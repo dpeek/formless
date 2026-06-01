@@ -6,7 +6,7 @@ import {
   type ArchiveRestorePolicy,
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
-import { validateAppInstallId } from "../shared/app-installs.ts";
+import { packageAppFactsForKey, validateAppInstallId } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { ArchiveRestoreMediaFile } from "../shared/archive-restore-plan.ts";
@@ -141,6 +141,12 @@ export function buildSiteProjectAppArchiveEntry(
 
   const label = siteProjectArchiveLabel(input.label, records, installId);
   const timestamp = input.exportedAt;
+  const packageFacts = packageAppFactsForKey("site");
+
+  if (!packageFacts) {
+    throw new Error("Site package facts are unavailable for archive export.");
+  }
+
   const archive: AppArchive = {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
@@ -151,7 +157,9 @@ export function buildSiteProjectAppArchiveEntry(
     app: {
       installId,
       packageAppKey: "site",
+      packageRevision: packageFacts.packageRevision,
       sourceSchemaKey: "site",
+      sourceSchemaHash: packageFacts.sourceSchemaHash,
       label,
       status: "installed",
       createdAt: input.createdAt ?? timestamp,

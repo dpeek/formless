@@ -18,6 +18,10 @@ import {
   type PortableArchive,
 } from "../shared/archive.ts";
 import {
+  normalizePortableArchive,
+  type ArchiveNormalizationEvidence,
+} from "../shared/archive-normalizers.ts";
+import {
   findAppInstall,
   findBundledAppPackage,
   type AppInstall,
@@ -108,6 +112,7 @@ export type ArchiveRestoreSummary = {
 
 export type RestorePortableArchiveResult = {
   archiveInput: PortableArchiveInputStatus;
+  archiveNormalizationEvidence: ArchiveNormalizationEvidence[];
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
   upgradePlanning?: CliUpgradePlanningReport;
@@ -308,6 +313,7 @@ export async function restorePortableArchive(
 
   return {
     archiveInput,
+    archiveNormalizationEvidence: diskArchive.normalizationEvidence,
     archivePath: diskArchive.archivePath,
     remote,
     ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
@@ -361,6 +367,7 @@ export async function restoreAppArchive(
 
   return {
     archiveInput,
+    archiveNormalizationEvidence: diskArchive.normalizationEvidence,
     archivePath: diskArchive.archivePath,
     remote,
     ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
@@ -448,6 +455,14 @@ async function buildRemoteAppArchiveEntry(input: {
     (candidate) => candidate.packageAppKey === input.install.packageAppKey,
   );
   const sourceSchemaKey = registryPackage?.sourceSchemaKey ?? packageApp?.sourceSchemaKey;
+  const packageRevision =
+    input.install.packageRevision ??
+    registryPackage?.packageRevision ??
+    packageApp?.packageRevision;
+  const sourceSchemaHash =
+    input.install.sourceSchemaHash ??
+    registryPackage?.sourceSchemaHash ??
+    packageApp?.sourceSchemaHash;
   const snapshot = await fetchJson<StoreSnapshot>(
     input.fetcher,
     apiUrl(input.target, appApiPath(input.install, "/snapshot")),
@@ -456,6 +471,12 @@ async function buildRemoteAppArchiveEntry(input: {
 
   if (!sourceSchemaKey) {
     throw new Error(`Installed app "${input.install.installId}" uses unsupported package.`);
+  }
+
+  if (!packageRevision || !sourceSchemaHash) {
+    throw new Error(
+      `Installed app "${input.install.installId}" is missing package facts for archive export.`,
+    );
   }
 
   const media = await exportRemoteAppMedia({
@@ -473,7 +494,9 @@ async function buildRemoteAppArchiveEntry(input: {
     app: {
       installId: input.install.installId,
       packageAppKey: input.install.packageAppKey,
+      packageRevision,
       sourceSchemaKey,
+      sourceSchemaHash,
       label: input.install.label,
       status: input.install.status,
       createdAt: input.install.createdAt,
@@ -727,10 +750,14 @@ async function readPortableArchiveDirectory(
   archive: PortableArchive;
   archivePath: string;
   mediaFiles: ArchiveDiskMediaFile[];
+  normalizationEvidence: ArchiveNormalizationEvidence[];
 }> {
   const archiveDir = path.resolve(dependencies.cwd, archiveDirInput);
   const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
-  const archive = parsePortableArchive(JSON.parse(await readFile(archivePath, "utf8")) as unknown);
+  const normalized = normalizePortableArchive(
+    JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+  );
+  const archive = normalized.archive;
   const mediaFiles = await Promise.all(
     archiveApps(archive).flatMap((app) =>
       app.media.objects.map(async (object) => {
@@ -748,7 +775,12 @@ async function readPortableArchiveDirectory(
     ),
   );
 
-  return { archive, archivePath, mediaFiles };
+  return {
+    archive,
+    archivePath,
+    mediaFiles,
+    normalizationEvidence: normalized.evidence,
+  };
 }
 
 function retargetAppArchive(archive: AppArchive, installId: string): AppArchive {

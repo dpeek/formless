@@ -456,12 +456,26 @@ function archivedInstall(
   return {
     installId,
     packageAppKey,
+    packageRevision: 1,
     sourceSchemaKey: packageAppKey,
+    sourceSchemaHash: sourceSchemaHashForPackageAppKey(packageAppKey),
     label,
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
     updatedAt: "2026-05-23T00:01:00.000Z",
   };
+}
+
+function sourceSchemaHashForPackageAppKey(packageAppKey: string) {
+  if (packageAppKey === "tasks") {
+    return bundledSourceSchemaHashFixtures.tasks;
+  }
+
+  if (packageAppKey === "estii") {
+    return bundledSourceSchemaHashFixtures.estii;
+  }
+
+  return bundledSourceSchemaHashFixtures.site;
 }
 
 function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {

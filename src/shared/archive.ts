@@ -14,11 +14,16 @@ import {
 } from "./protocol.ts";
 import { parseAppSchema, type AppSchema, type FieldSchema } from "./schema.ts";
 import { isRuntimeControlPlaneSecretReferenceField } from "./schema-runtime.ts";
+import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "./upgrade-migrations.ts";
 import type { MediaAsset } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";
 export const APP_ARCHIVE_KIND = "formless.appArchive";
-export const ARCHIVE_VERSION = 1;
+export const ARCHIVE_VERSION = 2;
 
 export const archiveCapabilities = [
   "installed-app-registry",
@@ -40,7 +45,9 @@ export type ArchiveRestorePolicy = {
 export type ArchivedAppInstall = {
   installId: string;
   packageAppKey: string;
+  packageRevision: PackageAppRevision;
   sourceSchemaKey: string;
+  sourceSchemaHash: SourceSchemaHash;
   label: string;
   status: "installed";
   createdAt: string;
@@ -230,7 +237,9 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
   assertExactKeys(context, object, [
     "installId",
     "packageAppKey",
+    "packageRevision",
     "sourceSchemaKey",
+    "sourceSchemaHash",
     "label",
     "status",
     "createdAt",
@@ -251,10 +260,12 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
   return {
     installId: installIdResult.installId,
     packageAppKey: parseTrimmedNonEmptyString(`${context} packageAppKey`, object.packageAppKey),
+    packageRevision: parsePositiveInteger(`${context} packageRevision`, object.packageRevision),
     sourceSchemaKey: parseTrimmedNonEmptyString(
       `${context} sourceSchemaKey`,
       object.sourceSchemaKey,
     ),
+    sourceSchemaHash: parseSourceSchemaHash(`${context} sourceSchemaHash`, object.sourceSchemaHash),
     label: parseTrimmedNonEmptyString(`${context} label`, object.label),
     status: "installed",
     createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
@@ -867,6 +878,22 @@ function parseNonNegativeInteger(context: string, value: unknown): number {
   return value;
 }
 
+function parsePositiveInteger(context: string, value: unknown): PackageAppRevision {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${context} must be a positive integer.`);
+  }
+
+  return value;
+}
+
+function parseSourceSchemaHash(context: string, value: unknown): SourceSchemaHash {
+  if (!isSourceSchemaHash(value)) {
+    throw new Error(`${context} must be a sha256 source schema hash.`);
+  }
+
+  return value;
+}
+
 function parseContentType(context: string, value: unknown): string {
   const contentType = parseTrimmedNonEmptyString(context, value);
 
@@ -966,7 +993,9 @@ function canonicalArchivedAppInstall(app: ArchivedAppInstall): ArchivedAppInstal
   return {
     installId: app.installId,
     packageAppKey: app.packageAppKey,
+    packageRevision: app.packageRevision,
     sourceSchemaKey: app.sourceSchemaKey,
+    sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
     status: "installed",
     createdAt: app.createdAt,

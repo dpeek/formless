@@ -20,6 +20,7 @@ import type {
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -636,7 +637,9 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
     app: {
       installId: "personal",
       packageAppKey: "site",
+      packageRevision: 1,
       sourceSchemaKey: "site",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       label: "Personal",
       status: "installed",
       createdAt: "2026-05-12T00:00:00.000Z",
@@ -667,7 +670,9 @@ function tasksAppArchive(input: {
     app: {
       installId: "work",
       packageAppKey: "tasks",
+      packageRevision: 1,
       sourceSchemaKey: "tasks",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
       label: "Work Tasks",
       status: "installed",
       createdAt: "2026-05-12T00:00:00.000Z",
@@ -700,7 +705,9 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
     app: {
       installId: "rates",
       packageAppKey: "estii",
+      packageRevision: 1,
       sourceSchemaKey: "estii",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
       label: "Rates",
       status: "installed",
       createdAt: "2026-05-12T00:00:00.000Z",

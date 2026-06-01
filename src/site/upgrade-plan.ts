@@ -1,5 +1,6 @@
 import type { PackageAppKey } from "../shared/app-installs.ts";
 import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, INSTANCE_ARCHIVE_KIND } from "../shared/archive.ts";
+import { findArchiveNormalizer } from "../shared/archive-normalizers.ts";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -126,7 +127,7 @@ export type CliUpgradeManualApprovalStep = CliUpgradePlanStepBase & {
 export type CliUpgradeArchiveNormalizationStep = CliUpgradePlanStepBase & {
   archiveKind?: string | null;
   fromArchiveVersion?: number | string | null;
-  normalizationStatus: "pending" | "unsupported";
+  normalizationStatus: "available" | "unsupported";
   toArchiveVersion?: number | string | null;
   type: "archive-normalization";
 };
@@ -460,26 +461,26 @@ function archiveNormalizationSteps(
     return [];
   }
 
-  if (
-    typeof archiveInput.version === "number" &&
-    archiveInput.version > 0 &&
-    archiveInput.version < ARCHIVE_VERSION
-  ) {
+  const normalizer = findArchiveNormalizer({
+    archiveKind: archiveInput.kind,
+    version: archiveInput.version,
+  });
+
+  if (normalizer) {
     return [
       {
         archiveKind: archiveInput.kind,
         fromArchiveVersion: archiveInput.version,
-        id: `normalize-${archiveInput.kind}-${archiveInput.version}`,
-        normalizationStatus: "pending",
+        id: normalizer.normalizerId,
+        normalizationStatus: "available",
         requiredEvidence: [
           {
-            description: `normalizer output manifest version ${ARCHIVE_VERSION}`,
+            description: `${normalizer.normalizerId} output manifest version ${ARCHIVE_VERSION}`,
             kind: "archive-normalization",
           },
         ],
         safety: "auto-with-backup",
-        status: "pending",
-        statusReason: "Archive normalizer registry has not shipped",
+        status: "ready",
         summary: "Normalize older archive before restore",
         target: stepTarget,
         toArchiveVersion: ARCHIVE_VERSION,

@@ -151,17 +151,16 @@ describe("CLI upgrade plan formatting", () => {
         {
           archiveKind: "formless.instanceArchive",
           fromArchiveVersion: 1,
-          id: "normalize-instance-archive",
-          normalizationStatus: "pending",
+          id: "archive.instance.v1-to-v2.package-facts",
+          normalizationStatus: "available",
           requiredEvidence: [
             {
-              description: "normalizer output manifest version 2",
+              description: "archive.instance.v1-to-v2.package-facts output manifest version 2",
               kind: "archive-normalization",
             },
           ],
           safety: "auto-with-backup",
-          status: "pending",
-          statusReason: "Archive normalizer registry has not shipped",
+          status: "ready",
           summary: "Normalize older instance archive before restore",
           target: {
             archivePath: "/workspace/archive/archive.json",
@@ -223,13 +222,12 @@ Steps: 7.
    Details: approval=destructive-site-cleanup; reason=Deletes tombstoned legacy Site records.
    Blocked: Manual approval has not been provided.
 
-7. archive-normalization [pending] safety=auto-with-backup
+7. archive-normalization [ready] safety=auto-with-backup
    Summary: Normalize older instance archive before restore.
    Target: targetId=instance.primary, archivePath=/workspace/archive/archive.json.
    Package app: none.
-   Required evidence: archive-normalization: normalizer output manifest version 2.
-   Details: archiveKind=formless.instanceArchive; version=1->2; normalization=pending.
-   Pending: Archive normalizer registry has not shipped.
+   Required evidence: archive-normalization: archive.instance.v1-to-v2.package-facts output manifest version 2.
+   Details: archiveKind=formless.instanceArchive; version=1->2; normalization=available.
 `);
   });
 

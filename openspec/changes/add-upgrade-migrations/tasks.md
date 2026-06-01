@@ -175,11 +175,20 @@ Evidence:
 
 ## 13. Archive Compatibility
 
-- [ ] 13.1 Add archive normalizer registry for older supported app and instance archive envelopes.
-- [ ] 13.2 Update archive parse/restore planning to normalize older supported versions before current validation.
-- [ ] 13.3 Keep archive export writers on the latest supported envelope and include package revision/schema hash facts needed for future planning.
-- [ ] 13.4 Add dry-run evidence for archive normalization and reject unsupported archive versions before mutation.
-- [ ] 13.5 Add archive tests for latest export, older supported import/restore normalization, unsupported version rejection, dry-run evidence, and no target mutation on failure.
+- [x] 13.1 Add archive normalizer registry for older supported app and instance archive envelopes.
+- [x] 13.2 Update archive parse/restore planning to normalize older supported versions before current validation.
+- [x] 13.3 Keep archive export writers on the latest supported envelope and include package revision/schema hash facts needed for future planning.
+- [x] 13.4 Add dry-run evidence for archive normalization and reject unsupported archive versions before mutation.
+- [x] 13.5 Add archive tests for latest export, older supported import/restore normalization, unsupported version rejection, dry-run evidence, and no target mutation on failure.
+
+Evidence:
+
+- `grug` 2026-06-01: bumped portable archive writer/parser envelope to version `2`, added archived app install `packageRevision` and `sourceSchemaHash` fields, and added `src/shared/archive-normalizers.ts` with registered app and instance version `1` to `2` normalizers.
+- Routed archive restore planning, Worker archive restore API handling, Site CLI archive directory reads, and instance workspace archive reads through normalization before current validation or restore posting. Unsupported archive versions now fail before target mutation.
+- Updated Site CLI archive export and Site project import writers to emit package revision/schema hash facts, preserve archived package facts during restore planning, and report archive normalization evidence in dry-run output.
+- Added focused coverage in `src/shared/archive-normalizers.test.ts`, `src/shared/archive.test.ts`, `src/shared/archive-restore-plan.test.ts`, `src/site/cli.test.ts`, `src/worker/archive-restore.test.ts`, and `src/worker/archive-api.test.ts` for latest export facts, older supported archive normalization, unsupported-version rejection, dry-run evidence, and no target mutation on failure.
+- Updated change specs for `portable-archives` and `site-cli-publish` with the shipped v1-to-v2 normalization and dry-run evidence behavior.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes archive and CLI behavior only and no visible browser app workflow changed.
 
 ## 14. Verification And Promotion
 

@@ -175,6 +175,33 @@ describe("archive restore execution", () => {
     expect(result.errors.map((error) => error.code)).toEqual(["install-collision"]);
   });
 
+  it("rejects unsupported archive versions without mutating the target", async () => {
+    const events: string[] = [];
+    const result = await applyPortableArchiveRestore(
+      {
+        ...legacyV1Archive(
+          appArchive({ restorePolicy: { dryRun: false, installCollisions: "reject" } }),
+        ),
+        version: 0,
+      },
+      memoryRestoreTarget({ events }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(events).toEqual([]);
+
+    if (result.ok) {
+      throw new Error("Expected unsupported archive version to fail.");
+    }
+
+    expect(result.errors).toEqual([
+      {
+        code: "invalid-archive",
+        message: "Archive version 0 has no registered normalizer for formless.appArchive.",
+      },
+    ]);
+  });
+
   it("restores core media archive objects through the media core", async () => {
     const identity = installedAppStorageIdentity({
       installId: "personal",
@@ -324,11 +351,38 @@ function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
   };
 }
 
+function legacyV1Archive(archive: AppArchive | InstanceArchive): Record<string, unknown> {
+  const copy = JSON.parse(JSON.stringify(archive)) as {
+    app?: Record<string, unknown>;
+    apps?: unknown[];
+    kind: string;
+    version: number;
+  };
+
+  copy.version = 1;
+
+  if (copy.kind === INSTANCE_ARCHIVE_KIND) {
+    copy.apps = (copy.apps ?? []).map((app) =>
+      legacyV1Archive(app as AppArchive | InstanceArchive),
+    );
+    return copy;
+  }
+
+  if (copy.app) {
+    delete copy.app.packageRevision;
+    delete copy.app.sourceSchemaHash;
+  }
+
+  return copy;
+}
+
 function archivedInstall(installId: string, label: string): AppArchive["app"] {
   return {
     installId,
     packageAppKey: "site",
+    packageRevision: 1,
     sourceSchemaKey: "site",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     label,
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",

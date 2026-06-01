@@ -1,6 +1,5 @@
 import {
   INSTANCE_ARCHIVE_KIND,
-  parsePortableArchive,
   type AppArchive,
   type AppArchiveData,
   type AppArchiveMediaObject,
@@ -8,6 +7,7 @@ import {
   type PortableArchive,
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
+import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
 import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
@@ -477,7 +477,7 @@ async function parseAndPlanArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = parsePortableArchive(value);
+    archive = normalizePortableArchive(value).archive;
   } catch (error) {
     return {
       errors: [

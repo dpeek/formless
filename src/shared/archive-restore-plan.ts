@@ -1,8 +1,5 @@
 import {
   INSTANCE_ARCHIVE_KIND,
-  parseAppArchive,
-  parseInstanceArchive,
-  parsePortableArchive,
   type AppArchive,
   type AppArchiveData,
   type AppArchiveMediaObject,
@@ -11,6 +8,11 @@ import {
   type InstanceArchive,
   type PortableArchive,
 } from "./archive.ts";
+import {
+  normalizeAppArchive,
+  normalizeInstanceArchive,
+  normalizePortableArchive,
+} from "./archive-normalizers.ts";
 import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
 import { isValidStoredFieldValue } from "./field-types.ts";
 import type { RecordValues, StoredRecord } from "./protocol.ts";
@@ -151,7 +153,7 @@ export function planPortableArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = parsePortableArchive(value);
+    archive = normalizePortableArchive(value).archive;
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -166,7 +168,7 @@ export function planInstanceArchiveRestore(
   let archive: InstanceArchive;
 
   try {
-    archive = parseInstanceArchive(value);
+    archive = normalizeInstanceArchive(value).archive;
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -181,7 +183,7 @@ export function planAppArchiveRestore(
   let archive: AppArchive;
 
   try {
-    archive = parseAppArchive(value);
+    archive = normalizeAppArchive(value).archive;
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -910,8 +912,8 @@ function appInstallForArchive(app: ArchivedAppInstall, appPackage: BundledAppPac
   return {
     installId: app.installId,
     packageAppKey: appPackage.packageAppKey,
-    packageRevision: appPackage.packageRevision,
-    sourceSchemaHash: appPackage.sourceSchemaHash,
+    packageRevision: app.packageRevision,
+    sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
     status: "installed",
     createdAt: app.createdAt,

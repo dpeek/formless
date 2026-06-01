@@ -1,9 +1,9 @@
 import {
   parseAppArchiveData,
-  parsePortableArchive,
   type AppArchiveData,
   type InstanceArchiveControlPlane,
 } from "../shared/archive.ts";
+import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
 import type {
   AppStorageIdentity,
   InstalledAppStorageIdentity,
@@ -93,7 +93,7 @@ export async function handleInstanceArchiveDurableObjectRequest(
     }
 
     const body = parseArchiveRestoreRequest(await readJson(request));
-    const archive = parsePortableArchive(body.archive);
+    const archive = normalizePortableArchive(body.archive).archive;
     const mediaFilesByPath = new Map(body.mediaFiles.map((file) => [file.archivePath, file]));
     const target = archiveRestoreApiTarget(request, storage, env, mediaFilesByPath);
     const result = archive.restorePolicy.dryRun

@@ -14,6 +14,12 @@ Formless instances.
 - **AND** the CLI reports code deploy, SQL migration, package app migration,
   archive normalization, backup, and browser reload requirements
 
+#### Scenario: Report archive normalization evidence
+
+- **WHEN** an archive restore dry-run reads an older supported archive envelope
+- **THEN** the CLI normalizes the archive before posting the dry-run restore
+- **AND** output reports the archive normalizer id and from/to archive versions
+
 #### Scenario: Dry-run remains non-mutating
 
 - **WHEN** an upgrade-aware CLI command runs without its required apply input

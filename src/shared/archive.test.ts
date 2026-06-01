@@ -18,13 +18,14 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "./protocol.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
 
 describe("portable archive protocol", () => {
-  it("parses the supported version 1 app archive envelope", () => {
+  it("parses the supported version 2 app archive envelope", () => {
     const archive = appArchive({
       data: {
         kind: "storeSnapshot",
@@ -131,8 +132,8 @@ describe("portable archive protocol", () => {
       'Archive kind "formless.futureArchive" is unsupported.',
     );
 
-    expect(() => parseAppArchive({ ...appArchive(), version: 2 })).toThrow(
-      "App archive version must be 1.",
+    expect(() => parseAppArchive({ ...appArchive(), version: 3 })).toThrow(
+      "App archive version must be 2.",
     );
 
     expect(() => parseInstanceArchive({ ...instanceArchive(), kind: APP_ARCHIVE_KIND })).toThrow(
@@ -281,7 +282,9 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
   return {
     installId,
     packageAppKey: "site",
+    packageRevision: 1,
     sourceSchemaKey: "site",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     label,
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",

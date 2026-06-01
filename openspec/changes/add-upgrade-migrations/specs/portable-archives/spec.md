@@ -12,6 +12,8 @@ import validation.
 - **THEN** a version-specific normalizer converts it into the current internal
   restore model before validation
 - **AND** restore planning reports normalization evidence in dry-run output
+- **AND** version `1` app and instance archive envelopes are normalized to the
+  latest archive envelope before validation
 
 #### Scenario: Reject unsupported archive version
 
@@ -31,3 +33,5 @@ envelope.
 - **THEN** the archive uses the latest supported archive version
 - **AND** the archive records enough package app revision and schema hash facts
   for future compatibility planning
+- **AND** each archived app install records package revision and source schema
+  hash facts

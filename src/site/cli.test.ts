@@ -2715,7 +2715,7 @@ describe("Formless Site CLI", () => {
     ]);
     expect(logs[0]).toContain("Upgrade target facts.");
     expect(logs[0]).toContain(
-      "Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=",
+      "Archive input: kind=formless.instanceArchive; version=2; readable=yes; archivePath=",
     );
     expect(logs[0]).toContain(
       "Upgrade plan.\nTarget: label=remote, url=https://personal.dpeek.workers.dev, archivePath=",
@@ -3749,6 +3749,7 @@ describe("Formless Site CLI", () => {
           installId: "work",
           label: "Work Tasks",
           packageAppKey: "tasks",
+          ...packageAppFactsForKey("tasks")!,
           schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3786,7 +3787,9 @@ describe("Formless Site CLI", () => {
     expect(archive.app).toMatchObject({
       installId: "work",
       packageAppKey: "tasks",
+      packageRevision: packageAppFactsForKey("tasks")!.packageRevision,
       sourceSchemaKey: "tasks",
+      sourceSchemaHash: packageAppFactsForKey("tasks")!.sourceSchemaHash,
     });
     expect(archive.data).toEqual({
       kind: "storeSnapshot",
@@ -3817,6 +3820,7 @@ describe("Formless Site CLI", () => {
           installId: "personal",
           label: "Personal",
           packageAppKey: "site",
+          ...packageAppFactsForKey("site")!,
           publicRoute: "/sites/personal",
           publicRoutePrefix: "/sites/personal/",
           schemaRoute: "/apps/personal/schema",
@@ -3829,6 +3833,7 @@ describe("Formless Site CLI", () => {
           installId: "work",
           label: "Work Tasks",
           packageAppKey: "tasks",
+          ...packageAppFactsForKey("tasks")!,
           schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3839,6 +3844,7 @@ describe("Formless Site CLI", () => {
           installId: "rates",
           label: "Rates",
           packageAppKey: "estii",
+          ...packageAppFactsForKey("estii")!,
           schemaRoute: "/apps/rates/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3872,10 +3878,32 @@ describe("Formless Site CLI", () => {
     const rates = archive.apps.find((app) => app.app.installId === "rates");
     const work = archive.apps.find((app) => app.app.installId === "work");
 
-    expect(archive.apps.map((app) => [app.app.installId, app.app.packageAppKey])).toEqual([
-      ["personal", "site"],
-      ["rates", "estii"],
-      ["work", "tasks"],
+    expect(
+      archive.apps.map((app) => [
+        app.app.installId,
+        app.app.packageAppKey,
+        app.app.packageRevision,
+        app.app.sourceSchemaHash,
+      ]),
+    ).toEqual([
+      [
+        "personal",
+        "site",
+        packageAppFactsForKey("site")!.packageRevision,
+        packageAppFactsForKey("site")!.sourceSchemaHash,
+      ],
+      [
+        "rates",
+        "estii",
+        packageAppFactsForKey("estii")!.packageRevision,
+        packageAppFactsForKey("estii")!.sourceSchemaHash,
+      ],
+      [
+        "work",
+        "tasks",
+        packageAppFactsForKey("tasks")!.packageRevision,
+        packageAppFactsForKey("tasks")!.sourceSchemaHash,
+      ],
     ]);
     expect(archive.capabilities).toEqual([
       "installed-app-registry",
@@ -4018,10 +4046,98 @@ describe("Formless Site CLI", () => {
     });
     expect(logs.at(-1)).toContain("Upgrade target facts.");
     expect(logs.at(-1)).toContain(
-      `Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=${path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
+      `Archive input: kind=formless.instanceArchive; version=2; readable=yes; archivePath=${path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
     );
     expect(logs.at(-1)).toContain(`packageVersion=0.1.7->${packageJson.version}`);
     expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+  });
+
+  it("normalizes older supported archive restore dry-runs before posting to the target", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "legacy-instance-restore");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
+      `${JSON.stringify(legacyV1Archive(instanceArchive([appArchive("david", "David Peek")])), null, 2)}\n`,
+    );
+    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
+
+    await runFormlessCli(
+      ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
+
+    expect(restoreBody.archive.version).toBe(ARCHIVE_VERSION);
+    expect(restoreBody.archive.apps[0]?.app).toMatchObject({
+      packageRevision: packageAppFactsForKey("site")!.packageRevision,
+      sourceSchemaHash: packageAppFactsForKey("site")!.sourceSchemaHash,
+    });
+    expect(logs.at(-1)).toContain(
+      `Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=${path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
+    );
+    expect(logs.at(-1)).toContain("archive-normalization [ready] safety=auto-with-backup");
+    expect(logs.at(-1)).toContain(
+      "Archive normalization: archive.instance.v1-to-v2.package-facts formless.instanceArchive version 1->2.",
+    );
+    expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+  });
+
+  it("rejects unsupported archive versions before restore mutation", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "unsupported-instance-restore");
+    const requests: CapturedFetchRequest[] = [];
+
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
+      `${JSON.stringify(
+        {
+          ...(legacyV1Archive(instanceArchive([appArchive("david", "David Peek")])) as Record<
+            string,
+            unknown
+          >),
+          version: 0,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    await expect(
+      runFormlessCli(
+        [
+          "archive",
+          "restore",
+          "--target",
+          "https://instance.example",
+          "--archive",
+          outDir,
+          "--apply",
+        ],
+        cliDeps(tempDir, {
+          fetch: responseQueue().fetcher(requests),
+        }),
+      ),
+    ).rejects.toThrow(
+      "Archive version 0 has no registered normalizer for formless.instanceArchive.",
+    );
+    expect(requests).toEqual([]);
   });
 
   it("imports a standalone Site project into an app archive directory", async () => {
@@ -4801,6 +4917,31 @@ function instanceArchive(apps: AppArchive[]): InstanceArchive {
   };
 }
 
+function legacyV1Archive(archive: InstanceArchive | AppArchive): unknown {
+  const copy = JSON.parse(JSON.stringify(archive)) as {
+    app?: Record<string, unknown>;
+    apps?: unknown[];
+    kind: string;
+    version: number;
+  };
+
+  copy.version = 1;
+
+  if (copy.kind === INSTANCE_ARCHIVE_KIND) {
+    copy.apps = (copy.apps ?? []).map((app) =>
+      legacyV1Archive(app as InstanceArchive | AppArchive),
+    );
+    return copy;
+  }
+
+  if (copy.app) {
+    delete copy.app.packageRevision;
+    delete copy.app.sourceSchemaHash;
+  }
+
+  return copy;
+}
+
 function appArchive(
   installId: string,
   label: string,
@@ -4810,6 +4951,13 @@ function appArchive(
     records?: StoredRecord[];
   } = {},
 ): AppArchive {
+  const packageAppKey = options.packageAppKey ?? "site";
+  const packageFacts = packageAppFactsForKey(packageAppKey);
+
+  if (!packageFacts) {
+    throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
+  }
+
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
@@ -4818,8 +4966,10 @@ function appArchive(
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId,
-      packageAppKey: options.packageAppKey ?? "site",
+      packageAppKey,
+      packageRevision: packageFacts.packageRevision,
       sourceSchemaKey: "site",
+      sourceSchemaHash: packageFacts.sourceSchemaHash,
       label,
       status: "installed",
       createdAt: "2026-05-01T00:00:00.000Z",

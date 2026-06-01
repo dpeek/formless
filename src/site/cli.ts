@@ -1421,12 +1421,16 @@ function formatArchiveRestoreResult(
     !applied && result.upgradePlanning
       ? formatCliUpgradePlanningReport(result.upgradePlanning).trimEnd()
       : null;
+  const archiveNormalizationEvidence = formatArchiveNormalizationEvidence(
+    result.archiveNormalizationEvidence,
+  );
 
   if (!result.remote.ok) {
     return [
       upgradePlanning,
       `${label} ${status} failed.`,
       `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
+      archiveNormalizationEvidence,
       ...(result.remote.errors ?? []).map((error) => `Error: ${error.message}`),
     ]
       .filter((line): line is string => line !== null)
@@ -1437,12 +1441,28 @@ function formatArchiveRestoreResult(
     upgradePlanning,
     `${label} ${status} ok.`,
     `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
+    archiveNormalizationEvidence,
     summary ? `Apps: ${summary.appCount}.` : null,
     summary ? `Created installs: ${summary.createdInstalls.join(", ") || "none"}.` : null,
     summary ? `Replaced installs: ${summary.replacedInstalls.join(", ") || "none"}.` : null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
+}
+
+function formatArchiveNormalizationEvidence(
+  evidence: RestorePortableArchiveResult["archiveNormalizationEvidence"],
+): string | null {
+  if (evidence.length === 0) {
+    return null;
+  }
+
+  return `Archive normalization: ${evidence
+    .map(
+      (entry) =>
+        `${entry.normalizerId} ${entry.archiveKind} version ${entry.fromVersion}->${entry.toVersion}`,
+    )
+    .join("; ")}.`;
 }
 
 function formatInstanceWorkspaceInitResult(

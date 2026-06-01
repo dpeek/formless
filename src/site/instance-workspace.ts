@@ -8,12 +8,12 @@ import {
   INSTANCE_ARCHIVE_KIND,
   formatAppArchive,
   formatInstanceArchive,
-  parsePortableArchive,
   type AppArchive,
   type InstanceArchive,
   type InstanceArchiveControlPlane,
   type PortableArchive,
 } from "../shared/archive.ts";
+import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
 import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
 import {
   normalizeInstanceDomainHost,
@@ -1365,7 +1365,7 @@ async function readArchiveDirectoryForCheck(
     throw error;
   }
 
-  const archive = parsePortableArchive(JSON.parse(contents) as unknown);
+  const archive = normalizePortableArchive(JSON.parse(contents) as unknown).archive;
   const mediaFiles: ArchiveDiskMediaFile[] = [];
   const missingMediaFiles: string[] = [];
 
@@ -1781,11 +1781,11 @@ function appDeclarationFromArchive(
 }
 
 async function readWorkspaceArchive(archiveDir: string): Promise<PortableArchive> {
-  return parsePortableArchive(
+  return normalizePortableArchive(
     JSON.parse(
       await readFile(path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
     ) as unknown,
-  );
+  ).archive;
 }
 
 async function readWorkspaceManifest(workspaceRoot: string): Promise<{
