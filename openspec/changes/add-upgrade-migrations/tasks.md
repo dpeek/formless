@@ -158,11 +158,20 @@ Evidence:
 
 ## 12. Browser Replica Compatibility
 
-- [ ] 12.1 Add stale client compatibility checks for mutation and action writes using runtime protocol, schema timestamp, or package app revision facts.
-- [ ] 12.2 Return reload-required errors for incompatible stale writes before any Authority commit or push notification.
-- [ ] 12.3 Preserve compatible bootstrap and sync reads where possible and include current schema/upgrade facts needed for reload or re-bootstrap.
-- [ ] 12.4 Add IndexedDB cache migration handling that can migrate local cache metadata or delete/re-bootstrap the replica if cache migration fails.
-- [ ] 12.5 Add browser replica and Authority operation tests for stale write rejection, compatible stale reads, failed cache migration re-bootstrap, and no data loss.
+- [x] 12.1 Add stale client compatibility checks for mutation and action writes using runtime protocol, schema timestamp, or package app revision facts.
+- [x] 12.2 Return reload-required errors for incompatible stale writes before any Authority commit or push notification.
+- [x] 12.3 Preserve compatible bootstrap and sync reads where possible and include current schema/upgrade facts needed for reload or re-bootstrap.
+- [x] 12.4 Add IndexedDB cache migration handling that can migrate local cache metadata or delete/re-bootstrap the replica if cache migration fails.
+- [x] 12.5 Add browser replica and Authority operation tests for stale write rejection, compatible stale reads, failed cache migration re-bootstrap, and no data loss.
+
+Evidence:
+
+- `grug` 2026-06-01: added browser replica compatibility headers and reload-required response contracts in `src/shared/protocol.ts`; browser mutation/action submits now send runtime protocol, schema timestamp, package revision, and source schema hash facts from `src/client/sync.ts`.
+- Added Authority stale-write guards in `src/worker/authority-operations.ts` using current runtime protocol, stored schema timestamp, and package app migration state. Incompatible mutation/action writes throw reload-required `409` responses before write outcome execution, change-row append, or push notification.
+- Bootstrap and HTTP sync reads now return current browser replica upgrade facts in no-store response headers while keeping existing JSON read bodies compatible.
+- Bumped the browser replica IndexedDB cache version in `src/client/db.ts`; safe older cache shape migrates metadata in place, and unsafe local cache migration deletes the replica so sync can re-bootstrap from Authority without Authority data loss.
+- Added coverage in `src/client/db.test.ts`, `src/client/sync.test.ts`, `src/worker/authority-operations.test.ts`, and `src/worker/authority.test.ts` for stale write rejection, compatible read facts, write headers, failed cache migration re-bootstrap, and no commit/push on reload-required writes.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. `bun browser` smoke against `/tasks` was attempted after `devstate start`; the page stayed blank because the dev server returned 404s for Vite optimized deps and `lib/ui` source modules, so no visible workflow assertion completed.
 
 ## 13. Archive Compatibility
 

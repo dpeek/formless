@@ -18,7 +18,7 @@ import {
   type StorageSource,
   type WriteOutcome,
 } from "./storage.ts";
-import { BadRequestError } from "./errors.ts";
+import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { Env } from "./index.ts";
 import { authorizeAuthorityOperation } from "./authority-admin-guard.ts";
 import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
@@ -231,6 +231,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           body,
           identity: route.identity,
           operation,
+          requestHeaders: request.headers,
           source,
           storage: this.ctx.storage,
           turnstileSiteKey: turnstileSiteKeyFromEnv(this.bindings),
@@ -248,6 +249,10 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (error instanceof BadRequestError) {
         return jsonResponse({ error: error.message }, 400);
+      }
+
+      if (error instanceof ReloadRequiredError) {
+        return jsonResponse(error.body, error.status);
       }
 
       throw error;

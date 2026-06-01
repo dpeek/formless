@@ -27,7 +27,15 @@ import {
   submitPatchMutation,
   syncClient,
 } from "./sync.ts";
-import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
+import {
+  FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
+  FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
+  FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+  FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
+  STORE_SNAPSHOT_KIND,
+  STORE_SNAPSHOT_VERSION,
+} from "../shared/protocol.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type {
@@ -228,6 +236,63 @@ describe("client sync", () => {
 
     expect(snapshot.schema).toEqual(appSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("re-bootstraps from Authority sync after unsafe local cache migration reset", async () => {
+    await createUnsafeLegacyReplica("formless:tasks");
+
+    await syncClient(
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=0", {
+        changes: [change(1, "record-1", "Authority")],
+        cursor: 1,
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot("tasks");
+
+    expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.records).toEqual([record("record-1", "Authority")]);
+    expect(snapshot.cursor).toBe(1);
+  });
+
+  it("sends browser replica compatibility facts with mutation writes", async () => {
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+
+    await submitCreateMutation(
+      "tasks",
+      "task",
+      { title: "Headers", done: false },
+      async (input, init) => {
+        const headers = new Headers(init?.headers);
+
+        expect(input).toBe("/api/tasks/mutations");
+        expect(headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
+          String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
+        );
+        expect(headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
+          "2026-04-28T00:00:00.000Z",
+        );
+        expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("1");
+        expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toMatch(
+          /^sha256:[a-f0-9]{64}$/,
+        );
+
+        return Response.json({
+          mutationId: "mutation-response",
+          record: record("record-1", "Headers"),
+          changes: [change(1, "record-1", "Headers")],
+          cursor: 1,
+        } satisfies MutationResponse);
+      },
+    );
   });
 
   it("merges schema returned by HTTP sync", async () => {
@@ -1603,6 +1668,40 @@ function jsonFetcher(expectedPath: string, body: unknown): typeof fetch {
 
     return Response.json(body);
   };
+}
+
+function createUnsafeLegacyReplica(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      db.createObjectStore("meta");
+      db.createObjectStore("records");
+    };
+
+    request.onerror = () => reject(request.error ?? new Error(`Could not create ${name}.`));
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction(["meta", "records"], "readwrite");
+      const meta = transaction.objectStore("meta");
+      const records = transaction.objectStore("records");
+      const legacyRecord = record("record-1", "Stale cache");
+
+      meta.put(appSchema, "schema");
+      meta.put("2026-04-28T00:00:00.000Z", "schemaUpdatedAt");
+      meta.put(9, "cursor");
+      records.put(legacyRecord, legacyRecord.id);
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error(`Could not write ${name}.`));
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error(`Could not write ${name}.`));
+    };
+  });
 }
 
 function parseRequestBody(body: BodyInit | null | undefined) {

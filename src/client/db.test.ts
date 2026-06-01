@@ -116,6 +116,29 @@ describe("client db", () => {
     expect((await readLocalSnapshot("tasks")).records).toEqual([]);
   });
 
+  it("migrates older local replica metadata without replacing records", async () => {
+    await createLegacyReplica("formless:tasks", { recordsKeyPath: "id" });
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const replicaVersion = await readRawMetaValue<number>("formless:tasks", "replicaVersion");
+
+    expect(snapshot.records).toEqual([record("record-1", "Legacy")]);
+    expect(snapshot.cursor).toBe(3);
+    expect(replicaVersion).toBe(2);
+  });
+
+  it("deletes unsafe local replica cache when IndexedDB migration fails", async () => {
+    await createLegacyReplica("formless:tasks", { recordsKeyPath: null });
+
+    const snapshot = await readLocalSnapshot("tasks");
+
+    expect(snapshot).toMatchObject({
+      schema: null,
+      records: [],
+      cursor: 0,
+    });
+  });
+
   it("merges records and advances the cursor", async () => {
     await mergeRecords("tasks", [record("record-1", "First")], 1);
     await mergeChanges("tasks", [change(2, "record-2", "Second", true)], 2);
@@ -213,6 +236,71 @@ function deleteRawDatabase(name: string) {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error(`Could not delete ${name}.`));
     request.onblocked = () => reject(new Error(`${name} delete was blocked.`));
+  });
+}
+
+function createLegacyReplica(
+  name: string,
+  options: { recordsKeyPath: "id" | null },
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      db.createObjectStore("meta");
+      if (options.recordsKeyPath === "id") {
+        db.createObjectStore("records", { keyPath: "id" });
+      } else {
+        db.createObjectStore("records");
+      }
+    };
+
+    request.onerror = () => reject(request.error ?? new Error(`Could not create ${name}.`));
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction(["meta", "records"], "readwrite");
+      const meta = transaction.objectStore("meta");
+      const records = transaction.objectStore("records");
+      const legacyRecord = record("record-1", "Legacy");
+
+      meta.put(appSchema, "schema");
+      meta.put("2026-04-28T00:00:00.000Z", "schemaUpdatedAt");
+      meta.put(3, "cursor");
+      if (options.recordsKeyPath === "id") {
+        records.put(legacyRecord);
+      } else {
+        records.put(legacyRecord, legacyRecord.id);
+      }
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error(`Could not write ${name}.`));
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error(`Could not write ${name}.`));
+    };
+  });
+}
+
+function readRawMetaValue<T>(name: string, key: string): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name);
+
+    request.onerror = () => reject(request.error ?? new Error(`Could not open ${name}.`));
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction("meta", "readonly");
+      const valueRequest = transaction.objectStore("meta").get(key);
+
+      valueRequest.onsuccess = () => {
+        db.close();
+        resolve(valueRequest.result as T | undefined);
+      };
+      valueRequest.onerror = () =>
+        reject(valueRequest.error ?? new Error(`Could not read ${name}.`));
+    };
   });
 }
 

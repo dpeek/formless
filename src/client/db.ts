@@ -3,7 +3,7 @@ import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/proto
 import { nowIsoString } from "../shared/clock.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const META_STORE = "meta";
 const RECORDS_STORE = "records";
@@ -12,6 +12,7 @@ const SCHEMA_KEY = "schema";
 const SCHEMA_UPDATED_AT_KEY = "schemaUpdatedAt";
 const CURSOR_KEY = "cursor";
 const LAST_SYNCED_AT_KEY = "lastSyncedAt";
+const REPLICA_VERSION_KEY = "replicaVersion";
 
 export type LocalSnapshot = {
   schema: AppSchema | null;
@@ -172,25 +173,51 @@ export function clientDbName(target: ClientAppTarget, projectId?: string) {
   return appStorageIdentityForClientTarget(target, { projectId }).browserDatabaseName;
 }
 
-function openClientDb(target: ClientAppTarget) {
+async function openClientDb(target: ClientAppTarget) {
+  try {
+    return await openClientDbOnce(target);
+  } catch {
+    await deleteClientDb(target);
+    return openClientDbOnce(target);
+  }
+}
+
+function openClientDbOnce(target: ClientAppTarget) {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(clientDbName(target), DB_VERSION);
 
     request.onupgradeneeded = () => {
-      const db = request.result;
-
-      if (!db.objectStoreNames.contains(META_STORE)) {
-        db.createObjectStore(META_STORE);
-      }
-
-      if (!db.objectStoreNames.contains(RECORDS_STORE)) {
-        db.createObjectStore(RECORDS_STORE, { keyPath: "id" });
+      try {
+        migrateClientDb(request.result, request.transaction);
+      } catch {
+        request.transaction?.abort();
       }
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Could not open IndexedDB."));
   });
+}
+
+function migrateClientDb(db: IDBDatabase, transaction: IDBTransaction | null) {
+  if (!transaction) {
+    throw new Error("IndexedDB upgrade transaction is unavailable.");
+  }
+
+  if (!db.objectStoreNames.contains(META_STORE)) {
+    db.createObjectStore(META_STORE);
+  }
+
+  if (!db.objectStoreNames.contains(RECORDS_STORE)) {
+    db.createObjectStore(RECORDS_STORE, { keyPath: "id" });
+  }
+
+  const records = transaction.objectStore(RECORDS_STORE);
+  if (records.keyPath !== "id") {
+    throw new Error("IndexedDB records store cannot be migrated safely.");
+  }
+
+  transaction.objectStore(META_STORE).put(DB_VERSION, REPLICA_VERSION_KEY);
 }
 
 function requestToPromise<T>(request: IDBRequest<T>) {

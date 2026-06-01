@@ -1,5 +1,7 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
+import { packageAppFactsForKey } from "../shared/app-installs.ts";
+import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import {
   deleteClientDb,
   mergeChanges,
@@ -16,24 +18,28 @@ import {
 } from "./store.ts";
 import { setSyncStatus } from "./sync-status.ts";
 import { createActionId, createMutationId } from "../shared/ids.ts";
-import type {
-  ActionRequest,
-  ActionResponse,
-  BootstrapResponse,
-  CreateMutation,
-  DeleteMutation,
-  EntityName,
-  MutationResponse,
-  PatchMutation,
-  RecordValues,
-  SchemaResponse,
-  SchemaUpdateResponse,
-  StoreSnapshot,
-  SyncSocketClientMessage,
-  SyncSocketServerMessage,
-  SyncResponse,
+import {
+  FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
+  FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
+  FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+  FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
+  isSyncSocketServerMessage,
+  type ActionRequest,
+  type ActionResponse,
+  type BootstrapResponse,
+  type CreateMutation,
+  type DeleteMutation,
+  type EntityName,
+  type MutationResponse,
+  type PatchMutation,
+  type RecordValues,
+  type SchemaResponse,
+  type SchemaUpdateResponse,
+  type StoreSnapshot,
+  type SyncResponse,
+  type SyncSocketClientMessage,
+  type SyncSocketServerMessage,
 } from "../shared/protocol.ts";
-import { isSyncSocketServerMessage } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 500;
@@ -177,6 +183,7 @@ export async function submitCreateMutation(
     fetcher,
     apiPath(identity, "mutations"),
     mutation,
+    { writeCompatibilityTarget: identity },
   );
 
   await mergeChanges(identity, response.changes, response.cursor);
@@ -206,6 +213,7 @@ export async function submitPatchMutation(
     fetcher,
     apiPath(identity, "mutations"),
     mutation,
+    { writeCompatibilityTarget: identity },
   );
 
   await mergeChanges(identity, response.changes, response.cursor);
@@ -233,6 +241,7 @@ export async function submitDeleteMutation(
     fetcher,
     apiPath(identity, "mutations"),
     mutation,
+    { writeCompatibilityTarget: identity },
   );
 
   await mergeChanges(identity, response.changes, response.cursor);
@@ -259,7 +268,9 @@ export async function submitAction(
     ...(input === undefined ? {} : { input }),
   };
 
-  const response = await postJson<ActionResponse>(fetcher, apiPath(identity, "actions"), action);
+  const response = await postJson<ActionResponse>(fetcher, apiPath(identity, "actions"), action, {
+    writeCompatibilityTarget: identity,
+  });
 
   await mergeChanges(identity, response.changes, response.cursor);
   applyChanges(response.changes, response.cursor, identity);
@@ -509,13 +520,24 @@ async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
   return parseJsonResponse<T>(response);
 }
 
-async function postJson<T>(fetcher: typeof fetch, url: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  fetcher: typeof fetch,
+  url: string,
+  body: unknown,
+  options: { writeCompatibilityTarget?: ClientAppTarget } = {},
+): Promise<T> {
+  const headers = new Headers({
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  });
+
+  if (options.writeCompatibilityTarget) {
+    await addBrowserReplicaWriteHeaders(headers, options.writeCompatibilityTarget);
+  }
+
   const response = await fetcher(url, {
     credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
     method: "POST",
   });
@@ -534,6 +556,23 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   }
 
   return body as T;
+}
+
+async function addBrowserReplicaWriteHeaders(headers: Headers, target: ClientAppTarget) {
+  const identity = appStorageIdentityForClientTarget(target);
+  const schemaUpdatedAt = await readSchemaUpdatedAt(identity);
+  const packageFacts = packageAppFactsForKey(identity.packageAppKey);
+
+  headers.set(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER, String(FORMLESS_RUNTIME_PROTOCOL_VERSION));
+
+  if (schemaUpdatedAt) {
+    headers.set(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER, schemaUpdatedAt);
+  }
+
+  if (packageFacts) {
+    headers.set(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER, String(packageFacts.packageRevision));
+    headers.set(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER, packageFacts.sourceSchemaHash);
+  }
 }
 
 function notifyLocalDataChanged(

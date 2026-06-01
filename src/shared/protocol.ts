@@ -3,7 +3,9 @@ import type {
   AppInstall,
   AppInstallInitializationPlan,
   BundledAppPackage,
+  PackageAppKey,
 } from "./app-installs.ts";
+import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export type EntityName = string;
 export type FieldValue = string | boolean | number;
@@ -226,6 +228,29 @@ export type SyncSocketServerMessage =
 export type SyncSocketAttachment = {
   cursor: number;
   schemaUpdatedAt: string | null;
+};
+
+export const FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER = "x-formless-runtime-protocol-version";
+export const FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER = "x-formless-schema-updated-at";
+export const FORMLESS_CLIENT_PACKAGE_REVISION_HEADER = "x-formless-package-app-revision";
+export const FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER = "x-formless-source-schema-hash";
+export const FORMLESS_RELOAD_REQUIRED_ERROR_CODE = "reload-required";
+
+export type BrowserReplicaUpgradeFacts = {
+  runtimeProtocolVersion: number;
+  schemaUpdatedAt: string | null;
+  packageApp: {
+    packageAppKey: PackageAppKey;
+    packageRevision: PackageAppRevision;
+    sourceSchemaHash: SourceSchemaHash;
+  } | null;
+};
+
+export type ReloadRequiredErrorResponse = {
+  error: string;
+  code: typeof FORMLESS_RELOAD_REQUIRED_ERROR_CODE;
+  reloadRequired: true;
+  upgrade: BrowserReplicaUpgradeFacts;
 };
 
 export const OWNER_SETUP_TOKEN_MIN_LENGTH = 32;

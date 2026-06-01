@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { MutationResponse } from "../shared/protocol.ts";
+import {
+  FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+  FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+  type BootstrapResponse,
+  type MutationResponse,
+} from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import {
   selectAuthorityOperation,
@@ -19,6 +24,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type ExecuteOperationInput = {
   appKey?: SchemaKey;
   body?: unknown;
+  headers?: Record<string, string>;
   method: string;
   path: string;
   search?: string;
@@ -37,7 +43,10 @@ type ExecuteOperationSuccess<TBody> = {
 };
 
 type ExecuteOperationFailure = {
+  code?: string;
   error: string;
+  reloadRequired?: boolean;
+  upgrade?: unknown;
   writes: Array<{
     kind: "committed" | "replay";
     response: unknown;
@@ -203,6 +212,51 @@ describe("authority operation execution", () => {
     });
   });
 
+  it("rejects stale browser mutation and action writes before write notification", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const staleHeaders = {
+      [FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER]: "2026-01-01T00:00:00.000Z",
+    };
+    const staleMutation = await executeOperationFailure({
+      method: "POST",
+      path: "/mutations",
+      headers: staleHeaders,
+      body: {
+        mutationId: "mutation-operation-stale-client",
+        entity: "task",
+        op: "create",
+        values: { title: "Stale client", done: false },
+      },
+    });
+    const staleAction = await executeOperationFailure({
+      method: "POST",
+      path: "/actions",
+      headers: staleHeaders,
+      body: {
+        actionId: "action-operation-stale-client",
+        entity: "task",
+        action: "clearCompletedTasks",
+      },
+    });
+
+    expect(bootstrap.body.result.body.schemaUpdatedAt).toEqual(expect.any(String));
+    expect(staleMutation.response.status).toBe(409);
+    expect(staleMutation.body).toMatchObject({
+      code: FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+      reloadRequired: true,
+      writes: [],
+    });
+    expect(staleAction.response.status).toBe(409);
+    expect(staleAction.body).toMatchObject({
+      code: FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+      reloadRequired: true,
+      writes: [],
+    });
+  });
+
   it("preserves operation-level cache headers and statuses", async () => {
     const missingSiteTree = await executeOperation<{ error: string }>({
       appKey: "site",
@@ -264,7 +318,10 @@ async function writeAuthorityOperationHarness() {
         executeAuthorityOperation,
         selectAuthorityOperation,
       } from "${process.cwd()}/src/worker/authority-operations.ts";
-      import { BadRequestError } from "${process.cwd()}/src/worker/errors.ts";
+      import {
+        BadRequestError,
+        ReloadRequiredError,
+      } from "${process.cwd()}/src/worker/errors.ts";
       import { workerSchemaAppDefinitions } from "${process.cwd()}/src/worker/schema-apps.ts";
       import { ensureStorageTables } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -303,6 +360,7 @@ async function writeAuthorityOperationHarness() {
               body: input.body,
               identity: schemaKeyStorageIdentity(appKey),
               operation,
+              requestHeaders: new Headers(input.headers ?? {}),
               source: {
                 schema: app.sourceSchema,
                 records: app.seedRecords,
@@ -314,10 +372,16 @@ async function writeAuthorityOperationHarness() {
 
             return Response.json({ result, writes });
           } catch (error) {
-            const status = error instanceof BadRequestError ? 400 : 500;
+            const status =
+              error instanceof ReloadRequiredError ? error.status :
+              error instanceof BadRequestError ? 400 : 500;
             const message = error instanceof Error ? error.message : "Unknown error.";
+            const body =
+              error instanceof ReloadRequiredError
+                ? { ...error.body, writes }
+                : { error: message, writes };
 
-            return Response.json({ error: message, writes }, { status });
+            return Response.json(body, { status });
           }
         }
       }

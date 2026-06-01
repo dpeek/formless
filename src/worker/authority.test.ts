@@ -1,17 +1,24 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { WebSocketEventMap } from "miniflare";
-import type {
-  ActionResponse,
-  BootstrapResponse,
-  MutationResponse,
-  SchemaResponse,
-  SchemaUpdateResponse,
-  SitePageTreeResponse,
-  StoreSnapshot,
-  StoredRecord,
-  SyncResponse,
-  SyncSocketServerMessage,
+import {
+  FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
+  FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
+  FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+  FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
+  FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+  type ActionResponse,
+  type BootstrapResponse,
+  type MutationResponse,
+  type SchemaResponse,
+  type SchemaUpdateResponse,
+  type SitePageTreeResponse,
+  type StoreSnapshot,
+  type StoredRecord,
+  type SyncResponse,
+  type SyncSocketServerMessage,
 } from "../shared/protocol.ts";
+import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
+import { packageAppFactsForKey } from "../shared/app-installs.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import {
@@ -65,6 +72,41 @@ describe("authority", () => {
     });
   });
 
+  it("returns browser replica upgrade facts on compatible bootstrap and sync reads", async () => {
+    const bootstrap = await harness.fetch(apiPath("/api/bootstrap"));
+    const bootstrapBody = (await bootstrap.json()) as BootstrapResponse;
+    const sync = await harness.fetch(
+      apiPath(
+        `/api/sync?after=${bootstrapBody.cursor}&schemaUpdatedAt=${encodeURIComponent(
+          "2026-01-01T00:00:00.000Z",
+        )}`,
+      ),
+    );
+    const syncBody = (await sync.json()) as SyncResponse;
+    const packageFacts = packageAppFactsForKey("tasks");
+
+    expect(bootstrap.status).toBe(200);
+    expect(sync.status).toBe(200);
+    expect(bootstrap.headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
+      String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
+    );
+    expect(sync.headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
+      bootstrapBody.schemaUpdatedAt,
+    );
+    expect(sync.headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe(
+      String(packageFacts?.packageRevision),
+    );
+    expect(sync.headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
+      packageFacts?.sourceSchemaHash,
+    );
+    expect(syncBody).toMatchObject({
+      changes: [],
+      cursor: bootstrapBody.cursor,
+      schema: appSchema,
+      schemaUpdatedAt: bootstrapBody.schemaUpdatedAt,
+    });
+  });
+
   it("returns the rate-card source schema from the Estii bootstrap path", async () => {
     useSchemaApp("estii");
 
@@ -90,6 +132,53 @@ describe("authority", () => {
     expect(new Set(body.records.map((record) => record.entity))).toEqual(
       new Set(["site", "block", "blockPlacement"]),
     );
+  });
+
+  it("rejects stale browser writes before commit or push notification", async () => {
+    const before = await getJson<BootstrapResponse>("/api/bootstrap");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, before.cursor, before.schemaUpdatedAt);
+      const capture = captureSyncSocketMessages(socket);
+      const response = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify({
+          mutationId: "mutation-stale-client-rejected",
+          entity: "task",
+          op: "create",
+          values: {
+            title: "Stale client write",
+            done: false,
+          },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          [FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER]: "2026-01-01T00:00:00.000Z",
+        },
+        method: "POST",
+      });
+      const body = (await response.json()) as {
+        code: string;
+        reloadRequired: boolean;
+        upgrade: { schemaUpdatedAt: string | null };
+      };
+      const after = await getJson<BootstrapResponse>("/api/bootstrap");
+
+      expect(response.status).toBe(409);
+      expect(body).toMatchObject({
+        code: FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+        reloadRequired: true,
+        upgrade: {
+          schemaUpdatedAt: before.schemaUpdatedAt,
+        },
+      });
+      expect(after.cursor).toBe(before.cursor);
+      expect(after.records).toEqual(before.records);
+      await expectNoCapturedMessages(capture);
+      capture.stop();
+    } finally {
+      socket.close();
+    }
   });
 
   it("bootstraps installed Site API routes from the bundled Site source", async () => {

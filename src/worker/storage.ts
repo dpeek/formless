@@ -376,6 +376,10 @@ export function getActiveSchema(
   });
 }
 
+export function readCurrentStoredSchema(storage: DurableObjectStorage): StoredSchema | undefined {
+  return readStoredSchema(storage);
+}
+
 export function initializeStorageFromSource(
   storage: DurableObjectStorage,
   source: StorageSource,

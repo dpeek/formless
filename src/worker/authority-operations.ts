@@ -1,19 +1,25 @@
 import { buildSitePageTree } from "../site/tree.ts";
-import type {
-  ActionResponse,
-  BootstrapResponse,
-  MutationResponse,
-  SchemaResponse,
-  SchemaUpdateResponse,
-  SitePageTreeResponse,
-  StoreSnapshot,
-  SyncResponse,
+import {
+  FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
+  FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
+  FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+  FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
+  type ActionResponse,
+  type BrowserReplicaUpgradeFacts,
+  type BootstrapResponse,
+  type MutationResponse,
+  type SchemaResponse,
+  type SchemaUpdateResponse,
+  type SitePageTreeResponse,
+  type StoreSnapshot,
+  type SyncResponse,
 } from "../shared/protocol.ts";
 import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import { findBundledAppPackage, type PackageAppKey } from "../shared/app-installs.ts";
+import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import type { AppSchema, SchemaActionActorKind } from "../shared/schema.ts";
 import {
   isSourceSchemaHash,
@@ -33,7 +39,7 @@ import {
   validateStoreSnapshotRestore,
 } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
-import { BadRequestError } from "./errors.ts";
+import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
 import {
@@ -50,6 +56,8 @@ import {
   resetStorageSchemaToSourceOutcome,
   resetStorageToSourceSeedOutcome,
   restoreStorageSnapshotOutcome,
+  readCurrentStoredSchema,
+  readPackageAppMigrationState,
   type ApplyPackageAppMigrationsResponse,
   type StorageSource,
   type WriteOutcome,
@@ -160,6 +168,7 @@ type AuthorityOperationExecutionInput = {
   body?: unknown;
   identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;
   operation: AuthorityOperation;
+  requestHeaders?: Headers;
   source: StorageSource;
   storage: DurableObjectStorage;
   turnstileSiteKey?: string;
@@ -244,6 +253,7 @@ export function executeAuthorityOperation(
 
       return {
         body: bootstrapResponse(input.storage, schema, updatedAt),
+        headers: browserReplicaUpgradeHeaders(input.storage, input.identity),
       };
     }
 
@@ -307,6 +317,7 @@ export function executeAuthorityOperation(
           cursor: getCurrentCursor(input.storage),
           ...schemaFields,
         },
+        headers: browserReplicaUpgradeHeaders(input.storage, input.identity),
       };
     }
 
@@ -329,6 +340,8 @@ export function executeAuthorityOperation(
     }
 
     case "mutation": {
+      assertBrowserReplicaWriteCompatible(input);
+
       const { schema } = initializeStorageFromSource(input.storage, input.source);
       const validatedMutation = validateMutationRequest(input.body, schema, input.storage);
 
@@ -381,6 +394,8 @@ export function executeAuthorityOperation(
     }
 
     case "action": {
+      assertBrowserReplicaWriteCompatible(input);
+
       const { schema } = initializeStorageFromSource(input.storage, input.source);
       const actorKind = input.actorKind ?? "owner";
       const action = validateEntityActionRequest(input.body, schema, { actorKind });
@@ -450,6 +465,170 @@ function writeOperationResult<T extends AuthorityOperationResponseBody>(
   outcome: WriteOutcome<T>,
 ): AuthorityOperationResult {
   return { body: outcome.response };
+}
+
+function assertBrowserReplicaWriteCompatible(input: AuthorityOperationExecutionInput) {
+  const clientFacts = parseBrowserReplicaWriteFacts(input.requestHeaders);
+
+  if (!clientFacts.hasAnyFact) {
+    return;
+  }
+
+  const upgrade = browserReplicaUpgradeFacts(input.storage, input.identity);
+
+  if (
+    clientFacts.runtimeProtocolVersion !== undefined &&
+    clientFacts.runtimeProtocolVersion !== upgrade.runtimeProtocolVersion
+  ) {
+    throw reloadRequired("Browser runtime protocol changed. Reload required.", upgrade);
+  }
+
+  if (
+    clientFacts.schemaUpdatedAt !== undefined &&
+    clientFacts.schemaUpdatedAt !== upgrade.schemaUpdatedAt
+  ) {
+    throw reloadRequired("App schema changed. Reload required.", upgrade);
+  }
+
+  if (
+    clientFacts.packageRevision !== undefined &&
+    clientFacts.packageRevision !== upgrade.packageApp?.packageRevision
+  ) {
+    throw reloadRequired("Package app revision changed. Reload required.", upgrade);
+  }
+
+  if (
+    clientFacts.sourceSchemaHash !== undefined &&
+    clientFacts.sourceSchemaHash !== upgrade.packageApp?.sourceSchemaHash
+  ) {
+    throw reloadRequired("Package app source schema changed. Reload required.", upgrade);
+  }
+}
+
+function reloadRequired(message: string, upgrade: BrowserReplicaUpgradeFacts) {
+  return new ReloadRequiredError(message, upgrade);
+}
+
+function parseBrowserReplicaWriteFacts(headers: Headers | undefined) {
+  const runtimeProtocolVersion = parseOptionalPositiveIntegerHeader(
+    headers,
+    FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
+    "runtime protocol version",
+  );
+  const packageRevision = parseOptionalPositiveIntegerHeader(
+    headers,
+    FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
+    "package app revision",
+  );
+  const schemaUpdatedAt = parseOptionalStringHeader(
+    headers,
+    FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
+    "schema updated timestamp",
+  );
+  const sourceSchemaHash = parseOptionalSourceSchemaHashHeader(headers);
+
+  return {
+    hasAnyFact:
+      runtimeProtocolVersion !== undefined ||
+      packageRevision !== undefined ||
+      schemaUpdatedAt !== undefined ||
+      sourceSchemaHash !== undefined,
+    packageRevision,
+    runtimeProtocolVersion,
+    schemaUpdatedAt,
+    sourceSchemaHash,
+  };
+}
+
+function parseOptionalPositiveIntegerHeader(
+  headers: Headers | undefined,
+  name: string,
+  label: string,
+) {
+  const value = headers?.get(name);
+
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new BadRequestError(`Browser replica ${label} header must be a positive integer.`);
+  }
+
+  return parsed;
+}
+
+function parseOptionalStringHeader(headers: Headers | undefined, name: string, label: string) {
+  const value = headers?.get(name);
+
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (value.trim() === "") {
+    throw new BadRequestError(`Browser replica ${label} header must be non-empty.`);
+  }
+
+  return value;
+}
+
+function parseOptionalSourceSchemaHashHeader(headers: Headers | undefined) {
+  const value = headers?.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER);
+
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (!isSourceSchemaHash(value)) {
+    throw new BadRequestError(
+      "Browser replica source schema hash header must be a sha256 source schema hash.",
+    );
+  }
+
+  return value;
+}
+
+function browserReplicaUpgradeHeaders(
+  storage: DurableObjectStorage,
+  identity: AppStorageIdentity,
+): HeadersInit {
+  const facts = browserReplicaUpgradeFacts(storage, identity);
+  const headers: Record<string, string> = {
+    [FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER]: String(facts.runtimeProtocolVersion),
+  };
+
+  if (facts.schemaUpdatedAt !== null) {
+    headers[FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER] = facts.schemaUpdatedAt;
+  }
+
+  if (facts.packageApp) {
+    headers[FORMLESS_CLIENT_PACKAGE_REVISION_HEADER] = String(facts.packageApp.packageRevision);
+    headers[FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER] = facts.packageApp.sourceSchemaHash;
+  }
+
+  return headers;
+}
+
+function browserReplicaUpgradeFacts(
+  storage: DurableObjectStorage,
+  identity: AppStorageIdentity,
+): BrowserReplicaUpgradeFacts {
+  const storedSchema = readCurrentStoredSchema(storage);
+  const packageApp = findBundledAppPackage(identity.packageAppKey);
+  const packageState = readPackageAppMigrationState(storage, identity.packageAppKey);
+
+  return {
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    schemaUpdatedAt: storedSchema?.updatedAt ?? null,
+    packageApp: packageApp
+      ? {
+          packageAppKey: packageApp.packageAppKey,
+          packageRevision: packageState?.packageRevision ?? packageApp.packageRevision,
+          sourceSchemaHash: packageState?.sourceSchemaHash ?? packageApp.sourceSchemaHash,
+        }
+      : null,
+  };
 }
 
 function operationMetadata<
