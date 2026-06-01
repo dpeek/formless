@@ -1,4 +1,5 @@
 import type { PackageAppKey } from "../shared/app-installs.ts";
+import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, INSTANCE_ARCHIVE_KIND } from "../shared/archive.ts";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -162,18 +163,19 @@ export function buildCliUpgradePlanningReport(input: {
 }): CliUpgradePlanningReport {
   const target = input.target;
   const status = input.status;
-  const blockers = [
+  const verificationBlockers = [
     ...status.verificationFailures.map(blockerFromVerificationFailure),
     ...packageDriftBlockers(status),
   ];
   const steps =
-    blockers.length === 0
+    verificationBlockers.length === 0
       ? plannedUpgradeSteps({
           localPackageVersion: input.localPackageVersion,
           status,
           target,
         })
       : [];
+  const blockers = [...verificationBlockers, ...blockedStepBlockers(steps)];
 
   return {
     blockers,
@@ -204,6 +206,7 @@ export function formatCliUpgradePlanningReport(report: CliUpgradePlanningReport)
     deploymentTarget
       ? `Deployment target: ${formatDeploymentTarget(deploymentTarget)}.`
       : "Deployment target: not requested.",
+    `Archive input: ${formatArchiveInputStatus(status.archiveInput)}.`,
     `Local package facts: ${formatLocalPackageFacts(status.localPackages)}.`,
     `Installed app facts: ${formatInstalledAppFacts(status.installedApps)}.`,
     `Blockers: ${formatPlanningBlockers(report.blockers)}.`,
@@ -397,7 +400,109 @@ function plannedUpgradeSteps(input: {
     });
   }
 
+  steps.push(...archiveNormalizationSteps(input.status, input.target));
+
   return steps;
+}
+
+function archiveNormalizationSteps(
+  status: FormlessInstanceTargetUpgradeStatus,
+  target: CliUpgradePlanTargetIdentity,
+): CliUpgradePlanStep[] {
+  const archiveInput = status.archiveInput;
+
+  if (!archiveInput.present) {
+    return [];
+  }
+
+  const stepTarget = {
+    ...target,
+    archivePath: archiveInput.archivePath,
+  };
+
+  if (!archiveInput.readable) {
+    return [
+      {
+        archiveKind: archiveInput.kind,
+        fromArchiveVersion: archiveInput.version,
+        id: "unsupported-archive-input",
+        normalizationStatus: "unsupported",
+        requiredEvidence: [],
+        safety: "manual-approval",
+        status: "blocked",
+        statusReason: `Archive manifest is not readable: ${archiveInput.error ?? "unknown error"}`,
+        summary: "Reject unreadable archive before restore",
+        target: stepTarget,
+        type: "archive-normalization",
+      },
+    ];
+  }
+
+  if (archiveInput.kind !== INSTANCE_ARCHIVE_KIND && archiveInput.kind !== APP_ARCHIVE_KIND) {
+    return [
+      {
+        archiveKind: archiveInput.kind,
+        fromArchiveVersion: archiveInput.version,
+        id: "unsupported-archive-kind",
+        normalizationStatus: "unsupported",
+        requiredEvidence: [],
+        safety: "manual-approval",
+        status: "blocked",
+        statusReason: `Archive kind ${archiveInput.kind ?? "unknown"} has no registered normalizer`,
+        summary: "Reject unsupported archive before restore",
+        target: stepTarget,
+        type: "archive-normalization",
+      },
+    ];
+  }
+
+  if (archiveInput.version === ARCHIVE_VERSION) {
+    return [];
+  }
+
+  if (
+    typeof archiveInput.version === "number" &&
+    archiveInput.version > 0 &&
+    archiveInput.version < ARCHIVE_VERSION
+  ) {
+    return [
+      {
+        archiveKind: archiveInput.kind,
+        fromArchiveVersion: archiveInput.version,
+        id: `normalize-${archiveInput.kind}-${archiveInput.version}`,
+        normalizationStatus: "pending",
+        requiredEvidence: [
+          {
+            description: `normalizer output manifest version ${ARCHIVE_VERSION}`,
+            kind: "archive-normalization",
+          },
+        ],
+        safety: "auto-with-backup",
+        status: "pending",
+        statusReason: "Archive normalizer registry has not shipped",
+        summary: "Normalize older archive before restore",
+        target: stepTarget,
+        toArchiveVersion: ARCHIVE_VERSION,
+        type: "archive-normalization",
+      },
+    ];
+  }
+
+  return [
+    {
+      archiveKind: archiveInput.kind,
+      fromArchiveVersion: archiveInput.version,
+      id: "unsupported-archive-version",
+      normalizationStatus: "unsupported",
+      requiredEvidence: [],
+      safety: "manual-approval",
+      status: "blocked",
+      statusReason: `Archive version ${archiveInput.version ?? "unknown"} has no registered normalizer`,
+      summary: "Reject unsupported archive before restore",
+      target: stepTarget,
+      type: "archive-normalization",
+    },
+  ];
 }
 
 function blockerFromVerificationFailure(
@@ -446,6 +551,17 @@ function packageDriftBlockers(
   return blockers;
 }
 
+function blockedStepBlockers(steps: readonly CliUpgradePlanStep[]): CliUpgradePlanningBlocker[] {
+  return steps
+    .filter((step): step is CliUpgradePlanStep & { status: "blocked"; statusReason: string } => {
+      return step.status === "blocked";
+    })
+    .map((step) => ({
+      code: step.id,
+      message: step.statusReason,
+    }));
+}
+
 function formatDeployedMetadata(
   metadata: FormlessInstanceTargetUpgradeStatus["deployedMetadata"],
 ): string {
@@ -467,6 +583,22 @@ function formatDeploymentTarget(
     ],
     ", ",
   );
+}
+
+function formatArchiveInputStatus(
+  archiveInput: FormlessInstanceTargetUpgradeStatus["archiveInput"],
+): string {
+  if (!archiveInput.present) {
+    return "none";
+  }
+
+  return compactJoin([
+    formatValue("kind", archiveInput.kind ?? "unknown"),
+    formatValue("version", archiveInput.version ?? "unknown"),
+    formatValue("readable", archiveInput.readable ? "yes" : "no"),
+    formatValue("archivePath", archiveInput.archivePath),
+    archiveInput.error === undefined ? null : formatValue("error", archiveInput.error),
+  ]);
 }
 
 function formatLocalPackageFacts(

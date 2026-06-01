@@ -107,6 +107,7 @@ import {
   saveSiteProject as saveSiteProjectCommand,
   type SaveSiteProjectResult,
 } from "./project-save.ts";
+import { formatCliUpgradePlanningReport } from "./upgrade-plan.ts";
 import { type SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 import { SITE_PROJECT_GITIGNORE_ENTRY } from "./project-state.ts";
 import {
@@ -1416,16 +1417,24 @@ function formatArchiveRestoreResult(
 ): string {
   const summary = result.remote.report?.summary ?? result.remote.plan?.summary;
   const status = applied ? "applied" : "dry run";
+  const upgradePlanning =
+    !applied && result.upgradePlanning
+      ? formatCliUpgradePlanningReport(result.upgradePlanning).trimEnd()
+      : null;
 
   if (!result.remote.ok) {
     return [
+      upgradePlanning,
       `${label} ${status} failed.`,
       `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
       ...(result.remote.errors ?? []).map((error) => `Error: ${error.message}`),
-    ].join("\n");
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
   }
 
   return [
+    upgradePlanning,
     `${label} ${status} ok.`,
     `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
     summary ? `Apps: ${summary.appCount}.` : null,
@@ -1546,6 +1555,10 @@ function formatInstanceWorkspacePushResult(
     result.applyResult?.remote.report?.summary ?? result.applyResult?.remote.plan?.summary;
   const dryRunErrors = result.dryRun.remote.errors ?? [];
   const applyErrors = result.applyResult?.remote.errors ?? [];
+  const upgradePlanning =
+    result.mode === "dry-run" && result.dryRun.upgradePlanning
+      ? formatCliUpgradePlanningReport(result.dryRun.upgradePlanning).trimEnd()
+      : null;
 
   return [
     `Instance workspace push ${result.mode === "apply" ? "applied" : "dry run"}.`,
@@ -1565,6 +1578,7 @@ function formatInstanceWorkspacePushResult(
     `Changed control-plane records: ${formatList(result.drift.changedControlPlaneRecords)}.`,
     `Changed media: ${formatList(result.drift.changedMedia)}.`,
     `Changed domain mappings: ${formatDomainDesiredDrift(result.drift.domainDesiredDrift)}.`,
+    upgradePlanning,
     `Dry-run restore: ${result.dryRun.remote.ok ? "ok" : "failed"}.`,
     dryRunSummary
       ? `Dry-run created installs: ${formatList(dryRunSummary.createdInstalls)}.`

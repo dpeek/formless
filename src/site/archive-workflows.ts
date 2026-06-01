@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import packageJson from "../../package.json";
 import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
@@ -45,8 +46,16 @@ import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
-import { readOptionalFormlessInstanceControlPlaneRecords } from "./instance-target-client.ts";
+import {
+  readFormlessInstanceTargetStatus,
+  readOptionalFormlessInstanceControlPlaneRecords,
+} from "./instance-target-client.ts";
 import { isLegacySiteMediaHref, unsupportedLegacySiteMediaMessage } from "./source-media.ts";
+import {
+  buildCliUpgradePlanningReport,
+  type CliUpgradePlanningReport,
+  type CliUpgradePlanTargetIdentity,
+} from "./upgrade-plan.ts";
 
 export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
@@ -101,6 +110,7 @@ export type RestorePortableArchiveResult = {
   archiveInput: PortableArchiveInputStatus;
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
+  upgradePlanning?: CliUpgradePlanningReport;
 };
 
 export type ImportSiteProjectArchiveResult = ArchiveDiskWriteResult & {
@@ -265,8 +275,10 @@ export async function restorePortableArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
+    includeUpgradePlanning?: boolean;
     replace: boolean;
     target: string;
+    upgradeTarget?: CliUpgradePlanTargetIdentity;
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
@@ -276,6 +288,14 @@ export async function restorePortableArchive(
   });
   const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
   const archive = withRestorePolicy(diskArchive.archive, restorePolicy(input));
+  const upgradePlanning = await readDryRunArchiveRestoreUpgradePlanning(
+    {
+      archiveInput,
+      archivePath: diskArchive.archivePath,
+      input,
+    },
+    dependencies,
+  );
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
@@ -290,6 +310,7 @@ export async function restorePortableArchive(
     archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
+    ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
   };
 }
 
@@ -298,9 +319,11 @@ export async function restoreAppArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
+    includeUpgradePlanning?: boolean;
     installId: string;
     replace: boolean;
     target: string;
+    upgradeTarget?: CliUpgradePlanTargetIdentity;
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
@@ -318,6 +341,14 @@ export async function restoreAppArchive(
     retargetAppArchive(diskArchive.archive, input.installId),
     restorePolicy(input),
   );
+  const upgradePlanning = await readDryRunArchiveRestoreUpgradePlanning(
+    {
+      archiveInput,
+      archivePath: diskArchive.archivePath,
+      input,
+    },
+    dependencies,
+  );
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
@@ -332,7 +363,44 @@ export async function restoreAppArchive(
     archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
+    ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
   };
+}
+
+async function readDryRunArchiveRestoreUpgradePlanning(
+  input: {
+    archiveInput: PortableArchiveInputStatus;
+    archivePath: string;
+    input: {
+      apply: boolean;
+      includeUpgradePlanning?: boolean;
+      target: string;
+      upgradeTarget?: CliUpgradePlanTargetIdentity;
+    };
+  },
+  dependencies: Pick<ArchiveWorkflowDependencies, "fetch">,
+): Promise<CliUpgradePlanningReport | undefined> {
+  if (input.input.apply || input.input.includeUpgradePlanning === false) {
+    return undefined;
+  }
+
+  const targetStatus = await readFormlessInstanceTargetStatus(
+    {
+      archiveInput: input.archiveInput,
+      targetUrl: input.input.target,
+    },
+    { fetch: dependencies.fetch },
+  );
+
+  return buildCliUpgradePlanningReport({
+    localPackageVersion: packageJson.version,
+    status: targetStatus.upgradeStatus,
+    target: {
+      ...input.input.upgradeTarget,
+      archivePath: input.archivePath,
+      targetUrl: input.input.upgradeTarget?.targetUrl ?? input.input.target,
+    },
+  });
 }
 
 export async function importSiteProjectArchive(

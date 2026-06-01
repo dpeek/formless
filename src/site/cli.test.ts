@@ -24,7 +24,11 @@ import type {
   CloudflareWorkerRoute,
   CloudflareZone,
 } from "./cloudflare-domain-client.ts";
-import { listBundledAppPackages, type BundledAppPackage } from "../shared/app-installs.ts";
+import {
+  listBundledAppPackages,
+  packageAppFactsForKey,
+  type BundledAppPackage,
+} from "../shared/app-installs.ts";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -2688,7 +2692,9 @@ describe("Formless Site CLI", () => {
       "providerConfigRef",
     ]);
     expect(logs).toHaveLength(1);
-    expect(logs[0]?.split("\n")).toEqual([
+    const lines = logs[0]?.split("\n") ?? [];
+
+    expect(lines.slice(0, 16)).toEqual([
       "Instance workspace push dry run.",
       `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
       "Target: remote (https://personal.dpeek.workers.dev).",
@@ -2706,6 +2712,15 @@ describe("Formless Site CLI", () => {
       "Changed control-plane records: none.",
       "Changed media: david.",
       "Changed domain mappings: none.",
+    ]);
+    expect(logs[0]).toContain("Upgrade target facts.");
+    expect(logs[0]).toContain(
+      "Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=",
+    );
+    expect(logs[0]).toContain(
+      "Upgrade plan.\nTarget: label=remote, url=https://personal.dpeek.workers.dev, archivePath=",
+    );
+    expect(lines.slice(-2)).toEqual([
       "Dry-run restore: failed.",
       'Dry-run error: Installed app "david" already exists.',
     ]);
@@ -3950,6 +3965,65 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Archive restore applied ok.");
   });
 
+  it("adds upgrade planning to archive restore dry-run without mutating target", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "instance-restore");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await writeArchiveDirectory(outDir, instanceArchive([appArchive("david", "David Peek")]));
+    responses.queueJson(
+      {
+        packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageAppKey: appPackage.packageAppKey,
+          packageRevision: appPackage.packageRevision,
+          sourceSchemaHash: appPackage.sourceSchemaHash,
+        })),
+        packageVersion: "0.1.7",
+        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+        version: "0.1.7",
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
+
+    await runFormlessCli(
+      ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://instance.example/api/formless/deploy",
+      "GET https://instance.example/api/formless/setup",
+      "GET https://instance.example/api/formless/app-installs",
+      "POST https://instance.example/api/formless/archive/restore",
+    ]);
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: true,
+      installCollisions: "reject",
+    });
+    expect(logs.at(-1)).toContain("Upgrade target facts.");
+    expect(logs.at(-1)).toContain(
+      `Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=${path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
+    );
+    expect(logs.at(-1)).toContain(`packageVersion=0.1.7->${packageJson.version}`);
+    expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+  });
+
   it("imports a standalone Site project into an app archive directory", async () => {
     const tempDir = await makeTempDir();
     const projectRoot = path.join(tempDir, "site");
@@ -4573,12 +4647,19 @@ function installedSite(installId: string, label: string) {
 }
 
 function installedApp(installId: string, label: string, packageAppKey: "site" | "tasks") {
+  const facts = packageAppFactsForKey(packageAppKey);
+
+  if (!facts) {
+    throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
+  }
+
   return {
     adminRoute: `/apps/${installId}` as `/apps/${string}`,
     createdAt: "2026-05-01T00:00:00.000Z",
     installId,
     label,
     packageAppKey,
+    packageRevision: facts.packageRevision,
     ...(packageAppKey === "site"
       ? {
           publicRoute: `/sites/${installId}` as `/sites/${string}`,
@@ -4586,6 +4667,7 @@ function installedApp(installId: string, label: string, packageAppKey: "site" | 
         }
       : {}),
     schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
+    sourceSchemaHash: facts.sourceSchemaHash,
     status: "installed" as const,
     updatedAt: "2026-05-01T00:00:00.000Z",
   };
@@ -4709,6 +4791,27 @@ function archiveFetch(
       method: init?.method ?? "GET",
       url: requestUrl,
     });
+
+    if (parsedUrl.pathname === "/api/formless/deploy") {
+      return Response.json(
+        {
+          packageApps: listBundledAppPackages().map((appPackage) => ({
+            packageAppKey: appPackage.packageAppKey,
+            packageRevision: appPackage.packageRevision,
+            sourceSchemaHash: appPackage.sourceSchemaHash,
+          })),
+          packageVersion: packageJson.version,
+          runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+          storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+          version: packageJson.version,
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    if (parsedUrl.pathname === "/api/formless/setup") {
+      return Response.json({ setupComplete: true });
+    }
 
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({

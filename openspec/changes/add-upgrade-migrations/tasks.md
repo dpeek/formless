@@ -101,9 +101,16 @@ Evidence:
 
 ## 8. Archive Restore And Workspace Push Dry-run Planning
 
-- [ ] 8.1 Integrate non-mutating upgrade planning into archive restore dry-run and instance workspace push dry-run flows.
-- [ ] 8.2 Keep archive normalization as pending or unsupported until the archive normalizer registry ships.
-- [ ] 8.3 Add CLI tests proving archive restore and workspace push dry-runs do not mutate target data and include archive-state evidence.
+- [x] 8.1 Integrate non-mutating upgrade planning into archive restore dry-run and instance workspace push dry-run flows.
+- [x] 8.2 Keep archive normalization as pending or unsupported until the archive normalizer registry ships.
+- [x] 8.3 Add CLI tests proving archive restore and workspace push dry-runs do not mutate target data and include archive-state evidence.
+
+Evidence:
+
+- `grug` 2026-06-01: wired archive restore dry-runs and instance workspace push dry-runs through CLI upgrade planning reports that read target metadata, installed app facts, local package facts, and archive input status without applying restore data.
+- Added archive input evidence to upgrade planning output and modeled non-current archive normalization as pending for older supported versions or blocked unsupported for unreadable, unknown-kind, or unsupported-version archives until a normalizer registry ships.
+- Added `src/site/cli.test.ts` coverage proving archive restore dry-run sends only a dry-run restore request, workspace push dry-run includes archive-state evidence, and neither flow sends an apply restore.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes CLI dry-run planning output only and no visible browser app behavior changed.
 
 ## 9. Runtime Upgrade Apply Evidence API
 

@@ -701,8 +701,13 @@ export async function pushFormlessInstanceWorkspace(
         adminToken,
         apply: false,
         archiveDir: composedArchiveRoot,
+        includeUpgradePlanning: !input.apply,
         replace: input.replace ?? false,
         target: selectedTarget.url,
+        upgradeTarget: {
+          label: selectedTarget.alias,
+          targetUrl: selectedTarget.url,
+        },
       },
       dependencies,
     );
