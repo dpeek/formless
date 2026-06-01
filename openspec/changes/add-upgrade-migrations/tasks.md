@@ -75,9 +75,16 @@ Evidence:
 
 ## 6. Upgrade Plan Model And Formatting
 
-- [ ] 6.1 Add CLI upgrade plan models for code deploy, SQL migration, package app migration, backup, browser reload, manual approval, and archive normalization pending or unsupported steps.
-- [ ] 6.2 Add plan formatting that includes step type, safety class, required evidence, target identity, package app identity, and why a step is blocked or pending.
-- [ ] 6.3 Add formatting tests for code deploy, SQL migration, package app migration, archive normalization pending, backup, browser reload, and manual approval steps.
+- [x] 6.1 Add CLI upgrade plan models for code deploy, SQL migration, package app migration, backup, browser reload, manual approval, and archive normalization pending or unsupported steps.
+- [x] 6.2 Add plan formatting that includes step type, safety class, required evidence, target identity, package app identity, and why a step is blocked or pending.
+- [x] 6.3 Add formatting tests for code deploy, SQL migration, package app migration, archive normalization pending, backup, browser reload, and manual approval steps.
+
+Evidence:
+
+- `grug` 2026-06-01: added `src/site/upgrade-plan.ts` with CLI upgrade plan step models for code deploy, SQL migration, package app migration, backup, browser reload, manual approval, and archive normalization pending or unsupported states.
+- Added deterministic `formatCliUpgradePlan` output with step type, safety class, required evidence, target identity, package app identity, step details, and blocked or pending reasons.
+- Added `src/site/upgrade-plan.test.ts` formatter coverage for code deploy, SQL migration, package app migration, backup, browser reload, manual approval, archive normalization pending, and unsupported archive normalization.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section adds CLI planning model/formatting only and does not change visible app behavior.
 
 ## 7. Deploy And Publish Dry-run Planning
 

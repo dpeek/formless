@@ -1,0 +1,274 @@
+import { describe, expect, it } from "vite-plus/test";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
+import { formatCliUpgradePlan, type CliUpgradePlan } from "./upgrade-plan.ts";
+
+const checksum = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+
+describe("CLI upgrade plan formatting", () => {
+  it("formats upgrade steps with safety, evidence, identities, and pending or blocked reasons", () => {
+    const plan: CliUpgradePlan = {
+      target: {
+        label: "Primary instance",
+        targetId: "instance.primary",
+        targetUrl: "https://instance.example",
+      },
+      steps: [
+        {
+          fromPackageVersion: "0.1.8",
+          fromRuntimeProtocolVersion: 1,
+          fromStorageMigrationSet: "storage.2026-05-28",
+          id: "deploy-runtime",
+          requiredEvidence: [
+            {
+              description: "deployed metadata reports packageVersion=0.1.9",
+              kind: "deploy-metadata",
+            },
+          ],
+          safety: "auto-safe",
+          status: "ready",
+          summary: "Deploy runtime package 0.1.9",
+          target: {
+            targetId: "instance.primary",
+            targetUrl: "https://instance.example",
+          },
+          toPackageVersion: "0.1.9",
+          toRuntimeProtocolVersion: 2,
+          toStorageMigrationSet: "storage.2026-06-01",
+          type: "code-deploy",
+        },
+        {
+          checksum,
+          id: "authority-sql",
+          migrationId: "sql.authority.add-package-state",
+          owner: "runtime",
+          requiredEvidence: [
+            {
+              description: "applied SQL migration row",
+              kind: "applied-sql-migration",
+              reference: "sql.authority.add-package-state",
+            },
+          ],
+          safety: "auto-safe",
+          status: "pending",
+          statusReason: "Applied-state evidence API is not available yet",
+          storageFamily: "authority",
+          summary: "Apply Authority SQL table migration",
+          target: {
+            storageIdentity: "app:site",
+            targetId: "instance.primary",
+          },
+          type: "sql-migration",
+        },
+        {
+          checksum,
+          id: "site-package",
+          migrationId: "package.site.0002",
+          owner: "site",
+          packageApp: {
+            fromPackageRevision: 1,
+            installId: "site",
+            packageAppKey: "site",
+            sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+            toPackageRevision: 2,
+          },
+          requiredEvidence: [
+            {
+              description: "package app migration evidence",
+              kind: "applied-package-app-migration",
+              reference: "package.site.0002",
+            },
+          ],
+          safety: "auto-with-backup",
+          status: "pending",
+          statusReason: "Backup evidence must be recorded before user data migration",
+          summary: "Migrate Site records to revision 2",
+          target: {
+            storageIdentity: "app:site",
+            targetId: "instance.primary",
+          },
+          type: "package-app-migration",
+        },
+        {
+          backupScope: "instance",
+          backupTarget: "archives/backups/instance-2026-06-01",
+          id: "backup-instance",
+          requiredEvidence: [
+            {
+              description: "fresh whole-instance archive path",
+              kind: "backup-archive",
+            },
+          ],
+          safety: "auto-with-backup",
+          status: "pending",
+          statusReason: "User-data migrations require a fresh backup",
+          summary: "Back up the target before user-data migrations",
+          target: {
+            targetId: "instance.primary",
+            targetUrl: "https://instance.example",
+          },
+          type: "backup",
+        },
+        {
+          fromRuntimeProtocolVersion: 1,
+          id: "reload-browser",
+          reloadReason: "runtime protocol changed",
+          requiredEvidence: [
+            {
+              description: "runtimeProtocolVersion=2 in bootstrap metadata",
+              kind: "client-reload",
+            },
+          ],
+          safety: "auto-safe",
+          status: "ready",
+          summary: "Require browser reload after deploy",
+          target: {
+            targetId: "instance.primary",
+            targetUrl: "https://instance.example",
+          },
+          toRuntimeProtocolVersion: 2,
+          type: "browser-reload",
+        },
+        {
+          approvalKey: "destructive-site-cleanup",
+          approvalReason: "Deletes tombstoned legacy Site records",
+          id: "manual-destructive-site-cleanup",
+          requiredEvidence: [
+            {
+              description: "explicit approval token destructive-site-cleanup",
+              kind: "manual-approval",
+            },
+          ],
+          safety: "manual-approval",
+          status: "blocked",
+          statusReason: "Manual approval has not been provided",
+          summary: "Approve destructive Site cleanup",
+          target: {
+            storageIdentity: "app:site",
+            targetId: "instance.primary",
+          },
+          type: "manual-approval",
+        },
+        {
+          archiveKind: "formless.instanceArchive",
+          fromArchiveVersion: 1,
+          id: "normalize-instance-archive",
+          normalizationStatus: "pending",
+          requiredEvidence: [
+            {
+              description: "normalizer output manifest version 2",
+              kind: "archive-normalization",
+            },
+          ],
+          safety: "auto-with-backup",
+          status: "pending",
+          statusReason: "Archive normalizer registry has not shipped",
+          summary: "Normalize older instance archive before restore",
+          target: {
+            archivePath: "/workspace/archive/archive.json",
+            targetId: "instance.primary",
+          },
+          toArchiveVersion: 2,
+          type: "archive-normalization",
+        },
+      ],
+    };
+
+    expect(formatCliUpgradePlan(plan)).toBe(`Upgrade plan.
+Target: label=Primary instance, targetId=instance.primary, url=https://instance.example.
+Steps: 7.
+
+1. code-deploy [ready] safety=auto-safe
+   Summary: Deploy runtime package 0.1.9.
+   Target: targetId=instance.primary, url=https://instance.example.
+   Package app: none.
+   Required evidence: deploy-metadata: deployed metadata reports packageVersion=0.1.9.
+   Details: packageVersion=0.1.8->0.1.9; runtimeProtocol=1->2; storageMigrationSet=storage.2026-05-28->storage.2026-06-01.
+
+2. sql-migration [pending] safety=auto-safe
+   Summary: Apply Authority SQL table migration.
+   Target: targetId=instance.primary, storageIdentity=app:site.
+   Package app: none.
+   Required evidence: applied-sql-migration: applied SQL migration row; reference=sql.authority.add-package-state.
+   Details: migration=sql.authority.add-package-state; checksum=sha256:1111111111111111111111111111111111111111111111111111111111111111; owner=runtime; storageFamily=authority.
+   Pending: Applied-state evidence API is not available yet.
+
+3. package-app-migration [pending] safety=auto-with-backup
+   Summary: Migrate Site records to revision 2.
+   Target: targetId=instance.primary, storageIdentity=app:site.
+   Package app: packageAppKey=site, installId=site, packageRevision=1->2, sourceSchemaHash=sha256:8f66129db4d31d2c4d93624737df3b9eb277c2d7f6690b1014bcb9bb6595b9fe.
+   Required evidence: applied-package-app-migration: package app migration evidence; reference=package.site.0002.
+   Details: migration=package.site.0002; checksum=sha256:1111111111111111111111111111111111111111111111111111111111111111; owner=site; packageRevision=1->2.
+   Pending: Backup evidence must be recorded before user data migration.
+
+4. backup [pending] safety=auto-with-backup
+   Summary: Back up the target before user-data migrations.
+   Target: targetId=instance.primary, url=https://instance.example.
+   Package app: none.
+   Required evidence: backup-archive: fresh whole-instance archive path.
+   Details: scope=instance; backupTarget=archives/backups/instance-2026-06-01.
+   Pending: User-data migrations require a fresh backup.
+
+5. browser-reload [ready] safety=auto-safe
+   Summary: Require browser reload after deploy.
+   Target: targetId=instance.primary, url=https://instance.example.
+   Package app: none.
+   Required evidence: client-reload: runtimeProtocolVersion=2 in bootstrap metadata.
+   Details: reason=runtime protocol changed; runtimeProtocol=1->2.
+
+6. manual-approval [blocked] safety=manual-approval
+   Summary: Approve destructive Site cleanup.
+   Target: targetId=instance.primary, storageIdentity=app:site.
+   Package app: none.
+   Required evidence: manual-approval: explicit approval token destructive-site-cleanup.
+   Details: approval=destructive-site-cleanup; reason=Deletes tombstoned legacy Site records.
+   Blocked: Manual approval has not been provided.
+
+7. archive-normalization [pending] safety=auto-with-backup
+   Summary: Normalize older instance archive before restore.
+   Target: targetId=instance.primary, archivePath=/workspace/archive/archive.json.
+   Package app: none.
+   Required evidence: archive-normalization: normalizer output manifest version 2.
+   Details: archiveKind=formless.instanceArchive; version=1->2; normalization=pending.
+   Pending: Archive normalizer registry has not shipped.
+`);
+  });
+
+  it("formats unsupported archive normalization as a blocked plan step", () => {
+    const plan: CliUpgradePlan = {
+      target: {
+        targetId: "instance.primary",
+      },
+      steps: [
+        {
+          archiveKind: "formless.instanceArchive",
+          fromArchiveVersion: 0,
+          id: "unsupported-archive",
+          normalizationStatus: "unsupported",
+          requiredEvidence: [],
+          safety: "manual-approval",
+          status: "blocked",
+          statusReason: "Archive version 0 has no registered normalizer",
+          summary: "Reject unsupported archive before restore",
+          target: {
+            archivePath: "/workspace/archive/archive.json",
+            targetId: "instance.primary",
+          },
+          type: "archive-normalization",
+        },
+      ],
+    };
+
+    expect(formatCliUpgradePlan(plan)).toBe(`Upgrade plan.
+Target: targetId=instance.primary.
+Steps: 1.
+
+1. archive-normalization [blocked] safety=manual-approval
+   Summary: Reject unsupported archive before restore.
+   Target: targetId=instance.primary, archivePath=/workspace/archive/archive.json.
+   Package app: none.
+   Required evidence: none.
+   Details: archiveKind=formless.instanceArchive; version=0->current; normalization=unsupported.
+   Blocked: Archive version 0 has no registered normalizer.
+`);
+  });
+});
