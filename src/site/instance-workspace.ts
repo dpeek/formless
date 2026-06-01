@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -44,6 +44,7 @@ import {
   type CloudflareDomainPreflightPolicy,
 } from "./cloudflare-domain-client.ts";
 import {
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
@@ -52,6 +53,7 @@ import {
   normalizeFormlessInstanceWorkspaceTargetUrl,
   parseFormlessInstanceWorkspaceManifestJson,
   type FormlessInstanceWorkspaceApp,
+  type FormlessInstanceWorkspaceDefaultAppPolicy,
   type FormlessInstanceWorkspaceDomainIntent,
   type FormlessInstanceWorkspaceManifest,
   type FormlessInstanceWorkspaceMigrationPolicy,
@@ -94,13 +96,20 @@ import {
   type EnsureFormlessInstanceLocalSecretEnvResult,
 } from "./instance-onboarding.ts";
 import { packageExecCommand } from "./package-commands.ts";
+import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
+  defaultAppPolicy?: FormlessInstanceWorkspaceDefaultAppPolicy;
   fromArchive?: string | null;
   fromRemote?: boolean;
   name?: string | null;
   targetAlias?: string;
   targetUrl?: string | null;
+  workspacePath?: string;
+};
+
+export type InitLocalFormlessWorkspaceOnboardingInput = {
+  name?: string | null;
   workspacePath?: string;
 };
 
@@ -418,7 +427,10 @@ export async function initFormlessInstanceWorkspace(
       ? null
       : normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
   const targetAlias = input.targetAlias ?? "remote";
-  let manifest = defaultFormlessInstanceWorkspaceManifest({ name, targetUrl });
+  let manifest = {
+    ...defaultFormlessInstanceWorkspaceManifest({ name, targetUrl }),
+    ...(input.defaultAppPolicy === undefined ? {} : { defaultAppPolicy: input.defaultAppPolicy }),
+  };
   let remoteStatus: FormlessInstanceTargetStatus | undefined;
   let archiveSourcePath: string | undefined;
 
@@ -455,6 +467,25 @@ export async function initFormlessInstanceWorkspace(
     ...(remoteStatus === undefined ? {} : { remoteStatus }),
     workspaceRoot,
   };
+}
+
+export async function initLocalFormlessWorkspaceOnboarding(
+  input: InitLocalFormlessWorkspaceOnboardingInput,
+  dependencies: InitFormlessInstanceWorkspaceDependencies,
+): Promise<InitFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+
+  await assertLocalOnboardingWorkspaceReady(workspaceRoot);
+
+  return initFormlessInstanceWorkspace(
+    {
+      defaultAppPolicy: "none",
+      name: input.name,
+      targetUrl: null,
+      workspacePath: input.workspacePath,
+    },
+    dependencies,
+  );
 }
 
 export async function discoverFormlessInstanceWorkspaceRoot(
@@ -1876,6 +1907,55 @@ async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
   }
 }
 
+async function assertLocalOnboardingWorkspaceReady(workspaceRoot: string) {
+  await assertNoExistingWorkspaceManifest(workspaceRoot);
+  await assertNoLocalOnboardingConflict(
+    workspaceRoot,
+    SITE_PROJECT_CONFIG_FILE,
+    "standalone Site project file",
+    "Import or move the Site project before onboarding.",
+  );
+  await assertNoLocalOnboardingConflict(
+    workspaceRoot,
+    SITE_PROJECT_RECORDS_FILE,
+    "standalone Site project file",
+    "Import or move the Site project before onboarding.",
+  );
+  await assertNoLocalOnboardingConflict(
+    workspaceRoot,
+    PORTABLE_ARCHIVE_MANIFEST_FILE,
+    "portable archive source",
+    "Import or move existing archive source before onboarding.",
+  );
+  await assertNoLocalOnboardingConflict(
+    workspaceRoot,
+    DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
+    "reviewable archive root",
+    "Move existing archive source before onboarding.",
+  );
+  await assertNoLocalOnboardingConflict(
+    workspaceRoot,
+    ".formless",
+    "ignored .formless state",
+    "Remove or move existing local state before onboarding.",
+  );
+}
+
+async function assertNoLocalOnboardingConflict(
+  workspaceRoot: string,
+  relativePath: string,
+  label: string,
+  guidance: string,
+) {
+  const filePath = path.join(workspaceRoot, relativePath);
+
+  if (await fileSystemPathExists(filePath)) {
+    throw new Error(
+      `formless onboard cannot initialize because ${label} exists at ${filePath}. ${guidance}`,
+    );
+  }
+}
+
 async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {
   for (const fileName of LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES) {
     const manifestPath = path.join(workspaceRoot, fileName);
@@ -1885,6 +1965,19 @@ async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {
         `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
       );
     }
+  }
+}
+
+async function fileSystemPathExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
   }
 }
 

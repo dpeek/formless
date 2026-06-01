@@ -59,7 +59,6 @@ import {
 } from "./project-source.ts";
 import {
   initSiteProject,
-  onboardFormlessInstance,
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   discoverFormlessInstanceWorkspaceRoot,
@@ -3337,16 +3336,18 @@ describe("Formless Site CLI", () => {
     ).rejects.toThrow("target already contains");
   });
 
-  it("runs onboard through deploy, health check, and optional browser open", async () => {
+  it("initializes a local Formless workspace from onboard without remote mutation", async () => {
+    const tempDir = await makeTempDir();
     const logs: string[] = [];
+    const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
     const commands: CapturedCommand[] = [];
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
     const openedUrls: string[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const stateWrites: WriteFormlessInstanceStateInput[] = [];
-    const setupUrl = `https://brother-instance.dpeek.workers.dev/setup?token=${setupToken}`;
-    const dependencies = cliDeps(process.cwd(), {
+    const dependencies = cliDeps(tempDir, {
+      accountDiscoveryInputs,
       commands,
       healthInputs,
       logs,
@@ -3359,158 +3360,116 @@ describe("Formless Site CLI", () => {
       },
     });
 
-    await expect(
-      onboardFormlessInstance(
-        {
-          credentialProfile: "personal",
-          instanceName: "brother-instance",
-          open: true,
-        },
-        dependencies,
-      ),
-    ).resolves.toMatchObject({
-      browserOpened: true,
-      credentialProfile: "personal",
-      deployment: {
-        url: "https://brother-instance.dpeek.workers.dev",
-      },
-      instanceName: "brother-instance",
-      mode: "deployed",
-      open: true,
-      ownerSetup: {
-        url: setupUrl,
-      },
-    });
-
     await runFormlessCli(
       ["onboard", "--name", "brother-instance", "--credential-profile", "personal", "--open"],
       dependencies,
     );
 
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(tempDir, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+
+    expect(manifest).toEqual({
+      version: 1,
+      kind: "formless-instance-workspace",
+      name: "brother-instance",
+      targets: [],
+      archives: {
+        instance: "archives/instance",
+        apps: "archives/apps",
+      },
+      local: {
+        stateRoot: ".formless/local",
+      },
+      defaultAppPolicy: "none",
+      apps: [],
+    });
+    await expect(readFile(path.join(tempDir, ".gitignore"), "utf8")).resolves.toBe(".formless/\n");
+    expect((await stat(path.join(tempDir, "archives/instance"))).isDirectory()).toBe(true);
+    expect((await stat(path.join(tempDir, "archives/apps"))).isDirectory()).toBe(true);
+    expect((await stat(path.join(tempDir, ".formless/local"))).isDirectory()).toBe(true);
+    await expect(
+      readFile(path.join(tempDir, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    expect(accountDiscoveryInputs).toEqual([]);
     expect(commands).toEqual([]);
-    expect(deployInputs).toHaveLength(2);
-    expect(deployInputs[0]).toMatchObject({
-      credentialProfile: "personal",
-      packageRoot: process.cwd(),
-      secrets: {
-        ALCHEMY_PASSWORD: "alchemy-password",
-        FORMLESS_ADMIN_TOKEN: "generated-token",
-      },
-    });
-    expect(healthInputs).toEqual([
-      {
-        expectedVersion: packageJson.version,
-        url: "https://brother-instance.dpeek.workers.dev",
-      },
-      {
-        expectedVersion: packageJson.version,
-        url: "https://brother-instance.dpeek.workers.dev",
-      },
-    ]);
-    expect(setupInputs).toEqual([
-      {
-        adminToken: "generated-token",
-        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
-        setupToken,
-      },
-      {
-        adminToken: "generated-token",
-        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
-        setupToken,
-      },
-    ]);
-    expect(openedUrls).toEqual([setupUrl, setupUrl]);
-    expect(stateWrites).toHaveLength(2);
-    expect(stateWrites.map((write) => write.root)).toEqual([
-      path.join(process.cwd(), ".formless/instances/brother-instance"),
-      path.join(process.cwd(), ".formless/instances/brother-instance"),
-    ]);
-    expect(stateWrites[0]?.state).toMatchObject({
-      accountId: "account-123",
-      credentialProfile: "personal",
-      deploymentTarget: "workers.dev",
-      instanceName: "brother-instance",
-      workersDevUrl: "https://brother-instance.dpeek.workers.dev",
-    });
-    expect(JSON.stringify(stateWrites)).not.toContain("generated-token");
-    expect(JSON.stringify(stateWrites)).not.toContain(setupToken);
-    expect(logs).toEqual([
-      [
-        "Formless instance deployed.",
-        "Instance: brother-instance.",
-        "Account: Personal (account-123).",
-        "Credential profile: personal.",
-        "URL: https://brother-instance.dpeek.workers.dev.",
-        "Worker: brother-instance.",
-        "Media bucket: brother-instance-media.",
-        "Authority storage: brother-instance-authority.",
-        `Deploy metadata: version ${packageJson.version} verified.`,
-        "State: .formless/instances/brother-instance/formless.instance.json.",
-        "Local secrets: .formless/instances/brother-instance/deploy.env.",
-        "Browser opened: yes.",
-        "Owner setup: opened in browser.",
-        "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
-      ].join("\n"),
-    ]);
-  });
-
-  it("prints the owner setup URL when onboard does not open a browser", async () => {
-    const logs: string[] = [];
-    const openedUrls: string[] = [];
-    const stateWrites: WriteFormlessInstanceStateInput[] = [];
-    const dependencies = cliDeps(process.cwd(), {
-      logs,
-      openedUrls,
-      stateWrites,
-    });
-    const setupUrl = `https://brother-instance.dpeek.workers.dev/setup?token=${setupToken}`;
-
-    await runFormlessCli(["onboard", "--name", "brother-instance", "--no-open"], dependencies);
-
+    expect(deployInputs).toEqual([]);
+    expect(healthInputs).toEqual([]);
+    expect(setupInputs).toEqual([]);
     expect(openedUrls).toEqual([]);
-    expect(JSON.stringify(stateWrites)).not.toContain(setupToken);
+    expect(stateWrites).toEqual([]);
     expect(logs).toEqual([
       [
-        "Formless instance deployed.",
-        "Instance: brother-instance.",
-        "Account: Personal (account-123).",
-        "Credential profile: <default>.",
-        "URL: https://brother-instance.dpeek.workers.dev.",
-        "Worker: brother-instance.",
-        "Media bucket: brother-instance-media.",
-        "Authority storage: brother-instance-authority.",
-        `Deploy metadata: version ${packageJson.version} verified.`,
-        "State: .formless/instances/brother-instance/formless.instance.json.",
-        "Local secrets: .formless/instances/brother-instance/deploy.env.",
-        "Browser opened: no.",
-        `Owner setup URL: ${setupUrl}.`,
-        "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
+        "Formless workspace initialized.",
+        "Workspace: .",
+        "Manifest: formless.json.",
+        "Ignored state: .formless/.",
+        "Archives: archives/instance, archives/apps.",
+        "Targets: none.",
+        "Default app policy: none.",
+        "Local apps: none.",
+        "Next:",
+        "  npx formless dev",
+        "  npx formless save",
+        "  npx formless deploy",
+        "First app: run `npx formless dev`, then install a package app in the local web UI.",
       ].join("\n"),
     ]);
   });
 
-  it("stores global instance onboarding state outside the current directory", async () => {
-    const cwd = "/tmp/empty-formless-project";
-    const logs: string[] = [];
-    const stateRoot = "/home/user/.formless";
-    const stateWrites: WriteFormlessInstanceStateInput[] = [];
-    const dependencies = cliDeps(cwd, {
-      logs,
-      stateRoot,
-      stateWrites,
-    });
+  it("rejects onboard when local workspace, Site, archive, or .formless state exists", async () => {
+    const cases: Array<{
+      create: (workspaceRoot: string) => Promise<void>;
+      message: (workspaceRoot: string) => string;
+    }> = [
+      {
+        create: (workspaceRoot) =>
+          writeFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "{}"),
+        message: (workspaceRoot) =>
+          `Formless instance workspace already exists at ${path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)}.`,
+      },
+      {
+        create: (workspaceRoot) =>
+          writeFile(path.join(workspaceRoot, "formless.config.json"), "{}"),
+        message: (workspaceRoot) =>
+          `formless onboard cannot initialize because standalone Site project file exists at ${path.join(workspaceRoot, "formless.config.json")}. Import or move the Site project before onboarding.`,
+      },
+      {
+        create: (workspaceRoot) => writeFile(path.join(workspaceRoot, "site.records.json"), "[]"),
+        message: (workspaceRoot) =>
+          `formless onboard cannot initialize because standalone Site project file exists at ${path.join(workspaceRoot, "site.records.json")}. Import or move the Site project before onboarding.`,
+      },
+      {
+        create: (workspaceRoot) =>
+          writeFile(path.join(workspaceRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "{}"),
+        message: (workspaceRoot) =>
+          `formless onboard cannot initialize because portable archive source exists at ${path.join(workspaceRoot, PORTABLE_ARCHIVE_MANIFEST_FILE)}. Import or move existing archive source before onboarding.`,
+      },
+      {
+        create: async (workspaceRoot) => {
+          await mkdir(path.join(workspaceRoot, "archives"), { recursive: true });
+        },
+        message: (workspaceRoot) =>
+          `formless onboard cannot initialize because reviewable archive root exists at ${path.join(workspaceRoot, "archives")}. Move existing archive source before onboarding.`,
+      },
+      {
+        create: async (workspaceRoot) => {
+          await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+        },
+        message: (workspaceRoot) =>
+          `formless onboard cannot initialize because ignored .formless state exists at ${path.join(workspaceRoot, ".formless")}. Remove or move existing local state before onboarding.`,
+      },
+    ];
 
-    await runFormlessCli(["onboard", "--name", "brother-instance", "--no-open"], dependencies);
+    for (const conflict of cases) {
+      const workspaceRoot = await makeTempDir();
 
-    expect(stateWrites.map((write) => write.root)).toEqual([
-      "/home/user/.formless/instances/brother-instance",
-    ]);
-    expect(logs[0]).toContain(
-      "State: /home/user/.formless/instances/brother-instance/formless.instance.json.",
-    );
-    expect(logs[0]).toContain(
-      "Local secrets: /home/user/.formless/instances/brother-instance/deploy.env.",
-    );
+      await conflict.create(workspaceRoot);
+      await expect(runFormlessCli(["onboard"], cliDeps(workspaceRoot))).rejects.toThrow(
+        conflict.message(workspaceRoot),
+      );
+    }
   });
 
   it("saves local authority snapshots into project records and media", async () => {
@@ -5563,6 +5522,7 @@ function fakeCloudflareDomainClient(input: {
 function cliDeps(
   cwd: string,
   options: {
+    accountDiscoveryInputs?: Array<{ credentialProfile: string | null }>;
     cloudflareDomainClient?: CloudflareDomainClient;
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
@@ -5583,13 +5543,17 @@ function cliDeps(
 
   return {
     accountDiscovery: {
-      listAccounts: async () => [
-        {
-          id: "account-123",
-          name: "Personal",
-          workersDevSubdomain: "dpeek",
-        },
-      ],
+      listAccounts: async (input) => {
+        options.accountDiscoveryInputs?.push(input);
+
+        return [
+          {
+            id: "account-123",
+            name: "Personal",
+            workersDevSubdomain: "dpeek",
+          },
+        ];
+      },
     },
     cloudflareDomainClient: () =>
       options.cloudflareDomainClient ??

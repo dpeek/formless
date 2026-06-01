@@ -62,6 +62,7 @@ import {
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
+  initLocalFormlessWorkspaceOnboarding as initLocalFormlessWorkspaceOnboardingCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   planFormlessInstanceWorkspaceDomains as planFormlessInstanceWorkspaceDomainsCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
@@ -78,6 +79,7 @@ import {
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
+  type InitLocalFormlessWorkspaceOnboardingInput,
   type PlanFormlessInstanceWorkspaceDomainsInput,
   type PlanFormlessInstanceWorkspaceDomainsResult,
   type PullFormlessInstanceWorkspaceResult,
@@ -117,7 +119,6 @@ import {
   fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   ensureFormlessInstanceLocalSecretEnv,
   FORMLESS_HOME_DIRECTORY,
-  runFormlessInstanceOnboarding,
   writeFormlessInstanceState,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
@@ -125,7 +126,6 @@ import {
   type FormlessInstanceLocalSecretEnvStore,
   type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceStateWriter,
-  type RunFormlessInstanceOnboardingResult,
 } from "./instance-onboarding.ts";
 
 export {
@@ -395,7 +395,7 @@ const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
 
 export type InitSiteProjectResult = InitSiteProjectSourceResult;
 
-export type OnboardFormlessInstanceResult = RunFormlessInstanceOnboardingResult;
+export type OnboardFormlessInstanceResult = InitFormlessInstanceWorkspaceResult;
 
 export async function runFormlessCli(
   args: string[],
@@ -423,26 +423,7 @@ export async function runFormlessCli(
     }
     case "onboard": {
       const result = await onboardFormlessInstance(command, dependencies);
-      dependencies.log(
-        [
-          "Formless instance deployed.",
-          `Instance: ${result.instanceName}.`,
-          `Account: ${formatAccountLabel(result.account)}.`,
-          `Credential profile: ${result.credentialProfile ?? "<default>"}.`,
-          `URL: ${result.deployment.url}.`,
-          `Worker: ${result.plan.resources.worker.name}.`,
-          `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
-          `Authority storage: ${result.plan.resources.authority.namespaceName}.`,
-          `Deploy metadata: version ${result.healthCheck.version} verified.`,
-          `State: ${formatCliPath(dependencies.cwd, result.stateWrite.path)}.`,
-          `Local secrets: ${formatCliPath(dependencies.cwd, result.localSecretEnv.path)}.`,
-          `Browser opened: ${result.browserOpened ? "yes" : "no"}.`,
-          result.browserOpened
-            ? "Owner setup: opened in browser."
-            : `Owner setup URL: ${result.ownerSetup.url}.`,
-          "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
-        ].join("\n"),
-      );
+      dependencies.log(formatFormlessOnboardingResult(result, dependencies.cwd));
       return;
     }
     case "dev":
@@ -655,39 +636,23 @@ export async function initSiteProject(
 }
 
 export async function onboardFormlessInstance(
-  input: {
+  input: InitLocalFormlessWorkspaceOnboardingInput & {
     credentialProfile?: string | null;
     instanceName?: string | null;
     open?: boolean;
   },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    | "accountDiscovery"
-    | "deploymentAdapter"
-    | "healthCheck"
-    | "localSecretEnv"
-    | "cwd"
-    | "openBrowser"
-    | "packageRoot"
-    | "randomToken"
-    | "stateRoot"
-    | "stateWriter"
-    | "setupCapability"
-  > = nodeFormlessCliDependencies(),
+  dependencies: Pick<FormlessCliDependencies, "cwd" | "fetch"> = nodeFormlessCliDependencies(),
 ): Promise<OnboardFormlessInstanceResult> {
-  return runFormlessInstanceOnboarding(input, {
-    accountDiscovery: dependencies.accountDiscovery,
-    deploymentAdapter: dependencies.deploymentAdapter,
-    healthCheck: dependencies.healthCheck,
-    localSecretEnv: dependencies.localSecretEnv,
-    openBrowser: dependencies.openBrowser,
-    packageRoot: dependencies.packageRoot,
-    packageVersion: packageJson.version,
-    randomToken: dependencies.randomToken,
-    stateRoot: dependencies.stateRoot,
-    stateWriter: dependencies.stateWriter,
-    setupCapability: dependencies.setupCapability,
-  });
+  return initLocalFormlessWorkspaceOnboardingCommand(
+    {
+      name: input.name ?? input.instanceName,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      fetch: dependencies.fetch,
+    },
+  );
 }
 
 export async function saveSiteProject(
@@ -1394,10 +1359,6 @@ function runCommandWithSpawn(
   });
 }
 
-function formatAccountLabel(account: { id: string; name?: string }): string {
-  return account.name ? `${account.name} (${account.id})` : account.id;
-}
-
 function formatArchiveWriteResult(
   label: string,
   result: ArchiveDiskWriteResult,
@@ -1466,6 +1427,30 @@ function formatArchiveNormalizationEvidence(
         `${entry.normalizerId} ${entry.archiveKind} version ${entry.fromVersion}->${entry.toVersion}`,
     )
     .join("; ")}.`;
+}
+
+function formatFormlessOnboardingResult(
+  result: InitFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  return [
+    "Formless workspace initialized.",
+    `Workspace: ${formatCliPathSentence(cwd, result.workspaceRoot)}`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Ignored state: ${formatCliDirectoryPath(cwd, path.join(result.workspaceRoot, ".formless"))}.`,
+    `Archives: ${formatCliPath(
+      cwd,
+      path.join(result.workspaceRoot, result.manifest.archives.instance),
+    )}, ${formatCliPath(cwd, path.join(result.workspaceRoot, result.manifest.archives.apps))}.`,
+    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
+    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
+    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
+    "Next:",
+    "  npx formless dev",
+    "  npx formless save",
+    "  npx formless deploy",
+    "First app: run `npx formless dev`, then install a package app in the local web UI.",
+  ].join("\n");
 }
 
 function formatInstanceWorkspaceInitResult(
@@ -2105,6 +2090,18 @@ function formatCliPath(cwd: string, filePath: string): string {
   }
 
   return relativePath;
+}
+
+function formatCliDirectoryPath(cwd: string, filePath: string): string {
+  const formatted = formatCliPath(cwd, filePath);
+
+  return formatted.endsWith("/") ? formatted : `${formatted}/`;
+}
+
+function formatCliPathSentence(cwd: string, filePath: string): string {
+  const formatted = formatCliPath(cwd, filePath);
+
+  return formatted === "." ? "." : `${formatted}.`;
 }
 
 function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {

@@ -15,12 +15,18 @@ Evidence:
 
 ## 2. Local-Only Onboard
 
-- [ ] 2.1 Replace remote `formless onboard` behavior with local workspace initialization in the current directory.
-- [ ] 2.2 Guard onboarding against conflicting existing workspace, Site project, archive, and `.formless` files.
-- [ ] 2.3 Generate the default reviewable `formless.json` manifest with no remote targets, no declared apps, and `defaultAppPolicy: "none"`.
-- [ ] 2.4 Create empty reviewable archive roots without generating default app archive source.
-- [ ] 2.5 Ensure `.formless/` is ignored and no Cloudflare account discovery, deploy, setup capability, browser open, or global state write occurs.
-- [ ] 2.6 Update onboard CLI output to show local workspace paths, next local commands, and local web app installation as the first app step.
+- [x] 2.1 Replace remote `formless onboard` behavior with local workspace initialization in the current directory.
+- [x] 2.2 Guard onboarding against conflicting existing workspace, Site project, archive, and `.formless` files.
+- [x] 2.3 Generate the default reviewable `formless.json` manifest with no remote targets, no declared apps, and `defaultAppPolicy: "none"`.
+- [x] 2.4 Create empty reviewable archive roots without generating default app archive source.
+- [x] 2.5 Ensure `.formless/` is ignored and no Cloudflare account discovery, deploy, setup capability, browser open, or global state write occurs.
+- [x] 2.6 Update onboard CLI output to show local workspace paths, next local commands, and local web app installation as the first app step.
+
+Evidence:
+
+- Files changed: `src/site/instance-workspace.ts`, `src/site/cli.ts`, `src/site/cli.test.ts`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run; section changes CLI onboarding behavior only, with no browser-visible app behavior.
 
 ## 3. Top-Level Workspace Commands
 
