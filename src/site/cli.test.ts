@@ -3211,6 +3211,7 @@ describe("Formless Site CLI", () => {
         FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
         FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "personal",
         FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "personal",
+        FORMLESS_INSTANCE_AUTH_ORIGIN: "https://personal.dpeek.workers.dev",
         FORMLESS_RUNTIME_PROFILE: "instance",
         VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },

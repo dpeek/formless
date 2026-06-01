@@ -7,6 +7,11 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite-plus";
 import { defaultExclude as defaultTestExclude } from "vite-plus/test/config";
 import {
+  FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
+  FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME,
+  FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME,
+} from "./src/shared/instance-auth.ts";
+import {
   FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
   FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
 } from "./src/shared/turnstile-config.ts";
@@ -142,6 +147,18 @@ function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
   return {
     ...optionalWorkerVar("FORMLESS_LAUNCH_FIXTURE", env.FORMLESS_LAUNCH_FIXTURE),
     ...optionalWorkerVar("FORMLESS_RUNTIME_PROFILE", env.FORMLESS_RUNTIME_PROFILE),
+    ...optionalWorkerVar(
+      FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
+      env[FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME],
+    ),
+    ...optionalWorkerVar(
+      FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME,
+      env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME],
+    ),
+    ...optionalWorkerVar(
+      FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME,
+      env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME],
+    ),
     ...optionalWorkerVar(
       FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
       env[FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME],

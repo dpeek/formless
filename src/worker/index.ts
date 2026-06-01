@@ -54,6 +54,9 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_DOMAIN_PROVIDER_ZONE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONE_NAME?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONES?: string;
+  FORMLESS_INSTANCE_AUTH_ORIGIN?: string;
+  FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID?: string;
+  FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME?: string;
   FORMLESS_LAUNCH_FIXTURE?: string;
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
@@ -76,6 +79,8 @@ export default {
       mappedAppInstall ? [mappedAppInstall] : [],
     );
     const isMappedAppProfileHost = domainMapping?.profile === "app";
+    const isMappedAuthBlockedProfileHost =
+      domainMapping?.profile === "app" || domainMapping?.profile === "publicSite";
     const effectiveRuntimeProfile = workerRuntimeProfileInput(
       domainMapping?.profile === "instance"
         ? "instance"
@@ -127,6 +132,10 @@ export default {
 
     if (deployMetadataResponse) {
       return deployMetadataResponse;
+    }
+
+    if (isMappedAuthBlockedProfileHost && isOwnerAuthRoute(requestTopology.pathname)) {
+      return notFoundResponse(requestTopology.apiPath);
     }
 
     const ownerSetupResponse = await handleOwnerSetupApiRequest(request, env);
@@ -198,7 +207,7 @@ export default {
     if (authorityRoute) {
       if (
         authorityRoute.identity.kind === "schemaKey" &&
-        (isMappedAppProfileHost ||
+        (isMappedAuthBlockedProfileHost ||
           !areSchemaKeyApiRoutesEnabledForRequest(request, requestTopology))
       ) {
         return Response.json({ error: "Not found." }, { status: 404 });
@@ -241,4 +250,23 @@ function redirectResponse(location: string, status: number): Response {
     },
     status,
   });
+}
+
+function isOwnerAuthRoute(pathname: string): boolean {
+  return (
+    pathname === "/setup" ||
+    pathname === "/login" ||
+    pathname === "/api/formless/setup" ||
+    pathname.startsWith("/api/formless/setup/") ||
+    pathname === "/api/formless/session" ||
+    pathname.startsWith("/api/formless/session/") ||
+    pathname === "/api/formless/passkeys" ||
+    pathname.startsWith("/api/formless/passkeys/")
+  );
+}
+
+function notFoundResponse(json: boolean): Response {
+  return json
+    ? Response.json({ error: "Not found." }, { status: 404 })
+    : new Response(null, { status: 404 });
 }

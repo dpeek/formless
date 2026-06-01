@@ -91,10 +91,20 @@ Evidence:
 
 ## 6. Runtime Topology And Host Boundaries
 
-- [ ] 6.1 Add runtime behavior for canonical instance auth origin in local dev and deployed instance profiles.
-- [ ] 6.2 Ensure mapped app hosts do not act as passkey relying parties and do not expose schema-key admin APIs.
-- [ ] 6.3 Ensure mapped public Site hosts do not act as passkey relying parties and continue serving public Site documents.
-- [ ] 6.4 Add routing tests for canonical instance auth routes, mapped app host non-auth behavior, and mapped public Site host non-auth behavior.
+- [x] 6.1 Add runtime behavior for canonical instance auth origin in local dev and deployed instance profiles.
+- [x] 6.2 Ensure mapped app hosts do not act as passkey relying parties and do not expose schema-key admin APIs.
+- [x] 6.3 Ensure mapped public Site hosts do not act as passkey relying parties and continue serving public Site documents.
+- [x] 6.4 Add routing tests for canonical instance auth routes, mapped app host non-auth behavior, and mapped public Site host non-auth behavior.
+
+Evidence:
+
+- Files changed: `src/shared/instance-auth.ts`, `src/worker/instance-auth-runtime.ts`, `src/worker/authority.ts`, `src/worker/index.ts`, `src/worker/custom-domain-routing.test.ts`, `src/site/instance-onboarding.ts`, `src/site/instance-onboarding.test.ts`, `src/site/cli.test.ts`, `vite.config.ts`.
+- Checks: `devstate start` passed before edits; `./.devstate/status.md` showed checks ok and services running at 2026-06-01T01:52:56.981Z. `devstate check` passed after edits; `./.devstate/status.md` shows checks ok and services running at 2026-06-01T02:00:45.458Z.
+- Runtime decision: the instance Authority seeds missing instance auth config only for `dev` and `instance` runtime profiles. Deployed instance plans now pass `FORMLESS_INSTANCE_AUTH_ORIGIN` as the workers.dev origin; local dev falls back to the request origin when it is a valid WebAuthn origin. Optional RP id/name env vars are passed through Vite Worker vars for explicit overrides.
+- Host-boundary decision: mapped `app` and `publicSite` hosts return 404 for `/setup`, `/login`, `/api/formless/setup/*`, `/api/formless/session/*`, and `/api/formless/passkeys/*`; mapped app/public Site hosts also block schema-key Authority APIs while installed app APIs remain available.
+- Worker routing tests: `src/worker/custom-domain-routing.test.ts` covers canonical auth config seeding for local dev and deployed instance origins, mapped app host auth-route rejection, mapped app schema-key API rejection, mapped installed app API availability, mapped public Site auth-route rejection, mapped public Site schema-key API rejection, and continued mapped public Site document rendering.
+- Browser smoke: `bun browser --session igor-owner-passkey-section6 --ignore-https-errors open https://add-owner-passkey-auth.formless.local/setup`, `bun browser --session igor-owner-passkey-section6 --ignore-https-errors snapshot -i`, `bun browser --session igor-owner-passkey-section6 --ignore-https-errors open https://add-owner-passkey-auth.formless.local/login`, and `bun browser --session igor-owner-passkey-section6 --ignore-https-errors snapshot -i` loaded `/setup` and `/login`; `/setup` reported missing setup token and `/login` reported setup incomplete. Mapped-host browser smoke remains section 7 because local dev has no custom-domain mapping configured.
+- Promotion note: finalization should promote runtime auth config seeding, deployed `FORMLESS_INSTANCE_AUTH_ORIGIN`, and mapped-host owner-auth/schema-key API boundary facts.
 
 ## 7. Verification And Promotion
 

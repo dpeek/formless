@@ -25,6 +25,12 @@ export type InstanceAuthConfigInput = {
   relyingPartyName: string;
 };
 
+export const FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME = "FORMLESS_INSTANCE_AUTH_ORIGIN";
+export const FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME =
+  "FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID";
+export const FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME =
+  "FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME";
+
 export type OwnerSessionSummary = {
   expiresAt: string;
 };

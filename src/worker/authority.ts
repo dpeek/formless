@@ -36,6 +36,7 @@ import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
+import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import {
   executePublicActionRequest,
   PublicActionError,
@@ -60,6 +61,7 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (this.ctx.id.name === FORMLESS_INSTANCE_AUTHORITY_NAME) {
       initializeInstanceAppInstallsFromConfiguredLaunchFixture(this.ctx.storage, this.bindings);
+      ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.bindings);
     }
 
     const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(

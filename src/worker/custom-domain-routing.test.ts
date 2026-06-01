@@ -16,6 +16,7 @@ const mappedHost = "www.example.com";
 const mappedAppHost = "tasks.example.com";
 const installId = "personal";
 const taskInstallId = "task-workspace";
+const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 let harness: Harness;
 let assetRequests: string[];
@@ -30,6 +31,52 @@ afterEach(async () => {
 });
 
 describe("installed Site custom-domain Worker routing", () => {
+  it("seeds canonical auth config for local dev and deployed instance origins", async () => {
+    const scenarios = [
+      {
+        host: "local.formless.local",
+        runtimeProfile: undefined,
+        expectedRpId: "local.formless.local",
+      },
+      {
+        host: "personal.dpeek.workers.dev",
+        runtimeProfile: "instance" as const,
+        expectedRpId: "personal.dpeek.workers.dev",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const authHarness = await createCustomDomainHarness(scenario.runtimeProfile);
+
+      try {
+        const origin = `https://${scenario.host}`;
+        const capability = await authHarness.mf.dispatchFetch(
+          `${origin}/api/formless/setup/capability`,
+          {
+            body: JSON.stringify({ setupToken }),
+            headers: adminHeaders({ "Content-Type": "application/json" }),
+            method: "POST",
+          },
+        );
+        const options = await authHarness.mf.dispatchFetch(
+          `${origin}/api/formless/passkeys/register/options`,
+          {
+            body: JSON.stringify({ setupToken }),
+            headers: { "Content-Type": "application/json", Origin: origin },
+            method: "POST",
+          },
+        );
+        const body = (await options.json()) as { options: { rp: { id: string; name: string } } };
+
+        expect(capability.status).toBe(200);
+        expect(options.status).toBe(200);
+        expect(body.options.rp).toEqual({ id: scenario.expectedRpId, name: "Formless" });
+      } finally {
+        await authHarness.dispose();
+      }
+    }
+  });
+
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
     await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
@@ -149,6 +196,32 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual([`/sites/${installId}`]);
   });
 
+  it("keeps mapped public Site hosts outside owner auth routes", async () => {
+    await setupMappedSite();
+
+    const home = await fetchMappedHost("/", {
+      headers: { Accept: "text/html" },
+    });
+    const login = await fetchMappedHost("/login", {
+      headers: { Accept: "text/html" },
+    });
+    const passkeyOptions = await fetchMappedHost("/api/formless/passkeys/login/options", {
+      body: "{}",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const session = await fetchMappedHost("/api/formless/session");
+    const schemaKeyApi = await fetchMappedHost("/api/site/bootstrap");
+    const homeHtml = await home.text();
+
+    expect(home.status).toBe(200);
+    expect(homeHtml).toContain(`<meta name="formless-runtime-profile" content="publishedSite" />`);
+    expect(login.status).toBe(404);
+    expect(passkeyOptions.status).toBe(404);
+    expect(session.status).toBe(404);
+    expect(schemaKeyApi.status).toBe(404);
+  });
+
   it("serves an instance profile custom host instead of public Site SSR", async () => {
     await harness.dispose();
     harness = await createCustomDomainHarness("publishedSite");
@@ -187,6 +260,19 @@ describe("installed Site custom-domain Worker routing", () => {
     const schema = await fetchHost(mappedAppHost, "/schema", {
       headers: { Accept: "text/html" },
     });
+    const login = await fetchHost(mappedAppHost, "/login", {
+      headers: { Accept: "text/html" },
+    });
+    const passkeyOptions = await fetchHost(mappedAppHost, "/api/formless/passkeys/login/options", {
+      body: "{}",
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const setupCapability = await fetchHost(mappedAppHost, "/api/formless/setup/capability", {
+      body: JSON.stringify({ setupToken }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    });
     const schemaKeyApi = await fetchHost(mappedAppHost, "/api/tasks/bootstrap");
     const installApi = await fetchHost(
       mappedAppHost,
@@ -210,6 +296,9 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(schemaHtml).toContain(
       `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
     );
+    expect(login.status).toBe(404);
+    expect(passkeyOptions.status).toBe(404);
+    expect(setupCapability.status).toBe(404);
     expect(schemaKeyApi.status).toBe(404);
     expect(installApi.status).toBe(200);
     expect(assetRequests).toEqual(["/index.html", "/index.html"]);
@@ -265,7 +354,16 @@ function fetchMappedHost(path: string, init?: DispatchFetchInit) {
 }
 
 function fetchHost(host: string, path: string, init?: DispatchFetchInit) {
-  return harness.mf.dispatchFetch(`http://${host}${path}`, init);
+  return fetchHarnessHost(harness, host, path, init);
+}
+
+function fetchHarnessHost(
+  targetHarness: Harness,
+  host: string,
+  path: string,
+  init?: DispatchFetchInit,
+) {
+  return targetHarness.mf.dispatchFetch(`http://${host}${path}`, init);
 }
 
 async function postAdminJson(path: string, body: unknown) {
@@ -325,7 +423,7 @@ function assetResponse(request: Request): Response {
   });
 }
 
-function createCustomDomainHarness(runtimeProfile: "instance" | "publishedSite") {
+function createCustomDomainHarness(runtimeProfile?: "instance" | "publishedSite") {
   return createWorkerHarness(
     "src/worker/index.ts",
     {
@@ -334,7 +432,7 @@ function createCustomDomainHarness(runtimeProfile: "instance" | "publishedSite")
     {
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
-        FORMLESS_RUNTIME_PROFILE: runtimeProfile,
+        ...(runtimeProfile === undefined ? {} : { FORMLESS_RUNTIME_PROFILE: runtimeProfile }),
       },
       compatibilityDate: "2026-04-28",
       r2Buckets: ["FORMLESS_MEDIA"],
