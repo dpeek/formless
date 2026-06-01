@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import packageJson from "../../package.json";
+import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import { listBundledAppPackages } from "../shared/app-installs.ts";
 import {
   parseSitePublishArgs,
   runSitePublish,
@@ -65,10 +71,45 @@ describe("Site publish workflow", () => {
     );
   });
 
-  it("dry-runs without commands, network calls, or backup writes", async () => {
+  it("dry-runs with upgrade planning reads and without mutation", async () => {
     const harness = publishHarness({
       apply: false,
       target: "https://live.example",
+    });
+    harness.queueJson(
+      {
+        packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageAppKey: appPackage.packageAppKey,
+          packageRevision: appPackage.packageRevision,
+          sourceSchemaHash: appPackage.sourceSchemaHash,
+        })),
+        packageVersion: "0.1.7",
+        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+        version: "0.1.7",
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/site",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          installId: "site",
+          label: "Site",
+          packageAppKey: "site",
+          packageRevision: 1,
+          publicRoute: "/sites/site",
+          publicRoutePrefix: "/sites/site/",
+          schemaRoute: "/apps/site/schema",
+          sourceSchemaHash: listBundledAppPackages()[0]?.sourceSchemaHash,
+          status: "installed",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
     });
 
     const result = await runSitePublish(harness.input());
@@ -80,12 +121,58 @@ describe("Site publish workflow", () => {
       target: "https://live.example",
     });
     expect(harness.commands).toEqual([]);
-    expect(harness.requests).toEqual([]);
+    expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+    ]);
     expect(harness.writes).toEqual([]);
     expect(harness.logs).toContain("DRY RUN: Site publish workflow.");
     expect(harness.logs).toContain(
       "Dry run only. Re-run with --apply to mutate code or live data.",
     );
+    expect(harness.logs.at(-1)).toContain("Upgrade target facts.");
+    expect(harness.logs.at(-1)).toContain(`packageVersion=0.1.7->${packageJson.version}`);
+    expect(harness.logs.at(-1)).toContain("Required evidence: deploy-metadata:");
+  });
+
+  it("blocks dry-run upgrade planning on target metadata verification failures", async () => {
+    const harness = publishHarness({
+      apply: false,
+      target: "https://live.example",
+    });
+    harness.queueJson({ version: "0.1.7" });
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/site",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          installId: "site",
+          label: "Site",
+          packageAppKey: "site",
+          publicRoute: "/sites/site",
+          publicRoutePrefix: "/sites/site/",
+          schemaRoute: "/apps/site/schema",
+          status: "installed",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(runSitePublish(harness.input())).rejects.toThrow(
+      "Upgrade planning blocked: deploy-metadata-cacheable, deploy-metadata-package-version-missing",
+    );
+
+    expect(harness.commands).toEqual([]);
+    expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+    ]);
+    expect(harness.writes).toEqual([]);
+    expect(harness.logs.at(-1)).toContain("Blockers: deploy-metadata-cacheable");
   });
 
   it("applies the default code and data publish flow", async () => {
@@ -332,8 +419,8 @@ function publishHarness(options: PublishHarnessOptions) {
     }),
     logs,
     mkdirs,
-    queueJson: (value: unknown, status = 200) =>
-      responses.push(textResponse(JSON.stringify(value), status)),
+    queueJson: (value: unknown, status = 200, headers?: Record<string, string>) =>
+      responses.push(textResponse(JSON.stringify(value), status, headers)),
     queueText: (value: string, status = 200) => responses.push(textResponse(value, status)),
     reads,
     requests,
@@ -342,8 +429,13 @@ function publishHarness(options: PublishHarnessOptions) {
   };
 }
 
-function textResponse(body: string, status = 200): SitePublishHttpResponse {
+function textResponse(
+  body: string,
+  status = 200,
+  headers?: Record<string, string>,
+): SitePublishHttpResponse {
   return {
+    headers: new Headers(headers),
     ok: status >= 200 && status < 300,
     status,
     text: async () => body,

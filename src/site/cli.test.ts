@@ -4178,6 +4178,144 @@ describe("Formless Site CLI", () => {
     );
   });
 
+  it("adds upgrade planning to Site project publish dry-run without mutating target", async () => {
+    const tempDir = await makeTempDir();
+    const projectRoot = path.join(tempDir, "site");
+    const config = {
+      ...defaultSiteProjectConfig(),
+      deploy: {
+        workerName: "brother-site",
+        publishUrl: "https://live.example",
+        mediaBucket: "brother-site-media",
+      },
+    };
+    const commands: CapturedCommand[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await writeFileTree(projectRoot, publishRecords(), config);
+    responses.queueJson(
+      {
+        packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageAppKey: appPackage.packageAppKey,
+          packageRevision: appPackage.packageRevision,
+          sourceSchemaHash: appPackage.sourceSchemaHash,
+        })),
+        packageVersion: "0.1.7",
+        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+        version: "0.1.7",
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/site",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          installId: "site",
+          label: "Site",
+          packageAppKey: "site",
+          packageRevision: 1,
+          publicRoute: "/sites/site",
+          publicRoutePrefix: "/sites/site/",
+          schemaRoute: "/apps/site/schema",
+          sourceSchemaHash: listBundledAppPackages()[0]?.sourceSchemaHash,
+          status: "installed",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await runFormlessCli(
+      ["publish", "--project", projectRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        commands,
+        fetch: responses.fetcher(requests),
+        logs,
+        packageRoot: "/package",
+      }),
+    );
+
+    expect(commands).toEqual([]);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+    ]);
+    expect(requests.some((request) => request.url.includes("/api/site/snapshot"))).toBe(false);
+    expect(logs.some((log) => log.includes("Upgrade target facts."))).toBe(true);
+    expect(logs.some((log) => log.includes(`packageVersion=0.1.7->${packageJson.version}`))).toBe(
+      true,
+    );
+    expect(logs.at(-1)).toBe(
+      `Site project publish dry run: ${publishRecords().length} records for https://live.example.`,
+    );
+  });
+
+  it("stops Site project publish dry-run on upgrade metadata verification failure", async () => {
+    const tempDir = await makeTempDir();
+    const projectRoot = path.join(tempDir, "site");
+    const config = {
+      ...defaultSiteProjectConfig(),
+      deploy: {
+        workerName: "brother-site",
+        publishUrl: "https://live.example",
+        mediaBucket: "brother-site-media",
+      },
+    };
+    const commands: CapturedCommand[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await writeFileTree(projectRoot, publishRecords(), config);
+    responses.queueJson({ version: "0.1.7" });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/site",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          installId: "site",
+          label: "Site",
+          packageAppKey: "site",
+          publicRoute: "/sites/site",
+          publicRoutePrefix: "/sites/site/",
+          schemaRoute: "/apps/site/schema",
+          status: "installed",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      runFormlessCli(
+        ["publish", "--project", projectRoot, "--dry-run"],
+        cliDeps(tempDir, {
+          commands,
+          fetch: responses.fetcher(requests),
+          logs,
+          packageRoot: "/package",
+        }),
+      ),
+    ).rejects.toThrow("Upgrade planning blocked: deploy-metadata-cacheable");
+
+    expect(commands).toEqual([]);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+    ]);
+    expect(requests.some((request) => request.url.includes("/api/site/snapshot"))).toBe(false);
+    expect(logs.at(-1)).toContain("Blockers: deploy-metadata-cacheable");
+  });
+
   it("brokers local admin publish through save and data-only publish when deploy is current", async () => {
     const tempDir = await makeTempDir();
     const projectRoot = path.join(tempDir, "site");
@@ -5178,7 +5316,8 @@ function responseQueue() {
           status,
         }),
       ),
-    queueJson: (value: unknown, status = 200) => responses.push(Response.json(value, { status })),
+    queueJson: (value: unknown, status = 200, headers?: HeadersInit) =>
+      responses.push(Response.json(value, { headers, status })),
     queueText: (value: string, status = 200) => responses.push(new Response(value, { status })),
   };
 }

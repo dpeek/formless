@@ -88,9 +88,16 @@ Evidence:
 
 ## 7. Deploy And Publish Dry-run Planning
 
-- [ ] 7.1 Integrate non-mutating upgrade planning into deploy dry-run and publish dry-run flows.
-- [ ] 7.2 Ensure dry-run output includes deployed metadata, local package facts, app install facts, planned steps, blockers, and evidence requirements.
-- [ ] 7.3 Add CLI tests proving deploy and publish dry-runs do not mutate target data and stop on metadata verification failure.
+- [x] 7.1 Integrate non-mutating upgrade planning into deploy dry-run and publish dry-run flows.
+- [x] 7.2 Ensure dry-run output includes deployed metadata, local package facts, app install facts, planned steps, blockers, and evidence requirements.
+- [x] 7.3 Add CLI tests proving deploy and publish dry-runs do not mutate target data and stop on metadata verification failure.
+
+Evidence:
+
+- `grug` 2026-06-01: added `src/site/upgrade-plan.ts` planning report helpers that build a non-mutating dry-run upgrade report from target status reads, deployed metadata, local package facts, installed app facts, blockers, and formatted plan/evidence requirements.
+- Wired `src/site/publish.ts` dry-runs with a target to read target upgrade status through existing HTTP target reads, log the upgrade planning report, and stop before returning when metadata verification blockers are present. Apply publish flow remains unchanged in this section.
+- Added `src/site/publish.test.ts` and `src/site/cli.test.ts` coverage proving direct Site publish and Site project publish dry-runs read only deploy/setup/app-install status endpoints, do not run deploy commands or touch Site snapshot data, include upgrade evidence output, and stop on target metadata verification failures.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes CLI dry-run output and no visible browser app behavior changed.
 
 ## 8. Archive Restore And Workspace Push Dry-run Planning
 

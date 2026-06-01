@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import packageJson from "../../package.json";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -9,8 +10,14 @@ import {
   type StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { readFormlessInstanceTargetStatus } from "./instance-target-client.ts";
 import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
 import { siteSourceMediaAssetsFromRecords, type SiteSourceMediaAsset } from "./source-media.ts";
+import {
+  assertCliUpgradePlanningReady,
+  buildCliUpgradePlanningReport,
+  formatCliUpgradePlanningReport,
+} from "./upgrade-plan.ts";
 
 export type SitePublishOptions = {
   apply: boolean;
@@ -34,6 +41,7 @@ export type SitePublishRunCommandOptions = {
 };
 
 export type SitePublishHttpResponse = {
+  headers: Headers;
   ok: boolean;
   status: number;
   text: () => Promise<string>;
@@ -173,6 +181,8 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
   logPublishPlan(input, sourceSnapshot, sourceMediaAssets.length);
 
   if (!input.options.apply) {
+    await logDryRunUpgradePlanning(input);
+
     return {
       backupPath: null,
       mode: "dry-run",
@@ -248,6 +258,36 @@ function logPublishPlan(
   if (input.options.data) {
     input.dependencies.log(`Backup directory: ${input.options.backupDir}`);
   }
+}
+
+async function logDryRunUpgradePlanning(input: SitePublishInput): Promise<void> {
+  const target = input.options.target;
+
+  if (!target) {
+    return;
+  }
+
+  const targetStatus = await readFormlessInstanceTargetStatus(
+    {
+      targetUrl: target,
+    },
+    {
+      fetch: (url, init) => sitePublishFetchResponse(input, url, init),
+    },
+  );
+  const deploymentTarget = targetStatus.upgradeStatus.deployment?.target;
+  const report = buildCliUpgradePlanningReport({
+    localPackageVersion: packageJson.version,
+    status: targetStatus.upgradeStatus,
+    target: {
+      ...(deploymentTarget?.label === undefined ? {} : { label: deploymentTarget.label }),
+      ...(deploymentTarget?.targetId === undefined ? {} : { targetId: deploymentTarget.targetId }),
+      targetUrl: target,
+    },
+  });
+
+  input.dependencies.log(formatCliUpgradePlanningReport(report).trimEnd());
+  assertCliUpgradePlanningReady(report);
 }
 
 async function publishSiteData(
@@ -460,6 +500,20 @@ async function fetchJson(
   } catch {
     throw new Error(`Failed ${init?.method ?? "GET"} ${url}: response was not JSON.`);
   }
+}
+
+async function sitePublishFetchResponse(
+  input: SitePublishInput,
+  url: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const requestUrl = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+  const response = await input.dependencies.fetch(requestUrl, init);
+
+  return new Response(await response.text(), {
+    headers: response.headers,
+    status: response.status,
+  });
 }
 
 async function fetchOk(input: SitePublishInput, url: string, init?: RequestInit): Promise<void> {

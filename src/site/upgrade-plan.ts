@@ -1,4 +1,8 @@
 import type { PackageAppKey } from "../shared/app-installs.ts";
+import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
 import type {
   PackageAppRevision,
   SourceSchemaHash,
@@ -6,6 +10,12 @@ import type {
   UpgradeMigrationId,
   UpgradeMigrationSafetyClass,
 } from "../shared/upgrade-migrations.ts";
+import type {
+  FormlessInstanceTargetInstalledAppUpgradeFacts,
+  FormlessInstanceTargetLocalPackageUpgradeFacts,
+  FormlessInstanceTargetUpgradeStatus,
+  FormlessInstanceTargetUpgradeVerificationFailure,
+} from "./instance-target-client.ts";
 
 export type CliUpgradePlanStepType =
   | "archive-normalization"
@@ -134,6 +144,76 @@ export type CliUpgradePlan = {
   target: CliUpgradePlanTargetIdentity;
 };
 
+export type CliUpgradePlanningBlocker = {
+  code: string;
+  message: string;
+};
+
+export type CliUpgradePlanningReport = {
+  blockers: readonly CliUpgradePlanningBlocker[];
+  plan: CliUpgradePlan;
+  status: FormlessInstanceTargetUpgradeStatus;
+};
+
+export function buildCliUpgradePlanningReport(input: {
+  localPackageVersion: string;
+  status: FormlessInstanceTargetUpgradeStatus;
+  target: CliUpgradePlanTargetIdentity;
+}): CliUpgradePlanningReport {
+  const target = input.target;
+  const status = input.status;
+  const blockers = [
+    ...status.verificationFailures.map(blockerFromVerificationFailure),
+    ...packageDriftBlockers(status),
+  ];
+  const steps =
+    blockers.length === 0
+      ? plannedUpgradeSteps({
+          localPackageVersion: input.localPackageVersion,
+          status,
+          target,
+        })
+      : [];
+
+  return {
+    blockers,
+    plan: {
+      steps,
+      target,
+    },
+    status,
+  };
+}
+
+export function assertCliUpgradePlanningReady(report: CliUpgradePlanningReport): void {
+  if (report.blockers.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Upgrade planning blocked: ${report.blockers.map((blocker) => blocker.code).join(", ")}.`,
+  );
+}
+
+export function formatCliUpgradePlanningReport(report: CliUpgradePlanningReport): string {
+  const status = report.status;
+  const deploymentTarget = status.deployment?.target;
+  const lines = [
+    "Upgrade target facts.",
+    `Deployed metadata: ${formatDeployedMetadata(status.deployedMetadata)}.`,
+    deploymentTarget
+      ? `Deployment target: ${formatDeploymentTarget(deploymentTarget)}.`
+      : "Deployment target: not requested.",
+    `Local package facts: ${formatLocalPackageFacts(status.localPackages)}.`,
+    `Installed app facts: ${formatInstalledAppFacts(status.installedApps)}.`,
+    `Blockers: ${formatPlanningBlockers(report.blockers)}.`,
+    "",
+    formatCliUpgradePlan(report.plan).trimEnd(),
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
 export function formatCliUpgradePlan(plan: CliUpgradePlan): string {
   const lines = [
     "Upgrade plan.",
@@ -249,6 +329,193 @@ function formatTargetIdentity(target: CliUpgradePlanTargetIdentity): string {
     ", ",
     "unspecified",
   );
+}
+
+function plannedUpgradeSteps(input: {
+  localPackageVersion: string;
+  status: FormlessInstanceTargetUpgradeStatus;
+  target: CliUpgradePlanTargetIdentity;
+}): CliUpgradePlanStep[] {
+  const steps: CliUpgradePlanStep[] = [];
+  const deployed = input.status.deployedMetadata;
+  const needsCodeDeploy =
+    deployed.packageVersion !== input.localPackageVersion ||
+    deployed.runtimeProtocolVersion !== FORMLESS_RUNTIME_PROTOCOL_VERSION ||
+    deployed.storageMigrationSet !== FORMLESS_STORAGE_MIGRATION_SET_ID;
+
+  if (needsCodeDeploy) {
+    steps.push({
+      fromPackageVersion: deployed.packageVersion,
+      fromRuntimeProtocolVersion: deployed.runtimeProtocolVersion,
+      fromStorageMigrationSet: deployed.storageMigrationSet,
+      id: "deploy-runtime",
+      requiredEvidence: [
+        {
+          description: `deployed metadata reports packageVersion=${input.localPackageVersion}`,
+          kind: "deploy-metadata",
+          reference: deployed.metadataUrl,
+        },
+        {
+          description: `deployed metadata reports runtimeProtocolVersion=${FORMLESS_RUNTIME_PROTOCOL_VERSION}`,
+          kind: "deploy-metadata",
+          reference: deployed.metadataUrl,
+        },
+        {
+          description: `deployed metadata reports storageMigrationSet=${FORMLESS_STORAGE_MIGRATION_SET_ID}`,
+          kind: "deploy-metadata",
+          reference: deployed.metadataUrl,
+        },
+      ],
+      safety: "auto-safe",
+      status: "ready",
+      summary: `Deploy runtime package ${input.localPackageVersion}`,
+      target: input.target,
+      toPackageVersion: input.localPackageVersion,
+      toRuntimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      toStorageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+      type: "code-deploy",
+    });
+  }
+
+  if (deployed.runtimeProtocolVersion !== FORMLESS_RUNTIME_PROTOCOL_VERSION) {
+    steps.push({
+      fromRuntimeProtocolVersion: deployed.runtimeProtocolVersion,
+      id: "browser-reload",
+      reloadReason: "runtime protocol changed",
+      requiredEvidence: [
+        {
+          description: `browser observes runtimeProtocolVersion=${FORMLESS_RUNTIME_PROTOCOL_VERSION}`,
+          kind: "client-reload",
+        },
+      ],
+      safety: "auto-safe",
+      status: "ready",
+      summary: "Require browser reload after runtime deploy",
+      target: input.target,
+      toRuntimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      type: "browser-reload",
+    });
+  }
+
+  return steps;
+}
+
+function blockerFromVerificationFailure(
+  failure: FormlessInstanceTargetUpgradeVerificationFailure,
+): CliUpgradePlanningBlocker {
+  return {
+    code: failure.code,
+    message: failure.message,
+  };
+}
+
+function packageDriftBlockers(
+  status: FormlessInstanceTargetUpgradeStatus,
+): CliUpgradePlanningBlocker[] {
+  const blockers: CliUpgradePlanningBlocker[] = [];
+  const localPackages = new Map(
+    status.localPackages.map((appPackage) => [appPackage.packageAppKey, appPackage]),
+  );
+
+  for (const install of status.installedApps) {
+    const localPackage = localPackages.get(install.packageAppKey);
+
+    if (!localPackage) {
+      continue;
+    }
+
+    if (install.packageRevision > localPackage.packageRevision) {
+      blockers.push({
+        code: "installed-app-package-revision-ahead",
+        message: `Installed app "${install.installId}" package revision ${install.packageRevision} is ahead of local package revision ${localPackage.packageRevision}.`,
+      });
+      continue;
+    }
+
+    if (
+      install.packageRevision === localPackage.packageRevision &&
+      install.sourceSchemaHash !== localPackage.sourceSchemaHash
+    ) {
+      blockers.push({
+        code: "installed-app-source-schema-hash-drift",
+        message: `Installed app "${install.installId}" source schema hash differs from local package facts at revision ${install.packageRevision}.`,
+      });
+    }
+  }
+
+  return blockers;
+}
+
+function formatDeployedMetadata(
+  metadata: FormlessInstanceTargetUpgradeStatus["deployedMetadata"],
+): string {
+  return compactJoin([
+    formatValue("packageVersion", metadata.packageVersion ?? "unknown"),
+    formatValue("runtimeProtocol", metadata.runtimeProtocolVersion),
+    formatValue("storageMigrationSet", metadata.storageMigrationSet),
+    formatValue("metadata", metadata.metadataUrl),
+  ]);
+}
+
+function formatDeploymentTarget(
+  target: NonNullable<FormlessInstanceTargetUpgradeStatus["deployment"]>["target"],
+): string {
+  return compactJoin(
+    [
+      formatValue("targetId", target.targetId),
+      target.label === undefined ? null : formatValue("label", target.label),
+    ],
+    ", ",
+  );
+}
+
+function formatLocalPackageFacts(
+  packages: readonly FormlessInstanceTargetLocalPackageUpgradeFacts[],
+): string {
+  if (packages.length === 0) {
+    return "none";
+  }
+
+  return packages.map(formatPackageFacts).join("; ");
+}
+
+function formatInstalledAppFacts(
+  installs: readonly FormlessInstanceTargetInstalledAppUpgradeFacts[],
+): string {
+  if (installs.length === 0) {
+    return "none";
+  }
+
+  return installs
+    .map(
+      (install) =>
+        `${install.installId} (${formatPackageFacts({
+          packageAppKey: install.packageAppKey,
+          packageRevision: install.packageRevision,
+          sourceSchemaHash: install.sourceSchemaHash,
+        })})`,
+    )
+    .join("; ");
+}
+
+function formatPackageFacts(input: {
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+}): string {
+  return compactJoin([
+    formatValue("packageAppKey", input.packageAppKey),
+    formatValue("packageRevision", input.packageRevision),
+    formatValue("sourceSchemaHash", input.sourceSchemaHash),
+  ]);
+}
+
+function formatPlanningBlockers(blockers: readonly CliUpgradePlanningBlocker[]): string {
+  if (blockers.length === 0) {
+    return "none";
+  }
+
+  return blockers.map((blocker) => `${blocker.code}: ${blocker.message}`).join("; ");
 }
 
 function formatPackageAppIdentity(
