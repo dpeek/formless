@@ -69,6 +69,7 @@ import {
   resolveFormlessInstanceWorkspaceRoot as resolveFormlessInstanceWorkspaceRootCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
   runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
+  saveLocalFormlessWorkspace as saveLocalFormlessWorkspaceCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
   pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
@@ -89,6 +90,8 @@ import {
   type PushFormlessInstanceWorkspaceResult,
   type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
+  type SaveLocalFormlessWorkspaceInput,
+  type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
 import {
   forgetFormlessInstanceDomainMapping,
@@ -254,6 +257,9 @@ export {
   type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
   type RotateFormlessInstanceWorkspaceAdminTokenInput,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
+  type SaveLocalFormlessWorkspaceDependencies,
+  type SaveLocalFormlessWorkspaceInput,
+  type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
 export {
   readFormlessInstanceAppRegistry,
@@ -439,10 +445,17 @@ export async function runFormlessCli(
       dependencies.log(formatLocalFormlessWorkspaceCheckResult(result, dependencies.cwd));
       return;
     }
-    case "workspaceSave":
-      throw new Error(
-        "formless save for local workspaces is not implemented yet; workspace save is tracked by OpenSpec task 4.",
+    case "workspaceSave": {
+      const result = await saveLocalFormlessWorkspaceCommand(
+        {
+          check: command.check,
+          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+        },
+        dependencies,
       );
+      dependencies.log(formatLocalFormlessWorkspaceSaveResult(result, dependencies.cwd));
+      return;
+    }
     case "workspaceDeploy": {
       const result = await deployFormlessInstanceWorkspace(
         {
@@ -799,6 +812,16 @@ export async function checkFormlessInstanceWorkspace(
   > = nodeFormlessCliDependencies(),
 ): Promise<CheckFormlessInstanceWorkspaceResult> {
   return checkFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
+export async function saveLocalFormlessWorkspace(
+  input: SaveLocalFormlessWorkspaceInput,
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<SaveLocalFormlessWorkspaceResult> {
+  return saveLocalFormlessWorkspaceCommand(input, dependencies);
 }
 
 export async function pushFormlessInstanceWorkspace(
@@ -1560,6 +1583,24 @@ function formatLocalFormlessWorkspaceCheckResult(
   ].join("\n");
 }
 
+function formatLocalFormlessWorkspaceSaveResult(
+  result: SaveLocalFormlessWorkspaceResult,
+  cwd: string,
+): string {
+  return [
+    `Formless workspace save ${result.mode === "check" ? "check ok" : "complete"}.`,
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Source: ${result.source}.`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Instance archive: ${formatCliPath(cwd, result.instanceArchive.archivePath)}.`,
+    `Apps: ${result.instanceArchive.appCount}.`,
+    `Records: ${result.instanceArchive.recordCount}.`,
+    `Media files: ${result.instanceArchive.mediaCount}.`,
+    `App archives: ${formatSavedAppArchives(result.appArchives)}.`,
+    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
+  ].join("\n");
+}
+
 function formatInstanceWorkspacePushResult(
   result: PushFormlessInstanceWorkspaceResult,
   cwd: string,
@@ -1841,6 +1882,18 @@ function formatWorkspaceApps(apps: readonly FormlessInstanceWorkspaceApp[]): str
 
 function formatPulledAppArchives(
   apps: readonly PullFormlessInstanceWorkspaceResult["appArchives"][number][],
+): string {
+  if (apps.length === 0) {
+    return "none";
+  }
+
+  return apps
+    .map((app) => `${app.installId} (${app.recordCount} records, ${app.mediaCount} media)`)
+    .join(", ");
+}
+
+function formatSavedAppArchives(
+  apps: readonly SaveLocalFormlessWorkspaceResult["appArchives"][number][],
 ): string {
   if (apps.length === 0) {
     return "none";

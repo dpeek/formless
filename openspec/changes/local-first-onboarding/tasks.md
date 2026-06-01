@@ -46,11 +46,18 @@ Evidence:
 
 ## 4. Workspace Save Source
 
-- [ ] 4.1 Implement workspace save from local instance Authority state into deterministic app archives.
-- [ ] 4.2 Include reviewable schema-owned control-plane intent in saved workspace source.
-- [ ] 4.3 Persist referenced core media payloads through archive media files without provider-specific URLs.
-- [ ] 4.4 Implement `formless save --check` for stale workspace source detection without rewriting files.
-- [ ] 4.5 Add tests proving save reads locally installed app state from Authority, rejects secret-looking fields, and does not read browser replica state.
+- [x] 4.1 Implement workspace save from local instance Authority state into deterministic app archives.
+- [x] 4.2 Include reviewable schema-owned control-plane intent in saved workspace source.
+- [x] 4.3 Persist referenced core media payloads through archive media files without provider-specific URLs.
+- [x] 4.4 Implement `formless save --check` for stale workspace source detection without rewriting files.
+- [x] 4.5 Add tests proving save reads locally installed app state from Authority, rejects secret-looking fields, and does not read browser replica state.
+
+Evidence:
+
+- Files changed: `src/site/instance-workspace.ts`, `src/site/cli.ts`, `src/site/cli.test.ts`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run; section changes CLI workspace save/check archive behavior only, with no browser-visible app behavior.
+- Notes: `formless save` exports local Authority-backed instance state from the running local instance API, writes deterministic instance and app archives, refreshes manifest app/domain intent from schema-owned control-plane records, persists referenced core media files, rejects reviewable control-plane secret values through archive validation, and `formless save --check` reports stale reviewable source without rewriting workspace files.
 
 ## 5. Cloudflare Deploy Boundary
 

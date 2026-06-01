@@ -3169,6 +3169,178 @@ describe("Formless Site CLI", () => {
     );
   });
 
+  it("saves local Authority installed apps into deterministic workspace archives", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const fetcher = archiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
+      },
+      [],
+      [],
+      controlPlaneRecords(),
+    );
+
+    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+
+    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+    const instanceArchive = parsePortableArchive(
+      JSON.parse(
+        await readFile(
+          path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+    const appArchiveValue = parsePortableArchive(
+      JSON.parse(
+        await readFile(
+          path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+
+    expect(manifest.defaultAppPolicy).toBe("declared-installs");
+    expect(manifest.apps).toEqual([
+      {
+        installId: "david",
+        packageAppKey: "site",
+        label: "David Peek",
+        archivePath: "archives/apps/david",
+        routes: {
+          admin: "/apps/david",
+          schema: "/apps/david/schema",
+          public: "/sites/david",
+        },
+      },
+    ]);
+    expect(manifest.domains).toEqual([
+      { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+    ]);
+    expect(instanceArchive.kind).toBe(INSTANCE_ARCHIVE_KIND);
+    if (
+      instanceArchive.kind !== INSTANCE_ARCHIVE_KIND ||
+      appArchiveValue.kind !== APP_ARCHIVE_KIND
+    ) {
+      throw new Error("Expected saved instance and app archives.");
+    }
+    expect(instanceArchive.capabilities).toContain("schema-owned-control-plane");
+    expect(instanceArchive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(instanceArchive.controlPlane?.records.map((record) => record.entity)).toContain(
+      "domainMapping",
+    );
+    expect(JSON.stringify(instanceArchive.controlPlane)).not.toContain("CF_API_TOKEN");
+    expect(appArchiveValue.data.kind).toBe("storeSnapshot");
+    expect(appArchiveValue.media.objects).toHaveLength(1);
+    await expect(
+      readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
+    ).resolves.toEqual(Buffer.from([4, 5, 6]));
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:5173/api/formless/app-installs",
+      "GET http://localhost:5173/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
+      "GET http://localhost:5173/api/app-installs/site/david/snapshot",
+      "GET http://localhost:5173/api/formless/media/media/images/cover.png",
+    ]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Formless workspace save complete.");
+    expect(logs[0]).toContain("Source: http://localhost:5173.");
+    expect(logs[0]).toContain(`Manifest: ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}.`);
+    expect(logs[0]).toContain(
+      `Instance archive: ${path.join("archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
+    );
+    expect(logs[0]).toContain(`Records: ${mediaRecords().length}.`);
+    expect(logs[0]).toContain("Media files: 1.");
+    expect(logs[0]).toContain(`App archives: david (${mediaRecords().length} records, 1 media).`);
+    expect(logs[0]).toContain("Local apps: david (site).");
+  });
+
+  it("checks local workspace source staleness without rewriting reviewable files", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const fetcher = archiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [],
+      [],
+      controlPlaneRecords(),
+    );
+
+    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+    const manifestBefore = await readFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      "utf8",
+    );
+
+    await expect(
+      runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher })),
+    ).rejects.toThrow(
+      `Formless workspace source is stale: archives/apps/david, archives/instance, ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}. Run "npx formless save".`,
+    );
+    await expect(
+      readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    ).resolves.toBe(manifestBefore);
+    await expect(
+      stat(path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    const logs: string[] = [];
+
+    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
+    await runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
+
+    expect(logs.at(-1)).toContain("Formless workspace save check ok.");
+  });
+
+  it("rejects secret-looking local Authority control-plane fields during workspace save", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const secretControlPlane = controlPlaneRecords().map((record) =>
+      record.entity === "deployDesiredResource"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              inputsJson: JSON.stringify({
+                host: "dpeek.com",
+                apiToken: "CF_API_TOKEN_secret",
+              }),
+            },
+          }
+        : record,
+    );
+    const fetcher = archiveFetch(
+      [],
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [],
+      [],
+      secretControlPlane,
+    );
+
+    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+
+    await expect(
+      runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher })),
+    ).rejects.toThrow(
+      'Instance archive controlPlane records record "deploy-resource:instance.primary:custom-domain:dpeek.com" field "deployDesiredResource.inputsJson" cannot store control-plane secret values.',
+    );
+  });
+
   it("resets only instance workspace local state", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
