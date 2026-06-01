@@ -125,17 +125,31 @@ describe("local agent worker state", () => {
 describe("local agent worker discovery", () => {
   it("discovers claimable changes from committed main files only", () => {
     const runCommand: CommandRunner = (_cwd, command, args) => {
-      expect(command).toBe("git");
-      expect(args).toEqual(["ls-tree", "-r", "--name-only", "main", "--", "openspec/changes"]);
-      return {
-        code: 0,
-        stderr: "",
-        stdout: [
-          readyChangeFiles("add-thing"),
-          "openspec/changes/incomplete/proposal.md",
-          "openspec/changes/incomplete/tasks.md",
-        ].join("\n"),
-      };
+      if (command === "git") {
+        expect(args).toEqual(["ls-tree", "-r", "--name-only", "main", "--", "openspec/changes"]);
+        return {
+          code: 0,
+          stderr: "",
+          stdout: [
+            readyChangeFiles("add-thing"),
+            "openspec/changes/incomplete/proposal.md",
+            "openspec/changes/incomplete/tasks.md",
+          ].join("\n"),
+        };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+        };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
     };
 
     expect(discoverClaimableOpenSpecChanges("/repo", { runCommand })).toEqual([
@@ -169,6 +183,32 @@ describe("local agent worker discovery", () => {
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
+  });
+
+  it("omits already-complete changes from claimable work even without a lease", () => {
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 0 }, state: "all_done" }),
+        };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    expect(discoverClaimableOpenSpecChanges("/repo", { runCommand })).toEqual([]);
   });
 
   it("uses stable change branch names", () => {
@@ -237,6 +277,7 @@ describe("local agent worker review branches", () => {
     const gitCommonDir = path.join(root, ".git");
     const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
     let branchExists = false;
+    let remainingWork = 1;
     let sessionCalls = 0;
     let stdout = "";
     let stderr = "";
@@ -281,7 +322,10 @@ describe("local agent worker review branches", () => {
         return {
           code: 0,
           stderr: "",
-          stdout: JSON.stringify({ progress: { remaining: 0 }, state: "all_done" }),
+          stdout: JSON.stringify({
+            progress: { remaining: remainingWork },
+            state: remainingWork === 0 ? "all_done" : "in_progress",
+          }),
         };
       }
 
@@ -325,8 +369,14 @@ describe("local agent worker review branches", () => {
         runCommand,
         runSession: async (input) => {
           sessionCalls += 1;
-          expect(input.mode).toBe("finalize");
           expect(input.changeId).toBe("add-thing");
+          if (sessionCalls === 1) {
+            expect(input.mode).toBe("implement");
+            remainingWork = 0;
+            return "plan-done";
+          }
+
+          expect(input.mode).toBe("finalize");
           return "plan-done";
         },
         ...streams,
@@ -356,7 +406,7 @@ describe("local agent worker review branches", () => {
       });
 
       expect(secondCode).toBe(0);
-      expect(sessionCalls).toBe(1);
+      expect(sessionCalls).toBe(2);
       expect(stdout).toContain("[agents] idle: change branches are leased");
       expect(stderr).toBe("");
       expect(commandCalls).toContainEqual({
@@ -364,6 +414,75 @@ describe("local agent worker review branches", () => {
         command: "git",
         cwd: path.join(root, "tmp", "worktree", "igor"),
       });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not reclaim an all_done change when the ready lease is missing", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    let sessionCalls = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 0 }, state: "all_done" }),
+        };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: "changes/add-thing\n" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async () => {
+          sessionCalls += 1;
+          return "plan-done";
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(sessionCalls).toBe(0);
+      expect(stdout).toContain("[agents] idle: change branches are complete");
+      expect(readChangeLease(agentStatePaths(gitCommonDir).root, "add-thing")).toBeNull();
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -489,6 +608,17 @@ describe("local agent worker dry-run", () => {
         args.join(" ") === "show-ref --verify --quiet refs/heads/changes/local-agent-pull-workers"
       ) {
         return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change local-agent-pull-workers --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+        };
       }
 
       throw new Error(`unexpected command: ${command} ${args.join(" ")}`);

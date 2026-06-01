@@ -48,6 +48,7 @@ export type FormlessInstanceAccountDiscoveryAdapter = {
 };
 
 type AlchemyCloudflareApiClient = {
+  accountId?: string;
   get: (path: string, init?: RequestInit) => Promise<Response>;
 };
 
@@ -557,6 +558,21 @@ export async function listFormlessInstanceAccountsWithAlchemy(
   const api = await resolvedDependencies.createCloudflareApi(
     credentialProfile ? { profile: credentialProfile } : {},
   );
+  const resolvedAccountId = parseOptionalString("Alchemy Cloudflare account id", api.accountId);
+
+  if (resolvedAccountId !== undefined) {
+    return [
+      parseDeploymentAccount({
+        id: resolvedAccountId,
+        workersDevSubdomain: await readFormlessInstanceWorkersDevSubdomainWithAlchemy(
+          api,
+          resolvedAccountId,
+          credentialProfile,
+        ),
+      }),
+    ];
+  }
+
   const accounts = await readCloudflareResult<CloudflareAccountApiResult[]>(
     "list Cloudflare accounts",
     api.get("/accounts", {
@@ -568,19 +584,65 @@ export async function listFormlessInstanceAccountsWithAlchemy(
     accounts.map(async (account) => {
       const accountId = parseRequiredString("Cloudflare account id", account.id);
       const accountName = parseOptionalString("Cloudflare account name", account.name);
-      const subdomain = await readCloudflareResult<{ subdomain: string }>(
-        `read workers.dev subdomain for Cloudflare account ${accountId}`,
-        api.get(`/accounts/${accountId}/workers/subdomain`, {
-          headers: { accept: "application/json" },
-        }),
+      const workersDevSubdomain = await readFormlessInstanceWorkersDevSubdomainWithAlchemy(
+        api,
+        accountId,
+        credentialProfile,
       );
 
       return parseDeploymentAccount({
         id: accountId,
         ...(accountName === undefined ? {} : { name: accountName }),
-        workersDevSubdomain: subdomain.subdomain,
+        workersDevSubdomain,
       });
     }),
+  );
+}
+
+async function readFormlessInstanceWorkersDevSubdomainWithAlchemy(
+  api: AlchemyCloudflareApiClient,
+  accountId: string,
+  credentialProfile: string | null,
+): Promise<string> {
+  let subdomain: { subdomain: string };
+
+  try {
+    subdomain = await readCloudflareResult<{ subdomain: string }>(
+      `read workers.dev subdomain for Cloudflare account ${accountId}`,
+      api.get(`/accounts/${accountId}/workers/subdomain`, {
+        headers: { accept: "application/json" },
+      }),
+    );
+  } catch (error) {
+    if (isCloudflareAuthenticationFailure(error)) {
+      const profileFlag = credentialProfile ? ` -p ${credentialProfile}` : "";
+
+      throw new Error(
+        [
+          error instanceof Error ? error.message : String(error),
+          `Cloudflare rejected the credentials resolved by Alchemy for account ${accountId}.`,
+          `Re-run \`alchemy login cloudflare${profileFlag}\` and \`alchemy configure${profileFlag}\`, or use a Cloudflare API token that can manage Workers and R2 for that account.`,
+          "If CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY is set, it overrides the Alchemy profile.",
+        ].join(" "),
+      );
+    }
+
+    throw error;
+  }
+
+  return subdomain.subdomain;
+}
+
+function isCloudflareAuthenticationFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("HTTP 401") ||
+    error.message.includes("HTTP 403") ||
+    error.message.includes("Authentication error") ||
+    error.message.includes("Unauthorized to access requested resource")
   );
 }
 
@@ -812,7 +874,13 @@ export function selectOnlyFormlessInstanceAccount(
   input: SelectFormlessInstanceAccountInput,
 ): FormlessInstanceDeploymentAccount {
   if (input.accounts.length === 0) {
-    throw new Error("No Cloudflare accounts were found for the selected credentials.");
+    throw new Error(
+      [
+        "No Cloudflare accounts were found for the selected credentials.",
+        "Formless uses Alchemy's resolved Cloudflare credentials first.",
+        "Check --credential-profile or ALCHEMY_PROFILE, and unset CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY if either points at the wrong account.",
+      ].join(" "),
+    );
   }
 
   if (input.accounts.length > 1) {

@@ -484,12 +484,15 @@ export function discoverClaimableOpenSpecChanges(
     options.baseRef ?? defaultBaseRef,
     options.runCommand ?? defaultCommandRunner,
   ).filter(hasRequiredApplyArtifacts);
+  const runCommand = options.runCommand ?? defaultCommandRunner;
 
-  if (!options.stateRoot) {
-    return changes;
-  }
+  const unleasedChanges = options.stateRoot
+    ? changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId))
+    : changes;
 
-  return changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId));
+  return unleasedChanges.filter((change) =>
+    changeHasRemainingWork(cwd, change.changeId, runCommand),
+  );
 }
 
 export function branchExists(
@@ -701,6 +704,22 @@ function changeNeedsFinalization(
 ): boolean {
   const instructions = readApplyInstructions(cwd, changeId, runCommand);
   return instructions.state === "all_done" || instructions.progress?.remaining === 0;
+}
+
+function changeHasRemainingWork(cwd: string, changeId: string, runCommand: CommandRunner): boolean {
+  return !changeNeedsFinalization(cwd, changeId, runCommand);
+}
+
+function tryChangeHasRemainingWork(
+  cwd: string,
+  changeId: string,
+  runCommand: CommandRunner,
+): boolean | null {
+  try {
+    return changeHasRemainingWork(cwd, changeId, runCommand);
+  } catch {
+    return null;
+  }
 }
 
 function signalFromFinalMessage(message: string): "blocked" | "none" | "plan-done" | "task-done" {
@@ -1279,9 +1298,16 @@ async function runIdleMaintenance(input: {
     return 0;
   }
 
+  let completeBranchCount = 0;
   for (const branch of branches) {
     const changeId = changeIdFromBranch(branch);
     if (!changeId || readChangeLease(input.paths.root, changeId)) {
+      continue;
+    }
+
+    const remainingWork = tryChangeHasRemainingWork(input.cwd, changeId, input.runCommand);
+    if (remainingWork === false) {
+      completeBranchCount += 1;
       continue;
     }
 
@@ -1291,6 +1317,14 @@ async function runIdleMaintenance(input: {
       workerName: input.options.workerName,
       worktreeDir: input.options.worktreeDir,
     });
+    if (
+      remainingWork === null &&
+      !changeHasRemainingWork(branchPlan.worktreeDir, changeId, input.runCommand)
+    ) {
+      completeBranchCount += 1;
+      continue;
+    }
+
     const result = input.runCommand(branchPlan.worktreeDir, "git", [
       "rebase",
       input.options.baseRef,
@@ -1335,6 +1369,11 @@ async function runIdleMaintenance(input: {
     );
     writeLine(input.stdout, `[agents] idle rebase blocked ${branch}`);
     return 1;
+  }
+
+  if (completeBranchCount > 0) {
+    writeLine(input.stdout, "[agents] idle: change branches are complete");
+    return 0;
   }
 
   writeLine(input.stdout, "[agents] idle: change branches are leased");

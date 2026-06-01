@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { HomeScreenCollectionSectionModel, HomeScreenModel } from "../../client/views.ts";
 import { HomeCollection } from "./collection.tsx";
 
@@ -11,12 +12,14 @@ export function HomeScreen({
   onSelectContext,
   onSelectQuery,
   screen,
+  sectionActions = {},
   today,
 }: {
   getSectionSelection: (section: HomeScreenCollectionSectionModel) => HomeScreenSectionSelection;
   onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
   onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
   screen: HomeScreenModel;
+  sectionActions?: Record<string, ReactNode>;
   today: string;
 }) {
   const sections = screen.layout.sections;
@@ -27,6 +30,23 @@ export function HomeScreen({
   }
 
   if (sections.length === 1) {
+    const sectionAction = sectionActions[firstSection.id];
+
+    if (sectionAction) {
+      return (
+        <section aria-label={firstSection.label} className="space-y-4">
+          <HomeScreenSectionHeader action={sectionAction} label={firstSection.label} />
+          <HomeScreenCollectionSection
+            getSectionSelection={getSectionSelection}
+            onSelectContext={onSelectContext}
+            onSelectQuery={onSelectQuery}
+            section={firstSection}
+            today={today}
+          />
+        </section>
+      );
+    }
+
     return (
       <HomeScreenCollectionSection
         getSectionSelection={getSectionSelection}
@@ -40,18 +60,35 @@ export function HomeScreen({
 
   return (
     <div className="space-y-8">
-      {sections.map((section) => (
-        <section aria-label={section.label} className="space-y-4" key={section.id}>
-          <h2 className="text-lg font-semibold">{section.label}</h2>
-          <HomeScreenCollectionSection
-            getSectionSelection={getSectionSelection}
-            onSelectContext={onSelectContext}
-            onSelectQuery={onSelectQuery}
-            section={section}
-            today={today}
-          />
-        </section>
-      ))}
+      {sections.map((section) => {
+        const sectionAction = sectionActions[section.id];
+
+        return (
+          <section aria-label={section.label} className="space-y-4" key={section.id}>
+            <HomeScreenSectionHeader action={sectionAction} label={section.label} />
+            <HomeScreenCollectionSection
+              getSectionSelection={getSectionSelection}
+              onSelectContext={onSelectContext}
+              onSelectQuery={onSelectQuery}
+              section={section}
+              today={today}
+            />
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function HomeScreenSectionHeader({ action, label }: { action?: ReactNode; label: string }) {
+  if (!action) {
+    return <h2 className="text-lg font-semibold">{label}</h2>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="text-lg font-semibold">{label}</h2>
+      {action}
     </div>
   );
 }

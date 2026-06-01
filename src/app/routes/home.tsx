@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -44,10 +44,12 @@ export {
 export function HomeRoute({
   target,
   schemaKey,
+  sectionActions,
   screenPath,
 }: {
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
+  sectionActions?: Record<string, ReactNode>;
   screenPath: string;
 }) {
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
@@ -180,6 +182,7 @@ export function HomeRoute({
             )
           }
           screen={homeScreen}
+          sectionActions={sectionActions}
           today={today}
         />
       </SchemaAppProvider>

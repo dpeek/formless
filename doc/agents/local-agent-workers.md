@@ -12,6 +12,7 @@ Local agent workers pull ready OpenSpec changes from local Git state.
 
 - Queue source: committed `openspec/changes/<change-id>/` directories on local `main`.
 - Claimable changes must have committed apply artifacts: `proposal.md`, `design.md`, `tasks.md`, and at least one `specs/**/*.md`.
+- Claimable changes must have remaining OpenSpec work; `all_done` changes are skipped unless they already have an active worker lease.
 - Uncommitted OpenSpec files in any worktree are ignored.
 - External systems are not the queue, lock, or status store for local workers.
 
@@ -89,7 +90,7 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - Each watch pass first scans `ready-for-review` leases.
 - If a review-ready branch does not contain local `main`, the worker adopts the lease, runs a finalization session, rebases on local `main`, runs checks, detaches the worktree, and marks the branch ready again.
 - If no change can be claimed or refreshed, the worker scans unleased local `changes/*` branches.
-- Eligible unleased branches are rebased on local `main`.
+- Eligible unleased branches with remaining OpenSpec work are rebased on local `main`.
 - Semantic rebase conflicts are recorded as blocked status with evidence.
 
 ## Human Boundary

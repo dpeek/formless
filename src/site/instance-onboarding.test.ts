@@ -162,7 +162,45 @@ describe("Formless instance onboarding planner", () => {
 });
 
 describe("Formless instance onboarding adapters", () => {
-  it("discovers Cloudflare accounts and workers.dev subdomains through the Alchemy API client", async () => {
+  it("discovers the Alchemy-resolved Cloudflare account and workers.dev subdomain", async () => {
+    const requests: string[] = [];
+    const accounts = await listFormlessInstanceAccountsWithAlchemy(
+      { credentialProfile: "personal" },
+      {
+        createCloudflareApi: async (options) => {
+          expect(options).toEqual({ profile: "personal" });
+
+          return {
+            accountId: "account-123",
+            get: async (requestPath) => {
+              requests.push(requestPath);
+
+              if (requestPath === "/accounts/account-123/workers/subdomain") {
+                return Response.json({
+                  success: true,
+                  result: {
+                    subdomain: "dpeek",
+                  },
+                });
+              }
+
+              return Response.json({ success: false }, { status: 404 });
+            },
+          };
+        },
+      },
+    );
+
+    expect(requests).toEqual(["/accounts/account-123/workers/subdomain"]);
+    expect(accounts).toEqual([
+      {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+    ]);
+  });
+
+  it("falls back to listing Cloudflare accounts when Alchemy has no resolved account id", async () => {
     const requests: string[] = [];
     const accounts = await listFormlessInstanceAccountsWithAlchemy(
       { credentialProfile: "personal" },
@@ -210,6 +248,30 @@ describe("Formless instance onboarding adapters", () => {
         workersDevSubdomain: "dpeek",
       },
     ]);
+  });
+
+  it("explains Cloudflare authentication failures for the Alchemy-resolved account", async () => {
+    await expect(
+      listFormlessInstanceAccountsWithAlchemy(
+        { credentialProfile: "personal" },
+        {
+          createCloudflareApi: async () => ({
+            accountId: "account-123",
+            get: async () =>
+              Response.json(
+                {
+                  success: false,
+                  errors: [{ message: "Authentication error" }],
+                  result: null,
+                },
+                { status: 403 },
+              ),
+          }),
+        },
+      ),
+    ).rejects.toThrow(
+      "Re-run `alchemy login cloudflare -p personal` and `alchemy configure -p personal`",
+    );
   });
 
   it("discovers an account, plans deployment, and calls the deployment adapter with secrets", async () => {

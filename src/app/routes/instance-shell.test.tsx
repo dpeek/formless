@@ -4,7 +4,7 @@ import { listBundledAppPackages, type AppInstall } from "../../shared/app-instal
 import { InstallAppDialogForm, InstanceShellRouteView } from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
-  it("renders generated control-plane app management and one install button", () => {
+  it("renders generated control-plane app management without a duplicate install heading", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
@@ -31,7 +31,6 @@ describe("instance shell route view", () => {
       />,
     );
 
-    expect(html).toContain("Installed apps");
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).toContain("Loading Instance control plane");
     expect(html).toContain("Personal Site");
@@ -40,8 +39,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Deployments");
     expect(html).toContain('data-formless-control-plane-screen="deployments"');
     expect(html).toContain("Control-plane deployment records");
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain("Install");
+    expect(html).not.toContain("Installed apps");
     expect(html).not.toContain("Bundled apps");
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
     expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");

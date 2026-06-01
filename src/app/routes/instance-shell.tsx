@@ -976,7 +976,6 @@ export function InstanceShellRouteView({
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader />
       <GeneratedInstanceAppsSection
-        installCount={state.installs.length}
         installDisabled={state.installing || state.packages.length === 0}
         onInstall={() => setInstallDialogOpen(true)}
       />
@@ -1059,39 +1058,33 @@ function GeneratedDeploymentManagementSection({
 }
 
 function GeneratedInstanceAppsSection({
-  installCount,
   installDisabled,
   onInstall,
 }: {
-  installCount: number;
   installDisabled: boolean;
   onInstall: () => void;
 }) {
   const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
 
   return (
-    <section className="space-y-3" aria-labelledby="installed-apps-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-        <div className="flex items-center gap-2">
-          <h2 id="installed-apps-heading" className="text-sm font-semibold">
-            Installed apps
-          </h2>
-          <span className="text-xs text-muted-fg">{installCount}</span>
-        </div>
-        <Button
-          aria-haspopup="dialog"
-          isDisabled={installDisabled}
-          onPress={onInstall}
-          size="sm"
-          type="button"
-        >
-          <AddIcon />
-          Install
-        </Button>
-      </div>
+    <section aria-label="Apps" className="space-y-3">
       <div data-formless-control-plane-screen="apps">
         <HomeRoute
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
+          sectionActions={{
+            "app-installs": (
+              <Button
+                aria-haspopup="dialog"
+                isDisabled={installDisabled}
+                onPress={onInstall}
+                size="sm"
+                type="button"
+              >
+                <AddIcon />
+                Install
+              </Button>
+            ),
+          }}
           screenPath="/"
           target={controlPlaneTarget}
         />
