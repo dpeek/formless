@@ -85,6 +85,47 @@ describe("portable archive protocol", () => {
     expect(parsePortableArchive(archive)).toEqual(archive);
   });
 
+  it("parses reviewable instance control-plane records and rejects secrets", () => {
+    const archive = instanceArchive({
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: now,
+        records: controlPlaneRecords(),
+      },
+    });
+    const parsed = parseInstanceArchive(archive);
+    const formatted = formatInstanceArchive(parsed);
+
+    expect(parsed.controlPlane?.records.map((record) => record.entity)).toContain(
+      "deployDesiredResource",
+    );
+    expect(JSON.stringify(parsed.controlPlane)).not.toContain("rec_site");
+    expect(formatInstanceArchive(parseInstanceArchive(JSON.parse(formatted)))).toBe(formatted);
+    const controlPlane = archive.controlPlane;
+
+    if (!controlPlane) {
+      throw new Error("Expected control-plane archive records.");
+    }
+
+    expect(() =>
+      parseInstanceArchive({
+        ...archive,
+        controlPlane: {
+          ...controlPlane,
+          records: controlPlaneRecords({
+            inputsJson: JSON.stringify({ apiToken: "CF_API_TOKEN" }),
+          }),
+        },
+      }),
+    ).toThrow("cannot store control-plane secret");
+  });
+
   it("rejects unknown kinds, unsupported versions, and missing sections", () => {
     expect(() => parsePortableArchive({ kind: "formless.futureArchive", version: 1 })).toThrow(
       'Archive kind "formless.futureArchive" is unsupported.',
@@ -246,6 +287,104 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
     createdAt: "2026-05-23T00:00:00.000Z",
     updatedAt: "2026-05-23T00:01:00.000Z",
   };
+}
+
+function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecord[] {
+  return [
+    {
+      id: "site",
+      entity: "appInstall",
+      values: {
+        installId: "site",
+        packageAppKey: "site",
+        label: "Site",
+        status: "installed",
+        storageIdentity: "app:site",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "app-route:site:publicSite",
+      entity: "appRoute",
+      values: {
+        appInstall: "site",
+        routeKind: "publicSite",
+        path: "/sites/site",
+        prefix: "/sites/site/",
+        surface: "publicSite",
+        packageCapability: "publicSite",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "domain-mapping:publicSite:www.example.com",
+      entity: "domainMapping",
+      values: {
+        host: "www.example.com",
+        profile: "publicSite",
+        appInstall: "site",
+        appRoute: "app-route:site:publicSite",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "instance.primary",
+      entity: "deployTarget",
+      values: {
+        targetId: "instance.primary",
+        targetKind: "instance",
+        label: "instance.primary",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "deploy-resource:instance.primary:site-domain",
+      entity: "deployDesiredResource",
+      values: {
+        deployTarget: "instance.primary",
+        domainMapping: "domain-mapping:publicSite:www.example.com",
+        logicalId: "site-domain",
+        kind: "cloudflare-worker-custom-domain",
+        providerFamily: "cloudflare",
+        inputsJson: options.inputsJson ?? JSON.stringify({ host: "www.example.com" }),
+        enabled: true,
+        sourceFingerprint: "source",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "deploy-drift:instance.primary",
+      entity: "deployDriftReport",
+      values: {
+        deployTarget: "instance.primary",
+        versionId: "version-1",
+        desiredStateHash: "hash-1",
+        revision: 1,
+        status: "in-sync",
+        actorKind: "runner",
+        actorId: "runner",
+        affectedLogicalIdsJson: "[]",
+        createCount: 0,
+        updateCount: 0,
+        deleteCount: 0,
+        reportedAt: now,
+      },
+      createdAt: now,
+    },
+  ];
 }
 
 function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {

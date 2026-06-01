@@ -1,8 +1,10 @@
 import {
+  INSTANCE_ARCHIVE_KIND,
   parsePortableArchive,
   type AppArchive,
   type AppArchiveData,
   type AppArchiveMediaObject,
+  type InstanceArchiveControlPlane,
   type PortableArchive,
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
@@ -60,6 +62,7 @@ export type ArchiveRestoreMediaAdapter = {
 export type ArchiveRestoreApplyTarget = {
   listInstalledApps: () => AppInstall[] | Promise<AppInstall[]>;
   packages?: readonly BundledAppPackage[];
+  restoreControlPlane?: (controlPlane: InstanceArchiveControlPlane) => void | Promise<void>;
   restoreAppData: (input: {
     app: AppInstall;
     data: AppArchiveData;
@@ -76,6 +79,7 @@ export type ArchiveRestoreApplyTarget = {
 export type ArchiveRestoreExecutionErrorCode =
   | ArchiveRestorePlanError["code"]
   | "app-data-restore-failed"
+  | "control-plane-restore-failed"
   | "dry-run-policy"
   | "install-restore-failed"
   | "invalid-archive"
@@ -327,6 +331,39 @@ export async function applyPortableArchiveRestore(
       schemaKey: step.schemaKey,
       tombstoneCount: step.tombstoneCount,
     });
+  }
+
+  if (planned.archive.kind === INSTANCE_ARCHIVE_KIND && planned.archive.controlPlane) {
+    if (!target.restoreControlPlane) {
+      return {
+        errors: [
+          {
+            code: "invalid-archive",
+            message: "Instance archive restore requires a control-plane restore adapter.",
+          },
+        ],
+        ok: false,
+        plan: planned.plan,
+      };
+    }
+
+    try {
+      await target.restoreControlPlane(planned.archive.controlPlane);
+    } catch (error) {
+      return {
+        errors: [
+          {
+            code: "control-plane-restore-failed",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Control-plane records could not be restored.",
+          },
+        ],
+        ok: false,
+        plan: planned.plan,
+      };
+    }
   }
 
   return {

@@ -109,6 +109,30 @@ describe("archive restore execution", () => {
     ]);
   });
 
+  it("restores instance control-plane snapshots when present", async () => {
+    const archive = instanceArchive({
+      capabilities: ["installed-app-registry", "schema-owned-control-plane", "app-store-snapshots"],
+      restorePolicy: { dryRun: false, installCollisions: "reject" },
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: now,
+        records: [],
+      },
+    });
+    const events: string[] = [];
+    const result = await applyPortableArchiveRestore(
+      archive,
+      memoryRestoreTarget({ events, restoreControlPlane: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(events).toEqual([
+      "install:create:personal",
+      "app-data:app:personal:personal:storeSnapshot",
+      "control-plane:0",
+    ]);
+  });
+
   it("refuses apply when the archive restore policy is dry-run", async () => {
     const events: string[] = [];
     const result = await applyPortableArchiveRestore(appArchive(), memoryRestoreTarget({ events }));
@@ -218,6 +242,7 @@ function memoryRestoreTarget(input: {
   events: string[];
   installedApps?: AppInstall[];
   mediaFiles?: ArchiveRestoreMediaRead[];
+  restoreControlPlane?: boolean;
 }): ArchiveRestoreApplyTarget {
   return {
     listInstalledApps: () => input.installedApps ?? [],
@@ -241,6 +266,13 @@ function memoryRestoreTarget(input: {
 
       return bootstrapResponse(data);
     },
+    ...(input.restoreControlPlane
+      ? {
+          restoreControlPlane: (controlPlane) => {
+            input.events.push(`control-plane:${controlPlane.records.length}`);
+          },
+        }
+      : {}),
     restoreInstall: ({ action, install }) => {
       input.events.push(`install:${action}:${install.installId}`);
     },

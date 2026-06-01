@@ -2,12 +2,23 @@ import {
   parseAppArchiveData,
   parsePortableArchive,
   type AppArchiveData,
+  type InstanceArchiveControlPlane,
 } from "../shared/archive.ts";
 import type {
   AppStorageIdentity,
   InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { BootstrapResponse } from "../shared/protocol.ts";
+import {
+  STORE_SNAPSHOT_KIND,
+  STORE_SNAPSHOT_VERSION,
+  type BootstrapResponse,
+  type StoreSnapshot,
+} from "../shared/protocol.ts";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
 import {
   applyPortableArchiveRestore,
   dryRunPortableArchiveRestore,
@@ -170,10 +181,52 @@ function archiveRestoreApiTarget(
     },
     restoreAppData: async ({ data, identity }) =>
       restoreAppDataViaAuthority(request, env, data, identity),
+    restoreControlPlane: async (controlPlane) => {
+      await restoreControlPlaneViaAuthority(request, env, controlPlane);
+    },
     restoreInstall: ({ action, install }) => {
       restoreInstanceAppInstall(storage, { action, install });
     },
   };
+}
+
+async function restoreControlPlaneViaAuthority(
+  request: Request,
+  env: InstanceArchiveApiEnv,
+  controlPlane: InstanceArchiveControlPlane,
+): Promise<BootstrapResponse> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const snapshot: StoreSnapshot = {
+    kind: STORE_SNAPSHOT_KIND,
+    version: STORE_SNAPSHOT_VERSION,
+    schemaKey: controlPlane.schemaKey,
+    exportedAt: controlPlane.schemaUpdatedAt,
+    schemaUpdatedAt: controlPlane.schemaUpdatedAt,
+    sourceCursor: 0,
+    schema: instanceControlPlaneSchema,
+    records: controlPlane.records,
+  };
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(
+      new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot/restore`, request.url),
+      {
+        body: JSON.stringify(snapshot),
+        headers: archiveRestoreForwardHeaders(request.headers),
+        method: "POST",
+      },
+    ),
+  );
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Failed control-plane restore: HTTP ${response.status} ${text}`);
+  }
+
+  try {
+    return JSON.parse(text) as BootstrapResponse;
+  } catch {
+    throw new Error("Failed control-plane restore: response was not JSON.");
+  }
 }
 
 async function restoreAppDataViaAuthority(

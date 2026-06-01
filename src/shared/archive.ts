@@ -1,11 +1,19 @@
 import { validateAppInstallId } from "./app-installs.ts";
+import { isValidStoredFieldValue } from "./field-types.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  type InstanceControlPlaneEntityName,
+  instanceControlPlaneEntityNames,
+  instanceControlPlaneSchema,
+} from "./instance-control-plane.ts";
 import {
   parseStoreSnapshot,
   type RecordValues,
   type StoreSnapshot,
   type StoredRecord,
 } from "./protocol.ts";
-import { parseAppSchema, type AppSchema } from "./schema.ts";
+import { parseAppSchema, type AppSchema, type FieldSchema } from "./schema.ts";
+import { isRuntimeControlPlaneSecretReferenceField } from "./schema-runtime.ts";
 import type { MediaAsset } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";
@@ -14,6 +22,7 @@ export const ARCHIVE_VERSION = 1;
 
 export const archiveCapabilities = [
   "installed-app-registry",
+  "schema-owned-control-plane",
   "app-store-snapshots",
   "source-records",
   "core-media-assets",
@@ -84,12 +93,19 @@ export type AppArchive = {
   media: AppArchiveMediaManifest;
 };
 
+export type InstanceArchiveControlPlane = {
+  schemaKey: typeof INSTANCE_CONTROL_PLANE_SCHEMA_KEY;
+  schemaUpdatedAt: string;
+  records: StoredRecord[];
+};
+
 export type InstanceArchive = {
   kind: typeof INSTANCE_ARCHIVE_KIND;
   version: typeof ARCHIVE_VERSION;
   exportedAt: string;
   capabilities: ArchiveCapability[];
   restorePolicy: ArchiveRestorePolicy;
+  controlPlane?: InstanceArchiveControlPlane;
   apps: AppArchive[];
 };
 
@@ -124,6 +140,7 @@ export function parseInstanceArchive(value: unknown): InstanceArchive {
     "exportedAt",
     "capabilities",
     "restorePolicy",
+    ...("controlPlane" in object ? ["controlPlane"] : []),
     "apps",
   ]);
 
@@ -145,6 +162,14 @@ export function parseInstanceArchive(value: unknown): InstanceArchive {
     exportedAt: parseIsoTimestamp("Instance archive exportedAt", object.exportedAt),
     capabilities: parseCapabilities("Instance archive capabilities", object.capabilities),
     restorePolicy: parseRestorePolicy("Instance archive restorePolicy", object.restorePolicy),
+    ...(object.controlPlane === undefined
+      ? {}
+      : {
+          controlPlane: parseInstanceArchiveControlPlane(
+            "Instance archive controlPlane",
+            object.controlPlane,
+          ),
+        }),
     apps: object.apps.map((app, index) =>
       parseAppArchiveAt(`Instance archive apps[${index}]`, app),
     ),
@@ -327,6 +352,354 @@ function parseMediaObject(context: string, value: unknown): AppArchiveMediaObjec
     deliveryHref: parseDeliveryHref(`${context} deliveryHref`, object.deliveryHref),
     ...("asset" in object ? { asset: parseMediaAsset(`${context} asset`, object.asset) } : {}),
   };
+}
+
+function parseInstanceArchiveControlPlane(
+  context: string,
+  value: unknown,
+): InstanceArchiveControlPlane {
+  const object = parseObject(context, value);
+
+  assertExactKeys(context, object, ["schemaKey", "schemaUpdatedAt", "records"]);
+
+  if (object.schemaKey !== INSTANCE_CONTROL_PLANE_SCHEMA_KEY) {
+    throw new Error(`${context} schemaKey must be "${INSTANCE_CONTROL_PLANE_SCHEMA_KEY}".`);
+  }
+
+  return {
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    schemaUpdatedAt: parseIsoTimestamp(`${context} schemaUpdatedAt`, object.schemaUpdatedAt),
+    records: parseInstanceArchiveControlPlaneRecords(`${context} records`, object.records),
+  };
+}
+
+function parseInstanceArchiveControlPlaneRecords(context: string, value: unknown): StoredRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  const records = value.map((record, index) =>
+    parseInstanceArchiveControlPlaneRecord(`${context}[${index}]`, record),
+  );
+
+  validateInstanceArchiveControlPlaneRecords(context, records);
+
+  return records;
+}
+
+function parseInstanceArchiveControlPlaneRecord(context: string, value: unknown): StoredRecord {
+  const object = parseObject(context, value);
+
+  assertExactKeys(context, object, [
+    "id",
+    "entity",
+    "values",
+    "createdAt",
+    ...("deletedAt" in object ? ["deletedAt"] : []),
+  ]);
+
+  const entity = parseNonEmptyString(`${context} entity`, object.entity);
+
+  if (
+    !instanceControlPlaneEntityNames.includes(
+      entity as (typeof instanceControlPlaneEntityNames)[number],
+    )
+  ) {
+    throw new Error(`${context} entity "${entity}" is not an instance control-plane entity.`);
+  }
+
+  const record = {
+    id: parseNonEmptyString(`${context} id`, object.id),
+    entity,
+    values: parseRecordValues(`${context} values`, object.values),
+    createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
+    ...(object.deletedAt === undefined
+      ? {}
+      : { deletedAt: parseIsoTimestamp(`${context} deletedAt`, object.deletedAt) }),
+  };
+
+  return record;
+}
+
+function validateInstanceArchiveControlPlaneRecords(context: string, records: StoredRecord[]) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`${context} includes duplicate control-plane record id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const record of records) {
+    validateInstanceArchiveControlPlaneRecord(context, record, recordsById);
+  }
+
+  validateInstanceArchiveControlPlaneUniqueConstraints(context, records);
+}
+
+function validateInstanceArchiveControlPlaneRecord(
+  context: string,
+  record: StoredRecord,
+  recordsById: Map<string, StoredRecord>,
+) {
+  const entity = instanceControlPlaneEntitySchema(record.entity);
+
+  if (!entity) {
+    throw new Error(
+      `${context} record "${record.id}" references unknown entity "${record.entity}".`,
+    );
+  }
+
+  const fields = entity.fields as Record<string, FieldSchema>;
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (!fields[fieldName]) {
+      throw new Error(
+        `${context} record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+      );
+    }
+  }
+
+  assertControlPlaneRecordValuesAreReviewable(context, record);
+
+  for (const [fieldName, field] of Object.entries(fields)) {
+    const value = record.values[fieldName];
+
+    if (!isValidStoredFieldValue(value, field)) {
+      throw new Error(
+        `${context} record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+      );
+    }
+
+    if (field.type === "reference" && value !== undefined) {
+      validateInstanceArchiveControlPlaneReference(
+        context,
+        record,
+        fieldName,
+        field.to,
+        value,
+        recordsById,
+      );
+    }
+  }
+}
+
+function validateInstanceArchiveControlPlaneReference(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  entityName: string,
+  value: RecordValues[string],
+  recordsById: Map<string, StoredRecord>,
+) {
+  if (typeof value !== "string") {
+    return;
+  }
+
+  const target = recordsById.get(value);
+
+  if (!target) {
+    throw new Error(
+      `${context} record "${record.id}" field "${record.entity}.${fieldName}" references unknown ${entityName} record "${value}".`,
+    );
+  }
+
+  if (target.entity !== entityName) {
+    throw new Error(
+      `${context} record "${record.id}" field "${record.entity}.${fieldName}" must reference a ${entityName} record.`,
+    );
+  }
+
+  if (target.deletedAt) {
+    throw new Error(
+      `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot reference tombstoned record "${value}".`,
+    );
+  }
+}
+
+function validateInstanceArchiveControlPlaneUniqueConstraints(
+  context: string,
+  records: StoredRecord[],
+) {
+  for (const [entityName, entity] of Object.entries(instanceControlPlaneSchema.entities)) {
+    const activeRecords = records.filter(
+      (record) => record.entity === entityName && !record.deletedAt,
+    );
+    const constraints = ("constraints" in entity ? entity.constraints : {}) as Record<
+      string,
+      { fields: readonly string[]; kind: string }
+    >;
+
+    for (const [constraintName, constraint] of Object.entries(constraints)) {
+      if (constraint.kind !== "unique") {
+        continue;
+      }
+
+      const seen = new Set<string>();
+
+      for (const record of activeRecords) {
+        const key = JSON.stringify(
+          constraint.fields.map((fieldName) => record.values[fieldName] ?? null),
+        );
+
+        if (seen.has(key)) {
+          throw new Error(
+            `${context} violates unique constraint "${entityName}.${constraintName}".`,
+          );
+        }
+
+        seen.add(key);
+      }
+    }
+  }
+}
+
+function assertControlPlaneRecordValuesAreReviewable(context: string, record: StoredRecord) {
+  for (const [fieldName, value] of Object.entries(record.values)) {
+    const isSecretReference = isRuntimeControlPlaneSecretReferenceField(
+      instanceControlPlaneSchema,
+      record.entity,
+      fieldName,
+    );
+
+    if (!isSecretReference && isForbiddenControlPlaneFieldName(fieldName)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    if (typeof value === "string") {
+      assertControlPlaneStringValueIsReviewable(context, record, fieldName, value);
+    }
+  }
+}
+
+function assertControlPlaneStringValueIsReviewable(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  if (containsForbiddenControlPlaneSecretValue(value)) {
+    throw new Error(
+      `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secret values.`,
+    );
+  }
+
+  const parsed = parseMaybeJson(value);
+
+  if (parsed !== undefined) {
+    assertControlPlaneJsonValueIsReviewable(context, record, fieldName, parsed);
+  }
+}
+
+function assertControlPlaneJsonValueIsReviewable(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: unknown,
+) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertControlPlaneJsonValueIsReviewable(context, record, fieldName, item);
+    }
+
+    return;
+  }
+
+  if (typeof value === "string") {
+    assertControlPlaneStringValueIsReviewable(context, record, fieldName, value);
+    return;
+  }
+
+  if (!isPlainRecord(value)) {
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (isForbiddenControlPlaneFieldName(key)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    assertControlPlaneJsonValueIsReviewable(context, record, fieldName, item);
+  }
+}
+
+function parseMaybeJson(value: string): Record<string, unknown> | unknown[] | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+
+    return isPlainRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function instanceControlPlaneEntitySchema(entityName: string) {
+  if (!instanceControlPlaneEntityNames.includes(entityName as InstanceControlPlaneEntityName)) {
+    return undefined;
+  }
+
+  return instanceControlPlaneSchema.entities[entityName as InstanceControlPlaneEntityName];
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isForbiddenControlPlaneFieldName(fieldName: string) {
+  const normalized = normalizeControlPlaneSecretText(fieldName);
+
+  return (
+    normalized.includes("api_token") ||
+    normalized.includes("access_token") ||
+    normalized.includes("auth_token") ||
+    normalized.includes("password") ||
+    normalized.includes("secret_value") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("provider_truth") ||
+    normalized.includes("provider_state") ||
+    normalized.includes("provider_resource_json") ||
+    normalized.includes("provider_resources_json")
+  );
+}
+
+function containsForbiddenControlPlaneSecretValue(value: string) {
+  const normalized = normalizeControlPlaneSecretText(value);
+
+  return (
+    normalized.includes("cf_api_token") ||
+    normalized.includes("cloudflare_api_token") ||
+    normalized.includes("alchemy_password") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    value.includes("-----BEGIN PRIVATE KEY-----")
+  );
+}
+
+function normalizeControlPlaneSecretText(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 }
 
 function parseMediaAsset(context: string, value: unknown): MediaAsset {
@@ -544,9 +917,22 @@ function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
     exportedAt: archive.exportedAt,
     capabilities: canonicalCapabilities(archive.capabilities),
     restorePolicy: canonicalRestorePolicy(archive.restorePolicy),
+    ...(archive.controlPlane === undefined
+      ? {}
+      : { controlPlane: canonicalInstanceArchiveControlPlane(archive.controlPlane) }),
     apps: archive.apps
       .map(canonicalAppArchive)
       .sort((left, right) => left.app.installId.localeCompare(right.app.installId)),
+  };
+}
+
+function canonicalInstanceArchiveControlPlane(
+  controlPlane: InstanceArchiveControlPlane,
+): InstanceArchiveControlPlane {
+  return {
+    schemaKey: controlPlane.schemaKey,
+    schemaUpdatedAt: controlPlane.schemaUpdatedAt,
+    records: canonicalStoredRecords(controlPlane.records),
   };
 }
 

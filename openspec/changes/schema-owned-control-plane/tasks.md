@@ -156,11 +156,19 @@ Evidence:
 
 ## 10. Workspace And Archive Control Plane
 
-- [ ] 10.1 Define the reviewable instance workspace and archive envelope for schema-owned app install, route, domain, and deployment intent records.
-- [ ] 10.2 Update instance workspace pull, check, push, and archive flows to represent app install, route, domain, and deployment intent as schema-owned records without secrets.
-- [ ] 10.3 Compare workspace drift against remote control-plane records while keeping provider drift summaries separate from desired intent drift.
-- [ ] 10.4 Keep installed app snapshots scoped by app install identity and outside control-plane records.
-- [ ] 10.5 Add workspace and archive tests for record shape, secret exclusion, drift comparison, and command compatibility.
+- [x] 10.1 Define the reviewable instance workspace and archive envelope for schema-owned app install, route, domain, and deployment intent records.
+- [x] 10.2 Update instance workspace pull, check, push, and archive flows to represent app install, route, domain, and deployment intent as schema-owned records without secrets.
+- [x] 10.3 Compare workspace drift against remote control-plane records while keeping provider drift summaries separate from desired intent drift.
+- [x] 10.4 Keep installed app snapshots scoped by app install identity and outside control-plane records.
+- [x] 10.5 Add workspace and archive tests for record shape, secret exclusion, drift comparison, and command compatibility.
+
+Evidence:
+
+- Files changed: `src/shared/archive.ts`, `src/shared/archive.test.ts`, `src/site/archive-workflows.ts`, `src/site/instance-workspace.ts`, `src/site/cli.ts`, `src/site/cli.test.ts`, `src/worker/archive-api.ts`, `src/worker/archive-restore.ts`, `src/worker/archive-restore.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running. `devstate check` initially caught archive validator type errors and two CLI fixture failures; after fixes, final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T02:12:19.685Z.
+- Smoke: not run; section 10 changes CLI, archive, workspace, and restore behavior without generated instance UI changes.
+- Decisions: instance archives now have an optional `controlPlane` envelope for the runtime-owned `instance-control-plane` schema and the `schema-owned-control-plane` capability. Archive validation rejects unknown control-plane entities, invalid references, duplicate ids, uniqueness violations, provider truth, and raw secret values while allowing non-secret secret reference fields. Workspace pull preserves remote control-plane records; push and local-dev composition synthesize reviewable app install, app route, domain mapping, deploy target, and provider config records from declared workspace state while keeping installed app snapshots under install-scoped app archives. Workspace drift compares desired control-plane intent records separately from provider drift reports, and provider drift report changes do not mark desired workspace drift.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 11. Compatibility Sweep
 
