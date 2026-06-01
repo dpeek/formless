@@ -61,15 +61,22 @@ Evidence:
 
 ## 5. Cloudflare Deploy Boundary
 
-- [ ] 5.1 Implement top-level `formless deploy` from `formless.json` with Cloudflare account discovery or configured target inputs.
-- [ ] 5.2 Plan deployment resources from workspace deploy intent and package version.
-- [ ] 5.3 Store deploy, provider, Cloudflare credential, and automation secret state only under ignored `.formless/` state.
-- [ ] 5.4 Copy materialized Cloudflare account id, credential profile, API token, Alchemy password/state token, admin token, and resource ids from Alchemy/env into ignored `.formless/` state when available.
-- [ ] 5.5 Write display-safe target and deploy intent back to `formless.json` after successful deploy planning.
-- [ ] 5.6 Verify deploy metadata and create owner setup capability when needed.
-- [ ] 5.7 Dry-run restore saved workspace archives and then apply the remote data push after deploy verification.
-- [ ] 5.8 Refuse deploy or push when target identity or remote drift requires explicit acknowledgement.
-- [ ] 5.9 Add tests for first deploy, redeploy, missing secrets, target identity mismatch, copied ignored credential state, and no-secret manifest/archive output.
+- [x] 5.1 Implement top-level `formless deploy` from `formless.json` with Cloudflare account discovery or configured target inputs.
+- [x] 5.2 Plan deployment resources from workspace deploy intent and package version.
+- [x] 5.3 Store deploy, provider, Cloudflare credential, and automation secret state only under ignored `.formless/` state.
+- [x] 5.4 Copy materialized Cloudflare account id, credential profile, API token, Alchemy password/state token, admin token, and resource ids from Alchemy/env into ignored `.formless/` state when available.
+- [x] 5.5 Write display-safe target and deploy intent back to `formless.json` after successful deploy planning.
+- [x] 5.6 Verify deploy metadata and create owner setup capability when needed.
+- [x] 5.7 Dry-run restore saved workspace archives and then apply the remote data push after deploy verification.
+- [x] 5.8 Refuse deploy or push when target identity or remote drift requires explicit acknowledgement.
+- [x] 5.9 Add tests for first deploy, redeploy, missing secrets, target identity mismatch, copied ignored credential state, and no-secret manifest/archive output.
+
+Evidence:
+
+- Files changed: `src/site/instance-workspace.ts`, `src/site/cli.ts`, `src/site/cli.test.ts`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run; section changes CLI workspace deploy behavior only, with no browser-visible app behavior.
+- Notes: top-level `formless deploy` now resolves the nearest `formless.json`, discovers a Cloudflare account when no deploy target is configured, plans instance resources from workspace deploy intent and package version, writes display-safe target/deploy intent to `formless.json`, stores admin/deploy/provider secret material under ignored `.formless/`, verifies deploy metadata, creates first-deploy owner setup capability, then dry-runs and applies workspace archive push. Existing-target deploy checks remote drift before Cloudflare mutation and refuses stale source.
 
 ## 6. Remove Standalone Site Project Surface
 

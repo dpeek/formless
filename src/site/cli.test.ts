@@ -3489,6 +3489,268 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
+  it("deploys a local-first workspace, records ignored state, updates manifest target intent, and pushes saved archives", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal");
+    const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+
+    await runFormlessCli(["onboard", "--name", "personal"], cliDeps(workspaceRoot));
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      formatFormlessInstanceWorkspaceManifest({
+        version: 1,
+        kind: "formless-instance-workspace",
+        name: "personal",
+        targets: [],
+        archives: { instance: "archives/instance", apps: "archives/apps" },
+        local: { stateRoot: ".formless/local" },
+        defaultAppPolicy: "declared-installs",
+        apps: [workspaceApp("david", "David Peek")],
+      }),
+    );
+
+    await runFormlessCli(
+      ["deploy"],
+      cliDeps(workspaceRoot, {
+        accountDiscoveryInputs,
+        deploy: async (input) => {
+          deployInputs.push(input);
+          return { url: input.plan.expectedUrl.url };
+        },
+        env: {
+          ALCHEMY_PROFILE: "personal-profile",
+          ALCHEMY_STATE_TOKEN: "alchemy-state-token",
+          CLOUDFLARE_API_TOKEN: "cf-token",
+        },
+        fetch: pushArchiveFetch(
+          requests,
+          [],
+          {},
+          [
+            restorePlan({ createdInstalls: ["david"] }),
+            restoreReport({ createdInstalls: ["david"] }),
+          ],
+          [],
+          [],
+        ),
+        healthInputs,
+        logs,
+        packageRoot: "/package",
+        setupInputs,
+      }),
+    );
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+    const deployEnv = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal/deploy.env"),
+      "utf8",
+    );
+    const deployState = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal/formless.instance.json"),
+      "utf8",
+    );
+    const restoreRequests = requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        request.url === "https://personal.dpeek.workers.dev/api/formless/archive/restore",
+    );
+
+    expect(accountDiscoveryInputs).toEqual([{ credentialProfile: null }]);
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]).toMatchObject({
+      credentialProfile: null,
+      packageRoot: "/package",
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
+        CLOUDFLARE_API_TOKEN: "cf-token",
+        FORMLESS_ADMIN_TOKEN: "generated-token",
+      },
+      stateRoot: path.join(workspaceRoot, ".formless/deploy/personal"),
+    });
+    expect(deployInputs[0]?.plan).toMatchObject({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      expectedUrl: {
+        url: "https://personal.dpeek.workers.dev",
+      },
+      instanceName: "personal",
+      migrationPolicy: "new",
+      resources: {
+        mediaBucket: {
+          name: "personal-media",
+        },
+        worker: {
+          name: "personal",
+        },
+      },
+    });
+    expect(healthInputs).toEqual([
+      {
+        expectedVersion: packageJson.version,
+        url: "https://personal.dpeek.workers.dev",
+      },
+    ]);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "generated-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(manifest.defaultTarget).toBe("remote");
+    expect(manifest.targets).toEqual([
+      { alias: "remote", url: "https://personal.dpeek.workers.dev" },
+    ]);
+    expect(manifest.deploy).toEqual({
+      accountId: "account-123",
+      mediaBucket: "personal-media",
+      migrationPolicy: "new",
+      workerName: "personal",
+      workersDevUrl: "https://personal.dpeek.workers.dev",
+    });
+    expect(JSON.stringify(manifest)).not.toContain("cf-token");
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
+    ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
+    expect(deployEnv).toContain("ALCHEMY_PASSWORD=alchemy-password\n");
+    expect(deployEnv).toContain("ALCHEMY_PROFILE=personal-profile\n");
+    expect(deployEnv).toContain("FORMLESS_ADMIN_TOKEN=generated-token\n");
+    expect(deployEnv).toContain("CLOUDFLARE_ACCOUNT_ID=account-123\n");
+    expect(deployEnv).toContain("CLOUDFLARE_API_TOKEN=cf-token\n");
+    expect(deployEnv).toContain("ALCHEMY_STATE_TOKEN=alchemy-state-token\n");
+    expect(deployState).toContain('"workersDevUrl": "https://personal.dpeek.workers.dev"');
+    expect(restoreRequests).toHaveLength(2);
+    expect(
+      restoreRequests.map(
+        (request) =>
+          capturedRequestJson<{ archive: InstanceArchive }>(request).archive.restorePolicy,
+      ),
+    ).toEqual([
+      { dryRun: true, installCollisions: "replace" },
+      { dryRun: false, installCollisions: "replace" },
+    ]);
+    expect(logs.at(-1)).toContain("Instance workspace deployed.");
+    expect(logs.at(-1)).toContain("Owner setup: https://personal.dpeek.workers.dev/setup?token=");
+    expect(logs.at(-1)).toContain("Apply restore: ok.");
+  });
+
+  it("refuses top-level deploy before Cloudflare mutation when existing target drift is unacknowledged", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const remoteRecords: StoredRecord[] = [
+      {
+        id: "remote-only",
+        entity: "block",
+        values: { title: "Remote" },
+        createdAt: "2026-05-01T00:00:00.000Z",
+      },
+    ];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await expect(
+      runFormlessCli(
+        ["deploy", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          deploy: async (input) => {
+            deployInputs.push(input);
+            return { url: input.plan.expectedUrl.url };
+          },
+          fetch: archiveFetch(requests, [installedSite("david", "David Peek")], {
+            david: { records: remoteRecords },
+          }),
+        }),
+      ),
+    ).rejects.toThrow("Formless deploy refused because remote drift was detected");
+    expect(deployInputs).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+  });
+
+  it("guards top-level deploy against missing Cloudflare accounts and target identity mismatch", async () => {
+    const tempDir = await makeTempDir();
+    const newWorkspaceRoot = path.join(tempDir, "new-personal");
+    const existingWorkspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+
+    await runFormlessCli(["onboard", "--name", "new-personal"], cliDeps(newWorkspaceRoot));
+
+    await expect(
+      runFormlessCli(
+        ["deploy"],
+        cliDeps(newWorkspaceRoot, {
+          accounts: [],
+          deploy: async (input) => {
+            deployInputs.push(input);
+            return { url: input.plan.expectedUrl.url };
+          },
+        }),
+      ),
+    ).rejects.toThrow("No Cloudflare accounts were found for the selected credentials.");
+    expect(deployInputs).toEqual([]);
+
+    await writeWorkspaceManifest(existingWorkspaceRoot);
+    await mkdir(path.join(existingWorkspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(existingWorkspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeArchiveDirectory(
+      path.join(existingWorkspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(
+      path.join(existingWorkspaceRoot, "archives/apps/david"),
+      localDavid,
+    );
+
+    await expect(
+      runFormlessCli(
+        ["deploy", "--workspace", existingWorkspaceRoot],
+        cliDeps(tempDir, {
+          deploy: async (input) => {
+            deployInputs.push(input);
+            return { url: "https://wrong.dpeek.workers.dev" };
+          },
+          fetch: archiveFetch([], [installedSite("david", "David Peek")], {
+            david: { records: [] },
+          }),
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless deploy returned https://wrong.dpeek.workers.dev, expected target https://personal.dpeek.workers.dev.",
+    );
+    expect(deployInputs).toHaveLength(1);
+  });
+
   it("guards instance workspace deploy against missing secrets and target identity changes", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -5729,6 +5991,7 @@ function fakeCloudflareDomainClient(input: {
 function cliDeps(
   cwd: string,
   options: {
+    accounts?: Array<{ id: string; name?: string; workersDevSubdomain: string }>;
     accountDiscoveryInputs?: Array<{ credentialProfile: string | null }>;
     cloudflareDomainClient?: CloudflareDomainClient;
     commands?: CapturedCommand[];
@@ -5753,13 +6016,15 @@ function cliDeps(
       listAccounts: async (input) => {
         options.accountDiscoveryInputs?.push(input);
 
-        return [
-          {
-            id: "account-123",
-            name: "Personal",
-            workersDevSubdomain: "dpeek",
-          },
-        ];
+        return (
+          options.accounts ?? [
+            {
+              id: "account-123",
+              name: "Personal",
+              workersDevSubdomain: "dpeek",
+            },
+          ]
+        );
       },
     },
     cloudflareDomainClient: () =>

@@ -31,7 +31,12 @@ import {
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneAppRouteSurface,
 } from "../shared/instance-control-plane.ts";
-import type { AppInstallsResponse, RecordValues, StoredRecord } from "../shared/protocol.ts";
+import {
+  parseOwnerSetupToken,
+  type AppInstallsResponse,
+  type RecordValues,
+  type StoredRecord,
+} from "../shared/protocol.ts";
 import {
   CF_API_TOKEN_ENV_NAME,
   CLOUDFLARE_API_TOKEN_ENV_NAME,
@@ -43,9 +48,11 @@ import {
   type CloudflareDomainPreflightPlan,
   type CloudflareDomainPreflightPolicy,
 } from "./cloudflare-domain-client.ts";
+import { formatDotEnv, parseDotEnv } from "./dotenv.ts";
 import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
   defaultFormlessInstanceWorkspaceManifest,
@@ -86,12 +93,22 @@ import {
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import {
+  ALCHEMY_PASSWORD_ENV_NAME,
   planFormlessInstanceDeployment,
+  createFormlessInstanceState,
+  formatFormlessInstanceState,
+  formatFormlessOwnerSetupUrl,
+  FORMLESS_INSTANCE_STATE_FILE,
+  selectOnlyFormlessInstanceAccount,
+  type CreateFormlessInstanceOwnerSetupCapabilityResult,
   type CheckFormlessInstanceDeployMetadataResult,
   type DeployFormlessInstanceResult,
+  type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
+  type FormlessInstanceDeploymentAccount,
   type FormlessInstanceDeploymentHealthCheckAdapter,
   type FormlessInstanceDeploymentPlan,
+  type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceLocalSecretEnvStore,
   type EnsureFormlessInstanceLocalSecretEnvResult,
 } from "./instance-onboarding.ts";
@@ -363,13 +380,35 @@ export type DeployFormlessInstanceWorkspaceDependencies = {
   randomToken: () => string;
 };
 
+export type DeployLocalFormlessWorkspaceInput = {
+  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type DeployLocalFormlessWorkspaceDependencies =
+  DeployFormlessInstanceWorkspaceDependencies & {
+    accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
+    fetch: typeof fetch;
+    now: () => string;
+    setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
+  };
+
+export type DeployLocalFormlessWorkspaceOwnerSetup = {
+  capability: CreateFormlessInstanceOwnerSetupCapabilityResult;
+  url: string;
+};
+
 export type DeployFormlessInstanceWorkspaceResult = {
   deployment: DeployFormlessInstanceResult;
   deploymentStateRoot: string;
+  deploymentStatePath?: string;
   healthCheck: CheckFormlessInstanceDeployMetadataResult;
   localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
   migrationPolicy: FormlessInstanceWorkspaceMigrationPolicy;
+  ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
   plan: FormlessInstanceDeploymentPlan;
+  push?: PushFormlessInstanceWorkspaceResult;
   secretPath: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
@@ -1066,6 +1105,142 @@ export async function resetFormlessInstanceWorkspaceLocalState(
   return {
     localStateRoot,
     manifestPath,
+    workspaceRoot,
+  };
+}
+
+export async function deployLocalFormlessWorkspace(
+  input: DeployLocalFormlessWorkspaceInput,
+  dependencies: DeployLocalFormlessWorkspaceDependencies,
+): Promise<DeployFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
+  const existingSelectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+
+  if (existingSelectedTarget) {
+    const preflight = await checkFormlessInstanceWorkspace(
+      {
+        targetAlias: existingSelectedTarget.alias,
+        workspacePath: workspaceRoot,
+      },
+      dependencies,
+    );
+
+    if (preflight.drift.status === "drift") {
+      throw new Error(
+        "Formless deploy refused because remote drift was detected; review `formless check` and retry after saving or pulling the workspace source.",
+      );
+    }
+  }
+
+  const account = await resolveLocalWorkspaceDeploymentAccount({
+    accountDiscovery: dependencies.accountDiscovery,
+    manifest,
+    selectedTarget: existingSelectedTarget,
+  });
+  const planned = planLocalWorkspaceDeployment({
+    account,
+    manifest,
+    migrationPolicy: input.migrationPolicy,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget: existingSelectedTarget,
+    targetAlias: input.targetAlias,
+  });
+  const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+  let adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    secretState,
+  });
+
+  await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+
+  if (!adminToken) {
+    adminToken = requiredGeneratedToken(dependencies.randomToken());
+    await writeFormlessInstanceWorkspaceSecretState(workspaceRoot, { adminToken });
+  }
+
+  const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, planned.plan);
+  const localSecretEnv = await dependencies.localSecretEnv.ensure({
+    createSecret: dependencies.randomToken,
+    root: deploymentStateRoot,
+  });
+
+  await copyLocalWorkspaceDeploySecretEnv({
+    adminToken,
+    env: dependencies.env,
+    localSecretEnv,
+    plan: planned.plan,
+  });
+
+  const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
+    credentialProfile: null,
+    deploymentStateRoot,
+    plan: planned.plan,
+  });
+  const deployment = await dependencies.deploymentAdapter.deploy({
+    credentialProfile: null,
+    packageRoot: dependencies.packageRoot,
+    plan: planned.plan,
+    secrets: {
+      ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
+      ...optionalCloudflareApiTokenSecret(dependencies.env),
+      FORMLESS_ADMIN_TOKEN: adminToken,
+    },
+    stateRoot: deploymentStateRoot,
+  });
+  const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
+
+  if (deploymentUrl !== planned.plan.expectedUrl.url) {
+    throw new Error(
+      `Formless deploy returned ${deploymentUrl}, expected target ${planned.plan.expectedUrl.url}.`,
+    );
+  }
+
+  const healthCheck = await dependencies.healthCheck.check({
+    expectedVersion: planned.plan.packageVersion,
+    url: deploymentUrl,
+  });
+
+  await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(planned.manifest));
+
+  const ownerSetup =
+    existingSelectedTarget === undefined
+      ? await createLocalWorkspaceOwnerSetup({
+          adminToken,
+          deploymentUrl,
+          randomToken: dependencies.randomToken,
+          setupCapability: dependencies.setupCapability,
+        })
+      : undefined;
+  const push = await pushFormlessInstanceWorkspace(
+    {
+      allowStale: existingSelectedTarget === undefined,
+      apply: true,
+      replace: true,
+      replaceInstallSet: false,
+      targetAlias: planned.selectedTarget.alias,
+      workspacePath: workspaceRoot,
+    },
+    dependencies,
+  );
+
+  return {
+    deployment: {
+      url: deploymentUrl,
+    },
+    deploymentStatePath,
+    deploymentStateRoot,
+    healthCheck,
+    localSecretEnv,
+    migrationPolicy: planned.plan.migrationPolicy,
+    ...(ownerSetup === undefined ? {} : { ownerSetup }),
+    plan: planned.plan,
+    push,
+    secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
+    selectedTarget: planned.selectedTarget,
     workspaceRoot,
   };
 }
@@ -2589,6 +2764,18 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+async function readTextFileIfExists(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 async function prepareWorkspaceDirectories(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
@@ -2952,6 +3139,130 @@ function requireWorkspaceDeployAccountId(manifest: FormlessInstanceWorkspaceMani
   }
 
   return accountId;
+}
+
+type LocalWorkspaceDeploymentPlanResult = {
+  manifest: FormlessInstanceWorkspaceManifest;
+  plan: FormlessInstanceDeploymentPlan;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+};
+
+async function resolveLocalWorkspaceDeploymentAccount(input: {
+  accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
+  manifest: FormlessInstanceWorkspaceManifest;
+  selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
+}): Promise<FormlessInstanceDeploymentAccount> {
+  const configuredUrl = input.manifest.deploy?.workersDevUrl ?? input.selectedTarget?.url;
+  const configuredFacts =
+    configuredUrl === undefined
+      ? undefined
+      : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
+  const configuredAccountId = input.manifest.deploy?.accountId?.trim();
+
+  if (configuredAccountId && configuredFacts) {
+    return {
+      id: configuredAccountId,
+      workersDevSubdomain: configuredFacts.workersDevSubdomain,
+    };
+  }
+
+  const accounts = await input.accountDiscovery.listAccounts({ credentialProfile: null });
+
+  if (!Array.isArray(accounts)) {
+    throw new Error("Cloudflare account discovery adapter must return an account array.");
+  }
+
+  const account =
+    configuredAccountId === undefined || configuredAccountId === ""
+      ? selectOnlyFormlessInstanceAccount({ accounts, credentialProfile: null })
+      : accounts.find((candidate) => candidate.id === configuredAccountId);
+
+  if (!account) {
+    throw new Error(
+      `Cloudflare account ${configuredAccountId} was not found for the selected credentials.`,
+    );
+  }
+
+  if (
+    configuredFacts !== undefined &&
+    account.workersDevSubdomain !== configuredFacts.workersDevSubdomain
+  ) {
+    throw new Error(
+      `Formless deploy target workers.dev subdomain "${configuredFacts.workersDevSubdomain}" does not match Cloudflare account "${account.workersDevSubdomain}".`,
+    );
+  }
+
+  return account;
+}
+
+function planLocalWorkspaceDeployment(input: {
+  account: FormlessInstanceDeploymentAccount;
+  manifest: FormlessInstanceWorkspaceManifest;
+  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
+  packageVersion: string;
+  selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
+  targetAlias?: string | null;
+}): LocalWorkspaceDeploymentPlanResult {
+  const configuredUrl = input.manifest.deploy?.workersDevUrl ?? input.selectedTarget?.url;
+  const configuredFacts =
+    configuredUrl === undefined
+      ? undefined
+      : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
+  const plan = planFormlessInstanceDeployment({
+    account: input.account,
+    instanceName:
+      input.manifest.deploy?.workerName ?? configuredFacts?.workerName ?? input.manifest.name,
+    mediaBucketName: input.manifest.deploy?.mediaBucket,
+    migrationPolicy:
+      input.migrationPolicy ?? input.manifest.deploy?.migrationPolicy ?? ("new" as const),
+    packageVersion: input.packageVersion,
+  });
+
+  if (
+    configuredUrl !== undefined &&
+    normalizeFormlessInstanceWorkspaceTargetUrl(configuredUrl) !== plan.expectedUrl.url
+  ) {
+    throw new Error(
+      `Formless deploy target ${normalizeFormlessInstanceWorkspaceTargetUrl(
+        configuredUrl,
+      )} does not match planned target ${plan.expectedUrl.url}.`,
+    );
+  }
+
+  const targetAlias =
+    input.targetAlias ??
+    input.selectedTarget?.alias ??
+    input.manifest.defaultTarget ??
+    DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
+  const selectedTarget = {
+    alias: targetAlias,
+    url: plan.expectedUrl.url,
+  };
+
+  return {
+    manifest: withWorkspaceDeploymentTarget(input.manifest, selectedTarget, plan),
+    plan,
+    selectedTarget,
+  };
+}
+
+function withWorkspaceDeploymentTarget(
+  manifest: FormlessInstanceWorkspaceManifest,
+  target: FormlessInstanceWorkspaceTarget,
+  plan: FormlessInstanceDeploymentPlan,
+): FormlessInstanceWorkspaceManifest {
+  return {
+    ...manifest,
+    defaultTarget: target.alias,
+    targets: [...manifest.targets.filter((candidate) => candidate.alias !== target.alias), target],
+    deploy: {
+      accountId: plan.account.id,
+      mediaBucket: plan.resources.mediaBucket.name,
+      migrationPolicy: plan.migrationPolicy,
+      workerName: plan.resources.worker.name,
+      workersDevUrl: plan.expectedUrl.url,
+    },
+  };
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
@@ -3354,10 +3665,106 @@ function rotateCommandEnv(
 function optionalCloudflareApiTokenSecret(
   env: NodeJS.ProcessEnv | undefined,
 ): { CLOUDFLARE_API_TOKEN: string } | {} {
+  const token = optionalCloudflareApiToken(env);
+
+  return token ? { CLOUDFLARE_API_TOKEN: token } : {};
+}
+
+function optionalCloudflareApiToken(env: NodeJS.ProcessEnv | undefined): string | undefined {
   const token =
     env?.[CLOUDFLARE_API_TOKEN_ENV_NAME]?.trim() ?? env?.[CF_API_TOKEN_ENV_NAME]?.trim();
 
-  return token ? { CLOUDFLARE_API_TOKEN: token } : {};
+  return token ? token : undefined;
+}
+
+async function copyLocalWorkspaceDeploySecretEnv(input: {
+  adminToken: string;
+  env: NodeJS.ProcessEnv | undefined;
+  localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
+  plan: FormlessInstanceDeploymentPlan;
+}): Promise<void> {
+  const current = await readTextFileIfExists(input.localSecretEnv.path);
+  const values = parseDotEnv(current ?? "");
+
+  values[ALCHEMY_PASSWORD_ENV_NAME] = input.localSecretEnv.secrets.ALCHEMY_PASSWORD;
+  values[FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME] = input.adminToken;
+  values.CLOUDFLARE_ACCOUNT_ID = input.plan.account.id;
+
+  const cloudflareApiToken = optionalCloudflareApiToken(input.env);
+  const alchemyProfile = input.env?.ALCHEMY_PROFILE?.trim();
+  const alchemyStateToken = input.env?.ALCHEMY_STATE_TOKEN?.trim();
+
+  if (alchemyProfile) {
+    values.ALCHEMY_PROFILE = alchemyProfile;
+  }
+
+  if (cloudflareApiToken) {
+    values.CLOUDFLARE_API_TOKEN = cloudflareApiToken;
+  }
+
+  if (alchemyStateToken) {
+    values.ALCHEMY_STATE_TOKEN = alchemyStateToken;
+  }
+
+  await mkdir(path.dirname(input.localSecretEnv.path), { recursive: true });
+  await writeFile(input.localSecretEnv.path, formatDotEnv(values));
+}
+
+async function writeLocalWorkspaceDeploymentState(input: {
+  credentialProfile: string | null;
+  deploymentStateRoot: string;
+  plan: FormlessInstanceDeploymentPlan;
+}): Promise<string> {
+  const statePath = path.join(input.deploymentStateRoot, FORMLESS_INSTANCE_STATE_FILE);
+
+  await mkdir(input.deploymentStateRoot, { recursive: true });
+  await writeFile(
+    statePath,
+    formatFormlessInstanceState(
+      createFormlessInstanceState({
+        credentialProfile: input.credentialProfile,
+        plan: input.plan,
+      }),
+    ),
+  );
+
+  return statePath;
+}
+
+async function createLocalWorkspaceOwnerSetup(input: {
+  adminToken: string;
+  deploymentUrl: string;
+  randomToken: () => string;
+  setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
+}): Promise<DeployLocalFormlessWorkspaceOwnerSetup> {
+  const setupToken = generatedOwnerSetupToken(input.randomToken);
+  const capability = await input.setupCapability.create({
+    adminToken: input.adminToken,
+    deploymentUrl: input.deploymentUrl,
+    setupToken,
+  });
+
+  return {
+    capability,
+    url: formatFormlessOwnerSetupUrl({
+      deploymentUrl: input.deploymentUrl,
+      setupToken,
+    }),
+  };
+}
+
+function generatedOwnerSetupToken(randomToken: () => string): string {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return parseOwnerSetupToken(randomToken());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 function requiredGeneratedToken(value: string): string {

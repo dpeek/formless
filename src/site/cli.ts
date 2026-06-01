@@ -61,6 +61,7 @@ import {
   applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
   checkLocalFormlessWorkspace as checkLocalFormlessWorkspaceCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
+  deployLocalFormlessWorkspace as deployLocalFormlessWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initLocalFormlessWorkspaceOnboarding as initLocalFormlessWorkspaceOnboardingCommand,
@@ -78,6 +79,7 @@ import {
   type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
   type CheckLocalFormlessWorkspaceResult,
+  type DeployLocalFormlessWorkspaceInput,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceDevCommand,
@@ -457,7 +459,7 @@ export async function runFormlessCli(
       return;
     }
     case "workspaceDeploy": {
-      const result = await deployFormlessInstanceWorkspace(
+      const result = await deployLocalFormlessWorkspace(
         {
           migrationPolicy: command.migrationPolicy,
           targetAlias: command.targetAlias,
@@ -890,6 +892,39 @@ export async function deployFormlessInstanceWorkspace(
     packageRoot: dependencies.packageRoot,
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
+  });
+}
+
+export async function deployLocalFormlessWorkspace(
+  input: DeployLocalFormlessWorkspaceInput,
+  dependencies: Pick<
+    FormlessCliDependencies,
+    | "accountDiscovery"
+    | "cwd"
+    | "deploymentAdapter"
+    | "env"
+    | "fetch"
+    | "healthCheck"
+    | "localSecretEnv"
+    | "now"
+    | "packageRoot"
+    | "randomToken"
+    | "setupCapability"
+  > = nodeFormlessCliDependencies(),
+): Promise<DeployFormlessInstanceWorkspaceResult> {
+  return deployLocalFormlessWorkspaceCommand(input, {
+    accountDiscovery: dependencies.accountDiscovery,
+    cwd: dependencies.cwd,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    env: dependencies.env,
+    fetch: dependencies.fetch,
+    healthCheck: dependencies.healthCheck,
+    localSecretEnv: dependencies.localSecretEnv,
+    now: dependencies.now,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
+    randomToken: dependencies.randomToken,
+    setupCapability: dependencies.setupCapability,
   });
 }
 
@@ -1703,8 +1738,21 @@ function formatInstanceWorkspaceDeployResult(
     "Runtime profile: server instance, client instance.",
     `Deploy metadata: version ${result.healthCheck.version} verified.`,
     `Deployment state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
+    ...(result.deploymentStatePath === undefined
+      ? []
+      : [`Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`]),
     `Local deploy secrets: ${formatCliPath(cwd, result.localSecretEnv.path)}.`,
     `Automation secret state: ${formatCliPath(cwd, result.secretPath)}.`,
+    ...(result.ownerSetup === undefined ? [] : [`Owner setup: ${result.ownerSetup.url}.`]),
+    ...(result.push === undefined
+      ? []
+      : [
+          `Data push: ${result.push.mode}.`,
+          `Dry-run restore: ${result.push.dryRun.remote.ok ? "ok" : "failed"}.`,
+          ...(result.push.applyResult === undefined
+            ? []
+            : [`Apply restore: ${result.push.applyResult.remote.ok ? "ok" : "failed"}.`]),
+        ]),
   ].join("\n");
 }
 
