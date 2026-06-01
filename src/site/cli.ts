@@ -102,20 +102,7 @@ import {
   readFormlessInstanceDomainProviderPlan,
 } from "./instance-target-client.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
-import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
-import {
-  publishSiteProject as publishSiteProjectCommand,
-  setupSiteProjectDeploy as setupSiteProjectDeployCommand,
-  startSiteProjectLocalPublishBroker as startSiteProjectLocalPublishBrokerCommand,
-  type PublishSiteProjectResult,
-  type SetupSiteProjectDeployResult,
-} from "./project-publish.ts";
-import {
-  saveSiteProject as saveSiteProjectCommand,
-  type SaveSiteProjectResult,
-} from "./project-save.ts";
 import { formatCliUpgradePlanningReport } from "./upgrade-plan.ts";
-import { type SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
@@ -277,11 +264,6 @@ export {
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
 export {
-  readSiteProjectSource,
-  resolveSiteProjectRoot,
-  type SiteProjectSource,
-} from "./project-files.ts";
-export {
   buildSiteProjectAppArchiveEntry,
   readSiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveEntry,
@@ -292,20 +274,6 @@ export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   type ArchiveRestoreRemoteResult,
 } from "./archive-workflows.ts";
-export {
-  readSiteProjectDevStateSource,
-  siteProjectDevEnv,
-  siteProjectStorageId,
-  siteProjectWranglerPersistPath,
-} from "./project-dev.ts";
-export { type SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
-export {
-  isSiteProjectPublishConfigured,
-  type LocalAdminPublishResult,
-  type PublishSiteProjectResult,
-  type SetupSiteProjectDeployResult,
-} from "./project-publish.ts";
-export { type SaveSiteProjectResult } from "./project-save.ts";
 export {
   ALCHEMY_PASSWORD_ENV_NAME,
   alchemyFormlessInstanceAccountDiscoveryAdapter,
@@ -400,8 +368,6 @@ export type FormlessCliDependencies = {
   stateWriter: FormlessInstanceStateWriter;
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
-
-export type InitSiteProjectResult = InitSiteProjectSourceResult;
 
 export type OnboardFormlessInstanceResult = InitFormlessInstanceWorkspaceResult;
 
@@ -624,18 +590,6 @@ export async function runFormlessCli(
   }
 }
 
-export async function initSiteProject(
-  input: { targetDir: string },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    "cwd" | "packageRoot"
-  > = nodeFormlessCliDependencies(),
-): Promise<InitSiteProjectResult> {
-  const projectRoot = path.resolve(dependencies.cwd, input.targetDir);
-
-  return initSiteProjectSource({ packageRoot: dependencies.packageRoot, projectRoot });
-}
-
 export async function onboardFormlessInstance(
   input: InitLocalFormlessWorkspaceOnboardingInput & {
     credentialProfile?: string | null;
@@ -654,44 +608,6 @@ export async function onboardFormlessInstance(
       fetch: dependencies.fetch,
     },
   );
-}
-
-export async function saveSiteProject(
-  input: { check?: boolean; projectPath?: string; source?: string | null },
-  dependencies: Pick<FormlessCliDependencies, "cwd" | "fetch"> = nodeFormlessCliDependencies(),
-): Promise<SaveSiteProjectResult> {
-  return saveSiteProjectCommand(input, dependencies);
-}
-
-export async function setupSiteProjectDeploy(
-  input: {
-    accountId?: string | null;
-    adminToken?: string | null;
-    createBucket?: boolean;
-    mediaBucket: string;
-    projectPath?: string;
-    publishUrl: string;
-    uploadSecret?: boolean;
-    workerName: string;
-  },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    "cwd" | "env" | "randomToken" | "runCommand" | "packageRoot"
-  > = nodeFormlessCliDependencies(),
-): Promise<SetupSiteProjectDeployResult> {
-  return setupSiteProjectDeployCommand(input, dependencies);
-}
-
-export async function publishSiteProject(
-  input: {
-    code?: boolean | "if-stale";
-    dryRun?: boolean;
-    projectPath?: string;
-    yes?: boolean;
-  },
-  dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
-): Promise<PublishSiteProjectResult> {
-  return publishSiteProjectCommand(input, dependencies);
 }
 
 export async function exportInstanceArchive(
@@ -1363,13 +1279,6 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
   > = nodeFormlessCliDependencies(),
 ): Promise<RotateFormlessInstanceWorkspaceAdminTokenResult> {
   return rotateFormlessInstanceWorkspaceAdminTokenCommand(input, dependencies);
-}
-
-export async function startSiteProjectLocalPublishBroker(
-  input: { projectPath: string; source: () => string | null },
-  dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
-): Promise<SiteProjectLocalPublishBroker> {
-  return startSiteProjectLocalPublishBrokerCommand(input, dependencies);
 }
 
 function runCommandWithSpawn(

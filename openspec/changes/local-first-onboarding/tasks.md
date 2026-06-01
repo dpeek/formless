@@ -80,10 +80,17 @@ Evidence:
 
 ## 6. Remove Standalone Site Project Surface
 
-- [ ] 6.1 Remove `formless init`, standalone Site-project `formless dev`, standalone Site-project `formless save`, `formless deploy setup`, and `formless publish` from top-level CLI usage.
-- [ ] 6.2 Remove or isolate standalone Site project implementation modules that are no longer part of the CLI surface.
-- [ ] 6.3 Keep only explicit migration/archive import coverage for legacy Site project data if still supported.
-- [ ] 6.4 Update README and user-facing docs to describe `formless onboard`, `formless dev`, `formless save`, and `formless deploy`.
+- [x] 6.1 Remove `formless init`, standalone Site-project `formless dev`, standalone Site-project `formless save`, `formless deploy setup`, and `formless publish` from top-level CLI usage.
+- [x] 6.2 Remove or isolate standalone Site project implementation modules that are no longer part of the CLI surface.
+- [x] 6.3 Keep only explicit migration/archive import coverage for legacy Site project data if still supported.
+- [x] 6.4 Update README and user-facing docs to describe `formless onboard`, `formless dev`, `formless save`, and `formless deploy`.
+
+Evidence:
+
+- Files changed: `src/site/cli.ts`, `src/site/cli.test.ts`, `README.md`, `doc/vision.md`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run; section removes CLI/docs surface only, with no browser-visible app behavior change.
+- Notes: top-level CLI usage remains local-first and rejects removed standalone command shapes. Standalone Site project helpers are no longer exported through the CLI facade; legacy standalone Site project data remains available through the explicit `formless archive import-site` migration path and direct project modules.
 
 ## 7. Verification And Promotion
 

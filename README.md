@@ -8,21 +8,24 @@ This README is the human overview. Agent instructions live separately in `AGENTS
 
 ## Quick Start
 
-Create a standalone Site project:
+Create a local Formless workspace:
 
 ```sh
-npx @dpeek/formless init my-site
-cd my-site
+mkdir my-workspace
+cd my-workspace
+npx @dpeek/formless onboard
 npx @dpeek/formless dev
 ```
 
 Common commands:
 
-- `formless init <dir>` creates `formless.config.json` and `site.records.json`.
-- `formless dev` runs local public preview and `/admin` editor.
-- `formless save` writes local Site edits back to project source files.
-- `formless deploy setup` stores deploy config and local admin token.
-- `formless publish` deploys code, media, and records.
+- `formless onboard` creates `formless.json`, empty archive roots, and ignored `.formless/` local state without mutating Cloudflare.
+- `formless dev` runs the local workspace instance selected by `formless.json`.
+- `formless save` writes local Authority-backed instance state to reviewable workspace archives.
+- `formless save --check` fails when reviewable workspace source is stale.
+- `formless check` compares workspace source and configured target drift.
+- `formless deploy` is the explicit Cloudflare boundary: it deploys the instance, stores display-safe target intent in `formless.json`, keeps secrets under `.formless/`, and pushes saved archives.
+- `formless archive import-site --project <path> --install <id> --out <dir>` imports a legacy standalone Site project as an app archive.
 
 ## Packages
 
@@ -40,9 +43,9 @@ The runtime already has:
 - HTTP cursor sync and push sync;
 - generated React UI for schema-declared screens, views, tables, trees, fields, and actions;
 - Site records projected into public trees and SSR documents;
-- standalone Site project CLI;
-- local save and publish flows;
+- local-first workspace CLI for onboard, dev, save, check, and deploy;
 - portable app and instance archives;
+- explicit legacy Site project archive import;
 - installed app identity and routes;
 - product instance, dev workbench, app, Site authoring, and published Site runtime profiles;
 - custom-domain planning and provider apply paths.

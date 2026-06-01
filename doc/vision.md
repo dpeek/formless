@@ -1,6 +1,6 @@
 # Formless Vision
 
-Last updated: 2026-05-28
+Last updated: 2026-06-01
 
 Purpose: big-picture product vision for Formless V1.
 
@@ -48,8 +48,10 @@ defaults and clear escape hatches.
   collections, tables, trees, fields, and actions.
 - Site already proves one definition can produce generated admin UI and public
   HTML output.
-- `formless onboard` already targets one Cloudflare `workers.dev` Formless
-  instance.
+- `formless onboard` already creates a local Formless workspace before
+  Cloudflare mutation.
+- `formless deploy` is the explicit Cloudflare deployment boundary for a saved
+  workspace.
 - Portable app and instance archives already prove backup, restore, and import
   plumbing.
 
@@ -196,10 +198,11 @@ The target first impression:
 
 ```sh
 formless onboard
+formless dev
 ```
 
-That command should create or connect a Cloudflare-backed Formless instance,
-open it in the browser, and leave the user with a usable runtime.
+Those commands should create a reviewable local Formless workspace, run the
+product instance locally, and let the user explore before deploying.
 
 From the browser, the user should be able to:
 
@@ -209,6 +212,8 @@ From the browser, the user should be able to:
 - use the generated UI immediately;
 - add media, auth, email, jobs, and AI capabilities when the workflow needs
   them;
+- save workspace archives locally;
+- deploy the workspace to Cloudflare when ready;
 - publish or expose the app through HTML, Markdown, JSON, and custom UI
   surfaces.
 
