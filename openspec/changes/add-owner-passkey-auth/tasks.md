@@ -108,8 +108,21 @@ Evidence:
 
 ## 7. Verification And Promotion
 
-- [ ] 7.1 Run `devstate start` and read `./.devstate/status.md`; record any pre-existing red status before implementation checks.
-- [ ] 7.2 Run `devstate check` and read `./.devstate/status.md`; fix new red status before finishing.
+- [x] 7.1 Run `devstate start` and read `./.devstate/status.md`; record any pre-existing red status before implementation checks.
+- [x] 7.2 Run `devstate check` and read `./.devstate/status.md`; fix new red status before finishing.
 - [ ] 7.3 Run browser smoke with `bun browser ...` for first-owner setup, passkey login, app write access, logout, and mapped-host non-auth behavior.
-- [ ] 7.4 Record evidence, decisions, blockers, and promotion notes in this OpenSpec change.
+- [x] 7.4 Record evidence, decisions, blockers, and promotion notes in this OpenSpec change.
 - [ ] 7.5 During finalization, promote shipped instance-auth, authority-storage, and runtime-topology facts into `openspec/specs/`; do not archive the change.
+
+Evidence:
+
+- Files changed: `openspec/changes/add-owner-passkey-auth/tasks.md`.
+- Pre-check: `devstate start` passed; `./.devstate/status.md` showed checks ok and services running at 2026-06-01T02:03:00.580Z.
+- Check: `devstate check` passed; `./.devstate/status.md` shows checks ok and services running at 2026-06-01T02:29:04.407Z.
+- Browser smoke setup: restarted devstate with `CLOUDFLARE_INCLUDE_PROCESS_ENV=true`, `FORMLESS_ADMIN_TOKEN=igor-section7-admin`, `FORMLESS_OWNER_SESSION_SECRET=igor-section7-session`, `FORMLESS_INSTANCE_AUTH_ORIGIN=https://add-owner-passkey-auth.formless.local`, and `FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID=add-owner-passkey-auth.formless.local`; cleared ignored local Wrangler Durable Object state at `.wrangler/state/v3/do/formless-FormlessAuthority` before the final clean first-owner smoke.
+- Browser smoke: `bun browser --session igor-owner-passkey-section7-final --ignore-https-errors --args "--enable-features=WebAuthenticationVirtualAuthenticator" open https://add-owner-passkey-auth.formless.local`, `bun browser --session igor-owner-passkey-section7-final open 'https://add-owner-passkey-auth.formless.local/setup?token=abcDEF0123456789_-abcDEF0123456789_-'`, and `bun browser --session igor-owner-passkey-section7-final snapshot -i` loaded the first-owner setup form.
+- Browser WebAuthn smoke: using the `bun browser ... get cdp-url` browser target with a CDP virtual authenticator, registration options returned RP id `add-owner-passkey-auth.formless.local`, browser registration produced a public-key credential, setup completion returned `setupComplete: true` with a session, `/api/tasks/mutations` accepted an owner-session browser write, logout returned unauthenticated state, login options returned one allowed credential for the canonical RP id, browser login assertion verified successfully, and the login route rendered `Owner signed in`.
+- Logout UI smoke: `bun browser --session igor-owner-passkey-section7-final open https://add-owner-passkey-auth.formless.local/login`, `snapshot -i`, `click @e3`, `wait 1000`, and `snapshot -i` moved the login route from `Owner signed in` to `Owner sign in`.
+- Mapped-host blocker: created mapped `app` and `publicSite` domain mappings during browser-context smoke, then `bun browser --session igor-owner-passkey-section7-mapped-app --args "--host-resolver-rules=MAP mapped-app.example.test 127.0.0.1" open http://mapped-app.example.test:4976/login` reached the Vite dev server but stopped before Worker routing with `Blocked request. This host ("mapped-app.example.test") is not allowed.` Restarting devstate with `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=mapped-app.example.test,mapped-site.example.test` and with the single host `mapped-app.example.test` did not change that behavior in this dev stack.
+- Blocker guidance: finish 7.3 by either adding a source-faithful local browser smoke path that permits exact mapped hosts through the Vite dev-server host guard, or by using a committed smoke harness that drives the Worker with mapped request hosts while still recording browser route coverage for canonical setup/login/logout.
+- Promotion note: finalization still needs to promote shipped `instance-auth`, `authority-storage`, and `runtime-topology` facts into `openspec/specs/`; this implementation session did not promote specs or archive the change.
