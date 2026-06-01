@@ -203,6 +203,7 @@ Evidence:
 - `grug` 2026-06-01: promoted shipped upgrade requirements into new canonical `openspec/specs/upgrade-migrations/spec.md`.
 - Updated modified capability specs with shipped requirements: `openspec/specs/app-schema/spec.md`, `openspec/specs/authority-storage/spec.md`, `openspec/specs/deployment-runtime/spec.md`, `openspec/specs/installed-apps/spec.md`, `openspec/specs/portable-archives/spec.md`, `openspec/specs/site-cli-publish/spec.md`, and `openspec/specs/sync-replica/spec.md`.
 - `openspec validate add-upgrade-migrations --strict`: valid. `openspec validate upgrade-migrations --strict`: valid. `openspec status --change "add-upgrade-migrations" --json`: `isComplete: true`.
+- `grug` 2026-06-01 finalization: `git rebase main` returned up to date; promoted specs were already present in `openspec/specs/`; `openspec validate add-upgrade-migrations --strict` and `openspec validate upgrade-migrations --strict` passed; `openspec status --change "add-upgrade-migrations" --json` reported `isComplete: true`.
 - `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass.
 - No `bun browser` smoke run because this section changed OpenSpec specs and task evidence only; no visible app or CLI behavior changed.
 - No blockers. Branch left on `changes/add-upgrade-migrations` for review; no archive or merge performed.
