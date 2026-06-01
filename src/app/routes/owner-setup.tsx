@@ -5,12 +5,24 @@ import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formles
 import { Input } from "@dpeek/formless-ui/input";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import {
+  parseOwnerPasskeyRegistrationOptionsResponse,
+  parseOwnerPasskeyRegistrationVerifyResponse,
+  type OwnerPasskeyRegistrationOptionsResponse,
+  type OwnerPasskeyRegistrationVerifyRequest,
+  type OwnerPasskeyRegistrationVerifyResponse,
+} from "../../shared/instance-auth.ts";
+import {
   parseOwnerSetupToken,
   type OwnerIdentity,
   type OwnerIdentityInput,
-  type OwnerSetupCompleteResponse,
   type OwnerSetupStatusResponse,
 } from "../../shared/protocol.ts";
+import {
+  browserSupportsPasskeys,
+  createBrowserPasskeyRegistrationResponse,
+  passkeyUnavailableMessage,
+  type CreatePasskeyRegistrationResponse,
+} from "./passkey-browser.ts";
 
 export type OwnerSetupRouteState =
   | { status: "already-complete"; owner?: OwnerIdentity }
@@ -18,6 +30,7 @@ export type OwnerSetupRouteState =
   | { status: "failed"; message: string; setupToken?: string }
   | { status: "invalid-link"; message: string }
   | { status: "loading" }
+  | { status: "passkey-unavailable"; message: string }
   | { status: "ready"; setupToken: string }
   | { status: "submitting"; setupToken: string };
 
@@ -25,6 +38,7 @@ type StartOwnerSetupRouteSessionOptions = {
   fetcher?: typeof fetch;
   locationSearch: string;
   onState: (state: OwnerSetupRouteState) => void;
+  passkeysSupported?: () => boolean;
 };
 
 type OwnerSetupFetchOptions = {
@@ -33,6 +47,7 @@ type OwnerSetupFetchOptions = {
 };
 
 type CompleteOwnerSetupOptions = OwnerSetupFetchOptions & {
+  createRegistrationResponse?: CreatePasskeyRegistrationResponse;
   owner: OwnerIdentityInput;
   setupToken: string;
 };
@@ -138,6 +153,7 @@ export function startOwnerSetupRouteSession({
   fetcher = fetch,
   locationSearch,
   onState,
+  passkeysSupported = browserSupportsPasskeys,
 }: StartOwnerSetupRouteSessionOptions) {
   const controller = new AbortController();
   let stopped = false;
@@ -157,7 +173,19 @@ export function startOwnerSetupRouteSession({
         return;
       }
 
-      onState(parseOwnerSetupRouteToken(locationSearch));
+      const tokenState = parseOwnerSetupRouteToken(locationSearch);
+
+      if (tokenState.status !== "ready") {
+        onState(tokenState);
+        return;
+      }
+
+      if (!passkeysSupported()) {
+        onState({ status: "passkey-unavailable", message: passkeyUnavailableMessage });
+        return;
+      }
+
+      onState(tokenState);
     } catch (error) {
       if (!stopped && !controller.signal.aborted) {
         onState({
@@ -197,13 +225,71 @@ export async function fetchOwnerSetupStatus({
 }
 
 export async function completeOwnerSetup({
+  createRegistrationResponse = createBrowserPasskeyRegistrationResponse,
   fetcher = fetch,
   owner,
   setupToken,
   signal,
-}: CompleteOwnerSetupOptions): Promise<OwnerSetupCompleteResponse> {
+}: CompleteOwnerSetupOptions): Promise<OwnerPasskeyRegistrationVerifyResponse> {
+  const options = await fetchOwnerPasskeyRegistrationOptions({ fetcher, setupToken, signal });
+  const response = await createRegistrationResponse(options.options);
+
+  return await verifyOwnerPasskeyRegistration({
+    fetcher,
+    owner,
+    response,
+    setupToken,
+    signal,
+  });
+}
+
+export async function fetchOwnerPasskeyRegistrationOptions({
+  fetcher = fetch,
+  setupToken,
+  signal,
+}: OwnerSetupFetchOptions & {
+  setupToken: string;
+}): Promise<OwnerPasskeyRegistrationOptionsResponse> {
+  const response = await fetcher("/api/formless/passkeys/register/options", {
+    body: JSON.stringify({ setupToken }),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+  const body = await readOwnerSetupJson(response);
+
+  if (!response.ok) {
+    const failure = parseOwnerSetupFailureResponse(body);
+
+    throw new OwnerSetupApiError(
+      ownerSetupErrorMessage(body, "Passkey registration options failed."),
+      {
+        ...failure,
+        status: response.status,
+      },
+    );
+  }
+
+  return parseOwnerPasskeyRegistrationOptionsResponse(body);
+}
+
+async function verifyOwnerPasskeyRegistration({
+  fetcher = fetch,
+  owner,
+  response: registrationResponse,
+  setupToken,
+  signal,
+}: OwnerSetupFetchOptions & {
+  owner: OwnerIdentityInput;
+  response: OwnerPasskeyRegistrationVerifyRequest["response"];
+  setupToken: string;
+}): Promise<OwnerPasskeyRegistrationVerifyResponse> {
   const response = await fetcher("/api/formless/setup/complete", {
-    body: JSON.stringify({ owner, setupToken }),
+    body: JSON.stringify({ owner, response: registrationResponse, setupToken }),
     credentials: "same-origin",
     headers: {
       Accept: "application/json",
@@ -223,7 +309,7 @@ export async function completeOwnerSetup({
     });
   }
 
-  return parseOwnerSetupCompleteResponse(body);
+  return parseOwnerPasskeyRegistrationVerifyResponse(body);
 }
 
 export class OwnerSetupApiError extends Error {
@@ -294,6 +380,8 @@ function OwnerSetupStateBody({
           submitError={submitError}
         />
       );
+    case "passkey-unavailable":
+      return <OwnerSetupMessage heading="Passkeys are unavailable" message={state.message} />;
     case "invalid-link":
       return <OwnerSetupMessage heading="Setup link unavailable" message={state.message} />;
     case "loading":
@@ -357,7 +445,7 @@ function OwnerSetupForm({
           </p>
         ) : null}
         <Button className="w-full" isDisabled={disabled} type="submit">
-          {disabled ? "Creating owner..." : "Create owner"}
+          {disabled ? "Creating passkey..." : "Create owner passkey"}
         </Button>
       </form>
     </>
@@ -469,17 +557,6 @@ function parseOwnerSetupStatusResponse(value: unknown): OwnerSetupStatusResponse
   return {
     setupComplete: value.setupComplete,
     ...(value.owner === undefined ? {} : { owner: parseOwnerIdentity(value.owner) }),
-  };
-}
-
-function parseOwnerSetupCompleteResponse(value: unknown): OwnerSetupCompleteResponse {
-  if (!isRecord(value) || value.setupComplete !== true || value.owner === undefined) {
-    throw new Error("Owner setup completion response is malformed.");
-  }
-
-  return {
-    setupComplete: true,
-    owner: parseOwnerIdentity(value.owner),
   };
 }
 

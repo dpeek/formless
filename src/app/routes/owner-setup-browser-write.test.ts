@@ -4,10 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { deleteClientDb, readLocalSnapshot } from "../../client/db.ts";
 import { getClientStoreSnapshot, resetClientStore } from "../../client/store.ts";
 import { submitAction, submitCreateMutation, submitPatchMutation } from "../../client/sync.ts";
-import type { BootstrapResponse } from "../../shared/protocol.ts";
+import type { BootstrapResponse, OwnerSetupCompleteResponse } from "../../shared/protocol.ts";
 import { createWorkerHarness } from "../../worker/miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "../../worker/owner-session.ts";
-import { completeOwnerSetup } from "./owner-setup.tsx";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -42,11 +41,7 @@ describe("owner setup browser writes", () => {
     await createSetupCapability();
 
     const browser = createBrowserSessionFetcher();
-    const completed = await completeOwnerSetup({
-      fetcher: browser.fetch,
-      owner: { email: "ada@example.com", name: "Ada Owner" },
-      setupToken,
-    });
+    const completed = await completeOwnerSetupForBrowserWrite(browser.fetch);
     const created = await submitCreateMutation(
       "tasks",
       "task",
@@ -141,6 +136,25 @@ async function createSetupCapability() {
   });
 
   expect(response.status).toBe(200);
+}
+
+async function completeOwnerSetupForBrowserWrite(fetcher: typeof fetch) {
+  const response = await fetcher("/api/formless/setup/complete", {
+    body: JSON.stringify({
+      owner: { email: "ada@example.com", name: "Ada Owner" },
+      setupToken,
+    }),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as OwnerSetupCompleteResponse;
 }
 
 async function getJson<T>(path: string) {

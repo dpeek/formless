@@ -3,15 +3,19 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   OwnerLoginRouteView,
-  createOwnerSession,
   fetchOwnerSessionStatus,
+  loginWithPasskey,
+  logoutOwnerSession,
   startOwnerLoginRouteSession,
   type OwnerLoginApiError,
   type OwnerLoginRouteState,
 } from "./owner-login.tsx";
+import type {
+  OwnerPasskeyLoginOptionsResponse,
+  OwnerPasskeyLoginVerifyRequest,
+} from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
 
-const adminToken = "test-admin-token";
 const owner: OwnerIdentity = {
   id: "owner-1",
   name: "Ada Owner",
@@ -27,27 +31,41 @@ describe("owner login route view", () => {
     );
     expect(renderOwnerLoginState({ status: "ready", owner })).toContain("Owner sign in");
     expect(renderOwnerLoginState({ status: "submitting", owner })).toContain("Signing in...");
+    expect(renderOwnerLoginState({ status: "logging-out", owner })).toContain("Signing out");
+    expect(
+      renderOwnerLoginState({
+        status: "passkey-unavailable",
+        message: "Passkeys are unavailable in this browser.",
+        owner,
+      }),
+    ).toContain("Passkeys are unavailable");
     expect(renderOwnerLoginState({ status: "complete", owner })).toContain(
       "Signed in as Ada Owner.",
     );
     expect(
       renderOwnerLoginState({
         status: "failed",
-        message: "Owner login requires the admin token.",
+        message: "Passkey login is required.",
         owner,
       }),
-    ).toContain("Owner login requires the admin token.");
+    ).toContain("Passkey login is required.");
   });
 
-  it("renders the admin token form when login is ready", () => {
-    const html = renderToStaticMarkup(
-      <OwnerLoginRouteView adminToken={adminToken} state={{ status: "ready", owner }} />,
-    );
+  it("renders passkey login without an admin-token input", () => {
+    const html = renderToStaticMarkup(<OwnerLoginRouteView state={{ status: "ready", owner }} />);
 
     expect(html).toContain("Owner sign in");
     expect(html).toContain("Sign in as Ada Owner.");
-    expect(html).toContain("Admin token");
-    expect(html).toContain("Sign in");
+    expect(html).toContain("Sign in with passkey");
+    expect(html).not.toContain("Admin token");
+    expect(html).not.toContain("current-password");
+  });
+
+  it("renders a logout affordance after sign-in", () => {
+    const html = renderOwnerLoginState({ status: "complete", owner });
+
+    expect(html).toContain("Continue");
+    expect(html).toContain("Sign out");
   });
 });
 
@@ -57,6 +75,7 @@ describe("owner login route data flow", () => {
     const stop = startOwnerLoginRouteSession({
       fetcher: jsonFetcher({ authenticated: false, owner, setupComplete: true }),
       onState: (state) => states.push(state),
+      passkeysSupported: () => true,
     });
 
     try {
@@ -66,6 +85,30 @@ describe("owner login route data flow", () => {
     }
 
     expect(states).toEqual([{ status: "loading" }, { status: "ready", owner }]);
+  });
+
+  it("loads unavailable state when setup is complete but WebAuthn is unavailable", async () => {
+    const states: OwnerLoginRouteState[] = [];
+    const stop = startOwnerLoginRouteSession({
+      fetcher: jsonFetcher({ authenticated: false, owner, setupComplete: true }),
+      onState: (state) => states.push(state),
+      passkeysSupported: () => false,
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "passkey-unavailable"));
+    } finally {
+      stop();
+    }
+
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        status: "passkey-unavailable",
+        message: "Passkeys are unavailable in this browser.",
+        owner,
+      },
+    ]);
   });
 
   it("loads complete state when an owner session already exists", async () => {
@@ -105,7 +148,80 @@ describe("owner login route data flow", () => {
     expect(states).toEqual([{ status: "loading" }, { status: "setup-incomplete" }]);
   });
 
-  it("posts owner login with the admin token as a bearer credential", async () => {
+  it("runs owner login through passkey assertion without admin authorization", async () => {
+    const calls: Array<{
+      authorization: string | null;
+      body: unknown;
+      credentials: RequestCredentials | undefined;
+      input: RequestInfo | URL;
+      method: string | undefined;
+    }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+
+      calls.push({
+        authorization: new Headers(init?.headers).get("Authorization"),
+        body: body as unknown,
+        credentials: init?.credentials,
+        input,
+        method: init?.method,
+      });
+
+      if (input === "/api/formless/passkeys/login/options") {
+        return Response.json(loginOptionsResponse);
+      }
+
+      return Response.json({
+        authenticated: true,
+        owner,
+        session: { expiresAt: "2026-06-21T00:00:00.000Z" },
+      });
+    };
+
+    await expect(
+      loginWithPasskey({
+        createAuthenticationResponse: async () => authenticationResponse,
+        fetcher,
+      }),
+    ).resolves.toEqual({
+      authenticated: true,
+      owner,
+      session: { expiresAt: "2026-06-21T00:00:00.000Z" },
+    });
+    expect(calls).toEqual([
+      {
+        authorization: null,
+        body: {},
+        credentials: "same-origin",
+        input: "/api/formless/passkeys/login/options",
+        method: "POST",
+      },
+      {
+        authorization: null,
+        body: { response: authenticationResponse },
+        credentials: "same-origin",
+        input: "/api/formless/passkeys/login/verify",
+        method: "POST",
+      },
+    ]);
+  });
+
+  it("keeps owner login failure details", async () => {
+    await expect(
+      loginWithPasskey({
+        createAuthenticationResponse: async () => authenticationResponse,
+        fetcher: jsonFetcher(
+          { authenticated: false, error: "Instance auth configuration is missing." },
+          { status: 400 },
+        ),
+      }),
+    ).rejects.toMatchObject({
+      message: "Instance auth configuration is missing.",
+      status: 400,
+    } satisfies Partial<OwnerLoginApiError>);
+  });
+
+  it("posts logout without admin authorization", async () => {
     const calls: Array<{
       authorization: string | null;
       credentials: RequestCredentials | undefined;
@@ -120,41 +236,18 @@ describe("owner login route data flow", () => {
         method: init?.method,
       });
 
-      return Response.json({
-        authenticated: true,
-        owner,
-        session: { expiresAt: "2026-06-21T00:00:00.000Z" },
-      });
+      return Response.json({ authenticated: false });
     };
 
-    await expect(createOwnerSession({ adminToken, fetcher })).resolves.toEqual({
-      authenticated: true,
-      owner,
-      session: { expiresAt: "2026-06-21T00:00:00.000Z" },
-    });
+    await expect(logoutOwnerSession({ fetcher })).resolves.toEqual({ authenticated: false });
     expect(calls).toEqual([
       {
-        authorization: `Bearer ${adminToken}`,
+        authorization: null,
         credentials: "same-origin",
-        input: "/api/formless/session",
+        input: "/api/formless/session/logout",
         method: "POST",
       },
     ]);
-  });
-
-  it("keeps owner login failure details", async () => {
-    await expect(
-      createOwnerSession({
-        adminToken,
-        fetcher: jsonFetcher(
-          { authenticated: false, error: "Owner login requires the admin token." },
-          { status: 401 },
-        ),
-      }),
-    ).rejects.toMatchObject({
-      message: "Owner login requires the admin token.",
-      status: 401,
-    } satisfies Partial<OwnerLoginApiError>);
   });
 
   it("parses owner session status responses", async () => {
@@ -166,8 +259,30 @@ describe("owner login route data flow", () => {
   });
 });
 
+const loginOptionsResponse = {
+  options: {
+    allowCredentials: [{ id: "Y3JlZA", transports: ["internal"], type: "public-key" }],
+    challenge: "Y2hhbGxlbmdl",
+    rpId: "example.com",
+    userVerification: "preferred",
+  },
+} satisfies OwnerPasskeyLoginOptionsResponse;
+
+const authenticationResponse = {
+  clientExtensionResults: {},
+  id: "Y3JlZA",
+  rawId: "Y3JlZA",
+  response: {
+    authenticatorData: "YXV0aA",
+    clientDataJSON: "Y2xpZW50",
+    signature: "c2ln",
+    userHandle: "dXNlcg",
+  },
+  type: "public-key",
+} satisfies OwnerPasskeyLoginVerifyRequest["response"];
+
 function renderOwnerLoginState(state: OwnerLoginRouteState) {
-  return renderToStaticMarkup(<OwnerLoginRouteView adminToken={adminToken} state={state} />);
+  return renderToStaticMarkup(<OwnerLoginRouteView state={state} />);
 }
 
 function jsonFetcher(body: unknown, init: ResponseInit = {}): typeof fetch {

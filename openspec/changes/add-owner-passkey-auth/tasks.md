@@ -74,10 +74,20 @@ Evidence:
 
 ## 5. Browser Routes
 
-- [ ] 5.1 Update `/setup` to request passkey registration options, call browser credential creation, submit owner identity plus registration response, and handle setup errors.
-- [ ] 5.2 Update `/login` to request passkey login options, call browser credential assertion, submit the assertion, and handle login errors.
-- [ ] 5.3 Keep setup and login route views usable when WebAuthn is unavailable, setup is incomplete, setup is already complete, or auth configuration is missing.
-- [ ] 5.4 Add React route tests for setup passkey states, login passkey states, logout affordance, and no admin-token input in normal login.
+- [x] 5.1 Update `/setup` to request passkey registration options, call browser credential creation, submit owner identity plus registration response, and handle setup errors.
+- [x] 5.2 Update `/login` to request passkey login options, call browser credential assertion, submit the assertion, and handle login errors.
+- [x] 5.3 Keep setup and login route views usable when WebAuthn is unavailable, setup is incomplete, setup is already complete, or auth configuration is missing.
+- [x] 5.4 Add React route tests for setup passkey states, login passkey states, logout affordance, and no admin-token input in normal login.
+
+Evidence:
+
+- Files changed: `src/app/routes/passkey-browser.ts`, `src/app/routes/owner-setup.tsx`, `src/app/routes/owner-login.tsx`, `src/app/routes/owner-setup.test.tsx`, `src/app/routes/owner-login.test.tsx`, `src/app/routes/owner-setup-browser-write.test.ts`.
+- Checks: `devstate start` passed before edits; `./.devstate/status.md` showed checks ok and services running at 2026-06-01T01:43:11.396Z. `devstate check` passed after edits; `./.devstate/status.md` shows checks ok and services running at 2026-06-01T01:50:56.863Z.
+- Setup route decision: `/setup` loads setup status, rejects unavailable WebAuthn as a visible route state, requests `/api/formless/passkeys/register/options`, invokes browser passkey registration, and submits owner identity plus registration response to `/api/formless/setup/complete` without admin bearer authorization.
+- Login route decision: `/login` no longer renders or submits an admin-token field; it requests `/api/formless/passkeys/login/options`, invokes browser passkey assertion, submits `/api/formless/passkeys/login/verify`, and exposes logout through `/api/formless/session/logout`.
+- React route tests: `src/app/routes/owner-setup.test.tsx` covers setup passkey states, unavailable WebAuthn, auth-configuration error handling, and no admin authorization; `src/app/routes/owner-login.test.tsx` covers passkey login states, unavailable WebAuthn, logout affordance, auth-configuration error handling, and no admin-token input.
+- Browser smoke: `bun browser --session igor-owner-passkey-section5 --ignore-https-errors open 'https://add-owner-passkey-auth.formless.local/setup?token=abcDEF0123456789_-abcDEF0123456789_-'`, `bun browser --session igor-owner-passkey-section5 snapshot -i`, `bun browser --session igor-owner-passkey-section5-login --ignore-https-errors open https://add-owner-passkey-auth.formless.local/login`, and `bun browser --session igor-owner-passkey-section5-login --ignore-https-errors snapshot -i` loaded `/setup` and `/login`; `/setup` rendered the passkey owner form and `/login` rendered setup-incomplete state. Full first-owner passkey ceremony smoke remains section 7.
+- Promotion note: finalization should promote browser setup/login use of passkey ceremony endpoints, removal of admin-token normal login UI, unavailable-WebAuthn route states, and logout UI behavior.
 
 ## 6. Runtime Topology And Host Boundaries
 

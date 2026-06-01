@@ -1,14 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
-import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
-import { Input } from "@dpeek/formless-ui/input";
-import { TextField } from "@dpeek/formless-ui/text-field";
+import { fieldErrorStyles } from "@dpeek/formless-ui/field";
+import {
+  parseOwnerLogoutResponse,
+  parseOwnerPasskeyLoginOptionsResponse,
+  parseOwnerPasskeyLoginVerifyResponse,
+  parseOwnerSessionStatusResponse,
+  type OwnerLogoutResponse,
+  type OwnerPasskeyLoginOptionsResponse,
+  type OwnerPasskeyLoginVerifyRequest,
+  type OwnerPasskeyLoginVerifyResponse,
+  type OwnerSessionStatusResponse,
+} from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
+import {
+  browserSupportsPasskeys,
+  createBrowserPasskeyAuthenticationResponse,
+  passkeyUnavailableMessage,
+  type CreatePasskeyAuthenticationResponse,
+} from "./passkey-browser.ts";
 
 export type OwnerLoginRouteState =
   | { status: "complete"; owner: OwnerIdentity }
   | { status: "failed"; message: string; owner?: OwnerIdentity }
+  | { status: "logging-out"; owner: OwnerIdentity }
   | { status: "loading" }
+  | { status: "passkey-unavailable"; message: string; owner?: OwnerIdentity }
   | { status: "ready"; owner: OwnerIdentity }
   | { status: "setup-incomplete" }
   | { status: "submitting"; owner: OwnerIdentity };
@@ -16,6 +33,7 @@ export type OwnerLoginRouteState =
 type StartOwnerLoginRouteSessionOptions = {
   fetcher?: typeof fetch;
   onState: (state: OwnerLoginRouteState) => void;
+  passkeysSupported?: () => boolean;
 };
 
 type OwnerLoginFetchOptions = {
@@ -23,28 +41,8 @@ type OwnerLoginFetchOptions = {
   signal?: AbortSignal;
 };
 
-type OwnerSessionStatusResponse =
-  | {
-      authenticated: false;
-      owner?: OwnerIdentity;
-      setupComplete: boolean;
-    }
-  | {
-      authenticated: true;
-      owner: OwnerIdentity;
-      session: { expiresAt: string };
-      setupComplete: true;
-    };
-
-type OwnerLoginResponse = {
-  authenticated: true;
-  owner: OwnerIdentity;
-  session: { expiresAt: string };
-};
-
 export function OwnerLoginRoute() {
   const [state, setState] = useState<OwnerLoginRouteState>({ status: "loading" });
-  const [adminToken, setAdminToken] = useState("");
 
   useEffect(
     () =>
@@ -58,7 +56,7 @@ export function OwnerLoginRoute() {
     state.status === "ready" || state.status === "failed" || state.status === "submitting"
       ? state.owner
       : undefined;
-  const disabled = state.status === "submitting" || adminToken.trim() === "";
+  const disabled = state.status === "submitting" || owner === undefined;
 
   async function submitLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,10 +68,9 @@ export function OwnerLoginRoute() {
     setState({ status: "submitting", owner });
 
     try {
-      const response = await createOwnerSession({ adminToken });
+      const response = await loginWithPasskey();
 
       setState({ status: "complete", owner: response.owner });
-      setAdminToken("");
     } catch (error) {
       setState({
         status: "failed",
@@ -83,11 +80,31 @@ export function OwnerLoginRoute() {
     }
   }
 
+  async function logout() {
+    if (state.status !== "complete") {
+      return;
+    }
+
+    const loggedOutOwner = state.owner;
+
+    setState({ status: "logging-out", owner: loggedOutOwner });
+
+    try {
+      await logoutOwnerSession();
+      setState({ status: "ready", owner: loggedOutOwner });
+    } catch (error) {
+      setState({
+        status: "failed",
+        message: error instanceof Error ? error.message : "Owner logout failed.",
+        owner: loggedOutOwner,
+      });
+    }
+  }
+
   return (
     <OwnerLoginRouteView
-      adminToken={adminToken}
       disabled={disabled}
-      onAdminTokenChange={setAdminToken}
+      onLogout={logout}
       onSubmit={submitLogin}
       state={state}
     />
@@ -95,15 +112,13 @@ export function OwnerLoginRoute() {
 }
 
 export function OwnerLoginRouteView({
-  adminToken = "",
   disabled,
-  onAdminTokenChange,
+  onLogout,
   onSubmit,
   state,
 }: {
-  adminToken?: string;
   disabled?: boolean;
-  onAdminTokenChange?: (value: string) => void;
+  onLogout?: () => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: OwnerLoginRouteState;
 }) {
@@ -112,9 +127,8 @@ export function OwnerLoginRouteView({
       <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
         <div className="space-y-6 rounded-lg border border-border bg-overlay p-6 shadow-sm">
           <OwnerLoginStateBody
-            adminToken={adminToken}
             disabled={disabled ?? state.status === "submitting"}
-            onAdminTokenChange={onAdminTokenChange}
+            onLogout={onLogout}
             onSubmit={onSubmit}
             state={state}
           />
@@ -127,6 +141,7 @@ export function OwnerLoginRouteView({
 export function startOwnerLoginRouteSession({
   fetcher = fetch,
   onState,
+  passkeysSupported = browserSupportsPasskeys,
 }: StartOwnerLoginRouteSessionOptions) {
   const controller = new AbortController();
   let stopped = false;
@@ -147,6 +162,15 @@ export function startOwnerLoginRouteSession({
       }
 
       if (status.setupComplete && status.owner) {
+        if (!passkeysSupported()) {
+          onState({
+            status: "passkey-unavailable",
+            message: passkeyUnavailableMessage,
+            owner: status.owner,
+          });
+          return;
+        }
+
         onState({ status: "ready", owner: status.owner });
         return;
       }
@@ -190,16 +214,57 @@ export async function fetchOwnerSessionStatus({
   return parseOwnerSessionStatusResponse(body);
 }
 
-export async function createOwnerSession({
-  adminToken,
+export async function loginWithPasskey({
+  createAuthenticationResponse = createBrowserPasskeyAuthenticationResponse,
   fetcher = fetch,
   signal,
-}: OwnerLoginFetchOptions & { adminToken: string }): Promise<OwnerLoginResponse> {
-  const response = await fetcher("/api/formless/session", {
+}: OwnerLoginFetchOptions & {
+  createAuthenticationResponse?: CreatePasskeyAuthenticationResponse;
+} = {}): Promise<OwnerPasskeyLoginVerifyResponse> {
+  const options = await fetchOwnerPasskeyLoginOptions({ fetcher, signal });
+  const response = await createAuthenticationResponse(options.options);
+
+  return await verifyOwnerPasskeyLogin({ fetcher, response, signal });
+}
+
+export async function fetchOwnerPasskeyLoginOptions({
+  fetcher = fetch,
+  signal,
+}: OwnerLoginFetchOptions = {}): Promise<OwnerPasskeyLoginOptionsResponse> {
+  const response = await fetcher("/api/formless/passkeys/login/options", {
+    body: "{}",
     credentials: "same-origin",
     headers: {
       Accept: "application/json",
-      Authorization: `Bearer ${adminToken.trim()}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+  const body = await readOwnerLoginJson(response);
+
+  if (!response.ok) {
+    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Passkey login options failed."), {
+      status: response.status,
+    });
+  }
+
+  return parseOwnerPasskeyLoginOptionsResponse(body);
+}
+
+async function verifyOwnerPasskeyLogin({
+  fetcher = fetch,
+  response: assertionResponse,
+  signal,
+}: OwnerLoginFetchOptions & {
+  response: OwnerPasskeyLoginVerifyRequest["response"];
+}): Promise<OwnerPasskeyLoginVerifyResponse> {
+  const response = await fetcher("/api/formless/passkeys/login/verify", {
+    body: JSON.stringify({ response: assertionResponse }),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
     },
     method: "POST",
     signal,
@@ -212,7 +277,28 @@ export async function createOwnerSession({
     });
   }
 
-  return parseOwnerLoginResponse(body);
+  return parseOwnerPasskeyLoginVerifyResponse(body);
+}
+
+export async function logoutOwnerSession({
+  fetcher = fetch,
+  signal,
+}: OwnerLoginFetchOptions = {}): Promise<OwnerLogoutResponse> {
+  const response = await fetcher("/api/formless/session/logout", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    method: "POST",
+    signal,
+  });
+  const body = await readOwnerLoginJson(response);
+
+  if (!response.ok) {
+    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Owner logout failed."), {
+      status: response.status,
+    });
+  }
+
+  return parseOwnerLogoutResponse(body);
 }
 
 export class OwnerLoginApiError extends Error {
@@ -226,15 +312,13 @@ export class OwnerLoginApiError extends Error {
 }
 
 function OwnerLoginStateBody({
-  adminToken,
   disabled,
-  onAdminTokenChange,
+  onLogout,
   onSubmit,
   state,
 }: {
-  adminToken: string;
   disabled: boolean;
-  onAdminTokenChange?: (value: string) => void;
+  onLogout?: () => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: OwnerLoginRouteState;
 }) {
@@ -242,11 +326,17 @@ function OwnerLoginStateBody({
     case "complete":
       return (
         <OwnerLoginMessage
-          action={<OwnerLoginContinueLink />}
+          action={<OwnerLoginSessionActions onLogout={onLogout} />}
           heading="Owner signed in"
           message={`Signed in as ${state.owner.name}.`}
         />
       );
+    case "logging-out":
+      return (
+        <OwnerLoginMessage heading="Signing out" message={`Signed in as ${state.owner.name}.`} />
+      );
+    case "passkey-unavailable":
+      return <OwnerLoginMessage heading="Passkeys are unavailable" message={state.message} />;
     case "setup-incomplete":
       return (
         <OwnerLoginMessage
@@ -259,9 +349,7 @@ function OwnerLoginStateBody({
     case "submitting":
       return (
         <OwnerLoginForm
-          adminToken={adminToken}
-          disabled={disabled}
-          onAdminTokenChange={onAdminTokenChange}
+          disabled={disabled || state.owner === undefined}
           onSubmit={onSubmit}
           owner={state.owner}
           submitError={state.status === "failed" ? state.message : undefined}
@@ -275,22 +363,16 @@ function OwnerLoginStateBody({
 }
 
 function OwnerLoginForm({
-  adminToken,
   disabled,
-  onAdminTokenChange,
   onSubmit,
   owner,
   submitError,
 }: {
-  adminToken: string;
   disabled: boolean;
-  onAdminTokenChange?: (value: string) => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   owner?: OwnerIdentity;
   submitError?: string;
 }) {
-  const tokenInputId = useMemo(() => "owner-login-admin-token", []);
-
   return (
     <>
       <OwnerLoginHeader
@@ -298,19 +380,6 @@ function OwnerLoginForm({
         message={owner ? `Sign in as ${owner.name}.` : "Sign in to this Formless instance."}
       />
       <form className="space-y-4" onSubmit={onSubmit}>
-        <FieldGroup>
-          <TextField
-            isDisabled={disabled && adminToken.trim() !== ""}
-            isRequired
-            onChange={(value) => onAdminTokenChange?.(value)}
-            type="password"
-            value={adminToken}
-          >
-            <Label htmlFor={tokenInputId}>Admin token</Label>
-            <Input autoComplete="current-password" id={tokenInputId} />
-            <Description>Stored only as an HTTP-only owner session cookie.</Description>
-          </TextField>
-        </FieldGroup>
         {submitError ? (
           <p
             className={fieldErrorStyles()}
@@ -322,7 +391,7 @@ function OwnerLoginForm({
           </p>
         ) : null}
         <Button className="w-full" isDisabled={disabled} type="submit">
-          {disabled && adminToken.trim() !== "" ? "Signing in..." : "Sign in"}
+          {disabled ? "Signing in..." : "Sign in with passkey"}
         </Button>
       </form>
     </>
@@ -367,6 +436,17 @@ function OwnerLoginContinueLink() {
   );
 }
 
+function OwnerLoginSessionActions({ onLogout }: { onLogout?: () => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <OwnerLoginContinueLink />
+      <Button intent="secondary" onPress={onLogout} type="button">
+        Sign out
+      </Button>
+    </div>
+  );
+}
+
 async function readOwnerLoginJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -377,79 +457,10 @@ async function readOwnerLoginJson(response: Response): Promise<unknown> {
   }
 }
 
-function parseOwnerSessionStatusResponse(value: unknown): OwnerSessionStatusResponse {
-  if (!isRecord(value) || typeof value.authenticated !== "boolean") {
-    throw new Error("Owner session status response is malformed.");
-  }
-
-  if (value.authenticated) {
-    return {
-      authenticated: true,
-      owner: parseOwnerIdentity(value.owner),
-      session: parseSessionSummary(value.session),
-      setupComplete: true,
-    };
-  }
-
-  const owner = value.owner === undefined ? undefined : parseOwnerIdentity(value.owner);
-
-  return {
-    authenticated: false,
-    ...(owner === undefined ? {} : { owner }),
-    setupComplete: value.setupComplete === true,
-  };
-}
-
-function parseOwnerLoginResponse(value: unknown): OwnerLoginResponse {
-  if (!isRecord(value) || value.authenticated !== true) {
-    throw new Error("Owner login response is malformed.");
-  }
-
-  return {
-    authenticated: true,
-    owner: parseOwnerIdentity(value.owner),
-    session: parseSessionSummary(value.session),
-  };
-}
-
-function parseSessionSummary(value: unknown): { expiresAt: string } {
-  if (!isRecord(value)) {
-    throw new Error("Owner session response is malformed.");
-  }
-
-  return {
-    expiresAt: parseNonEmptyString("Owner session expiresAt", value.expiresAt),
-  };
-}
-
 function ownerLoginErrorMessage(value: unknown, fallback: string): string {
   return isRecord(value) && typeof value.error === "string" && value.error.trim() !== ""
     ? value.error
     : fallback;
-}
-
-function parseOwnerIdentity(value: unknown): OwnerIdentity {
-  if (!isRecord(value)) {
-    throw new Error("Owner identity response is malformed.");
-  }
-
-  const email =
-    value.email === undefined ? undefined : parseNonEmptyString("Owner email", value.email);
-
-  return {
-    id: parseNonEmptyString("Owner id", value.id),
-    name: parseNonEmptyString("Owner name", value.name),
-    ...(email === undefined ? {} : { email }),
-    createdAt: parseNonEmptyString("Owner createdAt", value.createdAt),
-  };
-}
-
-function parseNonEmptyString(context: string, value: unknown): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${context} must be a non-empty string.`);
-  }
-
-  return value.trim();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

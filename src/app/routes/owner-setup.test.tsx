@@ -9,6 +9,10 @@ import {
   type OwnerSetupApiError,
   type OwnerSetupRouteState,
 } from "./owner-setup.tsx";
+import type {
+  OwnerPasskeyRegistrationOptionsResponse,
+  OwnerPasskeyRegistrationVerifyRequest,
+} from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
@@ -47,13 +51,19 @@ describe("owner setup route view", () => {
         setupToken,
       }),
     ).toContain("Owner setup failed.");
+    expect(
+      renderOwnerSetupState({
+        status: "passkey-unavailable",
+        message: "Passkeys are unavailable in this browser.",
+      }),
+    ).toContain("Passkeys are unavailable");
   });
 
   it("renders the first owner form when setup is ready", () => {
     const html = renderOwnerSetupState({ status: "ready", setupToken });
 
     expect(html).toContain("Claim this Formless instance");
-    expect(html).toContain("Create owner");
+    expect(html).toContain("Create owner passkey");
     expect(html).toContain("Name");
     expect(html).toContain("Email");
   });
@@ -67,6 +77,7 @@ describe("owner setup route data flow", () => {
       fetcher: jsonFetcher({ setupComplete: false }),
       locationSearch: `?token=${setupToken}`,
       onState: (state) => states.push(state),
+      passkeysSupported: () => true,
     });
 
     try {
@@ -76,6 +87,31 @@ describe("owner setup route data flow", () => {
     }
 
     expect(states).toEqual([{ status: "loading" }, { status: "ready", setupToken }]);
+  });
+
+  it("keeps setup usable when passkeys are unavailable", async () => {
+    const states: OwnerSetupRouteState[] = [];
+
+    const stop = startOwnerSetupRouteSession({
+      fetcher: jsonFetcher({ setupComplete: false }),
+      locationSearch: `?token=${setupToken}`,
+      onState: (state) => states.push(state),
+      passkeysSupported: () => false,
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "passkey-unavailable"));
+    } finally {
+      stop();
+    }
+
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        status: "passkey-unavailable",
+        message: "Passkeys are unavailable in this browser.",
+      },
+    ]);
   });
 
   it("shows already-complete state without requiring a route token", async () => {
@@ -148,7 +184,7 @@ describe("owner setup route data flow", () => {
     });
   });
 
-  it("posts first owner setup without exposing admin authorization", async () => {
+  it("runs first owner setup through passkey registration without admin authorization", async () => {
     const calls: Array<{
       authorization: string | null;
       body: unknown;
@@ -167,21 +203,42 @@ describe("owner setup route data flow", () => {
         method: init?.method,
       });
 
-      return Response.json({ setupComplete: true, owner });
+      if (input === "/api/formless/passkeys/register/options") {
+        return Response.json(registrationOptionsResponse);
+      }
+
+      return Response.json({
+        owner,
+        session: { expiresAt: "2026-06-21T00:00:00.000Z" },
+        setupComplete: true,
+      });
     };
 
     await expect(
       completeOwnerSetup({
+        createRegistrationResponse: async () => registrationResponse,
         fetcher,
         owner: { email: "ada@example.com", name: "Ada Owner" },
         setupToken,
       }),
-    ).resolves.toEqual({ setupComplete: true, owner });
+    ).resolves.toEqual({
+      owner,
+      session: { expiresAt: "2026-06-21T00:00:00.000Z" },
+      setupComplete: true,
+    });
     expect(calls).toEqual([
+      {
+        authorization: null,
+        body: { setupToken },
+        credentials: "same-origin",
+        input: "/api/formless/passkeys/register/options",
+        method: "POST",
+      },
       {
         authorization: null,
         body: {
           owner: { email: "ada@example.com", name: "Ada Owner" },
+          response: registrationResponse,
           setupToken,
         },
         credentials: "same-origin",
@@ -191,9 +248,31 @@ describe("owner setup route data flow", () => {
     ]);
   });
 
+  it("keeps setup errors visible when auth configuration is missing", async () => {
+    await expect(
+      completeOwnerSetup({
+        createRegistrationResponse: async () => {
+          throw new Error("Authenticator should not be called.");
+        },
+        fetcher: jsonFetcher(
+          {
+            error: "Instance auth configuration is missing.",
+          },
+          { status: 400 },
+        ),
+        owner: { name: "Ada Owner" },
+        setupToken,
+      }),
+    ).rejects.toMatchObject({
+      message: "Instance auth configuration is missing.",
+      status: 400,
+    } satisfies Partial<OwnerSetupApiError>);
+  });
+
   it("keeps setup failure details for visible route states", async () => {
     await expect(
       completeOwnerSetup({
+        createRegistrationResponse: async () => registrationResponse,
         fetcher: jsonFetcher(
           {
             error: "Owner setup link has expired.",
@@ -221,6 +300,30 @@ describe("owner setup route data flow", () => {
     });
   });
 });
+
+const registrationOptionsResponse = {
+  options: {
+    challenge: "Y2hhbGxlbmdl",
+    pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+    rp: { id: "example.com", name: "Formless" },
+    user: {
+      displayName: "Formless owner",
+      id: "dXNlcg",
+      name: "owner",
+    },
+  },
+} satisfies OwnerPasskeyRegistrationOptionsResponse;
+
+const registrationResponse = {
+  clientExtensionResults: {},
+  id: "Y3JlZA",
+  rawId: "Y3JlZA",
+  response: {
+    attestationObject: "YXR0ZXN0",
+    clientDataJSON: "Y2xpZW50",
+  },
+  type: "public-key",
+} satisfies OwnerPasskeyRegistrationVerifyRequest["response"];
 
 function renderOwnerSetupState(state: OwnerSetupRouteState) {
   return renderToStaticMarkup(<OwnerSetupRouteView state={state} />);
