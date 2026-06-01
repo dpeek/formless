@@ -140,11 +140,19 @@ Evidence:
 
 ## 9. Deployment Management UI
 
-- [ ] 9.1 Render deployment targets, desired resources, attempts, evidence summaries, and drift summaries from control-plane records in the instance shell.
-- [ ] 9.2 Hide CLI deployer and runner actions from browser generated UI while preserving owner/admin browser actions.
-- [ ] 9.3 Keep custom-domain desired state, provider applied evidence, and provider drift visually separate.
-- [ ] 9.4 Add generated UI tests for deployment history read-only behavior, action visibility, no-secret responses, and drift reporting.
-- [ ] 9.5 Smoke visible deployment management UI behavior with `bun browser ...`.
+- [x] 9.1 Render deployment targets, desired resources, attempts, evidence summaries, and drift summaries from control-plane records in the instance shell.
+- [x] 9.2 Hide CLI deployer and runner actions from browser generated UI while preserving owner/admin browser actions.
+- [x] 9.3 Keep custom-domain desired state, provider applied evidence, and provider drift visually separate.
+- [x] 9.4 Add generated UI tests for deployment history read-only behavior, action visibility, no-secret responses, and drift reporting.
+- [x] 9.5 Smoke visible deployment management UI behavior with `bun browser ...`.
+
+Evidence:
+
+- Files changed: `src/app/routes/instance-shell.tsx`, `src/app/routes/instance-shell.test.tsx`, `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `src/client/views.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` before implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:44:47.100Z. `devstate check` after implementation and evidence update passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:51:19.481Z.
+- Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; after restarting the browser session, `bun browser snapshot -i --max-output 10000` returned the generated `Deployments` region with `Deploy targets`, `Provider config`, `Desired resources`, `Deploy attempts`, `Evidence summaries`, and `Drift reports` sections.
+- Decisions: the instance shell now mounts the runtime-owned control-plane `/deployments` screen below custom domains so deployment targets, desired resources, attempts, evidence summaries, and drift reports render through generated UI from control-plane records. Deployment table metadata keeps desired resource source references, evidence resource ids, and drift counts in separate read-only generated sections. Browser action filtering continues to hide CLI deployer and runner actions while preserving owner/admin actions.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 10. Workspace And Archive Control Plane
 

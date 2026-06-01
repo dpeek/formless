@@ -1007,6 +1007,7 @@ export function InstanceShellRouteView({
         onSubmit={onSubmitDomainMapping}
         state={state}
       />
+      <GeneratedDeploymentManagementSection deploymentStatus={state.deploymentStatus} />
       <InstallAppDialog
         installDrafts={installDrafts}
         onDraftChange={onInstallDraftChange}
@@ -1015,6 +1016,44 @@ export function InstanceShellRouteView({
         open={installDialogOpen}
         state={state}
       />
+    </section>
+  );
+}
+
+function GeneratedDeploymentManagementSection({
+  deploymentStatus,
+}: {
+  deploymentStatus?: InstanceDeploymentStatusResponse;
+}) {
+  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
+  const deploymentSummary =
+    deploymentStatus === undefined
+      ? undefined
+      : deploymentStatusDisplaySummary(deploymentStatus.status);
+
+  return (
+    <section className="space-y-3" aria-labelledby="deployment-management-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
+        <div className="min-w-0 space-y-1">
+          <h2 id="deployment-management-heading" className="text-sm font-semibold">
+            Deployments
+          </h2>
+          {deploymentSummary === undefined ? (
+            <p className="text-xs text-muted-fg">Control-plane deployment records</p>
+          ) : (
+            <p className="text-xs text-muted-fg">
+              {deploymentSummary.label} · {deploymentSummary.detail}
+            </p>
+          )}
+        </div>
+      </div>
+      <div data-formless-control-plane-screen="deployments">
+        <HomeRoute
+          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
+          screenPath="/deployments"
+          target={controlPlaneTarget}
+        />
+      </div>
     </section>
   );
 }

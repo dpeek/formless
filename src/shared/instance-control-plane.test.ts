@@ -94,6 +94,60 @@ describe("instance control-plane schema contracts", () => {
     ]);
   });
 
+  it("renders deployment management as separate read-only generated sections", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const deployments = schema.screens?.deployments;
+
+    expect(deployments?.layout.sections.map((section) => section.view)).toEqual([
+      "deployTargetList",
+      "providerConfigRefList",
+      "deployDesiredResourceList",
+      "deployAttemptList",
+      "deployEvidenceSummaryList",
+      "deployDriftReportList",
+    ]);
+    expect(schema.views.deployTargetList?.type === "collection").toBe(true);
+    expect(
+      schema.views.deployTargetList?.type === "collection"
+        ? schema.views.deployTargetList.actions
+        : undefined,
+    ).toEqual([{ type: "create", createView: "deployTargetCreate" }]);
+    expect(
+      schema.views.deployAttemptList?.type === "collection"
+        ? schema.views.deployAttemptList.actions
+        : undefined,
+    ).toBeUndefined();
+    expect(schema.tableViews.deployDesiredResourceTable?.columns).toMatchObject([
+      { field: "deployTarget", display: "readOnly" },
+      { field: "domainMapping", display: "readOnly" },
+      { field: "redirectIntent", display: "readOnly" },
+      { field: "logicalId", display: "readOnly" },
+      { field: "kind", display: "readOnly" },
+      { field: "providerFamily", display: "readOnly" },
+      { field: "enabled", display: "readOnly" },
+      { field: "sourceFingerprint", display: "readOnly" },
+    ]);
+    expect(schema.tableViews.deployEvidenceSummaryTable?.columns).toMatchObject([
+      { field: "deployAttempt", display: "readOnly" },
+      { field: "deployDesiredResource", display: "readOnly" },
+      { field: "logicalId", display: "readOnly" },
+      { field: "kind", display: "readOnly" },
+      { field: "action", display: "readOnly" },
+      { field: "providerResourceIdsJson", display: "readOnly" },
+      { field: "recordedAt", display: "readOnly" },
+    ]);
+    expect(schema.tableViews.deployDriftReportTable?.columns).toMatchObject([
+      { field: "deployTarget", display: "readOnly" },
+      { field: "versionId", display: "readOnly" },
+      { field: "status", display: "readOnly" },
+      { field: "createCount", display: "readOnly" },
+      { field: "updateCount", display: "readOnly" },
+      { field: "deleteCount", display: "readOnly" },
+      { field: "affectedLogicalIdsJson", display: "readOnly" },
+      { field: "reportedAt", display: "readOnly" },
+    ]);
+  });
+
   it("derives default app route records without nesting installed app data", () => {
     const now = "2026-05-28T00:00:00.000Z";
 

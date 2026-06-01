@@ -5,6 +5,7 @@ import {
   siteSourceSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
+import { instanceControlPlaneSchema } from "../shared/instance-control-plane.ts";
 import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import {
   selectCollectionModels,
@@ -319,6 +320,24 @@ describe("home view model collections", () => {
               target: { query: "taskCompleted" },
               exposure: { actors: ["runner"] },
             },
+            cliDeploy: {
+              label: "CLI deploy",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+              exposure: { actors: ["cliDeployer"] },
+            },
+            ownerReview: {
+              label: "Owner review",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+              exposure: { actors: ["owner"] },
+            },
+            adminReview: {
+              label: "Admin review",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+              exposure: { actors: ["admin"] },
+            },
           },
         },
       },
@@ -326,13 +345,24 @@ describe("home view model collections", () => {
         ...appSchema.views,
         taskHome: {
           ...taskHome,
-          actions: [...(taskHome.actions ?? []), { type: "entityAction", action: "runnerApply" }],
+          actions: [
+            ...(taskHome.actions ?? []),
+            { type: "entityAction", action: "runnerApply" },
+            { type: "entityAction", action: "cliDeploy" },
+            { type: "entityAction", action: "ownerReview" },
+            { type: "entityAction", action: "adminReview" },
+          ],
         },
       },
     });
     const model = requiredCollectionModel(schema, "taskHome");
 
-    expect(model.actions.map((action) => action.label)).toEqual(["Create Task", "Clear completed"]);
+    expect(model.actions.map((action) => action.label)).toEqual([
+      "Create Task",
+      "Clear completed",
+      "Owner review",
+      "Admin review",
+    ]);
   });
 
   it("characterizes the task primary home model contract", () => {
@@ -2092,6 +2122,86 @@ describe("home view model collections", () => {
     });
   });
 
+  it("selects deployment control-plane collections as read-only generated UI sections", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const deployments = selectScreenModelByPath(schema, "/deployments");
+
+    if (!deployments) {
+      throw new Error("Missing deployments control-plane screen.");
+    }
+
+    expect(summarizeScreenModel(deployments)).toEqual({
+      screenName: "deployments",
+      label: "Deployments",
+      primary: true,
+      layoutType: "stack",
+      sections: [
+        {
+          id: "deploy-targets",
+          label: "Deploy targets",
+          viewName: "deployTargetList",
+          entityName: "deployTarget",
+        },
+        {
+          id: "provider-config",
+          label: "Provider config",
+          viewName: "providerConfigRefList",
+          entityName: "providerConfigRef",
+        },
+        {
+          id: "desired-resources",
+          label: "Desired resources",
+          viewName: "deployDesiredResourceList",
+          entityName: "deployDesiredResource",
+        },
+        {
+          id: "attempts",
+          label: "Deploy attempts",
+          viewName: "deployAttemptList",
+          entityName: "deployAttempt",
+        },
+        {
+          id: "evidence",
+          label: "Evidence summaries",
+          viewName: "deployEvidenceSummaryList",
+          entityName: "deployEvidenceSummary",
+        },
+        {
+          id: "drift",
+          label: "Drift reports",
+          viewName: "deployDriftReportList",
+          entityName: "deployDriftReport",
+        },
+      ],
+    });
+    const driftSection = deployments.layout.sections.find((section) => section.id === "drift");
+    const evidenceSection = deployments.layout.sections.find(
+      (section) => section.id === "evidence",
+    );
+
+    expect(
+      driftSection?.collection.result.type === "table"
+        ? driftSection.collection.result.columns.map(readOnlyTableColumnSummary)
+        : [],
+    ).toEqual([
+      { key: "field:deployTarget", display: "readOnly" },
+      { key: "field:versionId", display: "readOnly" },
+      { key: "field:status", display: "readOnly" },
+      { key: "field:createCount", display: "readOnly" },
+      { key: "field:updateCount", display: "readOnly" },
+      { key: "field:deleteCount", display: "readOnly" },
+      { key: "field:affectedLogicalIdsJson", display: "readOnly" },
+      { key: "field:reportedAt", display: "readOnly" },
+    ]);
+    expect(
+      evidenceSection?.collection.result.type === "table"
+        ? evidenceSection.collection.result.columns.map(readOnlyTableColumnSummary)
+        : [],
+    ).toContainEqual({ key: "field:providerResourceIdsJson", display: "readOnly" });
+    expect(evidenceSection?.collection.actions).toEqual([]);
+    expect(driftSection?.collection.actions).toEqual([]);
+  });
+
   it("selects site editor and settings as primary screen models", () => {
     const models = selectPrimaryScreenModels(siteSourceSchema);
 
@@ -2797,5 +2907,12 @@ function summarizeHomeAction(action: HomeActionConfig) {
     showAffectedCountOnSuccess: action.ui.showAffectedCountOnSuccess,
     targetCountQueryKind: action.ui.targetCount?.query.kind ?? null,
     targetCountDisplay: action.ui.targetCount?.display.type ?? null,
+  };
+}
+
+function readOnlyTableColumnSummary(column: TableColumnConfig) {
+  return {
+    key: column.key,
+    display: column.display,
   };
 }

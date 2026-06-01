@@ -37,6 +37,9 @@ describe("instance shell route view", () => {
     expect(html).toContain("Personal Site");
     expect(html).toContain("Custom domains");
     expect(html).toContain("No custom domains.");
+    expect(html).toContain("Deployments");
+    expect(html).toContain('data-formless-control-plane-screen="deployments"');
+    expect(html).toContain("Control-plane deployment records");
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain("Install");
     expect(html).not.toContain("Bundled apps");
