@@ -115,6 +115,14 @@ Evidence:
 - [ ] 7.7 Update instance workspace pull, check, push, and archive flows to represent app install, route, domain, and deployment intent as schema-owned records without secrets.
 - [ ] 7.8 Add UI, CLI, workspace, and archive tests for install editor behavior, route editor validation, no-secret responses, action exposure, drift reporting, and command compatibility.
 
+Blocker:
+
+- Section 7 is not ready as one local implementation unit. It crosses generated UI target plumbing, schema action/API contract shape, Site CLI deployment protocol, workspace/archive manifest format, and command compatibility tests.
+- Evidence: `src/app/routes/instance-shell.tsx` still renders the instance shell from compatibility clients such as `/api/formless/app-installs`, `/api/formless/domain-mappings`, and `/api/formless/deployments/status`; `src/client/app-target.ts` only accepts `SchemaKey | AppStorageIdentity`, while `AppStorageIdentity` does not include `instanceControlPlaneStorageIdentity`; `src/app/routes/home.tsx` and generated app context still require bundled `SchemaKey` definitions rather than a runtime-owned control-plane schema target; `src/shared/instance-control-plane.ts` defines control-plane screens and views but not schema-declared deployment lifecycle actions; `src/site/instance-target-client.ts` invokes deployment compatibility endpoints, not schema action routes; `src/site/instance-workspace-config.ts` persists bespoke `apps[].routes` and `domains` manifest state instead of a control-plane record envelope.
+- Split guidance: first ship a generated UI target slice that generalizes browser client targets for `instance:control-plane` and renders app install/app route screens from the control-plane schema with browser-hidden runner actions; then ship a deployment action protocol slice that either defines schema-declared deployment lifecycle actions or records compatibility endpoint delegation as the public contract; then ship a workspace/archive slice that defines the reviewable control-plane record envelope and drift comparison; finish with a compatibility test slice covering UI, CLI commands, workspaces, archives, no-secret responses, and action exposure.
+- Checks: `devstate start` ran before assessment with checks ok and services starting in `./.devstate/status.md` at 2026-06-01T00:42:53.449Z. `devstate check` after recording the blocker passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T00:46:27.661Z.
+- Smoke: not run; no app behavior changed because section 7 is blocked before implementation.
+
 ## 8. Verification And Promotion
 
 - [ ] 8.1 Run `devstate start` before implementation work and fix any red status in `./.devstate/status.md`.
