@@ -2,66 +2,94 @@
 
 ## Purpose
 
-Site CLI publish behavior lets a standalone Site project edit local Site records, save them back to source files, publish them to a Formless instance, move data through portable archives, and manage instance workspaces and custom-domain intent.
+Site CLI publish behavior lets a local Formless workspace initialize, run,
+save, deploy, move data through portable archives, and manage instance and
+custom-domain intent.
 
 ## Requirements
 
 ### Requirement: CLI Command Families
 
-The package SHALL expose Site project, publish, archive, instance workspace,
-domain, and token command families from the `formless` CLI.
+The package SHALL expose local workspace onboarding, workspace operation,
+archive, advanced instance, domain, and token command families from the
+`formless` CLI.
 
-#### Scenario: Site project commands
+#### Scenario: Local workspace commands
 
 - GIVEN the package CLI is installed
-- WHEN a user runs `formless init`, `formless dev`, `formless save`,
-  `formless deploy setup`, or `formless publish`
-- THEN the command operates on standalone Site project or publish state
-- AND mutating remote publish requires explicit target and apply inputs
+- WHEN a user runs `formless onboard`, `formless dev`, `formless save`,
+  `formless check`, or `formless deploy`
+- THEN the command operates on the local Formless workspace selected by
+  `formless.json`
+- AND `formless onboard`, `formless dev`, `formless save`, and
+  `formless check` do not mutate Cloudflare resources
+- AND `formless deploy` is the explicit Cloudflare deployment boundary
 
 #### Scenario: Instance commands
 
-- GIVEN a Formless instance workspace exists
+- GIVEN a Formless workspace exists
 - WHEN a user runs `formless instance status`, `pull`, `check`, `push`, `dev`,
   `reset-local`, or `deploy`
 - THEN the command operates on the selected instance workspace
 - AND workspace-local runtime state stays separate from remote instance state
 
-### Requirement: Standalone Site Project
+### Requirement: Local First Onboarding
 
-The system SHALL provide commands that create and run a standalone Site project with explicit project records and media roots.
+The CLI SHALL initialize a local Formless workspace before any Cloudflare
+account or deployment mutation.
 
-#### Scenario: Project init
+#### Scenario: Initialize local workspace
 
-- GIVEN a target directory
-- WHEN `formless init <dir>` runs
-- THEN the project contains `formless.config.json` and `site.records.json`
-- AND no starter media files or project media tree are written by default
+- GIVEN the current directory is empty enough to initialize
+- WHEN a user runs `formless onboard`
+- THEN the command writes a reviewable `formless.json` workspace manifest
+- AND the manifest has no remote target, no declared apps, and
+  `defaultAppPolicy: "none"`
+- AND it creates empty reviewable archive roots without writing app archive
+  source
+- AND it ensures ignored `.formless/` state is available for local runtime
+  caches and secrets
+- AND it does not list Cloudflare accounts, deploy Cloudflare resources, create
+  remote owner setup capability, open a remote setup URL, or write global
+  instance state
 
-#### Scenario: Project dev
+#### Scenario: Explore locally after onboarding
 
-- GIVEN a standalone Site project exists
+- GIVEN a workspace was initialized by `formless onboard`
 - WHEN `formless dev` runs
-- THEN the local public preview and `/admin` editor use the project identity and source files
-- AND the Site project media root is the source for project media files
+- THEN the product instance runtime starts with workspace-local persistence
+- AND first-run local runtime state starts with no installed apps when no
+  workspace archives exist
+- AND the user can explore the instance before any Cloudflare deploy
 
-### Requirement: Save From Local Authority
+#### Scenario: Install first app locally
 
-The system SHALL save edited standalone Site records from local Authority state back to project source files instead of treating browser replica state as the source of truth.
+- GIVEN a workspace initialized by `formless onboard` is running through
+  `formless dev`
+- WHEN the user installs a package app through the local web UI
+- THEN the local Authority records the app install and initialized app state
+- AND no Cloudflare resource is mutated
 
-#### Scenario: Save records
+### Requirement: Workspace Save From Local Authority
 
-- GIVEN an author edits a standalone Site through local admin
+The CLI SHALL save local workspace runtime state from Authority-backed instance
+state back to reviewable workspace source.
+
+#### Scenario: Save local workspace state
+
+- GIVEN a local Formless workspace is running through `formless dev`
 - WHEN `formless save` runs
-- THEN active Site records are written to the project source
-- AND browser IndexedDB state is not used as the publish source of truth
+- THEN active installed app records, media payloads, and reviewable
+  control-plane intent are written to deterministic workspace archives
+- AND browser IndexedDB state is not used as the source of truth
+- AND secrets are not written to `formless.json` or archive files
 
-#### Scenario: Save rejects legacy media
+#### Scenario: Check workspace source
 
-- GIVEN saved records contain legacy same-origin Site media hrefs
-- WHEN the save workflow validates project source media
-- THEN the workflow fails with a migration error
-- AND it does not silently move legacy Site media files
+- GIVEN local Authority state differs from the reviewable workspace source
+- WHEN a user runs `formless save --check`
+- THEN the command fails and reports that workspace source must be refreshed
+- AND it does not rewrite archive files
 
 ### Requirement: Seed Promotion
 
@@ -80,24 +108,6 @@ The system SHALL promote source Site seed data from local Site Authority state i
 - WHEN `bun run site:pull-seed --check` runs
 - THEN the command fails
 - AND it reports that source output must be refreshed
-
-### Requirement: Site Publish
-
-The system SHALL publish source Site data only to an explicit target and require an apply flag for mutation.
-
-#### Scenario: Dry-run by default
-
-- GIVEN source Site records are valid
-- WHEN `formless publish` or `bun run site:publish` runs without `--apply`
-- THEN the workflow performs a dry-run
-- AND no remote Site records or media are mutated
-
-#### Scenario: Apply publish
-
-- GIVEN a publish target and admin token are configured
-- WHEN publish runs with `--apply`
-- THEN live data is backed up before restore
-- AND media is restored before records through a guarded snapshot restore
 
 ### Requirement: CLI Upgrade Planning
 
@@ -155,12 +165,11 @@ APIs.
 
 ### Requirement: Deploy Verification Uses Upgrade Metadata
 
-Instance deploy and publish workflows SHALL verify upgrade metadata after code
-deploy.
+Instance deploy workflows SHALL verify upgrade metadata after code deploy.
 
 #### Scenario: Verify deployed metadata
 
-- WHEN `formless instance deploy` or code-aware publish deploys runtime code
+- WHEN `formless deploy` or `formless instance deploy` deploys runtime code
 - THEN it verifies package version, runtime protocol, storage migration set, and
   package app revision/hash facts from deployed metadata
 - AND verification failure stops subsequent data migration steps
@@ -185,12 +194,12 @@ The system SHALL export, restore, and import Site and instance data as portable 
 
 ### Requirement: Site CLI Media Package Boundary
 
-The system SHALL keep Site CLI save, publish, import, and archive behavior stable
+The system SHALL keep Site CLI save, import, and archive behavior stable
 while consuming Media contracts from public package subpaths.
 
 #### Scenario: Archive workflows use Media contract
 
-- GIVEN Site CLI publish, save, import, export, or restore workflows validate or
+- GIVEN Site CLI save, import, export, or restore workflows validate or
   move core media payloads
 - WHEN they need media asset, storage key, delivery, or restore result shapes
 - THEN they use public Media package contracts
@@ -223,7 +232,9 @@ The system SHALL import a standalone Site project as an installed Site app archi
 
 ### Requirement: Instance Workspace
 
-The system SHALL manage reviewable Formless instance workspaces whose manifests describe targets, archives, deploy settings, app policy, local state, and domain intent without storing secrets.
+The system SHALL manage reviewable Formless workspaces whose `formless.json`
+manifests describe targets, archives, deploy settings, app policy, local state,
+and domain intent without storing secrets.
 
 #### Scenario: Pull and check
 
@@ -242,6 +253,22 @@ The system SHALL manage reviewable Formless instance workspaces whose manifests 
 ### Requirement: Domain And Deploy Commands
 
 The system SHALL keep deployment, remote provider apply, and fallback Cloudflare domain mutations explicit and credential-scoped.
+
+#### Scenario: First workspace deploy
+
+- GIVEN a local Formless workspace has saved archive source and no remote target
+- WHEN `formless deploy` runs with Cloudflare credentials available to the CLI
+- THEN the deployment uses the instance runtime profile
+- AND deploy metadata is verified after upload
+- AND target and deploy intent are written to `formless.json`
+- AND display-safe Cloudflare target facts are copied to ignored `.formless/`
+  deploy state
+- AND Cloudflare API tokens, Alchemy secrets, automation admin tokens, and owner
+  setup tokens are stored only under ignored `.formless/` state
+- AND saved workspace archives are dry-run restored before remote data mutation
+  is applied
+- AND saved workspace archives are pushed after deploy verification unless
+  target identity or remote drift requires explicit acknowledgement
 
 #### Scenario: Instance deploy
 

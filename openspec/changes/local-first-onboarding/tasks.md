@@ -94,7 +94,15 @@ Evidence:
 
 ## 7. Verification And Promotion
 
-- [ ] 7.1 Update CLI, workspace, archive, deploy, and manifest tests for the local-first flow.
-- [ ] 7.2 Run `devstate check` and record `.devstate/status.md` evidence in this change.
-- [ ] 7.3 Smoke the changed app behavior with `bun browser ...` if local dev or browser-visible behavior changed.
-- [ ] 7.4 Promote shipped behavior into `openspec/specs/site-cli-publish/spec.md` and `openspec/specs/portable-archives/spec.md` before review.
+- [x] 7.1 Update CLI, workspace, archive, deploy, and manifest tests for the local-first flow.
+- [x] 7.2 Run `devstate check` and record `.devstate/status.md` evidence in this change.
+- [x] 7.3 Smoke the changed app behavior with `bun browser ...` if local dev or browser-visible behavior changed.
+- [x] 7.4 Promote shipped behavior into `openspec/specs/site-cli-publish/spec.md` and `openspec/specs/portable-archives/spec.md` before review.
+
+Evidence:
+
+- Files changed: `openspec/specs/site-cli-publish/spec.md`, `openspec/specs/portable-archives/spec.md`, `openspec/changes/local-first-onboarding/tasks.md`.
+- Test coverage verified: `src/site/cli.test.ts` covers local-first usage/parser behavior, removed standalone Site command shapes, workspace discovery and legacy manifest rejection, local-only onboarding, empty workspace dev, workspace save/check from Authority state, local-first deploy, and legacy `archive import-site`; `src/site/instance-workspace-config.test.ts` covers `formless.json` formatting, path validation, app/deploy/domain intent, and secret rejection.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run for this section; only OpenSpec spec/task evidence changed. Prior browser-visible local dev behavior was smoked in section 3.
+- Promotion: shipped local-first onboarding, workspace save/check, first deploy boundary, workspace source-of-truth, empty local runtime, and no-secret archive/workspace behavior were promoted into `openspec/specs/site-cli-publish/spec.md` and `openspec/specs/portable-archives/spec.md`.
