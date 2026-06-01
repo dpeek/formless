@@ -143,10 +143,18 @@ Evidence:
 
 ## 11. Backup And Manual Approval Gates
 
-- [ ] 11.1 Define CLI input and evidence shape for backup completion before `auto-with-backup` user-data migrations.
-- [ ] 11.2 Define CLI input and evidence shape for explicit manual approval before `manual-approval` migrations.
-- [ ] 11.3 Wire backup and manual approval gates into one mutating CLI flow before broadening to remaining flows.
-- [ ] 11.4 Add CLI tests for backup gating, manual approval gating, missing evidence failure, and persisted output evidence.
+- [x] 11.1 Define CLI input and evidence shape for backup completion before `auto-with-backup` user-data migrations.
+- [x] 11.2 Define CLI input and evidence shape for explicit manual approval before `manual-approval` migrations.
+- [x] 11.3 Wire backup and manual approval gates into one mutating CLI flow before broadening to remaining flows.
+- [x] 11.4 Add CLI tests for backup gating, manual approval gating, missing evidence failure, and persisted output evidence.
+
+Evidence:
+
+- `grug` 2026-06-01: added CLI upgrade apply gate evidence in `src/site/upgrade-apply.ts` with backup evidence shape (`kind`, scope, artifact path, completion timestamp, optional target) and manual approval evidence shape (`kind`, approval key, approval timestamp, optional approver/reason).
+- Wired Site publish apply as the first mutating flow by adding `--upgrade-backup-evidence <path>` and `--approve-upgrade <key>` parsing in `src/site/publish.ts`; project publish passes empty gate evidence until it grows equivalent inputs.
+- Added `src/site/upgrade-apply.test.ts` coverage for missing backup evidence, missing manual approval evidence, satisfied gates, and persisted apply evidence output. Updated `src/site/publish.test.ts` for Site publish option parsing and apply evidence logging.
+- Updated change specs for `upgrade-migrations` and `site-cli-publish` with the shipped evidence shapes.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes CLI apply evidence behavior only and no visible browser app behavior changed.
 
 ## 12. Browser Replica Compatibility
 

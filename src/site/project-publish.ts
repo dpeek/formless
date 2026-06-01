@@ -201,6 +201,8 @@ export async function publishSiteProject(
       data: true,
       skipCheck: true,
       target: deploy.publishUrl,
+      upgradeBackupEvidence: null,
+      upgradeManualApprovals: [],
     },
     smokePaths: siteProjectPublishSmokePaths(project.records),
     sourceMediaAssets: siteProjectMediaAssetsFromRecords(project.records, {

@@ -38,6 +38,16 @@ APIs.
 - **WHEN** an upgrade plan includes an `auto-with-backup` migration
 - **THEN** CLI apply requires backup evidence before applying the migration
 - **AND** the command reports the backup in its apply output
+- **AND** backup evidence includes backup kind, scope, artifact path, completion
+  timestamp, and target when available
+
+#### Scenario: Manual approval before manual migration
+
+- **WHEN** an upgrade plan includes a `manual-approval` migration
+- **THEN** CLI apply requires approval evidence matching that migration approval
+  key before applying the migration
+- **AND** manual approval evidence includes approval kind, approval key, approval
+  timestamp, and optional approver or reason
 
 ### Requirement: Deploy Verification Uses Upgrade Metadata
 

@@ -50,11 +50,23 @@ describe("Site publish workflow", () => {
       data: true,
       skipCheck: false,
       target: null,
+      upgradeBackupEvidence: null,
+      upgradeManualApprovals: [],
     });
 
     expect(
       parseSitePublishArgs(
-        ["--apply", "--data-only", "--skip-check", "--target", "https://live.example/path"],
+        [
+          "--apply",
+          "--data-only",
+          "--skip-check",
+          "--target",
+          "https://live.example/path",
+          "--upgrade-backup-evidence",
+          "archives/backups/site.snapshot.json",
+          "--approve-upgrade",
+          "destructive-site-cleanup",
+        ],
         {},
       ),
     ).toEqual({
@@ -64,6 +76,8 @@ describe("Site publish workflow", () => {
       data: true,
       skipCheck: true,
       target: "https://live.example/path",
+      upgradeBackupEvidence: "archives/backups/site.snapshot.json",
+      upgradeManualApprovals: ["destructive-site-cleanup"],
     });
 
     expect(() => parseSitePublishArgs(["--code-only", "--data-only"], {})).toThrow(
@@ -358,6 +372,56 @@ describe("Site publish workflow", () => {
     expect(harness.logs.at(-1)).toContain("Blockers: deploy-metadata-cacheable");
   });
 
+  it("passes configured upgrade gate evidence into apply output", async () => {
+    const harness = publishHarness({
+      adminToken: "secret-token",
+      apply: true,
+      code: false,
+      data: false,
+      skipCheck: true,
+      target: "https://live.example",
+      upgradeBackupEvidence: "archives/backups/site.snapshot.json",
+      upgradeManualApprovals: ["destructive-site-cleanup"],
+    });
+    harness.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson(currentAppRegistry());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(packageMigrationApplyResponse());
+    harness.queueJson(upgradeStatusResponse());
+
+    const result = await runSitePublish(harness.input());
+
+    expect(result).toEqual({
+      backupPath: null,
+      mode: "apply",
+      sourceRecordCount: siteSeedRecords.length,
+      target: "https://live.example",
+    });
+    expect(harness.commands).toEqual([]);
+    expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+      "POST https://live.example/api/formless/upgrade/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+      "POST https://live.example/api/formless/app-installs/site/site/package-migrations/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+    ]);
+    const evidenceLog = harness.logs.find((log) => log.includes("Upgrade apply evidence."));
+
+    expect(evidenceLog).toContain("Backup evidence: 1.");
+    expect(evidenceLog).toContain(
+      "Backup scope=app artifact=archives/backups/site.snapshot.json completedAt=2026-05-12T02:00:00.000Z target=https://live.example.",
+    );
+    expect(evidenceLog).toContain("Manual approvals: 1.");
+    expect(evidenceLog).toContain(
+      "Manual approval destructive-site-cleanup approvedAt=2026-05-12T02:00:00.000Z.",
+    );
+    expect(harness.writes).toEqual([]);
+  });
+
   it("fails before deploy when a referenced source media file is missing", async () => {
     const harness = publishHarness({
       apply: true,
@@ -488,6 +552,8 @@ function publishHarness(options: PublishHarnessOptions) {
         data: options.data ?? true,
         skipCheck: options.skipCheck ?? false,
         target: options.target ?? null,
+        upgradeBackupEvidence: options.upgradeBackupEvidence ?? null,
+        upgradeManualApprovals: options.upgradeManualApprovals ?? [],
       },
       sourceSchema: siteSourceSchema,
       sourceSeedRecords: options.sourceSeedRecords ?? siteSeedRecords,

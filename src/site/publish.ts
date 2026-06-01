@@ -18,7 +18,10 @@ import {
   buildCliUpgradePlanningReport,
   formatCliUpgradePlanningReport,
 } from "./upgrade-plan.ts";
-import { applyCliAutoSafeUpgradeMigrations } from "./upgrade-apply.ts";
+import {
+  applyCliAutoSafeUpgradeMigrations,
+  type CliUpgradeApplyEvidenceInput,
+} from "./upgrade-apply.ts";
 
 export type SitePublishOptions = {
   apply: boolean;
@@ -27,6 +30,8 @@ export type SitePublishOptions = {
   data: boolean;
   skipCheck: boolean;
   target: string | null;
+  upgradeBackupEvidence: string | null;
+  upgradeManualApprovals: string[];
 };
 
 export type SitePublishResult = {
@@ -110,6 +115,8 @@ export function parseSitePublishArgs(
     target: env.FORMLESS_SITE_PUBLISH_TARGET
       ? normalizePublishUrl(env.FORMLESS_SITE_PUBLISH_TARGET)
       : null,
+    upgradeBackupEvidence: null,
+    upgradeManualApprovals: [],
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -147,6 +154,18 @@ export function parseSitePublishArgs(
 
     if (arg === "--backup-dir") {
       options.backupDir = readOptionValue(args, index, "--backup-dir");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--upgrade-backup-evidence") {
+      options.upgradeBackupEvidence = readOptionValue(args, index, "--upgrade-backup-evidence");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--approve-upgrade") {
+      options.upgradeManualApprovals.push(readOptionValue(args, index, "--approve-upgrade"));
       index += 1;
       continue;
     }
@@ -211,7 +230,7 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
     }
   }
 
-  await applyAutoSafeUpgradeMigrations(input);
+  await applyAutoSafeUpgradeMigrations(input, plannedAt);
 
   const backupPath = input.options.data
     ? await publishSiteData(input, sourceSnapshot, sourceMediaFiles, plannedAt)
@@ -229,7 +248,7 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
 
 export function sitePublishUsage(): string {
   return [
-    "Usage: bun run site:publish [--apply] [--target <url>] [--code-only | --data-only] [--skip-check] [--backup-dir <path>]",
+    "Usage: bun run site:publish [--apply] [--target <url>] [--code-only | --data-only] [--skip-check] [--backup-dir <path>] [--upgrade-backup-evidence <path>] [--approve-upgrade <key>]",
     "",
     "Defaults to a dry run. Mutating publish requires --apply.",
     "Data publish backs up GET /api/site/snapshot, restores source Site seed data, and smokes /pages/home.",
@@ -293,7 +312,10 @@ async function logDryRunUpgradePlanning(input: SitePublishInput): Promise<void> 
   assertCliUpgradePlanningReady(report);
 }
 
-async function applyAutoSafeUpgradeMigrations(input: SitePublishInput): Promise<void> {
+async function applyAutoSafeUpgradeMigrations(
+  input: SitePublishInput,
+  plannedAt: string,
+): Promise<void> {
   const target = input.options.target;
 
   if (!target) {
@@ -303,6 +325,7 @@ async function applyAutoSafeUpgradeMigrations(input: SitePublishInput): Promise<
   await applyCliAutoSafeUpgradeMigrations(
     {
       adminToken: input.adminToken,
+      evidence: sitePublishUpgradeEvidence(input, plannedAt),
       targetUrl: target,
     },
     {
@@ -310,6 +333,33 @@ async function applyAutoSafeUpgradeMigrations(input: SitePublishInput): Promise<
       log: input.dependencies.log,
     },
   );
+}
+
+function sitePublishUpgradeEvidence(
+  input: SitePublishInput,
+  plannedAt: string,
+): CliUpgradeApplyEvidenceInput {
+  const target = input.options.target;
+
+  return {
+    backups:
+      input.options.upgradeBackupEvidence === null
+        ? []
+        : [
+            {
+              artifactPath: input.options.upgradeBackupEvidence,
+              completedAt: plannedAt,
+              kind: "backup",
+              scope: "app",
+              ...(target === null ? {} : { target }),
+            },
+          ],
+    manualApprovals: input.options.upgradeManualApprovals.map((approvalKey) => ({
+      approvalKey,
+      approvedAt: plannedAt,
+      kind: "manual-approval",
+    })),
+  };
 }
 
 async function publishSiteData(

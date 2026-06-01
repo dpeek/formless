@@ -55,6 +55,8 @@ The system SHALL classify migrations by safety before apply.
 - **THEN** upgrade apply requires backup evidence before mutation
 - **AND** dry-run output includes the affected storage identities or package
   app installs
+- **AND** CLI backup evidence identifies `kind: "backup"`, the backup scope,
+  artifact path, completion timestamp, and target when available
 
 #### Scenario: Manual-approval migration
 
@@ -62,6 +64,8 @@ The system SHALL classify migrations by safety before apply.
   resources and is classified `manual-approval`
 - **THEN** upgrade apply refuses to run it without explicit manual approval
 - **AND** dry-run output reports the destructive or provider-impacting behavior
+- **AND** CLI manual approval evidence identifies `kind: "manual-approval"`,
+  the approval key, approval timestamp, and optional approver or reason
 
 ### Requirement: CLI Upgrade Flow
 

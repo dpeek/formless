@@ -19,8 +19,36 @@ import {
   assertCliUpgradePlanningReady,
   buildCliUpgradePlanningReport,
   formatCliUpgradePlanningReport,
+  type CliUpgradeManualApprovalStep,
+  type CliUpgradePlanStep,
   type CliUpgradePlanningReport,
 } from "./upgrade-plan.ts";
+
+export type CliUpgradeBackupEvidenceInput = {
+  artifactPath: string;
+  completedAt: string;
+  kind: "backup";
+  scope: "app" | "instance" | "storage-identity";
+  target?: string;
+};
+
+export type CliUpgradeManualApprovalEvidenceInput = {
+  approvalKey: string;
+  approvedAt: string;
+  approvedBy?: string;
+  kind: "manual-approval";
+  reason?: string;
+};
+
+export type CliUpgradeApplyEvidenceInput = {
+  backups?: readonly CliUpgradeBackupEvidenceInput[];
+  manualApprovals?: readonly CliUpgradeManualApprovalEvidenceInput[];
+};
+
+export type CliUpgradeApplyGateEvidence = {
+  backups: readonly CliUpgradeBackupEvidenceInput[];
+  manualApprovals: readonly CliUpgradeManualApprovalEvidenceInput[];
+};
 
 export type CliAutoSafePackageAppApplyEvidence = {
   installId: string;
@@ -30,6 +58,7 @@ export type CliAutoSafePackageAppApplyEvidence = {
 };
 
 export type CliAutoSafeUpgradeApplyResult = {
+  gateEvidence: CliUpgradeApplyGateEvidence;
   packageApps: CliAutoSafePackageAppApplyEvidence[];
   planning: CliUpgradePlanningReport;
   sql: InstanceUpgradeApplyResponse;
@@ -43,6 +72,7 @@ export type CliAutoSafeUpgradeApplyDependencies = FormlessInstanceTargetClientDe
 export async function applyCliAutoSafeUpgradeMigrations(
   input: {
     adminToken?: string | null;
+    evidence?: CliUpgradeApplyEvidenceInput;
     targetUrl: string;
   },
   dependencies: CliAutoSafeUpgradeApplyDependencies,
@@ -66,7 +96,21 @@ export async function applyCliAutoSafeUpgradeMigrations(
 
   if (planning.blockers.length > 0) {
     dependencies.log(formatCliUpgradePlanningReport(planning).trimEnd());
-    assertCliUpgradePlanningReady(planning);
+  }
+
+  let gateEvidence: CliUpgradeApplyGateEvidence;
+
+  try {
+    gateEvidence = assertCliUpgradeApplyGateEvidence({
+      evidence: input.evidence,
+      planning,
+    });
+  } catch (error) {
+    if (planning.blockers.length === 0) {
+      dependencies.log(formatCliUpgradePlanningReport(planning).trimEnd());
+    }
+
+    throw error;
   }
 
   const sql = await applyFormlessInstanceAutoSafeSqlMigrations(
@@ -120,6 +164,7 @@ export async function applyCliAutoSafeUpgradeMigrations(
   }
 
   const result = {
+    gateEvidence,
     packageApps,
     planning,
     sql,
@@ -129,6 +174,42 @@ export async function applyCliAutoSafeUpgradeMigrations(
   dependencies.log(formatCliAutoSafeUpgradeApplyEvidence(result).trimEnd());
 
   return result;
+}
+
+export function assertCliUpgradeApplyGateEvidence(input: {
+  evidence?: CliUpgradeApplyEvidenceInput;
+  planning: CliUpgradePlanningReport;
+}): CliUpgradeApplyGateEvidence {
+  const gateEvidence = normalizeCliUpgradeGateEvidence(input.evidence);
+  const manualApprovalSteps = input.planning.plan.steps.filter(
+    (step): step is CliUpgradeManualApprovalStep => step.type === "manual-approval",
+  );
+  const manualApprovalStepIds = new Set(manualApprovalSteps.map((step) => step.id));
+  const planningBlockers = input.planning.blockers.filter(
+    (blocker) => !manualApprovalStepIds.has(blocker.code),
+  );
+
+  if (planningBlockers.length > 0) {
+    throw new Error(
+      `Upgrade planning blocked: ${planningBlockers.map((blocker) => blocker.code).join(", ")}.`,
+    );
+  }
+
+  const missingEvidence = [
+    ...missingBackupEvidence(input.planning.plan.steps, gateEvidence.backups),
+    ...missingManualApprovalEvidence(manualApprovalSteps, gateEvidence.manualApprovals),
+  ];
+
+  if (missingEvidence.length > 0) {
+    throw new Error(`Upgrade apply blocked: ${missingEvidence.join(", ")}.`);
+  }
+
+  assertCliUpgradePlanningReady({
+    ...input.planning,
+    blockers: planningBlockers,
+  });
+
+  return gateEvidence;
 }
 
 export function formatCliAutoSafeUpgradeApplyEvidence(
@@ -142,6 +223,10 @@ export function formatCliAutoSafeUpgradeApplyEvidence(
   );
   const lines = [
     "Upgrade apply evidence.",
+    `Backup evidence: ${result.gateEvidence.backups.length}.`,
+    ...result.gateEvidence.backups.map(formatBackupEvidence),
+    `Manual approvals: ${result.gateEvidence.manualApprovals.length}.`,
+    ...result.gateEvidence.manualApprovals.map(formatManualApprovalEvidence),
     `SQL storage identities: ${result.sql.storageIdentities.length}.`,
     `SQL migrations: ${sqlRows.length}.`,
     ...sqlRows.map(
@@ -156,6 +241,75 @@ export function formatCliAutoSafeUpgradeApplyEvidence(
   ];
 
   return `${lines.join("\n")}\n`;
+}
+
+function normalizeCliUpgradeGateEvidence(
+  evidence: CliUpgradeApplyEvidenceInput | undefined,
+): CliUpgradeApplyGateEvidence {
+  return {
+    backups: evidence?.backups ?? [],
+    manualApprovals: evidence?.manualApprovals ?? [],
+  };
+}
+
+function missingBackupEvidence(
+  steps: readonly CliUpgradePlanStep[],
+  backups: readonly CliUpgradeBackupEvidenceInput[],
+): string[] {
+  const requiredSteps = steps.filter((step) => step.safety === "auto-with-backup");
+
+  return requiredSteps
+    .filter((step) => !backups.some((backup) => backupMatchesStep(backup, step)))
+    .map((step) => `backup-evidence-missing:${step.id}`);
+}
+
+function backupMatchesStep(
+  backup: CliUpgradeBackupEvidenceInput,
+  step: CliUpgradePlanStep,
+): boolean {
+  if (!backup.artifactPath || !backup.completedAt) {
+    return false;
+  }
+
+  if (step.type === "backup") {
+    return backup.scope === step.backupScope;
+  }
+
+  return true;
+}
+
+function missingManualApprovalEvidence(
+  steps: readonly CliUpgradeManualApprovalStep[],
+  approvals: readonly CliUpgradeManualApprovalEvidenceInput[],
+): string[] {
+  return steps
+    .filter(
+      (step) =>
+        !approvals.some(
+          (approval) => approval.approvalKey === step.approvalKey && approval.approvedAt,
+        ),
+    )
+    .map((step) => `manual-approval-missing:${step.approvalKey}`);
+}
+
+function formatBackupEvidence(evidence: CliUpgradeBackupEvidenceInput): string {
+  return compactEvidenceLine([
+    "Backup",
+    `scope=${evidence.scope}`,
+    `artifact=${evidence.artifactPath}`,
+    `completedAt=${evidence.completedAt}`,
+    evidence.target === undefined ? null : `target=${evidence.target}`,
+  ]);
+}
+
+function formatManualApprovalEvidence(evidence: CliUpgradeManualApprovalEvidenceInput): string {
+  return compactEvidenceLine([
+    "Manual approval",
+    evidence.approvalKey,
+    `approvedAt=${evidence.approvedAt}`,
+    evidence.approvedBy === undefined ? null : `approvedBy=${evidence.approvedBy}`,
+    evidence.reason === undefined ? null : `reason=${evidence.reason}`,
+  ]);
 }
 
 function verifyPackageAppApplyEvidence(input: {
@@ -260,4 +414,8 @@ function formatUpgradeStorageIdentity(identity: UpgradeStorageIdentity): string 
   }
 
   return identity.sourceSchemaKey;
+}
+
+function compactEvidenceLine(parts: readonly (string | null)[]): string {
+  return `${parts.filter((part): part is string => part !== null && part.length > 0).join(" ")}.`;
 }
