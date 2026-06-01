@@ -12,7 +12,7 @@ import {
 } from "../shared/upgrade-status.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { readInstanceAppInstalls } from "./instance-app-installs-state.ts";
+import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
 import { readAllAppliedSqlMigrations } from "./sql-migrations.ts";
 import {
   ensureStorageTables,
@@ -187,7 +187,7 @@ async function instanceUpgradeStatusResponse(
   storage: DurableObjectStorage,
   env: InstanceUpgradeStatusApiEnv,
 ): Promise<InstanceUpgradeStatusResponse> {
-  const installs = readInstanceAppInstalls(storage);
+  const installs = await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
 
   return {
     storageIdentities: [

@@ -46,7 +46,7 @@ beforeEach(async () => {
   harness = await createWorkerHarness(
     harnessPath,
     {
-      PASSKEY_API_HARNESS: { className: "OwnerPasskeyApiHarness", useSQLite: true },
+      FORMLESS_AUTHORITY: { className: "OwnerPasskeyApiHarness", useSQLite: true },
     },
     {
       bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
@@ -804,21 +804,13 @@ async function writeOwnerPasskeyHarness() {
   await writeFile(
     path,
     `
-      import { DurableObject } from "cloudflare:workers";
-
       import { nowIsoString } from "${process.cwd()}/src/shared/clock.ts";
-      import { handleInstanceAppInstallsDurableObjectRequest } from "${process.cwd()}/src/worker/instance-app-installs.ts";
-      import { handleOwnerPasskeyDurableObjectRequest } from "${process.cwd()}/src/worker/owner-passkeys.ts";
-      import { handleOwnerSetupDurableObjectRequest } from "${process.cwd()}/src/worker/owner-setup.ts";
+      import { FormlessAuthority } from "${process.cwd()}/src/worker/authority.ts";
+      import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
       import { hashOwnerSetupToken, writeOwnerSetupCapability } from "${process.cwd()}/src/worker/instance-setup-state.ts";
       import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
 
-      export class OwnerPasskeyApiHarness extends DurableObject {
-        constructor(ctx, env) {
-          super(ctx, env);
-          this.bindings = env;
-        }
-
+      export class OwnerPasskeyApiHarness extends FormlessAuthority {
         async fetch(request) {
           const url = new URL(request.url);
 
@@ -857,41 +849,15 @@ async function writeOwnerPasskeyHarness() {
             return Response.json(credential);
           }
 
-          const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(
-            request,
-            this.ctx.storage,
-            this.bindings,
-          );
-
-          if (ownerSetupResponse) {
-            return ownerSetupResponse;
-          }
-
-          const passkeyResponse = await handleOwnerPasskeyDurableObjectRequest(
-            request,
-            this.ctx.storage,
-            this.bindings,
-          );
-
-          if (passkeyResponse) {
-            return passkeyResponse;
-          }
-
-          const appInstallsResponse = await handleInstanceAppInstallsDurableObjectRequest(
-            request,
-            this.ctx.storage,
-            this.bindings,
-          );
-
-          return appInstallsResponse ?? Response.json({ error: "Not found." }, { status: 404 });
+          return super.fetch(request);
         }
       }
 
       export default {
         fetch(request, env) {
-          const id = env.PASSKEY_API_HARNESS.idFromName("default");
+          const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
 
-          return env.PASSKEY_API_HARNESS.get(id).fetch(request);
+          return env.FORMLESS_AUTHORITY.get(id).fetch(request);
         },
       };
     `,
