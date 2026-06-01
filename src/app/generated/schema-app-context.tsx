@@ -1,9 +1,13 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { ClientAppTarget } from "../../client/app-target.ts";
-import { defaultSchemaKey, type SchemaKey } from "../../shared/schema-apps.ts";
+import {
+  clientTargetForSchemaKey,
+  type ClientAppSchemaKey,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
+import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 
 type SchemaAppContextValue = {
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   target: ClientAppTarget;
 };
 
@@ -15,14 +19,18 @@ const SchemaAppContext = createContext<SchemaAppContextValue>({
 export function SchemaAppProvider({
   children,
   schemaKey,
-  target = schemaKey,
+  target,
 }: {
   children: ReactNode;
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   target?: ClientAppTarget;
 }) {
+  const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
+
   return (
-    <SchemaAppContext.Provider value={{ schemaKey, target }}>{children}</SchemaAppContext.Provider>
+    <SchemaAppContext.Provider value={{ schemaKey, target: appTarget }}>
+      {children}
+    </SchemaAppContext.Provider>
   );
 }
 

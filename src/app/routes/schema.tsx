@@ -28,6 +28,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
 import {
   appStorageIdentityForClientTarget,
+  clientTargetSourceSchemaKey,
   type ClientAppTarget,
 } from "../../client/app-target.ts";
 import {
@@ -62,6 +63,7 @@ export function SchemaRoute({
 }) {
   const appTarget = target ?? schemaKey;
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
+  const appSchemaKey = clientTargetSourceSchemaKey(appTarget);
   const app = getSchemaAppDefinition(schemaKey);
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
@@ -70,8 +72,7 @@ export function SchemaRoute({
     activeClientStorageName === null ||
     activeClientStorageName === appTargetIdentity.browserDatabaseName;
   const routeIsActive =
-    routeStoreMatchesTarget &&
-    (activeSchemaKey === null || activeSchemaKey === appTargetIdentity.sourceSchemaKey);
+    routeStoreMatchesTarget && (activeSchemaKey === null || activeSchemaKey === appSchemaKey);
   const schema = routeIsActive ? activeSchema : null;
   const [mode, setMode] = useState<SchemaRouteMode>("builder");
   const [routeError, setRouteError] = useState<string | null>(null);

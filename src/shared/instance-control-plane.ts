@@ -208,6 +208,13 @@ export type InstanceControlPlaneRecordValuesByEntity = {
   redirectIntent: InstanceControlPlaneRedirectIntentValues;
 };
 
+type InstanceControlPlaneTableField =
+  | string
+  | {
+      display?: "editor" | "hidden" | "readOnly";
+      field: string;
+    };
+
 export type AnyInstanceControlPlaneRecord = {
   [Entity in InstanceControlPlaneEntityName]: InstanceControlPlaneRecord<
     Entity,
@@ -577,8 +584,22 @@ export const instanceControlPlaneSchema = {
     deployDriftReportItem: itemView("deployDriftReport", ["versionId", "status", "reportedAt"]),
   },
   tableViews: {
-    appInstallTable: tableView("appInstall", ["label", "installId", "packageAppKey", "status"]),
-    appRouteTable: tableView("appRoute", ["appInstall", "routeKind", "path", "prefix", "enabled"]),
+    appInstallTable: tableView("appInstall", [
+      { field: "label", display: "editor" },
+      { field: "installId", display: "readOnly" },
+      { field: "packageAppKey", display: "readOnly" },
+      { field: "status", display: "readOnly" },
+      { field: "storageIdentity", display: "readOnly" },
+    ]),
+    appRouteTable: tableView("appRoute", [
+      { field: "appInstall", display: "readOnly" },
+      { field: "routeKind", display: "readOnly" },
+      { field: "path", display: "editor" },
+      { field: "prefix", display: "editor" },
+      { field: "enabled", display: "editor" },
+      { field: "surface", display: "readOnly" },
+      { field: "packageCapability", display: "readOnly" },
+    ]),
     deployTargetTable: tableView("deployTarget", ["label", "targetId", "targetKind", "enabled"]),
     providerConfigRefTable: tableView("providerConfigRef", [
       "label",
@@ -645,7 +666,6 @@ export const instanceControlPlaneSchema = {
       "appInstallAll",
       "appInstallTable",
       {
-        createView: "appInstallCreate",
         navigation: true,
       },
     ),
@@ -661,7 +681,6 @@ export const instanceControlPlaneSchema = {
       "updatedAt",
     ]),
     appRouteList: collectionView("App routes", "appRoute", "appRouteAll", "appRouteTable", {
-      createView: "appRouteCreate",
       extraQueries: ["appRouteEnabled"],
       navigation: true,
     }),
@@ -1101,15 +1120,25 @@ function itemView(entity: InstanceControlPlaneEntityName, fields: string[]) {
   } satisfies AppSchema["itemViews"][string];
 }
 
-function tableView(entity: InstanceControlPlaneEntityName, fields: string[]) {
+function tableView(
+  entity: InstanceControlPlaneEntityName,
+  fields: InstanceControlPlaneTableField[],
+) {
   return {
     entity,
-    columns: fields.map((field) => ({
-      type: "field",
-      field,
-      display: "readOnly",
-    })),
+    columns: fields.map(tableFieldColumn),
   } satisfies AppSchema["tableViews"][string];
+}
+
+function tableFieldColumn(fieldInput: InstanceControlPlaneTableField) {
+  const field = typeof fieldInput === "string" ? fieldInput : fieldInput.field;
+  const display = typeof fieldInput === "string" ? "readOnly" : (fieldInput.display ?? "readOnly");
+
+  return {
+    type: "field",
+    field,
+    display,
+  } satisfies AppSchema["tableViews"][string]["columns"][number];
 }
 
 function createView(entity: InstanceControlPlaneEntityName, fields: string[]) {

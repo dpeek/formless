@@ -9,6 +9,7 @@ import {
   selectClientStoreSchemaKey,
   subscribeToClientStoreSelector,
 } from "./store.ts";
+import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
@@ -101,6 +102,20 @@ describe("client store", () => {
     applyBootstrapResponse(bootstrap([record("record-2", "Rate")]), "estii");
 
     expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(record("record-2", "Rate"));
+  });
+
+  it("tracks the runtime-owned control-plane schema key for its client target", () => {
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+
+    applyBootstrapResponse(bootstrap([record("install-1", "Personal Site")]), controlPlaneTarget);
+
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:instance:control-plane",
+      activeSchemaKey: "instance-control-plane",
+    });
+    expect(getClientStoreSnapshot().recordsById["install-1"]).toEqual(
+      record("install-1", "Personal Site"),
+    );
   });
 });
 

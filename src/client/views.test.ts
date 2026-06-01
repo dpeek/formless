@@ -297,6 +297,44 @@ describe("home view model collections", () => {
     expect(action?.type === "entity-action" ? action.ui.targetCount : undefined).toBeUndefined();
   });
 
+  it("hides generated entity actions that are not exposed to browser actors", () => {
+    const taskHome = appSchema.views.taskHome;
+    const task = appSchema.entities.task;
+
+    if (taskHome?.type !== "collection" || !task) {
+      throw new Error("Missing task home collection view.");
+    }
+
+    const schema = parseAppSchema({
+      ...appSchema,
+      entities: {
+        ...appSchema.entities,
+        task: {
+          ...task,
+          actions: {
+            ...task.actions,
+            runnerApply: {
+              label: "Runner apply",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+              exposure: { actors: ["runner"] },
+            },
+          },
+        },
+      },
+      views: {
+        ...appSchema.views,
+        taskHome: {
+          ...taskHome,
+          actions: [...(taskHome.actions ?? []), { type: "entityAction", action: "runnerApply" }],
+        },
+      },
+    });
+    const model = requiredCollectionModel(schema, "taskHome");
+
+    expect(model.actions.map((action) => action.label)).toEqual(["Create Task", "Clear completed"]);
+  });
+
   it("characterizes the task primary home model contract", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 

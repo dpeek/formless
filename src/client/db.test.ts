@@ -10,6 +10,7 @@ import {
   readCursor,
   readLocalSnapshot,
 } from "./db.ts";
+import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
@@ -18,6 +19,7 @@ import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 beforeEach(async () => {
   await deleteClientDb("tasks");
   await deleteClientDb("estii");
+  await deleteClientDb(instanceControlPlaneClientTarget());
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
 });
@@ -95,6 +97,23 @@ describe("client db", () => {
       records: [],
       cursor: 0,
     });
+  });
+
+  it("stores the instance control-plane replica separately from bundled apps", async () => {
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+
+    await saveBootstrapResponse(controlPlaneTarget, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("install-1", "Personal Site")],
+      cursor: 3,
+    });
+
+    expect(clientDbName(controlPlaneTarget)).toBe("formless:instance:control-plane");
+    expect((await readLocalSnapshot(controlPlaneTarget)).records).toEqual([
+      record("install-1", "Personal Site"),
+    ]);
+    expect((await readLocalSnapshot("tasks")).records).toEqual([]);
   });
 
   it("merges records and advances the cursor", async () => {

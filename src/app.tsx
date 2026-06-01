@@ -40,12 +40,20 @@ import {
 } from "./app/runtime-profile.ts";
 import { fetchInstanceAppInstalls } from "./client/app-installs.ts";
 import { useActiveClientStorageName, useActiveSchemaKey, useSchema } from "./client/store.ts";
-import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./client/app-target.ts";
+import {
+  appStorageIdentityForClientTarget,
+  clientTargetSourceSchemaKey,
+  type ClientAppTarget,
+} from "./client/app-target.ts";
 import type { AppInstall } from "./shared/app-installs.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels } from "./client/views.ts";
 
-type HomeRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey; screenPath: string };
+type HomeRouteProps = {
+  target?: ClientAppTarget;
+  schemaKey: SchemaKey;
+  screenPath: string;
+};
 type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
 type SitePageRouteProps = {
   linkMode?: SitePageLinkMode;
@@ -106,6 +114,9 @@ export function App({
   const routeAppTargetIdentity = routeWorld
     ? appStorageIdentityForClientTarget(routeWorld.target ?? routeWorld.app.key)
     : undefined;
+  const routeAppSchemaKey = routeWorld
+    ? clientTargetSourceSchemaKey(routeWorld.target ?? routeWorld.app.key)
+    : undefined;
   const routeStoreMatchesTarget =
     activeClientStorageName === null ||
     (routeAppTargetIdentity !== undefined &&
@@ -113,7 +124,7 @@ export function App({
   const routeAppSchema =
     routeApp &&
     routeStoreMatchesTarget &&
-    (activeSchemaKey === null || activeSchemaKey === routeAppTargetIdentity?.sourceSchemaKey)
+    (activeSchemaKey === null || activeSchemaKey === routeAppSchemaKey)
       ? activeSchema
       : null;
   const routeAppScreenModels = useMemo(

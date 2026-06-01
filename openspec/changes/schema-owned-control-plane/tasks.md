@@ -106,12 +106,21 @@ Evidence:
 
 ## 7. Generated UI Target Plumbing
 
-- [ ] 7.1 Generalize browser client targets and generated app context so the instance shell can load the runtime-owned `instance:control-plane` schema target without requiring a bundled `SchemaKey`.
-- [ ] 7.2 Render app install management from control-plane schema screens, views, read models, and owner/admin actions in the instance shell.
-- [ ] 7.3 Provide install creation and edit UI with package selection, route-safe install id entry, label editing, immutable identity fields, status display, and generated route summaries.
-- [ ] 7.4 Render app route management with install grouping, route kind, path or prefix, enabled state, surface, package capability, conflict feedback, and read-only derived fields.
-- [ ] 7.5 Add generated UI tests for install editor behavior, route editor validation, hidden non-browser actions, and no-secret browser responses.
-- [ ] 7.6 Smoke visible instance management UI behavior with `bun browser ...`.
+- [x] 7.1 Generalize browser client targets and generated app context so the instance shell can load the runtime-owned `instance:control-plane` schema target without requiring a bundled `SchemaKey`.
+- [x] 7.2 Render app install management from control-plane schema screens, views, read models, and owner/admin actions in the instance shell.
+- [x] 7.3 Provide install creation and edit UI with package selection, route-safe install id entry, label editing, immutable identity fields, status display, and generated route summaries.
+- [x] 7.4 Render app route management with install grouping, route kind, path or prefix, enabled state, surface, package capability, conflict feedback, and read-only derived fields.
+- [x] 7.5 Add generated UI tests for install editor behavior, route editor validation, hidden non-browser actions, and no-secret browser responses.
+- [x] 7.6 Smoke visible instance management UI behavior with `bun browser ...`.
+
+Evidence:
+
+- Files changed: `src/client/app-target.ts`, `src/client/store.ts`, `src/client/broadcast.test.ts`, `src/client/db.test.ts`, `src/client/store.test.ts`, `src/client/sync.test.ts`, `src/client/views.test.ts`, `src/app.tsx`, `src/app/generated/schema-app-context.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, `src/app/routes/instance-shell.tsx`, `src/app/routes/instance-shell.test.tsx`, `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `src/worker/instance-control-plane.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` before implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:20:54.607Z. `devstate check` first caught client target type fallout from widening generated UI targets; after narrowing the app-router component contract and using client target helpers, `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:30:28.171Z. Post-rebase `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:31:28.231Z. Final `devstate check` after evidence update passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:32:10.269Z.
+- Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; `bun browser snapshot -i --max-output 8000` returned the generated control-plane `App installs` and `App routes` tables under Installed apps, with editable route columns and the guided Install action still visible.
+- Decisions: browser client target plumbing now accepts the runtime-owned instance control-plane storage identity without adding it to bundled `SchemaKey`; generated app context can carry `instance-control-plane` only when a concrete control-plane target is provided. The instance shell renders the control-plane Apps screen from schema screens/views while keeping the existing guided install dialog as the owner/admin creation path because generic `appInstall` record creation does not initialize install-scoped app storage. Control-plane table metadata makes install labels, route paths, route prefixes, and enabled state editable while identity, package, storage, surface, and package capability fields remain read-only in generated UI.
+- Rebase note: `changes/schema-owned-control-plane` rebased cleanly on local `main`; the section 7 autostash reapplied without conflicts.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 8. Deployment Action Protocol
 

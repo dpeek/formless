@@ -253,9 +253,14 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/snapshot/restore`,
       secretSnapshot(now),
     );
+    const browserBootstrap = await getJson<BootstrapResponse>(
+      `${controlPlaneApi}/bootstrap?actorKind=owner`,
+    );
 
     expect(providerConfig.response.status).toBe(200);
     expect(providerConfig.body.record.values.secretRef).toBe("secret:cloudflare:primary");
+    expect(JSON.stringify(browserBootstrap.body)).not.toContain("CF_API_TOKEN");
+    expect(JSON.stringify(browserBootstrap.body)).not.toContain("ALCHEMY_PASSWORD");
     expect(rejectedRecord.response.status).toBe(400);
     expect(rejectedRecord.body.error).toBe(
       'Field "deployDesiredResource.inputsJson" cannot store control-plane secret values.',

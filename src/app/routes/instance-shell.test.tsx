@@ -4,7 +4,7 @@ import { listBundledAppPackages, type AppInstall } from "../../shared/app-instal
 import { InstallAppDialogForm, InstanceShellRouteView } from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
-  it("lists installed apps and renders one install button", () => {
+  it("renders generated control-plane app management and one install button", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
@@ -32,10 +32,9 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain("Installed apps");
+    expect(html).toContain('data-formless-control-plane-screen="apps"');
+    expect(html).toContain("Loading Instance control plane");
     expect(html).toContain("Personal Site");
-    expect(html).toContain("<code>personal</code>");
-    expect(html).toContain('href="/apps/personal"');
-    expect(html).toContain('href="/sites/personal"');
     expect(html).toContain("Custom domains");
     expect(html).toContain("No custom domains.");
     expect(html).toContain('aria-haspopup="dialog"');

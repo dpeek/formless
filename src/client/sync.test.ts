@@ -29,6 +29,7 @@ import {
 } from "./sync.ts";
 import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -51,6 +52,7 @@ import {
 beforeEach(async () => {
   await deleteClientDb("tasks");
   await deleteClientDb("estii");
+  await deleteClientDb(instanceControlPlaneClientTarget());
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
   await deleteClientDb(installedTasksIdentity("work"));
@@ -114,6 +116,28 @@ describe("client sync", () => {
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:personal",
       activeSchemaKey: "site",
+    });
+  });
+
+  it("bootstraps the instance control-plane client target through its runtime API", async () => {
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+
+    await bootstrapClient(
+      controlPlaneTarget,
+      jsonFetcher("/api/formless/control-plane/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("install-1", "Personal Site")],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot(controlPlaneTarget)).records).toEqual([
+      record("install-1", "Personal Site"),
+    ]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:instance:control-plane",
+      activeSchemaKey: "instance-control-plane",
     });
   });
 

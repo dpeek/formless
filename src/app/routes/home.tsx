@@ -11,11 +11,14 @@ import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPushSync } from "../../client/sync.ts";
 import {
   appStorageIdentityForClientTarget,
+  clientTargetLabel,
+  clientTargetForSchemaKey,
+  clientTargetSourceSchemaKey,
+  type ClientAppSchemaKey,
   type ClientAppTarget,
 } from "../../client/app-target.ts";
 import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
-import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
@@ -44,11 +47,13 @@ export function HomeRoute({
   screenPath,
 }: {
   target?: ClientAppTarget;
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   screenPath: string;
 }) {
-  const appTarget = target ?? schemaKey;
+  const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
+  const appLabel = clientTargetLabel(appTarget);
+  const appSchemaKey = clientTargetSourceSchemaKey(appTarget);
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
@@ -56,10 +61,8 @@ export function HomeRoute({
     activeClientStorageName === null ||
     activeClientStorageName === appTargetIdentity.browserDatabaseName;
   const routeIsActive =
-    routeStoreMatchesTarget &&
-    (activeSchemaKey === null || activeSchemaKey === appTargetIdentity.sourceSchemaKey);
+    routeStoreMatchesTarget && (activeSchemaKey === null || activeSchemaKey === appSchemaKey);
   const schema = routeIsActive ? activeSchema : null;
-  const app = getSchemaAppDefinition(schemaKey);
   const homeScreen = useMemo(
     () => (schema ? selectScreenModelByPath(schema, screenPath) : undefined),
     [schema, screenPath],
@@ -81,7 +84,7 @@ export function HomeRoute({
     let cancelled = false;
 
     async function startSync() {
-      setSyncStatus({ state: "syncing", message: `Syncing ${app.label}...` });
+      setSyncStatus({ state: "syncing", message: `Syncing ${appLabel}...` });
 
       try {
         await hydrateClientStore(appTarget);
@@ -92,7 +95,9 @@ export function HomeRoute({
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
-        stopPushSync = startPushSync(appTarget);
+        if (appTargetIdentity.kind !== "instanceControlPlane") {
+          stopPushSync = startPushSync(appTarget);
+        }
       } catch (error) {
         if (cancelled) {
           return;
@@ -112,14 +117,14 @@ export function HomeRoute({
       stopBroadcast();
       stopPushSync();
     };
-  }, [app.label, appTargetIdentity.browserDatabaseName]);
+  }, [appLabel, appTargetIdentity.browserDatabaseName, appTargetIdentity.kind]);
 
   if (!schema) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p className="text-sm text-slate-600">
-          <SchemaLoadingMessage appLabel={app.label} />
+          <SchemaLoadingMessage appLabel={appLabel} />
         </p>
       </section>
     );

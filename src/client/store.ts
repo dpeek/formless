@@ -5,6 +5,7 @@ import {
   appStorageIdentityForClientTarget,
   clientTargetSourceSchemaKey,
   clientTargetStorageName,
+  type ClientAppSchemaKey,
   type ClientAppTarget,
 } from "./app-target.ts";
 import {
@@ -26,7 +27,7 @@ import type { AggregateSchema, AppSchema, ComputedValueSchema } from "../shared/
 
 export type NormalizedClientState = {
   activeClientStorageName: string | null;
-  activeSchemaKey: SchemaKey | null;
+  activeSchemaKey: ClientAppSchemaKey | null;
   hydrated: boolean;
   schema: AppSchema | null;
   schemaUpdatedAt: string | null;
@@ -86,7 +87,7 @@ export function selectClientStoreTarget(target: ClientAppTarget) {
     return;
   }
 
-  setState(emptyClientState(identity.sourceSchemaKey, identity.browserDatabaseName));
+  setState(emptyClientState(clientTargetSourceSchemaKey(identity), identity.browserDatabaseName));
 }
 
 export function selectClientStoreSchemaKey(schemaKey: SchemaKey) {
@@ -381,7 +382,7 @@ function applyLocalSnapshot(target: ClientAppTarget, snapshot: LocalSnapshot) {
 }
 
 function emptyClientState(
-  activeSchemaKey: SchemaKey | null,
+  activeSchemaKey: ClientAppSchemaKey | null,
   activeClientStorageName: string | null = null,
 ): NormalizedClientState {
   return {

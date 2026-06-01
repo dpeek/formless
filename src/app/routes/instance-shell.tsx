@@ -20,6 +20,7 @@ import {
   createInstanceAppInstall,
   fetchInstanceAppInstalls,
 } from "../../client/app-installs.ts";
+import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
 import {
   createInstanceDomainMapping,
   deleteInstanceDomainMapping,
@@ -49,6 +50,7 @@ import {
   deploymentStatusDisplaySummary,
   type InstanceDeploymentStatusResponse,
 } from "../../shared/deployment-runtime.ts";
+import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../../shared/instance-control-plane.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderApplyJob,
@@ -62,6 +64,7 @@ import type {
   InstanceDomainMappingAppliedState,
   InstanceDomainMappingProfile,
 } from "../../shared/instance-domain-mappings.ts";
+import { HomeRoute } from "./home.tsx";
 
 export type PackageInstallDraft = {
   installId: string;
@@ -972,37 +975,11 @@ export function InstanceShellRouteView({
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader />
-      <section className="space-y-3" aria-labelledby="installed-apps-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-          <div className="flex items-center gap-2">
-            <h2 id="installed-apps-heading" className="text-sm font-semibold">
-              Installed apps
-            </h2>
-            <span className="text-xs text-muted-fg">{state.installs.length}</span>
-          </div>
-          <Button
-            aria-haspopup="dialog"
-            isDisabled={state.installing || state.packages.length === 0}
-            onPress={() => setInstallDialogOpen(true)}
-            size="sm"
-            type="button"
-          >
-            <AddIcon />
-            Install
-          </Button>
-        </div>
-        {state.installs.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
-            No installed apps.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {state.installs.map((install) => (
-              <InstalledAppRow install={install} key={install.installId} />
-            ))}
-          </div>
-        )}
-      </section>
+      <GeneratedInstanceAppsSection
+        installCount={state.installs.length}
+        installDisabled={state.installing || state.packages.length === 0}
+        onInstall={() => setInstallDialogOpen(true)}
+      />
       <CustomDomainsSection
         draft={
           domainDraft ??
@@ -1038,6 +1015,48 @@ export function InstanceShellRouteView({
         open={installDialogOpen}
         state={state}
       />
+    </section>
+  );
+}
+
+function GeneratedInstanceAppsSection({
+  installCount,
+  installDisabled,
+  onInstall,
+}: {
+  installCount: number;
+  installDisabled: boolean;
+  onInstall: () => void;
+}) {
+  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
+
+  return (
+    <section className="space-y-3" aria-labelledby="installed-apps-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
+        <div className="flex items-center gap-2">
+          <h2 id="installed-apps-heading" className="text-sm font-semibold">
+            Installed apps
+          </h2>
+          <span className="text-xs text-muted-fg">{installCount}</span>
+        </div>
+        <Button
+          aria-haspopup="dialog"
+          isDisabled={installDisabled}
+          onPress={onInstall}
+          size="sm"
+          type="button"
+        >
+          <AddIcon />
+          Install
+        </Button>
+      </div>
+      <div data-formless-control-plane-screen="apps">
+        <HomeRoute
+          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
+          screenPath="/"
+          target={controlPlaneTarget}
+        />
+      </div>
     </section>
   );
 }
@@ -1885,31 +1904,6 @@ function ShellHeader() {
   );
 }
 
-function InstalledAppRow({ install }: { install: AppInstall }) {
-  return (
-    <article className="rounded-md border border-border bg-overlay p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="truncate text-sm font-semibold">{install.label}</h3>
-          <p className="text-xs text-muted-fg">
-            <code>{install.installId}</code> · {install.packageAppKey}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <a className={shellLinkButtonClassName()} href={install.adminRoute}>
-            Open admin
-          </a>
-          {install.publicRoute ? (
-            <a className={shellLinkButtonClassName("outline")} href={install.publicRoute}>
-              Open public
-            </a>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
 export function InstallAppDialog({
   installDrafts = {},
   onDraftChange,
@@ -2417,13 +2411,4 @@ function removeCleanedProviderAppliedResource(
       resource.kind !== target.kind ||
       resource.logicalId !== target.logicalId,
   );
-}
-
-function shellLinkButtonClassName(intent: "solid" | "outline" = "solid") {
-  const base =
-    "inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-medium transition-colors hover:no-underline";
-
-  return intent === "solid"
-    ? `${base} bg-primary text-primary-fg hover:bg-primary/80`
-    : `${base} border border-border text-fg hover:bg-muted`;
 }

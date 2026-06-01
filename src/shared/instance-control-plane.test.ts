@@ -61,6 +61,39 @@ describe("instance control-plane schema contracts", () => {
     });
   });
 
+  it("marks generated install and route editor fields by ownership", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+
+    expect(schema.views.appInstallList?.type === "collection").toBe(true);
+    expect(
+      schema.views.appInstallList?.type === "collection"
+        ? schema.views.appInstallList.actions
+        : undefined,
+    ).toBeUndefined();
+    expect(schema.views.appRouteList?.type === "collection").toBe(true);
+    expect(
+      schema.views.appRouteList?.type === "collection"
+        ? schema.views.appRouteList.actions
+        : undefined,
+    ).toBeUndefined();
+    expect(schema.tableViews.appInstallTable?.columns).toMatchObject([
+      { field: "label", display: "editor" },
+      { field: "installId", display: "readOnly" },
+      { field: "packageAppKey", display: "readOnly" },
+      { field: "status", display: "readOnly" },
+      { field: "storageIdentity", display: "readOnly" },
+    ]);
+    expect(schema.tableViews.appRouteTable?.columns).toMatchObject([
+      { field: "appInstall", display: "readOnly" },
+      { field: "routeKind", display: "readOnly" },
+      { field: "path", display: "editor" },
+      { field: "prefix", display: "editor" },
+      { field: "enabled", display: "editor" },
+      { field: "surface", display: "readOnly" },
+      { field: "packageCapability", display: "readOnly" },
+    ]);
+  });
+
   it("derives default app route records without nesting installed app data", () => {
     const now = "2026-05-28T00:00:00.000Z";
 
