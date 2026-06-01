@@ -149,43 +149,35 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string;
     }
-  | {
-      accountId: string | null;
-      adminToken: string | null;
-      createBucket: boolean;
-      kind: "deploySetup";
-      mediaBucket: string;
-      projectPath: string;
-      publishUrl: string;
-      uploadSecret: boolean;
-      workerName: string;
-    }
-  | { kind: "dev"; projectPath: string }
   | { kind: "help" }
-  | { kind: "init"; targetDir: string }
   | {
       credentialProfile: string | null;
       instanceName: string | null;
       kind: "onboard";
       open: boolean;
     }
-  | { dryRun: boolean; kind: "publish"; projectPath: string; yes: boolean }
-  | { check: boolean; kind: "save"; projectPath: string; source: string | null };
+  | { kind: "workspaceCheck"; targetAlias: string | null; workspacePath: string | null }
+  | {
+      kind: "workspaceDeploy";
+      migrationPolicy: "existing" | "new" | null;
+      targetAlias: string | null;
+      workspacePath: string | null;
+    }
+  | { kind: "workspaceDev"; workspacePath: string | null }
+  | { check: boolean; kind: "workspaceSave"; workspacePath: string | null };
 
 export function formlessCliUsage(): string {
   return [
     "Usage: formless <command>",
     "",
     "Commands:",
-    "  init <dir>                         Create a Formless Site project",
-    "  onboard [options]                  Create a remote Formless instance",
-    "       [--name <name>] [--credential-profile <name>] [--open | --no-open]",
-    "  dev [--project <path>]             Run local public preview and /admin editor",
-    "  save [--project <path>] [--check]   Save local Site edits back to project files",
-    "       [--source <url>]",
-    "  deploy setup [options]              Store deploy config and local admin token",
-    "  publish [--project <path>]          Deploy code, media, and records",
-    "       [--dry-run] [--yes]",
+    "  onboard [--name <name>]             Create a local Formless workspace",
+    "  dev [--workspace <path>]            Run the local Formless workspace instance",
+    "  save [--workspace <path>] [--check] Save local workspace state to archives",
+    "  check [--workspace <path>] [--target <alias>]",
+    "                                      Check workspace source and target drift",
+    "  deploy [--workspace <path>] [--target <alias>]",
+    "       [--migration-policy <new|existing>]",
     "  archive export --target <url> --out <dir>",
     "  archive export-app --target <url> --install <id> --out <dir>",
     "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
@@ -221,18 +213,16 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
   }
 
   switch (command) {
-    case "init":
-      return parseInitArgs(rest);
     case "onboard":
       return parseOnboardArgs(rest);
     case "dev":
-      return parseDevArgs(rest);
+      return parseWorkspaceDevArgs(rest);
     case "save":
-      return parseSaveArgs(rest);
+      return parseWorkspaceSaveArgs(rest);
+    case "check":
+      return parseWorkspaceCheckArgs(rest);
     case "deploy":
-      return parseDeployArgs(rest);
-    case "publish":
-      return parsePublishArgs(rest);
+      return parseWorkspaceDeployArgs(rest);
     case "archive":
       return parseArchiveArgs(rest);
     case "instance":
@@ -254,14 +244,6 @@ export function normalizeSourceUrl(value: string): string {
   }
 }
 
-function parseInitArgs(args: string[]): FormlessCliCommand {
-  if (args.length !== 1 || args[0]?.startsWith("-")) {
-    throw new Error("Usage: formless init <dir>");
-  }
-
-  return { kind: "init", targetDir: args[0] };
-}
-
 function parseOnboardArgs(args: string[]): FormlessCliCommand {
   let credentialProfile: string | null = null;
   let instanceName: string | null = null;
@@ -271,9 +253,7 @@ function parseOnboardArgs(args: string[]): FormlessCliCommand {
     const arg = args[index];
 
     if (arg === "-h" || arg === "--help") {
-      throw new Error(
-        "Usage: formless onboard [--name <name>] [--credential-profile <name>] [--open | --no-open]",
-      );
+      throw new Error("Usage: formless onboard [--name <name>]");
     }
 
     if (arg === "--name") {
@@ -304,20 +284,22 @@ function parseOnboardArgs(args: string[]): FormlessCliCommand {
   return { credentialProfile, instanceName, kind: "onboard", open };
 }
 
-function parseDevArgs(args: string[]): FormlessCliCommand {
-  const options = parseProjectOptions(args, "formless dev");
+function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
+  const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>]");
 
   if (options.rest.length > 0) {
     throw new Error(`Unknown option for formless dev: ${options.rest[0]}`);
   }
 
-  return { kind: "dev", projectPath: options.projectPath };
+  return { kind: "workspaceDev", workspacePath: options.workspacePath };
 }
 
-function parseSaveArgs(args: string[]): FormlessCliCommand {
-  const options = parseProjectOptions(args, "formless save");
+function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
+  const options = parseTopLevelWorkspaceOptions(
+    args,
+    "formless save [--workspace <path>] [--check]",
+  );
   let check = false;
-  let source: string | null = null;
 
   for (let index = 0; index < options.rest.length; index += 1) {
     const arg = options.rest[index];
@@ -327,136 +309,60 @@ function parseSaveArgs(args: string[]): FormlessCliCommand {
       continue;
     }
 
-    if (arg === "--source") {
-      source = normalizeSourceUrl(readOptionValue(options.rest, index, "--source"));
-      index += 1;
-      continue;
-    }
-
     throw new Error(`Unknown option for formless save: ${arg}`);
   }
 
-  return { check, kind: "save", projectPath: options.projectPath, source };
+  return { check, kind: "workspaceSave", workspacePath: options.workspacePath };
 }
 
-function parseDeployArgs(args: string[]): FormlessCliCommand {
-  const [subcommand, ...rest] = args;
+function parseWorkspaceCheckArgs(args: string[]): FormlessCliCommand {
+  const options = parseTopLevelTargetOptions(
+    args,
+    "formless check [--workspace <path>] [--target <alias>]",
+  );
 
-  if (subcommand !== "setup") {
-    throw new Error(
-      "Usage: formless deploy setup [--project <path>] --worker <name> --publish-url <url> --media-bucket <bucket>",
-    );
+  if (options.rest.length > 0) {
+    throw new Error(`Unknown option for formless check: ${options.rest[0]}`);
   }
 
-  return parseDeploySetupArgs(rest);
+  return {
+    kind: "workspaceCheck",
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
 }
 
-function parseDeploySetupArgs(args: string[]): FormlessCliCommand {
-  const options = parseProjectOptions(args, "formless deploy setup");
-  let accountId: string | null = null;
-  let adminToken: string | null = null;
-  let createBucket = false;
-  let mediaBucket: string | null = null;
-  let publishUrl: string | null = null;
-  let uploadSecret = true;
-  let workerName: string | null = null;
+function parseWorkspaceDeployArgs(args: string[]): FormlessCliCommand {
+  const options = parseTopLevelTargetOptions(
+    args,
+    "formless deploy [--workspace <path>] [--target <alias>] [--migration-policy <new|existing>]",
+  );
+  let migrationPolicy: "existing" | "new" | null = null;
 
   for (let index = 0; index < options.rest.length; index += 1) {
     const arg = options.rest[index];
 
-    if (arg === "--worker") {
-      workerName = readOptionValue(options.rest, index, "--worker");
+    if (arg === "--migration-policy") {
+      const value = readOptionValue(options.rest, index, "--migration-policy");
+
+      if (value !== "existing" && value !== "new") {
+        throw new Error('formless deploy --migration-policy must be "new" or "existing".');
+      }
+
+      migrationPolicy = value;
       index += 1;
       continue;
     }
 
-    if (arg === "--publish-url") {
-      publishUrl = normalizeSourceUrl(readOptionValue(options.rest, index, "--publish-url"));
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--media-bucket") {
-      mediaBucket = readOptionValue(options.rest, index, "--media-bucket");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--account-id") {
-      accountId = readOptionValue(options.rest, index, "--account-id");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--admin-token") {
-      adminToken = readOptionValue(options.rest, index, "--admin-token");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--generate-admin-token") {
-      adminToken = null;
-      continue;
-    }
-
-    if (arg === "--create-bucket") {
-      createBucket = true;
-      continue;
-    }
-
-    if (arg === "--skip-secret-upload") {
-      uploadSecret = false;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless deploy setup: ${arg}`);
-  }
-
-  if (!workerName) {
-    throw new Error("Missing required option for formless deploy setup: --worker.");
-  }
-
-  if (!publishUrl) {
-    throw new Error("Missing required option for formless deploy setup: --publish-url.");
-  }
-
-  if (!mediaBucket) {
-    throw new Error("Missing required option for formless deploy setup: --media-bucket.");
+    throw new Error(`Unknown option for formless deploy: ${arg}`);
   }
 
   return {
-    accountId,
-    adminToken,
-    createBucket,
-    kind: "deploySetup",
-    mediaBucket,
-    projectPath: options.projectPath,
-    publishUrl,
-    uploadSecret,
-    workerName,
+    kind: "workspaceDeploy",
+    migrationPolicy,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
   };
-}
-
-function parsePublishArgs(args: string[]): FormlessCliCommand {
-  const options = parseProjectOptions(args, "formless publish");
-  let dryRun = false;
-  let yes = false;
-
-  for (const arg of options.rest) {
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-
-    if (arg === "--yes" || arg === "-y") {
-      yes = true;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless publish: ${arg}`);
-  }
-
-  return { dryRun, kind: "publish", projectPath: options.projectPath, yes };
 }
 
 function parseArchiveArgs(args: string[]): FormlessCliCommand {
@@ -1350,6 +1256,55 @@ function parseInstanceTargetOptions(
   }
 
   return { rest, targetAlias, workspacePath: options.workspacePath };
+}
+
+function parseTopLevelTargetOptions(
+  args: string[],
+  usage: string,
+): { rest: string[]; targetAlias: string | null; workspacePath: string | null } {
+  const options = parseTopLevelWorkspaceOptions(args, usage);
+  let targetAlias: string | null = null;
+  const rest: string[] = [];
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--target") {
+      targetAlias = parseCliTargetAlias(readOptionValue(options.rest, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    rest.push(arg);
+  }
+
+  return { rest, targetAlias, workspacePath: options.workspacePath };
+}
+
+function parseTopLevelWorkspaceOptions(
+  args: string[],
+  usage: string,
+): { rest: string[]; workspacePath: string | null } {
+  let workspacePath: string | null = null;
+  const rest: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--workspace") {
+      workspacePath = readOptionValue(args, index, "--workspace");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "-h" || arg === "--help") {
+      throw new Error(`Usage: ${usage}`);
+    }
+
+    rest.push(arg);
+  }
+
+  return { rest, workspacePath };
 }
 
 function parseInstanceWorkspaceOptions(

@@ -30,12 +30,19 @@ Evidence:
 
 ## 3. Top-Level Workspace Commands
 
-- [ ] 3.1 Update CLI usage and argument parsing around the local-first command sequence.
-- [ ] 3.2 Route top-level `formless dev` to workspace-local instance dev selected by `formless.json`.
-- [ ] 3.3 Route top-level `formless check` to workspace source and remote drift checks when a target exists.
-- [ ] 3.4 Preserve advanced `formless instance ...` command behavior against the renamed manifest.
-- [ ] 3.5 Ensure empty workspace dev starts an empty product instance and does not require archives before the first local web app install.
-- [ ] 3.6 Update command parser and CLI tests for removed standalone Site project command shapes.
+- [x] 3.1 Update CLI usage and argument parsing around the local-first command sequence.
+- [x] 3.2 Route top-level `formless dev` to workspace-local instance dev selected by `formless.json`.
+- [x] 3.3 Route top-level `formless check` to workspace source and remote drift checks when a target exists.
+- [x] 3.4 Preserve advanced `formless instance ...` command behavior against the renamed manifest.
+- [x] 3.5 Ensure empty workspace dev starts an empty product instance and does not require archives before the first local web app install.
+- [x] 3.6 Update command parser and CLI tests for removed standalone Site project command shapes.
+
+Evidence:
+
+- Files changed: `src/site/cli-command.ts`, `src/site/cli.ts`, `src/site/instance-workspace.ts`, `src/site/cli.test.ts`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: `bun browser --ignore-https-errors open https://local-first-onboarding.formless.local` and `bun browser snapshot --compact --depth 3` passed; snapshot showed runtime shell navigation for App management, Tasks, Estii, and Site.
+- Notes: top-level `formless save` now parses as a workspace command but still blocks with the OpenSpec task 4 implementation message; top-level `formless deploy` routes to existing claimed-workspace deploy behavior until task 5 adds first deploy planning.
 
 ## 4. Workspace Save Source
 

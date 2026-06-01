@@ -59,12 +59,14 @@ import {
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
   applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
+  checkLocalFormlessWorkspace as checkLocalFormlessWorkspaceCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initLocalFormlessWorkspaceOnboarding as initLocalFormlessWorkspaceOnboardingCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   planFormlessInstanceWorkspaceDomains as planFormlessInstanceWorkspaceDomainsCommand,
+  resolveFormlessInstanceWorkspaceRoot as resolveFormlessInstanceWorkspaceRootCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
   runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
@@ -74,6 +76,7 @@ import {
   type ApplyFormlessInstanceWorkspaceDomainsInput,
   type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
+  type CheckLocalFormlessWorkspaceResult,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceDevCommand,
@@ -94,11 +97,8 @@ import {
   readFormlessInstanceDomainProviderPlan,
 } from "./instance-target-client.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
-import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
-import { runSiteProjectDev } from "./project-dev.ts";
 import {
-  isSiteProjectPublishConfigured,
   publishSiteProject as publishSiteProjectCommand,
   setupSiteProjectDeploy as setupSiteProjectDeployCommand,
   startSiteProjectLocalPublishBroker as startSiteProjectLocalPublishBrokerCommand,
@@ -111,7 +111,6 @@ import {
 } from "./project-save.ts";
 import { formatCliUpgradePlanningReport } from "./upgrade-plan.ts";
 import { type SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
-import { SITE_PROJECT_GITIGNORE_ENTRY } from "./project-state.ts";
 import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
@@ -207,6 +206,7 @@ export {
   type WriteFormlessInstanceWorkspaceSecretStateResult,
 } from "./instance-workspace-secrets.ts";
 export {
+  checkLocalFormlessWorkspace,
   discoverFormlessInstanceWorkspaceRoot,
   formlessInstanceWorkspaceDevEnv,
   formlessInstanceWorkspaceLocalStateRoot,
@@ -221,6 +221,8 @@ export {
   type CheckFormlessInstanceWorkspaceDependencies,
   type CheckFormlessInstanceWorkspaceInput,
   type CheckFormlessInstanceWorkspaceResult,
+  type CheckLocalFormlessWorkspaceInput,
+  type CheckLocalFormlessWorkspaceResult,
   type DeployFormlessInstanceWorkspaceDependencies,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
@@ -391,11 +393,19 @@ export type FormlessCliDependencies = {
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
-const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
-
 export type InitSiteProjectResult = InitSiteProjectSourceResult;
 
 export type OnboardFormlessInstanceResult = InitFormlessInstanceWorkspaceResult;
+
+async function resolveTopLevelFormlessWorkspacePath(
+  input: { workspacePath?: string | null },
+  dependencies: Pick<FormlessCliDependencies, "cwd">,
+): Promise<string> {
+  return resolveFormlessInstanceWorkspaceRootCommand({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+}
 
 export async function runFormlessCli(
   args: string[],
@@ -407,57 +417,42 @@ export async function runFormlessCli(
     case "help":
       dependencies.log(formlessCliUsage());
       return;
-    case "init": {
-      const result = await initSiteProject(command, dependencies);
-      dependencies.log(
-        [
-          `Created Formless Site project at ${result.projectRoot}.`,
-          `Wrote ${path.basename(result.configPath)}, ${path.basename(result.recordsPath)}, and ${result.mediaCount} media files.`,
-          "",
-          "Next:",
-          `  cd ${path.relative(dependencies.cwd, result.projectRoot) || "."}`,
-          "  npx formless dev",
-        ].join("\n"),
-      );
-      return;
-    }
     case "onboard": {
       const result = await onboardFormlessInstance(command, dependencies);
       dependencies.log(formatFormlessOnboardingResult(result, dependencies.cwd));
       return;
     }
-    case "dev":
-      await runSiteProjectDev(command, dependencies, {
-        devCommand: packageRunScriptCommand("dev", dependencies.env),
-        isPublishConfigured: (project) => isSiteProjectPublishConfigured(project, dependencies),
-        startLocalPublishBroker: (input) => startSiteProjectLocalPublishBroker(input, dependencies),
-      });
-      return;
-    case "deploySetup": {
-      const result = await setupSiteProjectDeploy(command, dependencies);
-      dependencies.log(
-        [
-          `Configured Site deploy for ${result.projectRoot}.`,
-          `Wrote ${path.relative(result.projectRoot, result.configPath)} and ${path.relative(result.projectRoot, result.envPath)}.`,
-          `Ensured ${path.relative(result.projectRoot, result.gitignorePath)} ignores ${projectStateGitignoreEntry}.`,
-          result.bucketCreated ? "Verified or created the configured R2 bucket." : null,
-          result.secretUploaded ? "Uploaded the admin token as a Worker secret." : null,
-          "",
-          "Next:",
-          "  npx formless publish --yes",
-        ]
-          .filter((line): line is string => line !== null)
-          .join("\n"),
+    case "workspaceDev": {
+      await runFormlessInstanceWorkspaceDev(
+        {
+          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+        },
+        dependencies,
+        {
+          devCommand: packageRunScriptCommand("dev", dependencies.env),
+        },
       );
       return;
     }
-    case "publish": {
-      const result = await publishSiteProject(command, dependencies);
-      dependencies.log(
-        result.mode === "dry-run"
-          ? `Site project publish dry run: ${result.sourceRecordCount} records for ${result.target}.`
-          : `Site project published: ${result.sourceRecordCount} records to ${result.target}. Backup: ${result.backupPath}.`,
+    case "workspaceCheck": {
+      const result = await checkLocalFormlessWorkspaceCommand(command, dependencies);
+      dependencies.log(formatLocalFormlessWorkspaceCheckResult(result, dependencies.cwd));
+      return;
+    }
+    case "workspaceSave":
+      throw new Error(
+        "formless save for local workspaces is not implemented yet; workspace save is tracked by OpenSpec task 4.",
       );
+    case "workspaceDeploy": {
+      const result = await deployFormlessInstanceWorkspace(
+        {
+          migrationPolicy: command.migrationPolicy,
+          targetAlias: command.targetAlias,
+          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+        },
+        dependencies,
+      );
+      dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
       return;
     }
     case "archiveExport": {
@@ -609,15 +604,6 @@ export async function runFormlessCli(
         dependencies,
       );
       dependencies.log(formatInstanceDomainProviderManualCleanupResult(result, dependencies.cwd));
-      return;
-    }
-    case "save": {
-      const result = await saveSiteProject(command, dependencies);
-      dependencies.log(
-        result.mode === "check"
-          ? `Site project source is current: ${result.recordCount} records and ${result.mediaCount} media files from ${result.source}.`
-          : `Wrote ${SITE_PROJECT_RECORDS_FILE}: ${result.recordCount} records and ${result.mediaCount} media files from ${result.source}.`,
-      );
       return;
     }
   }
@@ -1551,6 +1537,26 @@ function formatInstanceWorkspaceCheckResult(
     `Changed media: ${formatList(drift.changedMedia)}.`,
     `Changed domain mappings: ${formatDomainDesiredDrift(drift.domainDesiredDrift)}.`,
     `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
+  ].join("\n");
+}
+
+function formatLocalFormlessWorkspaceCheckResult(
+  result: CheckLocalFormlessWorkspaceResult,
+  cwd: string,
+): string {
+  if (result.mode === "remote") {
+    return formatInstanceWorkspaceCheckResult(result.remote, cwd);
+  }
+
+  return [
+    "Formless workspace check.",
+    `Workspace: ${formatCliPath(cwd, path.dirname(result.manifestPath))}.`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    "Target: none.",
+    "Remote drift: skipped.",
+    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
+    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
+    `Archives: ${result.manifest.archives.instance}, ${result.manifest.archives.apps}.`,
   ].join("\n");
 }
 

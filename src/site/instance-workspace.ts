@@ -182,6 +182,11 @@ export type CheckFormlessInstanceWorkspaceInput = {
   workspacePath?: string;
 };
 
+export type CheckLocalFormlessWorkspaceInput = {
+  targetAlias?: string | null;
+  workspacePath?: string | null;
+};
+
 export type CheckFormlessInstanceWorkspaceDependencies = {
   cwd: string;
   fetch: typeof fetch;
@@ -223,6 +228,18 @@ export type CheckFormlessInstanceWorkspaceResult = {
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
+
+export type CheckLocalFormlessWorkspaceResult =
+  | {
+      manifest: FormlessInstanceWorkspaceManifest;
+      manifestPath: string;
+      mode: "local";
+      workspaceRoot: string;
+    }
+  | {
+      mode: "remote";
+      remote: CheckFormlessInstanceWorkspaceResult;
+    };
 
 export type PushFormlessInstanceWorkspaceInput = {
   allowStale?: boolean;
@@ -684,6 +701,38 @@ export async function checkFormlessInstanceWorkspace(
   }
 }
 
+export async function checkLocalFormlessWorkspace(
+  input: CheckLocalFormlessWorkspaceInput,
+  dependencies: CheckFormlessInstanceWorkspaceDependencies,
+): Promise<CheckLocalFormlessWorkspaceResult> {
+  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+
+  if (!selectedTarget) {
+    return {
+      manifest,
+      manifestPath,
+      mode: "local",
+      workspaceRoot,
+    };
+  }
+
+  return {
+    mode: "remote",
+    remote: await checkFormlessInstanceWorkspace(
+      {
+        targetAlias: input.targetAlias,
+        workspacePath: workspaceRoot,
+      },
+      dependencies,
+    ),
+  };
+}
+
 export async function pushFormlessInstanceWorkspace(
   input: PushFormlessInstanceWorkspaceInput,
   dependencies: PushFormlessInstanceWorkspaceDependencies,
@@ -867,10 +916,12 @@ export async function runFormlessInstanceWorkspaceDev(
       dependencies.log(
         `Workspace archive restored: ${bootstrap.sourceKind} (${bootstrap.appCount} apps, ${bootstrap.recordCount} records, ${bootstrap.mediaCount} media).`,
       );
-    } else {
+    } else if (bootstrap.status === "existing") {
       dependencies.log(
         `Workspace archive restore skipped: local installs already exist (${bootstrap.installIds.join(", ") || "none"}).`,
       );
+    } else {
+      dependencies.log("Workspace archive restore skipped: no workspace archives declared.");
     }
 
     await waitForChildExit(child);
@@ -1215,6 +1266,9 @@ type WorkspaceLocalBootstrapResult =
       status: "restored";
     }
   | {
+      status: "empty";
+    }
+  | {
       installIds: string[];
       status: "existing";
     };
@@ -1259,6 +1313,11 @@ async function bootstrapWorkspaceLocalInstance(
       tempRoot,
       workspaceRoot: input.workspaceRoot,
     });
+
+    if (!sourceArchive) {
+      return { status: "empty" };
+    }
+
     const restore = await restorePortableArchive(
       {
         adminToken: null,
@@ -1298,7 +1357,7 @@ async function workspaceLocalRestoreArchiveSource(input: {
   manifest: FormlessInstanceWorkspaceManifest;
   tempRoot: string;
   workspaceRoot: string;
-}): Promise<WorkspaceLocalRestoreArchiveSource> {
+}): Promise<WorkspaceLocalRestoreArchiveSource | undefined> {
   const appArchives = await readCompleteWorkspaceAppArchives(input.workspaceRoot, input.manifest);
 
   if (appArchives) {
@@ -1335,6 +1394,10 @@ async function workspaceLocalRestoreArchiveSource(input: {
   const instanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
 
   if (!instanceArchive) {
+    if (input.manifest.apps.length === 0) {
+      return undefined;
+    }
+
     throw new Error(
       "Formless instance local dev requires workspace archives. Run `formless instance pull` first or add declared app archives.",
     );

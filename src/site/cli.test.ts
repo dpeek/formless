@@ -95,15 +95,13 @@ describe("Formless Site CLI", () => {
       "Usage: formless <command>",
       "",
       "Commands:",
-      "  init <dir>                         Create a Formless Site project",
-      "  onboard [options]                  Create a remote Formless instance",
-      "       [--name <name>] [--credential-profile <name>] [--open | --no-open]",
-      "  dev [--project <path>]             Run local public preview and /admin editor",
-      "  save [--project <path>] [--check]   Save local Site edits back to project files",
-      "       [--source <url>]",
-      "  deploy setup [options]              Store deploy config and local admin token",
-      "  publish [--project <path>]          Deploy code, media, and records",
-      "       [--dry-run] [--yes]",
+      "  onboard [--name <name>]             Create a local Formless workspace",
+      "  dev [--workspace <path>]            Run the local Formless workspace instance",
+      "  save [--workspace <path>] [--check] Save local workspace state to archives",
+      "  check [--workspace <path>] [--target <alias>]",
+      "                                      Check workspace source and target drift",
+      "  deploy [--workspace <path>] [--target <alias>]",
+      "       [--migration-policy <new|existing>]",
       "  archive export --target <url> --out <dir>",
       "  archive export-app --target <url> --install <id> --out <dir>",
       "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
@@ -142,32 +140,42 @@ describe("Formless Site CLI", () => {
     expect(logs).toEqual([usage]);
   });
 
-  it("parses init, dev, and save commands", () => {
-    expect(parseFormlessCliArgs(["init", "my-site"])).toEqual({
-      kind: "init",
-      targetDir: "my-site",
+  it("parses top-level workspace command shortcuts", () => {
+    expect(parseFormlessCliArgs(["dev"])).toEqual({
+      kind: "workspaceDev",
+      workspacePath: null,
     });
-    expect(parseFormlessCliArgs(["dev", "--project", "../site"])).toEqual({
-      kind: "dev",
-      projectPath: "../site",
+    expect(parseFormlessCliArgs(["dev", "--workspace", "../personal"])).toEqual({
+      kind: "workspaceDev",
+      workspacePath: "../personal",
+    });
+    expect(parseFormlessCliArgs(["check", "--target", "remote"])).toEqual({
+      kind: "workspaceCheck",
+      targetAlias: "remote",
+      workspacePath: null,
+    });
+    expect(parseFormlessCliArgs(["save", "--workspace", "../personal", "--check"])).toEqual({
+      check: true,
+      kind: "workspaceSave",
+      workspacePath: "../personal",
     });
     expect(
       parseFormlessCliArgs([
-        "save",
-        "--project",
-        "../site",
-        "--check",
-        "--source",
-        "https://example.com/?draft=1#top",
+        "deploy",
+        "--workspace",
+        "../personal",
+        "--target",
+        "remote",
+        "--migration-policy",
+        "existing",
       ]),
     ).toEqual({
-      check: true,
-      kind: "save",
-      projectPath: "../site",
-      source: "https://example.com",
+      kind: "workspaceDeploy",
+      migrationPolicy: "existing",
+      targetAlias: "remote",
+      workspacePath: "../personal",
     });
     expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
-    expect(() => parseFormlessCliArgs(["save", "--source"])).toThrow("Missing value for --source.");
   });
 
   it("parses onboard command defaults, options, and browser-open flags", () => {
@@ -200,18 +208,18 @@ describe("Formless Site CLI", () => {
     });
   });
 
-  it("keeps default project, deploy setup, and publish flags stable", () => {
-    expect(parseFormlessCliArgs(["dev"])).toEqual({
-      kind: "dev",
-      projectPath: ".",
-    });
-    expect(parseFormlessCliArgs(["save"])).toEqual({
-      check: false,
-      kind: "save",
-      projectPath: ".",
-      source: null,
-    });
-    expect(
+  it("rejects removed standalone Site project command shapes", () => {
+    expect(() => parseFormlessCliArgs(["init", "my-site"])).toThrow("Unknown command: init");
+    expect(() => parseFormlessCliArgs(["dev", "--project", "../site"])).toThrow(
+      "Unknown option for formless dev: --project",
+    );
+    expect(() => parseFormlessCliArgs(["save", "--project", "../site"])).toThrow(
+      "Unknown option for formless save: --project",
+    );
+    expect(() => parseFormlessCliArgs(["save", "--source", "https://example.com"])).toThrow(
+      "Unknown option for formless save: --source",
+    );
+    expect(() =>
       parseFormlessCliArgs([
         "deploy",
         "setup",
@@ -222,48 +230,28 @@ describe("Formless Site CLI", () => {
         "--media-bucket",
         "brother-site-media",
       ]),
-    ).toEqual({
-      accountId: null,
-      adminToken: null,
-      createBucket: false,
-      kind: "deploySetup",
-      mediaBucket: "brother-site-media",
-      projectPath: ".",
-      publishUrl: "https://live.example",
-      uploadSecret: true,
-      workerName: "brother-site",
-    });
-    expect(parseFormlessCliArgs(["publish"])).toEqual({
-      dryRun: false,
-      kind: "publish",
-      projectPath: ".",
-      yes: false,
-    });
-    expect(parseFormlessCliArgs(["publish", "-y"])).toEqual({
-      dryRun: false,
-      kind: "publish",
-      projectPath: ".",
-      yes: true,
-    });
+    ).toThrow("Unknown option for formless deploy: setup");
+    expect(() => parseFormlessCliArgs(["publish"])).toThrow("Unknown command: publish");
+    expect(() => parseFormlessCliArgs(["publish", "-y"])).toThrow("Unknown command: publish");
   });
 
   it("keeps CLI parse error messages stable", () => {
     expect(() => parseFormlessCliArgs(["unknown"])).toThrow("Unknown command: unknown");
-    expect(() => parseFormlessCliArgs(["init"])).toThrow("Usage: formless init <dir>");
+    expect(() => parseFormlessCliArgs(["init"])).toThrow("Unknown command: init");
     expect(() => parseFormlessCliArgs(["dev", "--help"])).toThrow(
-      "Usage: formless dev [--project <path>]",
+      "Usage: formless dev [--workspace <path>]",
     );
     expect(() => parseFormlessCliArgs(["dev", "--verbose"])).toThrow(
       "Unknown option for formless dev: --verbose",
     );
-    expect(() => parseFormlessCliArgs(["save", "--project"])).toThrow(
-      "Missing value for --project.",
+    expect(() => parseFormlessCliArgs(["save", "--workspace"])).toThrow(
+      "Missing value for --workspace.",
     );
     expect(() => parseFormlessCliArgs(["save", "--force"])).toThrow(
       "Unknown option for formless save: --force",
     );
     expect(() => parseFormlessCliArgs(["onboard", "--help"])).toThrow(
-      "Usage: formless onboard [--name <name>] [--credential-profile <name>] [--open | --no-open]",
+      "Usage: formless onboard [--name <name>]",
     );
     expect(() => parseFormlessCliArgs(["onboard", "--name"])).toThrow("Missing value for --name.");
     expect(() => parseFormlessCliArgs(["onboard", "--credential-profile"])).toThrow(
@@ -272,86 +260,27 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["onboard", "--bogus"])).toThrow(
       "Unknown option for formless onboard: --bogus",
     );
-    expect(() => parseFormlessCliArgs(["deploy"])).toThrow(
-      "Usage: formless deploy setup [--project <path>] --worker <name> --publish-url <url> --media-bucket <bucket>",
+    expect(() => parseFormlessCliArgs(["check", "--target", "Remote"])).toThrow(
+      "Formless instance workspace target alias must start with a lowercase letter",
     );
-    expect(() =>
-      parseFormlessCliArgs([
-        "deploy",
-        "setup",
-        "--publish-url",
-        "https://live.example",
-        "--media-bucket",
-        "brother-site-media",
-      ]),
-    ).toThrow("Missing required option for formless deploy setup: --worker.");
-    expect(() =>
-      parseFormlessCliArgs([
-        "deploy",
-        "setup",
-        "--worker",
-        "brother-site",
-        "--media-bucket",
-        "brother-site-media",
-      ]),
-    ).toThrow("Missing required option for formless deploy setup: --publish-url.");
-    expect(() =>
-      parseFormlessCliArgs([
-        "deploy",
-        "setup",
-        "--worker",
-        "brother-site",
-        "--publish-url",
-        "https://live.example",
-      ]),
-    ).toThrow("Missing required option for formless deploy setup: --media-bucket.");
-    expect(() => parseFormlessCliArgs(["deploy", "setup", "--bogus"])).toThrow(
-      "Unknown option for formless deploy setup: --bogus",
+    expect(() => parseFormlessCliArgs(["deploy", "--migration-policy", "auto"])).toThrow(
+      'formless deploy --migration-policy must be "new" or "existing".',
     );
-    expect(() => parseFormlessCliArgs(["publish", "--force"])).toThrow(
-      "Unknown option for formless publish: --force",
-    );
+    expect(() => parseFormlessCliArgs(["publish", "--force"])).toThrow("Unknown command: publish");
   });
 
-  it("parses deploy setup and publish commands", () => {
-    expect(
-      parseFormlessCliArgs([
-        "deploy",
-        "setup",
-        "--project",
-        "../site",
-        "--worker",
-        "brother-site",
-        "--publish-url",
-        "https://live.example/?draft=1",
-        "--media-bucket",
-        "brother-site-media",
-        "--account-id",
-        "account-123",
-        "--admin-token",
-        "admin-secret",
-        "--create-bucket",
-        "--skip-secret-upload",
-      ]),
-    ).toEqual({
-      accountId: "account-123",
-      adminToken: "admin-secret",
-      createBucket: true,
-      kind: "deploySetup",
-      mediaBucket: "brother-site-media",
-      projectPath: "../site",
-      publishUrl: "https://live.example",
-      uploadSecret: false,
-      workerName: "brother-site",
+  it("parses local-first save and deploy defaults", () => {
+    expect(parseFormlessCliArgs(["save"])).toEqual({
+      check: false,
+      kind: "workspaceSave",
+      workspacePath: null,
     });
-    expect(parseFormlessCliArgs(["publish", "--project", "../site", "--dry-run", "--yes"])).toEqual(
-      {
-        dryRun: true,
-        kind: "publish",
-        projectPath: "../site",
-        yes: true,
-      },
-    );
+    expect(parseFormlessCliArgs(["deploy"])).toEqual({
+      kind: "workspaceDeploy",
+      migrationPolicy: null,
+      targetAlias: null,
+      workspacePath: null,
+    });
   });
 
   it("parses archive commands", () => {
@@ -1205,7 +1134,7 @@ describe("Formless Site CLI", () => {
     await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localApp);
 
     await runFormlessCli(
-      ["instance", "check", "--workspace", workspaceRoot],
+      ["check", "--workspace", workspaceRoot],
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
@@ -1227,6 +1156,47 @@ describe("Formless Site CLI", () => {
         "Changed media: none.",
         "Changed domain mappings: none.",
         "Changed archive paths: none.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("checks a local-first workspace without remote drift when no target exists", async () => {
+    const workspaceRoot = await makeTempDir();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+
+    await runFormlessCli(["onboard", "--name", "empty-workspace"], cliDeps(workspaceRoot));
+    await runFormlessCli(
+      ["check", "--workspace", "."],
+      cliDeps(workspaceRoot, {
+        fetch: async (url, init) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+
+          requests.push({
+            body: init?.body,
+            headers: normalizeHeaders(init?.headers),
+            method: init?.method ?? "GET",
+            url: requestUrl,
+          });
+
+          return Response.json({ error: "unexpected" }, { status: 500 });
+        },
+        logs,
+      }),
+    );
+
+    expect(requests).toEqual([]);
+    expect(logs).toEqual([
+      [
+        "Formless workspace check.",
+        "Workspace: ..",
+        "Manifest: formless.json.",
+        "Target: none.",
+        "Remote drift: skipped.",
+        "Default app policy: none.",
+        "Local apps: none.",
+        "Archives: archives/instance, archives/apps.",
       ].join("\n"),
     ]);
   });
@@ -3102,6 +3072,69 @@ describe("Formless Site CLI", () => {
     expect(child.killed).toBe(false);
   });
 
+  it("runs top-level workspace dev from the nearest manifest with empty local state", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const nestedRoot = path.join(workspaceRoot, "src", "site");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const onboardLogs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+
+    await mkdir(workspaceRoot, { recursive: true });
+    await runFormlessCli(
+      ["onboard", "--name", "personal-sites"],
+      cliDeps(workspaceRoot, { logs: onboardLogs }),
+    );
+    await mkdir(nestedRoot, { recursive: true });
+
+    const run = runFormlessCli(
+      ["dev"],
+      cliDeps(nestedRoot, {
+        env: { PORT: "4446" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some(
+        (line) => line === "Workspace archive restore skipped: no workspace archives declared.",
+      ),
+    );
+    child.close(0);
+    await run;
+
+    expect(spawnCalls[0]?.env).toMatchObject({
+      FORMLESS_LAUNCH_FIXTURE: "empty",
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
+      PORT: "4446",
+      VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+    });
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4446/api/formless/app-installs",
+      "GET http://localhost:4446/api/formless/app-installs",
+    ]);
+    expect(logs).toEqual([
+      "Instance shell: http://localhost:4446/",
+      `Local state: ${path.relative(nestedRoot, path.join(workspaceRoot, ".formless/local"))}.`,
+      "Workspace archive restore skipped: no workspace archives declared.",
+    ]);
+  });
+
   it("keeps existing workspace-local installs on instance dev rerun", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -4437,8 +4470,8 @@ describe("Formless Site CLI", () => {
       ],
     });
 
-    await runFormlessCli(
-      ["publish", "--project", projectRoot, "--dry-run"],
+    const result = await publishSiteProject(
+      { dryRun: true, projectPath: projectRoot },
       cliDeps(tempDir, {
         commands,
         fetch: responses.fetcher(requests),
@@ -4458,9 +4491,11 @@ describe("Formless Site CLI", () => {
     expect(logs.some((log) => log.includes(`packageVersion=0.1.7->${packageJson.version}`))).toBe(
       true,
     );
-    expect(logs.at(-1)).toBe(
-      `Site project publish dry run: ${publishRecords().length} records for https://live.example.`,
-    );
+    expect(result).toMatchObject({
+      mode: "dry-run",
+      sourceRecordCount: publishRecords().length,
+      target: "https://live.example",
+    });
   });
 
   it("stops Site project publish dry-run on upgrade metadata verification failure", async () => {
@@ -4501,8 +4536,8 @@ describe("Formless Site CLI", () => {
     });
 
     await expect(
-      runFormlessCli(
-        ["publish", "--project", projectRoot, "--dry-run"],
+      publishSiteProject(
+        { dryRun: true, projectPath: projectRoot },
         cliDeps(tempDir, {
           commands,
           fetch: responses.fetcher(requests),
