@@ -5,6 +5,7 @@ import {
 import type { AppInstall } from "../shared/app-installs.ts";
 import {
   APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX,
+  INSTANCE_UPGRADE_APPLY_API_PATH,
   INSTANCE_UPGRADE_STATUS_API_PATH,
   type InstanceUpgradeStatusResponse,
   type UpgradeStorageIdentityStatus,
@@ -27,7 +28,7 @@ export async function handleInstanceUpgradeStatusApiRequest(
   request: Request,
   env: InstanceUpgradeStatusApiEnv,
 ): Promise<Response | undefined> {
-  if (new URL(request.url).pathname !== INSTANCE_UPGRADE_STATUS_API_PATH) {
+  if (!isInstanceUpgradeApiPath(new URL(request.url).pathname)) {
     return undefined;
   }
 
@@ -41,13 +42,19 @@ export async function handleInstanceUpgradeStatusDurableObjectRequest(
   storage: DurableObjectStorage,
   env: InstanceUpgradeStatusApiEnv,
 ): Promise<Response | undefined> {
-  if (new URL(request.url).pathname !== INSTANCE_UPGRADE_STATUS_API_PATH) {
+  const pathname = new URL(request.url).pathname;
+
+  if (!isInstanceUpgradeApiPath(pathname)) {
     return undefined;
   }
 
   try {
-    if (request.method !== "GET") {
+    if (pathname === INSTANCE_UPGRADE_STATUS_API_PATH && request.method !== "GET") {
       return methodNotAllowedResponse("GET");
+    }
+
+    if (pathname === INSTANCE_UPGRADE_APPLY_API_PATH && request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
     }
 
     const authorization = await authorizeInstanceWrite(request, env);
@@ -60,17 +67,7 @@ export async function handleInstanceUpgradeStatusDurableObjectRequest(
       );
     }
 
-    const installs = readInstanceAppInstalls(storage);
-    const response: InstanceUpgradeStatusResponse = {
-      storageIdentities: [
-        instanceStorageUpgradeStatus(storage),
-        ...(await Promise.all(
-          installs.map((install) => readInstalledAppStorageUpgradeStatus(request, env, install)),
-        )),
-      ],
-    };
-
-    return jsonResponse(response);
+    return jsonResponse(await instanceUpgradeStatusResponse(request, storage, env));
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
@@ -183,6 +180,29 @@ async function readInstalledAppStorageUpgradeStatus(
   }
 
   return body as UpgradeStorageIdentityStatus;
+}
+
+async function instanceUpgradeStatusResponse(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceUpgradeStatusApiEnv,
+): Promise<InstanceUpgradeStatusResponse> {
+  const installs = readInstanceAppInstalls(storage);
+
+  return {
+    storageIdentities: [
+      instanceStorageUpgradeStatus(storage),
+      ...(await Promise.all(
+        installs.map((install) => readInstalledAppStorageUpgradeStatus(request, env, install)),
+      )),
+    ],
+  };
+}
+
+function isInstanceUpgradeApiPath(pathname: string): boolean {
+  return (
+    pathname === INSTANCE_UPGRADE_STATUS_API_PATH || pathname === INSTANCE_UPGRADE_APPLY_API_PATH
+  );
 }
 
 function methodNotAllowedResponse(allow: string): Response {

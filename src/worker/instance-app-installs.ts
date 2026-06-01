@@ -238,6 +238,7 @@ async function applyInstalledAppPackageMigrations(
   sourceSchemaHash: SourceSchemaHash;
 }> {
   const requestUrl = new URL(request.url);
+  const requestBody = await readOptionalJson(request);
   const applyUrl = new URL(
     `/api/app-installs/${install.packageAppKey}/${install.installId}${INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX}`,
     requestUrl.origin,
@@ -252,6 +253,9 @@ async function applyInstalledAppPackageMigrations(
       body: JSON.stringify({
         currentPackageRevision: install.packageRevision,
         currentSourceSchemaHash: install.sourceSchemaHash,
+        ...(isRecord(requestBody) && requestBody.safety === "auto-safe"
+          ? { safety: requestBody.safety }
+          : {}),
       }),
       headers,
       method: "POST",
@@ -417,6 +421,14 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
+async function readOptionalJson(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
+
 function methodNotAllowedResponse(allow: string): Response {
   return jsonResponse({ error: "Method not allowed." }, 405, { Allow: allow });
 }
@@ -436,4 +448,8 @@ function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): R
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Bad request.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

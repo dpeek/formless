@@ -79,14 +79,23 @@ import type {
 import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import {
   isSourceSchemaHash,
+  isUpgradeMigrationChecksum,
   type PackageAppRevision,
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
+import {
+  INSTANCE_UPGRADE_APPLY_API_PATH,
+  INSTANCE_UPGRADE_STATUS_API_PATH,
+  type InstanceUpgradeApplyResponse,
+  type InstanceUpgradeStatusResponse,
+  type UpgradePackageAppMigrationAppliedState,
+} from "../shared/upgrade-status.ts";
 import type { PortableArchiveInputStatus } from "./archive-input-status.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
+const PACKAGE_MIGRATIONS_APPLY_PATH_SUFFIX = "/package-migrations/apply";
 const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
 const DOMAIN_MAPPINGS_FORGET_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/forget`;
@@ -175,6 +184,17 @@ export type FormlessInstanceTargetUpgradeVerificationFailure = {
 
 export type FormlessInstanceTargetClientDependencies = {
   fetch: typeof fetch;
+};
+
+export type FormlessInstancePackageMigrationApplyResponse = {
+  applied: UpgradePackageAppMigrationAppliedState[];
+  changes: unknown[];
+  cursor: number;
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  schemaUpdatedAt: string;
+  skipped: UpgradePackageAppMigrationAppliedState[];
+  sourceSchemaHash: SourceSchemaHash;
 };
 
 export class FormlessInstanceTargetRequestError extends Error {
@@ -528,6 +548,69 @@ export async function readFormlessInstanceAppRegistry(
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<AppInstallsResponse> {
   return (await readFormlessInstanceAppRegistryResult(input, dependencies)).appRegistry;
+}
+
+export async function applyFormlessInstanceAutoSafeSqlMigrations(
+  input: {
+    adminToken?: string | null;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceUpgradeApplyResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const applyUrl = apiUrl(targetUrl, INSTANCE_UPGRADE_APPLY_API_PATH);
+
+  return parseInstanceUpgradeStatusResponse(
+    await postJson(dependencies.fetch, applyUrl, {
+      body: JSON.stringify({ safety: "auto-safe" }),
+      headers: adminJsonHeaders(input.adminToken),
+      method: "POST",
+    }),
+    applyUrl,
+  );
+}
+
+export async function readFormlessInstanceUpgradeStatus(
+  input: {
+    adminToken?: string | null;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceUpgradeStatusResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const statusUrl = apiUrl(targetUrl, INSTANCE_UPGRADE_STATUS_API_PATH);
+
+  return parseInstanceUpgradeStatusResponse(
+    await fetchJson(dependencies.fetch, statusUrl, {
+      headers: adminJsonHeaders(input.adminToken),
+    }),
+    statusUrl,
+  );
+}
+
+export async function applyFormlessInstalledAppAutoSafePackageMigrations(
+  input: {
+    adminToken?: string | null;
+    installId: string;
+    packageAppKey: PackageAppKey;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstancePackageMigrationApplyResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const applyUrl = apiUrl(
+    targetUrl,
+    `${APP_INSTALLS_API_PATH}/${input.packageAppKey}/${input.installId}${PACKAGE_MIGRATIONS_APPLY_PATH_SUFFIX}`,
+  );
+
+  return parsePackageMigrationApplyResponse(
+    await postJson(dependencies.fetch, applyUrl, {
+      body: JSON.stringify({ safety: "auto-safe" }),
+      headers: adminJsonHeaders(input.adminToken),
+      method: "POST",
+    }),
+    applyUrl,
+  );
 }
 
 async function readFormlessInstanceAppRegistryResult(
@@ -1168,6 +1251,105 @@ function parseAppRegistry(value: unknown, context: string): AppInstallsResponse 
   };
 }
 
+function parseInstanceUpgradeStatusResponse(
+  value: unknown,
+  context: string,
+): InstanceUpgradeStatusResponse {
+  if (!isRecord(value) || !Array.isArray(value.storageIdentities)) {
+    throw new Error(`${context} failed: upgrade status must include storageIdentities.`);
+  }
+
+  return value as InstanceUpgradeStatusResponse;
+}
+
+function parsePackageMigrationApplyResponse(
+  value: unknown,
+  context: string,
+): FormlessInstancePackageMigrationApplyResponse {
+  if (!isRecord(value)) {
+    throw new Error(`${context} failed: package migration apply response must be an object.`);
+  }
+
+  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const packageRevision = parseOptionalPositiveInteger(
+    value.packageRevision,
+    1 as PackageAppRevision,
+    `${context} packageRevision`,
+  );
+  const sourceSchemaHash = parseOptionalSourceSchemaHash(
+    value.sourceSchemaHash,
+    packageAppFactsForKey(packageAppKey)?.sourceSchemaHash ?? undefined,
+    `${context} sourceSchemaHash`,
+  );
+
+  if (
+    !Array.isArray(value.applied) ||
+    !Array.isArray(value.changes) ||
+    typeof value.cursor !== "number" ||
+    typeof value.schemaUpdatedAt !== "string" ||
+    !Array.isArray(value.skipped)
+  ) {
+    throw new Error(`${context} failed: package migration apply response is invalid.`);
+  }
+
+  return {
+    applied: value.applied.map((migration, index) =>
+      parsePackageAppMigrationAppliedState(migration, `${context} applied[${index}]`),
+    ),
+    changes: value.changes,
+    cursor: value.cursor,
+    packageAppKey,
+    packageRevision,
+    schemaUpdatedAt: value.schemaUpdatedAt,
+    skipped: value.skipped.map((migration, index) =>
+      parsePackageAppMigrationAppliedState(migration, `${context} skipped[${index}]`),
+    ),
+    sourceSchemaHash,
+  };
+}
+
+function parsePackageAppMigrationAppliedState(
+  value: unknown,
+  context: string,
+): UpgradePackageAppMigrationAppliedState {
+  if (!isRecord(value)) {
+    throw new Error(`${context} failed: package migration evidence must be an object.`);
+  }
+
+  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const sourceSchemaHash = parseOptionalSourceSchemaHash(
+    value.sourceSchemaHash,
+    packageAppFactsForKey(packageAppKey)?.sourceSchemaHash ?? undefined,
+    `${context} sourceSchemaHash`,
+  );
+
+  if (
+    typeof value.appliedAt !== "string" ||
+    !isUpgradeMigrationChecksum(value.checksum) ||
+    typeof value.migrationId !== "string"
+  ) {
+    throw new Error(`${context} failed: package migration evidence is invalid.`);
+  }
+
+  return {
+    appliedAt: value.appliedAt,
+    checksum: value.checksum,
+    fromPackageRevision: parseOptionalPositiveInteger(
+      value.fromPackageRevision,
+      1 as PackageAppRevision,
+      `${context} fromPackageRevision`,
+    ),
+    migrationId: value.migrationId,
+    packageAppKey,
+    sourceSchemaHash,
+    toPackageRevision: parseOptionalPositiveInteger(
+      value.toPackageRevision,
+      1 as PackageAppRevision,
+      `${context} toPackageRevision`,
+    ),
+  };
+}
+
 function parseDeployPackageApps(
   value: unknown,
   context: string,
@@ -1375,10 +1557,14 @@ function parseOptionalPositiveInteger(
 
 function parseOptionalSourceSchemaHash(
   value: unknown,
-  fallback: SourceSchemaHash,
+  fallback: SourceSchemaHash | undefined,
   context: string,
 ): SourceSchemaHash {
   if (value === undefined) {
+    if (fallback === undefined) {
+      throw new Error(`${context} failed: source schema hash is required.`);
+    }
+
     return fallback;
   }
 
@@ -1415,6 +1601,19 @@ function parseOptionalString(value: unknown, fallback: string, context: string):
   }
 
   return value;
+}
+
+function adminJsonHeaders(adminToken: string | null | undefined): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (adminToken && adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${adminToken.trim()}`;
+  }
+
+  return headers;
 }
 
 function parseRouteBase(value: unknown, fallback: BundledAppPackage["adminRouteBase"]): "/apps" {

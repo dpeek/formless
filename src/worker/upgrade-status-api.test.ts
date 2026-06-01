@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { CreateAppInstallResponse } from "../shared/protocol.ts";
 import {
+  INSTANCE_UPGRADE_APPLY_API_PATH,
   APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX,
   INSTANCE_UPGRADE_STATUS_API_PATH,
   type InstanceUpgradeStatusResponse,
@@ -104,6 +105,30 @@ describe("runtime upgrade status API", () => {
           storage.identity.kind === "appInstall" && storage.identity.installId === "estii",
       ),
     ).toBe(false);
+  });
+
+  it("applies auto-safe SQL migration evidence through the secured runtime API", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      installId: "tasks",
+      label: "Tasks",
+      packageAppKey: "tasks",
+    });
+
+    const apply = await postAdminJson<InstanceUpgradeStatusResponse>(
+      INSTANCE_UPGRADE_APPLY_API_PATH,
+      { safety: "auto-safe" },
+    );
+    const instance = apply.body.storageIdentities.find(
+      (storage) => storage.identity.kind === "instance",
+    );
+
+    expect(apply.response.headers.get("Cache-Control")).toBe("no-store");
+    expect(instance?.sqlMigrations).toContainEqual(
+      expect.objectContaining({
+        migrationId: "2026-05-28-instance-app-installs-package-facts",
+        storageFamily: "instance-app-installs",
+      }),
+    );
   });
 
   it("keeps status evidence out of public app and browser write routes", async () => {

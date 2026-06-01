@@ -8,6 +8,7 @@ import type {
 } from "./upgrade-migrations.ts";
 
 export const INSTANCE_UPGRADE_API_PATH = "/api/formless/upgrade";
+export const INSTANCE_UPGRADE_APPLY_API_PATH = `${INSTANCE_UPGRADE_API_PATH}/apply`;
 export const INSTANCE_UPGRADE_STATUS_API_PATH = `${INSTANCE_UPGRADE_API_PATH}/status`;
 export const APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX = "/upgrade/status";
 
@@ -57,3 +58,5 @@ export type UpgradeStorageIdentityStatus = {
 export type InstanceUpgradeStatusResponse = {
   storageIdentities: UpgradeStorageIdentityStatus[];
 };
+
+export type InstanceUpgradeApplyResponse = InstanceUpgradeStatusResponse;

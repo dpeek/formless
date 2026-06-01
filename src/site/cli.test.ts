@@ -4194,6 +4194,16 @@ describe("Formless Site CLI", () => {
       "FORMLESS_ADMIN_TOKEN=local-token\n",
     );
 
+    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("site", "Site")],
+    });
+    responses.queueJson(upgradeStatusResponse("site", "site"));
+    responses.queueJson(upgradeStatusResponse("site", "site"));
+    responses.queueJson(packageMigrationApplyResponse("site"));
+    responses.queueJson(upgradeStatusResponse("site", "site"));
     responses.queueJson(snapshot(projectRecords));
     responses.queueJson({
       contentType: mediaAsset.contentType,
@@ -4231,13 +4241,22 @@ describe("Formless Site CLI", () => {
       CLOUDFLARE_ACCOUNT_ID: "account-123",
     });
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+      "POST https://live.example/api/formless/upgrade/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+      "POST https://live.example/api/formless/app-installs/site/site/package-migrations/apply",
+      "GET https://live.example/api/formless/upgrade/status",
       "GET https://live.example/api/site/snapshot",
       "PUT https://live.example/api/formless/media/media/images/cover.png",
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/",
       "GET https://live.example/about",
     ]);
-    expect(requests[1]?.headers).toMatchObject({
+    expect(requests[3]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[5]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[8]?.headers).toMatchObject({
       authorization: "Bearer local-token",
       "content-type": "image/png",
     });
@@ -4422,6 +4441,16 @@ describe("Formless Site CLI", () => {
     responses.queueJson(snapshot(sourceRecords));
     responses.queueBinary(Buffer.from([7, 8, 9]), mediaAsset.contentType);
     responses.queueJson({ version: packageJson.version });
+    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("site", "Site")],
+    });
+    responses.queueJson(upgradeStatusResponse("site", "site"));
+    responses.queueJson(upgradeStatusResponse("site", "site"));
+    responses.queueJson(packageMigrationApplyResponse("site"));
+    responses.queueJson(upgradeStatusResponse("site", "site"));
     responses.queueJson(snapshot(sourceRecords));
     responses.queueJson({
       contentType: mediaAsset.contentType,
@@ -4491,13 +4520,22 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:5173/api/site/snapshot",
       "GET http://localhost:5173/api/formless/media/media/images/cover.png",
       "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+      "POST https://live.example/api/formless/upgrade/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+      "POST https://live.example/api/formless/app-installs/site/site/package-migrations/apply",
+      "GET https://live.example/api/formless/upgrade/status",
       "GET https://live.example/api/site/snapshot",
       "PUT https://live.example/api/formless/media/media/images/cover.png",
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/",
       "GET https://live.example/about",
     ]);
-    expect(requests[4]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[6]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[8]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[11]?.headers.authorization).toBe("Bearer local-token");
   });
 
   it("normalizes local source URLs", () => {
@@ -4670,6 +4708,85 @@ function installedApp(installId: string, label: string, packageAppKey: "site" | 
     sourceSchemaHash: facts.sourceSchemaHash,
     status: "installed" as const,
     updatedAt: "2026-05-01T00:00:00.000Z",
+  };
+}
+
+function currentDeployMetadata() {
+  return {
+    packageApps: listBundledAppPackages().map((appPackage) => ({
+      packageAppKey: appPackage.packageAppKey,
+      packageRevision: appPackage.packageRevision,
+      sourceSchemaHash: appPackage.sourceSchemaHash,
+    })),
+    packageVersion: packageJson.version,
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+    version: packageJson.version,
+  };
+}
+
+function packageMigrationApplyResponse(packageAppKey: "site" | "tasks") {
+  const facts = packageAppFactsForKey(packageAppKey);
+
+  if (!facts) {
+    throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
+  }
+
+  return {
+    applied: [],
+    changes: [],
+    cursor: 0,
+    packageAppKey,
+    packageRevision: facts.packageRevision,
+    schemaUpdatedAt: "2026-05-12T02:00:00.000Z",
+    skipped: [],
+    sourceSchemaHash: facts.sourceSchemaHash,
+  };
+}
+
+function upgradeStatusResponse(installId: string, packageAppKey: "site" | "tasks") {
+  const facts = packageAppFactsForKey(packageAppKey);
+
+  if (!facts) {
+    throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
+  }
+
+  return {
+    storageIdentities: [
+      {
+        identity: {
+          authorityName: "__formless_instance__",
+          kind: "instance",
+        },
+        sqlMigrations: [
+          {
+            appliedAt: "2026-05-12T02:00:00.000Z",
+            checksum: "sha256:0d3e904259214f8c83da95033fc8be3ca8f1502b44471fb47fa6f11000102f12",
+            migrationId: "2026-05-28-instance-app-installs-package-facts",
+            packageVersion: packageJson.version,
+            storageFamily: "instance-app-installs",
+          },
+        ],
+      },
+      {
+        identity: {
+          authorityName: `app:${installId}`,
+          installId,
+          kind: "appInstall",
+          packageAppKey,
+        },
+        packageAppMigrations: {
+          applied: [],
+          state: {
+            packageAppKey,
+            packageRevision: facts.packageRevision,
+            sourceSchemaHash: facts.sourceSchemaHash,
+            updatedAt: "2026-05-12T02:00:00.000Z",
+          },
+        },
+        sqlMigrations: [],
+      },
+    ],
   };
 }
 

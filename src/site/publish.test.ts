@@ -185,6 +185,13 @@ describe("Site publish workflow", () => {
     const backupSnapshot = buildSiteSourceSnapshot(siteSourceSchema, coreMediaSeedRecords, {
       exportedAt: "2026-05-12T03:00:00.000Z",
     });
+    harness.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson(currentAppRegistry());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(packageMigrationApplyResponse());
+    harness.queueJson(upgradeStatusResponse());
     harness.queueJson(backupSnapshot);
     for (const asset of sourceMediaAssets) {
       harness.queueJson({
@@ -206,6 +213,13 @@ describe("Site publish workflow", () => {
 
     expect(harness.commands).toEqual(["devstate check", "bun run deploy"]);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+      "POST https://live.example/api/formless/upgrade/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+      "POST https://live.example/api/formless/app-installs/site/site/package-migrations/apply",
+      "GET https://live.example/api/formless/upgrade/status",
       "GET https://live.example/api/site/snapshot",
       ...sourceMediaAssets.map(
         (asset) => `PUT https://live.example/api/formless/media/${asset.key}`,
@@ -213,16 +227,19 @@ describe("Site publish workflow", () => {
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/pages/home",
     ]);
+    expect(harness.requests[3]?.headers.authorization).toBe("Bearer secret-token");
+    expect(harness.requests[5]?.headers.authorization).toBe("Bearer secret-token");
+    expect(harness.logs.some((log) => log.includes("Upgrade apply evidence."))).toBe(true);
     expect(harness.reads).toEqual(
       sourceMediaAssets.map((asset) => `/workspace/${asset.sourcePath}`),
     );
     if (sourceMediaAssets.length > 0) {
-      expect(harness.requests[1]?.headers).toMatchObject({
+      expect(harness.requests[8]?.headers).toMatchObject({
         authorization: "Bearer secret-token",
         "content-type": sourceMediaAssets[0]?.contentType,
       });
     }
-    const restoreRequest = harness.requests[1 + sourceMediaAssets.length];
+    const restoreRequest = harness.requests[8 + sourceMediaAssets.length];
 
     expect(restoreRequest?.headers).toMatchObject({
       authorization: "Bearer secret-token",
@@ -248,11 +265,19 @@ describe("Site publish workflow", () => {
 
   it("keeps the backup artifact path in restore failure errors", async () => {
     const harness = publishHarness({
+      adminToken: "secret-token",
       apply: true,
       sourceSeedRecords: coreMediaSeedRecords,
       skipCheck: true,
       target: "https://live.example",
     });
+    harness.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson(currentAppRegistry());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(upgradeStatusResponse());
+    harness.queueJson(packageMigrationApplyResponse());
+    harness.queueJson(upgradeStatusResponse());
     harness.queueJson(
       buildSiteSourceSnapshot(siteSourceSchema, coreMediaSeedRecords, {
         exportedAt: "2026-05-12T03:00:00.000Z",
@@ -275,12 +300,62 @@ describe("Site publish workflow", () => {
     expect(harness.commands).toEqual(["bun run deploy"]);
     expect(harness.writes).toHaveLength(1);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+      "POST https://live.example/api/formless/upgrade/apply",
+      "GET https://live.example/api/formless/upgrade/status",
+      "POST https://live.example/api/formless/app-installs/site/site/package-migrations/apply",
+      "GET https://live.example/api/formless/upgrade/status",
       "GET https://live.example/api/site/snapshot",
       ...sourceMediaAssets.map(
         (asset) => `PUT https://live.example/api/formless/media/${asset.key}`,
       ),
       "POST https://live.example/api/site/snapshot/restore",
     ]);
+  });
+
+  it("stops apply before data migration on target metadata verification failure", async () => {
+    const harness = publishHarness({
+      adminToken: "secret-token",
+      apply: true,
+      code: false,
+      skipCheck: true,
+      target: "https://live.example",
+    });
+
+    harness.queueJson({ version: "0.1.7" });
+    harness.queueJson({ setupComplete: true });
+    harness.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/site",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          installId: "site",
+          label: "Site",
+          packageAppKey: "site",
+          publicRoute: "/sites/site",
+          publicRoutePrefix: "/sites/site/",
+          schemaRoute: "/apps/site/schema",
+          status: "installed",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(runSitePublish(harness.input())).rejects.toThrow(
+      "Upgrade planning blocked: deploy-metadata-cacheable",
+    );
+
+    expect(harness.commands).toEqual([]);
+    expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://live.example/api/formless/deploy",
+      "GET https://live.example/api/formless/setup",
+      "GET https://live.example/api/formless/app-installs",
+    ]);
+    expect(harness.writes).toEqual([]);
+    expect(harness.logs.at(-1)).toContain("Blockers: deploy-metadata-cacheable");
   });
 
   it("fails before deploy when a referenced source media file is missing", async () => {
@@ -456,4 +531,111 @@ function normalizeHeaders(headers: HeadersInit | undefined): Record<string, stri
   }
 
   return headers;
+}
+
+function currentDeployMetadata() {
+  return {
+    packageApps: listBundledAppPackages().map((appPackage) => ({
+      packageAppKey: appPackage.packageAppKey,
+      packageRevision: appPackage.packageRevision,
+      sourceSchemaHash: appPackage.sourceSchemaHash,
+    })),
+    packageVersion: packageJson.version,
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+    version: packageJson.version,
+  };
+}
+
+function currentAppRegistry() {
+  return {
+    packages: listBundledAppPackages(),
+    installs: [installedSite()],
+  };
+}
+
+function packageMigrationApplyResponse() {
+  const site = sitePackageFacts();
+
+  return {
+    applied: [],
+    changes: [],
+    cursor: 0,
+    packageAppKey: "site",
+    packageRevision: site.packageRevision,
+    schemaUpdatedAt: "2026-05-12T02:00:00.000Z",
+    skipped: [],
+    sourceSchemaHash: site.sourceSchemaHash,
+  };
+}
+
+function upgradeStatusResponse() {
+  const site = sitePackageFacts();
+
+  return {
+    storageIdentities: [
+      {
+        identity: {
+          authorityName: "__formless_instance__",
+          kind: "instance",
+        },
+        sqlMigrations: [
+          {
+            appliedAt: "2026-05-12T02:00:00.000Z",
+            checksum: "sha256:0d3e904259214f8c83da95033fc8be3ca8f1502b44471fb47fa6f11000102f12",
+            migrationId: "2026-05-28-instance-app-installs-package-facts",
+            packageVersion: packageJson.version,
+            storageFamily: "instance-app-installs",
+          },
+        ],
+      },
+      {
+        identity: {
+          authorityName: "app:site",
+          installId: "site",
+          kind: "appInstall",
+          packageAppKey: "site",
+        },
+        packageAppMigrations: {
+          applied: [],
+          state: {
+            packageAppKey: "site",
+            packageRevision: site.packageRevision,
+            sourceSchemaHash: site.sourceSchemaHash,
+            updatedAt: "2026-05-12T02:00:00.000Z",
+          },
+        },
+        sqlMigrations: [],
+      },
+    ],
+  };
+}
+
+function installedSite() {
+  const site = sitePackageFacts();
+
+  return {
+    adminRoute: "/apps/site",
+    createdAt: "2026-05-28T00:00:00.000Z",
+    installId: "site",
+    label: "Site",
+    packageAppKey: "site",
+    packageRevision: site.packageRevision,
+    publicRoute: "/sites/site",
+    publicRoutePrefix: "/sites/site/",
+    schemaRoute: "/apps/site/schema",
+    sourceSchemaHash: site.sourceSchemaHash,
+    status: "installed",
+    updatedAt: "2026-05-28T00:00:00.000Z",
+  };
+}
+
+function sitePackageFacts() {
+  const site = listBundledAppPackages().find((appPackage) => appPackage.packageAppKey === "site");
+
+  if (!site) {
+    throw new Error("Expected bundled Site package facts.");
+  }
+
+  return site;
 }

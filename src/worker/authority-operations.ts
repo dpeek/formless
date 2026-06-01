@@ -426,6 +426,7 @@ export function executeAuthorityOperation(
       const migrations = selectPackageAppMigrations({
         currentPackageRevision: packageFacts.currentPackageRevision,
         packageAppKey: input.app.key,
+        safety: packageFacts.safety,
         targetPackageRevision: packageFacts.targetPackageRevision,
       });
 
@@ -498,20 +499,34 @@ function parsePackageAppMigrationApplyRequest(value: unknown, packageAppKey: str
     ),
     targetPackageRevision: packageApp.packageRevision,
     targetSourceSchemaHash: packageApp.sourceSchemaHash,
+    safety: parseOptionalPackageMigrationSafety(body.safety),
   };
 }
 
 function selectPackageAppMigrations(input: {
   currentPackageRevision: PackageAppRevision;
   packageAppKey: PackageAppKey;
+  safety?: "auto-safe";
   targetPackageRevision: PackageAppRevision;
 }) {
   try {
-    return selectPackageAppMigrationChain(packageAppMigrationRegistry, {
+    const migrations = selectPackageAppMigrationChain(packageAppMigrationRegistry, {
       fromPackageRevision: input.currentPackageRevision,
       packageAppKey: input.packageAppKey,
       toPackageRevision: input.targetPackageRevision,
     });
+
+    if (input.safety === "auto-safe") {
+      const unsafe = migrations.find((migration) => migration.safety !== "auto-safe");
+
+      if (unsafe) {
+        throw new Error(
+          `Package app migration "${unsafe.id}" requires safety class "${unsafe.safety}".`,
+        );
+      }
+    }
+
+    return migrations;
   } catch (error) {
     throw new BadRequestError(
       error instanceof Error ? error.message : "Package app migration chain is invalid.",
@@ -548,6 +563,18 @@ function parseOptionalSourceSchemaHash(
     throw new BadRequestError(
       `Package migration ${fieldName} must be a sha256 source schema hash.`,
     );
+  }
+
+  return value;
+}
+
+function parseOptionalPackageMigrationSafety(value: unknown): "auto-safe" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "auto-safe") {
+    throw new BadRequestError('Package migration safety must be "auto-safe".');
   }
 
   return value;

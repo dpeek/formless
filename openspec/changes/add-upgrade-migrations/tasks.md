@@ -128,10 +128,18 @@ Evidence:
 
 ## 10. CLI Auto-safe Apply
 
-- [ ] 10.1 Apply `auto-safe` SQL migrations through the secured runtime or Authority API.
-- [ ] 10.2 Apply `auto-safe` package app migrations through the installed app migration API.
-- [ ] 10.3 Verify applied-state evidence after each apply step before continuing to later steps.
-- [ ] 10.4 Add CLI tests proving apply output includes evidence and metadata verification failure stops data migration.
+- [x] 10.1 Apply `auto-safe` SQL migrations through the secured runtime or Authority API.
+- [x] 10.2 Apply `auto-safe` package app migrations through the installed app migration API.
+- [x] 10.3 Verify applied-state evidence after each apply step before continuing to later steps.
+- [x] 10.4 Add CLI tests proving apply output includes evidence and metadata verification failure stops data migration.
+
+Evidence:
+
+- `grug` 2026-06-01: added secured `POST /api/formless/upgrade/apply` runtime apply status for known instance and installed-app storage identities, preserving `/api/formless/upgrade/status` as a no-store evidence read.
+- Added CLI auto-safe apply orchestration in `src/site/upgrade-apply.ts` and wired Site publish apply to verify target upgrade metadata, apply SQL migration status through the runtime API, apply installed app package migrations with `safety: "auto-safe"`, verify package applied-state evidence after each installed-app apply, and log apply evidence before data backup/restore.
+- Added installed-app package migration `safety: "auto-safe"` request enforcement so the CLI path refuses package migrations that require backup or manual approval safety.
+- Added coverage in `src/site/publish.test.ts`, `src/site/cli.test.ts`, and `src/worker/upgrade-status-api.test.ts` for apply evidence output, metadata verification failure stopping data mutation, secured runtime SQL apply evidence, and package migration apply calls through the installed-app API.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes CLI apply/runtime API behavior and no visible browser app workflow changed.
 
 ## 11. Backup And Manual Approval Gates
 

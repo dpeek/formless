@@ -18,6 +18,7 @@ import {
   buildCliUpgradePlanningReport,
   formatCliUpgradePlanningReport,
 } from "./upgrade-plan.ts";
+import { applyCliAutoSafeUpgradeMigrations } from "./upgrade-apply.ts";
 
 export type SitePublishOptions = {
   apply: boolean;
@@ -210,6 +211,8 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
     }
   }
 
+  await applyAutoSafeUpgradeMigrations(input);
+
   const backupPath = input.options.data
     ? await publishSiteData(input, sourceSnapshot, sourceMediaFiles, plannedAt)
     : null;
@@ -288,6 +291,25 @@ async function logDryRunUpgradePlanning(input: SitePublishInput): Promise<void> 
 
   input.dependencies.log(formatCliUpgradePlanningReport(report).trimEnd());
   assertCliUpgradePlanningReady(report);
+}
+
+async function applyAutoSafeUpgradeMigrations(input: SitePublishInput): Promise<void> {
+  const target = input.options.target;
+
+  if (!target) {
+    return;
+  }
+
+  await applyCliAutoSafeUpgradeMigrations(
+    {
+      adminToken: input.adminToken,
+      targetUrl: target,
+    },
+    {
+      fetch: (url, init) => sitePublishFetchResponse(input, url, init),
+      log: input.dependencies.log,
+    },
+  );
 }
 
 async function publishSiteData(
