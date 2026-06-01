@@ -54,13 +54,16 @@ storage APIs.
 - THEN the request targets instance metadata storage
 - AND installed app data remains scoped to each app storage identity
 
-#### Scenario: Instance setup and session
+#### Scenario: Instance setup and passkey session
 
-- GIVEN owner setup or login runs for a product instance
-- WHEN `/api/formless/setup` or `/api/formless/session` is used
-- THEN owner session state is established independently from app install
-  metadata
+- GIVEN owner setup or passkey login runs for a product instance
+- WHEN `/api/formless/setup`, `/api/formless/passkeys/*`, or
+  `/api/formless/session` is used
+- THEN owner identity, passkey credentials, passkey challenges, and owner
+  session state are established independently from app install metadata
 - AND write operations can be guarded by owner session cookies
+- AND admin bearer authorization remains available for bootstrap, automation,
+  and recovery-sensitive write paths
 
 ### Requirement: Media Storage Adapter Boundary
 

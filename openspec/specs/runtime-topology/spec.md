@@ -53,6 +53,14 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - THEN the request is eligible for the client shell
 - AND source schema routes such as `/tasks`, `/estii/setup`, `/site/schema`, and `/pages/home` are not eligible instance browser routes
 
+#### Scenario: Product instance owner auth routes
+
+- GIVEN a browser is on the canonical instance origin
+- WHEN it navigates to `/setup` or `/login`
+- THEN the client shell is eligible to render the owner setup or owner login
+  route
+- AND passkey ceremony API calls use the canonical instance auth origin
+
 #### Scenario: App profile mounts one app
 
 - GIVEN the runtime profile is `app`
@@ -133,6 +141,8 @@ The system SHALL route enabled exact-host profile mappings before ordinary host 
 - WHEN the mapped host receives a public document request for `/` or a nested page path
 - THEN the response is rendered from that installed Site storage
 - AND public links, indexing resources, root icons, and core media use top-level mapped-host paths
+- AND owner setup, owner login, and passkey ceremony requests do not treat the
+  mapped public Site host as a WebAuthn relying party
 
 #### Scenario: Mapped app host
 
@@ -140,6 +150,8 @@ The system SHALL route enabled exact-host profile mappings before ordinary host 
 - WHEN the mapped host receives browser requests for `/` or `/schema`
 - THEN the client shell is served with runtime profile, package app key, and app install id hints for that install
 - AND schema-key API routes are not exposed on the mapped app host while the matching installed app API route remains available
+- AND owner setup, owner login, and passkey ceremony requests do not treat the
+  mapped app host as a WebAuthn relying party
 
 ### Requirement: Schema-Owned App Route Resolution
 
