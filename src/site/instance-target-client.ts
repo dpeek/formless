@@ -1,4 +1,14 @@
 import {
+  deployControlPlaneActorHeaders,
+  deployControlPlaneBootstrapPath,
+  deployControlPlaneRecordsByEntity,
+  deployDesiredStateVersionRef,
+  type DeployControlPlaneProtocolActorKind,
+  type DeployControlPlaneRecord,
+  type DeployDesiredStateVersionRef,
+  type DeployControlPlaneBootstrapResponse,
+} from "@dpeek/formless-deploy/client";
+import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
@@ -71,6 +81,27 @@ export type FormlessInstanceTargetStatus = {
   deployment?: InstanceDeploymentStatusResponse;
   ownerSetup: OwnerSetupStatusResponse;
   targetUrl: string;
+};
+
+export type FormlessInstanceControlPlaneRecords = {
+  actorKind: DeployControlPlaneProtocolActorKind;
+  appInstalls: DeployControlPlaneRecord[];
+  appRoutes: DeployControlPlaneRecord[];
+  deployAttempts: DeployControlPlaneRecord[];
+  deployDesiredResources: DeployControlPlaneRecord[];
+  deployDriftReports: DeployControlPlaneRecord[];
+  deployEvidenceSummaries: DeployControlPlaneRecord[];
+  deployTargets: DeployControlPlaneRecord[];
+  domainMappings: DeployControlPlaneRecord[];
+  records: DeployControlPlaneRecord[];
+  redirectIntents: DeployControlPlaneRecord[];
+};
+
+export type FormlessInstanceDeploymentCommandContext = {
+  controlPlane?: FormlessInstanceControlPlaneRecords;
+  desiredState: InstanceDeploymentDesiredStateResponse;
+  desiredStateRef: DeployDesiredStateVersionRef;
+  status: InstanceDeploymentStatusResponse;
 };
 
 export type FormlessInstanceTargetDeployMetadata = {
@@ -237,6 +268,72 @@ export async function readFormlessInstanceDeploymentStatus(
     }),
     statusUrl,
   );
+}
+
+export async function readFormlessInstanceControlPlaneRecords(
+  input: {
+    actorKind?: DeployControlPlaneProtocolActorKind;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstanceControlPlaneRecords> {
+  const actorKind = input.actorKind ?? "cliDeployer";
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const controlPlaneUrl = apiUrl(targetUrl, deployControlPlaneBootstrapPath(actorKind));
+  const bootstrap = parseControlPlaneBootstrapResponse(
+    await fetchJson(dependencies.fetch, controlPlaneUrl, {
+      headers: {
+        accept: "application/json",
+        ...deployControlPlaneActorHeaders(actorKind),
+      },
+    }),
+    controlPlaneUrl,
+  );
+
+  return controlPlaneRecordsByEntity(actorKind, bootstrap.records);
+}
+
+export async function readOptionalFormlessInstanceControlPlaneRecords(
+  input: {
+    actorKind?: DeployControlPlaneProtocolActorKind;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstanceControlPlaneRecords | undefined> {
+  try {
+    return await readFormlessInstanceControlPlaneRecords(input, dependencies);
+  } catch (error) {
+    if (error instanceof FormlessInstanceTargetRequestError && error.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+export async function readFormlessInstanceDeploymentCommandContext(
+  input: {
+    actorKind?: DeployControlPlaneProtocolActorKind;
+    targetId?: string | null;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstanceDeploymentCommandContext> {
+  const [controlPlane, desiredState, status] = await Promise.all([
+    readOptionalFormlessInstanceControlPlaneRecords(
+      { actorKind: input.actorKind ?? "runner", targetUrl: input.targetUrl },
+      dependencies,
+    ),
+    readFormlessInstanceDeploymentDesiredState(input, dependencies),
+    readFormlessInstanceDeploymentStatus(input, dependencies),
+  ]);
+
+  return {
+    ...(controlPlane === undefined ? {} : { controlPlane }),
+    desiredState,
+    desiredStateRef: deployDesiredStateVersionRef(desiredState.desiredState),
+    status,
+  };
 }
 
 async function readOptionalFormlessInstanceDeploymentStatus(
@@ -736,6 +833,62 @@ function parseDeploymentStatusResponse(
   }
 
   return value as InstanceDeploymentStatusResponse;
+}
+
+function parseControlPlaneBootstrapResponse(
+  value: unknown,
+  context: string,
+): DeployControlPlaneBootstrapResponse {
+  if (!isRecord(value) || !Array.isArray(value.records)) {
+    throw new Error(`${context} failed: control-plane bootstrap response is invalid.`);
+  }
+
+  return {
+    ...(typeof value.cursor === "number" ? { cursor: value.cursor } : {}),
+    records: value.records.map((record, index) =>
+      parseControlPlaneRecord(record, `${context} records[${index}]`),
+    ),
+    ...(value.schema === undefined ? {} : { schema: value.schema }),
+  };
+}
+
+function parseControlPlaneRecord(value: unknown, context: string): DeployControlPlaneRecord {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.entity !== "string" ||
+    !isRecord(value.values)
+  ) {
+    throw new Error(`${context} failed: control-plane record is invalid.`);
+  }
+
+  return {
+    ...(typeof value.createdAt === "string" ? { createdAt: value.createdAt } : {}),
+    ...(typeof value.deletedAt === "string" ? { deletedAt: value.deletedAt } : {}),
+    entity: value.entity,
+    id: value.id,
+    ...(typeof value.updatedAt === "string" ? { updatedAt: value.updatedAt } : {}),
+    values: value.values,
+  };
+}
+
+function controlPlaneRecordsByEntity(
+  actorKind: DeployControlPlaneProtocolActorKind,
+  records: DeployControlPlaneRecord[],
+): FormlessInstanceControlPlaneRecords {
+  return {
+    actorKind,
+    appInstalls: deployControlPlaneRecordsByEntity(records, "appInstall"),
+    appRoutes: deployControlPlaneRecordsByEntity(records, "appRoute"),
+    deployAttempts: deployControlPlaneRecordsByEntity(records, "deployAttempt"),
+    deployDesiredResources: deployControlPlaneRecordsByEntity(records, "deployDesiredResource"),
+    deployDriftReports: deployControlPlaneRecordsByEntity(records, "deployDriftReport"),
+    deployEvidenceSummaries: deployControlPlaneRecordsByEntity(records, "deployEvidenceSummary"),
+    deployTargets: deployControlPlaneRecordsByEntity(records, "deployTarget"),
+    domainMappings: deployControlPlaneRecordsByEntity(records, "domainMapping"),
+    records,
+    redirectIntents: deployControlPlaneRecordsByEntity(records, "redirectIntent"),
+  };
 }
 
 function parseDeploymentAttemptStartResponse(

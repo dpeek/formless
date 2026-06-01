@@ -1550,6 +1550,33 @@ describe("Formless Site CLI", () => {
       202,
     );
     responses.queueJson({
+      cursor: 9,
+      records: [
+        { entity: "appInstall", id: "site", values: { installId: "site" } },
+        {
+          entity: "appRoute",
+          id: "app-route:site:publicSite",
+          values: { appInstall: "site", path: "/sites/site" },
+        },
+        {
+          entity: "domainMapping",
+          id: "domain:www.dpeek.com",
+          values: { appRoute: "app-route:site:publicSite", host: "www.dpeek.com" },
+        },
+        {
+          entity: "deployTarget",
+          id: desiredState.targetId,
+          values: { targetId: desiredState.targetId },
+        },
+        {
+          entity: "deployDesiredResource",
+          id: "desired:www.dpeek.com",
+          values: { deployTarget: desiredState.targetId, logicalId: "custom-domain:www" },
+        },
+      ],
+      schema: {},
+    });
+    responses.queueJson({
       desiredState: {
         ...desiredState,
         createdAt: "2026-05-27T00:00:00.000Z",
@@ -1714,6 +1741,7 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply",
+      "GET https://personal.dpeek.workers.dev/api/formless/control-plane/bootstrap?actorKind=runner",
       "GET https://personal.dpeek.workers.dev/api/formless/deployments/desired-state",
       "GET https://personal.dpeek.workers.dev/api/formless/deployments/status",
       "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/start",
@@ -1721,15 +1749,16 @@ describe("Formless Site CLI", () => {
       "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply-jobs/job-deployment-cli/result",
       "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/success",
     ]);
-    expect(requests[6]?.headers.authorization).toBe("Bearer admin-token");
+    expect(requests[4]?.headers["X-Formless-Control-Plane-Actor"]).toBe("runner");
+    expect(requests[7]?.headers.authorization).toBe("Bearer admin-token");
     expect(
-      capturedRequestJson<{ desiredState: typeof desiredState; mode: string }>(requests[6]),
+      capturedRequestJson<{ desiredState: typeof desiredState; mode: string }>(requests[7]),
     ).toMatchObject({
       desiredState,
       mode: "apply",
     });
     expect(
-      capturedRequestJson<{ attemptId: string; desiredState: typeof desiredState }>(requests[7]),
+      capturedRequestJson<{ attemptId: string; desiredState: typeof desiredState }>(requests[8]),
     ).toMatchObject({
       attemptId,
       desiredState,
@@ -1739,7 +1768,7 @@ describe("Formless Site CLI", () => {
         attemptId: string;
         desiredState: typeof desiredState;
         leaseToken: string;
-      }>(requests[9]),
+      }>(requests[10]),
     ).toMatchObject({
       attemptId,
       desiredState,
@@ -1823,6 +1852,33 @@ describe("Formless Site CLI", () => {
       },
       202,
     );
+    responses.queueJson({
+      cursor: 10,
+      records: [
+        { entity: "appInstall", id: "site", values: { installId: "site" } },
+        {
+          entity: "appRoute",
+          id: "app-route:site:publicSite",
+          values: { appInstall: "site", path: "/sites/site" },
+        },
+        {
+          entity: "domainMapping",
+          id: "domain:fail.dpeek.com",
+          values: { appRoute: "app-route:site:publicSite", host: "fail.dpeek.com" },
+        },
+        {
+          entity: "deployTarget",
+          id: desiredState.targetId,
+          values: { targetId: desiredState.targetId },
+        },
+        {
+          entity: "deployDesiredResource",
+          id: "desired:fail.dpeek.com",
+          values: { deployTarget: desiredState.targetId, logicalId: "custom-domain:fail" },
+        },
+      ],
+      schema: {},
+    });
     responses.queueJson({
       desiredState: {
         ...desiredState,
@@ -1996,6 +2052,7 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply",
+      "GET https://personal.dpeek.workers.dev/api/formless/control-plane/bootstrap?actorKind=runner",
       "GET https://personal.dpeek.workers.dev/api/formless/deployments/desired-state",
       "GET https://personal.dpeek.workers.dev/api/formless/deployments/status",
       "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/start",
@@ -2003,8 +2060,9 @@ describe("Formless Site CLI", () => {
       "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply-jobs/job-deployment-failure/result",
       "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/failure",
     ]);
+    expect(requests[4]?.headers["X-Formless-Control-Plane-Actor"]).toBe("runner");
     expect(
-      capturedRequestJson<{ error: string; runnerId: string; status: string }>(requests[8]),
+      capturedRequestJson<{ error: string; runnerId: string; status: string }>(requests[9]),
     ).toEqual({
       error: "Alchemy apply failed.",
       runnerId: "runner-fail",
@@ -2016,7 +2074,7 @@ describe("Formless Site CLI", () => {
         desiredState: typeof desiredState;
         leaseToken: string;
         summary: { code: string; displayMessage: string };
-      }>(requests[9]),
+      }>(requests[10]),
     ).toMatchObject({
       attemptId,
       desiredState,

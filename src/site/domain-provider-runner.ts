@@ -3,7 +3,6 @@ import type { CustomDomain, DnsRecords, RedirectRule } from "alchemy/cloudflare"
 
 import type {
   DeploymentActor,
-  DeploymentDesiredStateVersion,
   DeploymentDesiredStateVersionRef,
   DeploymentEvidenceAction,
   DeploymentFailureSummary,
@@ -43,8 +42,7 @@ import {
   FormlessInstanceTargetRequestError,
   completeFormlessInstanceDomainProviderApplyJob,
   completeFormlessInstanceDomainProviderDeleteJob,
-  readFormlessInstanceDeploymentDesiredState,
-  readFormlessInstanceDeploymentStatus,
+  readFormlessInstanceDeploymentCommandContext,
   requestFormlessInstanceDomainProviderApply,
   requestFormlessInstanceDomainProviderDelete,
   startFormlessInstanceDeploymentAttempt,
@@ -368,23 +366,19 @@ async function prepareDeploymentApplyContext(
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<DeploymentApplyContext | undefined> {
   try {
-    const desiredState = await readFormlessInstanceDeploymentDesiredState(
-      { targetUrl: input.targetUrl },
+    const context = await readFormlessInstanceDeploymentCommandContext(
+      { actorKind: "runner", targetUrl: input.targetUrl },
       dependencies,
     );
-    const desiredStateRef = deploymentDesiredStateRef(desiredState.desiredState);
-    const status = await readFormlessInstanceDeploymentStatus(
-      { targetUrl: input.targetUrl },
-      dependencies,
-    );
-    const bridgedAttempt = bridgedApplyAttemptFromStatus(status.status, input.runnerId);
+    const desiredStateRef: DeploymentDesiredStateVersionRef = context.desiredStateRef;
+    const bridgedAttempt = bridgedApplyAttemptFromStatus(context.status.status, input.runnerId);
 
     if (bridgedAttempt) {
       return {
         attemptId: bridgedAttempt.attemptId,
         desiredState: bridgedAttempt.desiredState,
-        resourceCount: desiredState.desiredState.display.resourceCount,
-        resourcesByKind: desiredState.desiredState.display.resourcesByKind,
+        resourceCount: context.desiredState.desiredState.display.resourceCount,
+        resourcesByKind: context.desiredState.desiredState.display.resourcesByKind,
         source: "domain-provider-job",
         targetId: bridgedAttempt.desiredState.targetId,
         writebackStatus: "started",
@@ -413,8 +407,8 @@ async function prepareDeploymentApplyContext(
       attemptId: started.attempt.attemptId,
       desiredState: desiredStateRef,
       leaseToken: started.lease.token,
-      resourceCount: desiredState.desiredState.display.resourceCount,
-      resourcesByKind: desiredState.desiredState.display.resourcesByKind,
+      resourceCount: context.desiredState.desiredState.display.resourceCount,
+      resourcesByKind: context.desiredState.desiredState.display.resourcesByKind,
       source: "runner",
       targetId: desiredStateRef.targetId,
       writebackStatus: "started",
@@ -808,17 +802,6 @@ function bridgedApplyAttemptFromStatus(
   return {
     attemptId: status.attemptId,
     desiredState: status.desiredState,
-  };
-}
-
-function deploymentDesiredStateRef(
-  desiredState: DeploymentDesiredStateVersion,
-): DeploymentDesiredStateVersionRef {
-  return {
-    hash: desiredState.hash,
-    revision: desiredState.revision,
-    targetId: desiredState.targetId,
-    versionId: desiredState.versionId,
   };
 }
 

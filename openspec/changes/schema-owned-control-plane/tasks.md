@@ -124,11 +124,19 @@ Evidence:
 
 ## 8. Deployment Action Protocol
 
-- [ ] 8.1 Define and record whether deployment lifecycle commands use schema-declared actions or compatibility endpoint delegation for this migration slice.
-- [ ] 8.2 Add or adapt actor-scoped deployment protocol helpers so CLI deployer and runner actors can query allowed control-plane records and bind commands to exact desired-state versions.
-- [ ] 8.3 Update CLI target helpers to query app install, app route, domain, and deployment records through the control-plane protocol where available.
-- [ ] 8.4 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, direct fallback, app install, and deploy command/API surfaces stable.
-- [ ] 8.5 Add CLI and protocol tests for actor exposure, action invocation or delegation, no-secret responses, and existing command compatibility.
+- [x] 8.1 Define and record whether deployment lifecycle commands use schema-declared actions or compatibility endpoint delegation for this migration slice.
+- [x] 8.2 Add or adapt actor-scoped deployment protocol helpers so CLI deployer and runner actors can query allowed control-plane records and bind commands to exact desired-state versions.
+- [x] 8.3 Update CLI target helpers to query app install, app route, domain, and deployment records through the control-plane protocol where available.
+- [x] 8.4 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, direct fallback, app install, and deploy command/API surfaces stable.
+- [x] 8.5 Add CLI and protocol tests for actor exposure, action invocation or delegation, no-secret responses, and existing command compatibility.
+
+Evidence:
+
+- Files changed: `lib/deploy/src/client.ts`, `lib/deploy/src/client.test.ts`, `src/site/instance-target-client.ts`, `src/site/instance-target-client.test.ts`, `src/site/domain-provider-runner.ts`, `src/site/cli.test.ts`, `package.json`, `bun.lock`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` before implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:34:22.406Z. `devstate check` first caught a stale watch-service resolver error for `@dpeek/formless-deploy/client` after adding the root workspace dependency; `bun -e "await import('@dpeek/formless-deploy/client')"` proved package resolution, `devstate start` refreshed services, and final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T01:42:47.994Z.
+- Smoke: not run; section 8 changes CLI/protocol helpers and command compatibility tests without visible generated instance UI behavior.
+- Decisions: deployment lifecycle commands stay on compatibility endpoint delegation for this migration slice. CLI runner apply now reads the runner-scoped control-plane bootstrap when available, then binds command writeback to the exact desired-state version returned by `/api/formless/deployments/desired-state` before calling existing deployment-runtime attempt, plan, success, and failure endpoints. Schema-declared deployment lifecycle actions remain a future cutover point once the runtime schema declares those actions.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 9. Deployment Management UI
 
