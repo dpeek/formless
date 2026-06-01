@@ -19,16 +19,19 @@ supported deployment target.
 - WHEN a client reads desired deployment state for a target
 - THEN the response includes a desired-state version id, monotonic revision,
   stable hash, schema version, target id, resource graph, and display summary
+- AND targets backed by schema-owned control-plane records project the resource
+  graph from app route, domain mapping, redirect, provider config reference, and
+  desired resource records for that target
 - AND the response does not include provider credentials, Alchemy passwords,
-  state tokens, or runtime secrets
+  state tokens, raw lease tokens, or runtime secrets
 - AND the response is not cached
 
 #### Scenario: Desired state hash stability
 
 - WHEN user intent has not changed
 - THEN repeated desired-state reads for the same target produce the same hash
-- AND timestamps, attempt history, and status display data do not change the
-  desired-state hash
+- AND timestamps, attempt history, evidence summaries, drift reports, and status
+  display data do not change the desired-state hash
 
 ### Requirement: Deployment Resource Graph
 
@@ -230,6 +233,8 @@ the `/api/formless/deployments` API family.
 - WHEN a client reads `/api/formless/deployments/desired-state` or
   `/api/formless/deployments/status`
 - THEN the runtime reads the requested supported target
+- AND the desired-state projection may be materialized from schema-owned
+  control-plane records when that target supports them
 - AND the response uses `Cache-Control: no-store`
 
 #### Scenario: Mutating writeback requires instance write authorization

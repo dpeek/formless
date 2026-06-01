@@ -214,3 +214,49 @@ Cloudflare fallback.
 - WHEN `formless instance domains plan` or `apply` runs
 - THEN the command is labeled fallback
 - AND provider mutation requires an explicit apply command and preflight checks
+
+### Requirement: Domain Intent As Control-Plane Records
+
+The system SHALL represent custom-domain mappings and redirect intent as
+schema-owned control-plane records.
+
+#### Scenario: Mapping record
+
+- GIVEN an authorized owner or admin creates an exact-host mapping
+- WHEN the mapping is accepted
+- THEN the mapping is stored as a control-plane record with host, profile,
+  optional target install id, optional target route id, enabled state, and
+  timestamps
+- AND route behavior matches existing custom-domain mapping semantics
+- AND app and public Site mappings reference the target app install or app route
+  record when available
+
+#### Scenario: Redirect record
+
+- GIVEN redirect intent is created or updated
+- WHEN the redirect write is accepted
+- THEN the redirect is stored as a control-plane record with source host,
+  target, status code, path/query policy, enabled state, and timestamps
+- AND provider resources are not mutated by the intent write
+
+### Requirement: Custom-Domain Compatibility Surface
+
+Existing custom-domain APIs SHALL remain compatible while reading and writing
+schema-owned control-plane records.
+
+#### Scenario: Existing API delegates to schema records
+
+- GIVEN existing custom-domain mapping or redirect APIs are called during
+  migration
+- WHEN the API reads or writes domain intent
+- THEN it reads or writes the corresponding control-plane records
+- AND its response shape remains compatible for existing clients
+
+#### Scenario: Cleanup evidence remains separate
+
+- GIVEN provider cleanup, manual cleanup, or forget workflows run
+- WHEN the workflow records its result
+- THEN desired route records, provider evidence summaries, and cleanup history
+  remain separate records or projections
+- AND deleting desired route intent does not delete provider evidence unless an
+  explicit cleanup action records that result

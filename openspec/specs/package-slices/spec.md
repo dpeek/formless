@@ -173,3 +173,42 @@ Package tests SHALL be fast, deterministic, and local.
 - WHEN package verification runs
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
+
+### Requirement: Deploy Package Slice
+
+The system SHALL provide a Deploy package slice under `lib/deploy/` for
+deployment schema, projection, protocol, and adapter contracts.
+
+#### Scenario: Deploy package scaffold
+
+- GIVEN the Deploy package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and supported adapters
+- AND the package is published as `@dpeek/formless-deploy` with root,
+  `./client`, `./react`, and `./worker` public subpaths
+- AND it follows package slice import and documentation boundaries
+
+#### Scenario: Deploy package exports
+
+- GIVEN app, client, Worker, CLI, generated UI, or tests need deploy package
+  behavior
+- WHEN they import the package
+- THEN they import from the package root or documented subpaths
+- AND they do not deep-import deploy package internals
+
+### Requirement: Deploy Package Non-Ownership
+
+The Deploy package SHALL own reusable contracts and helpers without owning
+provider secrets or canonical provider state.
+
+#### Scenario: Package owns schema contracts
+
+- GIVEN deployment entity shapes, action ids, projection helpers, display
+  summaries, or protocol request shapes are needed
+- WHEN runtime-neutral contracts are consumed
+- THEN they come from `lib/deploy`
+- AND provider SDK execution and Alchemy state remain outside the package's
+  runtime-neutral contract
+- AND app install and app route identity contracts are consumed from the
+  instance control-plane model instead of being redefined as deploy-only shapes

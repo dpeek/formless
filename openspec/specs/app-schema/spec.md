@@ -233,3 +233,103 @@ The system MUST only expose action kinds that are safe for public execution thro
 - WHEN the schema is parsed
 - THEN parsing accepts the action
 - AND the runtime can dispatch it through the public action executor
+
+### Requirement: Runtime-Owned Control-Plane Schemas
+
+The system SHALL support runtime-owned control-plane app schemas that use normal
+schema entities, fields, relationships, queries, read models, views, screens,
+mutations, and actions.
+
+#### Scenario: Parse control-plane schema
+
+- GIVEN a runtime-owned control-plane schema
+- WHEN the schema is parsed
+- THEN it is validated with the same schema parser as other app schemas
+- AND runtime-owned schema sections are preserved from Builder edits unless
+  explicitly supported
+
+#### Scenario: Control-plane records stay flat
+
+- GIVEN control-plane records are stored or synced
+- WHEN relationships between app install, route, provider, and deployment
+  records exist
+- THEN records keep flat field values
+- AND relationships are represented by schema metadata over reference fields
+
+### Requirement: Immutable Control-Plane Fields
+
+The system SHALL let runtime-owned schemas mark identity fields as immutable
+after record creation.
+
+#### Scenario: Immutable install identity
+
+- GIVEN an `appInstall` record has been created
+- WHEN a patch targets install identity, package app key, or storage identity
+- THEN generated UI, CLI, sync, and action writes reject the change
+- AND mutable fields such as label can still be patched when schema policy
+  allows
+
+#### Scenario: Route target integrity
+
+- GIVEN an `appRoute` record references an `appInstall`
+- WHEN the route is created or patched
+- THEN schema validation prevents the route from pointing at a missing,
+  incompatible, or tombstoned app install record
+
+### Requirement: Actor-Scoped Schema Actions
+
+The system SHALL let schema actions declare actor exposure for owner, admin, CLI
+deployer, and runner callers.
+
+#### Scenario: Authorized actor invokes action
+
+- GIVEN a caller invokes a schema action exposed to its actor kind
+- WHEN auth, input, idempotency, and schema validation pass
+- THEN the runtime accepts the action
+- AND the action response includes only fields allowed for that actor
+
+#### Scenario: Unexposed action is hidden
+
+- GIVEN a generated browser surface renders schema actions
+- WHEN an action is exposed only to CLI deployers or runners
+- THEN the action is not rendered as a browser control
+- AND direct browser invocation of that actor-only action is rejected
+
+### Requirement: Secret Reference Fields
+
+The system SHALL allow schema records to carry non-secret references to runtime
+or provider secrets without storing secret values.
+
+#### Scenario: Store secret reference
+
+- GIVEN deployment configuration needs a credential or provider state secret
+- WHEN the record is stored, changed, read, archived, or written to a workspace
+- THEN the schema record stores a secret reference or requirement fact
+- AND the secret value is excluded from record values, changes, read models,
+  browser responses, archives, and workspace manifests
+
+### Requirement: Route Field Validation
+
+The system SHALL let runtime-owned schemas validate route path and route prefix
+fields against runtime topology constraints.
+
+#### Scenario: Validate app route path
+
+- GIVEN an app route record is created or patched
+- WHEN route validation runs
+- THEN the route path or prefix is checked for route-safe shape, reserved path
+  conflicts, package capability, route kind, and enabled-route uniqueness
+- AND invalid route values are rejected before runtime route behavior changes
+
+### Requirement: Append-Only Control-Plane History
+
+The system SHALL let runtime-owned schemas mark control-plane history records as
+append-only or action-created.
+
+#### Scenario: Append-only evidence
+
+- GIVEN deployment attempt, evidence, cleanup, or drift history is recorded
+- WHEN the history record is created
+- THEN it is created through an allowed action or runtime write path
+- AND ordinary generated patch or delete controls are not exposed for that
+  history record

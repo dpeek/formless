@@ -1,10 +1,9 @@
 ## ADDED Requirements
 
-### Requirement: Schema Deployment Protocol
+### Requirement: Schema Control-Plane Protocol
 
 The Site CLI SHALL use the instance protocol to query schema-owned app install,
-route, and deployment records and invoke deployment actions when the target
-supports them.
+route, and deployment records when the target supports them.
 
 #### Scenario: CLI reads deployment records
 
@@ -15,13 +14,13 @@ supports them.
   control-plane protocol
 - **AND** provider credentials remain in CLI or runner-held secret locations
 
-#### Scenario: CLI invokes deployment action
+#### Scenario: CLI binds exact desired-state version
 
 - **WHEN** `formless instance domains run-apply` or a deployment command starts
-  an attempt
-- **THEN** the CLI invokes the schema-declared deployment action for the target
-  actor
-- **AND** the action binds to the exact desired-state version and idempotency key
+  against a schema-owned target
+- **THEN** the CLI reads the desired-state version for the target
+- **AND** existing deployment-runtime attempt and writeback calls bind to the
+  exact desired-state version and idempotency key
 
 #### Scenario: CLI reads app routes
 

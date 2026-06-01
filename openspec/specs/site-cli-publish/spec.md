@@ -228,3 +228,49 @@ generic deployment protocol facts when the target supports them.
 - THEN the commands remain available with their existing credential boundary
 - AND direct Cloudflare fallback plan/apply commands remain labeled fallback and
   explicit
+
+### Requirement: Schema Control-Plane Protocol
+
+The Site CLI SHALL use the instance protocol to query schema-owned app install,
+route, and deployment records when the target supports them.
+
+#### Scenario: CLI reads deployment records
+
+- GIVEN a claimed instance workspace targets a runtime with schema-owned
+  control-plane records
+- WHEN CLI status, check, pull, push, plan, deploy, or domain workflows need
+  instance control-plane state
+- THEN they read allowed app install, route, domain, and deployment records
+  through the instance control-plane protocol
+- AND provider credentials remain in CLI or runner-held secret locations
+
+#### Scenario: CLI binds exact desired-state version
+
+- GIVEN `formless instance domains run-apply` or a deployment command starts
+  against a schema-owned target
+- WHEN the command reads desired deployment state
+- THEN it binds existing deployment-runtime attempt and writeback calls to the
+  exact desired-state version and idempotency key
+- AND runner-held credentials remain outside browser, archive, and workspace
+  manifest responses
+
+#### Scenario: CLI reads app routes
+
+- GIVEN an instance workspace needs installed app or public Site route state
+- WHEN route state is available as schema-owned records
+- THEN the CLI reads `appInstall` and `appRoute` records
+- AND route drift is reported by comparing route records rather than
+  hand-derived install route strings
+
+### Requirement: Compatible Domain Commands
+
+The Site CLI SHALL keep existing domain command surfaces stable while
+deployment intent moves to schema-owned records.
+
+#### Scenario: Existing command output
+
+- GIVEN users run existing domain remote-plan, run-apply, run-delete, forget,
+  manual cleanup, or direct fallback commands
+- WHEN those commands execute
+- THEN command names and credential boundaries remain stable
+- AND output may include schema-owned deployment record ids when available

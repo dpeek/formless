@@ -188,8 +188,17 @@ Evidence:
 
 ## 12. Verification And Promotion
 
-- [ ] 12.1 Run `devstate start` before implementation work and fix any red status in `./.devstate/status.md`.
-- [ ] 12.2 Run `devstate check` after each shipped implementation section and use `./.devstate/status.md` as evidence.
-- [ ] 12.3 Smoke visible instance management UI behavior with `bun browser ...` when generated instance UI changes.
-- [ ] 12.4 Record implementation decisions, blockers, evidence, and promotion notes in the owning change artifacts.
-- [ ] 12.5 Promote shipped facts into `openspec/specs/` for instance control plane, installed apps, runtime topology, app schema, authority storage, generated UI, Site CLI, custom domains, package slices, and portable archives.
+- [x] 12.1 Run `devstate start` before implementation work and fix any red status in `./.devstate/status.md`.
+- [x] 12.2 Run `devstate check` after each shipped implementation section and use `./.devstate/status.md` as evidence.
+- [x] 12.3 Smoke visible instance management UI behavior with `bun browser ...` when generated instance UI changes.
+- [x] 12.4 Record implementation decisions, blockers, evidence, and promotion notes in the owning change artifacts.
+- [x] 12.5 Promote shipped facts into `openspec/specs/` for instance control plane, installed apps, runtime topology, app schema, authority storage, generated UI, Site CLI, custom domains, package slices, and portable archives.
+
+Evidence:
+
+- Files changed: `openspec/specs/instance-control-plane/spec.md`, `openspec/specs/app-schema/spec.md`, `openspec/specs/authority-storage/spec.md`, `openspec/specs/custom-domains/spec.md`, `openspec/specs/deployment-runtime/spec.md`, `openspec/specs/generated-ui/spec.md`, `openspec/specs/installed-apps/spec.md`, `openspec/specs/package-slices/spec.md`, `openspec/specs/portable-archives/spec.md`, `openspec/specs/runtime-topology/spec.md`, `openspec/specs/site-cli-publish/spec.md`, `openspec/changes/schema-owned-control-plane/specs/site-cli-publish/spec.md`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-06-01T02:21:51.230Z. `openspec validate schema-owned-control-plane --strict` passed. `openspec validate --all --strict` passed with 22 items. `devstate check` after spec promotion passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T02:26:14.486Z.
+- Smoke: not run; section 12 changes promoted specs and owning change evidence only, with no generated instance UI behavior change.
+- Decisions: promoted section 1-11 shipped facts into canonical specs, including the new `instance-control-plane` capability and the promoted `deployment-runtime` projection facts. Updated the change-local Site CLI delta so promotion matches the implemented migration slice: CLI workflows query control-plane records when available, then bind existing deployment-runtime attempt and writeback calls to the exact desired-state version rather than claiming a schema-declared lifecycle action cutover in this change.
+- Blockers: none.
+- Promotion notes: promoted runtime-owned schema metadata, immutable fields, actor-scoped actions, secret references, append-only history, instance control-plane storage, schema-owned app installs and routes, route resolution, generated instance management UI, custom-domain control-plane records, deploy package boundaries, control-plane archive/workspace shape, workspace drift separation, and CLI control-plane protocol compatibility into `openspec/specs/`.
