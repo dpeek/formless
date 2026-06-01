@@ -130,8 +130,10 @@ For `bun agents watch <worker-name>`:
 
 - Finalize automatically when required tasks are shipped or intentionally closed.
 - Rebase on local `main` and reconcile updated change artifacts before marking ready.
+- Resolve clear structural rebase conflicts; block only on semantic conflicts that require product, storage, security, public API, or user-intent decisions.
 - Promote shipped facts into relevant `openspec/specs/*/spec.md` on the branch.
 - Leave a clean review-ready `changes/<change-id>` branch.
+- Keep review-ready branches rebased on local `main`; workers rerun finalization when `main` advances.
 - Detach the worker worktree from `changes/<change-id>` at the final branch tip before marking ready.
 - Do not archive the OpenSpec change; archiving is a separate process after review and merge.
 - Do not merge unless user asks.

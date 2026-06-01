@@ -137,6 +137,16 @@ The system SHALL finalize a completed change branch before marking it ready for 
 - **WHEN** all required tasks are shipped or intentionally closed
 - **THEN** the worker rebases on local `main`, reconciles updated change artifacts, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits finalization, detaches the worker worktree at the final branch tip, and marks the branch ready for review
 
+#### Scenario: Worker resolves clear structural rebase conflicts
+
+- **WHEN** a finalization rebase has structural conflicts whose sides can coexist without changing runtime invariants
+- **THEN** the worker preserves both sides, continues the rebase, runs `devstate check`, and records conflict resolution evidence
+
+#### Scenario: Worker blocks on semantic rebase conflicts
+
+- **WHEN** a finalization rebase requires choosing between incompatible behavior, storage order, auth/security boundaries, public API shape, deletion versus edit, or another unstated product decision
+- **THEN** the worker records blocker evidence and leaves the branch unmerged for human review
+
 #### Scenario: Review-ready branch includes promoted specs
 
 - **WHEN** a worker marks `changes/add-thing` ready for review
@@ -162,9 +172,14 @@ The system SHALL rebase existing local change branches on local `main` when no i
 - **WHEN** no OpenSpec change can be claimed
 - **THEN** the worker scans existing `changes/*` branches and attempts to rebase eligible branches on local `main`
 
-#### Scenario: Idle rebase conflict blocks branch
+#### Scenario: Idle rebase structural conflict is resolved
 
-- **WHEN** an idle rebase has conflicts the worker cannot clearly resolve
+- **WHEN** an idle rebase has structural conflicts whose sides can coexist without changing runtime invariants
+- **THEN** the worker preserves both sides, continues the rebase, runs `devstate check`, and records conflict resolution evidence
+
+#### Scenario: Idle rebase semantic conflict blocks branch
+
+- **WHEN** an idle rebase has semantic conflicts that require choosing between incompatible behavior, storage order, auth/security boundaries, public API shape, deletion versus edit, or another unstated product decision
 - **THEN** the worker records blocker evidence and leaves the branch unmerged for human review
 
 ### Requirement: Human merge boundary
@@ -187,5 +202,5 @@ The system SHALL use rebases on local `main` to carry human-authored change feed
 
 #### Scenario: Worker cannot reconcile feedback
 
-- **WHEN** updated change artifacts conflict with shipped behavior and the resolution is unclear
+- **WHEN** updated change artifacts conflict semantically with shipped behavior
 - **THEN** the worker records blocker evidence and leaves the branch unmerged

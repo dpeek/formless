@@ -346,7 +346,7 @@ export function createChangeLease(
 export function updateChangeLease(
   stateRoot: string,
   changeId: string,
-  patch: Partial<Pick<LeaseRecord, "latestEvidence" | "state">>,
+  patch: Partial<Pick<LeaseRecord, "latestEvidence" | "owner" | "state">>,
   now: () => Date = () => new Date(),
 ): LeaseRecord {
   const lease = readChangeLease(stateRoot, changeId);
@@ -357,6 +357,7 @@ export function updateChangeLease(
   const updated: LeaseRecord = {
     ...lease,
     ...patch,
+    owner: patch.owner ? validateWorkerName(patch.owner) : lease.owner,
     heartbeatAt: nowIso(now),
     updatedAt: nowIso(now),
   };
@@ -591,6 +592,40 @@ export function listLocalChangeBranches(cwd: string, runCommand = defaultCommand
     .map((branch) => branch.trim())
     .filter((branch) => changeIdFromBranch(branch) !== null)
     .sort();
+}
+
+function branchIncludesBase(
+  cwd: string,
+  branch: string,
+  baseRef: string,
+  runCommand: CommandRunner,
+): boolean {
+  const result = runCommand(cwd, "git", ["merge-base", "--is-ancestor", baseRef, branch]);
+  if (result.code === 0) {
+    return true;
+  }
+
+  if (result.code === 1) {
+    return false;
+  }
+
+  throw new Error(`git merge-base --is-ancestor ${baseRef} ${branch} failed:\n${result.stderr}`);
+}
+
+function findReadyForReviewLeaseNeedingRebase(input: {
+  baseRef: string;
+  cwd: string;
+  runCommand: CommandRunner;
+  stateRoot: string;
+}): LeaseRecord | null {
+  return (
+    listChangeLeases(input.stateRoot).find(
+      (lease) =>
+        lease.state === "ready-for-review" &&
+        branchExists(input.cwd, lease.branch, input.runCommand) &&
+        !branchIncludesBase(input.cwd, lease.branch, input.baseRef, input.runCommand),
+    ) ?? null
+  );
 }
 
 export function detachWorktreeAtBranchTip(
@@ -990,6 +1025,7 @@ function showDryRunClaim(input: {
 async function runClaimedChange(input: {
   branchPlan: BranchPlan;
   change: CommittedOpenSpecChange;
+  modeOverride?: WorkerSessionMode;
   now: () => Date;
   options: WatchOptions;
   paths: AgentStatePaths;
@@ -997,13 +1033,11 @@ async function runClaimedChange(input: {
   runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
-  const mode = changeNeedsFinalization(
-    input.branchPlan.worktreeDir,
-    input.change.changeId,
-    input.runCommand,
-  )
-    ? "finalize"
-    : "implement";
+  const mode =
+    input.modeOverride ??
+    (changeNeedsFinalization(input.branchPlan.worktreeDir, input.change.changeId, input.runCommand)
+      ? "finalize"
+      : "implement");
   const state: WorkerState = mode === "finalize" ? "finalizing" : "working";
   const evidence: AgentEvidence = {
     at: nowIso(input.now),
@@ -1130,6 +1164,94 @@ async function runClaimedChange(input: {
   return 0;
 }
 
+async function runReadyForReviewMaintenance(input: {
+  cwd: string;
+  now: () => Date;
+  options: WatchOptions;
+  paths: AgentStatePaths;
+  runCommand: CommandRunner;
+  runSession: CodexSessionRunner;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}): Promise<number | null> {
+  const lease = findReadyForReviewLeaseNeedingRebase({
+    baseRef: input.options.baseRef,
+    cwd: input.cwd,
+    runCommand: input.runCommand,
+    stateRoot: input.paths.root,
+  });
+  if (!lease) {
+    return null;
+  }
+
+  const evidence: AgentEvidence = {
+    at: nowIso(input.now),
+    command: `git merge-base --is-ancestor ${input.options.baseRef} ${lease.branch}`,
+    message: `ready-for-review branch ${lease.branch} is behind ${input.options.baseRef}; starting finalization maintenance`,
+  };
+  updateChangeLease(
+    input.paths.root,
+    lease.changeId,
+    {
+      latestEvidence: evidence,
+      owner: input.options.workerName,
+      state: "finalizing",
+    },
+    input.now,
+  );
+  writeLine(input.stdout, `[agents] ready maintenance ${lease.changeId}`);
+
+  let branchPlan: BranchPlan;
+  try {
+    branchPlan = ensureChangeBranch(input.cwd, lease.changeId, {
+      baseRef: input.options.baseRef,
+      runCommand: input.runCommand,
+      workerName: input.options.workerName,
+      worktreeDir: input.options.worktreeDir,
+    });
+  } catch (error) {
+    const blockedEvidence: AgentEvidence = {
+      at: nowIso(input.now),
+      message: `branch setup failed for ready maintenance ${lease.changeId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+    writeWorkerStatus(
+      input.paths.root,
+      makeWorkerStatus({
+        branch: lease.branch,
+        currentChange: lease.changeId,
+        latestEvidence: blockedEvidence,
+        now: input.now,
+        owner: input.options.workerName,
+        state: "blocked",
+      }),
+    );
+    updateChangeLease(
+      input.paths.root,
+      lease.changeId,
+      { latestEvidence: blockedEvidence, owner: input.options.workerName, state: "blocked" },
+      input.now,
+    );
+    return 1;
+  }
+
+  return runClaimedChange({
+    branchPlan,
+    change: {
+      artifactPaths: [],
+      branch: lease.branch,
+      changeId: lease.changeId,
+    },
+    modeOverride: "finalize",
+    now: input.now,
+    options: input.options,
+    paths: input.paths,
+    runCommand: input.runCommand,
+    runSession: input.runSession,
+    stdout: input.stdout,
+  });
+}
+
 async function runIdleMaintenance(input: {
   cwd: string;
   now: () => Date;
@@ -1254,6 +1376,19 @@ async function runWatchOnce(input: {
         runSession: input.runSession,
         stdout: input.stdout,
       });
+    }
+
+    const readyMaintenanceCode = await runReadyForReviewMaintenance({
+      cwd: input.cwd,
+      now: input.now,
+      options: input.options,
+      paths,
+      runCommand: input.runCommand,
+      runSession: input.runSession,
+      stdout: input.stdout,
+    });
+    if (readyMaintenanceCode !== null) {
+      return readyMaintenanceCode;
     }
   }
 
