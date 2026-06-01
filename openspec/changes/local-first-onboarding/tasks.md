@@ -106,3 +106,4 @@ Evidence:
 - Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
 - Smoke: not run for this section; only OpenSpec spec/task evidence changed. Prior browser-visible local dev behavior was smoked in section 3.
 - Promotion: shipped local-first onboarding, workspace save/check, first deploy boundary, workspace source-of-truth, empty local runtime, and no-secret archive/workspace behavior were promoted into `openspec/specs/site-cli-publish/spec.md` and `openspec/specs/portable-archives/spec.md`.
+- Finalization: `git rebase main` reported `changes/local-first-onboarding` up to date; `openspec instructions apply --change "local-first-onboarding" --json` reported 39/39 tasks complete with `state: "all_done"` after the rebase; final `devstate check` passed and `.devstate/status.md` reported checks ok, web ready, and test service pass.
