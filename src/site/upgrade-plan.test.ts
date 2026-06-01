@@ -194,7 +194,7 @@ Steps: 7.
 3. package-app-migration [pending] safety=auto-with-backup
    Summary: Migrate Site records to revision 2.
    Target: targetId=instance.primary, storageIdentity=app:site.
-   Package app: packageAppKey=site, installId=site, packageRevision=1->2, sourceSchemaHash=sha256:8f66129db4d31d2c4d93624737df3b9eb277c2d7f6690b1014bcb9bb6595b9fe.
+   Package app: packageAppKey=site, installId=site, packageRevision=1->2, sourceSchemaHash=${bundledSourceSchemaHashFixtures.site}.
    Required evidence: applied-package-app-migration: package app migration evidence; reference=package.site.0002.
    Details: migration=package.site.0002; checksum=sha256:1111111111111111111111111111111111111111111111111111111111111111; owner=site; packageRevision=1->2.
    Pending: Backup evidence must be recorded before user data migration.

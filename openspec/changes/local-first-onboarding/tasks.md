@@ -1,10 +1,17 @@
 ## 1. Manifest Rename And Discovery
 
-- [ ] 1.1 Rename the instance workspace manifest constant and generated file name to `formless.json`.
-- [ ] 1.2 Update workspace manifest parse, format, validation, and error text to use `formless.json`.
-- [ ] 1.3 Add workspace discovery helpers that resolve the nearest `formless.json` for top-level commands.
-- [ ] 1.4 Remove legacy manifest read compatibility and fail precisely when `formless.instance-workspace.json` or `formless-workspace.json` is present.
-- [ ] 1.5 Update manifest unit tests for new file name, secret rejection, path validation, deploy settings, apps, and domains.
+- [x] 1.1 Rename the instance workspace manifest constant and generated file name to `formless.json`.
+- [x] 1.2 Update workspace manifest parse, format, validation, and error text to use `formless.json`.
+- [x] 1.3 Add workspace discovery helpers that resolve the nearest `formless.json` for top-level commands.
+- [x] 1.4 Remove legacy manifest read compatibility and fail precisely when `formless.instance-workspace.json` or `formless-workspace.json` is present.
+- [x] 1.5 Update manifest unit tests for new file name, secret rejection, path validation, deploy settings, apps, and domains.
+
+Evidence:
+
+- Files changed: `src/site/instance-workspace-config.ts`, `src/site/instance-workspace.ts`, `src/site/cli.ts`, `src/site/instance-workspace-config.test.ts`, `src/site/cli.test.ts`, `src/shared/instance-control-plane.test.ts`, `src/site/upgrade-plan.test.ts`.
+- Checks: `devstate check` passed on 2026-06-01; `.devstate/status.md` reports checks ok, web ready, test service pass.
+- Smoke: not run; section changes CLI workspace manifest/discovery behavior only, with no browser-visible app behavior.
+- Baseline red status fixed first: package app revision/hash expectations in `src/shared/instance-control-plane.test.ts` and `src/site/upgrade-plan.test.ts` now match shipped schema behavior.
 
 ## 2. Local-Only Onboard
 

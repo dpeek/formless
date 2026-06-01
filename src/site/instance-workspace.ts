@@ -46,6 +46,7 @@ import {
 import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
   defaultFormlessInstanceWorkspaceManifest,
   formatFormlessInstanceWorkspaceManifest,
   normalizeFormlessInstanceWorkspaceTargetUrl,
@@ -114,6 +115,11 @@ export type InitFormlessInstanceWorkspaceResult = {
   manifest: FormlessInstanceWorkspaceManifest;
   manifestPath: string;
   remoteStatus?: FormlessInstanceTargetStatus;
+  workspaceRoot: string;
+};
+
+export type FormlessInstanceWorkspaceDiscoveryResult = {
+  manifestPath: string;
   workspaceRoot: string;
 };
 
@@ -403,7 +409,7 @@ export async function initFormlessInstanceWorkspace(
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const manifestPath = workspaceManifestPath(workspaceRoot);
 
-  await assertNoExistingManifest(manifestPath);
+  await assertNoExistingWorkspaceManifest(workspaceRoot);
   await mkdir(workspaceRoot, { recursive: true });
 
   const name = input.name ?? defaultWorkspaceName(workspaceRoot);
@@ -449,6 +455,49 @@ export async function initFormlessInstanceWorkspace(
     ...(remoteStatus === undefined ? {} : { remoteStatus }),
     workspaceRoot,
   };
+}
+
+export async function discoverFormlessInstanceWorkspaceRoot(
+  cwd: string,
+): Promise<FormlessInstanceWorkspaceDiscoveryResult> {
+  let directory = path.resolve(cwd);
+
+  while (true) {
+    await assertNoLegacyWorkspaceManifest(directory);
+
+    const manifestPath = workspaceManifestPath(directory);
+
+    if (await pathExists(manifestPath)) {
+      return {
+        manifestPath,
+        workspaceRoot: directory,
+      };
+    }
+
+    const parent = path.dirname(directory);
+
+    if (parent === directory) {
+      throw new Error(
+        `Could not find ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE} from ${path.resolve(cwd)}.`,
+      );
+    }
+
+    directory = parent;
+  }
+}
+
+export async function resolveFormlessInstanceWorkspaceRoot(input: {
+  cwd: string;
+  workspacePath?: string | null;
+}): Promise<string> {
+  if (input.workspacePath === undefined || input.workspacePath === null) {
+    return (await discoverFormlessInstanceWorkspaceRoot(input.cwd)).workspaceRoot;
+  }
+
+  const workspaceRoot = workspaceRootForInput(input.cwd, input.workspacePath);
+
+  await assertNoLegacyWorkspaceManifest(workspaceRoot);
+  return workspaceRoot;
 }
 
 export async function getFormlessInstanceWorkspaceStatus(
@@ -1809,24 +1858,47 @@ async function readWorkspaceManifest(workspaceRoot: string): Promise<{
 }> {
   const manifestPath = workspaceManifestPath(workspaceRoot);
 
+  await assertNoLegacyWorkspaceManifest(workspaceRoot);
+
   return {
     manifest: parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
     manifestPath,
   };
 }
 
-async function assertNoExistingManifest(manifestPath: string) {
+async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
+  await assertNoLegacyWorkspaceManifest(workspaceRoot);
+
+  const manifestPath = workspaceManifestPath(workspaceRoot);
+
+  if (await pathExists(manifestPath)) {
+    throw new Error(`Formless instance workspace already exists at ${manifestPath}.`);
+  }
+}
+
+async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {
+  for (const fileName of LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES) {
+    const manifestPath = path.join(workspaceRoot, fileName);
+
+    if (await pathExists(manifestPath)) {
+      throw new Error(
+        `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+      );
+    }
+  }
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
   try {
-    await readFile(manifestPath, "utf8");
+    await readFile(filePath, "utf8");
+    return true;
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      return;
+      return false;
     }
 
     throw error;
   }
-
-  throw new Error(`Formless instance workspace already exists at ${manifestPath}.`);
 }
 
 async function prepareWorkspaceDirectories(

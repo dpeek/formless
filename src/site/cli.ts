@@ -207,9 +207,11 @@ export {
   type WriteFormlessInstanceWorkspaceSecretStateResult,
 } from "./instance-workspace-secrets.ts";
 export {
+  discoverFormlessInstanceWorkspaceRoot,
   formlessInstanceWorkspaceDevEnv,
   formlessInstanceWorkspaceLocalStateRoot,
   formlessInstanceWorkspaceWranglerPersistPath,
+  resolveFormlessInstanceWorkspaceRoot,
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
@@ -228,6 +230,7 @@ export {
   type FormlessInstanceWorkspaceStatusInput,
   type FormlessInstanceWorkspaceStatusResult,
   type FormlessInstanceWorkspaceDevCommand,
+  type FormlessInstanceWorkspaceDiscoveryResult,
   type FormlessInstanceWorkspaceDriftSummary,
   type FormlessInstanceWorkspacePackageMismatch,
   type InitFormlessInstanceWorkspaceDependencies,

@@ -5,7 +5,11 @@ import {
   type InstanceDomainMappingProfile,
 } from "../shared/instance-domain-mappings.ts";
 
-export const FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE = "formless.instance-workspace.json";
+export const FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE = "formless.json";
+export const LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES = [
+  "formless.instance-workspace.json",
+  "formless-workspace.json",
+] as const;
 export const FORMLESS_INSTANCE_WORKSPACE_VERSION = 1;
 export const FORMLESS_INSTANCE_WORKSPACE_KIND = "formless-instance-workspace";
 export const DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS = "remote";

@@ -83,6 +83,8 @@ describe("instance control-plane schema contracts", () => {
       { field: "packageAppKey", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
+      { field: "packageRevision", display: "readOnly" },
+      { field: "sourceSchemaHash", display: "readOnly" },
     ]);
     expect(schema.tableViews.appRouteTable?.columns).toMatchObject([
       { field: "appInstall", display: "readOnly" },

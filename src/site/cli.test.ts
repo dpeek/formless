@@ -62,9 +62,11 @@ import {
   onboardFormlessInstance,
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  discoverFormlessInstanceWorkspaceRoot,
   formatFormlessInstanceWorkspaceManifest,
   parseFormlessInstanceWorkspaceManifestJson,
   publishSiteProject,
+  resolveFormlessInstanceWorkspaceRoot,
   runFormlessCli,
   saveSiteProject,
   setupSiteProjectDeploy,
@@ -951,6 +953,41 @@ describe("Formless Site CLI", () => {
       ],
     });
     expect(logs.at(-1)).toContain("Archive source: archives/instance.");
+  });
+
+  it("discovers nearest Formless workspace manifest and rejects legacy manifest names", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const nestedRoot = path.join(workspaceRoot, "app", "site");
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await mkdir(nestedRoot, { recursive: true });
+
+    await expect(discoverFormlessInstanceWorkspaceRoot(nestedRoot)).resolves.toEqual({
+      manifestPath: path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      workspaceRoot,
+    });
+    await expect(resolveFormlessInstanceWorkspaceRoot({ cwd: nestedRoot })).resolves.toBe(
+      workspaceRoot,
+    );
+
+    for (const fileName of ["formless.instance-workspace.json", "formless-workspace.json"]) {
+      const legacyRoot = path.join(tempDir, fileName.replace(".json", ""));
+      const legacyPath = path.join(legacyRoot, fileName);
+
+      await mkdir(path.join(legacyRoot, "nested"), { recursive: true });
+      await writeFile(legacyPath, "{}");
+      await expect(
+        discoverFormlessInstanceWorkspaceRoot(path.join(legacyRoot, "nested")),
+      ).rejects.toThrow(
+        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+      );
+      await expect(
+        runFormlessCli(["instance", "status", "--workspace", legacyRoot], cliDeps(tempDir)),
+      ).rejects.toThrow(
+        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+      );
+    }
   });
 
   it("reports instance workspace status from manifest, secret state, and target reads", async () => {

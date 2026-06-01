@@ -5,6 +5,7 @@ import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
+  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultFormlessInstanceWorkspaceManifest,
   formatFormlessInstanceWorkspaceManifest,
   normalizeFormlessInstanceWorkspaceTargetUrl,
@@ -14,6 +15,7 @@ import {
 
 describe("Formless instance workspace manifest", () => {
   it("creates a minimal reviewable workspace manifest from a target URL", () => {
+    expect(FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE).toBe("formless.json");
     expect(
       defaultFormlessInstanceWorkspaceManifest({
         name: "personal-sites",
@@ -157,9 +159,7 @@ describe("Formless instance workspace manifest", () => {
           adminToken: "secret",
         },
       }),
-    ).toThrow(
-      'formless.instance-workspace.json must not store secret field "formless.instance-workspace.json.deploy.adminToken".',
-    );
+    ).toThrow('formless.json must not store secret field "formless.json.deploy.adminToken".');
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
@@ -170,7 +170,7 @@ describe("Formless instance workspace manifest", () => {
         },
       }),
     ).toThrow(
-      'formless.instance-workspace.json must not store secret field "formless.instance-workspace.json.deploy.alchemyStateToken".',
+      'formless.json must not store secret field "formless.json.deploy.alchemyStateToken".',
     );
 
     expect(() =>
@@ -190,7 +190,7 @@ describe("Formless instance workspace manifest", () => {
         apps: [],
         extra: true,
       }),
-    ).toThrow('formless.instance-workspace.json has unsupported key "extra".');
+    ).toThrow('formless.json has unsupported key "extra".');
   });
 
   it("validates target aliases, relative paths, install ids, and deploy policy", () => {
@@ -199,25 +199,21 @@ describe("Formless instance workspace manifest", () => {
         ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
         defaultTarget: "missing",
       }),
-    ).toThrow("formless.instance-workspace.json defaultTarget must match a target alias.");
+    ).toThrow("formless.json defaultTarget must match a target alias.");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
         ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
         targets: [{ alias: "Remote", url: "https://formless.example.workers.dev" }],
       }),
-    ).toThrow(
-      "formless.instance-workspace.json targets[0] alias must start with a lowercase letter",
-    );
+    ).toThrow("formless.json targets[0] alias must start with a lowercase letter");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
         ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
         archives: { instance: "../archive", apps: "archives/apps" },
       }),
-    ).toThrow(
-      "formless.instance-workspace.json archives.instance must be a relative workspace path.",
-    );
+    ).toThrow("formless.json archives.instance must be a relative workspace path.");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
@@ -231,9 +227,7 @@ describe("Formless instance workspace manifest", () => {
           },
         ],
       }),
-    ).toThrow(
-      'formless.instance-workspace.json apps[0] installId is invalid: Install id "api" is reserved.',
-    );
+    ).toThrow('formless.json apps[0] installId is invalid: Install id "api" is reserved.');
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
@@ -242,9 +236,7 @@ describe("Formless instance workspace manifest", () => {
           migrationPolicy: "auto",
         },
       }),
-    ).toThrow(
-      'formless.instance-workspace.json deploy.migrationPolicy must be "new" or "existing".',
-    );
+    ).toThrow('formless.json deploy.migrationPolicy must be "new" or "existing".');
   });
 
   it("normalizes target URLs to origins", () => {
