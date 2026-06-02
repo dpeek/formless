@@ -35,10 +35,19 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `openspec/specs/site-runtime/spec.md`: Site records, public tree, SSR, metadata, icons.
 - `openspec/specs/site-cli-publish/spec.md`: standalone Site CLI, save, publish, deploy commands.
 - `openspec/specs/installed-apps/spec.md`: product app installs, routes, install storage.
+- `openspec/specs/instance-control-plane/spec.md`: schema-owned instance management records.
+- `openspec/specs/instance-auth/spec.md`: owner passkeys, sessions, admin bearer boundary.
 - `openspec/specs/runtime-topology/spec.md`: profiles, route policy, mapped hosts.
+- `openspec/specs/deployment-runtime/spec.md`: desired deploy state, attempts, leases, status.
 - `openspec/specs/core-media/spec.md`: core media assets, upload, delivery, media archive payloads.
+- `openspec/specs/media/spec.md`: reusable Media package contracts and adapters.
 - `openspec/specs/custom-domains/spec.md`: exact-host mappings, provider jobs, redirects, cleanup.
 - `openspec/specs/portable-archives/spec.md`: app and instance archives, restore, import, workspaces.
+- `openspec/specs/public-actions/spec.md`: public action policy, target routes, challenges.
+- `openspec/specs/contact-subscriptions/spec.md`: Site contacts, emails, audiences, subscriptions.
+- `openspec/specs/package-slices/spec.md`: reusable `lib/<package>` package boundaries.
+- `openspec/specs/upgrade-migrations/spec.md`: metadata, migrations, CLI upgrade flow.
+- `openspec/specs/local-agent-workers/spec.md`: worker leases, branches, finalization.
 
 ## Repo Map
 
@@ -51,6 +60,8 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `src/test/`: shared test fixtures.
 - `schema/apps/`: bundled app schemas and seed records.
 - `lib/ui/`: shared browser UI package.
+- `lib/media/`: reusable media contracts and adapters package.
+- `lib/deploy/`: reusable deployment contracts and adapters package.
 - `scripts/`: repo scripts, local agents, package build, seed pull.
 - `openspec/specs/`: shipped capability specs.
 - `doc/agents/`: local agent workflow config and prompt bodies.
@@ -88,8 +99,16 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Generated UI: React surfaces selected from schema models.
 - Public tree: Site flat block and placement projection into nested output.
 - Core media: instance-owned media assets referenced by flat app records.
+- Media package: reusable core media contracts, helpers, and adapters under `lib/media`.
 - Custom domain mapping: exact-host profile route intent stored on the instance.
+- Instance control plane: schema records for installs, routes, domain intent, deploy intent.
+- Deployment runtime: versioned desired deploy state, attempt history, leases, and status.
+- Instance auth: owner passkey setup, sessions, logout, and admin bearer boundary.
+- Public action: schema-declared action opened through target-scoped public routes.
+- Contact subscription: flat Site-owned contact, email address, audience, and subscription records.
 - Portable archive: versioned app or instance export, restore, import envelope.
+- Package slice: reusable capability package under `lib/<package>` without app records.
+- Upgrade migration: registered runtime or app-data migration with safety policy and apply evidence.
 
 ## App Terms
 

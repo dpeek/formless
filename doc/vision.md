@@ -1,6 +1,6 @@
 # Formless Vision
 
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 Purpose: big-picture product vision for Formless V1.
 
@@ -54,6 +54,16 @@ defaults and clear escape hatches.
   workspace.
 - Portable app and instance archives already prove backup, restore, and import
   plumbing.
+- Schema-owned instance control-plane records already model app installs,
+  routes, domain intent, and deployment intent.
+- Owner passkey setup, owner sessions, logout, and admin bearer recovery
+  boundaries already exist.
+- Public actions and Site contact subscription records already prove anonymous
+  write paths for public Sites.
+- Deployment desired-state versions, attempts, leases, status, and upgrade
+  metadata already exist.
+- Media and Deploy package slices already expose reusable contracts, helpers,
+  and adapters.
 
 ## V1 Shape
 
@@ -230,9 +240,9 @@ From the browser, the user should be able to:
 
 ## Open Questions
 
-- What is the exact V1 command sequence after `formless onboard`?
+- What is the exact V1 browser-first setup path after `formless dev`?
 - Which Cloudflare primitive gets the next first-class adapter after core
-  instance and media work?
+  instance, deployment, and media work?
 - What is the smallest useful permission model for passkeys, roles, orgs, and
   groups?
 - What does ejection produce: a generated Worker project, an app package, an

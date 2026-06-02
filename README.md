@@ -2,7 +2,10 @@
 
 Formless is a schema-as-data app runtime for building custom software on Cloudflare.
 
-One app definition describes records, fields, relationships, queries, read models, views, screens, actions, public output, and deploy behavior. The runtime turns that definition into storage, sync, generated UI, media, public pages, archives, and deploy paths.
+One app definition describes records, fields, relationships, queries, read
+models, views, screens, actions, public output, and deploy behavior. The runtime
+turns that definition into storage, sync, generated UI, media, public pages,
+archives, and deploy paths.
 
 This README is the human overview. Agent instructions live separately in `AGENTS.md`.
 
@@ -19,18 +22,27 @@ npx @dpeek/formless dev
 
 Common commands:
 
-- `formless onboard` creates `formless.json`, empty archive roots, and ignored `.formless/` local state without mutating Cloudflare.
+- `formless onboard` creates `formless.json`, empty archive roots, and ignored
+  `.formless/` local state without mutating Cloudflare.
 - `formless dev` runs the local workspace instance selected by `formless.json`.
 - `formless save` writes local Authority-backed instance state to reviewable workspace archives.
 - `formless save --check` fails when reviewable workspace source is stale.
 - `formless check` compares workspace source and configured target drift.
-- `formless deploy` is the explicit Cloudflare boundary: it deploys the instance, stores display-safe target intent in `formless.json`, keeps secrets under `.formless/`, and pushes saved archives.
-- `formless archive import-site --project <path> --install <id> --out <dir>` imports a legacy standalone Site project as an app archive.
+- `formless deploy` is the explicit Cloudflare boundary: it deploys the
+  instance, stores display-safe target intent in `formless.json`, keeps secrets
+  under `.formless/`, and pushes saved archives.
+- `formless destroy` is the explicit Cloudflare boundary for tearing down the configured deployment.
+- `formless instance ...` manages advanced instance workspace pull, check,
+  push, dev, deploy, and destroy flows.
+- `formless archive import-site --project <path> --install <id> --out <dir>`
+  imports a legacy standalone Site project as an app archive.
 
 ## Packages
 
-- `@dpeek/formless`: Site runtime and CLI package.
+- `@dpeek/formless`: Formless runtime and CLI package.
 - `@dpeek/formless-ui`: shared browser primitives for generated runtime surfaces.
+- `@dpeek/formless-media`: reusable media contracts, helpers, and adapters.
+- `@dpeek/formless-deploy`: reusable deployment contracts, projection helpers, and adapters.
 
 ## Current Shape
 
@@ -47,8 +59,14 @@ The runtime already has:
 - portable app and instance archives;
 - explicit legacy Site project archive import;
 - installed app identity and routes;
+- schema-owned instance control-plane records for installs, routes, domain
+  intent, and deployment intent;
 - product instance, dev workbench, app, Site authoring, and published Site runtime profiles;
-- custom-domain planning and provider apply paths.
+- owner passkey setup, owner sessions, logout, and admin bearer recovery boundaries;
+- public action execution and Site contact subscription records;
+- deployment desired-state versions, attempts, leases, status, and upgrade metadata;
+- custom-domain planning, provider apply/delete, redirects, cleanup, and
+  deployment projection paths.
 
 ## Product Direction
 
@@ -67,7 +85,8 @@ The runtime should own:
 - AI, agents, browser rendering, image optimization, video delivery, and email integration;
 - deploy, backup, restore, import, and ejection paths.
 
-The schema stays the product contract. Custom code should extend that contract instead of replacing it.
+The schema stays the product contract. Custom code should extend that contract
+instead of replacing it.
 
 ## Design Principles
 
