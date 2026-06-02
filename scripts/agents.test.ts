@@ -23,6 +23,7 @@ import {
   runAgentsCli,
   worktreeDirForWorker,
   writeWorkerStatus,
+  type ApplyInstructions,
   type CommandRunner,
 } from "./agents.ts";
 
@@ -37,6 +38,32 @@ function readyChangeFiles(changeId = "add-thing"): string {
     `openspec/changes/${changeId}/tasks.md`,
     `openspec/changes/${changeId}/specs/local-agent-workers/spec.md`,
   ].join("\n");
+}
+
+function readyApplyInstructions(changeId = "add-thing"): ApplyInstructions {
+  return {
+    changeDir: `/repo/openspec/changes/${changeId}`,
+    changeName: changeId,
+    contextFiles: {
+      design: [`/repo/openspec/changes/${changeId}/design.md`],
+      proposal: [`/repo/openspec/changes/${changeId}/proposal.md`],
+      specs: [`/repo/openspec/changes/${changeId}/specs/local-agent-workers/spec.md`],
+      tasks: [`/repo/openspec/changes/${changeId}/tasks.md`],
+    },
+    instruction: "Read context files, work through pending tasks, mark complete as you go.",
+    progress: {
+      complete: 1,
+      remaining: 2,
+      total: 3,
+    },
+    schemaName: "spec-driven",
+    state: "ready",
+    tasks: [
+      { description: "1.1 Finished task.", done: true, id: "1" },
+      { description: "2.1 Select section before broad context reads.", done: false, id: "2" },
+      { description: "2.2 Reuse devstate output evidence.", done: false, id: "3" },
+    ],
+  };
 }
 
 function writeImplementationEvidence(worktreeDir: string, changeId = "add-thing"): void {
@@ -271,7 +298,7 @@ describe("local agent worker discovery", () => {
         return {
           code: 0,
           stderr: "",
-          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+          stdout: JSON.stringify(readyApplyInstructions()),
         };
       }
 
@@ -281,6 +308,7 @@ describe("local agent worker discovery", () => {
     expect(discoverClaimableOpenSpecChanges("/repo", { runCommand })).toEqual([
       {
         artifactPaths: readyChangeFiles("add-thing").split("\n").sort(),
+        applyInstructions: readyApplyInstructions(),
         branch: "changes/add-thing",
         changeId: "add-thing",
       },
@@ -347,7 +375,7 @@ describe("local agent worker discovery", () => {
         return {
           code: 0,
           stderr: "",
-          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+          stdout: JSON.stringify(readyApplyInstructions()),
         };
       }
 
@@ -378,6 +406,10 @@ describe("local agent worker discovery", () => {
           sessionCalls += 1;
           expect(input.changeId).toBe("add-thing");
           expect(input.mode).toBe("implement");
+          expect(input.applyInstructions?.state).toBe("ready");
+          expect(input.applyInstructions?.tasks?.find((task) => !task.done)?.description).toBe(
+            "2.1 Select section before broad context reads.",
+          );
           return "task-done";
         },
         stderr: {
@@ -1410,7 +1442,7 @@ describe("local agent worker dry-run", () => {
         return {
           code: 0,
           stderr: "",
-          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+          stdout: JSON.stringify(readyApplyInstructions("local-agent-pull-workers")),
         };
       }
 
@@ -1438,6 +1470,9 @@ describe("local agent worker dry-run", () => {
       expect(stdout).toContain(`${root}/tmp/worktree/igor`);
       expect(stdout).toContain('"state":"dry-run"');
       expect(stdout).toContain("codex exec");
+      expect(stdout).toContain("Apply state: ready");
+      expect(stdout).toContain("2.1 Select section before broad context reads.");
+      expect(stdout).not.toContain("openspec-apply-change");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -1445,33 +1480,74 @@ describe("local agent worker dry-run", () => {
 });
 
 describe("local OpenSpec implementation prompt", () => {
-  it("uses one tasks.md heading section as the implementation unit", () => {
-    const prompt = buildLocalOpenSpecImplementationPrompt("add-thing", "igor");
+  it("renders a concrete section-first prompt with known OpenSpec state", () => {
+    const prompt = buildLocalOpenSpecImplementationPrompt("add-thing", "igor", {
+      applyInstructions: readyApplyInstructions(),
+    });
 
     expect(prompt).toContain(
       "Implement one ready `##` task section from OpenSpec change `add-thing`.",
     );
+    expect(prompt).toContain(
+      'Apply command: openspec instructions apply --change "add-thing" --json',
+    );
+    expect(prompt).toContain('Status command: openspec status --change "add-thing" --json');
+    expect(prompt).toContain("Apply state: ready");
+    expect(prompt).toContain("Progress: 1/3 complete, 2 remaining");
+    expect(prompt).toContain(
+      "First unchecked task: 2: 2.1 Select section before broad context reads.",
+    );
+    expect(prompt).toContain("/repo/openspec/changes/add-thing/tasks.md");
+    expect(prompt).toContain("- [ ] 2: 2.1 Select section before broad context reads.");
+    expect(prompt).toContain("select the next ready `##` section before broad context reads");
     expect(prompt).toContain("Start with the `##` section containing the first unchecked task.");
     expect(prompt).toContain("until the next `##` heading or end of file.");
     expect(prompt).toContain("Do not cross into another `##` section.");
     expect(prompt).toContain("stop with `<blocked/>` and record split guidance");
     expect(prompt).toContain("Commit the `##` section with a concise message.");
+    expect(prompt).toContain("Current green `devstate start` output can satisfy setup evidence");
+    expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
+    expect(prompt).toContain(
+      "read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs",
+    );
+    expect(prompt).not.toContain("openspec-apply-change");
+    expect(prompt).not.toContain("doc/agents/local-openspec-implement.md");
+    expect(prompt).not.toContain("doc/agents/local-openspec-finalize.md");
+    expect(prompt).not.toContain("doc/agents/local-agent-workers.md");
     expect(prompt).not.toContain("Rebase current branch on local `main` before final commit.");
   });
 });
 
 describe("local OpenSpec finalization prompt", () => {
-  it("keeps review-ready branches promoted but unarchived", () => {
-    const prompt = buildLocalOpenSpecFinalizationPrompt("add-thing", "igor");
+  it("renders concrete CLI-owned finalization instructions", () => {
+    const prompt = buildLocalOpenSpecFinalizationPrompt("add-thing", "igor", {
+      applyInstructions: {
+        ...readyApplyInstructions(),
+        progress: { complete: 3, remaining: 0, total: 3 },
+        state: "all_done",
+        tasks: readyApplyInstructions().tasks?.map((task) => ({ ...task, done: true })),
+      },
+    });
 
     expect(prompt).toContain("Finalize before marking the branch ready for review.");
-    expect(prompt).toContain("reconcile implementation and promoted spec diffs");
-    expect(prompt).toContain("Promote shipped facts into relevant `openspec/specs/*/spec.md`.");
+    expect(prompt).toContain("Apply state: all_done");
+    expect(prompt).toContain("Progress: 3/3 complete, 0 remaining");
+    expect(prompt).toContain("git rebase main");
+    expect(prompt).toContain("openspec validate add-thing --strict --no-interactive");
+    expect(prompt).toContain("openspec archive add-thing --yes");
+    expect(prompt).toContain(
+      "Do not manually promote shipped facts into `openspec/specs/*/spec.md` when OpenSpec archive can apply the change deltas.",
+    );
+    expect(prompt).toContain("Reuse latest implementation `devstate check` evidence");
+    expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
     expect(prompt).toContain("Do not create an empty commit only for a clean rebase.");
-    expect(prompt).toContain("Do not archive the OpenSpec change.");
     expect(prompt).toContain(
       "Detach the worker worktree at the final `changes/add-thing` branch tip before marking ready.",
     );
-    expect(prompt).not.toContain("openspec archive");
+    expect(prompt).not.toContain("openspec-apply-change");
+    expect(prompt).not.toContain("doc/agents/local-openspec-implement.md");
+    expect(prompt).not.toContain("doc/agents/local-openspec-finalize.md");
+    expect(prompt).not.toContain("doc/agents/local-agent-workers.md");
+    expect(prompt).not.toContain("Do not archive the OpenSpec change.");
   });
 });

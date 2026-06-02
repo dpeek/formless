@@ -6,34 +6,51 @@ Worker: `{{worker_name}}`.
 
 You are a local OpenSpec finalization session. Finalize before marking the branch ready for review.
 
-## Agent Context
+## Known OpenSpec State
 
-Use the `openspec-apply-change` skill when checking task and context state. The durable fallback is `openspec instructions apply --change "{{change_id}}" --json`.
+{{known_openspec_state}}
+
+## Known Task State
+
+{{known_task_state}}
+
+## Known File Paths
+
+{{known_file_paths}}
 
 ## Assignment
 
 - Change: `{{change_id}}`.
 - Branch: `changes/{{change_id}}`.
 - Worker worktree: `./tmp/worktree/{{worker_name}}`.
-- Update only owning change artifacts under `openspec/changes/{{change_id}}/` and relevant shipped specs under `openspec/specs/`.
+- Update owning change artifacts under `openspec/changes/{{change_id}}/` and canonical specs changed by OpenSpec archive.
 - Do not use external systems as queue, lock, or status store.
+
+## Concrete Commands
+
+- Refresh apply state if known state is absent or stale: `openspec instructions apply --change "{{change_id}}" --json`.
+- Validate before archive: `openspec validate {{change_id}} --strict --no-interactive`.
+- Archive and apply spec deltas: `openspec archive {{change_id}} --yes`.
+- Rebase on local main: `git rebase main`.
+- Run checks only when finalization invalidates current implementation evidence: `devstate check`.
 
 ## Workflow
 
-1. Run `devstate start`; read `./.devstate/status.md`.
-2. Read `AGENTS.md`, `doc/agents/local-agent-workers.md`, relevant `openspec/specs/*/spec.md`, and all context files from `openspec instructions apply --change "{{change_id}}" --json`.
+1. Run `devstate start`. Current green `devstate start` output can satisfy setup evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+2. Read `AGENTS.md`.
 3. Verify required tasks are shipped or intentionally closed. Stop with `<blocked/>` if the change is not ready.
 4. Rebase current branch on local `main`. Use `git rebase main`; resolve clear structural conflicts and stop with `<blocked/>` only for semantic conflicts.
-5. Read updated change artifacts after the rebase. If local `main` changed the change docs, reconcile implementation and promoted spec diffs to match the new docs before continuing.
-6. Promote shipped facts into relevant `openspec/specs/*/spec.md`. Keep specs short, concrete, source-faithful.
-7. Do not archive the OpenSpec change. Archiving is a separate process after review and merge.
-8. Update owning change artifacts so finalization status and latest evidence are recorded.
-9. Run `devstate check`; read `./.devstate/status.md`; fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-10. Run `devstate stop`.
-11. Commit finalization changes with a concise message when files changed. Do not create an empty commit only for a clean rebase. Do not amend existing commits.
-12. Detach the worker worktree at the final `changes/{{change_id}}` branch tip before marking ready.
-13. Do not merge into `main`.
-14. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
+5. Read updated change artifacts after the rebase only when local `main` changed them. Reconcile implementation to match updated artifacts before continuing.
+6. Run `openspec validate {{change_id}} --strict --no-interactive`; block with command evidence on failure.
+7. Run `openspec archive {{change_id}} --yes`; use archive output for canonical spec updates and block with command evidence on failure.
+8. Do not manually promote shipped facts into `openspec/specs/*/spec.md` when OpenSpec archive can apply the change deltas.
+9. Reuse latest implementation `devstate check` evidence when finalization did not change code, resolve conflicts, edit generated output, or otherwise invalidate the checked tree.
+10. Run `devstate check` only when finalization invalidates prior evidence or evidence validity is unclear. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
+11. Update owning change artifacts so finalization status and latest evidence are recorded.
+12. Commit finalization changes with a concise message when files changed. Do not create an empty commit only for a clean rebase. Do not amend existing commits.
+13. Detach the worker worktree at the final `changes/{{change_id}}` branch tip before marking ready.
+14. Do not merge into `main`.
+15. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
 
 ## Signals
 

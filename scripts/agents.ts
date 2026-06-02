@@ -67,6 +67,7 @@ export type AgentStatePaths = {
 };
 
 export type CommittedOpenSpecChange = {
+  applyInstructions?: ApplyInstructions;
   artifactPaths: string[];
   branch: string;
   changeId: string;
@@ -114,16 +115,43 @@ type WorkerDeps = Partial<WorkerIo> & {
   runSession?: CodexSessionRunner;
 };
 
-type ApplyInstructions = {
+export type ApplyInstructionsTask = {
+  description?: string;
+  done?: boolean;
+  id?: string;
+};
+
+export type ApplyInstructions = {
+  changeDir?: string;
+  changeName?: string;
+  contextFiles?: Record<string, string[]>;
+  instruction?: string;
   progress?: {
+    complete?: number;
     remaining?: number;
+    total?: number;
   };
+  schemaName?: string;
   state?: string;
+  tasks?: ApplyInstructionsTask[];
+};
+
+type PromptRenderOptions = {
+  applyInstructions?: ApplyInstructions | null;
+};
+
+type ApplyInstructionsSummary = {
+  state: string;
+  progress: string;
+  firstUncheckedTask: string;
+  taskState: string;
+  filePaths: string;
 };
 
 type WorkerSessionMode = "finalize" | "implement";
 
 type CodexSessionRunner = (input: {
+  applyInstructions?: ApplyInstructions | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
@@ -616,9 +644,12 @@ export function discoverClaimableOpenSpecChanges(
     ? changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId))
     : changes;
 
-  return unleasedChanges.filter((change) =>
-    changeHasRemainingWork(cwd, change.changeId, runCommand),
-  );
+  return unleasedChanges.flatMap((change) => {
+    const applyInstructions = readApplyInstructions(cwd, change.changeId, runCommand);
+    return applyInstructionsNeedFinalization(applyInstructions)
+      ? []
+      : [{ ...change, applyInstructions }];
+  });
 }
 
 export function branchExists(
@@ -889,10 +920,7 @@ function readPromptTemplate(name: "local-openspec-finalize" | "local-openspec-im
   return readFileSync(path.join(promptDir, `${name}.md`), "utf8").trim();
 }
 
-function renderPrompt(
-  template: string,
-  values: Record<"change_id" | "worker_name", string>,
-): string {
+function renderPrompt(template: string, values: Record<string, string>): string {
   let rendered = template;
   for (const [key, value] of Object.entries(values)) {
     rendered = rendered.replaceAll(`{{${key}}}`, value);
@@ -901,19 +929,112 @@ function renderPrompt(
   return rendered;
 }
 
+function taskLabel(task: ApplyInstructionsTask): string {
+  const description = task.description?.trim() || "task description not supplied";
+  return task.id ? `${task.id}: ${description}` : description;
+}
+
+function formatProgress(instructions: ApplyInstructions | null | undefined): string {
+  const progress = instructions?.progress;
+  if (!progress) {
+    return "not supplied by supervisor";
+  }
+
+  const complete = progress.complete ?? "unknown";
+  const total = progress.total ?? "unknown";
+  const remaining = progress.remaining ?? "unknown";
+  return `${complete}/${total} complete, ${remaining} remaining`;
+}
+
+function formatTaskState(instructions: ApplyInstructions | null | undefined): string {
+  const tasks = instructions?.tasks;
+  if (!tasks || tasks.length === 0) {
+    return "- Task list not supplied by supervisor; use the tasks file path below.";
+  }
+
+  return tasks.map((task) => `- [${task.done ? "x" : " "}] ${taskLabel(task)}`).join("\n");
+}
+
+function firstUncheckedTask(instructions: ApplyInstructions | null | undefined): string {
+  const task = instructions?.tasks?.find((candidate) => !candidate.done);
+  return task ? taskLabel(task) : "none reported";
+}
+
+function formatFilePaths(
+  changeId: string,
+  instructions: ApplyInstructions | null | undefined,
+): string {
+  const contextFiles = instructions?.contextFiles;
+  const entries = contextFiles
+    ? Object.entries(contextFiles).filter(([, files]) => files.length > 0)
+    : [];
+
+  if (entries.length === 0) {
+    return [
+      `- tasks: openspec/changes/${changeId}/tasks.md`,
+      `- proposal: openspec/changes/${changeId}/proposal.md`,
+      `- design: openspec/changes/${changeId}/design.md`,
+      `- specs: openspec/changes/${changeId}/specs/**/*.md`,
+    ].join("\n");
+  }
+
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([artifactId, files]) => files.map((filePath) => `- ${artifactId}: ${filePath}`))
+    .join("\n");
+}
+
+function summarizeApplyInstructions(
+  changeId: string,
+  instructions: ApplyInstructions | null | undefined,
+): ApplyInstructionsSummary {
+  return {
+    filePaths: formatFilePaths(changeId, instructions),
+    firstUncheckedTask: firstUncheckedTask(instructions),
+    progress: formatProgress(instructions),
+    state: [
+      `- Change: ${instructions?.changeName ?? changeId}`,
+      `- Schema: ${instructions?.schemaName ?? "not supplied by supervisor"}`,
+      `- Apply state: ${instructions?.state ?? "not supplied by supervisor"}`,
+      `- Progress: ${formatProgress(instructions)}`,
+      `- First unchecked task: ${firstUncheckedTask(instructions)}`,
+      `- Apply command: openspec instructions apply --change "${changeId}" --json`,
+      `- Status command: openspec status --change "${changeId}" --json`,
+    ].join("\n"),
+    taskState: formatTaskState(instructions),
+  };
+}
+
 export function buildLocalOpenSpecImplementationPrompt(
   changeId: string,
   workerName: string,
+  options: PromptRenderOptions = {},
 ): string {
+  const safeChangeId = validateChangeId(changeId);
+  const summary = summarizeApplyInstructions(safeChangeId, options.applyInstructions);
+
   return renderPrompt(readPromptTemplate("local-openspec-implement"), {
-    change_id: validateChangeId(changeId),
+    change_id: safeChangeId,
+    known_file_paths: summary.filePaths,
+    known_openspec_state: summary.state,
+    known_task_state: summary.taskState,
     worker_name: validateWorkerName(workerName),
   });
 }
 
-export function buildLocalOpenSpecFinalizationPrompt(changeId: string, workerName: string): string {
+export function buildLocalOpenSpecFinalizationPrompt(
+  changeId: string,
+  workerName: string,
+  options: PromptRenderOptions = {},
+): string {
+  const safeChangeId = validateChangeId(changeId);
+  const summary = summarizeApplyInstructions(safeChangeId, options.applyInstructions);
+
   return renderPrompt(readPromptTemplate("local-openspec-finalize"), {
-    change_id: validateChangeId(changeId),
+    change_id: safeChangeId,
+    known_file_paths: summary.filePaths,
+    known_openspec_state: summary.state,
+    known_task_state: summary.taskState,
     worker_name: validateWorkerName(workerName),
   });
 }
@@ -941,13 +1062,17 @@ function readApplyInstructions(
   return parseJson<ApplyInstructions>(stdout, `openspec instructions apply ${changeId}`);
 }
 
+function applyInstructionsNeedFinalization(instructions: ApplyInstructions): boolean {
+  return instructions.state === "all_done" || instructions.progress?.remaining === 0;
+}
+
 function changeNeedsFinalization(
   cwd: string,
   changeId: string,
   runCommand: CommandRunner,
 ): boolean {
   const instructions = readApplyInstructions(cwd, changeId, runCommand);
-  return instructions.state === "all_done" || instructions.progress?.remaining === 0;
+  return applyInstructionsNeedFinalization(instructions);
 }
 
 function changeHasRemainingWork(cwd: string, changeId: string, runCommand: CommandRunner): boolean {
@@ -1427,6 +1552,7 @@ function makeRunDir(
 }
 
 async function runCodexSession(input: {
+  applyInstructions?: ApplyInstructions | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
@@ -1438,8 +1564,12 @@ async function runCodexSession(input: {
 }): Promise<"blocked" | "none" | "plan-done" | "task-done"> {
   const prompt =
     input.mode === "finalize"
-      ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName)
-      : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName);
+      ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName, {
+          applyInstructions: input.applyInstructions,
+        })
+      : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
+          applyInstructions: input.applyInstructions,
+        });
   const runDir = makeRunDir(input.paths, input.workerName, input.changeId, input.now);
   const outputPath = path.join(runDir, `${input.mode}-final.md`);
   const logPath = path.join(runDir, `${input.mode}.log`);
@@ -1596,6 +1726,7 @@ function parsePositiveInteger(value: string, flag: string): number {
 }
 
 function dryRunCodexCommand(input: {
+  applyInstructions?: ApplyInstructions | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
@@ -1604,8 +1735,12 @@ function dryRunCodexCommand(input: {
 }): string {
   const prompt =
     input.mode === "finalize"
-      ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName)
-      : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName);
+      ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName, {
+          applyInstructions: input.applyInstructions,
+        })
+      : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
+          applyInstructions: input.applyInstructions,
+        });
   return ["codex", ...codexArgs(input.dangerous, "<output>", prompt, input.worktreeDir)]
     .map(shellQuote)
     .join(" ");
@@ -1640,6 +1775,7 @@ function showDryRunClaim(input: {
   writeLine(
     input.stdout,
     `[agents] command ${dryRunCodexCommand({
+      applyInstructions: input.change.applyInstructions,
       changeId: input.change.changeId,
       dangerous: input.options.dangerous,
       mode: "implement",
@@ -1660,9 +1796,17 @@ async function runClaimedChange(input: {
   runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
+  const applyInstructions =
+    input.modeOverride === "finalize"
+      ? (input.change.applyInstructions ?? null)
+      : readApplyInstructions(
+          input.branchPlan.worktreeDir,
+          input.change.changeId,
+          input.runCommand,
+        );
   const mode =
     input.modeOverride ??
-    (changeNeedsFinalization(input.branchPlan.worktreeDir, input.change.changeId, input.runCommand)
+    (applyInstructions && applyInstructionsNeedFinalization(applyInstructions)
       ? "finalize"
       : "implement");
   const state: WorkerState = mode === "finalize" ? "finalizing" : "working";
@@ -1705,6 +1849,7 @@ async function runClaimedChange(input: {
           return outcome.signal;
         })()
       : await input.runSession({
+          applyInstructions,
           changeId: input.change.changeId,
           dangerous: input.options.dangerous,
           mode,

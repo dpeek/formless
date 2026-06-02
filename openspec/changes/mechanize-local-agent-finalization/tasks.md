@@ -37,13 +37,21 @@ Evidence:
 
 ## 3. Context-Efficient Prompt Packets
 
-- [ ] 3.1 Remove generic `openspec-apply-change` skill instructions from rendered worker prompts when the prompt has a concrete change id and mode.
-- [ ] 3.2 Render concrete OpenSpec CLI commands, task state, change state, and relevant file paths into implementation and finalization prompts when `scripts/agents.ts` already knows them.
-- [ ] 3.3 Stop requiring workers to reread `doc/agents/local-openspec-implement.md`, `doc/agents/local-openspec-finalize.md`, or `doc/agents/local-agent-workers.md` after `bun agents` injects the rendered prompt.
-- [ ] 3.4 Update implementation prompts to select the next ready `##` section from `tasks.md` before broad context reads, then load only files needed for that section.
-- [ ] 3.5 Allow current green `devstate start` or `devstate check` output to satisfy check evidence without immediate `.devstate/status.md` reread, while still reading the file after failures, stale output, conflict resolution, or exact evidence-copy needs.
-- [ ] 3.6 Add or update tests for prompt rendering, known OpenSpec state injection, no generic skill instruction, section-first context loading, and devstate evidence reuse.
-- [ ] 3.7 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+- [x] 3.1 Remove generic `openspec-apply-change` skill instructions from rendered worker prompts when the prompt has a concrete change id and mode.
+- [x] 3.2 Render concrete OpenSpec CLI commands, task state, change state, and relevant file paths into implementation and finalization prompts when `scripts/agents.ts` already knows them.
+- [x] 3.3 Stop requiring workers to reread `doc/agents/local-openspec-implement.md`, `doc/agents/local-openspec-finalize.md`, or `doc/agents/local-agent-workers.md` after `bun agents` injects the rendered prompt.
+- [x] 3.4 Update implementation prompts to select the next ready `##` section from `tasks.md` before broad context reads, then load only files needed for that section.
+- [x] 3.5 Allow current green `devstate start` or `devstate check` output to satisfy check evidence without immediate `.devstate/status.md` reread, while still reading the file after failures, stale output, conflict resolution, or exact evidence-copy needs.
+- [x] 3.6 Add or update tests for prompt rendering, known OpenSpec state injection, no generic skill instruction, section-first context loading, and devstate evidence reuse.
+- [x] 3.7 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+Evidence:
+
+- Changed `scripts/agents.ts` to retain parsed `openspec instructions apply --change "<change-id>" --json` state during claim discovery and mode selection, pass known state into Codex session and dry-run prompt rendering, and render task state, change state, concrete commands, and OpenSpec file paths.
+- Changed `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` rendered prompt templates to remove generic `openspec-apply-change` and source-doc reread instructions, select implementation sections before broad context reads, and allow current green devstate output as evidence with status-file reads reserved for failures, stale output, conflict resolution, or exact evidence-copy needs.
+- Changed `scripts/agents.test.ts` to cover known OpenSpec state injection, dry-run prompt state rendering, no generic skill instruction, section-first context loading, CLI-owned finalization commands, and devstate evidence reuse wording.
+- `devstate check` at 2026-06-02T02:47:57.806Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
+- App behavior unchanged; browser smoke not needed.
 
 ## 4. Worker Docs Alignment
 

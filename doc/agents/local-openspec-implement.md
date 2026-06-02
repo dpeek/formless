@@ -6,9 +6,17 @@ Worker: `{{worker_name}}`.
 
 You are one local OpenSpec worker session. Ship exactly one ready `##` task section from `tasks.md`, then stop.
 
-## Agent Context
+## Known OpenSpec State
 
-Use the `openspec-apply-change` skill when available. The durable fallback is `openspec instructions apply --change "{{change_id}}" --json` and the context files it returns.
+{{known_openspec_state}}
+
+## Known Task State
+
+{{known_task_state}}
+
+## Known File Paths
+
+{{known_file_paths}}
 
 ## Assignment
 
@@ -19,22 +27,30 @@ Use the `openspec-apply-change` skill when available. The durable fallback is `o
 - Update only owning change artifacts under `openspec/changes/{{change_id}}/`.
 - Do not use external systems as queue, lock, or status store.
 
+## Concrete Commands
+
+- Refresh apply state if known state is absent or stale: `openspec instructions apply --change "{{change_id}}" --json`.
+- Check artifact readiness if needed: `openspec status --change "{{change_id}}" --json`.
+- Start repo services and checks: `devstate start`.
+- Validate the shipped section: `devstate check`.
+
 ## Workflow
 
-1. Run `devstate start`; read `./.devstate/status.md`.
-2. Read `AGENTS.md`, `doc/agents/local-agent-workers.md`, relevant `openspec/specs/*/spec.md`, and all context files from `openspec instructions apply --change "{{change_id}}" --json`.
-3. If the worktree is already mid-rebase, resolve clear structural conflicts, continue the rebase, and stop with `<blocked/>` only for semantic conflicts.
-4. Select the next ready `##` section from `openspec/changes/{{change_id}}/tasks.md`. Start with the `##` section containing the first unchecked task.
-5. The section includes that `##` heading and its task checkboxes until the next `##` heading or end of file.
-6. Implement only that `##` section. Do not cross into another `##` section.
-7. If the selected `##` section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, stop with `<blocked/>` and record split guidance.
-8. Preserve user changes. Keep data model flat; compose in view/query/projection/action layer.
-9. Mark only completed task checkboxes in the selected `##` section complete.
-10. Record evidence in `openspec/changes/{{change_id}}/tasks.md` or the owning change artifact: files changed, checks, smoke if needed, blockers if any.
-11. Run `devstate check`; read `./.devstate/status.md`; fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-12. If app behavior changed, smoke with `bun browser ...` and record evidence.
-13. Commit the `##` section with a concise message. Do not amend existing commits. Do not merge into `main`.
-14. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
+1. Run `devstate start`. Current green `devstate start` output can satisfy setup evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+2. Read `AGENTS.md`.
+3. Open `openspec/changes/{{change_id}}/tasks.md` and select the next ready `##` section before broad context reads. Start with the `##` section containing the first unchecked task.
+4. The section includes that `##` heading and its task checkboxes until the next `##` heading or end of file.
+5. After selecting the section, read only the change artifacts, specs, docs, and code needed for that section. Use the known file paths above as candidates, not as a requirement to read every file.
+6. If the worktree is already mid-rebase, resolve clear structural conflicts, continue the rebase, and stop with `<blocked/>` only for semantic conflicts.
+7. Implement only that `##` section. Do not cross into another `##` section.
+8. If the selected `##` section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, stop with `<blocked/>` and record split guidance.
+9. Preserve user changes. Keep data model flat; compose in view/query/projection/action layer.
+10. Mark only completed task checkboxes in the selected `##` section complete.
+11. Record evidence in `openspec/changes/{{change_id}}/tasks.md` or the owning change artifact: files changed, checks, smoke if needed, blockers if any.
+12. Run `devstate check`. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
+13. If app behavior changed, smoke with `bun browser ...` and record evidence.
+14. Commit the `##` section with a concise message. Do not amend existing commits. Do not merge into `main`.
+15. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
 
 ## Signals
 
