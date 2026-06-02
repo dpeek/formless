@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import type { CreateAppInstallResponse } from "../shared/protocol.ts";
+import type { CreateAppInstallResponse, MutationResponse } from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import {
@@ -41,6 +41,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 const adminToken = "test-admin-token";
 
 let harness: Harness;
+let controlPlaneMutationCounter = 0;
 
 beforeEach(async () => {
   harness = await createWorkerHarness(
@@ -196,7 +197,7 @@ describe("instance deployment runtime API routes", () => {
       },
     ]);
     expect(desired.body.desiredState.source).toMatchObject({
-      fingerprint: expect.stringMatching(/^intent:instance\.primary\.domain-provider:/),
+      fingerprint: expect.stringMatching(/^intent:instance\.primary\.routes:/),
       intentRevision: 3,
     });
     expect(serialized).not.toContain("disabled.example.com");
@@ -323,7 +324,7 @@ describe("instance deployment runtime API routes", () => {
       },
     ]);
     expect(desired.body.desiredState.source).toMatchObject({
-      fingerprint: expect.stringMatching(/^intent:instance\.primary\.domain-provider:/),
+      fingerprint: expect.stringMatching(/^intent:instance\.primary\.routes:/),
       intentRevision: 4,
     });
     expect(serialized).not.toContain("disabled.example.com");
@@ -372,6 +373,82 @@ describe("instance deployment runtime API routes", () => {
     ]);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-cloudflare-token");
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-alchemy-password");
+  });
+
+  it("projects provider resources directly from route records without route timestamps or secrets", async () => {
+    const now = "2026-05-28T00:00:00.000Z";
+    const providerConfig = await createControlPlaneRecord("provider-config-ref", {
+      configRef: "cloudflare-primary",
+      createdAt: now,
+      label: "Cloudflare primary",
+      providerFamily: "cloudflare",
+      secretRef: "secret:cloudflare:primary",
+      updatedAt: now,
+      workerName: "config-worker",
+    });
+    const enabledRoute = await createControlPlaneRecord("route", {
+      enabled: true,
+      kind: "mount",
+      "match-host": "direct.example.com",
+      "match-path": "/",
+      "match-prefix": "/",
+      "provider-config": providerConfig.body.record.id,
+      "target-profile": "instance",
+      "created-at": now,
+      "updated-at": now,
+    });
+    await createControlPlaneRecord("route", {
+      enabled: false,
+      kind: "mount",
+      "match-host": "disabled.example.com",
+      "match-path": "/",
+      "match-prefix": "/",
+      "target-profile": "instance",
+      "created-at": now,
+      "updated-at": now,
+    });
+
+    const first = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    );
+    const started = await postAttemptStart(
+      attemptStartRequest(desiredStateRef(first.body.desiredState), {
+        idempotencyKey: "apply:primary:route-projection",
+        mode: "apply",
+      }),
+    );
+
+    expect(started.response.status).toBe(201);
+
+    await patchControlPlaneRecord("route", enabledRoute.body.record.id, {
+      "updated-at": "2026-05-28T00:01:00.000Z",
+    });
+    const second = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    );
+    const serialized = JSON.stringify(second.body);
+
+    expect(first.body.desiredState.resourceGraph.resources).toEqual([
+      expect.objectContaining({
+        inputs: {
+          adopt: false,
+          host: "direct.example.com",
+          name: "direct.example.com",
+          overrideExistingOrigin: false,
+          profile: "instance",
+          workerName: "config-worker",
+        },
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-custom-domain-direct-example-com-instance",
+      }),
+    ]);
+    expect(second.body.desiredState.hash).toBe(first.body.desiredState.hash);
+    expect(second.body.desiredState.versionId).toBe(first.body.desiredState.versionId);
+    expect(serialized).not.toContain("disabled.example.com");
+    expect(serialized).not.toContain("secret:cloudflare:primary");
+    expect(serialized).not.toContain("secret-cloudflare-token");
+    expect(serialized).not.toContain("secret-alchemy-password");
+    expect(serialized).not.toContain(started.body.lease?.token ?? "lease-token-missing");
   });
 
   it("uses no-store cache policy for method and target errors", async () => {
@@ -1187,6 +1264,29 @@ async function createRedirectIntent(input: {
     INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
     input,
   );
+}
+
+async function createControlPlaneRecord(entity: string, values: Record<string, unknown>) {
+  return postAdminJson<MutationResponse>(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`, {
+    mutationId: `mutation-${entity}-${++controlPlaneMutationCounter}`,
+    entity,
+    op: "create",
+    values,
+  });
+}
+
+async function patchControlPlaneRecord(
+  entity: string,
+  recordId: string,
+  values: Record<string, unknown>,
+) {
+  return postAdminJson<MutationResponse>(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`, {
+    mutationId: `mutation-${recordId}:patch:${Object.keys(values).join("-")}`,
+    entity,
+    op: "patch",
+    recordId,
+    values,
+  });
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {

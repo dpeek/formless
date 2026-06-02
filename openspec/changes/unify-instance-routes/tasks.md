@@ -99,10 +99,19 @@ Evidence 2026-06-02 grug:
 
 ## 7. Deployment Projection
 
-- [ ] 7.1 Project custom-domain and DNS desired resources from enabled host mount route records.
-- [ ] 7.2 Project redirect rule and redirect DNS desired resources from enabled redirect route records.
-- [ ] 7.3 Exclude disabled routes, timestamps outside intent, evidence summaries, cleanup history, attempts, and drift reports from desired-state hashes.
-- [ ] 7.4 Keep provider credentials, Alchemy secrets, raw lease tokens, and full provider truth outside desired-state responses.
+- [x] 7.1 Project custom-domain and DNS desired resources from enabled host mount route records.
+- [x] 7.2 Project redirect rule and redirect DNS desired resources from enabled redirect route records.
+- [x] 7.3 Exclude disabled routes, timestamps outside intent, evidence summaries, cleanup history, attempts, and drift reports from desired-state hashes.
+- [x] 7.4 Keep provider credentials, Alchemy secrets, raw lease tokens, and full provider truth outside desired-state responses.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/worker/deployment-runtime-projection.ts` so primary desired-state projection reads control-plane `route` records, derives enabled exact-host mount routes into Cloudflare Worker custom-domain resources, derives enabled redirect routes into redirect DNS and redirect rule resources, uses display-safe provider config worker names, and keeps the generic desired-resource sync surface aligned with the route-derived graph.
+- Excluded disabled/deleted route logical ids from active desired-resource projection so stale synced resources do not affect desired state after route disablement, and kept source fingerprints/hash inputs based on canonical route-derived resources rather than route timestamps, deployment attempts, evidence, drift, cleanup, or provider truth.
+- Extended `src/worker/deployment-runtime-api.test.ts` for route-derived source fingerprints, direct route-record projection with provider config, disabled route exclusion, route timestamp hash stability, provider secret omission, Alchemy secret omission, and raw lease-token omission.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes deployment desired-state API projection and tests, not browser-visible UI.
 
 ## 8. Workspace And Archives
 
