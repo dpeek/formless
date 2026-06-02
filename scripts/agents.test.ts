@@ -317,6 +317,74 @@ describe("local agent worker discovery", () => {
     ]);
   });
 
+  it("orders claimable changes by existing unmerged review branch before change id", () => {
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: [readyChangeFiles("alpha-new"), readyChangeFiles("zeta-started")].join("\n"),
+        };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/alpha-new"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/zeta-started"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "merge-base --is-ancestor changes/alpha-new main"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "merge-base --is-ancestor changes/zeta-started main"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "openspec" && args[0] === "instructions" && args[1] === "apply") {
+        const changeId = args[3];
+        if (changeId === "alpha-new") {
+          return {
+            code: 0,
+            stderr: "",
+            stdout: JSON.stringify(readyApplyInstructions(changeId)),
+          };
+        }
+
+        if (changeId === "zeta-started") {
+          return {
+            code: 0,
+            stderr: "",
+            stdout: JSON.stringify(readyApplyInstructions(changeId)),
+          };
+        }
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    expect(
+      discoverClaimableOpenSpecChanges("/repo", { runCommand }).map((change) => change.changeId),
+    ).toEqual(["zeta-started", "alpha-new"]);
+  });
+
   it("omits leased changes from claimable work", () => {
     const root = tempDir();
     const paths = agentStatePaths(root);

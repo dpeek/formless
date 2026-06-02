@@ -13,6 +13,7 @@ Local agent workers pull ready OpenSpec changes from local Git state.
 - Queue source: committed `openspec/changes/<change-id>/` directories on local `main`.
 - Claimable changes must have committed apply artifacts: `proposal.md`, `design.md`, `tasks.md`, and at least one `specs/**/*.md`.
 - Claimable changes must have remaining OpenSpec work; `all_done` changes are skipped unless they already have an active worker lease.
+- When multiple unleased changes are claimable, workers prefer existing unmerged review branches, then existing review branches, then deterministic change id order.
 - Uncommitted OpenSpec files in any worktree are ignored.
 - External systems are not the queue, lock, or status store for local workers.
 

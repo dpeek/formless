@@ -638,9 +638,10 @@ export function discoverClaimableOpenSpecChanges(
     stateRoot?: string | null;
   } = {},
 ): CommittedOpenSpecChange[] {
+  const baseRef = options.baseRef ?? defaultBaseRef;
   const changes = discoverCommittedOpenSpecChanges(
     cwd,
-    options.baseRef ?? defaultBaseRef,
+    baseRef,
     options.runCommand ?? defaultCommandRunner,
   ).filter(hasRequiredApplyArtifacts);
   const runCommand = options.runCommand ?? defaultCommandRunner;
@@ -649,12 +650,37 @@ export function discoverClaimableOpenSpecChanges(
     ? changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId))
     : changes;
 
-  return unleasedChanges.flatMap((change) => {
+  const claimableChanges = unleasedChanges.flatMap((change) => {
     const applyInstructions = readApplyInstructions(cwd, change.changeId, runCommand);
     return applyInstructionsNeedFinalization(applyInstructions)
       ? []
       : [{ ...change, applyInstructions }];
   });
+
+  if (claimableChanges.length < 2) {
+    return claimableChanges;
+  }
+
+  const branchPriorityByChange = new Map<string, number>();
+  const branchPriority = (change: CommittedOpenSpecChange): number => {
+    const existing = branchPriorityByChange.get(change.changeId);
+    if (typeof existing === "number") {
+      return existing;
+    }
+
+    const priority = branchExists(cwd, change.branch, runCommand)
+      ? branchMergedIntoBase(cwd, change.branch, baseRef, runCommand)
+        ? 1
+        : 2
+      : 0;
+    branchPriorityByChange.set(change.changeId, priority);
+    return priority;
+  };
+
+  return claimableChanges.sort(
+    (left, right) =>
+      branchPriority(right) - branchPriority(left) || left.changeId.localeCompare(right.changeId),
+  );
 }
 
 export function branchExists(

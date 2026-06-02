@@ -15,6 +15,13 @@ The system SHALL discover worker-claimable work from committed `openspec/changes
 - **WHEN** local `main` contains a committed `openspec/changes/add-thing/` directory with required apply artifacts complete
 - **THEN** the worker supervisor lists `add-thing` as claimable work
 
+#### Scenario: Worker prioritizes existing review branches
+
+- **WHEN** multiple unleased changes on local `main` are claimable
+- **THEN** the worker supervisor orders changes with existing unmerged review branches first
+- **AND** orders remaining changes with existing review branches before changes without review branches
+- **AND** uses deterministic change id order as the final tie-breaker
+
 #### Scenario: Worker ignores uncommitted change files
 
 - **WHEN** a human worktree has uncommitted files under `openspec/changes/draft-thing/`
