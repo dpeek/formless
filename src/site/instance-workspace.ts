@@ -3053,15 +3053,27 @@ function workspaceControlPlaneArchive(input: {
     input.localInstanceArchive?.archive.kind === INSTANCE_ARCHIVE_KIND
       ? input.localInstanceArchive.archive.controlPlane
       : undefined;
+  const generatedRecords = workspaceOwnedControlPlaneRecords(input);
+  const generatedRecordIds = new Set(generatedRecords.map((record) => record.id));
+  const manifestAppInstallIds = new Set(input.manifest.apps.map((app) => app.installId));
   const records = new Map<string, StoredRecord>();
 
   for (const record of existing?.records ?? []) {
-    if (!isWorkspaceOwnedControlPlaneRecord(input.manifest, record)) {
-      records.set(record.id, record);
+    if (
+      shouldReplaceExistingWorkspaceControlPlaneRecord({
+        generatedRecordIds,
+        manifest: input.manifest,
+        manifestAppInstallIds,
+        record,
+      })
+    ) {
+      continue;
     }
+
+    records.set(record.id, record);
   }
 
-  for (const record of workspaceOwnedControlPlaneRecords(input)) {
+  for (const record of generatedRecords) {
     records.set(record.id, record);
   }
 
@@ -3069,11 +3081,15 @@ function workspaceControlPlaneArchive(input: {
     return undefined;
   }
 
-  return {
+  const controlPlane: InstanceArchiveControlPlane = {
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
     schemaUpdatedAt: existing?.schemaUpdatedAt ?? input.exportedAt,
     records: [...records.values()],
   };
+
+  assertReviewableWorkspaceControlPlaneArchive(controlPlane, input.exportedAt);
+
+  return controlPlane;
 }
 
 function isWorkspaceOwnedControlPlaneRecord(
@@ -3084,6 +3100,45 @@ function isWorkspaceOwnedControlPlaneRecord(
     workspaceOwnedControlPlaneEntities.has(record.entity) ||
     (manifest.deploy !== undefined && workspaceDeployOwnedControlPlaneEntities.has(record.entity))
   );
+}
+
+function shouldReplaceExistingWorkspaceControlPlaneRecord(input: {
+  generatedRecordIds: ReadonlySet<string>;
+  manifest: FormlessInstanceWorkspaceManifest;
+  manifestAppInstallIds: ReadonlySet<string>;
+  record: StoredRecord;
+}): boolean {
+  if (input.generatedRecordIds.has(input.record.id)) {
+    return true;
+  }
+
+  if (input.record.entity === "route") {
+    const appInstallId = stringRecordValue(input.record, "app-install");
+
+    return appInstallId !== undefined && !input.manifestAppInstallIds.has(appInstallId);
+  }
+
+  return isWorkspaceOwnedControlPlaneRecord(input.manifest, input.record);
+}
+
+function assertReviewableWorkspaceControlPlaneArchive(
+  controlPlane: InstanceArchiveControlPlane,
+  exportedAt: string,
+) {
+  formatInstanceArchive({
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt,
+    capabilities: [
+      "installed-app-registry",
+      "schema-owned-control-plane",
+      "app-store-snapshots",
+      "core-media-assets",
+    ],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    controlPlane,
+    apps: [],
+  });
 }
 
 function workspaceOwnedControlPlaneRecords(input: {

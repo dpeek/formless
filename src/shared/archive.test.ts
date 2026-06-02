@@ -138,6 +138,27 @@ describe("portable archive protocol", () => {
         controlPlane: {
           ...controlPlane,
           records: controlPlaneRecords().map((record) =>
+            record.entity === "route" && record.id === "route:host:publicSite:www.example.com"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    "to-url": "https://example.com/CF_API_TOKEN",
+                  },
+                }
+              : record,
+          ),
+        },
+      }),
+    ).toThrow(
+      'Instance archive controlPlane records record "route:host:publicSite:www.example.com" field "instance:route.to-url" cannot store control-plane secret values.',
+    );
+    expect(() =>
+      parseInstanceArchive({
+        ...archive,
+        controlPlane: {
+          ...controlPlane,
+          records: controlPlaneRecords().map((record) =>
             record.entity === "route" && record.id === "route:site:public-site"
               ? {
                   ...record,

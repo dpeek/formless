@@ -115,10 +115,19 @@ Evidence 2026-06-02 grug:
 
 ## 8. Workspace And Archives
 
-- [ ] 8.1 Write route intent in deterministic workspace record source as `instance:route` records.
-- [ ] 8.2 Restore route records from workspace source and instance archives through Authority validation.
-- [ ] 8.3 Compare workspace and remote route records for app path, exact-host, redirect, and deploy-resource drift.
-- [ ] 8.4 Reject secret-looking values from route record source, archive payloads, and drift output.
+- [x] 8.1 Write route intent in deterministic workspace record source as `instance:route` records.
+- [x] 8.2 Restore route records from workspace source and instance archives through Authority validation.
+- [x] 8.3 Compare workspace and remote route records for app path, exact-host, redirect, and deploy-resource drift.
+- [x] 8.4 Reject secret-looking values from route record source, archive payloads, and drift output.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/site/instance-workspace.ts` so composed workspace control-plane archives preserve non-generated local `route` records, including redirect route source, while regenerating manifest-owned app/domain routes deterministically and validating the composed control-plane source through the portable archive parser before drift or restore.
+- Added CLI coverage in `src/site/cli.test.ts` for redirect `instance:route` source records in workspace push archives, redirect drift reported through qualified route record keys, and secret-looking generated route source rejected before drift output.
+- Added archive coverage in `src/shared/archive.test.ts` for secret-looking route field values and archive API coverage in `src/worker/archive-api.test.ts` for redirect route records restored through Authority snapshot validation.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes workspace/archive CLI and archive restore behavior, not browser-visible UI.
 
 ## 9. Generated UI
 

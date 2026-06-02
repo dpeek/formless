@@ -342,6 +342,7 @@ describe("instance archive restore API", () => {
       expect.arrayContaining([
         "app-install:personal",
         "route:route:host:publicSite:archive.example.com",
+        "route:route:redirect:old.archive.example.com",
         "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:archive.example.com",
         "deploy-drift-report:deploy-drift:instance.primary",
       ]),
@@ -592,6 +593,24 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
         sourceFingerprint: "control-plane:archive",
         createdAt: now,
         updatedAt: now,
+      },
+    },
+    {
+      id: "route:redirect:old.archive.example.com",
+      entity: "route",
+      createdAt: now,
+      values: {
+        enabled: true,
+        "match-host": "old.archive.example.com",
+        "match-path": "/",
+        "match-prefix": "/",
+        kind: "redirect",
+        "to-host": "archive.example.com",
+        "status-code": "308",
+        "preserve-path": true,
+        "preserve-query-string": true,
+        "created-at": now,
+        "updated-at": now,
       },
     },
     {

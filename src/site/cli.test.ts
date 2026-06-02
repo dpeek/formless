@@ -1230,6 +1230,37 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
+  it("rejects secret-looking generated route source before reporting drift", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localApp = appArchive("token-demo", "Token Demo");
+    const fetcher = archiveFetch(requests, [installedSite("token-demo", "Token Demo")], {
+      "token-demo": { records: [] },
+    });
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [
+        {
+          ...workspaceApp("token-demo", "Token Demo"),
+          routes: { admin: "/apps/CF_API_TOKEN" },
+        },
+      ],
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/token-demo"), localApp);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "check", "--workspace", workspaceRoot],
+        cliDeps(tempDir, { fetch: fetcher, logs }),
+      ),
+    ).rejects.toThrow(
+      'Instance archive controlPlane records record "route:token-demo:admin" field "instance:route.match-path" cannot store control-plane secret values.',
+    );
+    expect(logs).toEqual([]);
+  });
+
   it("checks a local-first workspace without remote drift when no target exists", async () => {
     const workspaceRoot = await makeTempDir();
     const logs: string[] = [];
@@ -1412,6 +1443,69 @@ describe("Formless Site CLI", () => {
         "Changed archive paths: archives/instance.",
       ].join("\n"),
     ]);
+  });
+
+  it("reports redirect drift through route record keys", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localApp = appArchive("david", "David Peek");
+    const localControlPlane = [
+      ...controlPlaneRecords(),
+      redirectRouteRecord("old.dpeek.com", "dpeek.com"),
+    ];
+    const remoteControlPlane = localControlPlane.map((record) =>
+      record.id === "route:redirect:old.dpeek.com"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              "status-code": "301",
+            },
+          }
+        : record,
+    );
+    const fetcher = archiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [],
+      [domainMapping("dpeek.com", "david")],
+      remoteControlPlane,
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [workspaceApp("david", "David Peek")],
+      domains: [
+        { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+      ],
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/instance"), {
+      ...instanceArchive([localApp]),
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        records: localControlPlane,
+      },
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localApp);
+
+    await runFormlessCli(
+      ["instance", "check", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(logs[0]).toContain("instance:route:route:redirect:old.dpeek.com");
+    expect(logs[0]).not.toContain("redirect-intent");
   });
 
   it("reports workspace archive drift by install set, package, records, and media", async () => {
@@ -2973,6 +3067,74 @@ describe("Formless Site CLI", () => {
       "Dry-run restore: failed.",
       'Dry-run error: Installed app "david" already exists.',
     ]);
+  });
+
+  it("pushes redirect route source records through the composed workspace archive", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/instance"), {
+      ...instanceArchive([localDavid]),
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        records: [redirectRouteRecord("old.dpeek.com", "dpeek.com")],
+      },
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["instance", "push", "--workspace", workspaceRoot, "--replace"],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    const restoreRequest = requests.find(
+      (request) =>
+        request.method === "POST" &&
+        request.url === "https://personal.dpeek.workers.dev/api/formless/archive/restore",
+    );
+    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
+
+    expect(
+      restoreBody.archive.controlPlane?.records.map((record) => `${record.entity}:${record.id}`),
+    ).toContain("instance:route:route:redirect:old.dpeek.com");
+    expect(
+      restoreBody.archive.controlPlane?.records.find(
+        (record) => record.id === "route:redirect:old.dpeek.com",
+      )?.values,
+    ).toMatchObject({
+      kind: "redirect",
+      "match-host": "old.dpeek.com",
+      "preserve-path": true,
+      "preserve-query-string": true,
+      "status-code": "308",
+      "to-host": "dpeek.com",
+    });
+    expect(JSON.stringify(restoreBody.archive.controlPlane)).not.toContain("redirect-intent");
+    expect(logs[0]).toContain("Instance workspace push dry run.");
   });
 
   it("backs up, dry-runs, and applies instance workspace push with explicit replace", async () => {
@@ -5236,7 +5398,7 @@ async function writeFileTree(
 async function writeWorkspaceManifest(
   workspaceRoot: string,
   options: {
-    apps?: ReturnType<typeof workspaceApp>[];
+    apps?: TestWorkspaceApp[];
     domains?: Array<{
       enabled: boolean;
       host: string;
@@ -5268,6 +5430,14 @@ async function writeWorkspaceManifest(
     }),
   );
 }
+
+type TestWorkspaceApp = ReturnType<typeof workspaceApp> & {
+  routes?: {
+    admin?: `/apps/${string}`;
+    public?: `/sites/${string}`;
+    schema?: `/apps/${string}/schema`;
+  };
+};
 
 async function writeWorkspaceDeployState(
   workspaceRoot: string,
@@ -5830,6 +6000,29 @@ function controlPlaneRecords(
       createdAt: now,
     },
   ];
+}
+
+function redirectRouteRecord(fromHost: string, toHost: string): StoredRecord {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return {
+    id: `route:redirect:${fromHost}`,
+    entity: "route",
+    values: {
+      enabled: true,
+      "match-host": fromHost,
+      "match-path": "/",
+      "match-prefix": "/",
+      kind: "redirect",
+      "to-host": toHost,
+      "status-code": "308",
+      "preserve-path": true,
+      "preserve-query-string": true,
+      "created-at": now,
+      "updated-at": now,
+    },
+    createdAt: now,
+  };
 }
 
 function instanceDomainMapping(host: string) {
