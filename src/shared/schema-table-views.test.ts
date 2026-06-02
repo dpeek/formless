@@ -38,7 +38,7 @@ describe("schema table views", () => {
     );
 
     expect(siteTableViews.blockPlacementTable).toMatchObject({
-      entity: "blockPlacement",
+      entity: "block-placement",
       actions: {
         editChildBlock: {
           type: "editRecord",

@@ -472,13 +472,13 @@ function executeSubscribePublicAction(
   context: PublicEntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
 ) {
   const contactEntity = requireSubscribeEntity(context.schema, "contact");
-  const emailAddressEntity = requireSubscribeEntity(context.schema, "emailAddress");
+  const emailAddressEntity = requireSubscribeEntity(context.schema, "email-address");
   const audienceEntity = requireSubscribeEntity(context.schema, "audience");
   const subscriptionEntity = requireSubscribeEntity(context.schema, "subscription");
   const email = parseSubscribeEmail(context.request.input.email);
   const existingEmailAddress = findActiveRecordByField(
     context.storage,
-    "emailAddress",
+    "email-address",
     "normalizedAddress",
     email.normalizedAddress,
   );
@@ -507,7 +507,7 @@ function executeSubscribePublicAction(
     ? undefined
     : pushPlan(plans, {
         kind: "create",
-        entity: "emailAddress",
+        entity: "email-address",
         values: (writtenRecords) =>
           validateRecordValues(
             {

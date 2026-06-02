@@ -230,7 +230,7 @@
         }
       }
     },
-    "blockPlacement": {
+    "block-placement": {
       "label": "Placement",
       "fields": {
         "parent": {
@@ -312,7 +312,7 @@
         }
       }
     },
-    "emailAddress": {
+    "email-address": {
       "label": "Email address",
       "fields": {
         "contact": {
@@ -390,7 +390,7 @@
           "type": "reference",
           "required": true,
           "label": "Email address",
-          "to": "emailAddress",
+          "to": "email-address",
           "displayField": "address"
         },
         "audience": {
@@ -532,7 +532,7 @@
       "kind": "toOne",
       "label": "Parent block",
       "from": {
-        "entity": "blockPlacement",
+        "entity": "block-placement",
         "field": "parent"
       },
       "to": {
@@ -547,7 +547,7 @@
         "entity": "block"
       },
       "to": {
-        "entity": "blockPlacement",
+        "entity": "block-placement",
         "field": "parent"
       },
       "inverse": "placementParent"
@@ -556,7 +556,7 @@
       "kind": "toOne",
       "label": "Child block",
       "from": {
-        "entity": "blockPlacement",
+        "entity": "block-placement",
         "field": "block"
       },
       "to": {
@@ -571,7 +571,7 @@
         "entity": "block"
       },
       "to": {
-        "entity": "blockPlacement",
+        "entity": "block-placement",
         "field": "block"
       },
       "inverse": "placementBlock"
@@ -580,7 +580,7 @@
       "kind": "toOne",
       "label": "Contact",
       "from": {
-        "entity": "emailAddress",
+        "entity": "email-address",
         "field": "contact"
       },
       "to": {
@@ -595,7 +595,7 @@
         "entity": "contact"
       },
       "to": {
-        "entity": "emailAddress",
+        "entity": "email-address",
         "field": "contact"
       },
       "inverse": "emailAddressContact"
@@ -608,7 +608,7 @@
         "field": "emailAddress"
       },
       "to": {
-        "entity": "emailAddress"
+        "entity": "email-address"
       },
       "inverse": "emailAddressSubscriptions"
     },
@@ -616,7 +616,7 @@
       "kind": "toMany",
       "label": "Subscriptions",
       "from": {
-        "entity": "emailAddress"
+        "entity": "email-address"
       },
       "to": {
         "entity": "subscription",
@@ -920,7 +920,7 @@
     },
     "emailAddressAll": {
       "label": "All",
-      "entity": "emailAddress",
+      "entity": "email-address",
       "expression": {
         "kind": "all"
       }
@@ -941,7 +941,7 @@
     },
     "placementsForSelectedBlock": {
       "label": "Selected block",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "expression": {
         "kind": "where",
         "ref": {
@@ -1305,7 +1305,7 @@
       }
     },
     "blockPlacementTreeItem": {
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "fields": {
         "label": {
           "editor": "text",
@@ -1402,7 +1402,7 @@
       ]
     },
     "blockPlacementTable": {
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "actions": {
         "editChildBlock": {
           "type": "editRecord",
@@ -1464,7 +1464,7 @@
       ]
     },
     "emailAddressTable": {
-      "entity": "emailAddress",
+      "entity": "email-address",
       "columns": [
         {
           "type": "field",
@@ -1628,7 +1628,7 @@
     "emailAddressHome": {
       "type": "collection",
       "label": "Email addresses",
-      "entity": "emailAddress",
+      "entity": "email-address",
       "navigation": {
         "primary": false
       },
@@ -1691,7 +1691,7 @@
     "siteCompositionHome": {
       "type": "collection",
       "label": "Site",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "navigation": {
         "primary": true
       },
@@ -1862,7 +1862,7 @@
     "pageCompositionHome": {
       "type": "collection",
       "label": "Pages",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "navigation": {
         "primary": false
       },
@@ -1899,7 +1899,7 @@
     "navigationCompositionHome": {
       "type": "collection",
       "label": "Navigation",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "navigation": {
         "primary": false
       },
@@ -2300,7 +2300,7 @@
     "blockCompositionHome": {
       "type": "collection",
       "label": "Placements",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "navigation": {
         "primary": false
       },
@@ -2335,7 +2335,7 @@
     },
     "blockPlacementCreate": {
       "type": "create",
-      "entity": "blockPlacement",
+      "entity": "block-placement",
       "fields": {
         "block": {
           "editor": "reference"

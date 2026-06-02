@@ -113,7 +113,7 @@ describe("instance control-plane API routes", () => {
       "/apps/personal/schema",
       "/sites/personal",
     ]);
-    expect(JSON.stringify(controlPlane.body.records)).not.toContain("blockPlacement");
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain("block-placement");
   });
 
   it("keeps control-plane records isolated from installed app storage writes", async () => {

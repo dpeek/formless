@@ -4,6 +4,7 @@ import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { getEntityActionKindCapabilities } from "./schema-actions.ts";
+import { formatQualifiedEntityName, parseQualifiedEntityName } from "./schema-entity-names.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 import type { EntityActionCapabilities, EntityActionKind } from "./schema-types.ts";
 
@@ -33,6 +34,182 @@ describe("schema mutation policies", () => {
     expect(enabledSchema.entities.task?.mutations.delete).toEqual({ enabled: true });
     expect(serializedEnabled.entities.task.mutations.delete).toEqual({ enabled: true });
     expect(parseAppSchema(serializedEnabled)).toEqual(enabledSchema);
+  });
+});
+
+describe("schema entity names", () => {
+  it("accepts schema-local kebab-case entity keys", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          ...defaultEntities(),
+          "project-note": {
+            label: "Project note",
+            fields: {
+              title: { type: "text", required: true, label: "Title" },
+              task: { type: "reference", required: false, to: "task", displayField: "title" },
+            },
+            mutations: {
+              create: { enabled: true },
+              patch: { enabled: true },
+              delete: { enabled: false },
+            },
+          },
+        },
+        queries: {
+          ...defaultQueries(),
+          projectNoteAll: {
+            label: "Project notes",
+            entity: "project-note",
+            expression: { kind: "all" },
+          },
+        },
+        itemViews: {
+          ...defaultItemViews(),
+          projectNoteListItem: {
+            entity: "project-note",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              task: { editor: "reference", commit: "immediate" },
+            },
+          },
+        },
+        views: {
+          ...defaultViews(),
+          projectNoteHome: {
+            type: "collection",
+            label: "Project notes",
+            entity: "project-note",
+            queries: [{ query: "projectNoteAll" }],
+            defaultQuery: "projectNoteAll",
+            result: { type: "list", itemView: "projectNoteListItem" },
+          },
+          projectNoteCreate: {
+            type: "create",
+            entity: "project-note",
+            fields: {
+              title: { editor: "text" },
+              task: { editor: "reference" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities["project-note"]?.fields.task).toMatchObject({
+      type: "reference",
+      to: "task",
+    });
+    expect(schema.views.projectNoteHome).toMatchObject({
+      type: "collection",
+      entity: "project-note",
+    });
+  });
+
+  it("rejects non-canonical schema-local entity keys", () => {
+    const invalidKeys = [
+      "",
+      "appInstall",
+      "App",
+      "app_install",
+      "app.install",
+      "app/install",
+      "site:block",
+      "1app",
+      "-app",
+      "app-",
+      "app--install",
+    ];
+
+    for (const entityKey of invalidKeys) {
+      expect(() =>
+        parseAppSchema(
+          baseSchema({
+            entities: {
+              ...defaultEntities(),
+              [entityKey]: {
+                label: "Invalid",
+                fields: { title: { type: "text", required: true } },
+                mutations: {
+                  create: { enabled: true },
+                  patch: { enabled: true },
+                  delete: { enabled: false },
+                },
+              },
+            },
+          }),
+        ),
+      ).toThrow(`Schema entity key "${entityKey}" must be a singular kebab-case entity key.`);
+    }
+  });
+
+  it("parses and formats qualified entity names for boundaries", () => {
+    expect(parseQualifiedEntityName("Boundary entity name", "instance:app-install")).toEqual({
+      schemaKey: "instance",
+      entityKey: "app-install",
+    });
+    expect(formatQualifiedEntityName({ schemaKey: "site", entityKey: "block-placement" })).toBe(
+      "site:block-placement",
+    );
+
+    expect(() => parseQualifiedEntityName("Boundary entity name", "site:blockPlacement")).toThrow(
+      'Boundary entity name must be a qualified entity name in "<schema-key>:<entity-key>" format with kebab-case schema and entity keys.',
+    );
+    expect(() =>
+      formatQualifiedEntityName({ schemaKey: "site", entityKey: "blockPlacement" }),
+    ).toThrow('Qualified entity key "blockPlacement" must be a singular kebab-case entity key.');
+  });
+
+  it("keeps schema-internal reference targets local", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                parent: { type: "reference", required: false, to: "tasks:task" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Use local entity key "task"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                parent: { type: "reference", required: false, to: "tasks:Task" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Field "task.parent" reference target "tasks:Task" must be a qualified entity name');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                parent: { type: "reference", required: false, to: "task_item" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'Field "task.parent" reference target "task_item" must be a singular kebab-case entity key.',
+    );
   });
 });
 
@@ -4528,9 +4705,9 @@ describe("personal site sample schema", () => {
     expect(Object.keys(schema.entities)).toEqual([
       "site",
       "block",
-      "blockPlacement",
+      "block-placement",
       "contact",
-      "emailAddress",
+      "email-address",
       "audience",
       "subscription",
     ]);
@@ -4668,32 +4845,32 @@ describe("personal site sample schema", () => {
     expect(schema.entities.block?.fields).not.toHaveProperty("templateKey");
     expect(schema.entities.block?.fields).not.toHaveProperty("featured");
     expect(schema.entities.block?.fields).not.toHaveProperty("order");
-    expect(schema.entities.blockPlacement?.label).toBe("Placement");
-    expect(schema.entities.blockPlacement?.fields.parent).toMatchObject({
+    expect(schema.entities["block-placement"]?.label).toBe("Placement");
+    expect(schema.entities["block-placement"]?.fields.parent).toMatchObject({
       type: "reference",
       required: true,
       to: "block",
       displayField: "label",
     });
-    expect(schema.entities.blockPlacement?.fields.block).toMatchObject({
+    expect(schema.entities["block-placement"]?.fields.block).toMatchObject({
       type: "reference",
       required: true,
       to: "block",
       displayField: "label",
     });
-    expect(schema.entities.blockPlacement?.fields.slot).toEqual({
+    expect(schema.entities["block-placement"]?.fields.slot).toEqual({
       type: "text",
       required: false,
       label: "Slot",
     });
-    expect(Object.keys(schema.entities.blockPlacement?.fields ?? {})).toEqual([
+    expect(Object.keys(schema.entities["block-placement"]?.fields ?? {})).toEqual([
       "parent",
       "block",
       "order",
       "label",
       "slot",
     ]);
-    expect(schema.entities.blockPlacement?.actions).toMatchObject({
+    expect(schema.entities["block-placement"]?.actions).toMatchObject({
       addTreeChild: {
         label: "Add child",
         kind: "create-tree-child",
@@ -4707,7 +4884,7 @@ describe("personal site sample schema", () => {
         relationship: "blockPlacements",
       },
     });
-    expect(schema.entities.emailAddress?.constraints?.uniqueNormalizedAddress).toEqual({
+    expect(schema.entities["email-address"]?.constraints?.uniqueNormalizedAddress).toEqual({
       kind: "unique",
       fields: ["normalizedAddress"],
     });
@@ -4769,26 +4946,26 @@ describe("personal site sample schema", () => {
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
-        from: { entity: "blockPlacement", field: "parent" },
+        from: { entity: "block-placement", field: "parent" },
         to: { entity: "block" },
         inverse: "blockPlacements",
       },
       blockPlacements: {
         kind: "toMany",
         from: { entity: "block" },
-        to: { entity: "blockPlacement", field: "parent" },
+        to: { entity: "block-placement", field: "parent" },
         inverse: "placementParent",
       },
       placementBlock: {
         kind: "toOne",
-        from: { entity: "blockPlacement", field: "block" },
+        from: { entity: "block-placement", field: "block" },
         to: { entity: "block" },
         inverse: "blockUsedInPlacements",
       },
       blockUsedInPlacements: {
         kind: "toMany",
         from: { entity: "block" },
-        to: { entity: "blockPlacement", field: "block" },
+        to: { entity: "block-placement", field: "block" },
         inverse: "placementBlock",
       },
     });
@@ -5011,7 +5188,7 @@ describe("personal site sample schema", () => {
     expect(schema.views.blockCompositionHome).toMatchObject({
       type: "collection",
       label: "Placements",
-      entity: "blockPlacement",
+      entity: "block-placement",
       navigation: { primary: false },
       context: {
         name: "block",
@@ -5043,7 +5220,7 @@ describe("personal site sample schema", () => {
     expect(schema.views.emailAddressHome).toMatchObject({
       type: "collection",
       label: "Email addresses",
-      entity: "emailAddress",
+      entity: "email-address",
       result: { type: "table", tableView: "emailAddressTable" },
     });
     expect(schema.views.audienceHome).toMatchObject({
@@ -5055,7 +5232,7 @@ describe("personal site sample schema", () => {
     expect(schema.views.siteCompositionHome).toMatchObject({
       type: "collection",
       label: "Site",
-      entity: "blockPlacement",
+      entity: "block-placement",
       navigation: { primary: true },
       context: {
         name: "block",
@@ -5137,7 +5314,7 @@ describe("personal site sample schema", () => {
     expect(schema.views.pageCompositionHome).toMatchObject({
       type: "collection",
       label: "Pages",
-      entity: "blockPlacement",
+      entity: "block-placement",
       navigation: { primary: false },
       context: {
         query: "blockPages",
@@ -5148,7 +5325,7 @@ describe("personal site sample schema", () => {
     expect(schema.views.navigationCompositionHome).toMatchObject({
       type: "collection",
       label: "Navigation",
-      entity: "blockPlacement",
+      entity: "block-placement",
       navigation: { primary: false },
       context: {
         query: "blockNavigationRoots",
@@ -5158,7 +5335,7 @@ describe("personal site sample schema", () => {
     });
     expect(schema.views.blockPlacementCreate).toMatchObject({
       type: "create",
-      entity: "blockPlacement",
+      entity: "block-placement",
       defaults: {
         parent: { kind: "context", name: "block" },
       },
@@ -5680,7 +5857,7 @@ describe("personal site sample schema", () => {
     expect(siteCompositionHome.actions).toBeUndefined();
     expect(blockPlacementCreate).toMatchObject({
       type: "create",
-      entity: "blockPlacement",
+      entity: "block-placement",
       fields: {
         block: { editor: "reference" },
         label: { editor: "text" },
@@ -6110,6 +6287,20 @@ describe("schema relationships", () => {
   });
 
   it("rejects invalid to-one and to-many relationship fields", () => {
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            rateCard: {
+              ...rateRelationships().rateCard,
+              to: { entity: "estii:card" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Use local entity key "card"');
+
     expect(() =>
       parseAppSchema(
         rateRelationshipSchema({

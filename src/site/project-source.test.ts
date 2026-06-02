@@ -92,7 +92,7 @@ describe("Site project source", () => {
         }),
       ]),
     ).toThrow(
-      'Site seed record "placement-home" field "blockPlacement.block" references missing block record "block-missing".',
+      'Site seed record "placement-home" field "block-placement.block" references missing block record "block-missing".',
     );
   });
 
@@ -261,7 +261,7 @@ function placementRecord(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values,
     createdAt,
   };

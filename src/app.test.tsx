@@ -351,7 +351,7 @@ function blockPlacementRecord(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent,
       block,
@@ -2395,7 +2395,7 @@ describe("public site renderer", () => {
       },
       {
         id: "rec_site_place_home_markdown",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "rec_site_content_home",
           block: "rec_site_content_home_markdown",
@@ -2431,7 +2431,7 @@ describe("public site renderer", () => {
       },
       {
         id: "rec_site_place_home_json_markdown",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "rec_site_content_home",
           block: "rec_site_content_home_json_markdown",
@@ -2543,7 +2543,7 @@ describe("public site renderer", () => {
       },
       {
         id: "rec_site_place_footer_copyright",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "rec_site_content_group_footer",
           block: "rec_site_content_footer_copyright",
@@ -2969,7 +2969,7 @@ describe("generated collection home", () => {
       }),
       {
         id: "placement-1",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "page-1",
           block: "link-1",
@@ -2980,7 +2980,7 @@ describe("generated collection home", () => {
       },
       {
         id: "placement-2",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "page-1",
           block: "link-2",
@@ -3108,7 +3108,7 @@ describe("generated collection home", () => {
       siteBlockRecord("link-1", { type: "link", label: "Docs", href: "/docs" }),
       {
         id: "placement-1",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "page-1",
           block: "group-1",
@@ -3118,7 +3118,7 @@ describe("generated collection home", () => {
       },
       {
         id: "placement-2",
-        entity: "blockPlacement",
+        entity: "block-placement",
         values: {
           parent: "page-1",
           block: "link-1",
@@ -4976,7 +4976,7 @@ describe("generated forms and records", () => {
   });
 
   it("sorts generated table rows by ordering rank before rendering", () => {
-    const blockPlacement = siteSourceSchema.entities.blockPlacement;
+    const blockPlacement = siteSourceSchema.entities["block-placement"];
     const orderField = blockPlacement.fields.order;
     const columns: TableColumnConfig[] = [
       {
@@ -5006,7 +5006,7 @@ describe("generated forms and records", () => {
     const html = renderRecordTableHtml({
       columns,
       entity: blockPlacement,
-      entityName: "blockPlacement",
+      entityName: "block-placement",
       ordering,
       records: [
         sitePlacementRecord("placement-3", "Third", 3000),

@@ -17,7 +17,7 @@ export function getRecordReadinessWarnings(
     return getBlockWarnings(record);
   }
 
-  if (record.entity === "blockPlacement") {
+  if (record.entity === "block-placement") {
     return getBlockPlacementWarnings(record, recordsById);
   }
 

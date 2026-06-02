@@ -538,7 +538,7 @@ function coreImageBlock(name: string): StoredRecord {
 function placementRecord(id: string, parent: string, block: string): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent,
       block,

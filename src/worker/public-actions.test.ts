@@ -244,7 +244,7 @@ describe("public action runtime", () => {
     });
     await postAdminJson<MutationResponse>("/api/site/mutations", {
       mutationId: "mutation-place-configured-subscribe-form",
-      entity: "blockPlacement",
+      entity: "block-placement",
       op: "create",
       values: {
         parent: "rec_site_starter_page_home",
@@ -460,7 +460,7 @@ function publicSubscribeBody(input: {
 function contactSubscriptionRecords(records: StoredRecord[]) {
   return {
     contacts: records.filter((record) => record.entity === "contact"),
-    emailAddresses: records.filter((record) => record.entity === "emailAddress"),
+    emailAddresses: records.filter((record) => record.entity === "email-address"),
     audiences: records.filter((record) => record.entity === "audience"),
     subscriptions: records.filter((record) => record.entity === "subscription"),
   };

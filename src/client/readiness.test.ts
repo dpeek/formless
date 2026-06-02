@@ -33,7 +33,7 @@ describe("record readiness warnings", () => {
 
   it("warns when placements do not resolve to a child block", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "blockPlacement", {
+      record("placement-1", "block-placement", {
         parent: "group-1",
         block: "missing-block",
         order: 0,
@@ -46,7 +46,7 @@ describe("record readiness warnings", () => {
 
   it("accepts placements with a live child block", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "blockPlacement", {
+      record("placement-1", "block-placement", {
         parent: "group-1",
         block: "link-1",
         order: 0,
@@ -76,7 +76,7 @@ describe("record readiness warnings", () => {
 
   it("warns for every placement with a missing child block", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "blockPlacement", {
+      record("placement-1", "block-placement", {
         parent: "block-1",
         block: "missing-block",
         order: 0,

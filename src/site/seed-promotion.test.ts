@@ -101,7 +101,7 @@ describe("Site seed promotion", () => {
     expect(() =>
       buildSiteSeedRecordsFromSnapshot(snapshot([parent, child, placement]), siteSourceSchema),
     ).toThrow(
-      'Site seed record "placement-deleted-child" field "blockPlacement.block" references missing block record "block-deleted-child".',
+      'Site seed record "placement-deleted-child" field "block-placement.block" references missing block record "block-deleted-child".',
     );
   });
 });
@@ -144,7 +144,7 @@ function placementRecord(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values,
     createdAt,
   };

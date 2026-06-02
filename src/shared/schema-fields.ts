@@ -1,4 +1,5 @@
 import { parseEntityMutations } from "./schema-mutations.ts";
+import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./schema-entity-names.ts";
 import {
   assertExactKeys,
   assertSupportedKeys,
@@ -45,9 +46,7 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
   const actionInputsByEntity: Record<string, unknown> = {};
 
   for (const [entityName, entityValue] of Object.entries(value)) {
-    if (entityName.trim() === "") {
-      throw new Error("Entity names must be non-empty.");
-    }
+    assertSchemaLocalEntityKey(`Schema entity key "${entityName}"`, entityName);
 
     const { actionsInput, entity } = parseEntityBase(entityName, entityValue);
     entities[entityName] = entity;
@@ -69,12 +68,11 @@ function validateReferenceFields(entities: Record<string, EntitySchema>) {
         continue;
       }
 
-      const targetEntity = entities[field.to];
-      if (!targetEntity) {
-        throw new Error(
-          `Field "${entityName}.${fieldName}" references unknown entity "${field.to}".`,
-        );
-      }
+      const targetEntity = requireLocalEntityReference(
+        `Field "${entityName}.${fieldName}" reference target`,
+        field.to,
+        entities,
+      );
 
       if (field.displayField === undefined) {
         continue;
@@ -94,6 +92,31 @@ function validateReferenceFields(entities: Record<string, EntitySchema>) {
       }
     }
   }
+}
+
+function requireLocalEntityReference(
+  context: string,
+  entityName: string,
+  entities: Record<string, EntitySchema>,
+): EntitySchema {
+  if (entityName.includes(":")) {
+    const qualifiedName = parseQualifiedEntityName(`${context} "${entityName}"`, entityName);
+
+    if (entities[qualifiedName.entityKey] !== undefined) {
+      throw new Error(
+        `${context} "${entityName}" references local entity "${qualifiedName.entityKey}" with a qualified name. Use local entity key "${qualifiedName.entityKey}".`,
+      );
+    }
+  } else {
+    assertSchemaLocalEntityKey(`${context} "${entityName}"`, entityName);
+  }
+
+  const entity = entities[entityName];
+  if (!entity) {
+    throw new Error(`${context} references unknown entity "${entityName}".`);
+  }
+
+  return entity;
 }
 
 function parseEntityBase(

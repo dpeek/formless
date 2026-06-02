@@ -29,7 +29,7 @@ export function siteBlockRecord(id: string, values: StoredRecord["values"]): Sto
 export function sitePlacementRecord(id: string, label: string, order: number): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent: "page-1",
       block: "block-1",

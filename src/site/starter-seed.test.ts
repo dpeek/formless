@@ -170,7 +170,7 @@ function childBlocks(parentId: string): StoredRecord[] {
 
   return siteSeedRecords
     .filter(
-      (record) => record.entity === "blockPlacement" && stringField(record, "parent") === parentId,
+      (record) => record.entity === "block-placement" && stringField(record, "parent") === parentId,
     )
     .sort((left, right) => numberField(left, "order") - numberField(right, "order"))
     .map((placement) => records.get(String(placement.values.block)))

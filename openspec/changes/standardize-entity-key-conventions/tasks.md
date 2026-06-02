@@ -15,10 +15,16 @@
 
 ## 2. Parser And Schema Grammar
 
-- [ ] 2.1 Add schema-local entity key validation for singular kebab-case keys and reject camelCase, qualified, underscored, dotted, slash-containing, empty, leading-digit, leading/trailing hyphen, and double-hyphen keys.
-- [ ] 2.2 Add qualified entity name parsing and formatting for `<schema-key>:<entity-key>` boundary names.
-- [ ] 2.3 Keep schema-internal entity references local when the target entity is declared in the same schema.
-- [ ] 2.4 Add parser errors that distinguish invalid local entity keys from invalid qualified boundary names.
+- [x] 2.1 Add schema-local entity key validation for singular kebab-case keys and reject camelCase, qualified, underscored, dotted, slash-containing, empty, leading-digit, leading/trailing hyphen, and double-hyphen keys.
+- [x] 2.2 Add qualified entity name parsing and formatting for `<schema-key>:<entity-key>` boundary names.
+- [x] 2.3 Keep schema-internal entity references local when the target entity is declared in the same schema.
+- [x] 2.4 Add parser errors that distinguish invalid local entity keys from invalid qualified boundary names.
+
+- Files changed: `src/shared/schema-entity-names.ts`, `src/shared/schema-fields.ts`, `src/shared/schema-relationships.ts`, `src/shared/schema.test.ts`, Site schema/seed fixtures, and Site entity lookup/test references under `src/app`, `src/client`, `src/site`, `src/test`, and `src/worker`.
+- Evidence: schema parsing now validates local entity keys with kebab-case grammar, rejects camelCase/qualified/underscored/dotted/slash/empty/leading-digit/hyphen-boundary/double-hyphen local keys, exposes qualified entity parse/format helpers, and rejects qualified references to same-schema entities with local-key guidance.
+- Site fixture evidence: bundled Site local entity keys `blockPlacement` and `emailAddress` were renamed to `block-placement` and `email-address`; field, query, view, action, and screen keys such as `emailAddress`, `blockPlacementTable`, and `blockPlacementCreate` remain unchanged.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T02:27:36.378Z.
+- Smoke: `bun browser --ignore-https-errors --session grug-entity-grammar-smoke batch --bail "open https://standardize-entity-key-conventions.formless.local/" "wait 1000" "snapshot -i" "errors"` rendered App management and returned no browser errors.
 
 ## 3. Builder And Generated UI
 

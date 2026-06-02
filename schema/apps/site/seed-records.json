@@ -281,7 +281,7 @@
   },
   {
     "id": "rec_site_starter_place_header_primary",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header",
       "block": "rec_site_starter_header_primary",
@@ -291,7 +291,7 @@
   },
   {
     "id": "rec_site_starter_place_header_secondary",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header",
       "block": "rec_site_starter_header_secondary",
@@ -301,7 +301,7 @@
   },
   {
     "id": "rec_site_starter_place_header_home",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header_primary",
       "block": "rec_site_starter_link_home",
@@ -311,7 +311,7 @@
   },
   {
     "id": "rec_site_starter_place_header_about",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header_secondary",
       "block": "rec_site_starter_link_about",
@@ -321,7 +321,7 @@
   },
   {
     "id": "rec_site_starter_place_header_blog",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header_secondary",
       "block": "rec_site_starter_link_blog",
@@ -331,7 +331,7 @@
   },
   {
     "id": "rec_site_starter_place_header_projects",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header_secondary",
       "block": "rec_site_starter_link_projects",
@@ -341,7 +341,7 @@
   },
   {
     "id": "rec_site_starter_place_header_resume",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_header_secondary",
       "block": "rec_site_starter_link_resume",
@@ -351,7 +351,7 @@
   },
   {
     "id": "rec_site_starter_place_footer_social",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_footer",
       "block": "rec_site_starter_footer_social",
@@ -361,7 +361,7 @@
   },
   {
     "id": "rec_site_starter_place_footer_github",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_footer_social",
       "block": "rec_site_starter_link_github",
@@ -371,7 +371,7 @@
   },
   {
     "id": "rec_site_starter_place_footer_linkedin",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_footer_social",
       "block": "rec_site_starter_link_linkedin",
@@ -381,7 +381,7 @@
   },
   {
     "id": "rec_site_starter_place_footer_x",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_footer_social",
       "block": "rec_site_starter_link_x",
@@ -391,7 +391,7 @@
   },
   {
     "id": "rec_site_starter_place_home_hero",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_page_home",
       "block": "rec_site_starter_home_hero",
@@ -401,7 +401,7 @@
   },
   {
     "id": "rec_site_starter_place_about_body",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_page_about",
       "block": "rec_site_starter_about_body",
@@ -411,7 +411,7 @@
   },
   {
     "id": "rec_site_starter_place_blog_list",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_page_blog",
       "block": "rec_site_starter_blog_list",
@@ -421,7 +421,7 @@
   },
   {
     "id": "rec_site_starter_place_projects_list",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_page_projects",
       "block": "rec_site_starter_projects_list",
@@ -431,7 +431,7 @@
   },
   {
     "id": "rec_site_starter_place_resume_body",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_page_resume",
       "block": "rec_site_starter_resume_body",
@@ -441,7 +441,7 @@
   },
   {
     "id": "rec_site_starter_place_post_body",
-    "entity": "blockPlacement",
+    "entity": "block-placement",
     "values": {
       "parent": "rec_site_starter_post",
       "block": "rec_site_starter_post_body",

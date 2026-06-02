@@ -378,7 +378,7 @@ function placement(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent,
       block: child,

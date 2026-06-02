@@ -133,7 +133,7 @@ function indexSiteRecords(records: StoredRecord[]): SiteTreeIndexes {
       continue;
     }
 
-    if (record.entity !== "blockPlacement" || record.deletedAt) {
+    if (record.entity !== "block-placement" || record.deletedAt) {
       continue;
     }
 

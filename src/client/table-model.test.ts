@@ -52,7 +52,7 @@ describe("table model", () => {
     const result = selectTableResultModel(
       siteSourceSchema,
       siteSourceSchema.tableViews.blockPlacementTable,
-      siteSourceSchema.entities.blockPlacement,
+      siteSourceSchema.entities["block-placement"],
     );
     const actionsColumn = result.columns.find((column) => column.type === "invokeAction");
 

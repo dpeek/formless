@@ -90,7 +90,7 @@ describe("collection result model", () => {
     const result = selectTreeResultModel(
       siteSourceSchema,
       view.result,
-      siteSourceSchema.entities.blockPlacement,
+      siteSourceSchema.entities["block-placement"],
     );
 
     expect(result).toMatchObject({

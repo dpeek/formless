@@ -981,7 +981,7 @@ describe("site page tree projection", () => {
       ),
       {
         id: "rec_site_email_reader",
-        entity: "emailAddress",
+        entity: "email-address",
         values: {
           address: "reader@example.com",
           normalizedAddress: "reader@example.com",
@@ -1265,7 +1265,7 @@ function placementRecord(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent,
       block,

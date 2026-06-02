@@ -31,7 +31,7 @@ describe("Site editing and publish workflow baseline", () => {
 
     expect(snapshot.records).toEqual(siteSeedRecords);
     expect(new Set(siteSeedRecords.map((record) => record.entity))).toEqual(
-      new Set(["site", "block", "blockPlacement"]),
+      new Set(["site", "block", "block-placement"]),
     );
 
     for (const record of siteSeedRecords) {

@@ -176,7 +176,7 @@ function recordsByIdFrom(records: StoredRecord[]) {
 function placementRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values: {
       parent: "page-1",
       slot: "main",

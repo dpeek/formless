@@ -1723,7 +1723,7 @@ describe("home view model collections", () => {
       {
         viewName: "siteCompositionHome",
         label: "Site",
-        entityName: "blockPlacement",
+        entityName: "block-placement",
         navigationPrimary: true,
         context: {
           name: "block",
@@ -1734,7 +1734,7 @@ describe("home view model collections", () => {
           relatedCollection: {
             relationshipName: "blockPlacements",
             label: "Placements",
-            entityName: "blockPlacement",
+            entityName: "block-placement",
             referenceFieldName: "parent",
           },
           createAction: null,
@@ -1771,7 +1771,7 @@ describe("home view model collections", () => {
     const placementModel = requiredCollectionModel(siteSourceSchema, "pageCompositionHome");
     const columns = placementModel.result.type === "table" ? placementModel.result.columns : [];
 
-    expect(siteSourceSchema.entities.blockPlacement.fields.order).toMatchObject({
+    expect(siteSourceSchema.entities["block-placement"].fields.order).toMatchObject({
       type: "number",
       required: true,
       default: 1000,
@@ -2007,7 +2007,7 @@ describe("home view model collections", () => {
         relationship: {
           kind: "toMany",
           from: { entity: "block" },
-          to: { entity: "blockPlacement", field: "parent" },
+          to: { entity: "block-placement", field: "parent" },
         },
       },
       itemViewName: "blockContextItem",
@@ -2016,7 +2016,7 @@ describe("home view model collections", () => {
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",
       label: "Add placement",
-      entityName: "blockPlacement",
+      entityName: "block-placement",
       defaults: [{ fieldName: "parent", value: { kind: "context", name: "block" } }],
     });
   });
@@ -2235,7 +2235,7 @@ describe("home view model collections", () => {
             id: "site",
             label: "Site",
             viewName: "siteCompositionHome",
-            entityName: "blockPlacement",
+            entityName: "block-placement",
           },
         ],
       },
@@ -2255,7 +2255,7 @@ describe("home view model collections", () => {
             id: "emailAddresses",
             label: "Email addresses",
             viewName: "emailAddressHome",
-            entityName: "emailAddress",
+            entityName: "email-address",
           },
           {
             id: "audiences",
@@ -2295,13 +2295,13 @@ describe("home view model collections", () => {
       {
         relationshipName: "blockPlacements",
         label: "Placements",
-        entityName: "blockPlacement",
+        entityName: "block-placement",
         referenceFieldName: "parent",
       },
       {
         relationshipName: "blockUsedInPlacements",
         label: "Used in placements",
-        entityName: "blockPlacement",
+        entityName: "block-placement",
         referenceFieldName: "block",
       },
     ]);

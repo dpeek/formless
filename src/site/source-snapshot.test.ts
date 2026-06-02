@@ -39,7 +39,7 @@ describe("Site source snapshot", () => {
 
   it("rejects non-Site source schemas", () => {
     expect(() => buildSiteSourceSnapshot(taskSourceSchema, [])).toThrow(
-      'Site source snapshot schema must define "block" and "blockPlacement" composition fields.',
+      'Site source snapshot schema must define "block" and "block-placement" composition fields.',
     );
   });
 
@@ -56,7 +56,7 @@ describe("Site source snapshot", () => {
         exportedAt: "2026-05-12T01:00:00.000Z",
       }),
     ).toThrow(
-      'Site seed record "placement-missing" field "blockPlacement.block" references missing block record "block-missing".',
+      'Site seed record "placement-missing" field "block-placement.block" references missing block record "block-missing".',
     );
   });
 
@@ -85,7 +85,7 @@ function placementRecord(
 ): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values,
     createdAt,
   };

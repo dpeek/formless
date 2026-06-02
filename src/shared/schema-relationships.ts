@@ -4,6 +4,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./schema-entity-names.ts";
 import type {
   EntitySchema,
   FieldSchema,
@@ -255,6 +256,18 @@ function requireEntity(
   entityName: string,
   entities: Record<string, EntitySchema>,
 ): EntitySchema {
+  if (entityName.includes(":")) {
+    const qualifiedName = parseQualifiedEntityName(`${context} entity "${entityName}"`, entityName);
+
+    if (entities[qualifiedName.entityKey] !== undefined) {
+      throw new Error(
+        `${context} entity "${entityName}" references local entity "${qualifiedName.entityKey}" with a qualified name. Use local entity key "${qualifiedName.entityKey}".`,
+      );
+    }
+  } else {
+    assertSchemaLocalEntityKey(`${context} entity "${entityName}"`, entityName);
+  }
+
   const entity = entities[entityName];
 
   if (!entity) {

@@ -135,17 +135,17 @@ describe("browser replica projections", () => {
   it("counts entity filters and active references from the replica snapshot", () => {
     const activeCount = createEntityRecordCountMatchingQuerySelector("task", activeQuery);
     const blockReferenceCount = createEntityRecordCountReferencingFieldSelector(
-      "blockPlacement",
+      "block-placement",
       "block",
       "block-1",
     );
     const snapshot = projectionSnapshot([
       record("task-1", "task", { done: false }),
       record("task-2", "task", { done: true }),
-      record("placement-1", "blockPlacement", { block: "block-1" }),
-      record("placement-2", "blockPlacement", { block: "block-2" }),
+      record("placement-1", "block-placement", { block: "block-1" }),
+      record("placement-2", "block-placement", { block: "block-2" }),
       {
-        ...record("placement-3", "blockPlacement", { block: "block-1" }),
+        ...record("placement-3", "block-placement", { block: "block-1" }),
         deletedAt: "2026-04-28T00:04:00.000Z",
       },
     ]);
@@ -236,13 +236,13 @@ describe("browser replica projections", () => {
   it("reuses readiness warning arrays and updates when references resolve", () => {
     const selector = createRecordReadinessWarningsSelector("placement-1");
     const snapshot = projectionSnapshot([
-      record("placement-1", "blockPlacement", { parent: "parent-1", block: "block-1", order: 0 }),
+      record("placement-1", "block-placement", { parent: "parent-1", block: "block-1", order: 0 }),
     ]);
 
     const first = selector(snapshot);
     const repeated = selector(snapshot);
     const resolvedSnapshot = projectionSnapshot([
-      record("placement-1", "blockPlacement", { parent: "parent-1", block: "block-1", order: 0 }),
+      record("placement-1", "block-placement", { parent: "parent-1", block: "block-1", order: 0 }),
       record("block-1", "block", { type: "link", label: "Home" }),
     ]);
     const afterResolvedReference = selector(resolvedSnapshot);

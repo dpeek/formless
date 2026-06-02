@@ -58,7 +58,7 @@ function cloneStoredRecord(record: StoredRecord): StoredRecord {
 
 function assertSiteSourceSchema(schema: AppSchema) {
   const block = schema.entities.block;
-  const placement = schema.entities.blockPlacement;
+  const placement = schema.entities["block-placement"];
   const parentField = placement?.fields.parent;
   const blockField = placement?.fields.block;
 
@@ -71,7 +71,7 @@ function assertSiteSourceSchema(schema: AppSchema) {
     blockField.to !== "block"
   ) {
     throw new Error(
-      'Site source snapshot schema must define "block" and "blockPlacement" composition fields.',
+      'Site source snapshot schema must define "block" and "block-placement" composition fields.',
     );
   }
 }

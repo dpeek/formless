@@ -130,7 +130,7 @@ describe("authority", () => {
     expect(body.cursor).toBe(siteSeedRecords.length);
     expectRecordsIgnoringOrder(body.records, siteSeedRecords);
     expect(new Set(body.records.map((record) => record.entity))).toEqual(
-      new Set(["site", "block", "blockPlacement"]),
+      new Set(["site", "block", "block-placement"]),
     );
   });
 
@@ -394,7 +394,7 @@ describe("authority", () => {
           },
           {
             id: "rec_installed_site_image_place",
-            entity: "blockPlacement",
+            entity: "block-placement",
             values: {
               parent: "rec_site_content_home",
               block: "rec_installed_site_image",
@@ -1357,19 +1357,19 @@ describe("authority", () => {
     };
     const added = await postActionForEntity(
       "action-site-tree-add-child",
-      "blockPlacement",
+      "block-placement",
       "addTreeChild",
       input,
     );
     const replay = await postActionForEntity(
       "action-site-tree-add-child",
-      "blockPlacement",
+      "block-placement",
       "addTreeChild",
       input,
     );
     const child = added.changes.find((change) => change.payload.entity === "block")?.payload;
     const placement = added.changes.find(
-      (change) => change.payload.entity === "blockPlacement",
+      (change) => change.payload.entity === "block-placement",
     )?.payload;
 
     if (!child || !placement) {
@@ -1393,7 +1393,7 @@ describe("authority", () => {
 
     const removed = await postActionForEntity(
       "action-site-tree-remove-placement",
-      "blockPlacement",
+      "block-placement",
       "removeTreePlacement",
       { input: { placementId: placement.id } },
     );
@@ -1404,7 +1404,7 @@ describe("authority", () => {
     expect(removed.changes).toHaveLength(1);
     expect(removed.changes[0]?.payload).toMatchObject({
       id: placement.id,
-      entity: "blockPlacement",
+      entity: "block-placement",
       deletedAt: expect.any(String),
     });
     expect(storedChild).toMatchObject({
@@ -1415,7 +1415,7 @@ describe("authority", () => {
     expect(storedChild).not.toHaveProperty("deletedAt");
     expect(storedPlacement).toMatchObject({
       id: placement.id,
-      entity: "blockPlacement",
+      entity: "block-placement",
       deletedAt: expect.any(String),
     });
   });

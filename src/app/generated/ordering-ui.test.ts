@@ -21,7 +21,7 @@ describe("generated result ordering helpers", () => {
     ]);
     const context = selectResultOrderingContext({
       canPatch: true,
-      entityName: "blockPlacement",
+      entityName: "block-placement",
       ordering: placementOrdering,
       recordIds: ["a", "b", "c", "d"],
       recordsById,
@@ -83,7 +83,7 @@ describe("generated result ordering helpers", () => {
     ]);
     const context = selectResultOrderingContext({
       canPatch: false,
-      entityName: "blockPlacement",
+      entityName: "block-placement",
       ordering: placementOrdering,
       recordIds: ["a", "b"],
       recordsById,
@@ -131,7 +131,7 @@ function recordsByIdFrom(records: StoredRecord[]) {
 function placementRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   return {
     id,
-    entity: "blockPlacement",
+    entity: "block-placement",
     values,
     createdAt: `2026-05-11T00:00:00.000Z`,
   };
