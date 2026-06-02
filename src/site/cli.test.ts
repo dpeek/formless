@@ -60,6 +60,8 @@ import {
   type CheckFormlessInstanceDeployMetadataInput,
   type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
+  type DestroyFormlessInstanceInput,
+  type DestroyFormlessInstanceResult,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
   type WriteFormlessInstanceStateInput,
@@ -87,6 +89,7 @@ describe("Formless Site CLI", () => {
       "                                      Check workspace source and target drift",
       "  deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
+      "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
       "  archive export --target <url> --out <dir>",
       "  archive export-app --target <url> --install <id> --out <dir>",
       "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
@@ -103,6 +106,7 @@ describe("Formless Site CLI", () => {
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
+      "  instance destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
       "  instance domains remote-plan|run-apply|run-delete|forget-route|forget-redirect",
       "       |mark-manually-removed|plan|apply [--workspace <path>] [--target <alias>]",
       "       [--policy <create-only|adopt|override>] [--host <hostname>]",
@@ -157,6 +161,22 @@ describe("Formless Site CLI", () => {
     ).toEqual({
       kind: "workspaceDeploy",
       migrationPolicy: "existing",
+      targetAlias: "remote",
+      workspacePath: "../personal",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "destroy",
+        "--workspace",
+        "../personal",
+        "--target",
+        "remote",
+        "--confirm",
+        "personal",
+      ]),
+    ).toEqual({
+      confirm: "personal",
+      kind: "workspaceDestroy",
       targetAlias: "remote",
       workspacePath: "../personal",
     });
@@ -251,6 +271,12 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["deploy", "--migration-policy", "auto"])).toThrow(
       'formless deploy --migration-policy must be "new" or "existing".',
     );
+    expect(() => parseFormlessCliArgs(["destroy"])).toThrow(
+      "Missing required option for formless destroy: --confirm.",
+    );
+    expect(() => parseFormlessCliArgs(["destroy", "--confirm", "personal", "--force"])).toThrow(
+      "Unknown option for formless destroy: --force",
+    );
     expect(() => parseFormlessCliArgs(["publish", "--force"])).toThrow("Unknown command: publish");
   });
 
@@ -263,6 +289,12 @@ describe("Formless Site CLI", () => {
     expect(parseFormlessCliArgs(["deploy"])).toEqual({
       kind: "workspaceDeploy",
       migrationPolicy: null,
+      targetAlias: null,
+      workspacePath: null,
+    });
+    expect(parseFormlessCliArgs(["destroy", "--confirm", "personal"])).toEqual({
+      confirm: "personal",
+      kind: "workspaceDestroy",
       targetAlias: null,
       workspacePath: null,
     });
@@ -441,6 +473,23 @@ describe("Formless Site CLI", () => {
       migrationPolicy: "existing",
       targetAlias: "remote",
       workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "destroy",
+        "--workspace",
+        "../personal",
+        "--target",
+        "remote",
+        "--confirm",
+        "personal",
+      ]),
+    ).toEqual({
+      confirm: "personal",
+      kind: "instanceDestroy",
+      targetAlias: "remote",
+      workspacePath: "../personal",
     });
     expect(
       parseFormlessCliArgs([
@@ -631,7 +680,7 @@ describe("Formless Site CLI", () => {
 
   it("validates instance workspace command options", () => {
     expect(() => parseFormlessCliArgs(["instance"])).toThrow(
-      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|domains|token>",
+      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token>",
     );
     expect(() => parseFormlessCliArgs(["instance", "init-workspace", "--from-remote"])).toThrow(
       "Missing required option for formless instance init-workspace: --target-url.",
@@ -653,6 +702,12 @@ describe("Formless Site CLI", () => {
     expect(() =>
       parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
+    expect(() => parseFormlessCliArgs(["instance", "destroy"])).toThrow(
+      "Missing required option for formless instance destroy: --confirm.",
+    );
+    expect(() =>
+      parseFormlessCliArgs(["instance", "destroy", "--confirm", "personal", "--force"]),
+    ).toThrow("Unknown option for formless instance destroy: --force");
     expect(() => parseFormlessCliArgs(["instance", "domains", "forget"])).toThrow(
       "Usage: formless instance domains <remote-plan|run-apply|run-delete|forget-route|forget-redirect|mark-manually-removed|plan|apply>",
     );
@@ -3474,6 +3529,182 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
+  it("destroys a claimed instance workspace after confirmation", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      domains: [
+        { enabled: true, host: "dpeek.com", profile: "instance" },
+        {
+          enabled: false,
+          host: "draft.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
+      ],
+    });
+    await writeWorkspaceDeployState(workspaceRoot);
+
+    await runFormlessCli(
+      ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "personal"],
+      cliDeps(tempDir, {
+        destroy: async (input) => {
+          destroyInputs.push(input);
+
+          return { resources: destroyedResourceSummary() };
+        },
+        logs,
+        packageRoot: "/package",
+      }),
+    );
+
+    expect(destroyInputs).toHaveLength(1);
+    expect(destroyInputs[0]).toMatchObject({
+      credentialProfile: "personal-profile",
+      packageRoot: "/package",
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
+        CLOUDFLARE_API_TOKEN: "state-cf-token",
+      },
+      stateRoot: path.join(workspaceRoot, ".formless/deploy/personal"),
+    });
+    expect(destroyInputs[0]?.plan).toMatchObject({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      expectedUrl: {
+        url: "https://personal.dpeek.workers.dev",
+      },
+      instanceName: "personal",
+      resources: {
+        authority: {
+          namespaceName: "personal-authority",
+        },
+        mediaBucket: {
+          name: "personal-media",
+        },
+        worker: {
+          name: "personal",
+        },
+      },
+    });
+    expect(logs).toEqual([
+      [
+        "Instance workspace destroyed.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Worker: personal.",
+        "Durable Object namespace: personal-authority.",
+        "Media bucket: personal-media.",
+        "Domain resources: 1 enabled host (dpeek.com).",
+        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 0, Alchemy state destroyed.",
+        `Ignored deploy state: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/deploy/personal"),
+        )}.`,
+        `Deployment facts: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/deploy/personal/formless.instance.json"),
+        )}.`,
+        `Local deploy secrets: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/deploy/personal/deploy.env"),
+        )}.`,
+      ].join("\n"),
+    ]);
+  });
+
+  it("destroys a local-first workspace through the top-level command", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
+
+    await runFormlessCli(
+      ["destroy", "--workspace", workspaceRoot, "--target", "remote", "--confirm", "personal"],
+      cliDeps(tempDir, {
+        destroy: async (input) => {
+          destroyInputs.push(input);
+
+          return { resources: destroyedResourceSummary() };
+        },
+      }),
+    );
+
+    expect(destroyInputs).toHaveLength(1);
+    expect(destroyInputs[0]?.stateRoot).toBe(path.join(workspaceRoot, ".formless/deploy/personal"));
+  });
+
+  it("refuses destroy before provider mutation when confirmation or deploy state is invalid", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "wrong"],
+        cliDeps(tempDir, {
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return { resources: destroyedResourceSummary() };
+          },
+        }),
+      ),
+    ).rejects.toThrow('Formless instance destroy confirmation must match Worker name "personal".');
+
+    await rm(path.join(workspaceRoot, ".formless/deploy/personal/formless.instance.json"));
+
+    await expect(
+      runFormlessCli(
+        ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "personal"],
+        cliDeps(tempDir, {
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return { resources: destroyedResourceSummary() };
+          },
+        }),
+      ),
+    ).rejects.toThrow("Formless instance destroy requires ignored deploy state");
+
+    expect(destroyInputs).toEqual([]);
+  });
+
+  it("refuses destroy before provider mutation when ignored deploy secrets are incomplete", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot, { deployEnv: "CLOUDFLARE_API_TOKEN=token\n" });
+
+    await expect(
+      runFormlessCli(
+        ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "personal"],
+        cliDeps(tempDir, {
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return { resources: destroyedResourceSummary() };
+          },
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance destroy requires ALCHEMY_PASSWORD in ignored deploy secrets",
+    );
+    expect(destroyInputs).toEqual([]);
+  });
+
   it("deploys a local-first workspace, records ignored state, updates manifest target intent, and pushes saved archives", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal");
@@ -4688,6 +4919,49 @@ async function writeWorkspaceManifest(
   );
 }
 
+async function writeWorkspaceDeployState(
+  workspaceRoot: string,
+  options: {
+    deployEnv?: string;
+    mediaBucketName?: string;
+    workerName?: string;
+  } = {},
+) {
+  const workerName = options.workerName ?? "personal";
+  const deployRoot = path.join(workspaceRoot, ".formless/deploy", workerName);
+
+  await mkdir(deployRoot, { recursive: true });
+  await writeFile(
+    path.join(deployRoot, "formless.instance.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        kind: "formless-instance",
+        instanceName: workerName,
+        accountId: "account-123",
+        workerName,
+        workersDevUrl: `https://${workerName}.dpeek.workers.dev`,
+        mediaBucketName: options.mediaBucketName ?? `${workerName}-media`,
+        authorityNamespaceName: `${workerName}-authority`,
+        deploymentTarget: "workers.dev",
+        deployedPackageVersion: packageJson.version,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(deployRoot, "deploy.env"),
+    options.deployEnv ??
+      [
+        "ALCHEMY_PASSWORD=alchemy-password",
+        "ALCHEMY_PROFILE=personal-profile",
+        "CLOUDFLARE_API_TOKEN=state-cf-token",
+        "",
+      ].join("\n"),
+  );
+}
+
 function workspaceApp(installId: string, label: string) {
   return {
     installId,
@@ -5358,6 +5632,20 @@ function fakeCloudflareDomainClient(input: {
   };
 }
 
+function destroyedResourceSummary(): DestroyFormlessInstanceResult["resources"] {
+  return {
+    alchemyState: "destroyed",
+    customDomains: 1,
+    dnsRecords: 1,
+    durableObjectNamespace: "destroyed",
+    mediaBucket: "destroyed",
+    redirectRules: 0,
+    worker: "destroyed",
+    workerAssets: "destroyed",
+    workerSecrets: "destroyed",
+  };
+}
+
 function cliDeps(
   cwd: string,
   options: {
@@ -5366,6 +5654,7 @@ function cliDeps(
     cloudflareDomainClient?: CloudflareDomainClient;
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
+    destroy?: (input: DestroyFormlessInstanceInput) => Promise<DestroyFormlessInstanceResult>;
     domainProviderApplyRuntime?: FormlessCliDependencies["domainProviderApplyRuntime"];
     env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
@@ -5412,6 +5701,7 @@ function cliDeps(
         (async (input) => ({
           url: input.plan.expectedUrl.url,
         })),
+      destroy: options.destroy ?? (async () => ({ resources: destroyedResourceSummary() })),
     },
     ...(options.domainProviderApplyRuntime === undefined
       ? {}

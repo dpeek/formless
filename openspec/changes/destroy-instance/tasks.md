@@ -1,9 +1,14 @@
 ## 1. CLI Surface And Validation
 
-- [ ] 1.1 Add `formless destroy` and `formless instance destroy` parser support, usage text, and command dispatch with `--workspace`, `--target`, and required `--confirm <workerName>`.
-- [ ] 1.2 Add destroy input/result types and formatter output that reports workspace, selected target, Worker, domain resources, destroyed resource summary, and ignored state path.
-- [ ] 1.3 Reuse workspace target selection and deployment plan resolution so destroy binds to the same Worker, Durable Object namespace, R2 media bucket, custom-domain, DNS, and redirect identities as deploy/domain apply.
-- [ ] 1.4 Validate confirmation, selected target, deploy config, ignored deploy state, and default Alchemy Cloudflare credentials before any provider mutation.
+- [x] 1.1 Add `formless destroy` and `formless instance destroy` parser support, usage text, and command dispatch with `--workspace`, `--target`, and required `--confirm <workerName>`.
+- [x] 1.2 Add destroy input/result types and formatter output that reports workspace, selected target, Worker, domain resources, destroyed resource summary, and ignored state path.
+- [x] 1.3 Reuse workspace target selection and deployment plan resolution so destroy binds to the same Worker, Durable Object namespace, R2 media bucket, custom-domain, DNS, and redirect identities as deploy/domain apply.
+- [x] 1.4 Validate confirmation, selected target, deploy config, ignored deploy state, and default Alchemy Cloudflare credentials before any provider mutation.
+
+Evidence:
+
+- Files changed: `src/site/cli-command.ts`, `src/site/cli.ts`, `src/site/instance-workspace.ts`, `src/site/instance-onboarding.ts`, `src/site/cli.test.ts`.
+- `devstate check` passed on 2026-06-02; `.devstate/status.md` reports checks ok, web service ready, test service pass.
 
 ## 2. Provider Destroy And State Handling
 

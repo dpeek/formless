@@ -135,8 +135,35 @@ export type DeployFormlessInstanceResult = {
   url: string;
 };
 
+export type DestroyFormlessInstanceInput = {
+  credentialProfile: string | null;
+  packageRoot: string;
+  plan: FormlessInstanceDeploymentPlan;
+  secrets: Omit<FormlessInstanceDeploymentSecrets, "FORMLESS_ADMIN_TOKEN">;
+  stateRoot: string;
+};
+
+export type DestroyFormlessInstanceResourceStatus = "already-missing" | "destroyed" | "skipped";
+
+export type DestroyFormlessInstanceResourceSummary = {
+  alchemyState: DestroyFormlessInstanceResourceStatus;
+  customDomains: number;
+  dnsRecords: number;
+  durableObjectNamespace: DestroyFormlessInstanceResourceStatus;
+  mediaBucket: DestroyFormlessInstanceResourceStatus;
+  redirectRules: number;
+  worker: DestroyFormlessInstanceResourceStatus;
+  workerAssets: DestroyFormlessInstanceResourceStatus;
+  workerSecrets: DestroyFormlessInstanceResourceStatus;
+};
+
+export type DestroyFormlessInstanceResult = {
+  resources: DestroyFormlessInstanceResourceSummary;
+};
+
 export type FormlessInstanceDeploymentAdapter = {
   deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
+  destroy?: (input: DestroyFormlessInstanceInput) => Promise<DestroyFormlessInstanceResult>;
 };
 
 export type CheckFormlessInstanceDeployMetadataInput = {
@@ -208,7 +235,7 @@ export type WriteFormlessInstanceStateDependencies = {
 };
 
 export type AlchemyFormlessInstanceDeploymentAppOptions = {
-  phase: "up";
+  phase: "destroy" | "up";
   password: string;
   profile?: string;
   rootDir: string;
@@ -787,8 +814,21 @@ export async function deployFormlessInstanceWithAlchemy(
   });
 }
 
+export async function destroyFormlessInstanceWithAlchemy(
+  input: DestroyFormlessInstanceInput,
+): Promise<DestroyFormlessInstanceResult> {
+  parseRequiredString("Formless package root", input.packageRoot);
+  parseRequiredString("Formless instance Alchemy state root", input.stateRoot);
+  parseRequiredString("Alchemy encryption password", input.secrets.ALCHEMY_PASSWORD);
+  parseOptionalString("Cloudflare API token", input.secrets.CLOUDFLARE_API_TOKEN);
+  normalizeCredentialProfile(input.credentialProfile);
+
+  throw new Error("Alchemy Formless instance destroy is not implemented.");
+}
+
 export const alchemyFormlessInstanceDeploymentAdapter: FormlessInstanceDeploymentAdapter = {
   deploy: deployFormlessInstanceWithAlchemy,
+  destroy: destroyFormlessInstanceWithAlchemy,
 };
 
 export const fetchFormlessInstanceDeploymentHealthCheckAdapter: FormlessInstanceDeploymentHealthCheckAdapter =

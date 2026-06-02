@@ -61,6 +61,8 @@ import {
   applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
   checkLocalFormlessWorkspace as checkLocalFormlessWorkspaceCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
+  destroyLocalFormlessWorkspace as destroyLocalFormlessWorkspaceCommand,
+  destroyFormlessInstanceWorkspace as destroyFormlessInstanceWorkspaceCommand,
   deployLocalFormlessWorkspace as deployLocalFormlessWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
@@ -79,6 +81,9 @@ import {
   type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
   type CheckLocalFormlessWorkspaceResult,
+  type DestroyLocalFormlessWorkspaceInput,
+  type DestroyFormlessInstanceWorkspaceInput,
+  type DestroyFormlessInstanceWorkspaceResult,
   type DeployLocalFormlessWorkspaceInput,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
@@ -215,6 +220,11 @@ export {
   type CheckFormlessInstanceWorkspaceResult,
   type CheckLocalFormlessWorkspaceInput,
   type CheckLocalFormlessWorkspaceResult,
+  type DestroyFormlessInstanceWorkspaceDependencies,
+  type DestroyFormlessInstanceWorkspaceInput,
+  type DestroyFormlessInstanceWorkspaceResult,
+  type DestroyLocalFormlessWorkspaceDependencies,
+  type DestroyLocalFormlessWorkspaceInput,
   type DeployFormlessInstanceWorkspaceDependencies,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
@@ -315,6 +325,10 @@ export {
   type CreateFormlessInstanceOwnerSetupCapabilityResult,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
+  type DestroyFormlessInstanceInput,
+  type DestroyFormlessInstanceResourceStatus,
+  type DestroyFormlessInstanceResourceSummary,
+  type DestroyFormlessInstanceResult,
   type EnsureFormlessInstanceLocalSecretEnvDependencies,
   type EnsureFormlessInstanceLocalSecretEnvInput,
   type EnsureFormlessInstanceLocalSecretEnvResult,
@@ -436,6 +450,18 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
       return;
     }
+    case "workspaceDestroy": {
+      const result = await destroyLocalFormlessWorkspace(
+        {
+          confirm: command.confirm,
+          targetAlias: command.targetAlias,
+          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+        },
+        dependencies,
+      );
+      dependencies.log(formatInstanceWorkspaceDestroyResult(result, dependencies.cwd));
+      return;
+    }
     case "archiveExport": {
       const result = await exportInstanceArchive(command, dependencies);
       dependencies.log(
@@ -536,6 +562,11 @@ export async function runFormlessCli(
     case "instanceDeploy": {
       const result = await deployFormlessInstanceWorkspace(command, dependencies);
       dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceDestroy": {
+      const result = await destroyFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceDestroyResult(result, dependencies.cwd));
       return;
     }
     case "instanceDomainsRemotePlan": {
@@ -841,6 +872,38 @@ export async function deployLocalFormlessWorkspace(
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
     setupCapability: dependencies.setupCapability,
+  });
+}
+
+export async function destroyFormlessInstanceWorkspace(
+  input: DestroyFormlessInstanceWorkspaceInput,
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "deploymentAdapter" | "env" | "packageRoot"
+  > = nodeFormlessCliDependencies(),
+): Promise<DestroyFormlessInstanceWorkspaceResult> {
+  return destroyFormlessInstanceWorkspaceCommand(input, {
+    cwd: dependencies.cwd,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    env: dependencies.env,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
+  });
+}
+
+export async function destroyLocalFormlessWorkspace(
+  input: DestroyLocalFormlessWorkspaceInput,
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "deploymentAdapter" | "env" | "packageRoot"
+  > = nodeFormlessCliDependencies(),
+): Promise<DestroyFormlessInstanceWorkspaceResult> {
+  return destroyLocalFormlessWorkspaceCommand(input, {
+    cwd: dependencies.cwd,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    env: dependencies.env,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
   });
 }
 
@@ -1663,6 +1726,39 @@ function formatInstanceWorkspaceDeployResult(
             : [`Apply restore: ${result.push.applyResult.remote.ok ? "ok" : "failed"}.`]),
         ]),
   ].join("\n");
+}
+
+function formatInstanceWorkspaceDestroyResult(
+  result: DestroyFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  const resources = result.destroy.resources;
+
+  return [
+    "Instance workspace destroyed.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Worker: ${result.plan.resources.worker.name}.`,
+    `Durable Object namespace: ${result.plan.resources.authority.namespaceName}.`,
+    `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
+    `Domain resources: ${formatDestroyDomainResources(result.domainResources)}.`,
+    `Destroyed resources: Worker ${resources.worker}, Durable Object namespace ${resources.durableObjectNamespace}, R2 media bucket ${resources.mediaBucket}, Worker assets ${resources.workerAssets}, Worker secrets ${resources.workerSecrets}, custom domains ${resources.customDomains}, DNS records ${resources.dnsRecords}, redirects ${resources.redirectRules}, Alchemy state ${resources.alchemyState}.`,
+    `Ignored deploy state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
+    `Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`,
+    `Local deploy secrets: ${formatCliPath(cwd, result.localSecretPath)}.`,
+  ].join("\n");
+}
+
+function formatDestroyDomainResources(
+  resources: DestroyFormlessInstanceWorkspaceResult["domainResources"],
+): string {
+  if (resources.enabledHosts.length === 0) {
+    return "none";
+  }
+
+  return `${resources.resourceCount} enabled host${
+    resources.resourceCount === 1 ? "" : "s"
+  } (${resources.enabledHosts.join(", ")})`;
 }
 
 function formatInstanceDomainProviderPlanResult(

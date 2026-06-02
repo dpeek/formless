@@ -67,6 +67,12 @@ export type FormlessCliCommand =
   | { kind: "instanceDev"; workspacePath: string }
   | { kind: "instanceResetLocal"; workspacePath: string }
   | {
+      confirm: string;
+      kind: "instanceDestroy";
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
       kind: "instanceDeploy";
       migrationPolicy: "existing" | "new" | null;
       targetAlias: string | null;
@@ -158,6 +164,12 @@ export type FormlessCliCommand =
     }
   | { kind: "workspaceCheck"; targetAlias: string | null; workspacePath: string | null }
   | {
+      confirm: string;
+      kind: "workspaceDestroy";
+      targetAlias: string | null;
+      workspacePath: string | null;
+    }
+  | {
       kind: "workspaceDeploy";
       migrationPolicy: "existing" | "new" | null;
       targetAlias: string | null;
@@ -178,6 +190,7 @@ export function formlessCliUsage(): string {
     "                                      Check workspace source and target drift",
     "  deploy [--workspace <path>] [--target <alias>]",
     "       [--migration-policy <new|existing>]",
+    "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
     "  archive export --target <url> --out <dir>",
     "  archive export-app --target <url> --install <id> --out <dir>",
     "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
@@ -194,6 +207,7 @@ export function formlessCliUsage(): string {
     "  instance dev|reset-local [--workspace <path>]",
     "  instance deploy [--workspace <path>] [--target <alias>]",
     "       [--migration-policy <new|existing>]",
+    "  instance destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
     "  instance domains remote-plan|run-apply|run-delete|forget-route|forget-redirect",
     "       |mark-manually-removed|plan|apply [--workspace <path>] [--target <alias>]",
     "       [--policy <create-only|adopt|override>] [--host <hostname>]",
@@ -223,6 +237,8 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
       return parseWorkspaceCheckArgs(rest);
     case "deploy":
       return parseWorkspaceDeployArgs(rest);
+    case "destroy":
+      return parseWorkspaceDestroyArgs(rest);
     case "archive":
       return parseArchiveArgs(rest);
     case "instance":
@@ -360,6 +376,21 @@ function parseWorkspaceDeployArgs(args: string[]): FormlessCliCommand {
   return {
     kind: "workspaceDeploy",
     migrationPolicy,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseWorkspaceDestroyArgs(args: string[]): FormlessCliCommand {
+  const options = parseTopLevelTargetOptions(
+    args,
+    "formless destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
+  );
+  const confirm = parseRequiredConfirmOption(options.rest, "formless destroy");
+
+  return {
+    confirm,
+    kind: "workspaceDestroy",
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };
@@ -547,13 +578,15 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
       );
     case "deploy":
       return parseInstanceDeployArgs(rest);
+    case "destroy":
+      return parseInstanceDestroyArgs(rest);
     case "domains":
       return parseInstanceDomainsArgs(rest);
     case "token":
       return parseInstanceTokenArgs(rest);
     default:
       throw new Error(
-        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|domains|token>",
+        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token>",
       );
   }
 }
@@ -729,6 +762,18 @@ function parseInstanceDeployArgs(args: string[]): FormlessCliCommand {
   return {
     kind: "instanceDeploy",
     migrationPolicy,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceDestroyArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance destroy");
+  const confirm = parseRequiredConfirmOption(options.rest, "formless instance destroy");
+
+  return {
+    confirm,
+    kind: "instanceDestroy",
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };
@@ -1256,6 +1301,28 @@ function parseInstanceTargetOptions(
   }
 
   return { rest, targetAlias, workspacePath: options.workspacePath };
+}
+
+function parseRequiredConfirmOption(args: string[], usage: string): string {
+  let confirm: string | null = null;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--confirm") {
+      confirm = readOptionValue(args, index, "--confirm");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for ${usage}: ${arg}`);
+  }
+
+  if (!confirm) {
+    throw new Error(`Missing required option for ${usage}: --confirm.`);
+  }
+
+  return confirm;
 }
 
 function parseTopLevelTargetOptions(

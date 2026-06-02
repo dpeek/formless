@@ -94,15 +94,18 @@ import {
 } from "./archive-workflows.ts";
 import {
   ALCHEMY_PASSWORD_ENV_NAME,
+  FORMLESS_INSTANCE_LOCAL_ENV_FILE,
   planFormlessInstanceDeployment,
   createFormlessInstanceState,
   formatFormlessInstanceState,
   formatFormlessOwnerSetupUrl,
   FORMLESS_INSTANCE_STATE_FILE,
+  parseFormlessInstanceStateJson,
   selectOnlyFormlessInstanceAccount,
   type CreateFormlessInstanceOwnerSetupCapabilityResult,
   type CheckFormlessInstanceDeployMetadataResult,
   type DeployFormlessInstanceResult,
+  type DestroyFormlessInstanceResult,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentAccount,
@@ -394,6 +397,25 @@ export type DeployLocalFormlessWorkspaceDependencies =
     setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
   };
 
+export type DestroyFormlessInstanceWorkspaceInput = {
+  confirm: string;
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type DestroyFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  deploymentAdapter: FormlessInstanceDeploymentAdapter;
+  env?: NodeJS.ProcessEnv;
+  packageRoot: string;
+  packageVersion: string;
+};
+
+export type DestroyLocalFormlessWorkspaceInput = DestroyFormlessInstanceWorkspaceInput;
+
+export type DestroyLocalFormlessWorkspaceDependencies =
+  DestroyFormlessInstanceWorkspaceDependencies;
+
 export type DeployLocalFormlessWorkspaceOwnerSetup = {
   capability: CreateFormlessInstanceOwnerSetupCapabilityResult;
   url: string;
@@ -410,6 +432,22 @@ export type DeployFormlessInstanceWorkspaceResult = {
   plan: FormlessInstanceDeploymentPlan;
   push?: PushFormlessInstanceWorkspaceResult;
   secretPath: string;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type DestroyFormlessInstanceWorkspaceDomainResources = {
+  enabledHosts: string[];
+  resourceCount: number;
+};
+
+export type DestroyFormlessInstanceWorkspaceResult = {
+  deploymentStatePath: string;
+  deploymentStateRoot: string;
+  destroy: DestroyFormlessInstanceResult;
+  domainResources: DestroyFormlessInstanceWorkspaceDomainResources;
+  localSecretPath: string;
+  plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
@@ -1309,6 +1347,83 @@ export async function deployFormlessInstanceWorkspace(
     migrationPolicy: plan.migrationPolicy,
     plan,
     secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
+    selectedTarget,
+    workspaceRoot,
+  };
+}
+
+export async function destroyLocalFormlessWorkspace(
+  input: DestroyLocalFormlessWorkspaceInput,
+  dependencies: DestroyLocalFormlessWorkspaceDependencies,
+): Promise<DestroyFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+
+  return destroyFormlessInstanceWorkspace(
+    {
+      confirm: input.confirm,
+      targetAlias: input.targetAlias,
+      workspacePath: workspaceRoot,
+    },
+    dependencies,
+  );
+}
+
+export async function destroyFormlessInstanceWorkspace(
+  input: DestroyFormlessInstanceWorkspaceInput,
+  dependencies: DestroyFormlessInstanceWorkspaceDependencies,
+): Promise<DestroyFormlessInstanceWorkspaceResult> {
+  const destroy = dependencies.deploymentAdapter.destroy;
+
+  if (!destroy) {
+    throw new Error(
+      "Formless instance destroy requires a deployment adapter with destroy support.",
+    );
+  }
+
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "destroy");
+  const plan = formlessInstanceWorkspaceDeploymentPlan({
+    commandName: "destroy",
+    manifest,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget,
+  });
+
+  if (input.confirm !== plan.resources.worker.name) {
+    throw new Error(
+      `Formless instance destroy confirmation must match Worker name "${plan.resources.worker.name}".`,
+    );
+  }
+
+  const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, plan);
+  const deploymentStatePath = await readRequiredLocalWorkspaceDeploymentState({
+    deploymentStateRoot,
+    plan,
+  });
+  const localSecretEnv = await readDestroyLocalDeploySecretEnv({
+    deploymentStateRoot,
+    env: dependencies.env,
+  });
+  const domainResources = destroyDomainResourcesFromWorkspaceManifest(manifest);
+  const result = await destroy({
+    credentialProfile: localSecretEnv.credentialProfile,
+    packageRoot: dependencies.packageRoot,
+    plan,
+    secrets: localSecretEnv.secrets,
+    stateRoot: deploymentStateRoot,
+  });
+
+  return {
+    deploymentStatePath,
+    deploymentStateRoot,
+    destroy: result,
+    domainResources,
+    localSecretPath: localSecretEnv.path,
+    plan,
     selectedTarget,
     workspaceRoot,
   };
@@ -3120,7 +3235,7 @@ function workspaceProviderConfigRefId(
 function requireWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
-  commandName: "check" | "deploy" | "domains plan" | "pull" | "push",
+  commandName: "check" | "deploy" | "destroy" | "domains plan" | "pull" | "push",
 ): FormlessInstanceWorkspaceTarget {
   const target = selectWorkspaceTarget(manifest, targetAlias);
 
@@ -3266,15 +3381,17 @@ function withWorkspaceDeploymentTarget(
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
+  commandName?: "deploy" | "destroy";
   manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 }): FormlessInstanceDeploymentPlan {
   const deploy = input.manifest.deploy;
+  const commandName = input.commandName ?? "deploy";
 
   if (!deploy) {
-    throw new Error("Formless instance deploy requires manifest deploy config.");
+    throw new Error(`Formless instance ${commandName} requires manifest deploy config.`);
   }
 
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(
@@ -3283,7 +3400,7 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
 
   if (targetUrl !== input.selectedTarget.url) {
     throw new Error(
-      `Formless instance deploy target ${input.selectedTarget.url} does not match deploy.workersDevUrl ${targetUrl}.`,
+      `Formless instance ${commandName} target ${input.selectedTarget.url} does not match deploy.workersDevUrl ${targetUrl}.`,
     );
   }
 
@@ -3291,14 +3408,14 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
   const accountId = deploy.accountId?.trim();
 
   if (!accountId) {
-    throw new Error("Formless instance deploy requires deploy.accountId.");
+    throw new Error(`Formless instance ${commandName} requires deploy.accountId.`);
   }
 
   const migrationPolicy = input.migrationPolicy ?? deploy.migrationPolicy;
 
   if (migrationPolicy === "existing" && !deploy.mediaBucket) {
     throw new Error(
-      "Formless instance deploy requires deploy.mediaBucket when migrationPolicy is existing.",
+      `Formless instance ${commandName} requires deploy.mediaBucket when migrationPolicy is existing.`,
     );
   }
 
@@ -3675,6 +3792,163 @@ function optionalCloudflareApiToken(env: NodeJS.ProcessEnv | undefined): string 
     env?.[CLOUDFLARE_API_TOKEN_ENV_NAME]?.trim() ?? env?.[CF_API_TOKEN_ENV_NAME]?.trim();
 
   return token ? token : undefined;
+}
+
+async function readRequiredLocalWorkspaceDeploymentState(input: {
+  deploymentStateRoot: string;
+  plan: FormlessInstanceDeploymentPlan;
+}): Promise<string> {
+  const statePath = path.join(input.deploymentStateRoot, FORMLESS_INSTANCE_STATE_FILE);
+  const contents = await readTextFileIfExists(statePath);
+
+  if (contents === null) {
+    throw new Error(`Formless instance destroy requires ignored deploy state ${statePath}.`);
+  }
+
+  const state = parseFormlessInstanceStateJson(contents);
+
+  assertDeploymentStateMatchesPlan({
+    plan: input.plan,
+    state,
+    statePath,
+  });
+
+  return statePath;
+}
+
+function assertDeploymentStateMatchesPlan(input: {
+  plan: FormlessInstanceDeploymentPlan;
+  state: {
+    accountId: string;
+    authorityNamespaceName: string;
+    mediaBucketName: string;
+    workerName: string;
+    workersDevUrl: string;
+  };
+  statePath: string;
+}): void {
+  assertMatchingDeploymentStateField({
+    actual: input.state.accountId,
+    expected: input.plan.account.id,
+    field: "accountId",
+    statePath: input.statePath,
+  });
+  assertMatchingDeploymentStateField({
+    actual: input.state.workerName,
+    expected: input.plan.resources.worker.name,
+    field: "workerName",
+    statePath: input.statePath,
+  });
+  assertMatchingDeploymentStateField({
+    actual: input.state.workersDevUrl,
+    expected: input.plan.expectedUrl.url,
+    field: "workersDevUrl",
+    statePath: input.statePath,
+  });
+  assertMatchingDeploymentStateField({
+    actual: input.state.mediaBucketName,
+    expected: input.plan.resources.mediaBucket.name,
+    field: "mediaBucketName",
+    statePath: input.statePath,
+  });
+  assertMatchingDeploymentStateField({
+    actual: input.state.authorityNamespaceName,
+    expected: input.plan.resources.authority.namespaceName,
+    field: "authorityNamespaceName",
+    statePath: input.statePath,
+  });
+}
+
+function assertMatchingDeploymentStateField(input: {
+  actual: string;
+  expected: string;
+  field: string;
+  statePath: string;
+}): void {
+  if (input.actual !== input.expected) {
+    throw new Error(
+      `Formless instance destroy deploy state ${input.statePath} field "${input.field}" is "${input.actual}", expected "${input.expected}".`,
+    );
+  }
+}
+
+async function readDestroyLocalDeploySecretEnv(input: {
+  deploymentStateRoot: string;
+  env: NodeJS.ProcessEnv | undefined;
+}): Promise<{
+  credentialProfile: string | null;
+  path: string;
+  secrets: {
+    ALCHEMY_PASSWORD: string;
+    CLOUDFLARE_API_TOKEN?: string;
+  };
+}> {
+  const secretPath = path.join(input.deploymentStateRoot, FORMLESS_INSTANCE_LOCAL_ENV_FILE);
+  const contents = await readTextFileIfExists(secretPath);
+
+  if (contents === null) {
+    throw new Error(`Formless instance destroy requires ignored deploy secrets ${secretPath}.`);
+  }
+
+  const values = parseDotEnv(contents);
+  const alchemyPassword = requiredDeploySecretValue(
+    values[ALCHEMY_PASSWORD_ENV_NAME],
+    ALCHEMY_PASSWORD_ENV_NAME,
+    secretPath,
+  );
+  const cloudflareApiToken =
+    optionalCloudflareApiToken(input.env) ??
+    optionalDeploySecretValue(values[CLOUDFLARE_API_TOKEN_ENV_NAME]) ??
+    optionalDeploySecretValue(values[CF_API_TOKEN_ENV_NAME]);
+  const credentialProfile =
+    optionalDeploySecretValue(input.env?.ALCHEMY_PROFILE) ??
+    optionalDeploySecretValue(values.ALCHEMY_PROFILE) ??
+    null;
+
+  return {
+    credentialProfile,
+    path: secretPath,
+    secrets: {
+      ALCHEMY_PASSWORD: alchemyPassword,
+      ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
+    },
+  };
+}
+
+function requiredDeploySecretValue(
+  value: string | undefined,
+  key: string,
+  secretPath: string,
+): string {
+  const normalized = optionalDeploySecretValue(value);
+
+  if (normalized === undefined) {
+    throw new Error(
+      `Formless instance destroy requires ${key} in ignored deploy secrets ${secretPath}.`,
+    );
+  }
+
+  return normalized;
+}
+
+function optionalDeploySecretValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : undefined;
+}
+
+function destroyDomainResourcesFromWorkspaceManifest(
+  manifest: FormlessInstanceWorkspaceManifest,
+): DestroyFormlessInstanceWorkspaceDomainResources {
+  const enabledHosts = (manifest.domains ?? [])
+    .filter((domain) => domain.enabled)
+    .map((domain) => domain.host)
+    .sort((left, right) => left.localeCompare(right));
+
+  return {
+    enabledHosts,
+    resourceCount: enabledHosts.length,
+  };
 }
 
 async function copyLocalWorkspaceDeploySecretEnv(input: {
