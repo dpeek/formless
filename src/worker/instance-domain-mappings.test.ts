@@ -80,7 +80,7 @@ describe("instance domain mapping API routes", () => {
     expect(controlPlane.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "domainMapping",
+          entity: "domain-mapping",
           id: "domain-mapping:publicSite:www.example.com",
           values: expect.objectContaining({
             appInstall: "personal",
@@ -194,7 +194,7 @@ describe("instance domain mapping API routes", () => {
     expect(controlPlane.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "domainMapping",
+          entity: "domain-mapping",
           id: "domain-mapping:app:tasks.example.com",
           values: expect.objectContaining({
             appInstall: "tasks",

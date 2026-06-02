@@ -104,7 +104,7 @@ describe("portable archive protocol", () => {
     const formatted = formatInstanceArchive(parsed);
 
     expect(parsed.controlPlane?.records.map((record) => record.entity)).toContain(
-      "deployDesiredResource",
+      "deploy-desired-resource",
     );
     expect(JSON.stringify(parsed.controlPlane)).not.toContain("rec_site");
     expect(formatInstanceArchive(parseInstanceArchive(JSON.parse(formatted)))).toBe(formatted);
@@ -296,7 +296,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
   return [
     {
       id: "site",
-      entity: "appInstall",
+      entity: "app-install",
       values: {
         installId: "site",
         packageAppKey: "site",
@@ -310,7 +310,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "app-route:site:publicSite",
-      entity: "appRoute",
+      entity: "app-route",
       values: {
         appInstall: "site",
         routeKind: "publicSite",
@@ -326,7 +326,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "domain-mapping:publicSite:www.example.com",
-      entity: "domainMapping",
+      entity: "domain-mapping",
       values: {
         host: "www.example.com",
         profile: "publicSite",
@@ -340,7 +340,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "instance.primary",
-      entity: "deployTarget",
+      entity: "deploy-target",
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
@@ -353,7 +353,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "deploy-resource:instance.primary:site-domain",
-      entity: "deployDesiredResource",
+      entity: "deploy-desired-resource",
       values: {
         deployTarget: "instance.primary",
         domainMapping: "domain-mapping:publicSite:www.example.com",
@@ -370,7 +370,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "deploy-drift:instance.primary",
-      entity: "deployDriftReport",
+      entity: "deploy-drift-report",
       values: {
         deployTarget: "instance.primary",
         versionId: "version-1",

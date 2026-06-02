@@ -26,8 +26,8 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.relationships?.appRouteInstall).toEqual({
       kind: "toOne",
       label: "App route install",
-      from: { entity: "appRoute", field: "appInstall" },
-      to: { entity: "appInstall" },
+      from: { entity: "app-route", field: "appInstall" },
+      to: { entity: "app-install" },
     });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.domains.path).toBe("/domains");
@@ -38,26 +38,26 @@ describe("instance control-plane schema contracts", () => {
 
   it("records identity invariants outside mutable generated fields", () => {
     expect(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:control-plane");
-    expect(instanceControlPlaneImmutableFields.appInstall).toEqual([
+    expect(instanceControlPlaneImmutableFields["app-install"]).toEqual([
       "installId",
       "packageAppKey",
       "storageIdentity",
     ]);
-    expect(instanceControlPlaneImmutableFields.appRoute).toEqual([
+    expect(instanceControlPlaneImmutableFields["app-route"]).toEqual([
       "appInstall",
       "packageCapability",
       "surface",
     ]);
-    expect(isInstanceControlPlaneEntityName("appInstall")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("app-install")).toBe(true);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
 
     const schema = parseAppSchema(instanceControlPlaneSchema);
-    expect(isRuntimeControlPlaneImmutableField(schema, "appInstall", "installId")).toBe(true);
-    expect(isRuntimeControlPlaneImmutableField(schema, "appInstall", "label")).toBe(false);
+    expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "installId")).toBe(true);
+    expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "label")).toBe(false);
     expect(
-      isRuntimeControlPlaneSecretReferenceField(schema, "providerConfigRef", "secretRef"),
+      isRuntimeControlPlaneSecretReferenceField(schema, "provider-config-ref", "secretRef"),
     ).toBe(true);
-    expect(schema.runtime?.controlPlane?.entities.deployAttempt?.history).toEqual({
+    expect(schema.runtime?.controlPlane?.entities["deploy-attempt"]?.history).toEqual({
       kind: "actionCreated",
     });
   });
@@ -171,7 +171,7 @@ describe("instance control-plane schema contracts", () => {
       }),
     ).toEqual({
       createdAt: now,
-      entity: "appInstall",
+      entity: "app-install",
       id: "personal",
       updatedAt: now,
       values: {

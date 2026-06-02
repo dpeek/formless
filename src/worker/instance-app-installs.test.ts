@@ -122,7 +122,7 @@ describe("instance app install API routes", () => {
       "/api/formless/control-plane/mutations",
       {
         mutationId: "mutation-personal-admin-route",
-        entity: "appRoute",
+        entity: "app-route",
         op: "patch",
         recordId: "app-route:personal:admin",
         values: {
@@ -134,10 +134,10 @@ describe("instance app install API routes", () => {
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual([
-      "appInstall:personal",
-      "appRoute:app-route:personal:admin",
-      "appRoute:app-route:personal:schema",
-      "appRoute:app-route:personal:publicSite",
+      "app-install:personal",
+      "app-route:app-route:personal:admin",
+      "app-route:app-route:personal:schema",
+      "app-route:app-route:personal:publicSite",
     ]);
     expect(patchedRoute.response.status).toBe(200);
     expect(after.body.installs[0]).toEqual(

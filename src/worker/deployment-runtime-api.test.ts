@@ -350,7 +350,7 @@ describe("instance deployment runtime API routes", () => {
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
     const desiredResourceRecords = controlPlane.body.records.filter(
-      (record) => record.entity === "deployDesiredResource",
+      (record) => record.entity === "deploy-desired-resource",
     );
     const projectedResources = desiredResourceRecords.map((record) => ({
       dependencies:
@@ -1024,7 +1024,7 @@ describe("instance deployment runtime API routes", () => {
 
     expect(
       controlPlane.body.records
-        .filter((record) => record.entity === "deployAttempt")
+        .filter((record) => record.entity === "deploy-attempt")
         .map((record) => ({
           id: record.id,
           status: record.values.status,
@@ -1037,10 +1037,10 @@ describe("instance deployment runtime API routes", () => {
       ]),
     );
     expect(
-      controlPlane.body.records.filter((record) => record.entity === "deployEvidenceSummary"),
+      controlPlane.body.records.filter((record) => record.entity === "deploy-evidence-summary"),
     ).toHaveLength(1);
     expect(
-      controlPlane.body.records.filter((record) => record.entity === "deployDriftReport"),
+      controlPlane.body.records.filter((record) => record.entity === "deploy-drift-report"),
     ).toHaveLength(1);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain(success.body.lease.token);
 

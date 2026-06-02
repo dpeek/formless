@@ -1625,7 +1625,7 @@ function domainMappingsFromControlPlaneRecords(
     records
       .filter(
         (record) =>
-          !record.deletedAt && record.entity === "domainMapping" && expectedIds.has(record.id),
+          !record.deletedAt && record.entity === "domain-mapping" && expectedIds.has(record.id),
       )
       .map((record) => {
         const profile = String(record.values.profile) as InstanceDomainMapping["profile"];
@@ -1656,7 +1656,7 @@ function redirectIntentsFromControlPlaneRecords(
   return records
     .filter(
       (record) =>
-        !record.deletedAt && record.entity === "redirectIntent" && expectedIds.has(record.id),
+        !record.deletedAt && record.entity === "redirect-intent" && expectedIds.has(record.id),
     )
     .map((record) => ({
       fromHost: String(record.values.fromHost),

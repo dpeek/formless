@@ -1736,16 +1736,16 @@ function controlPlaneRecordsByEntity(
 ): FormlessInstanceControlPlaneRecords {
   return {
     actorKind,
-    appInstalls: deployControlPlaneRecordsByEntity(records, "appInstall"),
-    appRoutes: deployControlPlaneRecordsByEntity(records, "appRoute"),
-    deployAttempts: deployControlPlaneRecordsByEntity(records, "deployAttempt"),
-    deployDesiredResources: deployControlPlaneRecordsByEntity(records, "deployDesiredResource"),
-    deployDriftReports: deployControlPlaneRecordsByEntity(records, "deployDriftReport"),
-    deployEvidenceSummaries: deployControlPlaneRecordsByEntity(records, "deployEvidenceSummary"),
-    deployTargets: deployControlPlaneRecordsByEntity(records, "deployTarget"),
-    domainMappings: deployControlPlaneRecordsByEntity(records, "domainMapping"),
+    appInstalls: deployControlPlaneRecordsByEntity(records, "app-install"),
+    appRoutes: deployControlPlaneRecordsByEntity(records, "app-route"),
+    deployAttempts: deployControlPlaneRecordsByEntity(records, "deploy-attempt"),
+    deployDesiredResources: deployControlPlaneRecordsByEntity(records, "deploy-desired-resource"),
+    deployDriftReports: deployControlPlaneRecordsByEntity(records, "deploy-drift-report"),
+    deployEvidenceSummaries: deployControlPlaneRecordsByEntity(records, "deploy-evidence-summary"),
+    deployTargets: deployControlPlaneRecordsByEntity(records, "deploy-target"),
+    domainMappings: deployControlPlaneRecordsByEntity(records, "domain-mapping"),
     records,
-    redirectIntents: deployControlPlaneRecordsByEntity(records, "redirectIntent"),
+    redirectIntents: deployControlPlaneRecordsByEntity(records, "redirect-intent"),
   };
 }
 

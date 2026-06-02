@@ -340,10 +340,10 @@ describe("instance archive restore API", () => {
     expect(installedApp.body.records).toContainEqual(siteRecord());
     expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual(
       expect.arrayContaining([
-        "appInstall:personal",
-        "domainMapping:domain-mapping:publicSite:archive.example.com",
-        "deployDesiredResource:deploy-resource:instance.primary:custom-domain:archive.example.com",
-        "deployDriftReport:deploy-drift:instance.primary",
+        "app-install:personal",
+        "domain-mapping:domain-mapping:publicSite:archive.example.com",
+        "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:archive.example.com",
+        "deploy-drift-report:deploy-drift:instance.primary",
       ]),
     );
     expect(serializedControlPlane).not.toContain("site-main");
@@ -529,7 +529,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     ...records,
     {
       id: "instance.primary",
-      entity: "deployTarget",
+      entity: "deploy-target",
       createdAt: now,
       values: {
         targetId: "instance.primary",
@@ -542,7 +542,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     },
     {
       id: "provider-config:cloudflare:primary",
-      entity: "providerConfigRef",
+      entity: "provider-config-ref",
       createdAt: now,
       values: {
         providerFamily: "cloudflare",
@@ -557,7 +557,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     },
     {
       id: "domain-mapping:publicSite:archive.example.com",
-      entity: "domainMapping",
+      entity: "domain-mapping",
       createdAt: now,
       values: {
         host: "archive.example.com",
@@ -572,7 +572,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     },
     {
       id: "deploy-resource:instance.primary:custom-domain:archive.example.com",
-      entity: "deployDesiredResource",
+      entity: "deploy-desired-resource",
       createdAt: now,
       values: {
         deployTarget: "instance.primary",
@@ -593,7 +593,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     },
     {
       id: "deploy-drift:instance.primary",
-      entity: "deployDriftReport",
+      entity: "deploy-drift-report",
       createdAt: now,
       values: {
         deployTarget: "instance.primary",

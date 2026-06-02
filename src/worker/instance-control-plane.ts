@@ -232,11 +232,11 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
   ensureStorageTables(storage);
   initializeStorageFromSource(storage, instanceControlPlaneSource);
   const records = getBootstrapRecords(storage).filter((record) => !record.deletedAt);
-  const routeRecords = records.filter((record) => record.entity === "appRoute");
+  const routeRecords = records.filter((record) => record.entity === "app-route");
 
   return listAppInstalls(
     records
-      .filter((record) => record.entity === "appInstall" && record.values.status === "installed")
+      .filter((record) => record.entity === "app-install" && record.values.status === "installed")
       .map((record) =>
         appInstallFromControlPlaneValues(
           record.values,
@@ -311,7 +311,7 @@ async function handleInternalUpdateAppInstallPackageFacts(
     patchStoredRecordOutcome(
       storage,
       {
-        entity: "appInstall",
+        entity: "app-install",
         mutationId: `updateAppInstallPackageFacts:${parsed.installId}:${parsed.packageRevision}:${parsed.sourceSchemaHash}`,
         op: "patch",
         recordId: parsed.installId,
@@ -523,7 +523,7 @@ async function handleCreateAppInstallAction(
     createRecordSetForActionOutcome(
       storage,
       parsed.actionId,
-      "appInstall",
+      "app-install",
       createAppInstallControlPlaneAction,
       records.map((record) => ({
         entity: record.entity,
@@ -676,7 +676,7 @@ function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppIn
   createRecordSetForActionOutcome(
     storage,
     `backfillAppInstall:${install.installId}`,
-    "appInstall",
+    "app-install",
     "backfillAppInstall",
     records.map((record) => ({
       entity: record.entity,
@@ -712,7 +712,7 @@ function syncDeploymentProjectionRecords(
 
     upsertControlPlaneRecord(storage, {
       action: "syncDeploymentProjection",
-      entity: "deployDesiredResource",
+      entity: "deploy-desired-resource",
       id: recordId,
       values,
     });
@@ -721,7 +721,7 @@ function syncDeploymentProjectionRecords(
 
   for (const record of activeControlPlaneRecords(storage)) {
     if (
-      record.entity !== "deployDesiredResource" ||
+      record.entity !== "deploy-desired-resource" ||
       record.values.deployTarget !== targetRecordId ||
       nextResourceRecordIds.has(record.id) ||
       record.values.enabled !== true
@@ -731,7 +731,7 @@ function syncDeploymentProjectionRecords(
 
     upsertControlPlaneRecord(storage, {
       action: "disableDeploymentProjectionResource",
-      entity: "deployDesiredResource",
+      entity: "deploy-desired-resource",
       id: record.id,
       values: {
         ...record.values,
@@ -758,14 +758,14 @@ function syncDomainIntentRecords(
 
       upsertControlPlaneRecord(storage, {
         action: "syncDomainMapping",
-        entity: "domainMapping",
+        entity: "domain-mapping",
         id: recordId,
         values: domainMappingRecordValues(storage, mapping),
       });
       nextDomainMappingIds.add(recordId);
     }
 
-    disableMissingControlPlaneIntentRecords(storage, "domainMapping", nextDomainMappingIds, {
+    disableMissingControlPlaneIntentRecords(storage, "domain-mapping", nextDomainMappingIds, {
       action: "disableDomainMappingIntent",
       now: input.now,
     });
@@ -779,14 +779,14 @@ function syncDomainIntentRecords(
 
       upsertControlPlaneRecord(storage, {
         action: "syncRedirectIntent",
-        entity: "redirectIntent",
+        entity: "redirect-intent",
         id: recordId,
         values: redirectIntentRecordValues(intent),
       });
       nextRedirectIntentIds.add(recordId);
     }
 
-    disableMissingControlPlaneIntentRecords(storage, "redirectIntent", nextRedirectIntentIds, {
+    disableMissingControlPlaneIntentRecords(storage, "redirect-intent", nextRedirectIntentIds, {
       action: "disableRedirectIntent",
       now: input.now,
     });
@@ -810,7 +810,7 @@ function upsertDeploymentTargetRecord(
 
   upsertControlPlaneRecord(storage, {
     action: "syncDeploymentTarget",
-    entity: "deployTarget",
+    entity: "deploy-target",
     id: target.targetId,
     values,
   });
@@ -843,7 +843,7 @@ function upsertDeploymentAttemptRecord(
 
   upsertControlPlaneRecord(storage, {
     action: existing ? "updateDeploymentAttempt" : "startDeploymentAttempt",
-    entity: "deployAttempt",
+    entity: "deploy-attempt",
     id: input.attempt.attemptId,
     values,
   });
@@ -862,7 +862,7 @@ function createDeploymentEvidenceRecords(
     activeControlPlaneRecords(storage)
       .filter(
         (record) =>
-          record.entity === "deployDesiredResource" &&
+          record.entity === "deploy-desired-resource" &&
           record.values.deployTarget === input.target.targetId,
       )
       .map((record) => [String(record.values.logicalId), record.id]),
@@ -894,7 +894,7 @@ function createDeploymentEvidenceRecords(
 
     upsertControlPlaneRecord(storage, {
       action: "recordDeploymentSuccess",
-      entity: "deployEvidenceSummary",
+      entity: "deploy-evidence-summary",
       id: recordId,
       values,
     });
@@ -926,7 +926,7 @@ function createDeploymentDriftRecord(
 
   upsertControlPlaneRecord(storage, {
     action: "recordDeploymentDrift",
-    entity: "deployDriftReport",
+    entity: "deploy-drift-report",
     id: input.report.reportId,
     values,
   });
@@ -1005,7 +1005,7 @@ function domainMappingRecordValues(
 ): RecordValues {
   const targetInstallId = mapping.targetInstallId ?? mapping.installId;
   const appInstall =
-    targetInstallId && activeControlPlaneRecordExists(storage, "appInstall", targetInstallId)
+    targetInstallId && activeControlPlaneRecordExists(storage, "app-install", targetInstallId)
       ? targetInstallId
       : undefined;
   const routeId =
@@ -1013,7 +1013,7 @@ function domainMappingRecordValues(
       ? undefined
       : domainMappingAppRouteIdForProfile(mapping.profile, targetInstallId);
   const appRoute =
-    routeId && activeControlPlaneRecordExists(storage, "appRoute", routeId) ? routeId : undefined;
+    routeId && activeControlPlaneRecordExists(storage, "app-route", routeId) ? routeId : undefined;
 
   return {
     host: mapping.host,
@@ -1042,7 +1042,7 @@ function redirectIntentRecordValues(intent: InstanceDomainProviderRedirectIntent
 
 function disableMissingControlPlaneIntentRecords(
   storage: DurableObjectStorage,
-  entity: "domainMapping" | "redirectIntent",
+  entity: "domain-mapping" | "redirect-intent",
   nextRecordIds: Set<string>,
   input: { action: string; now: string },
 ) {

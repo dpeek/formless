@@ -117,14 +117,14 @@ export function buildDeploymentDesiredStateProjectionFromControlPlaneRecords(
   const activeRecords = records.filter((record) => !record.deletedAt);
   const target = activeRecords.find(
     (record) =>
-      record.entity === "deployTarget" &&
+      record.entity === "deploy-target" &&
       record.values.targetId === input.targetId &&
       record.values.enabled === true,
   );
   const resources = activeRecords
     .filter(
       (record) =>
-        record.entity === "deployDesiredResource" &&
+        record.entity === "deploy-desired-resource" &&
         record.values.deployTarget === (target?.id ?? input.targetId) &&
         record.values.enabled === true,
     )
@@ -137,7 +137,7 @@ export function buildDeploymentDesiredStateProjectionFromControlPlaneRecords(
     activeRecords
       .filter(
         (record) =>
-          record.entity === "deployDesiredResource" &&
+          record.entity === "deploy-desired-resource" &&
           record.values.deployTarget === (target?.id ?? input.targetId) &&
           record.values.enabled === true,
       )
@@ -290,7 +290,7 @@ function parseJsonObject(value: unknown): DeploymentResource["inputs"] {
     return parsed as DeploymentResource["inputs"];
   }
 
-  throw new Error("Control-plane deployDesiredResource inputsJson must be an object.");
+  throw new Error("Control-plane deploy-desired-resource inputsJson must be an object.");
 }
 
 function parseJsonArray(value: unknown): DeploymentResource["dependencies"] {
@@ -299,7 +299,7 @@ function parseJsonArray(value: unknown): DeploymentResource["dependencies"] {
   }
 
   if (typeof value !== "string") {
-    throw new Error("Control-plane deployDesiredResource dependenciesJson must be a string.");
+    throw new Error("Control-plane deploy-desired-resource dependenciesJson must be a string.");
   }
 
   const parsed = JSON.parse(value) as unknown;
@@ -308,7 +308,7 @@ function parseJsonArray(value: unknown): DeploymentResource["dependencies"] {
     return parsed as DeploymentResource["dependencies"];
   }
 
-  throw new Error("Control-plane deployDesiredResource dependenciesJson must be an array.");
+  throw new Error("Control-plane deploy-desired-resource dependenciesJson must be an array.");
 }
 
 function firstStringValue(values: unknown[]): string | undefined {

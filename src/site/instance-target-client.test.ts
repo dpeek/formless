@@ -410,30 +410,30 @@ function controlPlaneBootstrapResponse(): Response {
   return Response.json({
     cursor: 3,
     records: [
-      { entity: "appInstall", id: "site", values: { installId: "site" } },
+      { entity: "app-install", id: "site", values: { installId: "site" } },
       {
-        entity: "appRoute",
+        entity: "app-route",
         id: "app-route:site:publicSite",
         values: { appInstall: "site", path: "/sites/site" },
       },
       {
-        entity: "domainMapping",
+        entity: "domain-mapping",
         id: "domain:www.example.com",
         values: { appRoute: "app-route:site:publicSite", host: "www.example.com" },
       },
       {
-        entity: "deployTarget",
+        entity: "deploy-target",
         id: "instance.primary",
         values: { targetId: "instance.primary" },
       },
       {
-        entity: "deployDesiredResource",
+        entity: "deploy-desired-resource",
         id: "desired:www.example.com",
         values: { deployTarget: "instance.primary", logicalId: "custom-domain:www" },
       },
       {
         deletedAt: "2026-06-01T00:00:00.000Z",
-        entity: "deployAttempt",
+        entity: "deploy-attempt",
         id: "attempt.deleted",
         values: { deployTarget: "instance.primary" },
       },

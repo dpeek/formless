@@ -7,16 +7,16 @@ export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 
 export const instanceControlPlaneEntityNames = [
-  "appInstall",
-  "appRoute",
-  "deployTarget",
-  "providerConfigRef",
-  "domainMapping",
-  "redirectIntent",
-  "deployDesiredResource",
-  "deployAttempt",
-  "deployEvidenceSummary",
-  "deployDriftReport",
+  "app-install",
+  "app-route",
+  "deploy-target",
+  "provider-config-ref",
+  "domain-mapping",
+  "redirect-intent",
+  "deploy-desired-resource",
+  "deploy-attempt",
+  "deploy-evidence-summary",
+  "deploy-drift-report",
 ] as const;
 
 export type InstanceControlPlaneEntityName = (typeof instanceControlPlaneEntityNames)[number];
@@ -199,16 +199,16 @@ export type InstanceControlPlaneDeployDriftReportValues = {
 };
 
 export type InstanceControlPlaneRecordValuesByEntity = {
-  appInstall: InstanceControlPlaneAppInstallValues;
-  appRoute: InstanceControlPlaneAppRouteValues;
-  deployAttempt: InstanceControlPlaneDeployAttemptValues;
-  deployDesiredResource: InstanceControlPlaneDeployDesiredResourceValues;
-  deployDriftReport: InstanceControlPlaneDeployDriftReportValues;
-  deployEvidenceSummary: InstanceControlPlaneDeployEvidenceSummaryValues;
-  deployTarget: InstanceControlPlaneDeployTargetValues;
-  domainMapping: InstanceControlPlaneDomainMappingValues;
-  providerConfigRef: InstanceControlPlaneProviderConfigRefValues;
-  redirectIntent: InstanceControlPlaneRedirectIntentValues;
+  "app-install": InstanceControlPlaneAppInstallValues;
+  "app-route": InstanceControlPlaneAppRouteValues;
+  "deploy-attempt": InstanceControlPlaneDeployAttemptValues;
+  "deploy-desired-resource": InstanceControlPlaneDeployDesiredResourceValues;
+  "deploy-drift-report": InstanceControlPlaneDeployDriftReportValues;
+  "deploy-evidence-summary": InstanceControlPlaneDeployEvidenceSummaryValues;
+  "deploy-target": InstanceControlPlaneDeployTargetValues;
+  "domain-mapping": InstanceControlPlaneDomainMappingValues;
+  "provider-config-ref": InstanceControlPlaneProviderConfigRefValues;
+  "redirect-intent": InstanceControlPlaneRedirectIntentValues;
 };
 
 type InstanceControlPlaneTableField =
@@ -226,22 +226,22 @@ export type AnyInstanceControlPlaneRecord = {
 }[InstanceControlPlaneEntityName];
 
 export const instanceControlPlaneImmutableFields = {
-  appInstall: ["installId", "packageAppKey", "storageIdentity"],
-  appRoute: ["appInstall", "packageCapability", "surface"],
-  deployAttempt: ["deployTarget", "versionId", "desiredStateHash", "revision", "idempotencyKey"],
-  deployDesiredResource: ["deployTarget", "logicalId", "kind", "providerFamily"],
-  deployDriftReport: ["deployTarget", "versionId", "desiredStateHash", "revision"],
-  deployEvidenceSummary: ["deployAttempt", "logicalId", "kind", "providerFamily"],
-  deployTarget: ["targetId", "targetKind"],
-  domainMapping: ["host", "profile"],
-  providerConfigRef: ["providerFamily", "configRef"],
-  redirectIntent: ["fromHost"],
+  "app-install": ["installId", "packageAppKey", "storageIdentity"],
+  "app-route": ["appInstall", "packageCapability", "surface"],
+  "deploy-attempt": ["deployTarget", "versionId", "desiredStateHash", "revision", "idempotencyKey"],
+  "deploy-desired-resource": ["deployTarget", "logicalId", "kind", "providerFamily"],
+  "deploy-drift-report": ["deployTarget", "versionId", "desiredStateHash", "revision"],
+  "deploy-evidence-summary": ["deployAttempt", "logicalId", "kind", "providerFamily"],
+  "deploy-target": ["targetId", "targetKind"],
+  "domain-mapping": ["host", "profile"],
+  "provider-config-ref": ["providerFamily", "configRef"],
+  "redirect-intent": ["fromHost"],
 } as const satisfies Record<InstanceControlPlaneEntityName, readonly string[]>;
 
 export const instanceControlPlaneActionCreatedEntities = [
-  "deployAttempt",
-  "deployEvidenceSummary",
-  "deployDriftReport",
+  "deploy-attempt",
+  "deploy-evidence-summary",
+  "deploy-drift-report",
 ] as const satisfies readonly InstanceControlPlaneEntityName[];
 
 export const instanceControlPlaneReservedRoutePaths = [
@@ -272,7 +272,7 @@ const appendOnlyMutations = {
 export const instanceControlPlaneSchema = {
   version: 1,
   entities: {
-    appInstall: {
+    "app-install": {
       label: "App install",
       fields: {
         installId: textField("Install id"),
@@ -299,10 +299,10 @@ export const instanceControlPlaneSchema = {
         uniqueStorageIdentity: { kind: "unique", fields: ["storageIdentity"] },
       },
     },
-    appRoute: {
+    "app-route": {
       label: "App route",
       fields: {
-        appInstall: referenceField("App install", "appInstall", "label"),
+        appInstall: referenceField("App install", "app-install", "label"),
         routeKind: enumField("Kind", {
           admin: "Admin",
           publicSite: "Public Site",
@@ -326,7 +326,7 @@ export const instanceControlPlaneSchema = {
       },
       mutations: editableMutations,
     },
-    deployTarget: {
+    "deploy-target": {
       label: "Deploy target",
       fields: {
         targetId: textField("Target id"),
@@ -341,7 +341,7 @@ export const instanceControlPlaneSchema = {
         uniqueTargetId: { kind: "unique", fields: ["targetId"] },
       },
     },
-    providerConfigRef: {
+    "provider-config-ref": {
       label: "Provider config",
       fields: {
         providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
@@ -358,7 +358,7 @@ export const instanceControlPlaneSchema = {
         uniqueConfigRef: { kind: "unique", fields: ["configRef"] },
       },
     },
-    domainMapping: {
+    "domain-mapping": {
       label: "Domain mapping",
       fields: {
         host: textField("Host"),
@@ -367,9 +367,13 @@ export const instanceControlPlaneSchema = {
           instance: "Instance",
           publicSite: "Public Site",
         }),
-        appInstall: optionalReferenceField("App install", "appInstall", "label"),
-        appRoute: optionalReferenceField("App route", "appRoute", "path"),
-        providerConfigRef: optionalReferenceField("Provider config", "providerConfigRef", "label"),
+        appInstall: optionalReferenceField("App install", "app-install", "label"),
+        appRoute: optionalReferenceField("App route", "app-route", "path"),
+        providerConfigRef: optionalReferenceField(
+          "Provider config",
+          "provider-config-ref",
+          "label",
+        ),
         enabled: booleanField("Enabled", true),
         createdAt: textField("Created at"),
         updatedAt: textField("Updated at"),
@@ -379,7 +383,7 @@ export const instanceControlPlaneSchema = {
         uniqueHostProfile: { kind: "unique", fields: ["host", "profile"] },
       },
     },
-    redirectIntent: {
+    "redirect-intent": {
       label: "Redirect intent",
       fields: {
         fromHost: textField("From host"),
@@ -403,12 +407,12 @@ export const instanceControlPlaneSchema = {
         uniqueRedirectFromHost: { kind: "unique", fields: ["fromHost"] },
       },
     },
-    deployDesiredResource: {
+    "deploy-desired-resource": {
       label: "Desired resource",
       fields: {
-        deployTarget: referenceField("Deploy target", "deployTarget", "label"),
-        domainMapping: optionalReferenceField("Domain mapping", "domainMapping", "host"),
-        redirectIntent: optionalReferenceField("Redirect intent", "redirectIntent", "fromHost"),
+        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
+        domainMapping: optionalReferenceField("Domain mapping", "domain-mapping", "host"),
+        redirectIntent: optionalReferenceField("Redirect intent", "redirect-intent", "fromHost"),
         logicalId: textField("Logical id"),
         kind: deploymentResourceKindField(),
         providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
@@ -424,10 +428,10 @@ export const instanceControlPlaneSchema = {
         uniqueTargetLogicalId: { kind: "unique", fields: ["deployTarget", "logicalId"] },
       },
     },
-    deployAttempt: {
+    "deploy-attempt": {
       label: "Deploy attempt",
       fields: {
-        deployTarget: referenceField("Deploy target", "deployTarget", "label"),
+        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
         versionId: textField("Version id"),
         desiredStateHash: textField("Desired-state hash"),
         revision: numberField("Revision"),
@@ -455,13 +459,13 @@ export const instanceControlPlaneSchema = {
         uniqueIdempotency: { kind: "unique", fields: ["deployTarget", "idempotencyKey"] },
       },
     },
-    deployEvidenceSummary: {
+    "deploy-evidence-summary": {
       label: "Evidence summary",
       fields: {
-        deployAttempt: referenceField("Deploy attempt", "deployAttempt", "versionId"),
+        deployAttempt: referenceField("Deploy attempt", "deploy-attempt", "versionId"),
         deployDesiredResource: optionalReferenceField(
           "Desired resource",
-          "deployDesiredResource",
+          "deploy-desired-resource",
           "logicalId",
         ),
         action: enumField("Action", {
@@ -481,10 +485,10 @@ export const instanceControlPlaneSchema = {
       },
       mutations: appendOnlyMutations,
     },
-    deployDriftReport: {
+    "deploy-drift-report": {
       label: "Drift report",
       fields: {
-        deployTarget: referenceField("Deploy target", "deployTarget", "label"),
+        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
         versionId: textField("Version id"),
         desiredStateHash: textField("Desired-state hash"),
         revision: numberField("Revision"),
@@ -505,91 +509,104 @@ export const instanceControlPlaneSchema = {
     },
   },
   relationships: {
-    appRouteInstall: toOne("App route install", "appRoute", "appInstall", "appInstall"),
+    appRouteInstall: toOne("App route install", "app-route", "appInstall", "app-install"),
     domainMappingInstall: toOne(
       "Domain mapping install",
-      "domainMapping",
+      "domain-mapping",
       "appInstall",
-      "appInstall",
+      "app-install",
     ),
-    domainMappingRoute: toOne("Domain mapping route", "domainMapping", "appRoute", "appRoute"),
+    domainMappingRoute: toOne("Domain mapping route", "domain-mapping", "appRoute", "app-route"),
     domainMappingProviderConfig: toOne(
       "Domain mapping provider config",
-      "domainMapping",
+      "domain-mapping",
       "providerConfigRef",
-      "providerConfigRef",
+      "provider-config-ref",
     ),
     desiredResourceTarget: toOne(
       "Desired resource target",
-      "deployDesiredResource",
+      "deploy-desired-resource",
       "deployTarget",
-      "deployTarget",
+      "deploy-target",
     ),
     desiredResourceDomainMapping: toOne(
       "Desired resource domain mapping",
-      "deployDesiredResource",
+      "deploy-desired-resource",
       "domainMapping",
-      "domainMapping",
+      "domain-mapping",
     ),
     desiredResourceRedirectIntent: toOne(
       "Desired resource redirect intent",
-      "deployDesiredResource",
+      "deploy-desired-resource",
       "redirectIntent",
-      "redirectIntent",
+      "redirect-intent",
     ),
     deployAttemptTarget: toOne(
       "Deploy attempt target",
-      "deployAttempt",
+      "deploy-attempt",
       "deployTarget",
-      "deployTarget",
+      "deploy-target",
     ),
     deployEvidenceAttempt: toOne(
       "Evidence attempt",
-      "deployEvidenceSummary",
+      "deploy-evidence-summary",
       "deployAttempt",
-      "deployAttempt",
+      "deploy-attempt",
     ),
     deployEvidenceDesiredResource: toOne(
       "Evidence desired resource",
-      "deployEvidenceSummary",
+      "deploy-evidence-summary",
       "deployDesiredResource",
-      "deployDesiredResource",
+      "deploy-desired-resource",
     ),
-    deployDriftTarget: toOne("Drift target", "deployDriftReport", "deployTarget", "deployTarget"),
+    deployDriftTarget: toOne(
+      "Drift target",
+      "deploy-drift-report",
+      "deployTarget",
+      "deploy-target",
+    ),
   },
   queries: {
-    appInstallAll: allQuery("App installs", "appInstall"),
-    appRouteAll: allQuery("App routes", "appRoute"),
-    appRouteEnabled: whereQuery("Enabled routes", "appRoute", "enabled", true),
-    deployTargetAll: allQuery("Deploy targets", "deployTarget"),
-    providerConfigRefAll: allQuery("Provider config", "providerConfigRef"),
-    domainMappingAll: allQuery("Domain mappings", "domainMapping"),
-    domainMappingEnabled: whereQuery("Enabled mappings", "domainMapping", "enabled", true),
-    redirectIntentAll: allQuery("Redirects", "redirectIntent"),
-    redirectIntentEnabled: whereQuery("Enabled redirects", "redirectIntent", "enabled", true),
-    deployDesiredResourceAll: allQuery("Desired resources", "deployDesiredResource"),
-    deployAttemptAll: allQuery("Deploy attempts", "deployAttempt"),
-    deployEvidenceSummaryAll: allQuery("Evidence summaries", "deployEvidenceSummary"),
-    deployDriftReportAll: allQuery("Drift reports", "deployDriftReport"),
+    appInstallAll: allQuery("App installs", "app-install"),
+    appRouteAll: allQuery("App routes", "app-route"),
+    appRouteEnabled: whereQuery("Enabled routes", "app-route", "enabled", true),
+    deployTargetAll: allQuery("Deploy targets", "deploy-target"),
+    providerConfigRefAll: allQuery("Provider config", "provider-config-ref"),
+    domainMappingAll: allQuery("Domain mappings", "domain-mapping"),
+    domainMappingEnabled: whereQuery("Enabled mappings", "domain-mapping", "enabled", true),
+    redirectIntentAll: allQuery("Redirects", "redirect-intent"),
+    redirectIntentEnabled: whereQuery("Enabled redirects", "redirect-intent", "enabled", true),
+    deployDesiredResourceAll: allQuery("Desired resources", "deploy-desired-resource"),
+    deployAttemptAll: allQuery("Deploy attempts", "deploy-attempt"),
+    deployEvidenceSummaryAll: allQuery("Evidence summaries", "deploy-evidence-summary"),
+    deployDriftReportAll: allQuery("Drift reports", "deploy-drift-report"),
   },
   itemViews: {
-    appInstallItem: itemView("appInstall", ["label", "installId", "packageAppKey", "status"]),
-    appRouteItem: itemView("appRoute", ["path", "routeKind", "enabled"]),
-    deployTargetItem: itemView("deployTarget", ["label", "targetId", "enabled"]),
-    providerConfigRefItem: itemView("providerConfigRef", ["label", "providerFamily", "configRef"]),
-    domainMappingItem: itemView("domainMapping", ["host", "profile", "enabled"]),
-    redirectIntentItem: itemView("redirectIntent", ["fromHost", "statusCode", "enabled"]),
-    deployDesiredResourceItem: itemView("deployDesiredResource", ["logicalId", "kind", "enabled"]),
-    deployAttemptItem: itemView("deployAttempt", ["versionId", "mode", "status", "updatedAt"]),
-    deployEvidenceSummaryItem: itemView("deployEvidenceSummary", [
+    appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
+    appRouteItem: itemView("app-route", ["path", "routeKind", "enabled"]),
+    deployTargetItem: itemView("deploy-target", ["label", "targetId", "enabled"]),
+    providerConfigRefItem: itemView("provider-config-ref", [
+      "label",
+      "providerFamily",
+      "configRef",
+    ]),
+    domainMappingItem: itemView("domain-mapping", ["host", "profile", "enabled"]),
+    redirectIntentItem: itemView("redirect-intent", ["fromHost", "statusCode", "enabled"]),
+    deployDesiredResourceItem: itemView("deploy-desired-resource", [
+      "logicalId",
+      "kind",
+      "enabled",
+    ]),
+    deployAttemptItem: itemView("deploy-attempt", ["versionId", "mode", "status", "updatedAt"]),
+    deployEvidenceSummaryItem: itemView("deploy-evidence-summary", [
       "logicalId",
       "action",
       "recordedAt",
     ]),
-    deployDriftReportItem: itemView("deployDriftReport", ["versionId", "status", "reportedAt"]),
+    deployDriftReportItem: itemView("deploy-drift-report", ["versionId", "status", "reportedAt"]),
   },
   tableViews: {
-    appInstallTable: tableView("appInstall", [
+    appInstallTable: tableView("app-install", [
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
       { field: "packageAppKey", display: "readOnly" },
@@ -598,7 +615,7 @@ export const instanceControlPlaneSchema = {
       { field: "packageRevision", display: "readOnly" },
       { field: "sourceSchemaHash", display: "readOnly" },
     ]),
-    appRouteTable: tableView("appRoute", [
+    appRouteTable: tableView("app-route", [
       { field: "appInstall", display: "readOnly" },
       { field: "routeKind", display: "readOnly" },
       { field: "path", display: "editor" },
@@ -607,29 +624,29 @@ export const instanceControlPlaneSchema = {
       { field: "surface", display: "readOnly" },
       { field: "packageCapability", display: "readOnly" },
     ]),
-    deployTargetTable: tableView("deployTarget", ["label", "targetId", "targetKind", "enabled"]),
-    providerConfigRefTable: tableView("providerConfigRef", [
+    deployTargetTable: tableView("deploy-target", ["label", "targetId", "targetKind", "enabled"]),
+    providerConfigRefTable: tableView("provider-config-ref", [
       "label",
       "providerFamily",
       "configRef",
       "accountId",
       "workerName",
     ]),
-    domainMappingTable: tableView("domainMapping", [
+    domainMappingTable: tableView("domain-mapping", [
       "host",
       "profile",
       "appInstall",
       "appRoute",
       "enabled",
     ]),
-    redirectIntentTable: tableView("redirectIntent", [
+    redirectIntentTable: tableView("redirect-intent", [
       "fromHost",
       "toHost",
       "toUrl",
       "statusCode",
       "enabled",
     ]),
-    deployDesiredResourceTable: tableView("deployDesiredResource", [
+    deployDesiredResourceTable: tableView("deploy-desired-resource", [
       "deployTarget",
       "domainMapping",
       "redirectIntent",
@@ -639,7 +656,7 @@ export const instanceControlPlaneSchema = {
       "enabled",
       "sourceFingerprint",
     ]),
-    deployAttemptTable: tableView("deployAttempt", [
+    deployAttemptTable: tableView("deploy-attempt", [
       "deployTarget",
       "versionId",
       "mode",
@@ -648,7 +665,7 @@ export const instanceControlPlaneSchema = {
       "runnerId",
       "updatedAt",
     ]),
-    deployEvidenceSummaryTable: tableView("deployEvidenceSummary", [
+    deployEvidenceSummaryTable: tableView("deploy-evidence-summary", [
       "deployAttempt",
       "deployDesiredResource",
       "logicalId",
@@ -657,7 +674,7 @@ export const instanceControlPlaneSchema = {
       "providerResourceIdsJson",
       "recordedAt",
     ]),
-    deployDriftReportTable: tableView("deployDriftReport", [
+    deployDriftReportTable: tableView("deploy-drift-report", [
       "deployTarget",
       "versionId",
       "status",
@@ -669,7 +686,7 @@ export const instanceControlPlaneSchema = {
     ]),
   },
   views: {
-    appInstallCreate: createView("appInstall", [
+    appInstallCreate: createView("app-install", [
       "installId",
       "packageAppKey",
       "packageRevision",
@@ -682,14 +699,14 @@ export const instanceControlPlaneSchema = {
     ]),
     appInstallList: collectionView(
       "App installs",
-      "appInstall",
+      "app-install",
       "appInstallAll",
       "appInstallTable",
       {
         navigation: true,
       },
     ),
-    appRouteCreate: createView("appRoute", [
+    appRouteCreate: createView("app-route", [
       "appInstall",
       "routeKind",
       "path",
@@ -700,11 +717,11 @@ export const instanceControlPlaneSchema = {
       "createdAt",
       "updatedAt",
     ]),
-    appRouteList: collectionView("App routes", "appRoute", "appRouteAll", "appRouteTable", {
+    appRouteList: collectionView("App routes", "app-route", "appRouteAll", "appRouteTable", {
       extraQueries: ["appRouteEnabled"],
       navigation: true,
     }),
-    deployTargetCreate: createView("deployTarget", [
+    deployTargetCreate: createView("deploy-target", [
       "targetId",
       "targetKind",
       "label",
@@ -714,12 +731,12 @@ export const instanceControlPlaneSchema = {
     ]),
     deployTargetList: collectionView(
       "Deploy targets",
-      "deployTarget",
+      "deploy-target",
       "deployTargetAll",
       "deployTargetTable",
       { createView: "deployTargetCreate" },
     ),
-    providerConfigRefCreate: createView("providerConfigRef", [
+    providerConfigRefCreate: createView("provider-config-ref", [
       "providerFamily",
       "configRef",
       "label",
@@ -731,12 +748,12 @@ export const instanceControlPlaneSchema = {
     ]),
     providerConfigRefList: collectionView(
       "Provider config",
-      "providerConfigRef",
+      "provider-config-ref",
       "providerConfigRefAll",
       "providerConfigRefTable",
       { createView: "providerConfigRefCreate" },
     ),
-    domainMappingCreate: createView("domainMapping", [
+    domainMappingCreate: createView("domain-mapping", [
       "host",
       "profile",
       "appInstall",
@@ -748,7 +765,7 @@ export const instanceControlPlaneSchema = {
     ]),
     domainMappingList: collectionView(
       "Domain mappings",
-      "domainMapping",
+      "domain-mapping",
       "domainMappingAll",
       "domainMappingTable",
       {
@@ -757,7 +774,7 @@ export const instanceControlPlaneSchema = {
         navigation: true,
       },
     ),
-    redirectIntentCreate: createView("redirectIntent", [
+    redirectIntentCreate: createView("redirect-intent", [
       "fromHost",
       "toHost",
       "toUrl",
@@ -770,32 +787,32 @@ export const instanceControlPlaneSchema = {
     ]),
     redirectIntentList: collectionView(
       "Redirect intents",
-      "redirectIntent",
+      "redirect-intent",
       "redirectIntentAll",
       "redirectIntentTable",
       { createView: "redirectIntentCreate", extraQueries: ["redirectIntentEnabled"] },
     ),
     deployDesiredResourceList: collectionView(
       "Desired resources",
-      "deployDesiredResource",
+      "deploy-desired-resource",
       "deployDesiredResourceAll",
       "deployDesiredResourceTable",
     ),
     deployAttemptList: collectionView(
       "Deploy attempts",
-      "deployAttempt",
+      "deploy-attempt",
       "deployAttemptAll",
       "deployAttemptTable",
     ),
     deployEvidenceSummaryList: collectionView(
       "Evidence summaries",
-      "deployEvidenceSummary",
+      "deploy-evidence-summary",
       "deployEvidenceSummaryAll",
       "deployEvidenceSummaryTable",
     ),
     deployDriftReportList: collectionView(
       "Drift reports",
-      "deployDriftReport",
+      "deploy-drift-report",
       "deployDriftReportAll",
       "deployDriftReportTable",
     ),
@@ -850,11 +867,11 @@ export const instanceControlPlaneSchema = {
     builder: { editable: false },
     controlPlane: {
       entities: {
-        appInstall: {
-          immutableFields: [...instanceControlPlaneImmutableFields.appInstall],
+        "app-install": {
+          immutableFields: [...instanceControlPlaneImmutableFields["app-install"]],
         },
-        appRoute: {
-          immutableFields: [...instanceControlPlaneImmutableFields.appRoute],
+        "app-route": {
+          immutableFields: [...instanceControlPlaneImmutableFields["app-route"]],
           routeValidation: {
             pathField: "path",
             prefixField: "prefix",
@@ -870,33 +887,33 @@ export const instanceControlPlaneSchema = {
             },
           },
         },
-        deployAttempt: {
-          immutableFields: [...instanceControlPlaneImmutableFields.deployAttempt],
+        "deploy-attempt": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deploy-attempt"]],
           history: { kind: "actionCreated" },
         },
-        deployDesiredResource: {
-          immutableFields: [...instanceControlPlaneImmutableFields.deployDesiredResource],
+        "deploy-desired-resource": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deploy-desired-resource"]],
         },
-        deployDriftReport: {
-          immutableFields: [...instanceControlPlaneImmutableFields.deployDriftReport],
+        "deploy-drift-report": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deploy-drift-report"]],
           history: { kind: "actionCreated" },
         },
-        deployEvidenceSummary: {
-          immutableFields: [...instanceControlPlaneImmutableFields.deployEvidenceSummary],
+        "deploy-evidence-summary": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deploy-evidence-summary"]],
           history: { kind: "actionCreated" },
         },
-        deployTarget: {
-          immutableFields: [...instanceControlPlaneImmutableFields.deployTarget],
+        "deploy-target": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deploy-target"]],
         },
-        domainMapping: {
-          immutableFields: [...instanceControlPlaneImmutableFields.domainMapping],
+        "domain-mapping": {
+          immutableFields: [...instanceControlPlaneImmutableFields["domain-mapping"]],
         },
-        providerConfigRef: {
-          immutableFields: [...instanceControlPlaneImmutableFields.providerConfigRef],
+        "provider-config-ref": {
+          immutableFields: [...instanceControlPlaneImmutableFields["provider-config-ref"]],
           secretReferenceFields: ["secretRef"],
         },
-        redirectIntent: {
-          immutableFields: [...instanceControlPlaneImmutableFields.redirectIntent],
+        "redirect-intent": {
+          immutableFields: [...instanceControlPlaneImmutableFields["redirect-intent"]],
         },
       },
     },
@@ -917,10 +934,10 @@ export function instanceControlPlaneStorageIdentityForInstall(
 
 export function instanceControlPlaneAppInstallRecord(
   install: AppInstall,
-): InstanceControlPlaneRecord<"appInstall", InstanceControlPlaneAppInstallValues> {
+): InstanceControlPlaneRecord<"app-install", InstanceControlPlaneAppInstallValues> {
   return {
     createdAt: install.createdAt,
-    entity: "appInstall",
+    entity: "app-install",
     id: install.installId,
     updatedAt: install.updatedAt,
     values: {
@@ -941,8 +958,8 @@ export function instanceControlPlaneRecordsForAppInstall(input: {
   install: AppInstall;
   now: string;
 }): [
-  InstanceControlPlaneRecord<"appInstall", InstanceControlPlaneAppInstallValues>,
-  ...InstanceControlPlaneRecord<"appRoute", InstanceControlPlaneAppRouteValues>[],
+  InstanceControlPlaneRecord<"app-install", InstanceControlPlaneAppInstallValues>,
+  ...InstanceControlPlaneRecord<"app-route", InstanceControlPlaneAppRouteValues>[],
 ] {
   return [
     instanceControlPlaneAppInstallRecord(input.install),
@@ -965,7 +982,7 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
   now: string;
-}): InstanceControlPlaneRecord<"appRoute", InstanceControlPlaneAppRouteValues>[] {
+}): InstanceControlPlaneRecord<"app-route", InstanceControlPlaneAppRouteValues>[] {
   const adminRoute = appRouteRecord(input, {
     kind: "admin",
     packageCapability: "generatedApp",
@@ -1015,10 +1032,10 @@ function appRouteRecord(
     prefix?: `/${string}/`;
     surface: InstanceControlPlaneAppRouteSurface;
   },
-): InstanceControlPlaneRecord<"appRoute", InstanceControlPlaneAppRouteValues> {
+): InstanceControlPlaneRecord<"app-route", InstanceControlPlaneAppRouteValues> {
   return {
     createdAt: input.now,
-    entity: "appRoute",
+    entity: "app-route",
     id: instanceControlPlaneAppRouteId(input.installId, route.kind),
     updatedAt: input.now,
     values: {

@@ -1,11 +1,17 @@
 ## 1. Existing Key Rewrite
 
-- [ ] 1.1 Rename existing instance control-plane schema entity keys from `appInstall`, `appRoute`, `domainMapping`, `redirectIntent`, `deployTarget`, `providerConfigRef`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and `deployDriftReport` to the canonical kebab-case keys before adding parser rejection for camelCase entity keys.
-- [ ] 1.2 Bulk update existing schema fixtures, seed records, generated models, test fixtures, source constants, and direct string lookups that embed the renamed control-plane entity keys.
-- [ ] 1.3 Update control-plane relationships and reference targets to use local kebab-case entity keys.
-- [ ] 1.4 Update app install, app route, domain, redirect, deploy target, provider reference, desired resource, attempt, evidence, and drift helpers to address entity keys as strings.
-- [ ] 1.5 Preserve storage identities such as `instance:control-plane` and `app:<installId>`.
-- [ ] 1.6 Confirm installed app content records remain outside instance control-plane records.
+- [x] 1.1 Rename existing instance control-plane schema entity keys from `appInstall`, `appRoute`, `domainMapping`, `redirectIntent`, `deployTarget`, `providerConfigRef`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and `deployDriftReport` to the canonical kebab-case keys before adding parser rejection for camelCase entity keys.
+- [x] 1.2 Bulk update existing schema fixtures, seed records, generated models, test fixtures, source constants, and direct string lookups that embed the renamed control-plane entity keys.
+- [x] 1.3 Update control-plane relationships and reference targets to use local kebab-case entity keys.
+- [x] 1.4 Update app install, app route, domain, redirect, deploy target, provider reference, desired resource, attempt, evidence, and drift helpers to address entity keys as strings.
+- [x] 1.5 Preserve storage identities such as `instance:control-plane` and `app:<installId>`.
+- [x] 1.6 Confirm installed app content records remain outside instance control-plane records.
+
+- Files changed: `src/shared/instance-control-plane.ts`, `src/worker/instance-control-plane.ts`, `src/worker/deployment-runtime-projection.ts`, `src/worker/domain-provider-api.ts`, `src/worker/instance-domain-mappings.ts`, `src/site/instance-target-client.ts`, `src/site/instance-workspace.ts`, plus related source/client/worker/site tests.
+- Evidence: instance control-plane schema entity keys, relationships, references, runtime control-plane metadata, record readers/writers, workspace/archive record fixtures, CLI/control-plane test fixtures, and generated view model expectations now use local kebab-case entity keys. Field keys, query/view/action/screen keys, `INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane"`, and app storage identities such as `app:<installId>` remain unchanged.
+- Boundary evidence: archive/workspace tests still keep installed app content in app archive/snapshot payloads while control-plane records store only flat management records.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T02:17:51.725Z.
+- Smoke: `bun browser --ignore-https-errors --session grug-control-plane-smoke batch --bail "open https://standardize-entity-key-conventions.formless.local/" "wait 1000" "snapshot -i" "errors"` rendered App management, App installs, App routes, and deployment control-plane sections. Follow-up `bun browser --session grug-control-plane-smoke errors` returned no errors.
 
 ## 2. Parser And Schema Grammar
 

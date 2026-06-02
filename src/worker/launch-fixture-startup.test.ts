@@ -45,10 +45,10 @@ describe("worker launch fixture startup", () => {
     ]);
     expect(
       controlPlane.records
-        .filter((record) => record.entity === "appInstall")
+        .filter((record) => record.entity === "app-install")
         .map((record) => record.id),
     ).toEqual(["docs", "projects", "site"]);
-    expect(controlPlane.records.filter((record) => record.entity === "appRoute")).toHaveLength(9);
+    expect(controlPlane.records.filter((record) => record.entity === "app-route")).toHaveLength(9);
     expect(legacySite.status).toBe(404);
     expect(docs.schema).toEqual(siteSourceSchema);
     expect(docs.cursor).toBe(siteSeedRecords.length);

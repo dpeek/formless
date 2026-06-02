@@ -2176,7 +2176,7 @@ function savedWorkspaceAppRoutesByInstall(
   const routesByInstall = new Map<string, FormlessInstanceWorkspaceApp["routes"]>();
 
   for (const record of controlPlane?.records ?? []) {
-    if (record.deletedAt || record.entity !== "appRoute") {
+    if (record.deletedAt || record.entity !== "app-route") {
       continue;
     }
 
@@ -2215,7 +2215,7 @@ function savedWorkspaceDomainIntents(
     .filter(
       (record) =>
         !record.deletedAt &&
-        record.entity === "domainMapping" &&
+        record.entity === "domain-mapping" &&
         stringRecordValue(record, "host") !== undefined,
     )
     .map((record) => {
@@ -2528,7 +2528,7 @@ function compareWorkspaceArchives(input: {
     localMediaCount: localArchives.reduce((count, app) => count + app.media.objects.length, 0),
     localProviderDriftReportCount: controlPlaneRecordCount(
       input.localControlPlane,
-      "deployDriftReport",
+      "deploy-drift-report",
     ),
     localRecordCount: localArchives.reduce((count, app) => count + appRecordCount(app), 0),
     missingInstalls,
@@ -2541,7 +2541,7 @@ function compareWorkspaceArchives(input: {
     remoteMediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
     remoteProviderDriftReportCount: controlPlaneRecordCount(
       remoteControlPlane,
-      "deployDriftReport",
+      "deploy-drift-report",
     ),
     remoteRecordCount: remoteApps.reduce((count, app) => count + appRecordCount(app), 0),
     status: hasDrift ? "drift" : "no-drift",
@@ -2598,7 +2598,7 @@ function comparableControlPlaneValues(record: StoredRecord): RecordValues {
     ),
   ) as RecordValues;
 
-  if (record.entity === "appInstall" && typeof values.packageAppKey === "string") {
+  if (record.entity === "app-install" && typeof values.packageAppKey === "string") {
     const packageFacts = packageAppFactsForKey(values.packageAppKey);
 
     if (packageFacts) {
@@ -2966,17 +2966,17 @@ function appRecordCount(app: AppArchive): number {
     : app.data.records.length;
 }
 
-const workspaceOwnedControlPlaneEntities = new Set(["appInstall", "appRoute", "domainMapping"]);
-const workspaceDeployOwnedControlPlaneEntities = new Set(["deployTarget", "providerConfigRef"]);
+const workspaceOwnedControlPlaneEntities = new Set(["app-install", "app-route", "domain-mapping"]);
+const workspaceDeployOwnedControlPlaneEntities = new Set(["deploy-target", "provider-config-ref"]);
 
 const controlPlaneIntentEntities = new Set([
-  "appInstall",
-  "appRoute",
-  "deployTarget",
-  "providerConfigRef",
-  "domainMapping",
-  "redirectIntent",
-  "deployDesiredResource",
+  "app-install",
+  "app-route",
+  "deploy-target",
+  "provider-config-ref",
+  "domain-mapping",
+  "redirect-intent",
+  "deploy-desired-resource",
 ]);
 
 function workspaceControlPlaneArchive(input: {
@@ -3126,7 +3126,7 @@ function workspaceAppRouteRecords(
 
   return routes.map((route) => ({
     id: instanceControlPlaneAppRouteId(app.installId, route.kind),
-    entity: "appRoute",
+    entity: "app-route",
     values: {
       appInstall: app.installId,
       routeKind: route.kind,
@@ -3166,7 +3166,7 @@ function workspaceDomainControlPlaneRecords(
 
     return {
       id: workspaceDomainMappingRecordId(domain),
-      entity: "domainMapping",
+      entity: "domain-mapping",
       values,
       createdAt: input.exportedAt,
     };
@@ -3184,7 +3184,7 @@ function workspaceDeployControlPlaneRecords(
   const records: StoredRecord[] = [
     {
       id: workspaceDeployTargetId(),
-      entity: "deployTarget",
+      entity: "deploy-target",
       values: {
         targetId: workspaceDeployTargetId(),
         targetKind: "instance",
@@ -3201,7 +3201,7 @@ function workspaceDeployControlPlaneRecords(
   if (providerConfigRef) {
     records.push({
       id: providerConfigRef,
-      entity: "providerConfigRef",
+      entity: "provider-config-ref",
       values: {
         providerFamily: "cloudflare",
         configRef: providerConfigRef,

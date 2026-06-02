@@ -143,10 +143,10 @@ describe("instance control-plane API routes", () => {
 
     expect(appMutation.body.record.entity).toBe("block");
     expect(controlPlane.body.records.map((record) => record.entity)).toEqual([
-      "appInstall",
-      "appRoute",
-      "appRoute",
-      "appRoute",
+      "app-install",
+      "app-route",
+      "app-route",
+      "app-route",
     ]);
     expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
   });
@@ -164,7 +164,7 @@ describe("instance control-plane API routes", () => {
 
     const reservedPath = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
       mutationId: "mutation-route-reserved-path",
-      entity: "appRoute",
+      entity: "app-route",
       op: "patch",
       recordId: "app-route:personal:admin",
       values: {
@@ -176,7 +176,7 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/mutations`,
       {
         mutationId: "mutation-route-duplicate-path",
-        entity: "appRoute",
+        entity: "app-route",
         op: "patch",
         recordId: "app-route:personal:schema",
         values: {
@@ -229,7 +229,7 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/mutations`,
       {
         mutationId: "mutation-runner-install",
-        entity: "appInstall",
+        entity: "app-install",
         op: "create",
         values: {
           installId: "runner",
@@ -260,7 +260,7 @@ describe("instance control-plane API routes", () => {
     const now = "2026-05-28T00:00:00.000Z";
     const providerConfig = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
       mutationId: "mutation-provider-ref",
-      entity: "providerConfigRef",
+      entity: "provider-config-ref",
       op: "create",
       values: {
         providerFamily: "cloudflare",
@@ -273,7 +273,7 @@ describe("instance control-plane API routes", () => {
     });
     const target = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
       mutationId: "mutation-target",
-      entity: "deployTarget",
+      entity: "deploy-target",
       op: "create",
       values: {
         targetId: "instance",
@@ -286,7 +286,7 @@ describe("instance control-plane API routes", () => {
     });
     const rejectedRecord = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
       mutationId: "mutation-secret-resource",
-      entity: "deployDesiredResource",
+      entity: "deploy-desired-resource",
       op: "create",
       values: {
         deployTarget: target.body.record.id,
@@ -314,11 +314,11 @@ describe("instance control-plane API routes", () => {
     expect(JSON.stringify(browserBootstrap.body)).not.toContain("ALCHEMY_PASSWORD");
     expect(rejectedRecord.response.status).toBe(400);
     expect(rejectedRecord.body.error).toBe(
-      'Field "deployDesiredResource.inputsJson" cannot store control-plane secret values.',
+      'Field "deploy-desired-resource.inputsJson" cannot store control-plane secret values.',
     );
     expect(rejectedSnapshot.response.status).toBe(400);
     expect(rejectedSnapshot.body.error).toBe(
-      'Field "appInstall.label" cannot store control-plane secret values.',
+      'Field "app-install.label" cannot store control-plane secret values.',
     );
   });
 });
@@ -364,13 +364,13 @@ function appInstallValues(
   installId: string,
 ): InstanceControlPlaneAppInstallValues | undefined {
   return bootstrap.records.find(
-    (record) => record.id === installId && record.entity === "appInstall",
+    (record) => record.id === installId && record.entity === "app-install",
   )?.values as InstanceControlPlaneAppInstallValues | undefined;
 }
 
 function routeValues(bootstrap: BootstrapResponse): InstanceControlPlaneAppRouteValues[] {
   return bootstrap.records
-    .filter((record) => record.entity === "appRoute")
+    .filter((record) => record.entity === "app-route")
     .map((record) => record.values as InstanceControlPlaneAppRouteValues);
 }
 
@@ -386,7 +386,7 @@ function secretSnapshot(now: string): StoreSnapshot {
     records: [
       {
         id: "secret",
-        entity: "appInstall",
+        entity: "app-install",
         createdAt: now,
         values: {
           installId: "secret",

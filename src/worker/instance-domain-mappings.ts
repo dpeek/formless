@@ -415,7 +415,7 @@ function domainMappingsFromControlPlaneRecords(
     records
       .filter(
         (record) =>
-          !record.deletedAt && record.entity === "domainMapping" && expectedIds.has(record.id),
+          !record.deletedAt && record.entity === "domain-mapping" && expectedIds.has(record.id),
       )
       .map(domainMappingFromControlPlaneRecord),
   );

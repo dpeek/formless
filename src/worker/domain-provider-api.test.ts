@@ -693,7 +693,7 @@ describe("instance domain provider API routes", () => {
     expect(controlPlaneIntent.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "redirectIntent",
+          entity: "redirect-intent",
           id: "redirect-intent:www.example.com",
           values: expect.objectContaining({
             enabled: true,
@@ -839,10 +839,10 @@ describe("instance domain provider API routes", () => {
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
     const attemptRecords = controlPlaneHistory.body.records.filter(
-      (record) => record.entity === "deployAttempt",
+      (record) => record.entity === "deploy-attempt",
     );
     const evidenceRecords = controlPlaneHistory.body.records.filter(
-      (record) => record.entity === "deployEvidenceSummary",
+      (record) => record.entity === "deploy-evidence-summary",
     );
 
     expect(attemptRecords.map((record) => record.values.status)).toEqual([

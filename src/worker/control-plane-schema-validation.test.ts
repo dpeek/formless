@@ -55,18 +55,18 @@ describe("control-plane schema runtime validation", () => {
       "/api/mutations",
       {
         mutationId: "mutation-control-plane-history-create",
-        entity: "deployAttempt",
+        entity: "deploy-attempt",
         op: "create",
         values: {
           label: "Attempt",
         },
       },
-      'Entity "deployAttempt" history records must be created through schema actions.',
+      'Entity "deploy-attempt" history records must be created through schema actions.',
     );
 
     const install = await authority.postJson<MutationResponse>("/api/mutations", {
       mutationId: "mutation-control-plane-install",
-      entity: "appInstall",
+      entity: "app-install",
       op: "create",
       values: {
         label: "Site",
@@ -77,7 +77,7 @@ describe("control-plane schema runtime validation", () => {
       "/api/mutations",
       {
         mutationId: "mutation-control-plane-route-reserved",
-        entity: "appRoute",
+        entity: "app-route",
         op: "create",
         values: routeValues(install.record.id, {
           path: "/api/jobs",
@@ -90,7 +90,7 @@ describe("control-plane schema runtime validation", () => {
       "/api/mutations",
       {
         mutationId: "mutation-control-plane-route-capability",
-        entity: "appRoute",
+        entity: "app-route",
         op: "create",
         values: routeValues(install.record.id, {
           packageCapability: "publicSite",
@@ -103,7 +103,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.postJson<MutationResponse>("/api/mutations", {
       mutationId: "mutation-control-plane-route",
-      entity: "appRoute",
+      entity: "app-route",
       op: "create",
       values: routeValues(install.record.id, {
         path: "/apps/site",
@@ -114,7 +114,7 @@ describe("control-plane schema runtime validation", () => {
       "/api/mutations",
       {
         mutationId: "mutation-control-plane-route-duplicate",
-        entity: "appRoute",
+        entity: "app-route",
         op: "create",
         values: routeValues(install.record.id, {
           path: "/apps/site",
@@ -203,7 +203,7 @@ function controlPlaneRuntimeSchema(): AppSchema {
           },
         },
       },
-      appInstall: {
+      "app-install": {
         label: "App install",
         fields: {
           label: { type: "text", required: true, label: "Label" },
@@ -214,14 +214,14 @@ function controlPlaneRuntimeSchema(): AppSchema {
           delete: { enabled: false },
         },
       },
-      appRoute: {
+      "app-route": {
         label: "App route",
         fields: {
           appInstall: {
             type: "reference",
             required: true,
             label: "App install",
-            to: "appInstall",
+            to: "app-install",
             displayField: "label",
           },
           routeKind: {
@@ -250,7 +250,7 @@ function controlPlaneRuntimeSchema(): AppSchema {
           delete: { enabled: false },
         },
       },
-      deployAttempt: {
+      "deploy-attempt": {
         label: "Deploy attempt",
         fields: {
           label: { type: "text", required: true, label: "Label" },
@@ -270,7 +270,7 @@ function controlPlaneRuntimeSchema(): AppSchema {
           task: {
             immutableFields: ["title"],
           },
-          appRoute: {
+          "app-route": {
             routeValidation: {
               pathField: "path",
               prefixField: "prefix",
@@ -285,7 +285,7 @@ function controlPlaneRuntimeSchema(): AppSchema {
               },
             },
           },
-          deployAttempt: {
+          "deploy-attempt": {
             history: { kind: "actionCreated" },
           },
         },
