@@ -42,6 +42,15 @@ describe("instance control-plane schema contracts", () => {
       from: { entity: "route", field: "appInstall" },
       to: { entity: "app-install" },
     });
+    expect(schema.entities["app-install"]?.fields.packageAppKey).toMatchObject({
+      type: "enum",
+      values: {
+        crm: { label: "CRM" },
+        estii: { label: "Estii" },
+        site: { label: "Site" },
+        tasks: { label: "Tasks" },
+      },
+    });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
     expect(schema.screens?.deployments.path).toBe("/deployments");

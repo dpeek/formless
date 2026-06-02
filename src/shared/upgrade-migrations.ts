@@ -135,6 +135,7 @@ export const bundledSourceSchemaHashFixtures = {
   tasks: "sha256:3015ff35861179dd8b3752b2af904fe8f85f644718e56276d894c016a0d15c21",
   estii: "sha256:4f57b43a88fe9127c52c4cde74504f16467a7cc193ee02fcbb34874047436854",
   site: "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+  crm: "sha256:6c3ae2a42fdae882af7aac84cc60c49b73823e26bb1f8dfcb61bb321d91ac420",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 
 export function sourceSchemaCanonicalJson(schema: unknown): string {

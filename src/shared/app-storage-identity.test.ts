@@ -108,6 +108,22 @@ describe("app storage identity", () => {
       seedRecordsKey: "estii",
       sourceSchemaKey: "estii",
     });
+    expect(
+      installedAppStorageIdentity({
+        installId: "crm",
+        packageAppKey: "crm",
+      }),
+    ).toEqual({
+      apiRoutePrefix: "/api/app-installs/crm/crm",
+      authorityName: "app:crm",
+      broadcastChannelName: "formless:app:crm",
+      browserDatabaseName: "formless:app:crm",
+      installId: "crm",
+      kind: "appInstall",
+      packageAppKey: "crm",
+      seedRecordsKey: "crm",
+      sourceSchemaKey: "crm",
+    });
   });
 
   it("accepts default Site install identity and rejects invalid identities", () => {

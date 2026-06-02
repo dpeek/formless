@@ -117,13 +117,19 @@ describe("runtime profile resolver", () => {
       packageAppKey: "site",
       siteRouteBase: "/sites",
     });
-    expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site"]);
-    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true]);
-    expect(profile.worlds.map((world) => world.route)).toEqual(["/tasks", "/estii", "/site"]);
+    expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site", "crm"]);
+    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true, true]);
+    expect(profile.worlds.map((world) => world.route)).toEqual([
+      "/tasks",
+      "/estii",
+      "/site",
+      "/crm",
+    ]);
     expect(profile.worlds.map((world) => world.schemaRoute)).toEqual([
       "/tasks/schema",
       "/estii/schema",
       "/site/schema",
+      "/crm/schema",
     ]);
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
@@ -163,12 +169,18 @@ describe("runtime profile resolver", () => {
         label: "Rates",
         packageAppKey: "estii",
       }),
+      appInstallFixture({
+        installId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+      }),
     ];
     const world = installedAppWorldMountFromInstallId(profile, "personal", { appInstalls });
     const tasksWorld = installedAppWorldMountFromInstallId(profile, "task-workspace", {
       appInstalls,
     });
     const estiiWorld = installedAppWorldMountFromInstallId(profile, "rates", { appInstalls });
+    const crmWorld = installedAppWorldMountFromInstallId(profile, "crm", { appInstalls });
 
     if (!world?.target || world.target.kind !== "appInstall") {
       throw new Error("Missing installed Site world.");
@@ -180,6 +192,10 @@ describe("runtime profile resolver", () => {
 
     if (!estiiWorld?.target || estiiWorld.target.kind !== "appInstall") {
       throw new Error("Missing installed Estii world.");
+    }
+
+    if (!crmWorld?.target || crmWorld.target.kind !== "appInstall") {
+      throw new Error("Missing installed CRM world.");
     }
 
     expect(world.app.key).toBe("site");
@@ -197,6 +213,11 @@ describe("runtime profile resolver", () => {
     expect(estiiWorld.schemaRoute).toBe("/apps/rates/schema");
     expect(estiiWorld.target.installId).toBe("rates");
     expect(estiiWorld.target.apiRoutePrefix).toBe("/api/app-installs/estii/rates");
+    expect(crmWorld.app.key).toBe("crm");
+    expect(crmWorld.route).toBe("/apps/crm");
+    expect(crmWorld.schemaRoute).toBe("/apps/crm/schema");
+    expect(crmWorld.target.installId).toBe("crm");
+    expect(crmWorld.target.apiRoutePrefix).toBe("/api/app-installs/crm/crm");
     expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
     expect(runtimeScreenRoute(world, "/settings")).toBe("/apps/personal/settings");
     expect(runtimeScreenRoute(estiiWorld, "/setup")).toBe("/apps/rates/setup");
@@ -213,6 +234,9 @@ describe("runtime profile resolver", () => {
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/rates/setup", { appInstalls })?.target,
     ).toEqual(estiiWorld.target);
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/crm/audiences", { appInstalls })?.target,
+    ).toEqual(crmWorld.target);
     expect(
       installedAppWorldMountFromInstallId(profile, "missing", { appInstalls }),
     ).toBeUndefined();

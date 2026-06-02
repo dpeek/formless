@@ -6,6 +6,8 @@ import type {
   MutationResponse,
 } from "../shared/protocol.ts";
 import {
+  crmSeedRecords,
+  crmSourceSchema,
   rateSeedRecords,
   rateSourceSchema,
   siteSourceSchema,
@@ -86,6 +88,13 @@ describe("instance app install API routes", () => {
         packageAppKey: "estii",
         packageRevision: 1,
         sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
+      }),
+      expect.objectContaining({
+        defaultInstallId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
       }),
     ]);
     expect(before.body.installs).toEqual([]);
@@ -330,6 +339,40 @@ describe("instance app install API routes", () => {
     expect(bootstrap.body.cursor).toBe(rateSeedRecords.length);
   });
 
+  it("persists CRM installs and bootstraps from the bundled CRM source", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "crm",
+      installId: "crm",
+      label: "CRM",
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/crm/crm/bootstrap");
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.initialization).toEqual({
+      installId: "crm",
+      packageAppKey: "crm",
+      seedRecordsKey: "crm",
+      sourceSchemaKey: "crm",
+    });
+    expect(created.body.install).toEqual(
+      expect.objectContaining({
+        adminRoute: "/apps/crm",
+        installId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+        packageRevision: 1,
+        schemaRoute: "/apps/crm/schema",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+        status: "installed",
+      }),
+    );
+    expect(created.body.install).not.toHaveProperty("publicRoute");
+    expect(created.body.install).not.toHaveProperty("publicRoutePrefix");
+    expect(bootstrap.body.schema).toEqual(crmSourceSchema);
+    expect(bootstrap.body.records).toEqual(crmSeedRecords);
+    expect(bootstrap.body.cursor).toBe(crmSeedRecords.length);
+  });
+
   it("rejects duplicate and invalid installs without mutating existing installs", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",
@@ -347,6 +390,14 @@ describe("instance app install API routes", () => {
       installId: "Site",
       label: "Bad Site",
     });
+    const unsupported = await postAdminJson<AppInstallFailureResponse>(
+      "/api/formless/app-installs",
+      {
+        packageAppKey: "missing",
+        installId: "missing",
+        label: "Missing",
+      },
+    );
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(duplicate.response.status).toBe(409);
@@ -358,6 +409,11 @@ describe("instance app install API routes", () => {
     expect(invalid.body).toMatchObject({
       code: "invalid-install-id",
       field: "installId",
+    });
+    expect(unsupported.response.status).toBe(400);
+    expect(unsupported.body).toMatchObject({
+      code: "unsupported-package",
+      field: "packageAppKey",
     });
     expect(after.body.installs.map((install) => install.installId)).toEqual(["personal"]);
   });

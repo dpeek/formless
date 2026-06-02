@@ -302,6 +302,7 @@ function ensureInstanceAppInstallPackageFactColumns(storage: DurableObjectStorag
         WHEN 'site' THEN ?
         WHEN 'tasks' THEN ?
         WHEN 'estii' THEN ?
+        WHEN 'crm' THEN ?
         ELSE source_schema_hash
       END
       WHERE source_schema_hash IS NULL OR source_schema_hash = ''
@@ -309,6 +310,7 @@ function ensureInstanceAppInstallPackageFactColumns(storage: DurableObjectStorag
     bundledSourceSchemaHashFixtures.site,
     bundledSourceSchemaHashFixtures.tasks,
     bundledSourceSchemaHashFixtures.estii,
+    bundledSourceSchemaHashFixtures.crm,
   );
 }
 

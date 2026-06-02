@@ -18,7 +18,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site, Tasks, and Estii as installable bundled app packages", () => {
+  it("declares Site, Tasks, Estii, and CRM as installable bundled app packages", () => {
     expect(listBundledAppPackages()).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
@@ -54,10 +54,22 @@ describe("app install registry", () => {
         sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
         supportsMultipleInstalls: true,
       }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+        packageRevision: 1,
+        seedRecordsKey: "crm",
+        sourceSchemaKey: "crm",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+        supportsMultipleInstalls: true,
+      }),
     ]);
     expect(findBundledAppPackage("site")?.label).toBe("Site");
     expect(findBundledAppPackage("tasks")?.label).toBe("Tasks");
     expect(findBundledAppPackage("estii")?.label).toBe("Estii");
+    expect(findBundledAppPackage("crm")?.label).toBe("CRM");
   });
 
   it("validates route-safe install ids", () => {
@@ -193,6 +205,37 @@ describe("app install registry", () => {
       packageAppKey: "estii",
       seedRecordsKey: "estii",
       sourceSchemaKey: "estii",
+    });
+  });
+
+  it("creates a flat CRM install without Site public route metadata", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "crm",
+        label: " CRM ",
+        now,
+        packageAppKey: "crm",
+      }),
+    );
+
+    expect(result.install).toEqual({
+      adminRoute: "/apps/crm",
+      createdAt: now,
+      installId: "crm",
+      label: "CRM",
+      packageAppKey: "crm",
+      packageRevision: 1,
+      schemaRoute: "/apps/crm/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(result.initialization).toEqual({
+      installId: "crm",
+      packageAppKey: "crm",
+      seedRecordsKey: "crm",
+      sourceSchemaKey: "crm",
     });
   });
 

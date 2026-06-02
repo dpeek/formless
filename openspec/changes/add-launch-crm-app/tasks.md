@@ -12,9 +12,15 @@ Evidence 2026-06-02 thag:
 
 ## 2. Package App Registration
 
-- [ ] 2.1 Extend schema app key definitions, source schema loading, worker source app definitions, test fixtures, and source schema hash fixtures to include `crm`.
-- [ ] 2.2 Add CRM bundled package metadata with package app key `crm`, label `CRM`, default install id `crm`, source schema key `crm`, seed records key `crm`, package revision facts, and non-Site admin/schema route behavior.
-- [ ] 2.3 Add tests proving package listing, package facts, install creation, unsupported package rejection, and install-scoped CRM bootstrap work.
+- [x] 2.1 Extend schema app key definitions, source schema loading, worker source app definitions, test fixtures, and source schema hash fixtures to include `crm`.
+- [x] 2.2 Add CRM bundled package metadata with package app key `crm`, label `CRM`, default install id `crm`, source schema key `crm`, seed records key `crm`, package revision facts, and non-Site admin/schema route behavior.
+- [x] 2.3 Add tests proving package listing, package facts, install creation, unsupported package rejection, and install-scoped CRM bootstrap work.
+
+Evidence 2026-06-02 thag:
+
+- Files changed: `src/shared/schema-apps.ts`, `src/worker/schema-apps.ts`, `src/test/schema-apps.ts`, `src/shared/upgrade-migrations.ts`, `src/shared/app-installs.ts`, `src/shared/app-storage-identity.test.ts`, `src/shared/instance-control-plane.ts`, `src/worker/instance-app-installs-state.ts`, `src/shared/schema-apps.test.ts`, `src/worker/schema-apps.test.ts`, `src/shared/upgrade-migrations.test.ts`, `src/shared/app-installs.test.ts`, `src/shared/instance-control-plane.test.ts`, `src/worker/instance-app-installs.test.ts`, `src/worker/deploy-metadata.test.ts`, `src/app/runtime-profile.test.ts`.
+- Checks: `devstate check` passed; status showed `vp check --fix` pass, web service ready, watch tests pass.
+- Smoke: `bun browser --ignore-https-errors --session thag-crm open https://thag.formless.local/crm` and `bun browser --ignore-https-errors --session thag-crm snapshot --compact --depth 4` passed; snapshot showed CRM navigation, Contacts/Audiences/Campaigns/Broadcasts screens, CRM settings, and generated Contacts/Email addresses/Companies sections.
 
 ## 3. Launch Fixtures And Generated Navigation
 

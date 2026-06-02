@@ -10,11 +10,14 @@ describe("worker schema app definitions", () => {
     const tasks = getWorkerSchemaAppDefinition("tasks");
     const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
+    const crm = getWorkerSchemaAppDefinition("crm");
 
-    expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "estii", "site"]);
+    expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "estii", "site", "crm"]);
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
     expect(estii.sourceSchema.entities.rate?.label).toBe("Rate");
     expect(site.sourceSchema.entities.site?.label).toBe("Site");
+    expect(crm.sourceSchema.entities.contact?.label).toBe("Contact");
+    expect(crm.sourceSchema.entities.subscription?.label).toBe("Subscription");
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
     expect(site.sourceSchema.entities["block-placement"]?.label).toBe("Placement");
     expect(site.sourceSchema.entities.site?.mutations.create.enabled).toBe(false);
@@ -28,6 +31,7 @@ describe("worker schema app definitions", () => {
     const tasks = getWorkerSchemaAppDefinition("tasks");
     const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
+    const crm = getWorkerSchemaAppDefinition("crm");
 
     expect(tasks.seedRecords).toHaveLength(5);
     expect(tasks.seedRecords.every((record) => record.entity === "task")).toBe(true);
@@ -44,6 +48,24 @@ describe("worker schema app definitions", () => {
     ]);
     expect(site.seedRecords.length).toBeGreaterThan(0);
     expect(site.seedRecords.every((record) => record.entity in site.sourceSchema.entities)).toBe(
+      true,
+    );
+    expect(crm.seedRecords).toHaveLength(21);
+    expect(new Set(crm.seedRecords.map((record) => record.entity))).toEqual(
+      new Set([
+        "audience",
+        "broadcast",
+        "broadcast-recipient",
+        "campaign",
+        "campaign-message",
+        "company",
+        "contact",
+        "delivery-event",
+        "email-address",
+        "subscription",
+      ]),
+    );
+    expect(crm.seedRecords.every((record) => record.entity in crm.sourceSchema.entities)).toBe(
       true,
     );
   });

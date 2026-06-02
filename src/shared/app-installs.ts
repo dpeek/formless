@@ -167,6 +167,18 @@ export const bundledAppPackages = [
     seedRecordsKey: "estii",
     adminRouteBase: "/apps",
   },
+  {
+    packageAppKey: "crm",
+    packageRevision: currentBundledPackageAppRevision,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+    label: schemaAppDefinitions.crm.label,
+    description: "CRM app backed by the bundled CRM schema and demo records.",
+    defaultInstallId: "crm",
+    supportsMultipleInstalls: true,
+    sourceSchemaKey: "crm",
+    seedRecordsKey: "crm",
+    adminRouteBase: "/apps",
+  },
 ] as const satisfies readonly BundledAppPackage[];
 
 export function listBundledAppPackages(): BundledAppPackage[] {

@@ -302,6 +302,7 @@ export const instanceControlPlaneSchema = {
       fields: {
         installId: textField("Install id"),
         packageAppKey: enumField("Package", {
+          crm: "CRM",
           estii: "Estii",
           site: "Site",
           tasks: "Tasks",
