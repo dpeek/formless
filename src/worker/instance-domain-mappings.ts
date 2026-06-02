@@ -409,32 +409,39 @@ function domainMappingsFromControlPlaneRecords(
   records: readonly StoredRecord[],
   sourceMappings: readonly InstanceDomainMapping[],
 ): InstanceDomainMapping[] {
-  const expectedIds = new Set(sourceMappings.map(domainMappingRecordId));
+  const expectedIds = new Set(sourceMappings.map(domainMappingRouteRecordId));
 
   return listInstanceDomainMappings(
     records
       .filter(
-        (record) =>
-          !record.deletedAt && record.entity === "domain-mapping" && expectedIds.has(record.id),
+        (record) => !record.deletedAt && record.entity === "route" && expectedIds.has(record.id),
       )
       .map(domainMappingFromControlPlaneRecord),
   );
 }
 
 function domainMappingFromControlPlaneRecord(record: StoredRecord): InstanceDomainMapping {
-  const profile = String(record.values.profile) as InstanceDomainMapping["profile"];
+  const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
   const targetInstallId =
-    typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+    typeof record.values["app-install"] === "string" ? record.values["app-install"] : undefined;
 
   return {
-    host: String(record.values.host),
+    host: String(record.values["match-host"]),
     profile,
     ...(profile === "publicSite" ? { surface: "site" as const } : {}),
     ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
     enabled: record.values.enabled === true,
-    createdAt: String(record.values.createdAt),
-    updatedAt: String(record.values.updatedAt),
+    createdAt: String(record.values["created-at"]),
+    updatedAt: String(record.values["updated-at"]),
   };
+}
+
+function domainMappingProfileFromRouteTarget(value: unknown): InstanceDomainMapping["profile"] {
+  if (value === "app" || value === "instance") {
+    return value;
+  }
+
+  return "publicSite";
 }
 
 function findEnabledDomainMapping(
@@ -462,8 +469,8 @@ function findDomainMapping(
   );
 }
 
-function domainMappingRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
-  return `domain-mapping:${mapping.profile}:${mapping.host}`;
+function domainMappingRouteRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
+  return `route:host:${mapping.profile}:${mapping.host}`;
 }
 
 function domainMappingFailureStatus(code: string) {

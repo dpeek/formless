@@ -31,11 +31,8 @@ import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
-  instanceControlPlaneAppRouteId,
+  instanceControlPlaneRouteRecordsForAppInstall,
   isInstanceControlPlaneEntityName,
-  type InstanceControlPlaneAppRouteCapability,
-  type InstanceControlPlaneAppRouteKind,
-  type InstanceControlPlaneAppRouteSurface,
 } from "../shared/instance-control-plane.ts";
 import {
   parseOwnerSetupToken,
@@ -2185,29 +2182,29 @@ function savedWorkspaceAppRoutesByInstall(
   const routesByInstall = new Map<string, FormlessInstanceWorkspaceApp["routes"]>();
 
   for (const record of controlPlane?.records ?? []) {
-    if (record.deletedAt || record.entity !== "app-route") {
+    if (record.deletedAt || record.entity !== "route" || stringRecordValue(record, "match-host")) {
       continue;
     }
 
-    const installId = stringRecordValue(record, "appInstall");
-    const routeKind = stringRecordValue(record, "routeKind");
-    const routePath = stringRecordValue(record, "path");
+    const installId = stringRecordValue(record, "app-install");
+    const surface = stringRecordValue(record, "surface");
+    const routePath = stringRecordValue(record, "match-path");
 
-    if (!installId || !routeKind || !routePath) {
+    if (!installId || !surface || !routePath) {
       continue;
     }
 
     const routes = routesByInstall.get(installId) ?? {};
 
-    if (routeKind === "admin" && routePath.startsWith("/apps/")) {
+    if (surface === "admin" && routePath.startsWith("/apps/")) {
       routes.admin = routePath as `/apps/${string}`;
     } else if (
-      routeKind === "schema" &&
+      surface === "schema" &&
       routePath.startsWith("/apps/") &&
       routePath.endsWith("/schema")
     ) {
       routes.schema = routePath as `/apps/${string}/schema`;
-    } else if (routeKind === "publicSite" && routePath.startsWith("/sites/")) {
+    } else if (surface === "public-site" && routePath.startsWith("/sites/")) {
       routes.public = routePath as `/sites/${string}`;
     }
 
@@ -2224,14 +2221,14 @@ function savedWorkspaceDomainIntents(
     .filter(
       (record) =>
         !record.deletedAt &&
-        record.entity === "domain-mapping" &&
-        stringRecordValue(record, "host") !== undefined,
+        record.entity === "route" &&
+        stringRecordValue(record, "match-host") !== undefined &&
+        stringRecordValue(record, "kind") === "mount",
     )
     .map((record) => {
-      const host = stringRecordValue(record, "host") ?? "";
-      const profile = stringRecordValue(record, "profile") ?? "publicSite";
-      const targetInstallId =
-        stringRecordValue(record, "targetInstallId") ?? stringRecordValue(record, "appInstall");
+      const host = stringRecordValue(record, "match-host") ?? "";
+      const profile = workspaceDomainProfileFromRoute(record);
+      const targetInstallId = stringRecordValue(record, "app-install");
       const enabled = booleanRecordValue(record, "enabled") ?? true;
 
       return {
@@ -2246,6 +2243,18 @@ function savedWorkspaceDomainIntents(
 
       return hostOrder === 0 ? left.profile.localeCompare(right.profile) : hostOrder;
     });
+}
+
+function workspaceDomainProfileFromRoute(
+  record: StoredRecord,
+): FormlessInstanceWorkspaceDomainIntent["profile"] {
+  const targetProfile = stringRecordValue(record, "target-profile");
+
+  if (targetProfile === "app" || targetProfile === "instance") {
+    return targetProfile;
+  }
+
+  return "publicSite";
 }
 
 function savedWorkspaceAppArchiveSummaries(
@@ -3023,16 +3032,14 @@ function appRecordCount(app: AppArchive): number {
     : app.data.records.length;
 }
 
-const workspaceOwnedControlPlaneEntities = new Set(["app-install", "app-route", "domain-mapping"]);
+const workspaceOwnedControlPlaneEntities = new Set(["app-install", "route"]);
 const workspaceDeployOwnedControlPlaneEntities = new Set(["deploy-target", "provider-config-ref"]);
 
 const controlPlaneIntentEntities = new Set([
   "app-install",
-  "app-route",
+  "route",
   "deploy-target",
   "provider-config-ref",
-  "domain-mapping",
-  "redirect-intent",
   "deploy-desired-resource",
 ]);
 
@@ -3085,7 +3092,6 @@ function workspaceOwnedControlPlaneRecords(input: {
   manifest: FormlessInstanceWorkspaceManifest;
 }): StoredRecord[] {
   const records: StoredRecord[] = [];
-  const appRouteIds = new Set<string>();
 
   for (const app of input.manifest.apps) {
     const archive = appArchiveFromWorkspaceDirectory(input.localAppArchives.get(app.installId));
@@ -3095,14 +3101,12 @@ function workspaceOwnedControlPlaneRecords(input: {
 
     for (const route of workspaceAppRouteRecords(app, install)) {
       records.push(route);
-      appRouteIds.add(route.id);
     }
   }
 
   records.push(
     ...workspaceDomainControlPlaneRecords(input.manifest, {
       appInstallIds: new Set(input.manifest.apps.map((app) => app.installId)),
-      appRouteIds,
       exportedAt: input.exportedAt,
     }),
     ...workspaceDeployControlPlaneRecords(input.manifest, input.exportedAt),
@@ -3145,85 +3149,42 @@ function workspaceAppInstallFromDeclaration(
 }
 
 function workspaceAppRouteRecords(
-  app: FormlessInstanceWorkspaceApp,
+  _app: FormlessInstanceWorkspaceApp,
   install: AppInstall,
 ): StoredRecord[] {
-  const routes: Array<{
-    kind: InstanceControlPlaneAppRouteKind;
-    packageCapability: InstanceControlPlaneAppRouteCapability;
-    path: `/${string}`;
-    prefix?: `/${string}/`;
-    surface: InstanceControlPlaneAppRouteSurface;
-  }> = [
-    {
-      kind: "admin",
-      packageCapability: "generatedApp",
-      path: (app.routes?.admin ?? `/apps/${app.installId}`) as `/${string}`,
-      surface: "admin",
-    },
-    {
-      kind: "schema",
-      packageCapability: "schema",
-      path: (app.routes?.schema ?? `/apps/${app.installId}/schema`) as `/${string}`,
-      surface: "schema",
-    },
-  ];
-
-  if (install.packageAppKey === "site" || app.routes?.public !== undefined) {
-    const path = app.routes?.public ?? `/sites/${app.installId}`;
-
-    routes.push({
-      kind: "publicSite",
-      packageCapability: "publicSite",
-      path: path as `/${string}`,
-      prefix: `${path}/` as `/${string}/`,
-      surface: "publicSite",
-    });
-  }
-
-  return routes.map((route) => ({
-    id: instanceControlPlaneAppRouteId(app.installId, route.kind),
-    entity: "app-route",
-    values: {
-      appInstall: app.installId,
-      routeKind: route.kind,
-      path: route.path,
-      ...(route.prefix === undefined ? {} : { prefix: route.prefix }),
-      surface: route.surface,
-      packageCapability: route.packageCapability,
-      enabled: true,
-      createdAt: install.createdAt,
-      updatedAt: install.updatedAt,
-    },
-    createdAt: install.createdAt,
-  }));
+  return instanceControlPlaneRouteRecordsForAppInstall({
+    install,
+    now: install.updatedAt,
+  }).map(storedControlPlaneRecord);
 }
 
 function workspaceDomainControlPlaneRecords(
   manifest: FormlessInstanceWorkspaceManifest,
   input: {
     appInstallIds: ReadonlySet<string>;
-    appRouteIds: ReadonlySet<string>;
     exportedAt: string;
   },
 ): StoredRecord[] {
   return (manifest.domains ?? []).map((domain) => {
-    const appRoute = workspaceDomainAppRouteId(domain);
+    const surface = workspaceRouteSurface(domain.profile);
     const values: RecordValues = {
-      host: domain.host,
-      profile: domain.profile,
+      enabled: domain.enabled,
+      "match-host": domain.host,
+      "match-path": "/",
+      "match-prefix": "/",
+      kind: "mount",
+      "target-profile": workspaceRouteTargetProfile(domain.profile),
       ...(domain.targetInstallId === undefined || !input.appInstallIds.has(domain.targetInstallId)
         ? {}
-        : { appInstall: domain.targetInstallId }),
-      ...(appRoute === undefined || !input.appRouteIds.has(appRoute) ? {} : { appRoute }),
-      enabled: domain.enabled,
-      createdAt: input.exportedAt,
-      updatedAt: input.exportedAt,
+        : { "app-install": domain.targetInstallId }),
+      ...(surface === undefined ? {} : { surface }),
+      "created-at": input.exportedAt,
+      "updated-at": input.exportedAt,
     };
 
     return {
-      id: workspaceDomainMappingRecordId(domain),
-      entity: "domain-mapping",
+      id: workspaceDomainRouteRecordId(domain),
+      entity: "route",
       values,
       createdAt: input.exportedAt,
     };
@@ -3301,25 +3262,27 @@ function storedControlPlaneRecord(record: {
   };
 }
 
-function workspaceDomainMappingRecordId(
+function workspaceDomainRouteRecordId(
   domain: Pick<FormlessInstanceWorkspaceDomainIntent, "host" | "profile">,
 ) {
-  return `domain-mapping:${domain.profile}:${domain.host}`;
+  return `route:host:${domain.profile}:${domain.host}`;
 }
 
-function workspaceDomainAppRouteId(
-  domain: FormlessInstanceWorkspaceDomainIntent,
-): string | undefined {
-  if (!domain.targetInstallId) {
-    return undefined;
+function workspaceRouteTargetProfile(profile: FormlessInstanceWorkspaceDomainIntent["profile"]) {
+  if (profile === "publicSite") {
+    return "public-site";
   }
 
-  if (domain.profile === "publicSite") {
-    return instanceControlPlaneAppRouteId(domain.targetInstallId, "publicSite");
+  return profile;
+}
+
+function workspaceRouteSurface(profile: FormlessInstanceWorkspaceDomainIntent["profile"]) {
+  if (profile === "publicSite") {
+    return "public-site";
   }
 
-  if (domain.profile === "app") {
-    return instanceControlPlaneAppRouteId(domain.targetInstallId, "admin");
+  if (profile === "app") {
+    return "admin";
   }
 
   return undefined;

@@ -856,11 +856,7 @@ export function instanceControlPlaneRecordsForAppInstall(input: {
 ] {
   return [
     instanceControlPlaneAppInstallRecord(input.install),
-    ...instanceControlPlaneDefaultRoutesForInstall({
-      installId: input.install.installId,
-      packageAppKey: input.install.packageAppKey,
-      now: input.now,
-    }),
+    ...instanceControlPlaneRouteRecordsForAppInstall(input),
   ];
 }
 
@@ -876,12 +872,13 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
   packageAppKey: PackageAppKey;
   now: string;
 }): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
-  const adminRoute = mountRouteRecord(input, {
+  const routeInput = { install: { installId: input.installId }, now: input.now };
+  const adminRoute = mountRouteRecord(routeInput, {
     matchPath: `/apps/${input.installId}`,
     surface: "admin",
     targetProfile: "app",
   });
-  const schemaRoute = mountRouteRecord(input, {
+  const schemaRoute = mountRouteRecord(routeInput, {
     matchPath: `/apps/${input.installId}/schema`,
     surface: "schema",
     targetProfile: "app",
@@ -894,13 +891,54 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
   return [
     adminRoute,
     schemaRoute,
-    mountRouteRecord(input, {
+    mountRouteRecord(routeInput, {
       matchPath: `/sites/${input.installId}`,
       matchPrefix: `/sites/${input.installId}/`,
       surface: "public-site",
       targetProfile: "public-site",
     }),
   ];
+}
+
+export function instanceControlPlaneRouteRecordsForAppInstall(input: {
+  install: Pick<
+    AppInstall,
+    | "adminRoute"
+    | "installId"
+    | "packageAppKey"
+    | "publicRoute"
+    | "publicRoutePrefix"
+    | "schemaRoute"
+  >;
+  now: string;
+}): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
+  const records = [
+    mountRouteRecord(input, {
+      matchPath: input.install.adminRoute,
+      surface: "admin",
+      targetProfile: "app",
+    }),
+    mountRouteRecord(input, {
+      matchPath: input.install.schemaRoute,
+      surface: "schema",
+      targetProfile: "app",
+    }),
+  ];
+
+  if (input.install.packageAppKey === "site" && input.install.publicRoute !== undefined) {
+    records.push(
+      mountRouteRecord(input, {
+        matchPath: input.install.publicRoute,
+        matchPrefix:
+          input.install.publicRoutePrefix ??
+          (`${input.install.publicRoute.replace(/\/+$/, "")}/` as `/${string}/`),
+        surface: "public-site",
+        targetProfile: "public-site",
+      }),
+    );
+  }
+
+  return records;
 }
 
 export function isInstanceControlPlaneRouteSafePath(path: string): path is `/${string}` {
@@ -914,7 +952,7 @@ export function isInstanceControlPlaneRouteSafePath(path: string): path is `/${s
 }
 
 function mountRouteRecord(
-  input: { installId: AppInstallId; now: string },
+  input: { install: Pick<AppInstall, "installId">; now: string },
   route: {
     matchPath: `/${string}`;
     matchPrefix?: `/${string}`;
@@ -926,7 +964,7 @@ function mountRouteRecord(
     createdAt: input.now,
     entity: "route",
     id: instanceControlPlaneAppRouteId(
-      input.installId,
+      input.install.installId,
       route.surface === "public-site" ? "publicSite" : route.surface,
     ),
     updatedAt: input.now,
@@ -936,7 +974,7 @@ function mountRouteRecord(
       ...(route.matchPrefix === undefined ? {} : { "match-prefix": route.matchPrefix }),
       kind: "mount",
       "target-profile": route.targetProfile,
-      "app-install": input.installId,
+      "app-install": input.install.installId,
       surface: route.surface,
       "created-at": input.now,
       "updated-at": input.now,

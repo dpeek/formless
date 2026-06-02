@@ -693,15 +693,15 @@ describe("instance domain provider API routes", () => {
     expect(controlPlaneIntent.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "redirect-intent",
-          id: "redirect-intent:www.example.com",
+          entity: "route",
+          id: "route:redirect:www.example.com",
           values: expect.objectContaining({
             enabled: true,
-            fromHost: "www.example.com",
-            preservePath: true,
-            preserveQueryString: true,
-            statusCode: "301",
-            toHost: "example.com",
+            "match-host": "www.example.com",
+            "preserve-path": true,
+            "preserve-query-string": true,
+            "status-code": "301",
+            "to-host": "example.com",
           }),
         }),
       ]),

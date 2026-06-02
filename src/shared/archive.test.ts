@@ -138,12 +138,12 @@ describe("portable archive protocol", () => {
         controlPlane: {
           ...controlPlane,
           records: controlPlaneRecords().map((record) =>
-            record.entity === "app-route"
+            record.entity === "route" && record.id === "route:site:public-site"
               ? {
                   ...record,
                   values: {
                     ...record.values,
-                    appInstall: "missing",
+                    "app-install": "missing",
                   },
                 }
               : record,
@@ -151,7 +151,7 @@ describe("portable archive protocol", () => {
         },
       }),
     ).toThrow(
-      'Instance archive controlPlane records record "app-route:site:publicSite" field "instance:app-route.appInstall" references unknown instance:app-install record "missing".',
+      'Instance archive controlPlane records record "route:site:public-site" field "instance:route.app-install" references unknown instance:app-install record "missing".',
     );
   });
 
@@ -337,32 +337,35 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
       createdAt: now,
     },
     {
-      id: "app-route:site:publicSite",
-      entity: "app-route",
+      id: "route:site:public-site",
+      entity: "route",
       values: {
-        appInstall: "site",
-        routeKind: "publicSite",
-        path: "/sites/site",
-        prefix: "/sites/site/",
-        surface: "publicSite",
-        packageCapability: "publicSite",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-path": "/sites/site",
+        "match-prefix": "/sites/site/",
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": "site",
+        surface: "public-site",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
     {
-      id: "domain-mapping:publicSite:www.example.com",
-      entity: "domain-mapping",
+      id: "route:host:publicSite:www.example.com",
+      entity: "route",
       values: {
-        host: "www.example.com",
-        profile: "publicSite",
-        appInstall: "site",
-        appRoute: "app-route:site:publicSite",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-host": "www.example.com",
+        "match-path": "/",
+        "match-prefix": "/",
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": "site",
+        surface: "public-site",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
@@ -384,7 +387,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
       entity: "deploy-desired-resource",
       values: {
         deployTarget: "instance.primary",
-        domainMapping: "domain-mapping:publicSite:www.example.com",
+        route: "route:host:publicSite:www.example.com",
         logicalId: "site-domain",
         kind: "cloudflare-worker-custom-domain",
         providerFamily: "cloudflare",

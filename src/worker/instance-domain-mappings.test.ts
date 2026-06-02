@@ -80,14 +80,14 @@ describe("instance domain mapping API routes", () => {
     expect(controlPlane.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "domain-mapping",
-          id: "domain-mapping:publicSite:www.example.com",
+          entity: "route",
+          id: "route:host:publicSite:www.example.com",
           values: expect.objectContaining({
-            appInstall: "personal",
-            appRoute: "app-route:personal:publicSite",
+            "app-install": "personal",
             enabled: true,
-            host: "www.example.com",
-            profile: "publicSite",
+            "match-host": "www.example.com",
+            "target-profile": "public-site",
+            surface: "public-site",
           }),
         }),
       ]),
@@ -194,14 +194,14 @@ describe("instance domain mapping API routes", () => {
     expect(controlPlane.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entity: "domain-mapping",
-          id: "domain-mapping:app:tasks.example.com",
+          entity: "route",
+          id: "route:host:app:tasks.example.com",
           values: expect.objectContaining({
-            appInstall: "tasks",
-            appRoute: "app-route:tasks:admin",
+            "app-install": "tasks",
             enabled: true,
-            host: "tasks.example.com",
-            profile: "app",
+            "match-host": "tasks.example.com",
+            "target-profile": "app",
+            surface: "admin",
           }),
         }),
       ]),

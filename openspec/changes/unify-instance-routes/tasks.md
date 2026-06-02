@@ -32,11 +32,20 @@ Evidence 2026-06-02 grug:
 
 ## 3. Migration And Backfill
 
-- [ ] 3.1 Backfill existing app route records into hostless mount route records.
-- [ ] 3.2 Backfill existing exact-host domain mapping records into host mount route records.
-- [ ] 3.3 Backfill existing redirect intent records into redirect route records.
-- [ ] 3.4 Preserve provider evidence, cleanup history, deployment attempts, and drift reports outside route records.
-- [ ] 3.5 Detect conflicting legacy desired records and report migration blockers before route records become active.
+- [x] 3.1 Backfill existing app route records into hostless mount route records.
+- [x] 3.2 Backfill existing exact-host domain mapping records into host mount route records.
+- [x] 3.3 Backfill existing redirect intent records into redirect route records.
+- [x] 3.4 Preserve provider evidence, cleanup history, deployment attempts, and drift reports outside route records.
+- [x] 3.5 Detect conflicting legacy desired records and report migration blockers before route records become active.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/worker/instance-control-plane.ts` to initialize control-plane storage with legacy route-intent backfill, convert active legacy `app-route`, `domain-mapping`, and `redirect-intent` records into deterministic `route` records, and preflight enabled route conflicts before sync writes.
+- Changed compatibility readers in `src/worker/instance-domain-mappings.ts` and `src/worker/domain-provider-api.ts` to reconstruct existing response shapes from synced `route` records while leaving provider evidence, cleanup events, deployment attempts, and drift reports in their separate stores.
+- Changed workspace/archive route source paths and affected tests to use canonical `route` records for app routes and exact-host mappings.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes backfill, API compatibility, and workspace/archive route records, not browser-visible UI.
 
 ## 4. Runtime Topology
 

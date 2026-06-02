@@ -1111,14 +1111,14 @@ describe("Formless Site CLI", () => {
     ).toEqual(
       [
         "instance:app-install:david",
-        "instance:app-route:app-route:david:admin",
-        "instance:app-route:app-route:david:publicSite",
-        "instance:app-route:app-route:david:schema",
         "instance:deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
         "instance:deploy-drift-report:deploy-drift:instance.primary",
         "instance:deploy-target:instance.primary",
-        "instance:domain-mapping:domain-mapping:publicSite:dpeek.com",
         "instance:provider-config-ref:provider-config:cloudflare:personal",
+        "instance:route:route:david:admin",
+        "instance:route:route:david:public-site",
+        "instance:route:route:david:schema",
+        "instance:route:route:host:publicSite:dpeek.com",
       ].sort((left, right) => left.localeCompare(right)),
     );
     expect(
@@ -1128,14 +1128,14 @@ describe("Formless Site CLI", () => {
     ).toEqual(
       [
         "app-install:david",
-        "app-route:app-route:david:admin",
-        "app-route:app-route:david:publicSite",
-        "app-route:app-route:david:schema",
         "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
         "deploy-drift-report:deploy-drift:instance.primary",
         "deploy-target:instance.primary",
-        "domain-mapping:domain-mapping:publicSite:dpeek.com",
         "provider-config-ref:provider-config:cloudflare:personal",
+        "route:route:david:admin",
+        "route:route:david:public-site",
+        "route:route:david:schema",
+        "route:route:host:publicSite:dpeek.com",
       ].sort((left, right) => left.localeCompare(right)),
     );
     expect(JSON.stringify(pulledInstance.controlPlane)).not.toContain("CF_API_TOKEN");
@@ -1319,7 +1319,7 @@ describe("Formless Site CLI", () => {
         "Instance workspace check.",
         `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
         "Target: remote (https://personal.dpeek.workers.dev).",
-        "Drift: none.",
+        "Drift: detected.",
         "Local apps: 1. Remote apps: 1.",
         "Local records: 0. Remote records: 0.",
         "Local media files: 0. Remote media files: 0.",
@@ -1328,10 +1328,10 @@ describe("Formless Site CLI", () => {
         "Extra remote installs: none.",
         "Package mismatches: none.",
         "Changed records: none.",
-        "Changed control-plane records: none.",
+        "Changed control-plane records: instance:route:route:david:admin, instance:route:route:david:public-site, instance:route:route:david:schema, instance:route:route:host:publicSite:dpeek.com.",
         "Changed media: none.",
         "Changed domain mappings: none.",
-        "Changed archive paths: none.",
+        "Changed archive paths: archives/instance.",
       ].join("\n"),
     ]);
   });
@@ -1344,12 +1344,12 @@ describe("Formless Site CLI", () => {
     const localApp = appArchive("david", "David Peek");
     const localControlPlane = controlPlaneRecords();
     const remoteControlPlane = localControlPlane.map((record) =>
-      record.id === "app-route:david:admin"
+      record.id === "route:david:admin"
         ? {
             ...record,
             values: {
               ...record.values,
-              path: "/apps/david-admin",
+              "match-path": "/apps/david-admin",
             },
           }
         : record,
@@ -1406,7 +1406,7 @@ describe("Formless Site CLI", () => {
         "Extra remote installs: none.",
         "Package mismatches: none.",
         "Changed records: none.",
-        "Changed control-plane records: instance:app-route:app-route:david:admin.",
+        "Changed control-plane records: instance:route:route:david:admin, instance:route:route:david:public-site, instance:route:route:david:schema, instance:route:route:host:publicSite:dpeek.com.",
         "Changed media: none.",
         "Changed domain mappings: none.",
         "Changed archive paths: archives/instance.",
@@ -1807,14 +1807,14 @@ describe("Formless Site CLI", () => {
       records: [
         { entity: "app-install", id: "site", values: { installId: "site" } },
         {
-          entity: "app-route",
-          id: "app-route:site:publicSite",
-          values: { appInstall: "site", path: "/sites/site" },
+          entity: "route",
+          id: "route:site:public-site",
+          values: { "app-install": "site", "match-path": "/sites/site" },
         },
         {
-          entity: "domain-mapping",
+          entity: "route",
           id: "domain:www.dpeek.com",
-          values: { appRoute: "app-route:site:publicSite", host: "www.dpeek.com" },
+          values: { "app-install": "site", "match-host": "www.dpeek.com" },
         },
         {
           entity: "deploy-target",
@@ -2197,14 +2197,14 @@ describe("Formless Site CLI", () => {
       records: [
         { entity: "app-install", id: "site", values: { installId: "site" } },
         {
-          entity: "app-route",
-          id: "app-route:site:publicSite",
-          values: { appInstall: "site", path: "/sites/site" },
+          entity: "route",
+          id: "route:site:public-site",
+          values: { "app-install": "site", "match-path": "/sites/site" },
         },
         {
-          entity: "domain-mapping",
+          entity: "route",
           id: "domain:fail.dpeek.com",
-          values: { appRoute: "app-route:site:publicSite", host: "fail.dpeek.com" },
+          values: { "app-install": "site", "match-host": "fail.dpeek.com" },
         },
         {
           entity: "deploy-target",
@@ -2934,11 +2934,11 @@ describe("Formless Site CLI", () => {
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
       "instance:app-install",
-      "instance:app-route",
-      "instance:app-route",
-      "instance:app-route",
       "instance:deploy-target",
       "instance:provider-config-ref",
+      "instance:route",
+      "instance:route",
+      "instance:route",
     ]);
     expect(logs).toHaveLength(1);
     const lines = logs[0]?.split("\n") ?? [];
@@ -3478,11 +3478,9 @@ describe("Formless Site CLI", () => {
     expect(instanceArchive.capabilities).toContain("schema-owned-control-plane");
     expect(instanceArchive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(instanceArchiveJson.controlPlane?.records.map((record) => record.entity)).toContain(
-      "instance:domain-mapping",
+      "instance:route",
     );
-    expect(instanceArchive.controlPlane?.records.map((record) => record.entity)).toContain(
-      "domain-mapping",
-    );
+    expect(instanceArchive.controlPlane?.records.map((record) => record.entity)).toContain("route");
     expect(JSON.stringify(instanceArchive.controlPlane)).not.toContain("CF_API_TOKEN");
     expect(appArchiveValue.data.kind).toBe("storeSnapshot");
     expect(appArchiveValue.media.objects).toHaveLength(1);
@@ -5683,10 +5681,10 @@ function controlPlaneRecords(
 ): StoredRecord[] {
   const host = options.host ?? "dpeek.com";
   const installId = options.installId ?? "david";
-  const adminRouteId = `app-route:${installId}:admin`;
-  const publicRouteId = `app-route:${installId}:publicSite`;
-  const schemaRouteId = `app-route:${installId}:schema`;
-  const domainMappingId = `domain-mapping:publicSite:${host}`;
+  const adminRouteId = `route:${installId}:admin`;
+  const publicRouteId = `route:${installId}:public-site`;
+  const schemaRouteId = `route:${installId}:schema`;
+  const domainRouteId = `route:host:publicSite:${host}`;
   const deployTargetId = "instance.primary";
   const now = "2026-05-26T00:00:00.000Z";
 
@@ -5707,61 +5705,64 @@ function controlPlaneRecords(
     },
     {
       id: adminRouteId,
-      entity: "app-route",
+      entity: "route",
       values: {
-        appInstall: installId,
-        routeKind: "admin",
-        path: `/apps/${installId}`,
-        surface: "admin",
-        packageCapability: "generatedApp",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-path": `/apps/${installId}`,
+        kind: "mount",
+        "target-profile": "app",
+        "app-install": installId,
+        surface: "admin",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
     {
       id: publicRouteId,
-      entity: "app-route",
+      entity: "route",
       values: {
-        appInstall: installId,
-        routeKind: "publicSite",
-        path: `/sites/${installId}`,
-        prefix: `/sites/${installId}/`,
-        surface: "publicSite",
-        packageCapability: "publicSite",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-path": `/sites/${installId}`,
+        "match-prefix": `/sites/${installId}/`,
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": installId,
+        surface: "public-site",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
     {
       id: schemaRouteId,
-      entity: "app-route",
+      entity: "route",
       values: {
-        appInstall: installId,
-        routeKind: "schema",
-        path: `/apps/${installId}/schema`,
-        surface: "schema",
-        packageCapability: "schema",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-path": `/apps/${installId}/schema`,
+        kind: "mount",
+        "target-profile": "app",
+        "app-install": installId,
+        surface: "schema",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
     {
-      id: domainMappingId,
-      entity: "domain-mapping",
+      id: domainRouteId,
+      entity: "route",
       values: {
-        host,
-        profile: "publicSite",
-        appInstall: installId,
-        appRoute: publicRouteId,
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-host": host,
+        "match-path": "/",
+        "match-prefix": "/",
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": installId,
+        surface: "public-site",
+        "created-at": now,
+        "updated-at": now,
       },
       createdAt: now,
     },
@@ -5797,7 +5798,7 @@ function controlPlaneRecords(
       entity: "deploy-desired-resource",
       values: {
         deployTarget: deployTargetId,
-        domainMapping: domainMappingId,
+        route: domainRouteId,
         logicalId: `custom-domain:${host}`,
         kind: "cloudflare-worker-custom-domain",
         providerFamily: "cloudflare",

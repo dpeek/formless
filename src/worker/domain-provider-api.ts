@@ -1618,31 +1618,40 @@ function domainMappingsFromControlPlaneRecords(
   sourceMappings: readonly InstanceDomainMapping[],
 ): InstanceDomainMapping[] {
   const expectedIds = new Set(
-    sourceMappings.map((mapping) => `domain-mapping:${mapping.profile}:${mapping.host}`),
+    sourceMappings.map((mapping) => `route:host:${mapping.profile}:${mapping.host}`),
   );
 
   return listInstanceDomainMappings(
     records
       .filter(
-        (record) =>
-          !record.deletedAt && record.entity === "domain-mapping" && expectedIds.has(record.id),
+        (record) => !record.deletedAt && record.entity === "route" && expectedIds.has(record.id),
       )
       .map((record) => {
-        const profile = String(record.values.profile) as InstanceDomainMapping["profile"];
+        const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
         const targetInstallId =
-          typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+          typeof record.values["app-install"] === "string"
+            ? record.values["app-install"]
+            : undefined;
 
         return {
-          host: String(record.values.host),
+          host: String(record.values["match-host"]),
           profile,
           ...(profile === "publicSite" ? { surface: "site" as const } : {}),
           ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
           enabled: record.values.enabled === true,
-          createdAt: String(record.values.createdAt),
-          updatedAt: String(record.values.updatedAt),
+          createdAt: String(record.values["created-at"]),
+          updatedAt: String(record.values["updated-at"]),
         };
       }),
   );
+}
+
+function domainMappingProfileFromRouteTarget(value: unknown): InstanceDomainMapping["profile"] {
+  if (value === "app" || value === "instance") {
+    return value;
+  }
+
+  return "publicSite";
 }
 
 function redirectIntentsFromControlPlaneRecords(
@@ -1650,24 +1659,23 @@ function redirectIntentsFromControlPlaneRecords(
   sourceRedirectIntents: readonly InstanceDomainProviderRedirectIntent[],
 ): InstanceDomainProviderRedirectIntent[] {
   const expectedIds = new Set(
-    sourceRedirectIntents.map((intent) => `redirect-intent:${intent.fromHost}`),
+    sourceRedirectIntents.map((intent) => `route:redirect:${intent.fromHost}`),
   );
 
   return records
     .filter(
-      (record) =>
-        !record.deletedAt && record.entity === "redirect-intent" && expectedIds.has(record.id),
+      (record) => !record.deletedAt && record.entity === "route" && expectedIds.has(record.id),
     )
     .map((record) => ({
-      fromHost: String(record.values.fromHost),
-      ...(typeof record.values.toHost === "string" ? { toHost: record.values.toHost } : {}),
-      ...(typeof record.values.toUrl === "string" ? { toUrl: record.values.toUrl } : {}),
-      statusCode: Number(record.values.statusCode) as DomainProviderRedirectStatusCode,
-      preservePath: record.values.preservePath === true,
-      preserveQueryString: record.values.preserveQueryString === true,
+      fromHost: String(record.values["match-host"]),
+      ...(typeof record.values["to-host"] === "string" ? { toHost: record.values["to-host"] } : {}),
+      ...(typeof record.values["to-url"] === "string" ? { toUrl: record.values["to-url"] } : {}),
+      statusCode: Number(record.values["status-code"]) as DomainProviderRedirectStatusCode,
+      preservePath: record.values["preserve-path"] === true,
+      preserveQueryString: record.values["preserve-query-string"] === true,
       enabled: record.values.enabled === true,
-      createdAt: String(record.values.createdAt),
-      updatedAt: String(record.values.updatedAt),
+      createdAt: String(record.values["created-at"]),
+      updatedAt: String(record.values["updated-at"]),
     }))
     .sort((left, right) => left.fromHost.localeCompare(right.fromHost));
 }

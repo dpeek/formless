@@ -341,7 +341,7 @@ describe("instance archive restore API", () => {
     expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual(
       expect.arrayContaining([
         "app-install:personal",
-        "domain-mapping:domain-mapping:publicSite:archive.example.com",
+        "route:route:host:publicSite:archive.example.com",
         "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:archive.example.com",
         "deploy-drift-report:deploy-drift:instance.primary",
       ]),
@@ -513,7 +513,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
   const records = instanceControlPlaneRecordsForAppInstall({ install, now }).map(
     storedControlPlaneRecord,
   );
-  const adminRoute = records.find((record) => record.id === "app-route:personal:admin");
+  const adminRoute = records.find((record) => record.id === "route:personal:admin");
 
   if (!adminRoute) {
     throw new Error("Expected default admin app route.");
@@ -521,8 +521,8 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
 
   adminRoute.values = {
     ...adminRoute.values,
-    path: "/apps/personal-dashboard",
-    updatedAt: now,
+    "match-path": "/apps/personal-dashboard",
+    "updated-at": now,
   };
 
   return [
@@ -556,18 +556,21 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       },
     },
     {
-      id: "domain-mapping:publicSite:archive.example.com",
-      entity: "domain-mapping",
+      id: "route:host:publicSite:archive.example.com",
+      entity: "route",
       createdAt: now,
       values: {
-        host: "archive.example.com",
-        profile: "publicSite",
-        appInstall: "personal",
-        appRoute: "app-route:personal:publicSite",
-        providerConfigRef: "provider-config:cloudflare:primary",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-host": "archive.example.com",
+        "match-path": "/",
+        "match-prefix": "/",
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": "personal",
+        surface: "public-site",
+        "provider-config": "provider-config:cloudflare:primary",
+        "created-at": now,
+        "updated-at": now,
       },
     },
     {
@@ -576,7 +579,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       createdAt: now,
       values: {
         deployTarget: "instance.primary",
-        domainMapping: "domain-mapping:publicSite:archive.example.com",
+        route: "route:host:publicSite:archive.example.com",
         logicalId: "custom-domain:archive.example.com",
         kind: "cloudflare-worker-custom-domain",
         providerFamily: "cloudflare",

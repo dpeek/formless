@@ -122,12 +122,12 @@ describe("instance app install API routes", () => {
       "/api/formless/control-plane/mutations",
       {
         mutationId: "mutation-personal-admin-route",
-        entity: "app-route",
+        entity: "route",
         op: "patch",
-        recordId: "app-route:personal:admin",
+        recordId: "route:personal:admin",
         values: {
-          path: "/apps/personal-admin",
-          updatedAt: "2026-05-28T00:00:00.000Z",
+          "match-path": "/apps/personal-admin",
+          "updated-at": "2026-05-28T00:00:00.000Z",
         },
       },
     );
@@ -135,9 +135,9 @@ describe("instance app install API routes", () => {
 
     expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual([
       "app-install:personal",
-      "app-route:app-route:personal:admin",
-      "app-route:app-route:personal:schema",
-      "app-route:app-route:personal:publicSite",
+      "route:route:personal:admin",
+      "route:route:personal:schema",
+      "route:route:personal:public-site",
     ]);
     expect(patchedRoute.response.status).toBe(200);
     expect(after.body.installs[0]).toEqual(

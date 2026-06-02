@@ -18,6 +18,7 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppRouteId,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
@@ -102,6 +103,16 @@ const instanceControlPlaneApp = {
   seedRecords: [],
 } satisfies WorkerSchemaAppDefinition;
 
+function initializeControlPlaneStorage(storage: DurableObjectStorage) {
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+}
+
+function ensureControlPlaneStorage(storage: DurableObjectStorage) {
+  initializeControlPlaneStorage(storage);
+  backfillLegacyRouteIntentRecords(storage);
+}
+
 type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
 };
@@ -109,6 +120,12 @@ type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv & {
 type ParsedCreateAppInstallActionRequest = {
   actionId: string;
   input: CreateAppInstallRequest;
+};
+
+type RouteMigrationCandidate = {
+  id: string;
+  source: string;
+  values: RecordValues;
 };
 
 export async function handleInstanceControlPlaneApiRequest(
@@ -205,7 +222,7 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
     }
 
     const body = operation.metadata.mode === "write" ? await readJson(request) : undefined;
-    ensureStorageTables(storage);
+    ensureControlPlaneStorage(storage);
     const result = executeAuthorityOperation({
       actorKind,
       app: instanceControlPlaneApp,
@@ -262,8 +279,7 @@ async function handleInternalBackfillAppInstalls(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  initializeControlPlaneStorage(storage);
 
   const installs = parseInternalBackfillAppInstalls(await readJson(request));
   const existing = readControlPlaneAppInstalls(storage);
@@ -279,6 +295,8 @@ async function handleInternalBackfillAppInstalls(
     backfilled.push(install.installId);
   }
 
+  backfillLegacyRouteIntentRecords(storage);
+
   return jsonResponse({
     backfilled,
     installs: readControlPlaneAppInstalls(storage),
@@ -293,8 +311,7 @@ async function handleInternalUpdateAppInstallPackageFacts(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalAppInstallPackageFactsUpdate(await readJson(request));
   const install = findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId);
@@ -343,8 +360,7 @@ async function handleInternalSyncDeploymentProjection(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalDeploymentProjectionRequest(await readJson(request));
 
@@ -363,8 +379,7 @@ async function handleInternalSyncDomainIntent(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalDomainIntentSyncRequest(await readJson(request));
 
@@ -383,8 +398,7 @@ async function handleInternalRecordDeploymentAttempt(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalDeploymentAttemptRecordRequest(await readJson(request));
 
@@ -403,8 +417,7 @@ async function handleInternalRecordDeploymentEvidence(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalDeploymentEvidenceRecordRequest(await readJson(request));
 
@@ -427,8 +440,7 @@ async function handleInternalRecordDeploymentDrift(
     return methodNotAllowedResponse("POST");
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseInternalDeploymentDriftRecordRequest(await readJson(request));
 
@@ -474,8 +486,7 @@ async function handleCreateAppInstallAction(
     );
   }
 
-  ensureStorageTables(storage);
-  initializeStorageFromSource(storage, instanceControlPlaneSource);
+  ensureControlPlaneStorage(storage);
 
   const parsed = parseCreateAppInstallActionRequest(await readJson(request));
   const replay = getActionResponseById(storage, parsed.actionId);
@@ -690,6 +701,165 @@ function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppIn
   );
 }
 
+function backfillLegacyRouteIntentRecords(storage: DurableObjectStorage) {
+  const candidates = legacyRouteMigrationCandidates(storage);
+
+  if (candidates.length === 0) {
+    return;
+  }
+
+  const safeCandidates = assertRouteMigrationCandidatesAreSafe(storage, candidates);
+
+  for (const candidate of safeCandidates) {
+    upsertControlPlaneRecord(storage, {
+      action: "backfillLegacyRouteIntent",
+      entity: "route",
+      id: candidate.id,
+      values: candidate.values,
+    });
+  }
+}
+
+function legacyRouteMigrationCandidates(storage: DurableObjectStorage): RouteMigrationCandidate[] {
+  return activeControlPlaneRecords(storage).flatMap((record) => {
+    if (record.entity === "app-route") {
+      return legacyAppRouteMigrationCandidate(storage, record);
+    }
+
+    if (record.entity === "domain-mapping") {
+      return legacyDomainMappingMigrationCandidate(storage, record);
+    }
+
+    if (record.entity === "redirect-intent") {
+      return legacyRedirectIntentMigrationCandidate(storage, record);
+    }
+
+    return [];
+  });
+}
+
+function legacyAppRouteMigrationCandidate(
+  storage: DurableObjectStorage,
+  record: StoredRecord,
+): RouteMigrationCandidate[] {
+  const appInstall = parseRequiredString("legacy app-route.appInstall", record.values.appInstall);
+  const routeKind = parseLegacyAppRouteKind(record.values.routeKind);
+  const id = instanceControlPlaneAppRouteId(appInstall, routeKind);
+
+  if (activeControlPlaneRecordExists(storage, "route", id)) {
+    return [];
+  }
+
+  const surface = appRouteSurface(routeKind);
+  const values: RecordValues = {
+    enabled: record.values.enabled === true,
+    "match-path": parseRouteString("legacy app-route.path", record.values.path),
+    ...(typeof record.values.prefix === "string"
+      ? { "match-prefix": parseRoutePrefixString("legacy app-route.prefix", record.values.prefix) }
+      : {}),
+    kind: "mount",
+    "target-profile": routeKind === "publicSite" ? "public-site" : "app",
+    "app-install": appInstall,
+    surface,
+    "created-at": stringRecordValue(record.values.createdAt) ?? record.createdAt,
+    "updated-at": stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+  };
+
+  return [
+    {
+      id,
+      source: `legacy app-route "${record.id}"`,
+      values,
+    },
+  ];
+}
+
+function legacyDomainMappingMigrationCandidate(
+  storage: DurableObjectStorage,
+  record: StoredRecord,
+): RouteMigrationCandidate[] {
+  const profile = parseDomainMappingProfile(record.values.profile);
+  const host = parseRequiredString("legacy domain-mapping.host", record.values.host);
+  const id = domainMappingRouteRecordId({ host, profile });
+
+  if (activeControlPlaneRecordExists(storage, "route", id)) {
+    return [];
+  }
+
+  const targetInstallId =
+    stringRecordValue(record.values.appInstall) ??
+    stringRecordValue(record.values.targetInstallId) ??
+    stringRecordValue(record.values.installId);
+  const mapping: InstanceDomainMapping = {
+    host,
+    profile,
+    ...(profile === "publicSite" ? { surface: "site" as const } : {}),
+    ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
+    enabled: record.values.enabled === true,
+    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
+    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+  };
+  const values = domainMappingRouteRecordValues(storage, mapping);
+  const providerConfig = stringRecordValue(record.values.providerConfigRef);
+
+  return [
+    {
+      id,
+      source: `legacy domain-mapping "${record.id}"`,
+      values: {
+        ...values,
+        ...(providerConfig === undefined ? {} : { "provider-config": providerConfig }),
+      },
+    },
+  ];
+}
+
+function legacyRedirectIntentMigrationCandidate(
+  storage: DurableObjectStorage,
+  record: StoredRecord,
+): RouteMigrationCandidate[] {
+  const fromHost = parseRequiredString("legacy redirect-intent.fromHost", record.values.fromHost);
+  const id = redirectRouteRecordId(fromHost);
+
+  if (activeControlPlaneRecordExists(storage, "route", id)) {
+    return [];
+  }
+
+  const intent: InstanceDomainProviderRedirectIntent = {
+    fromHost,
+    ...(typeof record.values.toHost === "string" && record.values.toHost.trim() !== ""
+      ? { toHost: record.values.toHost }
+      : {}),
+    ...(typeof record.values.toUrl === "string" && record.values.toUrl.trim() !== ""
+      ? { toUrl: record.values.toUrl }
+      : {}),
+    statusCode: parseLegacyRedirectStatusCode(record.values.statusCode),
+    preservePath: booleanRecordValue(
+      record.values.preservePath,
+      "legacy redirect-intent.preservePath",
+    ),
+    preserveQueryString: booleanRecordValue(
+      record.values.preserveQueryString,
+      "legacy redirect-intent.preserveQueryString",
+    ),
+    enabled: record.values.enabled === true,
+    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
+    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+  };
+  const providerConfig = stringRecordValue(record.values.providerConfigRef);
+
+  return [
+    {
+      id,
+      source: `legacy redirect-intent "${record.id}"`,
+      values: {
+        ...redirectRouteRecordValues(intent),
+        ...(providerConfig === undefined ? {} : { "provider-config": providerConfig }),
+      },
+    },
+  ];
+}
+
 function syncDeploymentProjectionRecords(
   storage: DurableObjectStorage,
   input: {
@@ -753,20 +923,28 @@ function syncDomainIntentRecords(
     redirectIntents?: InstanceDomainProviderRedirectIntent[];
   },
 ) {
+  const domainRouteCandidates =
+    input.mappings?.map((mapping) => domainMappingRouteCandidate(storage, mapping)) ?? [];
+  const redirectRouteCandidates =
+    input.redirectIntents?.map((intent) => redirectRouteCandidate(intent)) ?? [];
+  const safeCandidates = assertRouteMigrationCandidatesAreSafe(storage, [
+    ...domainRouteCandidates,
+    ...redirectRouteCandidates,
+  ]);
+
+  for (const candidate of safeCandidates) {
+    upsertControlPlaneRecord(storage, {
+      action: candidate.id.startsWith("route:redirect:")
+        ? "syncRedirectIntent"
+        : "syncDomainMapping",
+      entity: "route",
+      id: candidate.id,
+      values: candidate.values,
+    });
+  }
+
   if (input.mappings !== undefined) {
-    const nextDomainRouteIds = new Set<string>();
-
-    for (const mapping of input.mappings) {
-      const recordId = domainMappingRouteRecordId(mapping);
-
-      upsertControlPlaneRecord(storage, {
-        action: "syncDomainMapping",
-        entity: "route",
-        id: recordId,
-        values: domainMappingRouteRecordValues(storage, mapping),
-      });
-      nextDomainRouteIds.add(recordId);
-    }
+    const nextDomainRouteIds = new Set(domainRouteCandidates.map((candidate) => candidate.id));
 
     disableMissingControlPlaneIntentRecords(storage, nextDomainRouteIds, {
       action: "disableDomainMappingIntent",
@@ -776,19 +954,7 @@ function syncDomainIntentRecords(
   }
 
   if (input.redirectIntents !== undefined) {
-    const nextRedirectRouteIds = new Set<string>();
-
-    for (const intent of input.redirectIntents) {
-      const recordId = redirectRouteRecordId(intent.fromHost);
-
-      upsertControlPlaneRecord(storage, {
-        action: "syncRedirectIntent",
-        entity: "route",
-        id: recordId,
-        values: redirectRouteRecordValues(intent),
-      });
-      nextRedirectRouteIds.add(recordId);
-    }
+    const nextRedirectRouteIds = new Set(redirectRouteCandidates.map((candidate) => candidate.id));
 
     disableMissingControlPlaneIntentRecords(storage, nextRedirectRouteIds, {
       action: "disableRedirectIntent",
@@ -1004,6 +1170,17 @@ function deploymentDesiredResourceValues(input: {
   };
 }
 
+function domainMappingRouteCandidate(
+  storage: DurableObjectStorage,
+  mapping: InstanceDomainMapping,
+): RouteMigrationCandidate {
+  return {
+    id: domainMappingRouteRecordId(mapping),
+    source: `legacy domain mapping "${mapping.profile}:${mapping.host}"`,
+    values: domainMappingRouteRecordValues(storage, mapping),
+  };
+}
+
 function domainMappingRouteRecordValues(
   storage: DurableObjectStorage,
   mapping: InstanceDomainMapping,
@@ -1026,6 +1203,16 @@ function domainMappingRouteRecordValues(
     ...(surface === undefined ? {} : { surface }),
     "created-at": mapping.createdAt,
     "updated-at": mapping.updatedAt,
+  };
+}
+
+function redirectRouteCandidate(
+  intent: InstanceDomainProviderRedirectIntent,
+): RouteMigrationCandidate {
+  return {
+    id: redirectRouteRecordId(intent.fromHost),
+    source: `legacy redirect intent "${intent.fromHost}"`,
+    values: redirectRouteRecordValues(intent),
   };
 }
 
@@ -1689,6 +1876,37 @@ function parseRedirectStatusCode(
   throw new BadRequestError('Field "redirect.statusCode" must be 301, 302, 303, 307, or 308.');
 }
 
+function parseLegacyRedirectStatusCode(
+  value: unknown,
+): InstanceDomainProviderRedirectIntent["statusCode"] {
+  const statusCode = typeof value === "string" ? Number(value) : value;
+
+  return parseRedirectStatusCode(statusCode);
+}
+
+function parseLegacyAppRouteKind(value: unknown): InstanceControlPlaneAppRouteKind {
+  if (value === "admin" || value === "schema" || value === "publicSite") {
+    return value;
+  }
+
+  throw new BadRequestError(
+    'Field "legacy app-route.routeKind" must be "admin", "schema", or "publicSite".',
+  );
+}
+
+function appRouteSurface(
+  routeKind: InstanceControlPlaneAppRouteKind,
+): NonNullable<InstanceControlPlaneRouteValues["surface"]> {
+  switch (routeKind) {
+    case "admin":
+      return "admin";
+    case "schema":
+      return "schema";
+    case "publicSite":
+      return "public-site";
+  }
+}
+
 function domainMappingRouteRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
   return `route:host:${mapping.profile}:${mapping.host}`;
 }
@@ -1739,6 +1957,116 @@ function deploymentDesiredResourceRecordId(targetId: string, logicalId: string) 
 
 function deploymentEvidenceRecordId(attemptId: string, logicalId: string) {
   return `deploy-evidence:${attemptId}:${logicalId}`;
+}
+
+function assertRouteMigrationCandidatesAreSafe(
+  storage: DurableObjectStorage,
+  candidates: readonly RouteMigrationCandidate[],
+): RouteMigrationCandidate[] {
+  const uniqueCandidates = uniqueRouteMigrationCandidates(candidates);
+  const enabledRoutes = activeControlPlaneRecords(storage)
+    .filter((record) => record.entity === "route" && record.values.enabled === true)
+    .map((record) => ({
+      id: record.id,
+      match: routeMatchFromValues(record.values),
+      source: `route "${record.id}"`,
+    }));
+
+  for (const candidate of uniqueCandidates) {
+    if (candidate.values.enabled !== true) {
+      continue;
+    }
+
+    const candidateMatch = routeMatchFromValues(candidate.values);
+
+    for (const existing of enabledRoutes) {
+      if (existing.id === candidate.id) {
+        continue;
+      }
+
+      if (
+        candidateMatch.host === existing.match.host &&
+        routeMatchesOverlap(candidateMatch, existing.match)
+      ) {
+        throw new BadRequestError(
+          `Legacy route migration blocker: ${candidate.source} match "${formatRouteMatch(
+            candidateMatch,
+          )}" conflicts with ${existing.source}.`,
+        );
+      }
+    }
+
+    enabledRoutes.push({
+      id: candidate.id,
+      match: candidateMatch,
+      source: candidate.source,
+    });
+  }
+
+  return uniqueCandidates;
+}
+
+function uniqueRouteMigrationCandidates(
+  candidates: readonly RouteMigrationCandidate[],
+): RouteMigrationCandidate[] {
+  const byId = new Map<string, RouteMigrationCandidate>();
+
+  for (const candidate of candidates) {
+    const existing = byId.get(candidate.id);
+
+    if (!existing) {
+      byId.set(candidate.id, candidate);
+      continue;
+    }
+
+    if (!recordValuesEqual(existing.values, candidate.values)) {
+      throw new BadRequestError(
+        `Legacy route migration blocker: ${existing.source} and ${candidate.source} both map to route "${candidate.id}" with different values.`,
+      );
+    }
+  }
+
+  return [...byId.values()];
+}
+
+function routeMatchFromValues(values: RecordValues): {
+  host: string;
+  path: string;
+  prefix?: string;
+} {
+  return {
+    host: stringRecordValue(values["match-host"]) ?? "<hostless>",
+    path: parseRouteString("route.match-path", values["match-path"]),
+    ...(stringRecordValue(values["match-prefix"]) === undefined
+      ? {}
+      : { prefix: parseRouteString("route.match-prefix", values["match-prefix"]) }),
+  };
+}
+
+function routeMatchesOverlap(
+  left: { path: string; prefix?: string },
+  right: { path: string; prefix?: string },
+) {
+  return (
+    left.path === right.path ||
+    (left.prefix !== undefined && routePathMatchesPrefix(right.path, left.prefix)) ||
+    (right.prefix !== undefined && routePathMatchesPrefix(left.path, right.prefix)) ||
+    (left.prefix !== undefined &&
+      right.prefix !== undefined &&
+      routePrefixesOverlap(left.prefix, right.prefix))
+  );
+}
+
+function routePathMatchesPrefix(path: string, prefix: string) {
+  return prefix === "/" || path.startsWith(prefix);
+}
+
+function routePrefixesOverlap(left: string, right: string) {
+  return left === "/" || right === "/" || left.startsWith(right) || right.startsWith(left);
+}
+
+function formatRouteMatch(match: { host: string; path: string; prefix?: string }) {
+  return `${match.host}${match.path}${match.prefix === undefined ? "" : ` ${match.prefix}`}`;
 }
 
 function controlPlaneDeploymentActorKind(kind: string) {
