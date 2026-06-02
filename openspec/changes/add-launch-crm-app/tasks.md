@@ -1,8 +1,14 @@
 ## 1. Source App Schema
 
-- [ ] 1.1 Add `schema/apps/crm/schema.json` with flat CRM entities, reference fields, relationships, constraints, queries, item/table/create views, and primary workspace screens.
-- [ ] 1.2 Add `schema/apps/crm/seed-records.json` with small deterministic demo records that validate as source-shaped stored records.
-- [ ] 1.3 Add schema parser or view-model tests proving CRM entities, relationships, unique constraints, queries, views, and screens parse and select expected generated admin models.
+- [x] 1.1 Add `schema/apps/crm/schema.json` with flat CRM entities, reference fields, relationships, constraints, queries, item/table/create views, and primary workspace screens.
+- [x] 1.2 Add `schema/apps/crm/seed-records.json` with small deterministic demo records that validate as source-shaped stored records.
+- [x] 1.3 Add schema parser or view-model tests proving CRM entities, relationships, unique constraints, queries, views, and screens parse and select expected generated admin models.
+
+Evidence 2026-06-02 thag:
+
+- Files changed: `schema/apps/crm/schema.json`, `schema/apps/crm/seed-records.json`, `src/client/crm-schema.test.ts`.
+- Checks: `devstate check` passed; status showed `vp check --fix` pass, web service ready, watch tests pass.
+- Smoke: not run; this section adds the source schema and tests only, while CRM route/package registration remains in later sections.
 
 ## 2. Package App Registration
 

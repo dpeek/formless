@@ -1,0 +1,2359 @@
+{
+  "version": 1,
+  "entities": {
+    "company": {
+      "label": "Company",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "website": {
+          "type": "text",
+          "required": false,
+          "label": "Website",
+          "format": "href"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "prospect",
+          "values": {
+            "prospect": {
+              "label": "Prospect"
+            },
+            "customer": {
+              "label": "Customer"
+            },
+            "partner": {
+              "label": "Partner"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        },
+        "notes": {
+          "type": "text",
+          "required": false,
+          "label": "Notes",
+          "format": "longText"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueCompanyName": {
+          "kind": "unique",
+          "fields": ["name"]
+        }
+      }
+    },
+    "contact": {
+      "label": "Contact",
+      "fields": {
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "company": {
+          "type": "reference",
+          "required": false,
+          "label": "Company",
+          "to": "company",
+          "displayField": "name"
+        },
+        "role": {
+          "type": "text",
+          "required": false,
+          "label": "Role"
+        },
+        "lifecycle": {
+          "type": "enum",
+          "required": true,
+          "label": "Lifecycle",
+          "default": "lead",
+          "values": {
+            "lead": {
+              "label": "Lead"
+            },
+            "customer": {
+              "label": "Customer"
+            },
+            "advocate": {
+              "label": "Advocate"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        },
+        "source": {
+          "type": "enum",
+          "required": true,
+          "label": "Source",
+          "default": "owner",
+          "values": {
+            "owner": {
+              "label": "Owner"
+            },
+            "import": {
+              "label": "Import"
+            },
+            "site": {
+              "label": "Site"
+            },
+            "event": {
+              "label": "Event"
+            }
+          }
+        },
+        "notes": {
+          "type": "text",
+          "required": false,
+          "label": "Notes",
+          "format": "longText"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "email-address": {
+      "label": "Email address",
+      "fields": {
+        "contact": {
+          "type": "reference",
+          "required": true,
+          "label": "Contact",
+          "to": "contact",
+          "displayField": "label"
+        },
+        "address": {
+          "type": "text",
+          "required": true,
+          "label": "Address"
+        },
+        "normalizedAddress": {
+          "type": "text",
+          "required": true,
+          "label": "Normalized address"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "active",
+          "values": {
+            "active": {
+              "label": "Active"
+            },
+            "bounced": {
+              "label": "Bounced"
+            },
+            "suppressed": {
+              "label": "Suppressed"
+            }
+          }
+        },
+        "primary": {
+          "type": "boolean",
+          "required": true,
+          "label": "Primary",
+          "default": true
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueNormalizedAddress": {
+          "kind": "unique",
+          "fields": ["normalizedAddress"]
+        }
+      }
+    },
+    "audience": {
+      "label": "Audience",
+      "fields": {
+        "key": {
+          "type": "text",
+          "required": true,
+          "label": "Key"
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "description": {
+          "type": "text",
+          "required": false,
+          "label": "Description",
+          "format": "longText"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "active",
+          "values": {
+            "active": {
+              "label": "Active"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueAudienceKey": {
+          "kind": "unique",
+          "fields": ["key"]
+        }
+      }
+    },
+    "subscription": {
+      "label": "Subscription",
+      "fields": {
+        "emailAddress": {
+          "type": "reference",
+          "required": true,
+          "label": "Email address",
+          "to": "email-address",
+          "displayField": "address"
+        },
+        "audience": {
+          "type": "reference",
+          "required": true,
+          "label": "Audience",
+          "to": "audience",
+          "displayField": "label"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "subscribed",
+          "values": {
+            "subscribed": {
+              "label": "Subscribed"
+            },
+            "unsubscribed": {
+              "label": "Unsubscribed"
+            },
+            "pending": {
+              "label": "Pending"
+            }
+          }
+        },
+        "consentedAt": {
+          "type": "text",
+          "required": true,
+          "label": "Consented at"
+        },
+        "sourceKind": {
+          "type": "enum",
+          "required": true,
+          "label": "Source kind",
+          "default": "owner",
+          "values": {
+            "owner": {
+              "label": "Owner"
+            },
+            "import": {
+              "label": "Import"
+            },
+            "site": {
+              "label": "Site"
+            },
+            "event": {
+              "label": "Event"
+            }
+          }
+        },
+        "sourceLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Source"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueEmailAudience": {
+          "kind": "unique",
+          "fields": ["emailAddress", "audience"]
+        }
+      }
+    },
+    "campaign": {
+      "label": "Campaign",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "draft",
+          "values": {
+            "draft": {
+              "label": "Draft"
+            },
+            "active": {
+              "label": "Active"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        },
+        "objective": {
+          "type": "text",
+          "required": false,
+          "label": "Objective",
+          "format": "longText"
+        },
+        "startsOn": {
+          "type": "date",
+          "required": false,
+          "label": "Starts on"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "campaign-message": {
+      "label": "Campaign message",
+      "fields": {
+        "campaign": {
+          "type": "reference",
+          "required": true,
+          "label": "Campaign",
+          "to": "campaign",
+          "displayField": "name"
+        },
+        "subject": {
+          "type": "text",
+          "required": true,
+          "label": "Subject"
+        },
+        "preview": {
+          "type": "text",
+          "required": false,
+          "label": "Preview"
+        },
+        "body": {
+          "type": "text",
+          "required": false,
+          "label": "Body",
+          "format": "markdown"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "draft",
+          "values": {
+            "draft": {
+              "label": "Draft"
+            },
+            "ready": {
+              "label": "Ready"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "broadcast": {
+      "label": "Broadcast",
+      "fields": {
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "campaign": {
+          "type": "reference",
+          "required": true,
+          "label": "Campaign",
+          "to": "campaign",
+          "displayField": "name"
+        },
+        "message": {
+          "type": "reference",
+          "required": true,
+          "label": "Message",
+          "to": "campaign-message",
+          "displayField": "subject"
+        },
+        "audience": {
+          "type": "reference",
+          "required": true,
+          "label": "Audience",
+          "to": "audience",
+          "displayField": "label"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "draft",
+          "values": {
+            "draft": {
+              "label": "Draft"
+            },
+            "scheduled": {
+              "label": "Scheduled"
+            },
+            "sent": {
+              "label": "Sent"
+            },
+            "paused": {
+              "label": "Paused"
+            },
+            "canceled": {
+              "label": "Canceled"
+            }
+          }
+        },
+        "scheduledDate": {
+          "type": "date",
+          "required": false,
+          "label": "Scheduled date"
+        },
+        "sentAt": {
+          "type": "text",
+          "required": false,
+          "label": "Sent at"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "broadcast-recipient": {
+      "label": "Broadcast recipient",
+      "fields": {
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "broadcast": {
+          "type": "reference",
+          "required": true,
+          "label": "Broadcast",
+          "to": "broadcast",
+          "displayField": "label"
+        },
+        "emailAddress": {
+          "type": "reference",
+          "required": true,
+          "label": "Email address",
+          "to": "email-address",
+          "displayField": "address"
+        },
+        "subscription": {
+          "type": "reference",
+          "required": true,
+          "label": "Subscription",
+          "to": "subscription"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "queued",
+          "values": {
+            "queued": {
+              "label": "Queued"
+            },
+            "sent": {
+              "label": "Sent"
+            },
+            "skipped": {
+              "label": "Skipped"
+            },
+            "bounced": {
+              "label": "Bounced"
+            },
+            "failed": {
+              "label": "Failed"
+            }
+          }
+        },
+        "lastEventAt": {
+          "type": "text",
+          "required": false,
+          "label": "Last event at"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueBroadcastEmail": {
+          "kind": "unique",
+          "fields": ["broadcast", "emailAddress"]
+        }
+      }
+    },
+    "delivery-event": {
+      "label": "Delivery event",
+      "fields": {
+        "broadcastRecipient": {
+          "type": "reference",
+          "required": true,
+          "label": "Recipient",
+          "to": "broadcast-recipient",
+          "displayField": "label"
+        },
+        "eventType": {
+          "type": "enum",
+          "required": true,
+          "label": "Event",
+          "default": "queued",
+          "values": {
+            "queued": {
+              "label": "Queued"
+            },
+            "sent": {
+              "label": "Sent"
+            },
+            "delivered": {
+              "label": "Delivered"
+            },
+            "opened": {
+              "label": "Opened"
+            },
+            "clicked": {
+              "label": "Clicked"
+            },
+            "bounced": {
+              "label": "Bounced"
+            },
+            "failed": {
+              "label": "Failed"
+            }
+          }
+        },
+        "occurredAt": {
+          "type": "text",
+          "required": true,
+          "label": "Occurred at"
+        },
+        "detail": {
+          "type": "text",
+          "required": false,
+          "label": "Detail",
+          "format": "longText"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": false
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "relationships": {
+    "contactCompany": {
+      "kind": "toOne",
+      "label": "Company",
+      "from": {
+        "entity": "contact",
+        "field": "company"
+      },
+      "to": {
+        "entity": "company"
+      },
+      "inverse": "companyContacts"
+    },
+    "companyContacts": {
+      "kind": "toMany",
+      "label": "Contacts",
+      "from": {
+        "entity": "company"
+      },
+      "to": {
+        "entity": "contact",
+        "field": "company"
+      },
+      "inverse": "contactCompany"
+    },
+    "emailAddressContact": {
+      "kind": "toOne",
+      "label": "Contact",
+      "from": {
+        "entity": "email-address",
+        "field": "contact"
+      },
+      "to": {
+        "entity": "contact"
+      },
+      "inverse": "contactEmailAddresses"
+    },
+    "contactEmailAddresses": {
+      "kind": "toMany",
+      "label": "Email addresses",
+      "from": {
+        "entity": "contact"
+      },
+      "to": {
+        "entity": "email-address",
+        "field": "contact"
+      },
+      "inverse": "emailAddressContact"
+    },
+    "subscriptionEmailAddress": {
+      "kind": "toOne",
+      "label": "Email address",
+      "from": {
+        "entity": "subscription",
+        "field": "emailAddress"
+      },
+      "to": {
+        "entity": "email-address"
+      },
+      "inverse": "emailAddressSubscriptions"
+    },
+    "emailAddressSubscriptions": {
+      "kind": "toMany",
+      "label": "Subscriptions",
+      "from": {
+        "entity": "email-address"
+      },
+      "to": {
+        "entity": "subscription",
+        "field": "emailAddress"
+      },
+      "inverse": "subscriptionEmailAddress"
+    },
+    "subscriptionAudience": {
+      "kind": "toOne",
+      "label": "Audience",
+      "from": {
+        "entity": "subscription",
+        "field": "audience"
+      },
+      "to": {
+        "entity": "audience"
+      },
+      "inverse": "audienceSubscriptions"
+    },
+    "audienceSubscriptions": {
+      "kind": "toMany",
+      "label": "Subscriptions",
+      "from": {
+        "entity": "audience"
+      },
+      "to": {
+        "entity": "subscription",
+        "field": "audience"
+      },
+      "inverse": "subscriptionAudience"
+    },
+    "emailAddressAudiences": {
+      "kind": "manyToMany",
+      "label": "Audiences",
+      "from": {
+        "entity": "email-address"
+      },
+      "to": {
+        "entity": "audience"
+      },
+      "through": {
+        "entity": "subscription",
+        "fromField": "emailAddress",
+        "toField": "audience",
+        "uniqueConstraint": "uniqueEmailAudience"
+      },
+      "inverse": "audienceEmailAddresses"
+    },
+    "audienceEmailAddresses": {
+      "kind": "manyToMany",
+      "label": "Email addresses",
+      "from": {
+        "entity": "audience"
+      },
+      "to": {
+        "entity": "email-address"
+      },
+      "through": {
+        "entity": "subscription",
+        "fromField": "audience",
+        "toField": "emailAddress",
+        "uniqueConstraint": "uniqueEmailAudience"
+      },
+      "inverse": "emailAddressAudiences"
+    },
+    "campaignMessageCampaign": {
+      "kind": "toOne",
+      "label": "Campaign",
+      "from": {
+        "entity": "campaign-message",
+        "field": "campaign"
+      },
+      "to": {
+        "entity": "campaign"
+      },
+      "inverse": "campaignMessages"
+    },
+    "campaignMessages": {
+      "kind": "toMany",
+      "label": "Messages",
+      "from": {
+        "entity": "campaign"
+      },
+      "to": {
+        "entity": "campaign-message",
+        "field": "campaign"
+      },
+      "inverse": "campaignMessageCampaign"
+    },
+    "broadcastCampaign": {
+      "kind": "toOne",
+      "label": "Campaign",
+      "from": {
+        "entity": "broadcast",
+        "field": "campaign"
+      },
+      "to": {
+        "entity": "campaign"
+      },
+      "inverse": "campaignBroadcasts"
+    },
+    "campaignBroadcasts": {
+      "kind": "toMany",
+      "label": "Broadcasts",
+      "from": {
+        "entity": "campaign"
+      },
+      "to": {
+        "entity": "broadcast",
+        "field": "campaign"
+      },
+      "inverse": "broadcastCampaign"
+    },
+    "broadcastMessage": {
+      "kind": "toOne",
+      "label": "Message",
+      "from": {
+        "entity": "broadcast",
+        "field": "message"
+      },
+      "to": {
+        "entity": "campaign-message"
+      },
+      "inverse": "messageBroadcasts"
+    },
+    "messageBroadcasts": {
+      "kind": "toMany",
+      "label": "Broadcasts",
+      "from": {
+        "entity": "campaign-message"
+      },
+      "to": {
+        "entity": "broadcast",
+        "field": "message"
+      },
+      "inverse": "broadcastMessage"
+    },
+    "broadcastAudience": {
+      "kind": "toOne",
+      "label": "Audience",
+      "from": {
+        "entity": "broadcast",
+        "field": "audience"
+      },
+      "to": {
+        "entity": "audience"
+      },
+      "inverse": "audienceBroadcasts"
+    },
+    "audienceBroadcasts": {
+      "kind": "toMany",
+      "label": "Broadcasts",
+      "from": {
+        "entity": "audience"
+      },
+      "to": {
+        "entity": "broadcast",
+        "field": "audience"
+      },
+      "inverse": "broadcastAudience"
+    },
+    "recipientBroadcast": {
+      "kind": "toOne",
+      "label": "Broadcast",
+      "from": {
+        "entity": "broadcast-recipient",
+        "field": "broadcast"
+      },
+      "to": {
+        "entity": "broadcast"
+      },
+      "inverse": "broadcastRecipients"
+    },
+    "broadcastRecipients": {
+      "kind": "toMany",
+      "label": "Recipients",
+      "from": {
+        "entity": "broadcast"
+      },
+      "to": {
+        "entity": "broadcast-recipient",
+        "field": "broadcast"
+      },
+      "inverse": "recipientBroadcast"
+    },
+    "recipientEmailAddress": {
+      "kind": "toOne",
+      "label": "Email address",
+      "from": {
+        "entity": "broadcast-recipient",
+        "field": "emailAddress"
+      },
+      "to": {
+        "entity": "email-address"
+      },
+      "inverse": "emailAddressBroadcastRecipients"
+    },
+    "emailAddressBroadcastRecipients": {
+      "kind": "toMany",
+      "label": "Broadcast recipients",
+      "from": {
+        "entity": "email-address"
+      },
+      "to": {
+        "entity": "broadcast-recipient",
+        "field": "emailAddress"
+      },
+      "inverse": "recipientEmailAddress"
+    },
+    "recipientSubscription": {
+      "kind": "toOne",
+      "label": "Subscription",
+      "from": {
+        "entity": "broadcast-recipient",
+        "field": "subscription"
+      },
+      "to": {
+        "entity": "subscription"
+      },
+      "inverse": "subscriptionBroadcastRecipients"
+    },
+    "subscriptionBroadcastRecipients": {
+      "kind": "toMany",
+      "label": "Broadcast recipients",
+      "from": {
+        "entity": "subscription"
+      },
+      "to": {
+        "entity": "broadcast-recipient",
+        "field": "subscription"
+      },
+      "inverse": "recipientSubscription"
+    },
+    "deliveryEventRecipient": {
+      "kind": "toOne",
+      "label": "Recipient",
+      "from": {
+        "entity": "delivery-event",
+        "field": "broadcastRecipient"
+      },
+      "to": {
+        "entity": "broadcast-recipient"
+      },
+      "inverse": "broadcastRecipientDeliveryEvents"
+    },
+    "broadcastRecipientDeliveryEvents": {
+      "kind": "toMany",
+      "label": "Delivery events",
+      "from": {
+        "entity": "broadcast-recipient"
+      },
+      "to": {
+        "entity": "delivery-event",
+        "field": "broadcastRecipient"
+      },
+      "inverse": "deliveryEventRecipient"
+    }
+  },
+  "queries": {
+    "companyAll": {
+      "label": "All",
+      "entity": "company",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "companyCustomers": {
+      "label": "Customers",
+      "entity": "company",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "customer"
+      }
+    },
+    "contactAll": {
+      "label": "All",
+      "entity": "contact",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "contactLeads": {
+      "label": "Leads",
+      "entity": "contact",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "lifecycle"
+        },
+        "op": "eq",
+        "value": "lead"
+      }
+    },
+    "contactCustomers": {
+      "label": "Customers",
+      "entity": "contact",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "lifecycle"
+        },
+        "op": "eq",
+        "value": "customer"
+      }
+    },
+    "emailAddressAll": {
+      "label": "All",
+      "entity": "email-address",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "emailAddressActive": {
+      "label": "Active",
+      "entity": "email-address",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "active"
+      }
+    },
+    "audienceAll": {
+      "label": "All",
+      "entity": "audience",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "audienceActive": {
+      "label": "Active",
+      "entity": "audience",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "active"
+      }
+    },
+    "subscriptionAll": {
+      "label": "All",
+      "entity": "subscription",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "subscriptionSubscribed": {
+      "label": "Subscribed",
+      "entity": "subscription",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "subscribed"
+      }
+    },
+    "subscriptionUnsubscribed": {
+      "label": "Unsubscribed",
+      "entity": "subscription",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "unsubscribed"
+      }
+    },
+    "campaignAll": {
+      "label": "All",
+      "entity": "campaign",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "campaignDraft": {
+      "label": "Draft",
+      "entity": "campaign",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "draft"
+      }
+    },
+    "campaignActive": {
+      "label": "Active",
+      "entity": "campaign",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "active"
+      }
+    },
+    "campaignMessageAll": {
+      "label": "All",
+      "entity": "campaign-message",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "campaignMessageReady": {
+      "label": "Ready",
+      "entity": "campaign-message",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "ready"
+      }
+    },
+    "broadcastAll": {
+      "label": "All",
+      "entity": "broadcast",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "broadcastDraft": {
+      "label": "Draft",
+      "entity": "broadcast",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "draft"
+      }
+    },
+    "broadcastScheduled": {
+      "label": "Scheduled",
+      "entity": "broadcast",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "scheduled"
+      }
+    },
+    "broadcastSent": {
+      "label": "Sent",
+      "entity": "broadcast",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "sent"
+      }
+    },
+    "broadcastRecipientAll": {
+      "label": "All",
+      "entity": "broadcast-recipient",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "broadcastRecipientQueued": {
+      "label": "Queued",
+      "entity": "broadcast-recipient",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "queued"
+      }
+    },
+    "broadcastRecipientSent": {
+      "label": "Sent",
+      "entity": "broadcast-recipient",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "sent"
+      }
+    },
+    "broadcastRecipientNeedsReview": {
+      "label": "Needs review",
+      "entity": "broadcast-recipient",
+      "expression": {
+        "kind": "or",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "status"
+            },
+            "op": "eq",
+            "value": "bounced"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "status"
+            },
+            "op": "eq",
+            "value": "failed"
+          }
+        ]
+      }
+    },
+    "deliveryEventAll": {
+      "label": "All",
+      "entity": "delivery-event",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "deliveryEventBounces": {
+      "label": "Bounces",
+      "entity": "delivery-event",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "eventType"
+        },
+        "op": "eq",
+        "value": "bounced"
+      }
+    }
+  },
+  "itemViews": {
+    "companyListItem": {
+      "entity": "company",
+      "fields": {
+        "name": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        }
+      }
+    },
+    "contactListItem": {
+      "entity": "contact",
+      "fields": {
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "company": {
+          "editor": "reference",
+          "commit": "immediate"
+        },
+        "lifecycle": {
+          "editor": "enum",
+          "commit": "immediate"
+        }
+      }
+    },
+    "audienceListItem": {
+      "entity": "audience",
+      "fields": {
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        }
+      }
+    },
+    "campaignListItem": {
+      "entity": "campaign",
+      "fields": {
+        "name": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "startsOn": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "broadcastListItem": {
+      "entity": "broadcast",
+      "fields": {
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "audience": {
+          "editor": "reference",
+          "commit": "immediate"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        }
+      }
+    }
+  },
+  "tableViews": {
+    "companyTable": {
+      "entity": "company",
+      "columns": [
+        {
+          "type": "field",
+          "field": "name",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "website",
+          "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        }
+      ]
+    },
+    "contactTable": {
+      "entity": "contact",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "company",
+          "field": "name",
+          "label": "Company",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "role",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "lifecycle",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "source",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        }
+      ]
+    },
+    "emailAddressTable": {
+      "entity": "email-address",
+      "columns": [
+        {
+          "type": "field",
+          "field": "address",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "contact",
+          "field": "label",
+          "label": "Contact",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "primary",
+          "editor": "boolean",
+          "commit": "immediate",
+          "width": "xs"
+        }
+      ]
+    },
+    "audienceTable": {
+      "entity": "audience",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "key",
+          "editor": "slug",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        }
+      ]
+    },
+    "subscriptionTable": {
+      "entity": "subscription",
+      "columns": [
+        {
+          "type": "referenceField",
+          "referenceField": "emailAddress",
+          "field": "address",
+          "label": "Email",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "audience",
+          "field": "label",
+          "label": "Audience",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "sourceKind",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "consentedAt",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        }
+      ]
+    },
+    "campaignTable": {
+      "entity": "campaign",
+      "columns": [
+        {
+          "type": "field",
+          "field": "name",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "startsOn",
+          "editor": "date",
+          "commit": "field-commit",
+          "width": "sm"
+        }
+      ]
+    },
+    "campaignMessageTable": {
+      "entity": "campaign-message",
+      "columns": [
+        {
+          "type": "referenceField",
+          "referenceField": "campaign",
+          "field": "name",
+          "label": "Campaign",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "subject",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "preview",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        }
+      ]
+    },
+    "broadcastTable": {
+      "entity": "broadcast",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "audience",
+          "field": "label",
+          "label": "Audience",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "message",
+          "field": "subject",
+          "label": "Message",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "scheduledDate",
+          "editor": "date",
+          "commit": "field-commit",
+          "width": "sm"
+        }
+      ]
+    },
+    "broadcastRecipientTable": {
+      "entity": "broadcast-recipient",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "broadcast",
+          "field": "label",
+          "label": "Broadcast",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "emailAddress",
+          "field": "address",
+          "label": "Email",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "lastEventAt",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        }
+      ]
+    },
+    "deliveryEventTable": {
+      "entity": "delivery-event",
+      "columns": [
+        {
+          "type": "referenceField",
+          "referenceField": "broadcastRecipient",
+          "field": "label",
+          "label": "Recipient",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "eventType",
+          "width": "sm",
+          "display": "readOnly"
+        },
+        {
+          "type": "field",
+          "field": "occurredAt",
+          "width": "md",
+          "display": "readOnly"
+        },
+        {
+          "type": "field",
+          "field": "detail",
+          "width": "lg",
+          "display": "readOnly"
+        }
+      ]
+    }
+  },
+  "views": {
+    "companyHome": {
+      "type": "collection",
+      "label": "Companies",
+      "entity": "company",
+      "queries": [
+        {
+          "query": "companyAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "companyCustomers",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "companyAll",
+      "result": {
+        "type": "table",
+        "tableView": "companyTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "companyCreate"
+        }
+      ]
+    },
+    "contactHome": {
+      "type": "collection",
+      "label": "Contacts",
+      "entity": "contact",
+      "queries": [
+        {
+          "query": "contactAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contactLeads",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contactCustomers",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "contactAll",
+      "result": {
+        "type": "table",
+        "tableView": "contactTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "contactCreate"
+        }
+      ]
+    },
+    "emailAddressHome": {
+      "type": "collection",
+      "label": "Email addresses",
+      "entity": "email-address",
+      "queries": [
+        {
+          "query": "emailAddressAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "emailAddressActive",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "emailAddressAll",
+      "result": {
+        "type": "table",
+        "tableView": "emailAddressTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "emailAddressCreate"
+        }
+      ]
+    },
+    "audienceHome": {
+      "type": "collection",
+      "label": "Audiences",
+      "entity": "audience",
+      "queries": [
+        {
+          "query": "audienceAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "audienceActive",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "audienceAll",
+      "result": {
+        "type": "table",
+        "tableView": "audienceTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "audienceCreate"
+        }
+      ]
+    },
+    "subscriptionHome": {
+      "type": "collection",
+      "label": "Subscriptions",
+      "entity": "subscription",
+      "queries": [
+        {
+          "query": "subscriptionAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "subscriptionSubscribed",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "subscriptionUnsubscribed",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "subscriptionAll",
+      "result": {
+        "type": "table",
+        "tableView": "subscriptionTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "subscriptionCreate"
+        }
+      ]
+    },
+    "campaignHome": {
+      "type": "collection",
+      "label": "Campaigns",
+      "entity": "campaign",
+      "queries": [
+        {
+          "query": "campaignAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "campaignDraft",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "campaignActive",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "campaignAll",
+      "result": {
+        "type": "table",
+        "tableView": "campaignTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "campaignCreate"
+        }
+      ]
+    },
+    "campaignMessageHome": {
+      "type": "collection",
+      "label": "Messages",
+      "entity": "campaign-message",
+      "queries": [
+        {
+          "query": "campaignMessageAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "campaignMessageReady",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "campaignMessageAll",
+      "result": {
+        "type": "table",
+        "tableView": "campaignMessageTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "campaignMessageCreate"
+        }
+      ]
+    },
+    "broadcastHome": {
+      "type": "collection",
+      "label": "Broadcasts",
+      "entity": "broadcast",
+      "queries": [
+        {
+          "query": "broadcastAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastDraft",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastScheduled",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastSent",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "broadcastAll",
+      "result": {
+        "type": "table",
+        "tableView": "broadcastTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "broadcastCreate"
+        }
+      ]
+    },
+    "broadcastRecipientHome": {
+      "type": "collection",
+      "label": "Recipients",
+      "entity": "broadcast-recipient",
+      "queries": [
+        {
+          "query": "broadcastRecipientAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastRecipientQueued",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastRecipientSent",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "broadcastRecipientNeedsReview",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "broadcastRecipientAll",
+      "result": {
+        "type": "table",
+        "tableView": "broadcastRecipientTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "broadcastRecipientCreate"
+        }
+      ]
+    },
+    "deliveryEventHome": {
+      "type": "collection",
+      "label": "Delivery events",
+      "entity": "delivery-event",
+      "queries": [
+        {
+          "query": "deliveryEventAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "deliveryEventBounces",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "deliveryEventAll",
+      "result": {
+        "type": "table",
+        "tableView": "deliveryEventTable"
+      }
+    },
+    "companyCreate": {
+      "type": "create",
+      "entity": "company",
+      "fields": {
+        "name": {
+          "editor": "text"
+        },
+        "website": {
+          "editor": "href"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "notes": {
+          "editor": "textarea"
+        }
+      }
+    },
+    "contactCreate": {
+      "type": "create",
+      "entity": "contact",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "company": {
+          "editor": "reference"
+        },
+        "role": {
+          "editor": "text"
+        },
+        "lifecycle": {
+          "editor": "enum"
+        },
+        "source": {
+          "editor": "enum"
+        },
+        "notes": {
+          "editor": "textarea"
+        }
+      }
+    },
+    "emailAddressCreate": {
+      "type": "create",
+      "entity": "email-address",
+      "fields": {
+        "contact": {
+          "editor": "reference"
+        },
+        "address": {
+          "editor": "text"
+        },
+        "normalizedAddress": {
+          "editor": "text"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "primary": {
+          "editor": "boolean"
+        }
+      }
+    },
+    "audienceCreate": {
+      "type": "create",
+      "entity": "audience",
+      "fields": {
+        "key": {
+          "editor": "slug"
+        },
+        "label": {
+          "editor": "text"
+        },
+        "description": {
+          "editor": "textarea"
+        },
+        "status": {
+          "editor": "enum"
+        }
+      }
+    },
+    "subscriptionCreate": {
+      "type": "create",
+      "entity": "subscription",
+      "fields": {
+        "emailAddress": {
+          "editor": "reference"
+        },
+        "audience": {
+          "editor": "reference"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "consentedAt": {
+          "editor": "text"
+        },
+        "sourceKind": {
+          "editor": "enum"
+        },
+        "sourceLabel": {
+          "editor": "text"
+        }
+      }
+    },
+    "campaignCreate": {
+      "type": "create",
+      "entity": "campaign",
+      "fields": {
+        "name": {
+          "editor": "text"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "objective": {
+          "editor": "textarea"
+        },
+        "startsOn": {
+          "editor": "date"
+        }
+      }
+    },
+    "campaignMessageCreate": {
+      "type": "create",
+      "entity": "campaign-message",
+      "fields": {
+        "campaign": {
+          "editor": "reference"
+        },
+        "subject": {
+          "editor": "text"
+        },
+        "preview": {
+          "editor": "text"
+        },
+        "body": {
+          "editor": "markdown"
+        },
+        "status": {
+          "editor": "enum"
+        }
+      }
+    },
+    "broadcastCreate": {
+      "type": "create",
+      "entity": "broadcast",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "campaign": {
+          "editor": "reference"
+        },
+        "message": {
+          "editor": "reference"
+        },
+        "audience": {
+          "editor": "reference"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "scheduledDate": {
+          "editor": "date"
+        },
+        "sentAt": {
+          "editor": "text"
+        }
+      }
+    },
+    "broadcastRecipientCreate": {
+      "type": "create",
+      "entity": "broadcast-recipient",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "broadcast": {
+          "editor": "reference"
+        },
+        "emailAddress": {
+          "editor": "reference"
+        },
+        "subscription": {
+          "editor": "reference"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "lastEventAt": {
+          "editor": "text"
+        }
+      }
+    }
+  },
+  "screens": {
+    "contacts": {
+      "type": "workspace",
+      "label": "Contacts",
+      "path": "/",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "contacts",
+            "type": "collection",
+            "view": "contactHome"
+          },
+          {
+            "id": "email-addresses",
+            "type": "collection",
+            "view": "emailAddressHome"
+          },
+          {
+            "id": "companies",
+            "type": "collection",
+            "view": "companyHome"
+          }
+        ]
+      }
+    },
+    "audiences": {
+      "type": "workspace",
+      "label": "Audiences",
+      "path": "/audiences",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "audiences",
+            "type": "collection",
+            "view": "audienceHome"
+          },
+          {
+            "id": "subscriptions",
+            "type": "collection",
+            "view": "subscriptionHome"
+          }
+        ]
+      }
+    },
+    "campaigns": {
+      "type": "workspace",
+      "label": "Campaigns",
+      "path": "/campaigns",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "campaigns",
+            "type": "collection",
+            "view": "campaignHome"
+          },
+          {
+            "id": "messages",
+            "type": "collection",
+            "view": "campaignMessageHome"
+          }
+        ]
+      }
+    },
+    "broadcasts": {
+      "type": "workspace",
+      "label": "Broadcasts",
+      "path": "/broadcasts",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "broadcasts",
+            "type": "collection",
+            "view": "broadcastHome"
+          },
+          {
+            "id": "recipients",
+            "type": "collection",
+            "view": "broadcastRecipientHome"
+          },
+          {
+            "id": "delivery-events",
+            "type": "collection",
+            "view": "deliveryEventHome"
+          }
+        ]
+      }
+    }
+  }
+}
