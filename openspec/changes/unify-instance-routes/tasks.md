@@ -131,10 +131,18 @@ Evidence 2026-06-02 grug:
 
 ## 9. Generated UI
 
-- [ ] 9.1 Replace separate app route, domain mapping, and redirect intent lists with one Routes surface.
-- [ ] 9.2 Add route filters or grouping for instance paths, host mappings, public Site routes, redirects, app installs, and provider configs.
-- [ ] 9.3 Render mount and redirect edit controls from route kind, target profile, surface, app install, provider config, and redirect fields.
-- [ ] 9.4 Render provider evidence, cleanup history, deployment attempts, and drift summaries separately from desired route fields.
+- [x] 9.1 Replace separate app route, domain mapping, and redirect intent lists with one Routes surface.
+- [x] 9.2 Add route filters or grouping for instance paths, host mappings, public Site routes, redirects, app installs, and provider configs.
+- [x] 9.3 Render mount and redirect edit controls from route kind, target profile, surface, app install, provider config, and redirect fields.
+- [x] 9.4 Render provider evidence, cleanup history, deployment attempts, and drift summaries separately from desired route fields.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/shared/instance-control-plane.ts` so app installs keep their generated Apps surface while `route` records own one generated `/routes` surface with mount, host-mapping, redirect, instance-path, app-install, and public Site filters, provider-config grouping, row edit actions, and kind/profile-aware route create/edit field visibility.
+- Changed `src/app/routes/instance-shell.tsx` so desired app path, exact-host mapping, and redirect intent editing moves to the generated Routes surface while provider plan, provider evidence, cleanup actions, deployment attempts, and drift summaries remain separate from desired route fields.
+- Updated generated UI and route shell tests for the unified Routes surface, route filters/edit actions, and provider evidence separation.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: `bun browser close && bun browser --ignore-https-errors --session grug-generated-routes-smoke-fresh batch --bail "open https://unify-instance-routes.formless.local/" "wait 1500" "snapshot -i --max-output 10000" "errors"` loaded the instance shell with generated Routes, Route provider state, and Deployments surfaces with no browser errors; route filter and provider-config grouping shape is covered by generated UI tests.
 
 ## 10. Deploy And Destroy Reconciliation
 

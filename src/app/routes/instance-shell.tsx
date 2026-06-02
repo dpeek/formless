@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
-import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import {
   ModalBody,
   ModalClose,
@@ -21,24 +20,15 @@ import {
   fetchInstanceAppInstalls,
 } from "../../client/app-installs.ts";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
-import {
-  createInstanceDomainMapping,
-  deleteInstanceDomainMapping,
-  DomainMappingApiError,
-  fetchInstanceDomainMappings,
-  forgetInstanceDomainMapping,
-} from "../../client/domain-mappings.ts";
+import { fetchInstanceDomainMappings } from "../../client/domain-mappings.ts";
 import {
   applyInstanceDomainProviderPlan,
-  createInstanceDomainProviderRedirect,
   deleteInstanceDomainProviderResource,
-  deleteInstanceDomainProviderRedirect,
   DomainProviderApiError,
   fetchInstanceDomainProviderApplyJob,
   fetchInstanceDomainProviderDeleteJob,
   fetchInstanceDomainProviderPlan,
   fetchInstanceDomainProviderRedirects,
-  forgetInstanceDomainProviderRedirect,
   markInstanceDomainProviderResourceManuallyRemoved,
 } from "../../client/domain-provider.ts";
 import {
@@ -57,13 +47,8 @@ import type {
   InstanceDomainProviderDeleteJob,
   InstanceDomainProviderDeleteTarget,
   InstanceDomainProviderPlanResponse,
-  InstanceDomainProviderRedirectIntent,
 } from "../../shared/domain-provider-api.ts";
-import type {
-  InstanceDomainMapping,
-  InstanceDomainMappingAppliedState,
-  InstanceDomainMappingProfile,
-} from "../../shared/instance-domain-mappings.ts";
+import type { InstanceDomainMappingAppliedState } from "../../shared/instance-domain-mappings.ts";
 import { HomeRoute } from "./home.tsx";
 
 export type PackageInstallDraft = {
@@ -72,19 +57,6 @@ export type PackageInstallDraft = {
 };
 
 export type PackageInstallDrafts = Partial<Record<PackageAppKey, PackageInstallDraft>>;
-
-export type DomainMappingDraft = {
-  host: string;
-  profile: InstanceDomainMappingProfile;
-  targetInstallId: string;
-};
-
-export type DomainRedirectDraft = {
-  fromHost: string;
-  targetMode: "host" | "url";
-  toHost: string;
-  toUrl: string;
-};
 
 type DomainProviderDeleteActionInput = {
   host: string;
@@ -103,11 +75,6 @@ export type InstanceShellRouteState =
   | { status: "loading" }
   | {
       domainAppliedStates: InstanceDomainMappingAppliedState[];
-      domainMappingDeletingKey?: string;
-      domainMappingError?: string;
-      domainMappingForgettingKey?: string;
-      domainMappingSubmitting: boolean;
-      domainMappings: InstanceDomainMapping[];
       domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
       domainProviderApplying?: boolean;
       domainProviderApplyError?: string;
@@ -123,11 +90,6 @@ export type InstanceShellRouteState =
       domainProviderPlanError?: string;
       domainProviderPlanLoading?: boolean;
       deploymentStatus?: InstanceDeploymentStatusResponse;
-      domainRedirectDeletingKey?: string;
-      domainRedirectDraftError?: string;
-      domainRedirectForgettingKey?: string;
-      domainRedirectIntents: InstanceDomainProviderRedirectIntent[];
-      domainRedirectSubmitting: boolean;
       installError?: string;
       installErrorPackageAppKey?: PackageAppKey;
       installing: boolean;
@@ -141,17 +103,6 @@ export function InstanceShellRoute() {
   const [, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
-  const [domainDraft, setDomainDraft] = useState<DomainMappingDraft>({
-    host: "",
-    profile: "publicSite",
-    targetInstallId: "",
-  });
-  const [domainRedirectDraft, setDomainRedirectDraft] = useState<DomainRedirectDraft>({
-    fromHost: "",
-    targetMode: "host",
-    toHost: "",
-    toUrl: "",
-  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -179,18 +130,12 @@ export function InstanceShellRoute() {
 
         setState({
           domainAppliedStates: domainResponse.appliedStates,
-          domainMappingDeletingKey: undefined,
-          domainMappingSubmitting: false,
-          domainMappings: domainResponse.mappings,
           domainProviderAppliedResources: redirectResponse.appliedResources,
           domainProviderApplying: false,
           domainProviderDeletingKey: undefined,
           domainProviderPlan: providerPlanResponse,
           domainProviderPlanLoading: false,
           ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
-          domainRedirectDeletingKey: undefined,
-          domainRedirectIntents: redirectResponse.redirectIntents,
-          domainRedirectSubmitting: false,
           installing: false,
           installs: appResponse.installs,
           packages: appResponse.packages,
@@ -201,12 +146,6 @@ export function InstanceShellRoute() {
             currentDrafts: current,
             installs: appResponse.installs,
             packages: appResponse.packages,
-          }),
-        );
-        setDomainDraft((current) =>
-          initializeDomainMappingDraft({
-            currentDraft: current,
-            installs: appResponse.installs,
           }),
         );
       } catch (error) {
@@ -263,11 +202,6 @@ export function InstanceShellRoute() {
 
       setState({
         domainAppliedStates: state.domainAppliedStates,
-        domainMappingDeletingKey: state.domainMappingDeletingKey,
-        domainMappingError: state.domainMappingError,
-        domainMappingForgettingKey: state.domainMappingForgettingKey,
-        domainMappingSubmitting: false,
-        domainMappings: state.domainMappings,
         domainProviderAppliedResources: state.domainProviderAppliedResources,
         domainProviderApplying: state.domainProviderApplying,
         domainProviderApplyError: state.domainProviderApplyError,
@@ -283,11 +217,6 @@ export function InstanceShellRoute() {
         domainProviderPlanError: state.domainProviderPlanError,
         domainProviderPlanLoading: state.domainProviderPlanLoading,
         deploymentStatus: state.deploymentStatus,
-        domainRedirectDeletingKey: state.domainRedirectDeletingKey,
-        domainRedirectDraftError: state.domainRedirectDraftError,
-        domainRedirectForgettingKey: state.domainRedirectForgettingKey,
-        domainRedirectIntents: state.domainRedirectIntents,
-        domainRedirectSubmitting: state.domainRedirectSubmitting,
         installing: false,
         installs: response.installs,
         packages: state.packages,
@@ -303,12 +232,6 @@ export function InstanceShellRoute() {
           packages: state.packages,
         }),
       );
-      setDomainDraft((current) =>
-        initializeDomainMappingDraft({
-          currentDraft: current,
-          installs: response.installs,
-        }),
-      );
       setLocation(response.install.adminRoute);
     } catch (error) {
       const message =
@@ -322,301 +245,6 @@ export function InstanceShellRoute() {
         installingPackageAppKey: undefined,
         installError: message,
         installErrorPackageAppKey: packageAppKey,
-      });
-    }
-  }
-
-  async function submitDomainMapping(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (state.status !== "ready" || state.domainMappingSubmitting) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainMappingError: undefined,
-      domainMappingSubmitting: true,
-    });
-
-    try {
-      const normalizedDraft = initializeDomainMappingDraft({
-        currentDraft: domainDraft,
-        installs: state.installs,
-      });
-      const response = await createInstanceDomainMapping({
-        enabled: true,
-        host: normalizedDraft.host,
-        profile: normalizedDraft.profile,
-        ...(normalizedDraft.profile === "instance"
-          ? {}
-          : { targetInstallId: normalizedDraft.targetInstallId }),
-      });
-
-      setState({
-        ...state,
-        domainMappingDeletingKey: undefined,
-        domainMappingError: undefined,
-        domainMappingSubmitting: false,
-        domainMappings: response.mappings,
-      });
-      setDomainDraft((current) => ({
-        host: "",
-        profile: current.profile,
-        targetInstallId: current.targetInstallId,
-      }));
-    } catch (error) {
-      const message =
-        error instanceof DomainMappingApiError || error instanceof Error
-          ? error.message
-          : "Domain mapping failed.";
-
-      setState({
-        ...state,
-        domainMappingError: message,
-        domainMappingSubmitting: false,
-      });
-    }
-  }
-
-  async function submitDeleteDomainMapping(mapping: InstanceDomainMapping) {
-    if (
-      state.status !== "ready" ||
-      state.domainMappingSubmitting ||
-      state.domainMappingDeletingKey ||
-      state.domainMappingForgettingKey
-    ) {
-      return;
-    }
-
-    if (!window.confirm(`Remove desired mapping for ${mapping.host}?`)) {
-      return;
-    }
-
-    const key = domainMappingKey(mapping);
-
-    setState({
-      ...state,
-      domainMappingDeletingKey: key,
-      domainMappingError: undefined,
-    });
-
-    try {
-      const response = await deleteInstanceDomainMapping({
-        host: mapping.host,
-        profile: mapping.profile,
-      });
-
-      setState({
-        ...state,
-        domainMappingDeletingKey: undefined,
-        domainMappingError: undefined,
-        domainMappingSubmitting: false,
-        domainMappings: response.mappings,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainMappingApiError || error instanceof Error
-          ? error.message
-          : "Domain mapping delete failed.";
-
-      setState({
-        ...state,
-        domainMappingDeletingKey: undefined,
-        domainMappingError: message,
-      });
-    }
-  }
-
-  async function submitForgetDomainMapping(mapping: InstanceDomainMapping) {
-    if (
-      state.status !== "ready" ||
-      state.domainMappingSubmitting ||
-      state.domainMappingDeletingKey ||
-      state.domainMappingForgettingKey
-    ) {
-      return;
-    }
-
-    if (!window.confirm(`Forget disabled route for ${mapping.host}?`)) {
-      return;
-    }
-
-    const key = domainMappingKey(mapping);
-
-    setState({
-      ...state,
-      domainMappingError: undefined,
-      domainMappingForgettingKey: key,
-    });
-
-    try {
-      const response = await forgetInstanceDomainMapping({
-        host: mapping.host,
-        profile: mapping.profile,
-      });
-
-      setState({
-        ...state,
-        domainMappingError: undefined,
-        domainMappingForgettingKey: undefined,
-        domainMappingSubmitting: false,
-        domainMappings: response.mappings,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainMappingApiError || error instanceof Error
-          ? error.message
-          : "Domain mapping forget failed.";
-
-      setState({
-        ...state,
-        domainMappingError: message,
-        domainMappingForgettingKey: undefined,
-      });
-    }
-  }
-
-  async function submitDomainRedirect(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (state.status !== "ready" || state.domainRedirectSubmitting) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainRedirectDraftError: undefined,
-      domainRedirectSubmitting: true,
-    });
-
-    try {
-      const response = await createInstanceDomainProviderRedirect({
-        enabled: true,
-        fromHost: domainRedirectDraft.fromHost,
-        preservePath: true,
-        preserveQueryString: true,
-        statusCode: 301,
-        ...(domainRedirectDraft.targetMode === "host"
-          ? { toHost: domainRedirectDraft.toHost }
-          : { toUrl: domainRedirectDraft.toUrl }),
-      });
-
-      setState({
-        ...state,
-        domainRedirectDeletingKey: undefined,
-        domainRedirectDraftError: undefined,
-        domainRedirectIntents: response.redirectIntents,
-        domainRedirectSubmitting: false,
-      });
-      setDomainRedirectDraft((current) => ({
-        fromHost: "",
-        targetMode: current.targetMode,
-        toHost: "",
-        toUrl: "",
-      }));
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Domain redirect failed.";
-
-      setState({
-        ...state,
-        domainRedirectDraftError: message,
-        domainRedirectSubmitting: false,
-      });
-    }
-  }
-
-  async function submitDeleteDomainRedirect(redirect: InstanceDomainProviderRedirectIntent) {
-    if (
-      state.status !== "ready" ||
-      state.domainRedirectSubmitting ||
-      state.domainRedirectDeletingKey ||
-      state.domainRedirectForgettingKey
-    ) {
-      return;
-    }
-
-    if (!window.confirm(`Remove desired redirect for ${redirect.fromHost}?`)) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainRedirectDeletingKey: redirect.fromHost,
-      domainRedirectDraftError: undefined,
-    });
-
-    try {
-      const response = await deleteInstanceDomainProviderRedirect({
-        fromHost: redirect.fromHost,
-      });
-
-      setState({
-        ...state,
-        domainRedirectDeletingKey: undefined,
-        domainRedirectDraftError: undefined,
-        domainRedirectIntents: response.redirectIntents,
-        domainRedirectSubmitting: false,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Domain redirect delete failed.";
-
-      setState({
-        ...state,
-        domainRedirectDeletingKey: undefined,
-        domainRedirectDraftError: message,
-      });
-    }
-  }
-
-  async function submitForgetDomainRedirect(redirect: InstanceDomainProviderRedirectIntent) {
-    if (
-      state.status !== "ready" ||
-      state.domainRedirectSubmitting ||
-      state.domainRedirectDeletingKey ||
-      state.domainRedirectForgettingKey
-    ) {
-      return;
-    }
-
-    if (!window.confirm(`Forget disabled redirect for ${redirect.fromHost}?`)) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainRedirectDraftError: undefined,
-      domainRedirectForgettingKey: redirect.fromHost,
-    });
-
-    try {
-      const response = await forgetInstanceDomainProviderRedirect({
-        fromHost: redirect.fromHost,
-      });
-
-      setState({
-        ...state,
-        domainRedirectDraftError: undefined,
-        domainRedirectForgettingKey: undefined,
-        domainRedirectIntents: response.redirectIntents,
-        domainRedirectSubmitting: false,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Domain redirect forget failed.";
-
-      setState({
-        ...state,
-        domainRedirectDraftError: message,
-        domainRedirectForgettingKey: undefined,
       });
     }
   }
@@ -789,7 +417,7 @@ export function InstanceShellRoute() {
         domainProviderPlan: {
           config: response.config,
           plan: response.plan,
-          redirectIntents: state.domainProviderPlan?.redirectIntents ?? state.domainRedirectIntents,
+          redirectIntents: state.domainProviderPlan?.redirectIntents ?? [],
         },
       });
     } catch (error) {
@@ -864,23 +492,13 @@ export function InstanceShellRoute() {
 
   return (
     <InstanceShellRouteView
-      domainDraft={domainDraft}
-      domainRedirectDraft={domainRedirectDraft}
       installDrafts={installDrafts}
-      onDomainDraftChange={setDomainDraft}
-      onDomainRedirectDraftChange={setDomainRedirectDraft}
-      onDeleteDomainRedirect={submitDeleteDomainRedirect}
-      onDeleteDomainMapping={submitDeleteDomainMapping}
       onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
-      onForgetDomainMapping={submitForgetDomainMapping}
-      onForgetDomainRedirect={submitForgetDomainRedirect}
       onMarkDomainProviderResourceManuallyRemoved={submitMarkDomainProviderResourceManuallyRemoved}
       onRefreshDomainProviderApplyJob={refreshDomainProviderApplyJob}
       onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
       onRefreshDomainProviderPlan={refreshDomainProviderPlan}
       onSubmitDomainProviderApply={submitApplyDomainProviderPlan}
-      onSubmitDomainRedirect={submitDomainRedirect}
-      onSubmitDomainMapping={submitDomainMapping}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
           ...current,
@@ -908,44 +526,24 @@ async function fetchOptionalInstanceDeploymentStatus(
 }
 
 export function InstanceShellRouteView({
-  domainDraft,
-  domainRedirectDraft,
   installDrafts = {},
-  onDomainDraftChange,
-  onDomainRedirectDraftChange,
-  onDeleteDomainRedirect,
-  onDeleteDomainMapping,
   onDeleteDomainProviderResource,
-  onForgetDomainMapping,
-  onForgetDomainRedirect,
   onMarkDomainProviderResourceManuallyRemoved,
   onRefreshDomainProviderApplyJob,
   onRefreshDomainProviderDeleteJob,
   onRefreshDomainProviderPlan,
   onSubmitDomainProviderApply,
-  onSubmitDomainRedirect,
-  onSubmitDomainMapping,
   onInstallDraftChange,
   onSubmitInstall,
   state,
 }: {
-  domainDraft?: DomainMappingDraft;
-  domainRedirectDraft?: DomainRedirectDraft;
   installDrafts?: PackageInstallDrafts;
-  onDomainDraftChange?: (draft: DomainMappingDraft) => void;
-  onDomainRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
-  onDeleteDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
-  onDeleteDomainMapping?: (mapping: InstanceDomainMapping) => void;
   onDeleteDomainProviderResource?: (input: DomainProviderDeleteActionInput) => void;
-  onForgetDomainMapping?: (mapping: InstanceDomainMapping) => void;
-  onForgetDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
   onRefreshDomainProviderApplyJob?: () => void;
   onRefreshDomainProviderDeleteJob?: () => void;
   onRefreshDomainProviderPlan?: () => void;
   onSubmitDomainProviderApply?: () => void;
-  onSubmitDomainRedirect?: (event: React.FormEvent<HTMLFormElement>) => void;
-  onSubmitDomainMapping?: (event: React.FormEvent<HTMLFormElement>) => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
   state: InstanceShellRouteState;
@@ -979,31 +577,14 @@ export function InstanceShellRouteView({
         installDisabled={state.installing || state.packages.length === 0}
         onInstall={() => setInstallDialogOpen(true)}
       />
-      <CustomDomainsSection
-        draft={
-          domainDraft ??
-          initializeDomainMappingDraft({
-            currentDraft: { host: "", profile: "publicSite", targetInstallId: "" },
-            installs: state.installs,
-          })
-        }
-        onDraftChange={onDomainDraftChange}
-        onDelete={onDeleteDomainMapping}
+      <GeneratedInstanceRoutesSection />
+      <RouteProviderOperationsSection
         onDeleteProvider={onDeleteDomainProviderResource}
-        onDeleteRedirect={onDeleteDomainRedirect}
-        onForget={onForgetDomainMapping}
-        onForgetRedirect={onForgetDomainRedirect}
         onManualCleanup={onMarkDomainProviderResourceManuallyRemoved}
         onRefreshApplyJob={onRefreshDomainProviderApplyJob}
         onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
         onRefreshPlan={onRefreshDomainProviderPlan}
-        onRedirectDraftChange={onDomainRedirectDraftChange}
-        onRedirectSubmit={onSubmitDomainRedirect}
         onSubmitProviderApply={onSubmitDomainProviderApply}
-        redirectDraft={
-          domainRedirectDraft ?? { fromHost: "", targetMode: "host", toHost: "", toUrl: "" }
-        }
-        onSubmit={onSubmitDomainMapping}
         state={state}
       />
       <GeneratedDeploymentManagementSection deploymentStatus={state.deploymentStatus} />
@@ -1093,73 +674,40 @@ function GeneratedInstanceAppsSection({
   );
 }
 
-function CustomDomainsSection({
-  draft,
-  onDraftChange,
-  onDelete,
+function GeneratedInstanceRoutesSection() {
+  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
+
+  return (
+    <section aria-label="Routes" className="space-y-3">
+      <div data-formless-control-plane-screen="routes">
+        <HomeRoute
+          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
+          screenPath="/routes"
+          target={controlPlaneTarget}
+        />
+      </div>
+    </section>
+  );
+}
+
+function RouteProviderOperationsSection({
   onDeleteProvider,
-  onDeleteRedirect,
-  onForget,
-  onForgetRedirect,
   onManualCleanup,
   onRefreshApplyJob,
   onRefreshDeleteJob,
   onRefreshPlan,
-  onRedirectDraftChange,
-  onRedirectSubmit,
   onSubmitProviderApply,
-  redirectDraft,
-  onSubmit,
   state,
 }: {
-  draft: DomainMappingDraft;
-  onDraftChange?: (draft: DomainMappingDraft) => void;
-  onDelete?: (mapping: InstanceDomainMapping) => void;
   onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onDeleteRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
-  onForget?: (mapping: InstanceDomainMapping) => void;
-  onForgetRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
   onRefreshApplyJob?: () => void;
   onRefreshDeleteJob?: () => void;
   onRefreshPlan?: () => void;
-  onRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
-  onRedirectSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   onSubmitProviderApply?: () => void;
-  redirectDraft: DomainRedirectDraft;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
 }) {
-  const hostInputId = useMemo(() => "domain-mapping-host", []);
-  const profileSelectId = useMemo(() => "domain-mapping-profile", []);
-  const targetSelectId = useMemo(() => "domain-mapping-target", []);
-  const redirectFromInputId = useMemo(() => "domain-redirect-from-host", []);
-  const redirectModeSelectId = useMemo(() => "domain-redirect-target-mode", []);
-  const redirectTargetInputId = useMemo(() => "domain-redirect-target", []);
-  const normalizedDraft = initializeDomainMappingDraft({
-    currentDraft: draft,
-    installs: state.installs,
-  });
-  const targetInstalls = domainTargetInstalls(normalizedDraft.profile, state.installs);
-  const isDisabled =
-    state.domainMappingSubmitting ||
-    state.domainMappingDeletingKey !== undefined ||
-    (normalizedDraft.profile !== "instance" && targetInstalls.length === 0);
-  const orphanAppliedStates = state.domainAppliedStates.filter(
-    (appliedState) =>
-      !state.domainMappings.some(
-        (mapping) => mapping.host === appliedState.host && mapping.profile === appliedState.profile,
-      ),
-  );
   const providerAppliedResources = state.domainProviderAppliedResources ?? [];
-  const orphanProviderAppliedResources = providerAppliedResources.filter(
-    (resource) =>
-      !state.domainRedirectIntents.some((redirect) => redirect.fromHost === resource.host),
-  );
-  const redirectDisabled =
-    state.domainRedirectSubmitting ||
-    state.domainRedirectDeletingKey !== undefined ||
-    state.domainRedirectForgettingKey !== undefined;
   const providerPlanLoading = state.domainProviderPlanLoading ?? false;
   const providerApplying = state.domainProviderApplying ?? false;
   const providerApplyDisabled =
@@ -1168,15 +716,16 @@ function CustomDomainsSection({
     state.domainProviderPlan === undefined ||
     !state.domainProviderPlan.config.jobReady ||
     state.domainProviderPlan.plan.blockers.length > 0;
+  const evidenceCount = state.domainAppliedStates.length + providerAppliedResources.length;
 
   return (
-    <section className="space-y-3" aria-labelledby="custom-domains-heading">
+    <section className="space-y-3" aria-labelledby="route-provider-heading">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
         <div className="flex items-center gap-2">
-          <h2 id="custom-domains-heading" className="text-sm font-semibold">
-            Custom domains
+          <h2 id="route-provider-heading" className="text-sm font-semibold">
+            Route provider state
           </h2>
-          <span className="text-xs text-muted-fg">{state.domainMappings.length}</span>
+          <span className="text-xs text-muted-fg">{evidenceCount}</span>
         </div>
       </div>
       <DomainProviderControlPanel
@@ -1194,197 +743,32 @@ function CustomDomainsSection({
         applyError={state.domainProviderApplyError}
         applyJob={state.domainProviderApplyJob}
       />
-      <form
-        className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(12rem,16rem)_auto]"
-        onSubmit={onSubmit}
-      >
-        <TextField
-          isDisabled={state.domainMappingSubmitting}
-          isRequired
-          onChange={(host) => onDraftChange?.({ ...normalizedDraft, host })}
-          value={normalizedDraft.host}
-        >
-          <Label htmlFor={hostInputId}>Hostname</Label>
-          <Input id={hostInputId} placeholder="www.example.com" />
-        </TextField>
-        <div className="space-y-1">
-          <Label htmlFor={profileSelectId}>Profile</Label>
-          <NativeSelect>
-            <NativeSelectContent
-              disabled={state.domainMappingSubmitting}
-              id={profileSelectId}
-              onChange={(event) =>
-                onDraftChange?.(
-                  initializeDomainMappingDraft({
-                    currentDraft: {
-                      ...normalizedDraft,
-                      profile: event.target.value as InstanceDomainMappingProfile,
-                    },
-                    installs: state.installs,
-                  }),
-                )
-              }
-              required
-              value={normalizedDraft.profile}
-            >
-              {DOMAIN_PROFILE_OPTIONS.map((option) => (
-                <option key={option.profile} value={option.profile}>
-                  {option.label}
-                </option>
-              ))}
-            </NativeSelectContent>
-          </NativeSelect>
-        </div>
-        {normalizedDraft.profile === "instance" ? (
-          <div className="space-y-1">
-            <Label>Target</Label>
-            <div className="flex min-h-9 items-center rounded-md border border-border bg-muted px-3 text-sm text-muted-fg">
-              Instance
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <Label htmlFor={targetSelectId}>{domainTargetLabel(normalizedDraft.profile)}</Label>
-            <NativeSelect>
-              <NativeSelectContent
-                disabled={isDisabled}
-                id={targetSelectId}
-                onChange={(event) =>
-                  onDraftChange?.({ ...normalizedDraft, targetInstallId: event.target.value })
-                }
-                required
-                value={normalizedDraft.targetInstallId}
-              >
-                {targetInstalls.map((install) => (
-                  <option key={install.installId} value={install.installId}>
-                    {install.label}
-                  </option>
-                ))}
-              </NativeSelectContent>
-            </NativeSelect>
-          </div>
-        )}
-        <div className="flex items-end">
-          <Button isDisabled={isDisabled} type="submit">
-            <AddIcon />
-            {state.domainMappingSubmitting ? "Adding..." : "Add"}
-          </Button>
-        </div>
-        {state.domainMappingError ? (
-          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
-            {state.domainMappingError}
-          </p>
-        ) : null}
+      <div className="grid gap-3 rounded-md border border-border bg-overlay p-4">
         {state.domainProviderDeleteError ? (
-          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
+          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
             {state.domainProviderDeleteError}
           </p>
         ) : null}
         {state.domainProviderDeleteMessage ? (
-          <p className="text-xs text-muted-fg sm:col-span-4" role="status">
+          <p className="text-xs text-muted-fg" role="status">
             {state.domainProviderDeleteMessage}
           </p>
         ) : null}
         {state.domainProviderCleanupError ? (
-          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
+          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
             {state.domainProviderCleanupError}
           </p>
         ) : null}
         {state.domainProviderCleanupMessage ? (
-          <p className="text-xs text-muted-fg sm:col-span-4" role="status">
+          <p className="text-xs text-muted-fg" role="status">
             {state.domainProviderCleanupMessage}
           </p>
         ) : null}
-      </form>
-      <form
-        className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(0,1fr)_auto]"
-        onSubmit={onRedirectSubmit}
-      >
-        <TextField
-          isDisabled={state.domainRedirectSubmitting}
-          isRequired
-          onChange={(fromHost) => onRedirectDraftChange?.({ ...redirectDraft, fromHost })}
-          value={redirectDraft.fromHost}
-        >
-          <Label htmlFor={redirectFromInputId}>Redirect from</Label>
-          <Input id={redirectFromInputId} placeholder="www.example.com" />
-        </TextField>
-        <div className="space-y-1">
-          <Label htmlFor={redirectModeSelectId}>Target type</Label>
-          <NativeSelect>
-            <NativeSelectContent
-              disabled={state.domainRedirectSubmitting}
-              id={redirectModeSelectId}
-              onChange={(event) =>
-                onRedirectDraftChange?.({
-                  ...redirectDraft,
-                  targetMode: event.target.value === "url" ? "url" : "host",
-                })
-              }
-              value={redirectDraft.targetMode}
-            >
-              <option value="host">Host</option>
-              <option value="url">URL</option>
-            </NativeSelectContent>
-          </NativeSelect>
-        </div>
-        <TextField
-          isDisabled={state.domainRedirectSubmitting}
-          isRequired
-          onChange={(target) =>
-            onRedirectDraftChange?.(
-              redirectDraft.targetMode === "host"
-                ? { ...redirectDraft, toHost: target }
-                : { ...redirectDraft, toUrl: target },
-            )
-          }
-          value={redirectDraft.targetMode === "host" ? redirectDraft.toHost : redirectDraft.toUrl}
-        >
-          <Label htmlFor={redirectTargetInputId}>Redirect to</Label>
-          <Input
-            id={redirectTargetInputId}
-            placeholder={
-              redirectDraft.targetMode === "host" ? "example.com" : "https://example.com"
-            }
-          />
-        </TextField>
-        <div className="flex items-end">
-          <Button isDisabled={redirectDisabled} type="submit">
-            <AddIcon />
-            {state.domainRedirectSubmitting ? "Adding..." : "Add redirect"}
-          </Button>
-        </div>
-        {state.domainRedirectDraftError ? (
-          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
-            {state.domainRedirectDraftError}
-          </p>
+        {evidenceCount === 0 ? (
+          <p className="text-sm text-muted-fg">No provider evidence.</p>
         ) : null}
-      </form>
-      {state.domainMappings.length === 0 && orphanAppliedStates.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
-          No custom domains.
-        </div>
-      ) : (
         <div className="grid gap-3">
-          {state.domainMappings.map((mapping) => (
-            <DomainMappingRow
-              appliedState={appliedStateForMapping(mapping, state.domainAppliedStates)}
-              deleting={state.domainMappingDeletingKey === domainMappingKey(mapping)}
-              forgetting={state.domainMappingForgettingKey === domainMappingKey(mapping)}
-              install={state.installs.find(
-                (install) => install.installId === mapping.targetInstallId,
-              )}
-              key={domainMappingKey(mapping)}
-              mapping={mapping}
-              onDelete={onDelete}
-              onDeleteProvider={onDeleteProvider}
-              onForget={onForget}
-              onManualCleanup={onManualCleanup}
-              providerCleanupKey={state.domainProviderCleanupKey}
-              providerDeletingKey={state.domainProviderDeletingKey}
-            />
-          ))}
-          {orphanAppliedStates.map((appliedState) => (
+          {state.domainAppliedStates.map((appliedState) => (
             <AppliedDomainStateRow
               appliedState={appliedState}
               install={state.installs.find(
@@ -1397,32 +781,7 @@ function CustomDomainsSection({
               providerDeletingKey={state.domainProviderDeletingKey}
             />
           ))}
-        </div>
-      )}
-      {state.domainRedirectIntents.length === 0 && orphanProviderAppliedResources.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
-          No redirects.
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {state.domainRedirectIntents.map((redirect) => (
-            <DomainRedirectRow
-              deleting={state.domainRedirectDeletingKey === redirect.fromHost}
-              forgetting={state.domainRedirectForgettingKey === redirect.fromHost}
-              key={redirect.fromHost}
-              onDelete={onDeleteRedirect}
-              onDeleteProvider={onDeleteProvider}
-              onForget={onForgetRedirect}
-              onManualCleanup={onManualCleanup}
-              providerAppliedResources={providerAppliedResources.filter(
-                (resource) => resource.host === redirect.fromHost,
-              )}
-              providerCleanupKey={state.domainProviderCleanupKey}
-              providerDeletingKey={state.domainProviderDeletingKey}
-              redirect={redirect}
-            />
-          ))}
-          {orphanProviderAppliedResources.map((resource) => (
+          {providerAppliedResources.map((resource) => (
             <AppliedProviderResourceRow
               key={`resource:${resource.kind}:${resource.logicalId}`}
               onDeleteProvider={onDeleteProvider}
@@ -1433,7 +792,7 @@ function CustomDomainsSection({
             />
           ))}
         </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -1571,212 +930,6 @@ function DomainProviderJobStatus({
   );
 }
 
-function DomainMappingRow({
-  appliedState,
-  deleting,
-  forgetting,
-  install,
-  mapping,
-  onDelete,
-  onDeleteProvider,
-  onForget,
-  onManualCleanup,
-  providerCleanupKey,
-  providerDeletingKey,
-}: {
-  appliedState: InstanceDomainMappingAppliedState | undefined;
-  deleting: boolean;
-  forgetting: boolean;
-  install: AppInstall | undefined;
-  mapping: InstanceDomainMapping;
-  onDelete?: (mapping: InstanceDomainMapping) => void;
-  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onForget?: (mapping: InstanceDomainMapping) => void;
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  providerCleanupKey?: string;
-  providerDeletingKey?: string;
-}) {
-  const providerDelete = appliedState
-    ? providerDeleteInputForAppliedState(appliedState)
-    : undefined;
-  const providerCleanup = appliedState
-    ? providerCleanupInputForAppliedState(appliedState)
-    : undefined;
-  const providerDeleting =
-    providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
-  const providerCleaning =
-    providerCleanup !== undefined &&
-    providerCleanupKey === domainProviderDeleteKey(providerCleanup);
-  const canForget = !mapping.enabled && appliedState === undefined;
-
-  return (
-    <article className="rounded-md border border-border bg-overlay p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="truncate text-sm font-semibold">{mapping.host}</h3>
-          <p className="text-xs text-muted-fg">
-            <code>{domainProfileTargetLabel(mapping.profile, mapping.targetInstallId)}</code>
-            {install ? ` · ${install.label}` : ""} · Route:{" "}
-            {mapping.enabled ? "enabled" : "disabled"} ·{" "}
-            {appliedState ? `Applied: ${appliedState.workerName}` : "Applied: none"}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {mapping.enabled ? (
-            <Button
-              intent="outline"
-              isDisabled={deleting}
-              onPress={() => onDelete?.(mapping)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {deleting ? "Removing..." : "Remove route"}
-            </Button>
-          ) : null}
-          {canForget ? (
-            <Button
-              intent="outline"
-              isDisabled={forgetting}
-              onPress={() => onForget?.(mapping)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {forgetting ? "Forgetting..." : "Forget route"}
-            </Button>
-          ) : null}
-          {providerDelete ? (
-            <Button
-              intent="outline"
-              isDisabled={providerDeleting}
-              onPress={() => onDeleteProvider?.(providerDelete)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {providerDeleting ? "Deleting..." : "Delete provider"}
-            </Button>
-          ) : null}
-          {providerCleanup ? (
-            <Button
-              intent="outline"
-              isDisabled={providerCleaning}
-              onPress={() => onManualCleanup?.(providerCleanup)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {providerCleaning ? "Marking..." : "Mark manually removed"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function DomainRedirectRow({
-  deleting,
-  forgetting,
-  onDelete,
-  onDeleteProvider,
-  onForget,
-  onManualCleanup,
-  providerAppliedResources,
-  providerCleanupKey,
-  providerDeletingKey,
-  redirect,
-}: {
-  deleting: boolean;
-  forgetting: boolean;
-  onDelete?: (redirect: InstanceDomainProviderRedirectIntent) => void;
-  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onForget?: (redirect: InstanceDomainProviderRedirectIntent) => void;
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  providerAppliedResources: InstanceDomainProviderAppliedResourceState[];
-  providerCleanupKey?: string;
-  providerDeletingKey?: string;
-  redirect: InstanceDomainProviderRedirectIntent;
-}) {
-  const providerDelete =
-    providerAppliedResources.length === 0 ? undefined : { host: redirect.fromHost };
-  const providerDeleting =
-    providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
-  const canForget = !redirect.enabled && providerAppliedResources.length === 0;
-
-  return (
-    <article className="rounded-md border border-border bg-overlay p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="truncate text-sm font-semibold">{redirect.fromHost}</h3>
-          <p className="text-xs text-muted-fg">
-            <code>{redirectTargetLabel(redirect)}</code> · Route:{" "}
-            {redirect.enabled ? "enabled" : "disabled"} · Applied:{" "}
-            {providerAppliedResources.length === 0
-              ? "none"
-              : `${providerAppliedResources.length} resources`}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <p className="text-xs text-muted-fg">
-            {redirect.statusCode} · {redirect.preservePath ? "path" : "no path"} ·{" "}
-            {redirect.preserveQueryString ? "query" : "no query"}
-          </p>
-          {redirect.enabled ? (
-            <Button
-              intent="outline"
-              isDisabled={deleting}
-              onPress={() => onDelete?.(redirect)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {deleting ? "Removing..." : "Remove route"}
-            </Button>
-          ) : null}
-          {canForget ? (
-            <Button
-              intent="outline"
-              isDisabled={forgetting}
-              onPress={() => onForget?.(redirect)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {forgetting ? "Forgetting..." : "Forget route"}
-            </Button>
-          ) : null}
-          {providerDelete ? (
-            <Button
-              intent="outline"
-              isDisabled={providerDeleting}
-              onPress={() => onDeleteProvider?.(providerDelete)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {providerDeleting ? "Deleting..." : "Delete provider"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      {providerAppliedResources.length > 0 ? (
-        <div className="mt-3 grid gap-2 border-t border-border pt-3">
-          {providerAppliedResources.map((resource) => (
-            <ProviderResourceEvidenceRow
-              key={`${resource.kind}:${resource.logicalId}`}
-              onManualCleanup={onManualCleanup}
-              providerCleanupKey={providerCleanupKey}
-              resource={resource}
-            />
-          ))}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
 function AppliedDomainStateRow({
   appliedState,
   install,
@@ -1805,11 +958,8 @@ function AppliedDomainStateRow({
         <div className="min-w-0 space-y-1">
           <h3 className="truncate text-sm font-semibold">{appliedState.host}</h3>
           <p className="text-xs text-muted-fg">
-            <code>
-              {domainProfileTargetLabel(appliedState.profile, appliedState.targetInstallId)}
-            </code>
-            {install ? ` · ${install.label}` : ""} · Route: removed · Applied:{" "}
-            {appliedState.workerName}
+            <code>{appliedRouteTargetLabel(appliedState)}</code>
+            {install ? ` · ${install.label}` : ""} · Applied: {appliedState.workerName}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -1865,8 +1015,7 @@ function AppliedProviderResourceRow({
         <div className="min-w-0 space-y-1">
           <h3 className="truncate text-sm font-semibold">{resource.host}</h3>
           <p className="text-xs text-muted-fg">
-            {domainProviderResourceKindLabel(resource.kind)} · Route: removed · Applied:{" "}
-            {resource.action}
+            {domainProviderResourceKindLabel(resource.kind)} · Applied: {resource.action}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -1893,37 +1042,6 @@ function AppliedProviderResourceRow({
         </div>
       </div>
     </article>
-  );
-}
-
-function ProviderResourceEvidenceRow({
-  onManualCleanup,
-  providerCleanupKey,
-  resource,
-}: {
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  providerCleanupKey?: string;
-  resource: InstanceDomainProviderAppliedResourceState;
-}) {
-  const providerCleanup = providerCleanupInputForAppliedResource(resource);
-  const providerCleaning = providerCleanupKey === domainProviderDeleteKey(providerCleanup);
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-fg">
-      <span className="min-w-0 truncate">
-        {domainProviderResourceKindLabel(resource.kind)} · <code>{resource.logicalId}</code>
-      </span>
-      <Button
-        intent="outline"
-        isDisabled={providerCleaning}
-        onPress={() => onManualCleanup?.(providerCleanup)}
-        size="sm"
-        type="button"
-      >
-        <RemoveIcon />
-        {providerCleaning ? "Marking..." : "Mark manually removed"}
-      </Button>
-    </div>
   );
 }
 
@@ -2210,82 +1328,10 @@ function availableDefaultInstallId(appPackage: BundledAppPackage, installs: read
   return appPackage.defaultInstallId;
 }
 
-function initializeDomainMappingDraft({
-  currentDraft,
-  installs,
-}: {
-  currentDraft: DomainMappingDraft;
-  installs: readonly AppInstall[];
-}): DomainMappingDraft {
-  const profile = DOMAIN_PROFILE_OPTIONS.some((option) => option.profile === currentDraft.profile)
-    ? currentDraft.profile
-    : defaultDomainProfile(installs);
-  const targetInstalls = domainTargetInstalls(profile, installs);
-  const targetInstallId =
-    profile === "instance"
-      ? ""
-      : targetInstalls.some((install) => install.installId === currentDraft.targetInstallId)
-        ? currentDraft.targetInstallId
-        : (targetInstalls[0]?.installId ?? "");
-
-  return {
-    host: currentDraft.host,
-    profile,
-    targetInstallId,
-  };
-}
-
-function appliedStateForMapping(
-  mapping: InstanceDomainMapping,
-  appliedStates: readonly InstanceDomainMappingAppliedState[],
-): InstanceDomainMappingAppliedState | undefined {
-  return appliedStates.find(
-    (state) => state.host === mapping.host && state.profile === mapping.profile,
-  );
-}
-
-const DOMAIN_PROFILE_OPTIONS: Array<{ label: string; profile: InstanceDomainMappingProfile }> = [
-  { label: "Instance", profile: "instance" },
-  { label: "App", profile: "app" },
-  { label: "Public Site", profile: "publicSite" },
-];
-
-function defaultDomainProfile(installs: readonly AppInstall[]): InstanceDomainMappingProfile {
-  if (installs.some((install) => install.packageAppKey === "site")) {
-    return "publicSite";
-  }
-
-  return installs.length > 0 ? "app" : "instance";
-}
-
-function domainTargetInstalls(
-  profile: InstanceDomainMappingProfile,
-  installs: readonly AppInstall[],
-): AppInstall[] {
-  if (profile === "instance") {
-    return [];
-  }
-
-  if (profile === "publicSite") {
-    return installs.filter((install) => install.packageAppKey === "site");
-  }
-
-  return [...installs];
-}
-
-function domainTargetLabel(profile: InstanceDomainMappingProfile): string {
-  return profile === "publicSite" ? "Site" : "App";
-}
-
-function domainProfileTargetLabel(
-  profile: InstanceDomainMappingProfile,
-  targetInstallId: string | undefined,
-): string {
-  return targetInstallId === undefined ? profile : `${profile}:${targetInstallId}`;
-}
-
-function redirectTargetLabel(redirect: InstanceDomainProviderRedirectIntent): string {
-  return redirect.toHost ?? redirect.toUrl ?? "missing target";
+function appliedRouteTargetLabel(appliedState: InstanceDomainMappingAppliedState): string {
+  return appliedState.targetInstallId === undefined
+    ? appliedState.profile
+    : `${appliedState.profile}:${appliedState.targetInstallId}`;
 }
 
 function domainProviderConfigLabel(plan: InstanceDomainProviderPlanResponse): string {
@@ -2343,10 +1389,6 @@ function domainProviderRunnerSummary(plan: InstanceDomainProviderPlanResponse): 
 
 function isRunnerMutationConfigIssue(code: string): boolean {
   return code === "missing-alchemy-password" || code === "missing-cloudflare-api-token";
-}
-
-function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {
-  return `${mapping.profile}:${mapping.host}`;
 }
 
 function providerDeleteInputForAppliedState(appliedState: InstanceDomainMappingAppliedState): {

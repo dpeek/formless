@@ -234,6 +234,17 @@ type InstanceControlPlaneTableField =
       field: string;
     };
 
+type InstanceControlPlaneViewField =
+  | string
+  | {
+      field: string;
+      visibleWhen?: { field: string; values: Array<string | boolean | number> };
+    };
+type InstanceControlPlaneQueryValue = string | boolean | number | { kind: "context"; name: string };
+type InstanceControlPlaneCollectionContext = NonNullable<
+  Extract<AppSchema["views"][string], { type: "collection" }>["context"]
+>;
+
 export type AnyInstanceControlPlaneRecord = {
   [Entity in InstanceControlPlaneEntityName]: InstanceControlPlaneRecord<
     Entity,
@@ -491,6 +502,14 @@ export const instanceControlPlaneSchema = {
       "route",
       "providerConfig",
       "provider-config-ref",
+      "providerConfigRoutes",
+    ),
+    providerConfigRoutes: toMany(
+      "Provider config routes",
+      "provider-config-ref",
+      "route",
+      "providerConfig",
+      "routeProviderConfig",
     ),
     desiredResourceTarget: toOne(
       "Desired resource target",
@@ -533,6 +552,21 @@ export const instanceControlPlaneSchema = {
     appInstallAll: allQuery("App installs", "app-install"),
     routeAll: allQuery("Routes", "route"),
     routeEnabled: whereQuery("Enabled routes", "route", "enabled", true),
+    routeMount: whereQuery("Mounts", "route", "kind", "mount"),
+    routeHostMapping: andWhereQuery("Host mappings", "route", [
+      { field: "kind", value: "mount" },
+      { field: "matchPath", value: "/" },
+    ]),
+    routeRedirect: whereQuery("Redirects", "route", "kind", "redirect"),
+    routeInstanceMount: whereQuery("Instance paths", "route", "targetProfile", "instance"),
+    routeAppMount: whereQuery("App install routes", "route", "targetProfile", "app"),
+    routePublicSiteMount: whereQuery("Public Site routes", "route", "targetProfile", "public-site"),
+    routesForSelectedProviderConfig: whereQuery(
+      "Selected provider config",
+      "route",
+      "providerConfig",
+      { kind: "context", name: "providerConfig" },
+    ),
     deployTargetAll: allQuery("Deploy targets", "deploy-target"),
     providerConfigRefAll: allQuery("Provider config", "provider-config-ref"),
     deployDesiredResourceAll: allQuery("Desired resources", "deploy-desired-resource"),
@@ -572,22 +606,36 @@ export const instanceControlPlaneSchema = {
       { field: "packageRevision", display: "readOnly" },
       { field: "sourceSchemaHash", display: "readOnly" },
     ]),
-    routeTable: tableView("route", [
-      { field: "enabled", display: "editor" },
-      { field: "matchHost", display: "editor" },
-      { field: "matchPath", display: "editor" },
-      { field: "matchPrefix", display: "editor" },
-      { field: "kind", display: "readOnly" },
-      { field: "targetProfile", display: "editor" },
-      { field: "appInstall", display: "editor" },
-      { field: "surface", display: "readOnly" },
-      { field: "providerConfig", display: "editor" },
-      { field: "toHost", display: "editor" },
-      { field: "toUrl", display: "editor" },
-      { field: "statusCode", display: "editor" },
-      { field: "preservePath", display: "editor" },
-      { field: "preserveQueryString", display: "editor" },
-    ]),
+    routeTable: tableView(
+      "route",
+      [
+        { field: "enabled", display: "editor" },
+        { field: "matchHost", display: "readOnly" },
+        { field: "matchPath", display: "readOnly" },
+        { field: "matchPrefix", display: "readOnly" },
+        { field: "kind", display: "readOnly" },
+        { field: "targetProfile", display: "readOnly" },
+        { field: "appInstall", display: "readOnly" },
+        { field: "surface", display: "readOnly" },
+        { field: "providerConfig", display: "readOnly" },
+        { field: "toHost", display: "readOnly" },
+        { field: "toUrl", display: "readOnly" },
+        { field: "statusCode", display: "readOnly" },
+        { field: "createdAt", display: "readOnly" },
+        { field: "updatedAt", display: "readOnly" },
+      ],
+      {
+        actions: {
+          editRoute: {
+            type: "editRecord",
+            label: "Edit route",
+            target: { kind: "row" },
+            editView: "routeEdit",
+          },
+        },
+        actionLabel: "Route actions",
+      },
+    ),
     deployTargetTable: tableView("deploy-target", ["label", "targetId", "targetKind", "enabled"]),
     providerConfigRefTable: tableView("provider-config-ref", [
       "label",
@@ -661,23 +709,76 @@ export const instanceControlPlaneSchema = {
       "matchPath",
       "matchPrefix",
       "kind",
-      "targetProfile",
-      "appInstall",
-      "surface",
+      { field: "targetProfile", visibleWhen: { field: "kind", values: ["mount"] } },
+      {
+        field: "appInstall",
+        visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
+      },
+      {
+        field: "surface",
+        visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
+      },
       "providerConfig",
-      "toHost",
-      "toUrl",
-      "statusCode",
-      "preservePath",
-      "preserveQueryString",
+      { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "preservePath", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "preserveQueryString", visibleWhen: { field: "kind", values: ["redirect"] } },
       "createdAt",
       "updatedAt",
     ]),
+    routeEdit: editView("route", [
+      "enabled",
+      "matchHost",
+      "matchPath",
+      "matchPrefix",
+      { field: "targetProfile", visibleWhen: { field: "kind", values: ["mount"] } },
+      {
+        field: "appInstall",
+        visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
+      },
+      {
+        field: "surface",
+        visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
+      },
+      "providerConfig",
+      { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "preservePath", visibleWhen: { field: "kind", values: ["redirect"] } },
+      { field: "preserveQueryString", visibleWhen: { field: "kind", values: ["redirect"] } },
+    ]),
     routeList: collectionView("Routes", "route", "routeAll", "routeTable", {
       createView: "routeCreate",
-      extraQueries: ["routeEnabled"],
+      extraQueries: [
+        "routeEnabled",
+        "routeMount",
+        "routeHostMapping",
+        "routeRedirect",
+        "routeInstanceMount",
+        "routeAppMount",
+        "routePublicSiteMount",
+      ],
       navigation: true,
     }),
+    routesByProviderConfigList: collectionView(
+      "Routes by provider config",
+      "route",
+      "routesForSelectedProviderConfig",
+      "routeTable",
+      {
+        context: {
+          name: "providerConfig",
+          entity: "provider-config-ref",
+          query: "providerConfigRefAll",
+          labelField: "label",
+          presentation: "listDetail",
+          relationship: "providerConfigRoutes",
+          createView: "providerConfigRefCreate",
+          itemView: "providerConfigRefItem",
+        },
+      },
+    ),
     deployTargetCreate: createView("deploy-target", [
       "targetId",
       "targetKind",
@@ -743,20 +844,25 @@ export const instanceControlPlaneSchema = {
       navigation: { primary: true },
       layout: {
         type: "stack",
-        sections: [
-          { id: "app-installs", type: "collection", view: "appInstallList" },
-          { id: "routes", type: "collection", view: "routeList" },
-        ],
+        sections: [{ id: "app-installs", type: "collection", view: "appInstallList" }],
       },
     },
-    domains: {
+    routes: {
       type: "workspace",
-      label: "Domains",
-      path: "/domains",
+      label: "Routes",
+      path: "/routes",
       navigation: { primary: true },
       layout: {
         type: "stack",
-        sections: [{ id: "routes", type: "collection", view: "routeList" }],
+        sections: [
+          { id: "routes", type: "collection", view: "routeList" },
+          {
+            id: "routes-by-provider-config",
+            label: "Routes by provider config",
+            type: "collection",
+            view: "routesByProviderConfigList",
+          },
+        ],
       },
     },
     deployments: {
@@ -1061,12 +1167,30 @@ function toOne(
   fromEntity: string,
   fromField: string,
   toEntity: string,
+  inverse?: string,
 ): NonNullable<AppSchema["relationships"]>[string] {
   return {
     kind: "toOne",
     label,
     from: { entity: fromEntity, field: fromField },
     to: { entity: toEntity },
+    ...(inverse === undefined ? {} : { inverse }),
+  };
+}
+
+function toMany(
+  label: string,
+  fromEntity: string,
+  toEntity: string,
+  toField: string,
+  inverse?: string,
+): NonNullable<AppSchema["relationships"]>[string] {
+  return {
+    kind: "toMany",
+    label,
+    from: { entity: fromEntity },
+    to: { entity: toEntity, field: toField },
+    ...(inverse === undefined ? {} : { inverse }),
   };
 }
 
@@ -1082,7 +1206,7 @@ function whereQuery(
   label: string,
   entity: InstanceControlPlaneEntityName,
   field: string,
-  value: boolean,
+  value: InstanceControlPlaneQueryValue,
 ) {
   return {
     label,
@@ -1092,6 +1216,26 @@ function whereQuery(
       ref: { kind: "value", name: field },
       op: "eq",
       value,
+    },
+  } satisfies AppSchema["queries"][string];
+}
+
+function andWhereQuery(
+  label: string,
+  entity: InstanceControlPlaneEntityName,
+  filters: Array<{ field: string; value: InstanceControlPlaneQueryValue }>,
+) {
+  return {
+    label,
+    entity,
+    expression: {
+      kind: "and",
+      expressions: filters.map((filter) => ({
+        kind: "where",
+        ref: { kind: "value", name: filter.field },
+        op: "eq",
+        value: filter.value,
+      })),
     },
   } satisfies AppSchema["queries"][string];
 }
@@ -1106,10 +1250,29 @@ function itemView(entity: InstanceControlPlaneEntityName, fields: string[]) {
 function tableView(
   entity: InstanceControlPlaneEntityName,
   fields: InstanceControlPlaneTableField[],
+  options: {
+    actionLabel?: string;
+    actions?: NonNullable<AppSchema["tableViews"][string]["actions"]>;
+  } = {},
 ) {
   return {
     entity,
-    columns: fields.map(tableFieldColumn),
+    ...(options.actions === undefined ? {} : { actions: options.actions }),
+    columns: [
+      ...fields.map(tableFieldColumn),
+      ...(options.actions === undefined
+        ? []
+        : [
+            {
+              type: "invokeAction",
+              label: options.actionLabel ?? "Actions",
+              actions: Object.keys(options.actions),
+              align: "end",
+              width: "xs",
+              presentation: "dropdown",
+            } satisfies AppSchema["tableViews"][string]["columns"][number],
+          ]),
+    ],
   } satisfies AppSchema["tableViews"][string];
 }
 
@@ -1124,11 +1287,22 @@ function tableFieldColumn(fieldInput: InstanceControlPlaneTableField) {
   } satisfies AppSchema["tableViews"][string]["columns"][number];
 }
 
-function createView(entity: InstanceControlPlaneEntityName, fields: string[]) {
+function createView(
+  entity: InstanceControlPlaneEntityName,
+  fields: InstanceControlPlaneViewField[],
+) {
   return {
     type: "create",
     entity,
-    fields: Object.fromEntries(fields.map((field) => [field, createField(editorForField(field))])),
+    fields: Object.fromEntries(fields.map(createFieldEntry)),
+  } satisfies AppSchema["views"][string];
+}
+
+function editView(entity: InstanceControlPlaneEntityName, fields: InstanceControlPlaneViewField[]) {
+  return {
+    type: "edit",
+    entity,
+    fields: Object.fromEntries(fields.map(viewFieldEntry)),
   } satisfies AppSchema["views"][string];
 }
 
@@ -1138,6 +1312,7 @@ function collectionView(
   defaultQuery: string,
   tableViewName: string,
   options: {
+    context?: InstanceControlPlaneCollectionContext;
     createView?: string;
     extraQueries?: string[];
     navigation?: boolean;
@@ -1148,6 +1323,7 @@ function collectionView(
     label,
     entity,
     ...(options.navigation ? { navigation: { primary: true } } : {}),
+    ...(options.context === undefined ? {} : { context: options.context }),
     queries: [defaultQuery, ...(options.extraQueries ?? [])].map((query) => ({
       query,
       count: { type: "count" },
@@ -1177,6 +1353,34 @@ function createField(editor: FieldEditor) {
   return { editor } satisfies NonNullable<
     Extract<AppSchema["views"][string], { type: "create" }>["fields"]
   >[string];
+}
+
+function createFieldEntry(fieldInput: InstanceControlPlaneViewField) {
+  const field = typeof fieldInput === "string" ? fieldInput : fieldInput.field;
+
+  return [
+    field,
+    {
+      ...createField(editorForField(field)),
+      ...(typeof fieldInput === "string" || fieldInput.visibleWhen === undefined
+        ? {}
+        : { visibleWhen: fieldInput.visibleWhen }),
+    },
+  ] as const;
+}
+
+function viewFieldEntry(fieldInput: InstanceControlPlaneViewField) {
+  const field = typeof fieldInput === "string" ? fieldInput : fieldInput.field;
+
+  return [
+    field,
+    {
+      ...viewField(editorForField(field)),
+      ...(typeof fieldInput === "string" || fieldInput.visibleWhen === undefined
+        ? {}
+        : { visibleWhen: fieldInput.visibleWhen }),
+    },
+  ] as const;
 }
 
 function editorForField(field: string): FieldEditor {

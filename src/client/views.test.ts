@@ -2142,21 +2142,78 @@ describe("home view model collections", () => {
           viewName: "appInstallList",
           entityName: "app-install",
         },
+      ],
+    });
+    expect(
+      apps.layout.sections.map((section) => section.collection.queries.defaultQueryName),
+    ).toEqual(["appInstallAll"]);
+    expect(apps.layout.sections.map((section) => section.collection.entity.label)).toEqual([
+      "App install",
+    ]);
+  });
+
+  it("selects the unified route control-plane surface with route filters", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const routes = selectScreenModelByPath(schema, "/routes");
+
+    if (!routes) {
+      throw new Error("Missing routes control-plane screen.");
+    }
+
+    expect(summarizeScreenModel(routes)).toEqual({
+      screenName: "routes",
+      label: "Routes",
+      primary: true,
+      layoutType: "stack",
+      sections: [
         {
           id: "routes",
           label: "Routes",
           viewName: "routeList",
           entityName: "route",
         },
+        {
+          id: "routes-by-provider-config",
+          label: "Routes by provider config",
+          viewName: "routesByProviderConfigList",
+          entityName: "route",
+        },
       ],
     });
-    expect(
-      apps.layout.sections.map((section) => section.collection.queries.defaultQueryName),
-    ).toEqual(["appInstallAll", "routeAll"]);
-    expect(apps.layout.sections.map((section) => section.collection.entity.label)).toEqual([
-      "App install",
-      "Route",
+    const routeSection = routes.layout.sections[0];
+    const providerRouteSection = routes.layout.sections[1];
+
+    expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual([
+      "Routes",
+      "Enabled routes",
+      "Mounts",
+      "Host mappings",
+      "Redirects",
+      "Instance paths",
+      "App install routes",
+      "Public Site routes",
     ]);
+    expect(routeSection?.collection.result.type).toBe("table");
+    expect(
+      routeSection?.collection.result.type === "table"
+        ? routeSection.collection.result.columns.some((column) => column.type === "invokeAction")
+        : false,
+    ).toBe(true);
+    expect(providerRouteSection?.collection.context).toMatchObject({
+      name: "providerConfig",
+      entityName: "provider-config-ref",
+      queryName: "providerConfigRefAll",
+      labelField: "label",
+      presentation: "listDetail",
+      relatedCollection: {
+        relationshipName: "providerConfigRoutes",
+        entityName: "route",
+        referenceFieldName: "providerConfig",
+      },
+    });
+    expect(providerRouteSection?.collection.queries.defaultQueryName).toBe(
+      "routesForSelectedProviderConfig",
+    );
   });
 
   it("selects deployment control-plane collections as read-only generated UI sections", () => {

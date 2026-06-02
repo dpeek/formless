@@ -2,10 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import { listBundledAppPackages, type AppInstall } from "../../shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
-import { InstallAppDialogForm, InstanceShellRouteView } from "./instance-shell.tsx";
+import {
+  InstallAppDialogForm,
+  InstanceShellRouteView,
+  type InstanceShellRouteState,
+} from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
-  it("renders generated control-plane app management without a duplicate install heading", () => {
+  it("renders generated control-plane app, route, and deployment surfaces", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
@@ -13,33 +17,28 @@ describe("instance shell route view", () => {
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
         }}
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
-          installing: false,
+        state={readyState({
           installs: [
             siteInstall({
               installId: "personal",
               label: "Personal Site",
             }),
           ],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
     expect(html).toContain('data-formless-control-plane-screen="apps"');
+    expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain("Loading Instance control plane");
-    expect(html).toContain("Personal Site");
-    expect(html).toContain("Custom domains");
-    expect(html).toContain("No custom domains.");
+    expect(html).toContain("Route provider state");
+    expect(html).toContain("No provider evidence.");
     expect(html).toContain("Deployments");
     expect(html).toContain('data-formless-control-plane-screen="deployments"');
     expect(html).toContain("Control-plane deployment records");
+    expect(html).not.toContain("Custom domains");
+    expect(html).not.toContain("No custom domains.");
+    expect(html).not.toContain("Add redirect");
     expect(html).not.toContain("Installed apps");
     expect(html).not.toContain("Bundled apps");
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
@@ -55,17 +54,9 @@ describe("instance shell route view", () => {
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
         }}
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
-          installing: false,
+        state={readyState({
           installs: [],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
@@ -83,25 +74,17 @@ describe("instance shell route view", () => {
     expect(html).not.toContain('value="Rates"');
   });
 
-  it("renders install errors in the dialog without hiding existing installs", () => {
+  it("renders install errors in the dialog with generated app management mounted", () => {
     const viewHtml = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
           site: { installId: "personal", label: "Other Site" },
         }}
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
+        state={readyState({
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
-          installing: false,
           installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
     const dialogHtml = renderToStaticMarkup(
@@ -109,39 +92,26 @@ describe("instance shell route view", () => {
         installDrafts={{
           site: { installId: "personal", label: "Other Site" },
         }}
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
+        state={readyState({
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
-          installing: false,
           installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
-    expect(viewHtml).toContain("Personal Site");
+    expect(viewHtml).toContain('data-formless-control-plane-screen="apps"');
     expect(dialogHtml).toContain('role="alert"');
     expect(dialogHtml).toContain("already installed");
   });
 
-  it("renders desired custom domains and the add form", () => {
+  it("renders provider evidence separately from route intent", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        domainDraft={{
-          host: "www.example.com",
-          profile: "publicSite",
-          targetInstallId: "personal",
-        }}
         installDrafts={{
           site: { installId: "docs", label: "Docs Site" },
         }}
-        state={{
+        state={readyState({
           domainAppliedStates: [
             {
               accountId: "account-123",
@@ -161,68 +131,6 @@ describe("instance shell route view", () => {
               zoneName: "dpeek.com",
             },
           ],
-          domainMappingSubmitting: false,
-          domainMappings: [
-            {
-              createdAt: "2026-05-26T00:00:00.000Z",
-              enabled: true,
-              host: "dpeek.com",
-              installId: "personal",
-              profile: "publicSite",
-              surface: "site",
-              targetInstallId: "personal",
-              updatedAt: "2026-05-26T00:00:00.000Z",
-            },
-          ],
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
-          installing: false,
-          installs: [
-            siteInstall({ installId: "personal", label: "Personal Site" }),
-            appInstall({ installId: "tasks", label: "Tasks", packageAppKey: "tasks" }),
-          ],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
-      />,
-    );
-
-    expect(html).toContain("Custom domains");
-    expect(html).toContain("dpeek.com");
-    expect(html).toContain("publicSite:personal");
-    expect(html).toContain("Applied: personal");
-    expect(html).toContain('value="www.example.com"');
-    expect(html).toContain("<option");
-    expect(html).toContain("Personal Site");
-    expect(html).toContain("Public Site");
-    expect(html).toContain("Remove");
-    expect(html).toContain("Delete provider");
-    expect(html).toContain("Add");
-  });
-
-  it("renders app and instance domain profile options plus orphan applied state", () => {
-    const html = renderToStaticMarkup(
-      <InstanceShellRouteView
-        domainDraft={{ host: "admin.example.com", profile: "instance", targetInstallId: "" }}
-        state={{
-          domainAppliedStates: [
-            {
-              accountId: "account-123",
-              action: "created",
-              alchemyResourceId: "primary-custom-domain-admin-example-com-instance",
-              appliedAt: "2026-05-26T00:00:00.000Z",
-              host: "admin.example.com",
-              profile: "instance",
-              provider: "cloudflare-worker-custom-domain",
-              updatedAt: "2026-05-26T00:00:00.000Z",
-              workerDomainId: "domain-1",
-              workerName: "personal",
-              zoneId: "zone-1",
-              zoneName: "example.com",
-            },
-          ],
-          domainMappingSubmitting: false,
-          domainMappings: [],
           domainProviderAppliedResources: [
             {
               accountId: "account-123",
@@ -239,94 +147,34 @@ describe("instance shell route view", () => {
               zoneName: "example.com",
             },
           ],
-          domainRedirectIntents: [
-            {
-              createdAt: "2026-05-27T00:00:00.000Z",
-              enabled: true,
-              fromHost: "www.example.com",
-              preservePath: true,
-              preserveQueryString: true,
-              statusCode: 301,
-              toHost: "example.com",
-              updatedAt: "2026-05-27T00:00:00.000Z",
-            },
-          ],
-          domainRedirectSubmitting: false,
-          installing: false,
           installs: [
             siteInstall({ installId: "personal", label: "Personal Site" }),
             appInstall({ installId: "tasks", label: "Tasks", packageAppKey: "tasks" }),
           ],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
-    expect(html).toContain("Instance");
-    expect(html).toContain("App");
-    expect(html).toContain("Public Site");
-    expect(html).toContain("admin.example.com");
-    expect(html).toContain("Route: removed");
+    expect(html).toContain('data-formless-control-plane-screen="routes"');
+    expect(html).toContain("Route provider state");
+    expect(html).toContain("dpeek.com");
+    expect(html).toContain("publicSite:personal");
+    expect(html).toContain("Applied: personal");
     expect(html).toContain("www.example.com");
-    expect(html).toContain("example.com");
-    expect(html).toContain("Add redirect");
+    expect(html).toContain("DNS records");
+    expect(html).toContain("Personal Site");
     expect(html).toContain("Delete provider");
     expect(html).toContain("Mark manually removed");
-  });
-
-  it("renders forget actions for disabled desired routes with no provider evidence", () => {
-    const html = renderToStaticMarkup(
-      <InstanceShellRouteView
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [
-            {
-              createdAt: "2026-05-26T00:00:00.000Z",
-              enabled: false,
-              host: "draft.example.com",
-              profile: "publicSite",
-              surface: "site",
-              targetInstallId: "site",
-              updatedAt: "2026-05-26T00:00:00.000Z",
-            },
-          ],
-          domainRedirectIntents: [
-            {
-              createdAt: "2026-05-27T00:00:00.000Z",
-              enabled: false,
-              fromHost: "old.example.com",
-              preservePath: true,
-              preserveQueryString: true,
-              statusCode: 301,
-              toHost: "example.com",
-              updatedAt: "2026-05-27T00:00:00.000Z",
-            },
-          ],
-          domainRedirectSubmitting: false,
-          installing: false,
-          installs: [siteInstall({ installId: "site", label: "Site" })],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
-      />,
-    );
-
-    expect(html).toContain("draft.example.com");
-    expect(html).toContain("old.example.com");
-    expect(html).toContain("Route: disabled");
-    expect(html.match(/Forget route/g)?.length).toBe(2);
-    expect(html).not.toContain("Delete provider");
+    expect(html).not.toContain("Custom domains");
+    expect(html).not.toContain("Add redirect");
+    expect(html).not.toContain("Forget route");
+    expect(html).not.toContain("Route: removed");
   });
 
   it("renders provider config, plan, blockers, and job status", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
+        state={readyState({
           domainProviderApplyJob: {
             createdAt: "2026-05-27T00:00:00.000Z",
             jobId: "apply-job-1",
@@ -441,13 +289,8 @@ describe("instance shell route view", () => {
               targetId: "instance.primary",
             },
           },
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
-          installing: false,
           installs: [siteInstall({ installId: "site", label: "Site" })],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
@@ -469,10 +312,7 @@ describe("instance shell route view", () => {
   it("keeps runner secret gaps out of provider config blocker copy", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        state={{
-          domainAppliedStates: [],
-          domainMappingSubmitting: false,
-          domainMappings: [],
+        state={readyState({
           domainProviderPlan: {
             config: {
               alchemyPassword: { configured: false, envNames: ["ALCHEMY_PASSWORD"] },
@@ -515,13 +355,8 @@ describe("instance shell route view", () => {
             },
             redirectIntents: [],
           },
-          domainRedirectIntents: [],
-          domainRedirectSubmitting: false,
-          installing: false,
           installs: [siteInstall({ installId: "site", label: "Site" })],
-          packages: listBundledAppPackages(),
-          status: "ready",
-        }}
+        })}
       />,
     );
 
@@ -533,6 +368,19 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Config blockers missing-alchemy-password");
   });
 });
+
+function readyState(
+  overrides: Partial<Extract<InstanceShellRouteState, { status: "ready" }>> = {},
+): Extract<InstanceShellRouteState, { status: "ready" }> {
+  return {
+    domainAppliedStates: [],
+    installing: false,
+    installs: [siteInstall({ installId: "site", label: "Site" })],
+    packages: listBundledAppPackages(),
+    status: "ready",
+    ...overrides,
+  };
+}
 
 function siteInstall(input: { installId: string; label: string }): AppInstall {
   return appInstall({ ...input, packageAppKey: "site" });

@@ -43,7 +43,7 @@ describe("instance control-plane schema contracts", () => {
       to: { entity: "app-install" },
     });
     expect(schema.screens?.apps.path).toBe("/");
-    expect(schema.screens?.domains.path).toBe("/domains");
+    expect(schema.screens?.routes.path).toBe("/routes");
     expect(schema.screens?.deployments.path).toBe("/deployments");
     expect(schema.runtime?.owner).toBe("runtime");
     expect(schema.runtime?.builder.editable).toBe(false);
@@ -85,6 +85,8 @@ describe("instance control-plane schema contracts", () => {
 
   it("marks generated install and route editor fields by ownership", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
+    const routeTable = schema.tableViews.routeTable;
+    const routesByProviderConfigList = schema.views.routesByProviderConfigList;
 
     expect(schema.views.appInstallList?.type === "collection").toBe(true);
     expect(
@@ -96,6 +98,40 @@ describe("instance control-plane schema contracts", () => {
     expect(
       schema.views.routeList?.type === "collection" ? schema.views.routeList.actions : undefined,
     ).toEqual([{ type: "create", createView: "routeCreate" }]);
+    expect(
+      schema.views.routeList?.type === "collection"
+        ? schema.views.routeList.queries.map((slot) => slot.query)
+        : undefined,
+    ).toEqual([
+      "routeAll",
+      "routeEnabled",
+      "routeMount",
+      "routeHostMapping",
+      "routeRedirect",
+      "routeInstanceMount",
+      "routeAppMount",
+      "routePublicSiteMount",
+    ]);
+    expect(
+      routesByProviderConfigList?.type === "collection"
+        ? {
+            context: routesByProviderConfigList.context,
+            defaultQuery: routesByProviderConfigList.defaultQuery,
+          }
+        : undefined,
+    ).toMatchObject({
+      context: {
+        name: "providerConfig",
+        entity: "provider-config-ref",
+        relationship: "providerConfigRoutes",
+      },
+      defaultQuery: "routesForSelectedProviderConfig",
+    });
+    expect(
+      routeTable?.actions?.editRoute?.type === "editRecord"
+        ? routeTable.actions.editRoute.editView
+        : undefined,
+    ).toBe("routeEdit");
     expect(schema.tableViews.appInstallTable?.columns).toMatchObject([
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
@@ -105,22 +141,31 @@ describe("instance control-plane schema contracts", () => {
       { field: "packageRevision", display: "readOnly" },
       { field: "sourceSchemaHash", display: "readOnly" },
     ]);
-    expect(schema.tableViews.routeTable?.columns).toMatchObject([
+    expect(routeTable?.columns).toMatchObject([
       { field: "enabled", display: "editor" },
-      { field: "matchHost", display: "editor" },
-      { field: "matchPath", display: "editor" },
-      { field: "matchPrefix", display: "editor" },
+      { field: "matchHost", display: "readOnly" },
+      { field: "matchPath", display: "readOnly" },
+      { field: "matchPrefix", display: "readOnly" },
       { field: "kind", display: "readOnly" },
-      { field: "targetProfile", display: "editor" },
-      { field: "appInstall", display: "editor" },
+      { field: "targetProfile", display: "readOnly" },
+      { field: "appInstall", display: "readOnly" },
       { field: "surface", display: "readOnly" },
-      { field: "providerConfig", display: "editor" },
-      { field: "toHost", display: "editor" },
-      { field: "toUrl", display: "editor" },
-      { field: "statusCode", display: "editor" },
-      { field: "preservePath", display: "editor" },
-      { field: "preserveQueryString", display: "editor" },
+      { field: "providerConfig", display: "readOnly" },
+      { field: "toHost", display: "readOnly" },
+      { field: "toUrl", display: "readOnly" },
+      { field: "statusCode", display: "readOnly" },
+      { field: "createdAt", display: "readOnly" },
+      { field: "updatedAt", display: "readOnly" },
+      { type: "invokeAction", actions: ["editRoute"] },
     ]);
+    expect(
+      schema.views.routeEdit?.type === "edit" ? schema.views.routeEdit.fields : undefined,
+    ).toMatchObject({
+      targetProfile: { visibleWhen: { field: "kind", values: ["mount"] } },
+      appInstall: { visibleWhen: { field: "targetProfile", values: ["app", "public-site"] } },
+      toHost: { visibleWhen: { field: "kind", values: ["redirect"] } },
+      statusCode: { visibleWhen: { field: "kind", values: ["redirect"] } },
+    });
   });
 
   it("renders deployment management as separate read-only generated sections", () => {
