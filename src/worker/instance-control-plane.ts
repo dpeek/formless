@@ -18,13 +18,12 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-  instanceControlPlaneAppRouteId,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppRouteKind,
-  type InstanceControlPlaneAppRouteValues,
   type InstanceControlPlaneRedirectStatusCode,
+  type InstanceControlPlaneRouteValues,
 } from "../shared/instance-control-plane.ts";
 import type {
   DeploymentAttempt,
@@ -232,7 +231,7 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
   ensureStorageTables(storage);
   initializeStorageFromSource(storage, instanceControlPlaneSource);
   const records = getBootstrapRecords(storage).filter((record) => !record.deletedAt);
-  const routeRecords = records.filter((record) => record.entity === "app-route");
+  const routeRecords = records.filter((record) => record.entity === "route");
 
   return listAppInstalls(
     records
@@ -241,10 +240,14 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
         appInstallFromControlPlaneValues(
           record.values,
           routeRecords
-            .filter((routeRecord) => routeRecord.values.appInstall === record.id)
+            .filter(
+              (routeRecord) =>
+                routeRecord.values["app-install"] === record.id &&
+                routeRecord.values["match-host"] === undefined,
+            )
             .map((routeRecord) => ({
               id: routeRecord.id,
-              values: routeRecord.values as InstanceControlPlaneAppRouteValues,
+              values: routeRecord.values as InstanceControlPlaneRouteValues,
             })),
         ),
       ),
@@ -614,7 +617,7 @@ function parseOptionalActionIdentity(value: unknown): string | undefined {
 
 function appInstallFromControlPlaneValues(
   values: RecordValues,
-  routeRecords: { id: string; values: InstanceControlPlaneAppRouteValues }[],
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
 ): AppInstall {
   const packageAppKey = String(values.packageAppKey);
   const packageApp = findBundledAppPackage(packageAppKey);
@@ -751,43 +754,45 @@ function syncDomainIntentRecords(
   },
 ) {
   if (input.mappings !== undefined) {
-    const nextDomainMappingIds = new Set<string>();
+    const nextDomainRouteIds = new Set<string>();
 
     for (const mapping of input.mappings) {
-      const recordId = domainMappingRecordId(mapping);
+      const recordId = domainMappingRouteRecordId(mapping);
 
       upsertControlPlaneRecord(storage, {
         action: "syncDomainMapping",
-        entity: "domain-mapping",
+        entity: "route",
         id: recordId,
-        values: domainMappingRecordValues(storage, mapping),
+        values: domainMappingRouteRecordValues(storage, mapping),
       });
-      nextDomainMappingIds.add(recordId);
+      nextDomainRouteIds.add(recordId);
     }
 
-    disableMissingControlPlaneIntentRecords(storage, "domain-mapping", nextDomainMappingIds, {
+    disableMissingControlPlaneIntentRecords(storage, nextDomainRouteIds, {
       action: "disableDomainMappingIntent",
+      idPrefix: "route:host:",
       now: input.now,
     });
   }
 
   if (input.redirectIntents !== undefined) {
-    const nextRedirectIntentIds = new Set<string>();
+    const nextRedirectRouteIds = new Set<string>();
 
     for (const intent of input.redirectIntents) {
-      const recordId = redirectIntentRecordId(intent.fromHost);
+      const recordId = redirectRouteRecordId(intent.fromHost);
 
       upsertControlPlaneRecord(storage, {
         action: "syncRedirectIntent",
-        entity: "redirect-intent",
+        entity: "route",
         id: recordId,
-        values: redirectIntentRecordValues(intent),
+        values: redirectRouteRecordValues(intent),
       });
-      nextRedirectIntentIds.add(recordId);
+      nextRedirectRouteIds.add(recordId);
     }
 
-    disableMissingControlPlaneIntentRecords(storage, "redirect-intent", nextRedirectIntentIds, {
+    disableMissingControlPlaneIntentRecords(storage, nextRedirectRouteIds, {
       action: "disableRedirectIntent",
+      idPrefix: "route:redirect:",
       now: input.now,
     });
   }
@@ -999,7 +1004,7 @@ function deploymentDesiredResourceValues(input: {
   };
 }
 
-function domainMappingRecordValues(
+function domainMappingRouteRecordValues(
   storage: DurableObjectStorage,
   mapping: InstanceDomainMapping,
 ): RecordValues {
@@ -1008,47 +1013,48 @@ function domainMappingRecordValues(
     targetInstallId && activeControlPlaneRecordExists(storage, "app-install", targetInstallId)
       ? targetInstallId
       : undefined;
-  const routeId =
-    targetInstallId === undefined
-      ? undefined
-      : domainMappingAppRouteIdForProfile(mapping.profile, targetInstallId);
-  const appRoute =
-    routeId && activeControlPlaneRecordExists(storage, "app-route", routeId) ? routeId : undefined;
+  const surface = domainMappingSurfaceForProfile(mapping.profile);
 
   return {
-    host: mapping.host,
-    profile: mapping.profile,
-    ...(appInstall === undefined ? {} : { appInstall }),
-    ...(appRoute === undefined ? {} : { appRoute }),
     enabled: mapping.enabled,
-    createdAt: mapping.createdAt,
-    updatedAt: mapping.updatedAt,
+    "match-host": mapping.host,
+    "match-path": "/",
+    "match-prefix": "/",
+    kind: "mount",
+    "target-profile": domainMappingTargetProfile(mapping.profile),
+    ...(appInstall === undefined ? {} : { "app-install": appInstall }),
+    ...(surface === undefined ? {} : { surface }),
+    "created-at": mapping.createdAt,
+    "updated-at": mapping.updatedAt,
   };
 }
 
-function redirectIntentRecordValues(intent: InstanceDomainProviderRedirectIntent): RecordValues {
+function redirectRouteRecordValues(intent: InstanceDomainProviderRedirectIntent): RecordValues {
   return {
-    fromHost: intent.fromHost,
-    ...(intent.toHost === undefined ? {} : { toHost: intent.toHost }),
-    ...(intent.toUrl === undefined ? {} : { toUrl: intent.toUrl }),
-    statusCode: String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
-    preservePath: intent.preservePath,
-    preserveQueryString: intent.preserveQueryString,
     enabled: intent.enabled,
-    createdAt: intent.createdAt,
-    updatedAt: intent.updatedAt,
+    "match-host": intent.fromHost,
+    "match-path": "/",
+    "match-prefix": "/",
+    kind: "redirect",
+    ...(intent.toHost === undefined ? {} : { "to-host": intent.toHost }),
+    ...(intent.toUrl === undefined ? {} : { "to-url": intent.toUrl }),
+    "status-code": String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
+    "preserve-path": intent.preservePath,
+    "preserve-query-string": intent.preserveQueryString,
+    "created-at": intent.createdAt,
+    "updated-at": intent.updatedAt,
   };
 }
 
 function disableMissingControlPlaneIntentRecords(
   storage: DurableObjectStorage,
-  entity: "domain-mapping" | "redirect-intent",
   nextRecordIds: Set<string>,
-  input: { action: string; now: string },
+  input: { action: string; idPrefix: string; now: string },
 ) {
   for (const record of activeControlPlaneRecords(storage)) {
     if (
-      record.entity !== entity ||
+      record.entity !== "route" ||
+      !record.id.startsWith(input.idPrefix) ||
       nextRecordIds.has(record.id) ||
       record.values.enabled === false
     ) {
@@ -1057,12 +1063,12 @@ function disableMissingControlPlaneIntentRecords(
 
     upsertControlPlaneRecord(storage, {
       action: input.action,
-      entity,
+      entity: "route",
       id: record.id,
       values: {
         ...record.values,
         enabled: false,
-        updatedAt: input.now,
+        "updated-at": input.now,
       },
     });
   }
@@ -1073,23 +1079,39 @@ function activeControlPlaneRecords(storage: DurableObjectStorage): StoredRecord[
 }
 
 function appInstallRoutesFromControlPlaneRoutes(
-  routeRecords: { id: string; values: InstanceControlPlaneAppRouteValues }[],
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
 ): AppInstallRoute[] {
   return routeRecords
-    .map((record) => appInstallRouteFromControlPlaneRoute(record.id, record.values))
+    .flatMap((record) => {
+      const route = appInstallRouteFromControlPlaneRoute(record.id, record.values);
+
+      return route ? [route] : [];
+    })
     .sort(compareAppInstallRoutes);
 }
 
 function appInstallRouteFromControlPlaneRoute(
   id: string,
-  values: InstanceControlPlaneAppRouteValues,
-): AppInstallRoute {
+  values: InstanceControlPlaneRouteValues,
+): AppInstallRoute | undefined {
+  if (values.kind !== "mount" || values.surface === undefined) {
+    return undefined;
+  }
+
+  const routeKind = appInstallRouteKindFromRouteSurface(values.surface);
+
+  if (routeKind === undefined) {
+    return undefined;
+  }
+
   return {
     enabled: values.enabled,
     id,
-    path: values.path,
-    ...(values.prefix === undefined ? {} : { prefix: values.prefix }),
-    routeKind: values.routeKind,
+    path: values["match-path"],
+    ...(values["match-prefix"] === undefined
+      ? {}
+      : { prefix: values["match-prefix"] as `/${string}/` }),
+    routeKind,
   };
 }
 
@@ -1108,6 +1130,21 @@ function appInstallRouteKindOrder(kind: InstanceControlPlaneAppRouteKind) {
       return 1;
     case "publicSite":
       return 2;
+  }
+}
+
+function appInstallRouteKindFromRouteSurface(
+  surface: InstanceControlPlaneRouteValues["surface"],
+): InstanceControlPlaneAppRouteKind | undefined {
+  switch (surface) {
+    case "admin":
+      return "admin";
+    case "schema":
+      return "schema";
+    case "public-site":
+      return "publicSite";
+    default:
+      return undefined;
   }
 }
 
@@ -1652,25 +1689,37 @@ function parseRedirectStatusCode(
   throw new BadRequestError('Field "redirect.statusCode" must be 301, 302, 303, 307, or 308.');
 }
 
-function domainMappingRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
-  return `domain-mapping:${mapping.profile}:${mapping.host}`;
+function domainMappingRouteRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
+  return `route:host:${mapping.profile}:${mapping.host}`;
 }
 
-function redirectIntentRecordId(fromHost: string) {
-  return `redirect-intent:${fromHost}`;
+function redirectRouteRecordId(fromHost: string) {
+  return `route:redirect:${fromHost}`;
 }
 
-function domainMappingAppRouteIdForProfile(
+function domainMappingSurfaceForProfile(
   profile: InstanceDomainMappingProfile,
-  installId: AppInstallId,
-): string | undefined {
+): InstanceControlPlaneRouteValues["surface"] | undefined {
   switch (profile) {
     case "app":
-      return instanceControlPlaneAppRouteId(installId, "admin");
+      return "admin";
     case "publicSite":
-      return instanceControlPlaneAppRouteId(installId, "publicSite");
+      return "public-site";
     case "instance":
       return undefined;
+  }
+}
+
+function domainMappingTargetProfile(
+  profile: InstanceDomainMappingProfile,
+): NonNullable<InstanceControlPlaneRouteValues["target-profile"]> {
+  switch (profile) {
+    case "app":
+      return "app";
+    case "publicSite":
+      return "public-site";
+    case "instance":
+      return "instance";
   }
 }
 

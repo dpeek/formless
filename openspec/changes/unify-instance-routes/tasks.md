@@ -1,9 +1,18 @@
 ## 1. Schema Model
 
-- [ ] 1.1 Add the `route` entity to the instance control-plane schema using kebab-case field names and qualified boundary name `instance:route`.
-- [ ] 1.2 Remove app route, domain mapping, and redirect intent desired-state entities from new control-plane source paths.
-- [ ] 1.3 Define route field metadata for enabled state, match host, match path, match prefix, kind, target profile, app install, surface, provider config, redirect fields, and timestamps.
-- [ ] 1.4 Update read models and relationships so app installs, provider configs, deployment projection, and generated views reference route records.
+- [x] 1.1 Add the `route` entity to the instance control-plane schema using kebab-case field names and qualified boundary name `instance:route`.
+- [x] 1.2 Remove app route, domain mapping, and redirect intent desired-state entities from new control-plane source paths.
+- [x] 1.3 Define route field metadata for enabled state, match host, match path, match prefix, kind, target profile, app install, surface, provider config, redirect fields, and timestamps.
+- [x] 1.4 Update read models and relationships so app installs, provider configs, deployment projection, and generated views reference route records.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/shared/instance-control-plane.ts` to make `route` the desired route entity, expose `instance:route`, use kebab-case route fields, and point generated route/deploy views and relationships at route records.
+- Changed worker control-plane adapters so default app install routes and synced domain/redirect intent records write `route` records while app install API summaries still derive hostless installed-app routes.
+- Updated direct schema/view/worker tests for the unified route model.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: `bun browser` opened `https://unify-instance-routes.formless.local/`; App management rendered `Routes` and desired resources with route columns, with no browser errors.
 
 ## 2. Validation
 

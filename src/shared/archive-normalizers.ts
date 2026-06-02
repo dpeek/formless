@@ -55,15 +55,15 @@ const archiveNormalizers = createArchiveNormalizerRegistry([
 
 const legacyInstanceControlPlaneEntityNames: Record<string, InstanceControlPlaneEntityName> = {
   appInstall: "app-install",
-  appRoute: "app-route",
+  appRoute: "route",
   deployAttempt: "deploy-attempt",
   deployDesiredResource: "deploy-desired-resource",
   deployDriftReport: "deploy-drift-report",
   deployEvidenceSummary: "deploy-evidence-summary",
   deployTarget: "deploy-target",
-  domainMapping: "domain-mapping",
+  domainMapping: "route",
   providerConfigRef: "provider-config-ref",
-  redirectIntent: "redirect-intent",
+  redirectIntent: "route",
 };
 
 const instanceControlPlaneEntityNameNormalizerId = "archive.instance.control-plane-entity-names";

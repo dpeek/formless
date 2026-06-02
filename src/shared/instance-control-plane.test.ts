@@ -34,12 +34,12 @@ describe("instance control-plane schema contracts", () => {
     expect(Object.keys(schema.entities)).not.toContain("appInstall");
     expect(referenceTargets.filter((target) => target.includes(":"))).toEqual([]);
     expect(referenceTargets).toEqual(
-      expect.arrayContaining(["app-install", "app-route", "deploy-target"]),
+      expect.arrayContaining(["app-install", "route", "deploy-target"]),
     );
-    expect(schema.relationships?.appRouteInstall).toEqual({
+    expect(schema.relationships?.routeInstall).toEqual({
       kind: "toOne",
-      label: "App route install",
-      from: { entity: "app-route", field: "appInstall" },
+      label: "Route install",
+      from: { entity: "route", field: "app-install" },
       to: { entity: "app-install" },
     });
     expect(schema.screens?.apps.path).toBe("/");
@@ -52,15 +52,10 @@ describe("instance control-plane schema contracts", () => {
   it("records identity invariants outside mutable generated fields", () => {
     expect(INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("instance");
     expect(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:control-plane");
-    expect(formatInstanceControlPlaneBoundaryEntityName("deploy-target")).toBe(
-      "instance:deploy-target",
-    );
+    expect(formatInstanceControlPlaneBoundaryEntityName("route")).toBe("instance:route");
     expect(
-      parseInstanceControlPlaneBoundaryEntityName(
-        "Archive record entity",
-        "instance:deploy-target",
-      ),
-    ).toBe("deploy-target");
+      parseInstanceControlPlaneBoundaryEntityName("Archive record entity", "instance:route"),
+    ).toBe("route");
     expect(() =>
       parseInstanceControlPlaneBoundaryEntityName(
         "Archive record entity",
@@ -72,12 +67,9 @@ describe("instance control-plane schema contracts", () => {
       "packageAppKey",
       "storageIdentity",
     ]);
-    expect(instanceControlPlaneImmutableFields["app-route"]).toEqual([
-      "appInstall",
-      "packageCapability",
-      "surface",
-    ]);
+    expect(instanceControlPlaneImmutableFields.route).toEqual(["kind"]);
     expect(isInstanceControlPlaneEntityName("app-install")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("app-route")).toBe(false);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
 
     const schema = parseAppSchema(instanceControlPlaneSchema);
@@ -100,12 +92,10 @@ describe("instance control-plane schema contracts", () => {
         ? schema.views.appInstallList.actions
         : undefined,
     ).toBeUndefined();
-    expect(schema.views.appRouteList?.type === "collection").toBe(true);
+    expect(schema.views.routeList?.type === "collection").toBe(true);
     expect(
-      schema.views.appRouteList?.type === "collection"
-        ? schema.views.appRouteList.actions
-        : undefined,
-    ).toBeUndefined();
+      schema.views.routeList?.type === "collection" ? schema.views.routeList.actions : undefined,
+    ).toEqual([{ type: "create", createView: "routeCreate" }]);
     expect(schema.tableViews.appInstallTable?.columns).toMatchObject([
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
@@ -115,14 +105,21 @@ describe("instance control-plane schema contracts", () => {
       { field: "packageRevision", display: "readOnly" },
       { field: "sourceSchemaHash", display: "readOnly" },
     ]);
-    expect(schema.tableViews.appRouteTable?.columns).toMatchObject([
-      { field: "appInstall", display: "readOnly" },
-      { field: "routeKind", display: "readOnly" },
-      { field: "path", display: "editor" },
-      { field: "prefix", display: "editor" },
+    expect(schema.tableViews.routeTable?.columns).toMatchObject([
       { field: "enabled", display: "editor" },
+      { field: "match-host", display: "editor" },
+      { field: "match-path", display: "editor" },
+      { field: "match-prefix", display: "editor" },
+      { field: "kind", display: "readOnly" },
+      { field: "target-profile", display: "editor" },
+      { field: "app-install", display: "editor" },
       { field: "surface", display: "readOnly" },
-      { field: "packageCapability", display: "readOnly" },
+      { field: "provider-config", display: "editor" },
+      { field: "to-host", display: "editor" },
+      { field: "to-url", display: "editor" },
+      { field: "status-code", display: "editor" },
+      { field: "preserve-path", display: "editor" },
+      { field: "preserve-query-string", display: "editor" },
     ]);
   });
 
@@ -151,8 +148,7 @@ describe("instance control-plane schema contracts", () => {
     ).toBeUndefined();
     expect(schema.tableViews.deployDesiredResourceTable?.columns).toMatchObject([
       { field: "deployTarget", display: "readOnly" },
-      { field: "domainMapping", display: "readOnly" },
-      { field: "redirectIntent", display: "readOnly" },
+      { field: "route", display: "readOnly" },
       { field: "logicalId", display: "readOnly" },
       { field: "kind", display: "readOnly" },
       { field: "providerFamily", display: "readOnly" },
@@ -224,35 +220,35 @@ describe("instance control-plane schema contracts", () => {
       }).map((record) => record.values),
     ).toEqual([
       {
-        appInstall: "personal",
-        routeKind: "admin",
-        path: "/apps/personal",
+        enabled: true,
+        "match-path": "/apps/personal",
+        kind: "mount",
+        "target-profile": "app",
+        "app-install": "personal",
         surface: "admin",
-        packageCapability: "generatedApp",
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "created-at": now,
+        "updated-at": now,
       },
       {
-        appInstall: "personal",
-        routeKind: "schema",
-        path: "/apps/personal/schema",
+        enabled: true,
+        "match-path": "/apps/personal/schema",
+        kind: "mount",
+        "target-profile": "app",
+        "app-install": "personal",
         surface: "schema",
-        packageCapability: "schema",
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "created-at": now,
+        "updated-at": now,
       },
       {
-        appInstall: "personal",
-        routeKind: "publicSite",
-        path: "/sites/personal",
-        prefix: "/sites/personal/",
-        surface: "publicSite",
-        packageCapability: "publicSite",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
+        "match-path": "/sites/personal",
+        "match-prefix": "/sites/personal/",
+        kind: "mount",
+        "target-profile": "public-site",
+        "app-install": "personal",
+        surface: "public-site",
+        "created-at": now,
+        "updated-at": now,
       },
     ]);
 
@@ -261,7 +257,7 @@ describe("instance control-plane schema contracts", () => {
         installId: "tasks",
         packageAppKey: "tasks",
         now,
-      }).map((record) => record.values.routeKind),
+      }).map((record) => record.values.surface),
     ).toEqual(["admin", "schema"]);
   });
 

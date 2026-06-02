@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppInstallValues,
-  type InstanceControlPlaneAppRouteValues,
+  type InstanceControlPlaneRouteValues,
 } from "../shared/instance-control-plane.ts";
 import type {
   ActionResponse,
@@ -93,9 +93,9 @@ describe("instance control-plane API routes", () => {
     expect(created.body.cursor).toBe(4);
     expect(created.body.changes.map((change) => change.payload.id)).toEqual([
       "personal",
-      "app-route:personal:admin",
-      "app-route:personal:schema",
-      "app-route:personal:publicSite",
+      "route:personal:admin",
+      "route:personal:schema",
+      "route:personal:public-site",
     ]);
     expect(replay.response.status).toBe(200);
     expect(replay.body).toEqual(created.body);
@@ -108,7 +108,7 @@ describe("instance control-plane API routes", () => {
       label: "Personal Site",
       storageIdentity: "app:personal",
     });
-    expect(routeValues(controlPlane.body).map((route) => route.path)).toEqual([
+    expect(routeValues(controlPlane.body).map((route) => route["match-path"])).toEqual([
       "/apps/personal",
       "/apps/personal/schema",
       "/sites/personal",
@@ -148,15 +148,15 @@ describe("instance control-plane API routes", () => {
     ).toBe(true);
     expect(controlPlane.body.records.map((record) => record.entity)).toEqual([
       "app-install",
-      "app-route",
-      "app-route",
-      "app-route",
+      "route",
+      "route",
+      "route",
     ]);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("Installed only");
     expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
   });
 
-  it("rejects invalid route edits through real control-plane records", async () => {
+  it("derives installed app API summaries from real control-plane route records", async () => {
     await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
       actionId: "action-create-route-validation",
       input: {
@@ -167,29 +167,16 @@ describe("instance control-plane API routes", () => {
     });
     const before = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
-    const reservedPath = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-route-reserved-path",
-      entity: "app-route",
+    const routeEdit = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
+      mutationId: "mutation-route-edit",
+      entity: "route",
       op: "patch",
-      recordId: "app-route:personal:admin",
+      recordId: "route:personal:admin",
       values: {
-        path: "/api/jobs",
-        updatedAt: "2026-05-28T00:00:00.000Z",
+        "match-path": "/apps/personal-admin",
+        "updated-at": "2026-05-28T00:00:00.000Z",
       },
     });
-    const duplicateEnabledPath = await postAdminJson<FailureResponse>(
-      `${controlPlaneApi}/mutations`,
-      {
-        mutationId: "mutation-route-duplicate-path",
-        entity: "app-route",
-        op: "patch",
-        recordId: "app-route:personal:schema",
-        values: {
-          path: "/apps/personal",
-          updatedAt: "2026-05-28T00:00:01.000Z",
-        },
-      },
-    );
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(before.body.installs[0]).toMatchObject({
@@ -197,13 +184,12 @@ describe("instance control-plane API routes", () => {
       installId: "personal",
       schemaRoute: "/apps/personal/schema",
     });
-    expect(reservedPath.response.status).toBe(400);
-    expect(reservedPath.body.error).toBe('Field "path" must be a route-safe path.');
-    expect(duplicateEnabledPath.response.status).toBe(400);
-    expect(duplicateEnabledPath.body.error).toBe(
-      'Enabled route path "/apps/personal" is already in use.',
-    );
-    expect(after.body.installs).toEqual(before.body.installs);
+    expect(routeEdit.response.status).toBe(200);
+    expect(after.body.installs[0]).toMatchObject({
+      adminRoute: "/apps/personal-admin",
+      installId: "personal",
+      schemaRoute: "/apps/personal/schema",
+    });
   });
 
   it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {
@@ -373,10 +359,10 @@ function appInstallValues(
   )?.values as InstanceControlPlaneAppInstallValues | undefined;
 }
 
-function routeValues(bootstrap: BootstrapResponse): InstanceControlPlaneAppRouteValues[] {
+function routeValues(bootstrap: BootstrapResponse): InstanceControlPlaneRouteValues[] {
   return bootstrap.records
-    .filter((record) => record.entity === "app-route")
-    .map((record) => record.values as InstanceControlPlaneAppRouteValues);
+    .filter((record) => record.entity === "route")
+    .map((record) => record.values as InstanceControlPlaneRouteValues);
 }
 
 function secretSnapshot(now: string): StoreSnapshot {

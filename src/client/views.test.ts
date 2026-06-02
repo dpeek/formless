@@ -2143,19 +2143,19 @@ describe("home view model collections", () => {
           entityName: "app-install",
         },
         {
-          id: "app-routes",
-          label: "App routes",
-          viewName: "appRouteList",
-          entityName: "app-route",
+          id: "routes",
+          label: "Routes",
+          viewName: "routeList",
+          entityName: "route",
         },
       ],
     });
     expect(
       apps.layout.sections.map((section) => section.collection.queries.defaultQueryName),
-    ).toEqual(["appInstallAll", "appRouteAll"]);
+    ).toEqual(["appInstallAll", "routeAll"]);
     expect(apps.layout.sections.map((section) => section.collection.entity.label)).toEqual([
       "App install",
-      "App route",
+      "Route",
     ]);
   });
 
