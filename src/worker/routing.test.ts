@@ -41,6 +41,7 @@ describe("Worker document routing", () => {
       installedAppApiRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: false,
     });
     expect(preview.clientShellRoute).toBe(true);
     expect(preview.publishedSitePreviewRedirectLocation).toBe("/?ref=old");
@@ -186,13 +187,22 @@ describe("Worker document routing", () => {
       installedAppApiRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: false,
     });
     expect(workerRuntimeRoutePolicy({ profile: "dev" })).toEqual({
       instanceBrowserRoutes: true,
       installedAppApiRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
+      workspaceGatewayApiRoutes: false,
     });
+    expect(workerRuntimeRoutePolicy({ profile: "app" }).workspaceGatewayApiRoutes).toBe(false);
+    expect(workerRuntimeRoutePolicy({ profile: "siteAuthoring" }).workspaceGatewayApiRoutes).toBe(
+      false,
+    );
+    expect(workerRuntimeRoutePolicy({ profile: "publishedSite" }).workspaceGatewayApiRoutes).toBe(
+      false,
+    );
     expect(
       areSchemaKeyApiRoutesEnabledForRequest(
         new Request("http://instance.example.com/api/site/bootstrap"),

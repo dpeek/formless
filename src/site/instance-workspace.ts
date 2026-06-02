@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -1668,14 +1669,26 @@ export function formlessInstanceWorkspaceDevEnv(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
 ): NodeJS.ProcessEnv {
+  const bootstrapToken = randomWorkspaceGatewayToken();
+  const csrfToken = randomWorkspaceGatewayToken();
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
     FORMLESS_LAUNCH_FIXTURE: "empty",
+    FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
+    FORMLESS_OWNER_SESSION_SECRET:
+      env.FORMLESS_OWNER_SESSION_SECRET && env.FORMLESS_OWNER_SESSION_SECRET.trim() !== ""
+        ? env.FORMLESS_OWNER_SESSION_SECRET
+        : randomWorkspaceGatewayToken(),
     FORMLESS_RUNTIME_PROFILE: "instance",
+    FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
+    FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
+    FORMLESS_WORKSPACE_GATEWAY_ROOT: workspaceRoot,
     FORMLESS_WRANGLER_PERSIST: formlessInstanceWorkspaceWranglerPersistPath(
       workspaceRoot,
       manifest,
     ),
+    VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
+    VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
     VITE_FORMLESS_RUNTIME_PROFILE: "instance",
   };
 
@@ -1687,6 +1700,10 @@ export function formlessInstanceWorkspaceDevEnv(
   delete nextEnv.VITE_FORMLESS_SITE_PROJECT_ID;
 
   return nextEnv;
+}
+
+function randomWorkspaceGatewayToken(): string {
+  return randomBytes(32).toString("base64url");
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(

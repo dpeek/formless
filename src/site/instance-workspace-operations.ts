@@ -33,6 +33,7 @@ export const FORMLESS_WORKSPACE_OPERATION_STATE_ROOT = ".formless/operations";
 
 export type FormlessWorkspaceOperationKind =
   | "check"
+  | "credentialSetup"
   | "deployApply"
   | "deployPlan"
   | "init"
@@ -73,6 +74,18 @@ export type FormlessWorkspaceOperationError = {
   message: string;
 };
 
+export type FormlessWorkspaceOperationExternalAuthorizationEvent = {
+  at: string;
+  id: string;
+  profileLabel: string;
+  provider: "alchemy" | "cloudflare";
+  status: "waiting";
+  type: "externalAuthorizationUrl";
+  url: string;
+};
+
+export type FormlessWorkspaceOperationEvent = FormlessWorkspaceOperationExternalAuthorizationEvent;
+
 export type FormlessWorkspaceOperationResult = {
   deployment?: FormlessWorkspaceOperationDisplayObject;
   details?: FormlessWorkspaceOperationDisplayObject;
@@ -84,6 +97,7 @@ export type FormlessWorkspaceOperationState = {
   completedAt?: string;
   createdAt: string;
   errors: FormlessWorkspaceOperationError[];
+  events: FormlessWorkspaceOperationEvent[];
   id: string;
   input: FormlessWorkspaceOperationDisplayObject;
   kind: typeof FORMLESS_WORKSPACE_OPERATION_STATE_FILE_KIND;
@@ -185,6 +199,7 @@ type CreateFormlessWorkspaceOperationStateInput = {
 
 type UpdateFormlessWorkspaceOperationStateInput = {
   errors?: readonly { message: string }[];
+  events?: readonly Omit<FormlessWorkspaceOperationEvent, "id">[];
   logs?: readonly Omit<FormlessWorkspaceOperationLog, "id">[];
   result?: FormlessWorkspaceOperationResult;
   status?: FormlessWorkspaceOperationStatus;
@@ -264,6 +279,7 @@ export async function createFormlessWorkspaceOperationState(
     actor: input.actor ?? "system",
     createdAt: now,
     errors: [],
+    events: [],
     id,
     input: redactDisplayObject(input.input, input.workspaceRoot),
     kind: FORMLESS_WORKSPACE_OPERATION_STATE_FILE_KIND,
@@ -348,6 +364,14 @@ export async function updateFormlessWorkspaceOperationState(
         at: timestamp,
         message: redactDisplayText(error.message, input.workspaceRoot),
       })),
+    ],
+    events: [
+      ...(current.events ?? []),
+      ...(input.events ?? []).map((event, index) =>
+        redactOperationEvent(event, input.workspaceRoot, {
+          id: `${current.id}-event-${(current.events ?? []).length + index + 1}`,
+        }),
+      ),
     ],
     logs: [
       ...current.logs,
@@ -892,6 +916,25 @@ function redactOperationSummary(
   };
 }
 
+function redactOperationEvent(
+  event: Omit<FormlessWorkspaceOperationEvent, "id">,
+  workspaceRoot: string,
+  options: { id: string },
+): FormlessWorkspaceOperationEvent {
+  switch (event.type) {
+    case "externalAuthorizationUrl":
+      return {
+        at: redactDisplayText(event.at, workspaceRoot),
+        id: options.id,
+        profileLabel: redactDisplayText(event.profileLabel, workspaceRoot),
+        provider: event.provider,
+        status: "waiting",
+        type: "externalAuthorizationUrl",
+        url: allowlistedAuthorizationUrl(event.url, event.provider),
+      };
+  }
+}
+
 function redactDisplayObject(
   value: FormlessWorkspaceOperationDisplayObject,
   workspaceRoot: string,
@@ -936,6 +979,52 @@ function redactDisplayText(value: string, workspaceRoot: string): string {
     .replace(/(^|[\s(])\/(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+/g, "$1<path>");
 }
 
+function allowlistedAuthorizationUrl(url: string, provider: "alchemy" | "cloudflare"): string {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Workspace operation authorization URL is invalid.");
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("Workspace operation authorization URL must use HTTPS.");
+  }
+
+  for (const key of parsed.searchParams.keys()) {
+    const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
+
+    if (
+      normalized.includes("token") ||
+      normalized.includes("secret") ||
+      normalized.includes("password") ||
+      normalized.includes("apikey")
+    ) {
+      throw new Error("Workspace operation authorization URL includes secret-looking parameters.");
+    }
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const authorizationPath = /(?:authorize|authorization|oauth|login)/i.test(parsed.pathname);
+
+  if (provider === "cloudflare") {
+    if (hostname === "dash.cloudflare.com" && authorizationPath) {
+      return parsed.toString();
+    }
+  } else if (
+    (hostname === "alchemy.com" ||
+      hostname.endsWith(".alchemy.com") ||
+      hostname === "alchemy.run" ||
+      hostname.endsWith(".alchemy.run")) &&
+    authorizationPath
+  ) {
+    return parsed.toString();
+  }
+
+  throw new Error("Workspace operation authorization URL is not allowlisted.");
+}
+
 function isForbiddenDisplayKey(key: string): boolean {
   const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
 
@@ -955,6 +1044,7 @@ function isForbiddenDisplayKey(key: string): boolean {
 function isWorkspaceOperationKind(value: unknown): value is FormlessWorkspaceOperationKind {
   return (
     value === "check" ||
+    value === "credentialSetup" ||
     value === "deployApply" ||
     value === "deployPlan" ||
     value === "init" ||

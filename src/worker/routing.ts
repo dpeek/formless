@@ -31,6 +31,7 @@ export type WorkerRuntimeRoutePolicy = {
   installedAppApiRoutes: boolean;
   schemaKeyApiRoutes: boolean;
   schemaKeyBrowserRoutes: boolean;
+  workspaceGatewayApiRoutes: boolean;
 };
 
 export type WorkerRuntimeRequestTopology = {
@@ -299,6 +300,7 @@ function workerRuntimeRoutePolicyFromKind(
     installedAppApiRoutes: policy.installedAppApiRoutes,
     schemaKeyApiRoutes: policy.schemaKeyApiRoutes,
     schemaKeyBrowserRoutes: policy.schemaKeyBrowserRoutes,
+    workspaceGatewayApiRoutes: false,
   };
 }
 

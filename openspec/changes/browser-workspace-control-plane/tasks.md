@@ -73,15 +73,25 @@ Evidence:
 
 ## 6. Local Workspace Gateway API
 
-- [ ] 6.1 Add local-only workspace gateway API routes for operation start, status, and progress reads.
-- [ ] 6.2 Enforce runtime route policy so gateway routes are unavailable in deployed instance, app, site-authoring, and published Site profiles.
-- [ ] 6.3 Issue a process-scoped pre-owner bootstrap capability from `formless dev` for same-origin workspace status and init only.
-- [ ] 6.4 Reject bootstrap capability use for save, pull, push, credential setup, deploy plan/apply, cleanup, arbitrary control-plane writes, arbitrary filesystem access, and provider mutation.
-- [ ] 6.5 Enforce same-origin owner-session and CSRF protection for browser-started post-bootstrap mutating gateway operations.
-- [ ] 6.6 Allow admin bearer authorization only for CLI or automation gateway callers, not browser login or browser-visible state.
-- [ ] 6.7 Block arbitrary filesystem reads, arbitrary filesystem writes, path traversal, shell commands, raw logs, raw adapter output, provider state payloads, and secret output from gateway requests.
-- [ ] 6.8 Expose allowlisted Cloudflare or Alchemy authorization URLs from trusted credential setup adapters as display-safe operation events.
-- [ ] 6.9 Add worker/runtime tests for route availability, bootstrap status/init authorization, bootstrap denial for non-init mutations, same-origin and CSRF rejection, owner-session authorization, admin-bearer non-browser authorization, semantic operation dispatch, operation-id workspace scoping, auth URL handoff, and secret redaction.
+- [x] 6.1 Add local-only workspace gateway API routes for operation start, status, and progress reads.
+- [x] 6.2 Enforce runtime route policy so gateway routes are unavailable in deployed instance, app, site-authoring, and published Site profiles.
+- [x] 6.3 Issue a process-scoped pre-owner bootstrap capability from `formless dev` for same-origin workspace status and init only.
+- [x] 6.4 Reject bootstrap capability use for save, pull, push, credential setup, deploy plan/apply, cleanup, arbitrary control-plane writes, arbitrary filesystem access, and provider mutation.
+- [x] 6.5 Enforce same-origin owner-session and CSRF protection for browser-started post-bootstrap mutating gateway operations.
+- [x] 6.6 Allow admin bearer authorization only for CLI or automation gateway callers, not browser login or browser-visible state.
+- [x] 6.7 Block arbitrary filesystem reads, arbitrary filesystem writes, path traversal, shell commands, raw logs, raw adapter output, provider state payloads, and secret output from gateway requests.
+- [x] 6.8 Expose allowlisted Cloudflare or Alchemy authorization URLs from trusted credential setup adapters as display-safe operation events.
+- [x] 6.9 Add worker/runtime tests for route availability, bootstrap status/init authorization, bootstrap denial for non-init mutations, same-origin and CSRF rejection, owner-session authorization, admin-bearer non-browser authorization, semantic operation dispatch, operation-id workspace scoping, auth URL handoff, and secret redaction.
+
+Evidence:
+
+- Added Node-only `src/site/local-workspace-gateway.ts` and wired it through lazy Vite middleware so `/api/formless/workspace/*` runs only when `formless dev` sets local workspace gateway env.
+- Changed `src/site/instance-workspace.ts` to issue process-scoped bootstrap, CSRF, and owner-session secrets for local workspace dev, with only the bootstrap capability exposed to the browser shell.
+- Extended persisted operation state with display-safe events for allowlisted Cloudflare/Alchemy authorization URLs and kept raw adapter output and secret-looking values redacted.
+- Changed `src/worker/routing.ts` and `src/worker/routing.test.ts` to keep Worker runtime `workspaceGatewayApiRoutes` unavailable across deployed/app/site profiles.
+- Added `src/site/local-workspace-gateway.test.ts` coverage for local-only route availability, bootstrap status/init, bootstrap mutation denial, owner-session and CSRF, admin bearer automation, semantic input rejection, operation-id workspace scoping, auth URL handoff, and secret redaction.
+- `devstate check` green at 2026-06-02T13:27:57.286Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-local-workspace-gateway-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
 
 ## 7. Browser Instance Management UI
 
