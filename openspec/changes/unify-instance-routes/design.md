@@ -51,27 +51,27 @@ The instance control-plane schema should define one local `route` entity with
 these fields:
 
 - `enabled`
-- `match-host`
-- `match-path`
-- `match-prefix`
+- `matchHost`
+- `matchPath`
+- `matchPrefix`
 - `kind`
-- `target-profile`
-- `app-install`
+- `targetProfile`
+- `appInstall`
 - `surface`
-- `provider-config`
-- `to-host`
-- `to-url`
-- `status-code`
-- `preserve-path`
-- `preserve-query-string`
-- `created-at`
-- `updated-at`
+- `providerConfig`
+- `toHost`
+- `toUrl`
+- `statusCode`
+- `preservePath`
+- `preserveQueryString`
+- `createdAt`
+- `updatedAt`
 
-`match-host` is optional. An absent host means the instance host or active
-profile host. A present host is an exact normalized host. `match-path` is the
-exact path to match. `match-prefix`, when present, is an additional normalized
-path prefix for subtree matches, for example `match-path: "/sites/site"` and
-`match-prefix: "/sites/site/"`.
+`matchHost` is optional. An absent host means the instance host or active
+profile host. A present host is an exact normalized host. `matchPath` is the
+exact path to match. `matchPrefix`, when present, is an additional normalized
+path prefix for subtree matches, for example `matchPath: "/sites/site"` and
+`matchPrefix: "/sites/site/"`.
 
 Alternative: keep separate route, mapping, and redirect entities and add a
 shared read model. That improves generated display but leaves workspace source,
@@ -80,13 +80,13 @@ archives, deployment projection, and drift with three desired-state shapes.
 ### Use two route kinds
 
 `kind: "mount"` selects a runtime surface. Mount routes can target
-`target-profile: "instance"`, `"app"`, or `"public-site"`. App and public Site
-mounts require an `app-install` reference. Supported surfaces are `admin`,
-`schema`, and `public-site`.
+`targetProfile: "instance"`, `"app"`, or `"public-site"`. App and public Site
+mounts require an `appInstall` reference to an `app-install` record. Supported
+surfaces are `admin`, `schema`, and `public-site`.
 
 `kind: "redirect"` returns a redirect and generally does not target an app
-install. Redirects require `status-code` and either `to-host` or `to-url`.
-`preserve-path` and `preserve-query-string` control how request path and query
+install. Redirects require `statusCode` and either `toHost` or `toUrl`.
+`preservePath` and `preserveQueryString` control how request path and query
 are carried to the destination.
 
 Alternative: encode redirects as a mount target profile. That makes redirect
@@ -97,12 +97,12 @@ target.
 
 Validation should reject route records before they affect runtime behavior when:
 
-- `match-host` is not a normalized exact host.
-- `match-path` or `match-prefix` is not a normalized absolute path.
-- `match-prefix` does not represent a subtree beginning at or below
-  `match-path`.
+- `matchHost` is not a normalized exact host.
+- `matchPath` or `matchPrefix` is not a normalized absolute path.
+- `matchPrefix` does not represent a subtree beginning at or below
+  `matchPath`.
 - two enabled routes conflict for the same host scope and path/prefix match.
-- a mount route lacks required target fields for its `target-profile` or
+- a mount route lacks required target fields for its `targetProfile` or
   `surface`.
 - an app or public Site route references a missing or unsupported app install.
 - a redirect route includes app-only target fields or lacks redirect target
@@ -135,7 +135,7 @@ Migration should create deterministic `route` records from existing
 the old entities as desired-state sources.
 
 - App routes become hostless mount routes.
-- Domain mappings become host mount routes with `match-host`.
+- Domain mappings become host mount routes with `matchHost`.
 - Redirect intent becomes redirect routes with host match and redirect fields.
 - Existing provider evidence, cleanup records, deployment attempts, and drift
   summaries remain in their current evidence/history records or projections.
@@ -201,7 +201,7 @@ workspace source review.
 
 ## Risks / Trade-offs
 
-- Route entity becomes too broad -> validate by `kind`, `target-profile`, and
+- Route entity becomes too broad -> validate by `kind`, `targetProfile`, and
   `surface`, and keep provider evidence out of the record.
 - Host route conflicts become harder to reason about -> define deterministic
   match precedence and reject overlapping enabled routes at write time.
@@ -217,8 +217,9 @@ workspace source review.
 
 ## Migration Plan
 
-1. Land `standardize-entity-key-conventions` first so the route entity uses
-   kebab-case and boundary name `instance:route`.
+1. Land `standardize-entity-key-conventions` first so the route entity uses a
+   kebab-case entity key, boundary name `instance:route`, and camelCase field
+   keys.
 2. Add `route` to the instance control-plane schema and validation model.
 3. Add migration/backfill from `app-route`, `domain-mapping`, and
    `redirect-intent` records to deterministic `route` records.
@@ -238,7 +239,7 @@ old entity split and is not preferred.
 
 ## Open Questions
 
-- Should `provider-config` be required for every host route and redirect, or
+- Should `providerConfig` be required for every host route and redirect, or
   only when multiple provider configs exist for one instance?
 - Should route ids be semantic from match and behavior, or stable generated ids
   with uniqueness enforced by indexes?

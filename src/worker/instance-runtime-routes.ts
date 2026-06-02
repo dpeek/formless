@@ -158,7 +158,7 @@ function routeCandidateFromRecord(
     return undefined;
   }
 
-  const matchHost = values["match-host"];
+  const matchHost = values.matchHost;
 
   if (matchHost === undefined) {
     if (!input.includeHostless) {
@@ -186,9 +186,9 @@ function routeCandidateFromRecord(
 
 function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteValues | undefined {
   const kind = values.kind;
-  const matchHost = optionalString(values["match-host"]);
-  const matchPath = optionalAbsolutePath(values["match-path"]);
-  const matchPrefix = optionalAbsolutePath(values["match-prefix"]);
+  const matchHost = optionalString(values.matchHost);
+  const matchPath = optionalAbsolutePath(values.matchPath);
+  const matchPrefix = optionalAbsolutePath(values.matchPrefix);
 
   if ((kind !== "mount" && kind !== "redirect") || !matchPath) {
     return undefined;
@@ -196,37 +196,31 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
 
   return {
     enabled: values.enabled === true,
-    ...(matchHost === undefined ? {} : { "match-host": matchHost }),
-    "match-path": matchPath,
-    ...(matchPrefix === undefined ? {} : { "match-prefix": matchPrefix }),
+    ...(matchHost === undefined ? {} : { matchHost }),
+    matchPath,
+    ...(matchPrefix === undefined ? {} : { matchPrefix }),
     kind,
-    ...(values["target-profile"] === "app" ||
-    values["target-profile"] === "instance" ||
-    values["target-profile"] === "public-site"
-      ? { "target-profile": values["target-profile"] }
+    ...(values.targetProfile === "app" ||
+    values.targetProfile === "instance" ||
+    values.targetProfile === "public-site"
+      ? { targetProfile: values.targetProfile }
       : {}),
-    ...(typeof values["app-install"] === "string" ? { "app-install": values["app-install"] } : {}),
+    ...(typeof values.appInstall === "string" ? { appInstall: values.appInstall } : {}),
     ...(values.surface === "admin" ||
     values.surface === "schema" ||
     values.surface === "public-site"
       ? { surface: values.surface }
       : {}),
-    ...(typeof values["provider-config"] === "string"
-      ? { "provider-config": values["provider-config"] }
+    ...(typeof values.providerConfig === "string" ? { providerConfig: values.providerConfig } : {}),
+    ...(typeof values.toHost === "string" ? { toHost: values.toHost } : {}),
+    ...(typeof values.toUrl === "string" ? { toUrl: values.toUrl } : {}),
+    ...(isRedirectStatusCode(values.statusCode) ? { statusCode: values.statusCode } : {}),
+    ...(typeof values.preservePath === "boolean" ? { preservePath: values.preservePath } : {}),
+    ...(typeof values.preserveQueryString === "boolean"
+      ? { preserveQueryString: values.preserveQueryString }
       : {}),
-    ...(typeof values["to-host"] === "string" ? { "to-host": values["to-host"] } : {}),
-    ...(typeof values["to-url"] === "string" ? { "to-url": values["to-url"] } : {}),
-    ...(isRedirectStatusCode(values["status-code"])
-      ? { "status-code": values["status-code"] }
-      : {}),
-    ...(typeof values["preserve-path"] === "boolean"
-      ? { "preserve-path": values["preserve-path"] }
-      : {}),
-    ...(typeof values["preserve-query-string"] === "boolean"
-      ? { "preserve-query-string": values["preserve-query-string"] }
-      : {}),
-    "created-at": typeof values["created-at"] === "string" ? values["created-at"] : "",
-    "updated-at": typeof values["updated-at"] === "string" ? values["updated-at"] : "",
+    createdAt: typeof values.createdAt === "string" ? values.createdAt : "",
+    updatedAt: typeof values.updatedAt === "string" ? values.updatedAt : "",
   };
 }
 
@@ -234,11 +228,11 @@ function routePathMatch(
   values: InstanceControlPlaneRouteValues,
   pathname: string,
 ): { rank: number; specificity: number } | undefined {
-  if (pathname === values["match-path"]) {
-    return { rank: 0, specificity: values["match-path"].length };
+  if (pathname === values.matchPath) {
+    return { rank: 0, specificity: values.matchPath.length };
   }
 
-  const prefix = values["match-prefix"];
+  const prefix = values.matchPrefix;
 
   if (prefix === undefined) {
     return undefined;
@@ -273,7 +267,7 @@ function runtimeRouteResolutionFromCandidate(
   const values = candidate.values;
 
   if (values.kind === "redirect") {
-    if (!candidate.matchHost || !values["status-code"]) {
+    if (!candidate.matchHost || !values.statusCode) {
       return undefined;
     }
 
@@ -282,13 +276,13 @@ function runtimeRouteResolutionFromCandidate(
       kind: "redirect",
       location: redirectLocation(values, request),
       matchHost: candidate.matchHost,
-      matchPath: values["match-path"],
-      ...(values["match-prefix"] === undefined ? {} : { matchPrefix: values["match-prefix"] }),
-      status: redirectStatus(values["status-code"]),
+      matchPath: values.matchPath,
+      ...(values.matchPrefix === undefined ? {} : { matchPrefix: values.matchPrefix }),
+      status: redirectStatus(values.statusCode),
     };
   }
 
-  const targetProfile = values["target-profile"];
+  const targetProfile = values.targetProfile;
 
   if (!targetProfile) {
     return undefined;
@@ -304,8 +298,8 @@ function runtimeRouteResolutionFromCandidate(
     id: candidate.id,
     kind: "mount",
     ...(candidate.matchHost === undefined ? {} : { matchHost: candidate.matchHost }),
-    matchPath: values["match-path"],
-    ...(values["match-prefix"] === undefined ? {} : { matchPrefix: values["match-prefix"] }),
+    matchPath: values.matchPath,
+    ...(values.matchPrefix === undefined ? {} : { matchPrefix: values.matchPrefix }),
     ...(values.surface === undefined ? {} : { surface: values.surface }),
     ...(target === undefined ? {} : { target }),
     targetProfile,
@@ -316,7 +310,7 @@ function installTarget(
   values: InstanceControlPlaneRouteValues,
   appInstalls: readonly AppInstall[],
 ): InstalledAppStorageIdentity | undefined {
-  const installId = values["app-install"];
+  const installId = values.appInstall;
 
   if (!installId) {
     return undefined;
@@ -337,14 +331,14 @@ function redirectLocation(
   request: InstanceRuntimeRouteRequest,
 ) {
   const target = new URL(
-    values["to-host"] ? `https://${values["to-host"]}` : (values["to-url"] ?? "https://invalid"),
+    values.toHost ? `https://${values.toHost}` : (values.toUrl ?? "https://invalid"),
   );
 
-  if (values["preserve-path"] === true) {
+  if (values.preservePath === true) {
     target.pathname = joinUrlPaths(target.pathname, request.pathname);
   }
 
-  if (values["preserve-query-string"] === true) {
+  if (values.preserveQueryString === true) {
     target.search = request.search ?? "";
   }
 

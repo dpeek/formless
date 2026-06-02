@@ -389,23 +389,23 @@ describe("instance deployment runtime API routes", () => {
     const enabledRoute = await createControlPlaneRecord("route", {
       enabled: true,
       kind: "mount",
-      "match-host": "direct.example.com",
-      "match-path": "/",
-      "match-prefix": "/",
-      "provider-config": providerConfig.body.record.id,
-      "target-profile": "instance",
-      "created-at": now,
-      "updated-at": now,
+      matchHost: "direct.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      providerConfig: providerConfig.body.record.id,
+      targetProfile: "instance",
+      createdAt: now,
+      updatedAt: now,
     });
     await createControlPlaneRecord("route", {
       enabled: false,
       kind: "mount",
-      "match-host": "disabled.example.com",
-      "match-path": "/",
-      "match-prefix": "/",
-      "target-profile": "instance",
-      "created-at": now,
-      "updated-at": now,
+      matchHost: "disabled.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "instance",
+      createdAt: now,
+      updatedAt: now,
     });
 
     const first = await getJson<InstanceDeploymentDesiredStateResponse>(
@@ -421,7 +421,7 @@ describe("instance deployment runtime API routes", () => {
     expect(started.response.status).toBe(201);
 
     await patchControlPlaneRecord("route", enabledRoute.body.record.id, {
-      "updated-at": "2026-05-28T00:01:00.000Z",
+      updatedAt: "2026-05-28T00:01:00.000Z",
     });
     const second = await getJson<InstanceDeploymentDesiredStateResponse>(
       INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,

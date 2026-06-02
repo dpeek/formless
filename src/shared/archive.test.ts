@@ -143,7 +143,7 @@ describe("portable archive protocol", () => {
                   ...record,
                   values: {
                     ...record.values,
-                    "to-url": "https://example.com/CF_API_TOKEN",
+                    toUrl: "https://example.com/CF_API_TOKEN",
                   },
                 }
               : record,
@@ -151,7 +151,7 @@ describe("portable archive protocol", () => {
         },
       }),
     ).toThrow(
-      'Instance archive controlPlane records record "route:host:publicSite:www.example.com" field "instance:route.to-url" cannot store control-plane secret values.',
+      'Instance archive controlPlane records record "route:host:publicSite:www.example.com" field "instance:route.toUrl" cannot store control-plane secret values.',
     );
     expect(() =>
       parseInstanceArchive({
@@ -164,7 +164,7 @@ describe("portable archive protocol", () => {
                   ...record,
                   values: {
                     ...record.values,
-                    "app-install": "missing",
+                    appInstall: "missing",
                   },
                 }
               : record,
@@ -172,7 +172,7 @@ describe("portable archive protocol", () => {
         },
       }),
     ).toThrow(
-      'Instance archive controlPlane records record "route:site:public-site" field "instance:route.app-install" references unknown instance:app-install record "missing".',
+      'Instance archive controlPlane records record "route:site:public-site" field "instance:route.appInstall" references unknown instance:app-install record "missing".',
     );
   });
 
@@ -362,14 +362,14 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
       entity: "route",
       values: {
         enabled: true,
-        "match-path": "/sites/site",
-        "match-prefix": "/sites/site/",
+        matchPath: "/sites/site",
+        matchPrefix: "/sites/site/",
         kind: "mount",
-        "target-profile": "public-site",
-        "app-install": "site",
+        targetProfile: "public-site",
+        appInstall: "site",
         surface: "public-site",
-        "created-at": now,
-        "updated-at": now,
+        createdAt: now,
+        updatedAt: now,
       },
       createdAt: now,
     },
@@ -378,15 +378,15 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
       entity: "route",
       values: {
         enabled: true,
-        "match-host": "www.example.com",
-        "match-path": "/",
-        "match-prefix": "/",
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
         kind: "mount",
-        "target-profile": "public-site",
-        "app-install": "site",
+        targetProfile: "public-site",
+        appInstall: "site",
         surface: "public-site",
-        "created-at": now,
-        "updated-at": now,
+        createdAt: now,
+        updatedAt: now,
       },
       createdAt: now,
     },

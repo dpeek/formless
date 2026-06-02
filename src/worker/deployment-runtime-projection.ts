@@ -227,7 +227,7 @@ function deploymentResourcesFromRouteRecord(
     record.deletedAt ||
     record.entity !== "route" ||
     record.values.enabled !== true ||
-    typeof record.values["match-host"] !== "string"
+    typeof record.values.matchHost !== "string"
   ) {
     return [];
   }
@@ -253,7 +253,7 @@ function deploymentRouteLogicalIds(
     targetId: DeploymentTarget["targetId"];
   },
 ): string[] {
-  if (record.entity !== "route" || typeof record.values["match-host"] !== "string") {
+  if (record.entity !== "route" || typeof record.values.matchHost !== "string") {
     return [];
   }
 
@@ -279,7 +279,7 @@ function deploymentRouteLogicalIds(
 function isRouteProviderIntentRecord(record: StoredRecord): boolean {
   return (
     record.entity === "route" &&
-    typeof record.values["match-host"] === "string" &&
+    typeof record.values.matchHost === "string" &&
     (record.values.kind === "mount" || record.values.kind === "redirect")
   );
 }
@@ -292,15 +292,15 @@ function deploymentCustomDomainResourceFromRoute(
     targetId: DeploymentTarget["targetId"];
   },
 ): DeploymentResource | undefined {
-  const host = optionalString(record.values["match-host"]);
-  const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
+  const host = optionalString(record.values.matchHost);
+  const profile = domainMappingProfileFromRouteTarget(record.values.targetProfile);
 
   if (host === undefined || profile === undefined) {
     return undefined;
   }
 
-  const targetInstallId = optionalString(record.values["app-install"]);
-  const workerName = routeWorkerName(record.values["provider-config"], input);
+  const targetInstallId = optionalString(record.values.appInstall);
+  const workerName = routeWorkerName(record.values.providerConfig, input);
 
   return {
     dependencies: [],
@@ -335,7 +335,7 @@ function deploymentRedirectResourcesFromRoute(
     targetId: DeploymentTarget["targetId"];
   },
 ): DeploymentResource[] {
-  const fromHost = optionalString(record.values["match-host"]);
+  const fromHost = optionalString(record.values.matchHost);
 
   if (fromHost === undefined) {
     return [];
@@ -345,15 +345,15 @@ function deploymentRedirectResourcesFromRoute(
     {
       enabled: true,
       fromHost,
-      preservePath: record.values["preserve-path"] !== false,
-      preserveQueryString: record.values["preserve-query-string"] !== false,
-      statusCode: redirectStatusCodeFromRoute(record.values["status-code"]),
-      ...(optionalString(record.values["to-host"]) === undefined
+      preservePath: record.values.preservePath !== false,
+      preserveQueryString: record.values.preserveQueryString !== false,
+      statusCode: redirectStatusCodeFromRoute(record.values.statusCode),
+      ...(optionalString(record.values.toHost) === undefined
         ? {}
-        : { toHost: optionalString(record.values["to-host"]) }),
-      ...(optionalString(record.values["to-url"]) === undefined
+        : { toHost: optionalString(record.values.toHost) }),
+      ...(optionalString(record.values.toUrl) === undefined
         ? {}
-        : { toUrl: optionalString(record.values["to-url"]) }),
+        : { toUrl: optionalString(record.values.toUrl) }),
     },
     input,
   );

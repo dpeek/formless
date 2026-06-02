@@ -354,16 +354,16 @@ describe("installed Site custom-domain Worker routing", () => {
   it("resolves redirect route records with preserved path and query string", async () => {
     await createRouteRecord("route:redirect:old.example.com", {
       enabled: true,
-      "match-host": "old.example.com",
-      "match-path": "/",
-      "match-prefix": "/",
+      matchHost: "old.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
       kind: "redirect",
-      "to-host": "new.example.com",
-      "status-code": "308",
-      "preserve-path": true,
-      "preserve-query-string": true,
-      "created-at": "2026-06-02T00:00:00.000Z",
-      "updated-at": "2026-06-02T00:00:00.000Z",
+      toHost: "new.example.com",
+      statusCode: "308",
+      preservePath: true,
+      preserveQueryString: true,
+      createdAt: "2026-06-02T00:00:00.000Z",
+      updatedAt: "2026-06-02T00:00:00.000Z",
     });
 
     const redirected = await fetchHost("old.example.com", "/docs/start?ref=old", {
@@ -429,15 +429,15 @@ async function setupMappedSiteRouteRecord() {
   });
   await createRouteRecord(`route:host:publicSite:${mappedHost}`, {
     enabled: true,
-    "match-host": mappedHost,
-    "match-path": "/",
-    "match-prefix": "/",
+    matchHost: mappedHost,
+    matchPath: "/",
+    matchPrefix: "/",
     kind: "mount",
-    "target-profile": "public-site",
-    "app-install": installId,
+    targetProfile: "public-site",
+    appInstall: installId,
     surface: "public-site",
-    "created-at": "2026-06-02T00:00:00.000Z",
-    "updated-at": "2026-06-02T00:00:00.000Z",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
   });
 }
 
@@ -449,15 +449,15 @@ async function setupMappedAppRouteRecord() {
   });
   await createRouteRecord(`route:host:app:${mappedAppHost}`, {
     enabled: true,
-    "match-host": mappedAppHost,
-    "match-path": "/",
-    "match-prefix": "/",
+    matchHost: mappedAppHost,
+    matchPath: "/",
+    matchPrefix: "/",
     kind: "mount",
-    "target-profile": "app",
-    "app-install": taskInstallId,
+    targetProfile: "app",
+    appInstall: taskInstallId,
     surface: "admin",
-    "created-at": "2026-06-02T00:00:00.000Z",
-    "updated-at": "2026-06-02T00:00:00.000Z",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
   });
 }
 

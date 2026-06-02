@@ -269,8 +269,8 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
           routeRecords
             .filter(
               (routeRecord) =>
-                routeRecord.values["app-install"] === record.id &&
-                routeRecord.values["match-host"] === undefined,
+                routeRecord.values.appInstall === record.id &&
+                routeRecord.values.matchHost === undefined,
             )
             .map((routeRecord) => ({
               id: routeRecord.id,
@@ -825,16 +825,16 @@ function legacyAppRouteMigrationCandidate(
   const surface = appRouteSurface(routeKind);
   const values: RecordValues = {
     enabled: record.values.enabled === true,
-    "match-path": parseRouteString("legacy app-route.path", record.values.path),
+    matchPath: parseRouteString("legacy app-route.path", record.values.path),
     ...(typeof record.values.prefix === "string"
-      ? { "match-prefix": parseRoutePrefixString("legacy app-route.prefix", record.values.prefix) }
+      ? { matchPrefix: parseRoutePrefixString("legacy app-route.prefix", record.values.prefix) }
       : {}),
     kind: "mount",
-    "target-profile": routeKind === "publicSite" ? "public-site" : "app",
-    "app-install": appInstall,
+    targetProfile: routeKind === "publicSite" ? "public-site" : "app",
+    appInstall,
     surface,
-    "created-at": stringRecordValue(record.values.createdAt) ?? record.createdAt,
-    "updated-at": stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
+    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
   };
 
   return [
@@ -880,7 +880,7 @@ function legacyDomainMappingMigrationCandidate(
       source: `legacy domain-mapping "${record.id}"`,
       values: {
         ...values,
-        ...(providerConfig === undefined ? {} : { "provider-config": providerConfig }),
+        ...(providerConfig === undefined ? {} : { providerConfig }),
       },
     },
   ];
@@ -926,7 +926,7 @@ function legacyRedirectIntentMigrationCandidate(
       source: `legacy redirect-intent "${record.id}"`,
       values: {
         ...redirectRouteRecordValues(intent),
-        ...(providerConfig === undefined ? {} : { "provider-config": providerConfig }),
+        ...(providerConfig === undefined ? {} : { providerConfig }),
       },
     },
   ];
@@ -1266,15 +1266,15 @@ function domainMappingRouteRecordValues(
 
   return {
     enabled: mapping.enabled,
-    "match-host": mapping.host,
-    "match-path": "/",
-    "match-prefix": "/",
+    matchHost: mapping.host,
+    matchPath: "/",
+    matchPrefix: "/",
     kind: "mount",
-    "target-profile": domainMappingTargetProfile(mapping.profile),
-    ...(appInstall === undefined ? {} : { "app-install": appInstall }),
+    targetProfile: domainMappingTargetProfile(mapping.profile),
+    ...(appInstall === undefined ? {} : { appInstall }),
     ...(surface === undefined ? {} : { surface }),
-    "created-at": mapping.createdAt,
-    "updated-at": mapping.updatedAt,
+    createdAt: mapping.createdAt,
+    updatedAt: mapping.updatedAt,
   };
 }
 
@@ -1291,17 +1291,17 @@ function redirectRouteCandidate(
 function redirectRouteRecordValues(intent: InstanceDomainProviderRedirectIntent): RecordValues {
   return {
     enabled: intent.enabled,
-    "match-host": intent.fromHost,
-    "match-path": "/",
-    "match-prefix": "/",
+    matchHost: intent.fromHost,
+    matchPath: "/",
+    matchPrefix: "/",
     kind: "redirect",
-    ...(intent.toHost === undefined ? {} : { "to-host": intent.toHost }),
-    ...(intent.toUrl === undefined ? {} : { "to-url": intent.toUrl }),
-    "status-code": String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
-    "preserve-path": intent.preservePath,
-    "preserve-query-string": intent.preserveQueryString,
-    "created-at": intent.createdAt,
-    "updated-at": intent.updatedAt,
+    ...(intent.toHost === undefined ? {} : { toHost: intent.toHost }),
+    ...(intent.toUrl === undefined ? {} : { toUrl: intent.toUrl }),
+    statusCode: String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
+    preservePath: intent.preservePath,
+    preserveQueryString: intent.preserveQueryString,
+    createdAt: intent.createdAt,
+    updatedAt: intent.updatedAt,
   };
 }
 
@@ -1327,7 +1327,7 @@ function disableMissingControlPlaneIntentRecords(
       values: {
         ...record.values,
         enabled: false,
-        "updated-at": input.now,
+        updatedAt: input.now,
       },
     });
   }
@@ -1366,10 +1366,8 @@ function appInstallRouteFromControlPlaneRoute(
   return {
     enabled: values.enabled,
     id,
-    path: values["match-path"],
-    ...(values["match-prefix"] === undefined
-      ? {}
-      : { prefix: values["match-prefix"] as `/${string}/` }),
+    path: values.matchPath,
+    ...(values.matchPrefix === undefined ? {} : { prefix: values.matchPrefix as `/${string}/` }),
     routeKind,
   };
 }
@@ -2002,7 +2000,7 @@ function domainMappingSurfaceForProfile(
 
 function domainMappingTargetProfile(
   profile: InstanceDomainMappingProfile,
-): NonNullable<InstanceControlPlaneRouteValues["target-profile"]> {
+): NonNullable<InstanceControlPlaneRouteValues["targetProfile"]> {
   switch (profile) {
     case "app":
       return "app";
@@ -2107,11 +2105,11 @@ function routeMatchFromValues(values: RecordValues): {
   prefix?: string;
 } {
   return {
-    host: stringRecordValue(values["match-host"]) ?? "<hostless>",
-    path: parseRouteString("route.match-path", values["match-path"]),
-    ...(stringRecordValue(values["match-prefix"]) === undefined
+    host: stringRecordValue(values.matchHost) ?? "<hostless>",
+    path: parseRouteString("route.matchPath", values.matchPath),
+    ...(stringRecordValue(values.matchPrefix) === undefined
       ? {}
-      : { prefix: parseRouteString("route.match-prefix", values["match-prefix"]) }),
+      : { prefix: parseRouteString("route.matchPrefix", values.matchPrefix) }),
   };
 }
 

@@ -779,17 +779,17 @@ function isInstanceControlPlaneRouteValidationEntity(schema: AppSchema, entityNa
 
   return (
     entity?.fields.enabled?.type === "boolean" &&
-    entity.fields["match-host"]?.type === "text" &&
-    entity.fields["match-path"]?.type === "text" &&
-    entity.fields["match-prefix"]?.type === "text" &&
+    entity.fields.matchHost?.type === "text" &&
+    entity.fields.matchPath?.type === "text" &&
+    entity.fields.matchPrefix?.type === "text" &&
     entity.fields.kind?.type === "enum" &&
-    entity.fields["target-profile"]?.type === "enum" &&
-    entity.fields["app-install"]?.type === "reference" &&
+    entity.fields.targetProfile?.type === "enum" &&
+    entity.fields.appInstall?.type === "reference" &&
     entity.fields.surface?.type === "enum" &&
-    entity.fields["provider-config"]?.type === "reference" &&
-    entity.fields["to-host"]?.type === "text" &&
-    entity.fields["to-url"]?.type === "text" &&
-    entity.fields["status-code"]?.type === "enum"
+    entity.fields.providerConfig?.type === "reference" &&
+    entity.fields.toHost?.type === "text" &&
+    entity.fields.toUrl?.type === "text" &&
+    entity.fields.statusCode?.type === "enum"
   );
 }
 
@@ -799,17 +799,17 @@ function validateInstanceControlPlaneRouteValues(
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  const matchHost = optionalStringRecordValue(values, "match-host");
-  const matchPath = stringRecordValue(values, "match-path");
-  const matchPrefix = optionalStringRecordValue(values, "match-prefix");
+  const matchHost = optionalStringRecordValue(values, "matchHost");
+  const matchPath = stringRecordValue(values, "matchPath");
+  const matchPrefix = optionalStringRecordValue(values, "matchPrefix");
   const kind = stringRecordValue(values, "kind");
-  const providerConfig = optionalStringRecordValue(values, "provider-config");
+  const providerConfig = optionalStringRecordValue(values, "providerConfig");
 
   if (matchHost !== undefined) {
-    assertNormalizedExactHost("match-host", matchHost);
+    assertNormalizedExactHost("matchHost", matchHost);
   }
 
-  assertNormalizedAbsoluteMatchPath("match-path", matchPath);
+  assertNormalizedAbsoluteMatchPath("matchPath", matchPath);
 
   if (matchPrefix !== undefined) {
     assertNormalizedMatchPrefix(matchPath, matchPrefix);
@@ -817,7 +817,7 @@ function validateInstanceControlPlaneRouteValues(
 
   if (providerConfig !== undefined && matchHost === undefined) {
     throw new BadRequestError(
-      'Field "provider-config" can only be set on exact-host route records.',
+      'Field "providerConfig" can only be set on exact-host route records.',
     );
   }
 
@@ -854,29 +854,29 @@ function validateInstanceControlPlaneMountRoute(
   matchPrefix: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  const targetProfile = optionalStringRecordValue(values, "target-profile");
-  const appInstall = optionalStringRecordValue(values, "app-install");
+  const targetProfile = optionalStringRecordValue(values, "targetProfile");
+  const appInstall = optionalStringRecordValue(values, "appInstall");
   const surface = optionalStringRecordValue(values, "surface");
 
-  if (optionalStringRecordValue(values, "to-host") !== undefined) {
-    throw new BadRequestError('Field "to-host" is incompatible with mount routes.');
+  if (optionalStringRecordValue(values, "toHost") !== undefined) {
+    throw new BadRequestError('Field "toHost" is incompatible with mount routes.');
   }
 
-  if (optionalStringRecordValue(values, "to-url") !== undefined) {
-    throw new BadRequestError('Field "to-url" is incompatible with mount routes.');
+  if (optionalStringRecordValue(values, "toUrl") !== undefined) {
+    throw new BadRequestError('Field "toUrl" is incompatible with mount routes.');
   }
 
-  if (optionalStringRecordValue(values, "status-code") !== undefined) {
-    throw new BadRequestError('Field "status-code" is incompatible with mount routes.');
+  if (optionalStringRecordValue(values, "statusCode") !== undefined) {
+    throw new BadRequestError('Field "statusCode" is incompatible with mount routes.');
   }
 
   if (targetProfile === undefined) {
-    throw new BadRequestError('Field "target-profile" is required for mount routes.');
+    throw new BadRequestError('Field "targetProfile" is required for mount routes.');
   }
 
   if (targetProfile === "instance") {
     if (appInstall !== undefined) {
-      throw new BadRequestError('Field "app-install" is incompatible with instance mount routes.');
+      throw new BadRequestError('Field "appInstall" is incompatible with instance mount routes.');
     }
 
     if (surface !== undefined && surface !== "admin") {
@@ -887,24 +887,24 @@ function validateInstanceControlPlaneMountRoute(
   }
 
   if (targetProfile !== "app" && targetProfile !== "public-site") {
-    throw new BadRequestError('Field "target-profile" is invalid for mount routes.');
+    throw new BadRequestError('Field "targetProfile" is invalid for mount routes.');
   }
 
   if (appInstall === undefined) {
-    throw new BadRequestError(`Field "app-install" is required for ${targetProfile} mount routes.`);
+    throw new BadRequestError(`Field "appInstall" is required for ${targetProfile} mount routes.`);
   }
 
   const install = getStoredRecordForValidation(storage, appInstall, additionalRecords);
 
   if (!install || install.entity !== "app-install" || install.deletedAt) {
     throw new BadRequestError(
-      `Field "app-install" references unknown app-install record "${appInstall}".`,
+      `Field "appInstall" references unknown app-install record "${appInstall}".`,
     );
   }
 
   if (install.values.status !== "installed") {
     throw new BadRequestError(
-      `Field "app-install" references non-installed app-install record "${appInstall}".`,
+      `Field "appInstall" references non-installed app-install record "${appInstall}".`,
     );
   }
 
@@ -926,13 +926,13 @@ function validateInstanceControlPlaneMountRoute(
 
   if (install.values.packageAppKey !== "site") {
     throw new BadRequestError(
-      `Field "app-install" references app-install record "${appInstall}" without public Site capability.`,
+      `Field "appInstall" references app-install record "${appInstall}" without public Site capability.`,
     );
   }
 
   if (matchHost !== undefined && (matchPath !== "/" || matchPrefix !== "/")) {
     throw new BadRequestError(
-      'Host-mounted public Site routes must set field "match-path" to "/" and field "match-prefix" to "/".',
+      'Host-mounted public Site routes must set field "matchPath" to "/" and field "matchPrefix" to "/".',
     );
   }
 }
@@ -942,45 +942,45 @@ function validateInstanceControlPlaneRedirectRoute(
   matchHost: string | undefined,
 ) {
   if (matchHost === undefined) {
-    throw new BadRequestError('Field "match-host" is required for redirect routes.');
+    throw new BadRequestError('Field "matchHost" is required for redirect routes.');
   }
 
-  for (const fieldName of ["target-profile", "app-install", "surface"] as const) {
+  for (const fieldName of ["targetProfile", "appInstall", "surface"] as const) {
     if (optionalStringRecordValue(values, fieldName) !== undefined) {
       throw new BadRequestError(`Field "${fieldName}" is incompatible with redirect routes.`);
     }
   }
 
-  const toHost = optionalStringRecordValue(values, "to-host");
-  const toUrl = optionalStringRecordValue(values, "to-url");
+  const toHost = optionalStringRecordValue(values, "toHost");
+  const toUrl = optionalStringRecordValue(values, "toUrl");
 
   if (
     (toHost === undefined && toUrl === undefined) ||
     (toHost !== undefined && toUrl !== undefined)
   ) {
     throw new BadRequestError(
-      'Redirect routes must set exactly one of field "to-host" or field "to-url".',
+      'Redirect routes must set exactly one of field "toHost" or field "toUrl".',
     );
   }
 
   if (toHost !== undefined) {
-    assertNormalizedExactHost("to-host", toHost);
+    assertNormalizedExactHost("toHost", toHost);
   }
 
   if (toUrl !== undefined) {
-    assertNormalizedHttpsUrl("to-url", toUrl);
+    assertNormalizedHttpsUrl("toUrl", toUrl);
   }
 
-  if (optionalStringRecordValue(values, "status-code") === undefined) {
-    throw new BadRequestError('Field "status-code" is required for redirect routes.');
+  if (optionalStringRecordValue(values, "statusCode") === undefined) {
+    throw new BadRequestError('Field "statusCode" is required for redirect routes.');
   }
 
-  if (typeof values["preserve-path"] !== "boolean") {
-    throw new BadRequestError('Field "preserve-path" is required for redirect routes.');
+  if (typeof values.preservePath !== "boolean") {
+    throw new BadRequestError('Field "preservePath" is required for redirect routes.');
   }
 
-  if (typeof values["preserve-query-string"] !== "boolean") {
-    throw new BadRequestError('Field "preserve-query-string" is required for redirect routes.');
+  if (typeof values.preserveQueryString !== "boolean") {
+    throw new BadRequestError('Field "preserveQueryString" is required for redirect routes.');
   }
 }
 
@@ -1027,23 +1027,23 @@ function assertNormalizedMatchPrefix(matchPath: string, matchPrefix: string) {
     matchPrefix === "/" ? matchPrefix : matchPrefix.endsWith("/") ? matchPrefix.slice(0, -1) : "";
 
   if (matchPrefix !== "/" && !matchPrefix.endsWith("/")) {
-    throw new BadRequestError('Field "match-prefix" must be a normalized absolute path prefix.');
+    throw new BadRequestError('Field "matchPrefix" must be a normalized absolute path prefix.');
   }
 
   if (matchPrefix !== "/" && !isNormalizedAbsoluteRoutePath(normalizedPrefix)) {
-    throw new BadRequestError('Field "match-prefix" must be a normalized absolute path prefix.');
+    throw new BadRequestError('Field "matchPrefix" must be a normalized absolute path prefix.');
   }
 
   if (matchPath === "/") {
     if (matchPrefix !== "/") {
-      throw new BadRequestError('Field "match-prefix" must begin at or below field "match-path".');
+      throw new BadRequestError('Field "matchPrefix" must begin at or below field "matchPath".');
     }
 
     return;
   }
 
   if (!matchPrefix.startsWith(`${matchPath}/`)) {
-    throw new BadRequestError('Field "match-prefix" must begin at or below field "match-path".');
+    throw new BadRequestError('Field "matchPrefix" must begin at or below field "matchPath".');
   }
 }
 
@@ -1103,11 +1103,11 @@ function instanceRouteMatch(values: RecordValues): {
   prefix?: string;
 } {
   return {
-    host: optionalStringRecordValue(values, "match-host") ?? "<hostless>",
-    path: stringRecordValue(values, "match-path"),
-    ...(optionalStringRecordValue(values, "match-prefix") === undefined
+    host: optionalStringRecordValue(values, "matchHost") ?? "<hostless>",
+    path: stringRecordValue(values, "matchPath"),
+    ...(optionalStringRecordValue(values, "matchPrefix") === undefined
       ? {}
-      : { prefix: optionalStringRecordValue(values, "match-prefix") }),
+      : { prefix: optionalStringRecordValue(values, "matchPrefix") }),
   };
 }
 

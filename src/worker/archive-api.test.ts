@@ -522,8 +522,8 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
 
   adminRoute.values = {
     ...adminRoute.values,
-    "match-path": "/apps/personal-dashboard",
-    "updated-at": now,
+    matchPath: "/apps/personal-dashboard",
+    updatedAt: now,
   };
 
   return [
@@ -562,16 +562,16 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       createdAt: now,
       values: {
         enabled: true,
-        "match-host": "archive.example.com",
-        "match-path": "/",
-        "match-prefix": "/",
+        matchHost: "archive.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
         kind: "mount",
-        "target-profile": "public-site",
-        "app-install": "personal",
+        targetProfile: "public-site",
+        appInstall: "personal",
         surface: "public-site",
-        "provider-config": "provider-config:cloudflare:primary",
-        "created-at": now,
-        "updated-at": now,
+        providerConfig: "provider-config:cloudflare:primary",
+        createdAt: now,
+        updatedAt: now,
       },
     },
     {
@@ -601,16 +601,16 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       createdAt: now,
       values: {
         enabled: true,
-        "match-host": "old.archive.example.com",
-        "match-path": "/",
-        "match-prefix": "/",
+        matchHost: "old.archive.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
         kind: "redirect",
-        "to-host": "archive.example.com",
-        "status-code": "308",
-        "preserve-path": true,
-        "preserve-query-string": true,
-        "created-at": now,
-        "updated-at": now,
+        toHost: "archive.example.com",
+        statusCode: "308",
+        preservePath: true,
+        preserveQueryString: true,
+        createdAt: now,
+        updatedAt: now,
       },
     },
     {

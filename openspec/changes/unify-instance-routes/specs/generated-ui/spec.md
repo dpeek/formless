@@ -30,7 +30,7 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **GIVEN** owner or admin users edit a redirect route
 - **WHEN** the edit is submitted
 - **THEN** the editor validates match host, match path, redirect target, status
-  code, preserve-path policy, and preserve-query-string policy
+  code, preservePath policy, and preserveQueryString policy
 - **AND** the redirect route does not require an app install target
 
 #### Scenario: Evidence remains separate

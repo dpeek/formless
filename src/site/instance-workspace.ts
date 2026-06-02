@@ -2182,13 +2182,13 @@ function savedWorkspaceAppRoutesByInstall(
   const routesByInstall = new Map<string, FormlessInstanceWorkspaceApp["routes"]>();
 
   for (const record of controlPlane?.records ?? []) {
-    if (record.deletedAt || record.entity !== "route" || stringRecordValue(record, "match-host")) {
+    if (record.deletedAt || record.entity !== "route" || stringRecordValue(record, "matchHost")) {
       continue;
     }
 
-    const installId = stringRecordValue(record, "app-install");
+    const installId = stringRecordValue(record, "appInstall");
     const surface = stringRecordValue(record, "surface");
-    const routePath = stringRecordValue(record, "match-path");
+    const routePath = stringRecordValue(record, "matchPath");
 
     if (!installId || !surface || !routePath) {
       continue;
@@ -2222,13 +2222,13 @@ function savedWorkspaceDomainIntents(
       (record) =>
         !record.deletedAt &&
         record.entity === "route" &&
-        stringRecordValue(record, "match-host") !== undefined &&
+        stringRecordValue(record, "matchHost") !== undefined &&
         stringRecordValue(record, "kind") === "mount",
     )
     .map((record) => {
-      const host = stringRecordValue(record, "match-host") ?? "";
+      const host = stringRecordValue(record, "matchHost") ?? "";
       const profile = workspaceDomainProfileFromRoute(record);
-      const targetInstallId = stringRecordValue(record, "app-install");
+      const targetInstallId = stringRecordValue(record, "appInstall");
       const enabled = booleanRecordValue(record, "enabled") ?? true;
 
       return {
@@ -2248,7 +2248,7 @@ function savedWorkspaceDomainIntents(
 function workspaceDomainProfileFromRoute(
   record: StoredRecord,
 ): FormlessInstanceWorkspaceDomainIntent["profile"] {
-  const targetProfile = stringRecordValue(record, "target-profile");
+  const targetProfile = stringRecordValue(record, "targetProfile");
 
   if (targetProfile === "app" || targetProfile === "instance") {
     return targetProfile;
@@ -3113,7 +3113,7 @@ function shouldReplaceExistingWorkspaceControlPlaneRecord(input: {
   }
 
   if (input.record.entity === "route") {
-    const appInstallId = stringRecordValue(input.record, "app-install");
+    const appInstallId = stringRecordValue(input.record, "appInstall");
 
     return appInstallId !== undefined && !input.manifestAppInstallIds.has(appInstallId);
   }
@@ -3224,17 +3224,17 @@ function workspaceDomainControlPlaneRecords(
     const surface = workspaceRouteSurface(domain.profile);
     const values: RecordValues = {
       enabled: domain.enabled,
-      "match-host": domain.host,
-      "match-path": "/",
-      "match-prefix": "/",
+      matchHost: domain.host,
+      matchPath: "/",
+      matchPrefix: "/",
       kind: "mount",
-      "target-profile": workspaceRouteTargetProfile(domain.profile),
+      targetProfile: workspaceRouteTargetProfile(domain.profile),
       ...(domain.targetInstallId === undefined || !input.appInstallIds.has(domain.targetInstallId)
         ? {}
-        : { "app-install": domain.targetInstallId }),
+        : { appInstall: domain.targetInstallId }),
       ...(surface === undefined ? {} : { surface }),
-      "created-at": input.exportedAt,
-      "updated-at": input.exportedAt,
+      createdAt: input.exportedAt,
+      updatedAt: input.exportedAt,
     };
 
     return {

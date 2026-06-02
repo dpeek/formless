@@ -87,21 +87,21 @@ export type InstanceControlPlaneRouteTargetProfile = "app" | "instance" | "publi
 
 export type InstanceControlPlaneRouteValues = {
   enabled: boolean;
-  "match-host"?: string;
-  "match-path": `/${string}`;
-  "match-prefix"?: `/${string}`;
+  matchHost?: string;
+  matchPath: `/${string}`;
+  matchPrefix?: `/${string}`;
   kind: InstanceControlPlaneRouteKind;
-  "target-profile"?: InstanceControlPlaneRouteTargetProfile;
-  "app-install"?: AppInstallId;
+  targetProfile?: InstanceControlPlaneRouteTargetProfile;
+  appInstall?: AppInstallId;
   surface?: InstanceControlPlaneRouteSurface;
-  "provider-config"?: string;
-  "to-host"?: string;
-  "to-url"?: string;
-  "status-code"?: InstanceControlPlaneRedirectStatusCode;
-  "preserve-path"?: boolean;
-  "preserve-query-string"?: boolean;
-  "created-at": string;
-  "updated-at": string;
+  providerConfig?: string;
+  toHost?: string;
+  toUrl?: string;
+  statusCode?: InstanceControlPlaneRedirectStatusCode;
+  preservePath?: boolean;
+  preserveQueryString?: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type InstanceControlPlaneDeployTargetKind = "instance";
@@ -317,42 +317,38 @@ export const instanceControlPlaneSchema = {
       label: "Route",
       fields: {
         enabled: booleanField("Enabled", true),
-        "match-host": optionalTextField("Match host"),
-        "match-path": textField("Match path"),
-        "match-prefix": optionalTextField("Match prefix"),
+        matchHost: optionalTextField("Match host"),
+        matchPath: textField("Match path"),
+        matchPrefix: optionalTextField("Match prefix"),
         kind: enumField("Kind", {
           mount: "Mount",
           redirect: "Redirect",
         }),
-        "target-profile": optionalEnumField("Target profile", {
+        targetProfile: optionalEnumField("Target profile", {
           app: "App",
           instance: "Instance",
           "public-site": "Public Site",
         }),
-        "app-install": optionalReferenceField("App install", "app-install", "label"),
+        appInstall: optionalReferenceField("App install", "app-install", "label"),
         surface: optionalEnumField("Surface", {
           admin: "Admin",
           "public-site": "Public Site",
           schema: "Schema",
         }),
-        "provider-config": optionalReferenceField(
-          "Provider config",
-          "provider-config-ref",
-          "label",
-        ),
-        "to-host": optionalTextField("To host"),
-        "to-url": optionalTextField("To URL", "href"),
-        "status-code": optionalEnumField("Status code", {
+        providerConfig: optionalReferenceField("Provider config", "provider-config-ref", "label"),
+        toHost: optionalTextField("To host"),
+        toUrl: optionalTextField("To URL", "href"),
+        statusCode: optionalEnumField("Status code", {
           "301": "301",
           "302": "302",
           "303": "303",
           "307": "307",
           "308": "308",
         }),
-        "preserve-path": optionalBooleanField("Preserve path", true),
-        "preserve-query-string": optionalBooleanField("Preserve query string", true),
-        "created-at": textField("Created at"),
-        "updated-at": textField("Updated at"),
+        preservePath: optionalBooleanField("Preserve path", true),
+        preserveQueryString: optionalBooleanField("Preserve query string", true),
+        createdAt: textField("Created at"),
+        updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
     },
@@ -392,7 +388,7 @@ export const instanceControlPlaneSchema = {
       label: "Desired resource",
       fields: {
         deployTarget: referenceField("Deploy target", "deploy-target", "label"),
-        route: optionalReferenceField("Route", "route", "match-path"),
+        route: optionalReferenceField("Route", "route", "matchPath"),
         logicalId: textField("Logical id"),
         kind: deploymentResourceKindField(),
         providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
@@ -489,11 +485,11 @@ export const instanceControlPlaneSchema = {
     },
   },
   relationships: {
-    routeInstall: toOne("Route install", "route", "app-install", "app-install"),
+    routeInstall: toOne("Route install", "route", "appInstall", "app-install"),
     routeProviderConfig: toOne(
       "Route provider config",
       "route",
-      "provider-config",
+      "providerConfig",
       "provider-config-ref",
     ),
     desiredResourceTarget: toOne(
@@ -546,7 +542,7 @@ export const instanceControlPlaneSchema = {
   },
   itemViews: {
     appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
-    routeItem: itemView("route", ["match-host", "match-path", "kind", "enabled"]),
+    routeItem: itemView("route", ["matchHost", "matchPath", "kind", "enabled"]),
     deployTargetItem: itemView("deploy-target", ["label", "targetId", "enabled"]),
     providerConfigRefItem: itemView("provider-config-ref", [
       "label",
@@ -578,19 +574,19 @@ export const instanceControlPlaneSchema = {
     ]),
     routeTable: tableView("route", [
       { field: "enabled", display: "editor" },
-      { field: "match-host", display: "editor" },
-      { field: "match-path", display: "editor" },
-      { field: "match-prefix", display: "editor" },
+      { field: "matchHost", display: "editor" },
+      { field: "matchPath", display: "editor" },
+      { field: "matchPrefix", display: "editor" },
       { field: "kind", display: "readOnly" },
-      { field: "target-profile", display: "editor" },
-      { field: "app-install", display: "editor" },
+      { field: "targetProfile", display: "editor" },
+      { field: "appInstall", display: "editor" },
       { field: "surface", display: "readOnly" },
-      { field: "provider-config", display: "editor" },
-      { field: "to-host", display: "editor" },
-      { field: "to-url", display: "editor" },
-      { field: "status-code", display: "editor" },
-      { field: "preserve-path", display: "editor" },
-      { field: "preserve-query-string", display: "editor" },
+      { field: "providerConfig", display: "editor" },
+      { field: "toHost", display: "editor" },
+      { field: "toUrl", display: "editor" },
+      { field: "statusCode", display: "editor" },
+      { field: "preservePath", display: "editor" },
+      { field: "preserveQueryString", display: "editor" },
     ]),
     deployTargetTable: tableView("deploy-target", ["label", "targetId", "targetKind", "enabled"]),
     providerConfigRefTable: tableView("provider-config-ref", [
@@ -661,21 +657,21 @@ export const instanceControlPlaneSchema = {
     ),
     routeCreate: createView("route", [
       "enabled",
-      "match-host",
-      "match-path",
-      "match-prefix",
+      "matchHost",
+      "matchPath",
+      "matchPrefix",
       "kind",
-      "target-profile",
-      "app-install",
+      "targetProfile",
+      "appInstall",
       "surface",
-      "provider-config",
-      "to-host",
-      "to-url",
-      "status-code",
-      "preserve-path",
-      "preserve-query-string",
-      "created-at",
-      "updated-at",
+      "providerConfig",
+      "toHost",
+      "toUrl",
+      "statusCode",
+      "preservePath",
+      "preserveQueryString",
+      "createdAt",
+      "updatedAt",
     ]),
     routeList: collectionView("Routes", "route", "routeAll", "routeTable", {
       createView: "routeCreate",
@@ -970,14 +966,14 @@ function mountRouteRecord(
     updatedAt: input.now,
     values: {
       enabled: true,
-      "match-path": route.matchPath,
-      ...(route.matchPrefix === undefined ? {} : { "match-prefix": route.matchPrefix }),
+      matchPath: route.matchPath,
+      ...(route.matchPrefix === undefined ? {} : { matchPrefix: route.matchPrefix }),
       kind: "mount",
-      "target-profile": route.targetProfile,
-      "app-install": input.install.installId,
+      targetProfile: route.targetProfile,
+      appInstall: input.install.installId,
       surface: route.surface,
-      "created-at": input.now,
-      "updated-at": input.now,
+      createdAt: input.now,
+      updatedAt: input.now,
     },
   };
 }
@@ -1184,13 +1180,7 @@ function createField(editor: FieldEditor) {
 }
 
 function editorForField(field: string): FieldEditor {
-  if (
-    field === "enabled" ||
-    field === "preservePath" ||
-    field === "preserveQueryString" ||
-    field === "preserve-path" ||
-    field === "preserve-query-string"
-  ) {
+  if (field === "enabled" || field === "preservePath" || field === "preserveQueryString") {
     return "boolean";
   }
 
@@ -1211,11 +1201,10 @@ function editorForField(field: string): FieldEditor {
     field === "surface" ||
     field === "packageCapability" ||
     field === "targetKind" ||
-    field === "target-profile" ||
+    field === "targetProfile" ||
     field === "providerFamily" ||
     field === "profile" ||
     field === "statusCode" ||
-    field === "status-code" ||
     field === "kind" ||
     field === "mode" ||
     field === "actorKind" ||
@@ -1226,10 +1215,9 @@ function editorForField(field: string): FieldEditor {
 
   if (
     field === "appInstall" ||
-    field === "app-install" ||
     field === "appRoute" ||
+    field === "providerConfig" ||
     field === "providerConfigRef" ||
-    field === "provider-config" ||
     field === "route" ||
     field === "deployTarget" ||
     field === "domainMapping" ||
@@ -1249,7 +1237,7 @@ function editorForField(field: string): FieldEditor {
     return "textarea";
   }
 
-  if (field === "toUrl" || field === "to-url") {
+  if (field === "toUrl") {
     return "href";
   }
 

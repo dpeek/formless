@@ -100,6 +100,23 @@ identifiers.
 - AND existing validation for those schema sections remains separately owned by
   their current parser rules
 
+### Requirement: Field Key Grammar
+
+The system SHALL use camelCase field keys for entity field identifiers.
+
+#### Scenario: Declare entity fields
+
+- WHEN an app schema declares entity fields
+- THEN field keys use lower camelCase identifiers such as `appInstall`,
+  `matchPath`, `providerConfig`, and `createdAt`
+- AND kebab-case remains reserved for entity keys, not field keys
+
+#### Scenario: Reference kebab-case entity from camelCase field
+
+- WHEN a field references an entity such as `app-install`
+- THEN the field key remains camelCase
+- AND the reference target remains the local kebab-case entity key
+
 ### Requirement: Qualified Entity Names
 
 The system SHALL represent entity identity as `<schema-key>:<entity-key>` at

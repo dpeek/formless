@@ -127,8 +127,8 @@ describe("instance app install API routes", () => {
         op: "patch",
         recordId: "route:personal:admin",
         values: {
-          "match-path": "/apps/personal-admin",
-          "updated-at": "2026-05-28T00:00:00.000Z",
+          matchPath: "/apps/personal-admin",
+          updatedAt: "2026-05-28T00:00:00.000Z",
         },
       },
     );
@@ -167,12 +167,12 @@ describe("instance app install API routes", () => {
         op: "create",
         values: {
           enabled: true,
-          "match-path": "/apps/personal",
+          matchPath: "/apps/personal",
           kind: "mount",
-          "target-profile": "instance",
+          targetProfile: "instance",
           surface: "admin",
-          "created-at": now,
-          "updated-at": now,
+          createdAt: now,
+          updatedAt: now,
         },
       },
     );
@@ -205,8 +205,8 @@ describe("instance app install API routes", () => {
         op: "patch",
         recordId: "route:personal:admin",
         values: {
-          "match-path": "/apps/personal-admin",
-          "updated-at": "2026-06-02T00:00:00.000Z",
+          matchPath: "/apps/personal-admin",
+          updatedAt: "2026-06-02T00:00:00.000Z",
         },
       },
     );

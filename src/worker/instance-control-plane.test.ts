@@ -108,7 +108,7 @@ describe("instance control-plane API routes", () => {
       label: "Personal Site",
       storageIdentity: "app:personal",
     });
-    expect(routeValues(controlPlane.body).map((route) => route["match-path"])).toEqual([
+    expect(routeValues(controlPlane.body).map((route) => route["matchPath"])).toEqual([
       "/apps/personal",
       "/apps/personal/schema",
       "/sites/personal",
@@ -173,8 +173,8 @@ describe("instance control-plane API routes", () => {
       op: "patch",
       recordId: "route:personal:admin",
       values: {
-        "match-path": "/apps/personal-admin",
-        "updated-at": "2026-05-28T00:00:00.000Z",
+        matchPath: "/apps/personal-admin",
+        updatedAt: "2026-05-28T00:00:00.000Z",
       },
     });
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");

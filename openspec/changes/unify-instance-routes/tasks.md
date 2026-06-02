@@ -1,13 +1,13 @@
 ## 1. Schema Model
 
-- [x] 1.1 Add the `route` entity to the instance control-plane schema using kebab-case field names and qualified boundary name `instance:route`.
+- [x] 1.1 Add the `route` entity to the instance control-plane schema using camelCase field names and qualified boundary name `instance:route`.
 - [x] 1.2 Remove app route, domain mapping, and redirect intent desired-state entities from new control-plane source paths.
 - [x] 1.3 Define route field metadata for enabled state, match host, match path, match prefix, kind, target profile, app install, surface, provider config, redirect fields, and timestamps.
 - [x] 1.4 Update read models and relationships so app installs, provider configs, deployment projection, and generated views reference route records.
 
 Evidence 2026-06-02 grug:
 
-- Changed `src/shared/instance-control-plane.ts` to make `route` the desired route entity, expose `instance:route`, use kebab-case route fields, and point generated route/deploy views and relationships at route records.
+- Changed `src/shared/instance-control-plane.ts` to make `route` the desired route entity, expose `instance:route`, use camelCase route fields, and point generated route/deploy views and relationships at route records.
 - Changed worker control-plane adapters so default app install routes and synced domain/redirect intent records write `route` records while app install API summaries still derive hostless installed-app routes.
 - Updated direct schema/view/worker tests for the unified route model.
 - `devstate start`: pass, services running.
@@ -18,13 +18,13 @@ Evidence 2026-06-02 grug:
 
 - [x] 2.1 Validate normalized exact hosts, hostless route scope, absolute match paths, and optional prefix shape.
 - [x] 2.2 Validate `mount` routes by target profile, required app install target, surface, package capability, and provider config eligibility.
-- [x] 2.3 Validate `redirect` routes by target host or URL, status code, preserve-path policy, preserve-query-string policy, and absence of app-only target fields.
+- [x] 2.3 Validate `redirect` routes by target host or URL, status code, preservePath policy, preserveQueryString policy, and absence of app-only target fields.
 - [x] 2.4 Reject conflicting enabled routes for the same host scope and path or prefix match.
 - [x] 2.5 Preserve host-mounted public Site blocking for generated admin shell, owner auth, schema-key routes, and installed app admin routes on that host.
 
 Evidence 2026-06-02 grug:
 
-- Changed `src/worker/authority-validation.ts` to validate unified `route` records in Authority writes: canonical exact hosts, hostless scope, normalized absolute paths and prefixes, mount target/surface/app capability, redirect target and policy shape, provider-config eligibility, enabled-route overlaps, and host public Site root-prefix blocking.
+- Changed `src/worker/authority-validation.ts` to validate unified `route` records in Authority writes: canonical exact hosts, hostless scope, normalized absolute paths and prefixes, mount target/surface/app capability, redirect target and policy shape, providerConfig eligibility, enabled-route overlaps, and host public Site root-prefix blocking.
 - Added focused Authority coverage in `src/worker/control-plane-schema-validation.test.ts` for unified `route` validation while preserving the legacy generic `app-route` metadata test.
 - `devstate start`: pass, services running.
 - `devstate check`: pass, checks ok and services running.
@@ -52,14 +52,14 @@ Evidence 2026-06-02 grug:
 - [x] 4.1 Resolve installed app admin and schema routes from enabled route records.
 - [x] 4.2 Resolve installed Site public routes from enabled route records.
 - [x] 4.3 Resolve exact-host public Site and app mappings from enabled route records before ordinary host profile behavior.
-- [x] 4.4 Resolve redirect routes with configured status code, target, preserve-path policy, and preserve-query-string policy.
+- [x] 4.4 Resolve redirect routes with configured status code, target, preservePath policy, and preserveQueryString policy.
 - [x] 4.5 Add deterministic match ordering for exact host, hostless, exact path, prefix path, redirect, and mount selection.
 
 Evidence 2026-06-02 grug:
 
 - Added `src/worker/instance-runtime-routes.ts` and a private control-plane runtime route resolver so Worker routing selects enabled `route` records directly without request-time domain mapping compatibility lookup.
 - Changed `src/worker/index.ts`, `src/worker/mapped-app-host.ts`, and `src/worker/mapped-site-host.ts` so exact-host mount routes drive mapped public Site SSR, mapped app shell hints, instance profile host behavior, auth blocking, and schema-key API blocking before ordinary host profile inference.
-- Added redirect route resolution with configured status code, `to-host`/`to-url` target, preserved path, and preserved query string handling.
+- Added redirect route resolution with configured status code, `toHost`/`toUrl` target, preserved path, and preserved query string handling.
 - Added runtime route ordering coverage for exact-host before hostless, exact path before prefix, redirect before mount, disabled-hostless exclusion for mapped-host lookup, and direct route-record Worker routing coverage for public Site, app, and redirect hosts.
 - `devstate start`: pass, services running.
 - `devstate check`: pass, checks ok and services running.

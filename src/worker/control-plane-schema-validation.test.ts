@@ -164,10 +164,10 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-host": "WWW.Example.COM.",
+          matchHost: "WWW.Example.COM.",
         }),
       },
-      'Field "match-host" must be a normalized exact host.',
+      'Field "matchHost" must be a normalized exact host.',
     );
 
     await authority.expectError(
@@ -177,10 +177,10 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-path": "/api/site",
+          matchPath: "/api/site",
         }),
       },
-      'Field "match-path" must be a normalized absolute path.',
+      'Field "matchPath" must be a normalized absolute path.',
     );
 
     await authority.expectError(
@@ -190,13 +190,13 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-path": "/sites/personal",
-          "match-prefix": "/sites/",
-          "target-profile": "public-site",
+          matchPath: "/sites/personal",
+          matchPrefix: "/sites/",
+          targetProfile: "public-site",
           surface: "public-site",
         }),
       },
-      'Field "match-prefix" must begin at or below field "match-path".',
+      'Field "matchPrefix" must begin at or below field "matchPath".',
     );
 
     await authority.expectError(
@@ -206,10 +206,10 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "provider-config": providerConfig.record.id,
+          providerConfig: providerConfig.record.id,
         }),
       },
-      'Field "provider-config" can only be set on exact-host route records.',
+      'Field "providerConfig" can only be set on exact-host route records.',
     );
 
     await authority.expectError(
@@ -219,13 +219,13 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(tasksInstall.record.id, {
-          "match-path": "/sites/tasks",
-          "match-prefix": "/sites/tasks/",
-          "target-profile": "public-site",
+          matchPath: "/sites/tasks",
+          matchPrefix: "/sites/tasks/",
+          targetProfile: "public-site",
           surface: "public-site",
         }),
       },
-      'Field "app-install" references app-install record',
+      'Field "appInstall" references app-install record',
     );
 
     await authority.expectError(
@@ -235,10 +235,10 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: redirectRouteValues({
-          "to-host": undefined,
+          toHost: undefined,
         }),
       },
-      'Redirect routes must set exactly one of field "to-host" or field "to-url".',
+      'Redirect routes must set exactly one of field "toHost" or field "toUrl".',
     );
 
     await authority.expectError(
@@ -248,10 +248,10 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: redirectRouteValues({
-          "app-install": siteInstall.record.id,
+          appInstall: siteInstall.record.id,
         }),
       },
-      'Field "app-install" is incompatible with redirect routes.',
+      'Field "appInstall" is incompatible with redirect routes.',
     );
 
     await authority.expectError(
@@ -261,11 +261,11 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: redirectRouteValues({
-          "to-host": undefined,
-          "to-url": "http://example.com",
+          toHost: undefined,
+          toUrl: "http://example.com",
         }),
       },
-      'Field "to-url" must be a normalized absolute HTTPS URL without credentials or fragment.',
+      'Field "toUrl" must be a normalized absolute HTTPS URL without credentials or fragment.',
     );
 
     await authority.expectError(
@@ -275,14 +275,14 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-host": "www.example.com",
-          "match-path": "/sites/personal",
-          "match-prefix": "/sites/personal/",
-          "target-profile": "public-site",
+          matchHost: "www.example.com",
+          matchPath: "/sites/personal",
+          matchPrefix: "/sites/personal/",
+          targetProfile: "public-site",
           surface: "public-site",
         }),
       },
-      'Host-mounted public Site routes must set field "match-path" to "/" and field "match-prefix" to "/".',
+      'Host-mounted public Site routes must set field "matchPath" to "/" and field "matchPrefix" to "/".',
     );
 
     await authority.postJson<MutationResponse>("/api/mutations", {
@@ -290,10 +290,10 @@ describe("control-plane schema runtime validation", () => {
       entity: "route",
       op: "create",
       values: mountRouteValues(siteInstall.record.id, {
-        "match-host": "www.example.com",
-        "match-path": "/",
-        "match-prefix": "/",
-        "target-profile": "public-site",
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        targetProfile: "public-site",
         surface: "public-site",
       }),
     });
@@ -305,8 +305,8 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-host": "www.example.com",
-          "match-path": "/apps/personal",
+          matchHost: "www.example.com",
+          matchPath: "/apps/personal",
         }),
       },
       'Enabled route match "www.example.com/apps/personal" conflicts with enabled route',
@@ -317,7 +317,7 @@ describe("control-plane schema runtime validation", () => {
       entity: "route",
       op: "create",
       values: mountRouteValues(siteInstall.record.id, {
-        "match-path": "/apps/personal",
+        matchPath: "/apps/personal",
       }),
     });
 
@@ -328,7 +328,7 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-path": "/apps/personal",
+          matchPath: "/apps/personal",
         }),
       },
       'Enabled route match "<hostless>/apps/personal" conflicts with enabled route',
@@ -339,9 +339,9 @@ describe("control-plane schema runtime validation", () => {
       entity: "route",
       op: "create",
       values: mountRouteValues(siteInstall.record.id, {
-        "match-path": "/sites/personal",
-        "match-prefix": "/sites/personal/",
-        "target-profile": "public-site",
+        matchPath: "/sites/personal",
+        matchPrefix: "/sites/personal/",
+        targetProfile: "public-site",
         surface: "public-site",
       }),
     });
@@ -353,8 +353,8 @@ describe("control-plane schema runtime validation", () => {
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          "match-path": "/sites/personal/blog",
-          "target-profile": "public-site",
+          matchPath: "/sites/personal/blog",
+          targetProfile: "public-site",
           surface: "public-site",
         }),
       },
@@ -471,13 +471,13 @@ function instanceRouteRuntimeSchema(): AppSchema {
 function mountRouteValues(appInstall: string, overrides: Record<string, unknown> = {}) {
   return {
     enabled: true,
-    "match-path": "/apps/personal",
+    matchPath: "/apps/personal",
     kind: "mount",
-    "target-profile": "app",
-    "app-install": appInstall,
+    targetProfile: "app",
+    appInstall,
     surface: "admin",
-    "created-at": now,
-    "updated-at": now,
+    createdAt: now,
+    updatedAt: now,
     ...overrides,
   };
 }
@@ -485,16 +485,16 @@ function mountRouteValues(appInstall: string, overrides: Record<string, unknown>
 function redirectRouteValues(overrides: Record<string, unknown> = {}) {
   return {
     enabled: true,
-    "match-host": "old.example.com",
-    "match-path": "/",
-    "match-prefix": "/",
+    matchHost: "old.example.com",
+    matchPath: "/",
+    matchPrefix: "/",
     kind: "redirect",
-    "to-host": "example.com",
-    "status-code": "308",
-    "preserve-path": true,
-    "preserve-query-string": true,
-    "created-at": now,
-    "updated-at": now,
+    toHost: "example.com",
+    statusCode: "308",
+    preservePath: true,
+    preserveQueryString: true,
+    createdAt: now,
+    updatedAt: now,
     ...overrides,
   };
 }

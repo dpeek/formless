@@ -80,8 +80,8 @@ schema-owned `route` records that target app install records.
 - **GIVEN** app routing, custom-domain targets, deployment graphs, archive
   export, or generated UI need to identify an app route
 - **WHEN** a route target is selected
-- **THEN** they reference a `route` record that references an `app-install`
-  record
+- **THEN** they reference a `route` record that uses `appInstall` to reference
+  an `app-install` record
 - **AND** the install id remains the storage identity for installed app data
 
 ### Requirement: App Install Compatibility

@@ -488,7 +488,7 @@ function domainMappingsFromControlPlaneRecords(
           record.entity === "route" &&
           record.id.startsWith("route:host:") &&
           record.values.kind === "mount" &&
-          typeof record.values["match-host"] === "string",
+          typeof record.values.matchHost === "string",
       )
       .map(domainMappingFromControlPlaneRecord),
   ).filter((mapping) => !isForgottenDomainMapping(mapping, cleanupEvents));
@@ -531,18 +531,18 @@ function isForgottenDomainMapping(
 }
 
 function domainMappingFromControlPlaneRecord(record: StoredRecord): InstanceDomainMapping {
-  const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
+  const profile = domainMappingProfileFromRouteTarget(record.values.targetProfile);
   const targetInstallId =
-    typeof record.values["app-install"] === "string" ? record.values["app-install"] : undefined;
+    typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
 
   return {
-    host: String(record.values["match-host"]),
+    host: String(record.values.matchHost),
     profile,
     ...(profile === "publicSite" ? { surface: "site" as const } : {}),
     ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
     enabled: record.values.enabled === true,
-    createdAt: String(record.values["created-at"]),
-    updatedAt: String(record.values["updated-at"]),
+    createdAt: String(record.values.createdAt),
+    updatedAt: String(record.values.updatedAt),
   };
 }
 

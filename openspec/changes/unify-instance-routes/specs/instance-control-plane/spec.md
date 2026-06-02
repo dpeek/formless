@@ -9,11 +9,11 @@ records.
 
 - **GIVEN** the instance control-plane schema is loaded
 - **WHEN** the `route` entity is inspected
-- **THEN** each route record can store enabled state, optional match host,
-  match path, optional match prefix, kind, optional target profile, optional app
-  install reference, optional surface, optional provider config reference,
-  redirect target fields, redirect policy fields, created time, and updated
-  time
+- **THEN** each route record can store camelCase fields for enabled state,
+  optional match host, match path, optional match prefix, kind, optional target
+  profile, optional app install reference, optional surface, optional provider
+  config reference, redirect target fields, redirect policy fields, created
+  time, and updated time
 - **AND** route records remain flat schema records
 
 #### Scenario: Mount route
@@ -21,7 +21,8 @@ records.
 - **GIVEN** an owner or admin creates a mount route
 - **WHEN** the route is accepted
 - **THEN** `kind` is `mount`
-- **AND** app and public Site mounts reference an `app-install` record
+- **AND** app and public Site mounts set `appInstall` to reference an
+  `app-install` record
 - **AND** the route records the selected target profile and surface without
   duplicating installed app data or storage state
 
@@ -31,7 +32,7 @@ records.
 - **WHEN** the route is accepted
 - **THEN** `kind` is `redirect`
 - **AND** the route stores the source match, target host or URL, status code,
-  preserve-path policy, and preserve-query-string policy
+  preservePath policy, and preserveQueryString policy
 - **AND** the route does not require an app install target
 
 #### Scenario: Desired route write

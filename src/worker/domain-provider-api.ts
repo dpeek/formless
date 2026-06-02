@@ -1686,23 +1686,21 @@ function domainMappingsFromControlPlaneRecords(
           record.entity === "route" &&
           record.id.startsWith("route:host:") &&
           record.values.kind === "mount" &&
-          typeof record.values["match-host"] === "string",
+          typeof record.values.matchHost === "string",
       )
       .map((record) => {
-        const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
+        const profile = domainMappingProfileFromRouteTarget(record.values.targetProfile);
         const targetInstallId =
-          typeof record.values["app-install"] === "string"
-            ? record.values["app-install"]
-            : undefined;
+          typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
 
         return {
-          host: String(record.values["match-host"]),
+          host: String(record.values.matchHost),
           profile,
           ...(profile === "publicSite" ? { surface: "site" as const } : {}),
           ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
           enabled: record.values.enabled === true,
-          createdAt: String(record.values["created-at"]),
-          updatedAt: String(record.values["updated-at"]),
+          createdAt: String(record.values.createdAt),
+          updatedAt: String(record.values.updatedAt),
         };
       }),
   ).filter((mapping) => !isForgottenDomainMapping(mapping, cleanupEvents));
@@ -1767,18 +1765,18 @@ function redirectIntentsFromControlPlaneRecords(
         record.entity === "route" &&
         record.id.startsWith("route:redirect:") &&
         record.values.kind === "redirect" &&
-        typeof record.values["match-host"] === "string",
+        typeof record.values.matchHost === "string",
     )
     .map((record) => ({
-      fromHost: String(record.values["match-host"]),
-      ...(typeof record.values["to-host"] === "string" ? { toHost: record.values["to-host"] } : {}),
-      ...(typeof record.values["to-url"] === "string" ? { toUrl: record.values["to-url"] } : {}),
-      statusCode: Number(record.values["status-code"]) as DomainProviderRedirectStatusCode,
-      preservePath: record.values["preserve-path"] === true,
-      preserveQueryString: record.values["preserve-query-string"] === true,
+      fromHost: String(record.values.matchHost),
+      ...(typeof record.values.toHost === "string" ? { toHost: record.values.toHost } : {}),
+      ...(typeof record.values.toUrl === "string" ? { toUrl: record.values.toUrl } : {}),
+      statusCode: Number(record.values.statusCode) as DomainProviderRedirectStatusCode,
+      preservePath: record.values.preservePath === true,
+      preserveQueryString: record.values.preserveQueryString === true,
       enabled: record.values.enabled === true,
-      createdAt: String(record.values["created-at"]),
-      updatedAt: String(record.values["updated-at"]),
+      createdAt: String(record.values.createdAt),
+      updatedAt: String(record.values.updatedAt),
     }))
     .filter((intent) => !isForgottenRedirectIntent(intent, cleanupEvents))
     .sort((left, right) => left.fromHost.localeCompare(right.fromHost));
