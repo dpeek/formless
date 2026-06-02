@@ -2,9 +2,11 @@ import { validateAppInstallId } from "./app-installs.ts";
 import { isValidStoredFieldValue } from "./field-types.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  formatInstanceControlPlaneBoundaryEntityName,
   type InstanceControlPlaneEntityName,
-  instanceControlPlaneEntityNames,
+  isInstanceControlPlaneEntityName,
   instanceControlPlaneSchema,
+  parseInstanceControlPlaneBoundaryEntityName,
 } from "./instance-control-plane.ts";
 import {
   parseStoreSnapshot,
@@ -409,15 +411,7 @@ function parseInstanceArchiveControlPlaneRecord(context: string, value: unknown)
     ...("deletedAt" in object ? ["deletedAt"] : []),
   ]);
 
-  const entity = parseNonEmptyString(`${context} entity`, object.entity);
-
-  if (
-    !instanceControlPlaneEntityNames.includes(
-      entity as (typeof instanceControlPlaneEntityNames)[number],
-    )
-  ) {
-    throw new Error(`${context} entity "${entity}" is not an instance control-plane entity.`);
-  }
+  const entity = parseInstanceArchiveControlPlaneEntity(`${context} entity`, object.entity);
 
   const record = {
     id: parseNonEmptyString(`${context} id`, object.id),
@@ -459,7 +453,7 @@ function validateInstanceArchiveControlPlaneRecord(
 
   if (!entity) {
     throw new Error(
-      `${context} record "${record.id}" references unknown entity "${record.entity}".`,
+      `${context} record "${record.id}" references unknown entity "${controlPlaneEntityLabel(record.entity)}".`,
     );
   }
 
@@ -468,7 +462,7 @@ function validateInstanceArchiveControlPlaneRecord(
   for (const fieldName of Object.keys(record.values)) {
     if (!fields[fieldName]) {
       throw new Error(
-        `${context} record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+        `${context} record "${record.id}" includes unknown field "${controlPlaneFieldLabel(record, fieldName)}".`,
       );
     }
   }
@@ -480,7 +474,7 @@ function validateInstanceArchiveControlPlaneRecord(
 
     if (!isValidStoredFieldValue(value, field)) {
       throw new Error(
-        `${context} record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+        `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, fieldName)}".`,
       );
     }
 
@@ -513,19 +507,19 @@ function validateInstanceArchiveControlPlaneReference(
 
   if (!target) {
     throw new Error(
-      `${context} record "${record.id}" field "${record.entity}.${fieldName}" references unknown ${entityName} record "${value}".`,
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" references unknown ${controlPlaneEntityLabel(entityName)} record "${value}".`,
     );
   }
 
   if (target.entity !== entityName) {
     throw new Error(
-      `${context} record "${record.id}" field "${record.entity}.${fieldName}" must reference a ${entityName} record.`,
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must reference a ${controlPlaneEntityLabel(entityName)} record.`,
     );
   }
 
   if (target.deletedAt) {
     throw new Error(
-      `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot reference tombstoned record "${value}".`,
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot reference tombstoned record "${value}".`,
     );
   }
 }
@@ -557,7 +551,7 @@ function validateInstanceArchiveControlPlaneUniqueConstraints(
 
         if (seen.has(key)) {
           throw new Error(
-            `${context} violates unique constraint "${entityName}.${constraintName}".`,
+            `${context} violates unique constraint "${controlPlaneEntityLabel(entityName)}.${constraintName}".`,
           );
         }
 
@@ -577,7 +571,7 @@ function assertControlPlaneRecordValuesAreReviewable(context: string, record: St
 
     if (!isSecretReference && isForbiddenControlPlaneFieldName(fieldName)) {
       throw new Error(
-        `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secrets or provider truth.`,
       );
     }
 
@@ -595,7 +589,7 @@ function assertControlPlaneStringValueIsReviewable(
 ) {
   if (containsForbiddenControlPlaneSecretValue(value)) {
     throw new Error(
-      `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secret values.`,
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secret values.`,
     );
   }
 
@@ -632,7 +626,7 @@ function assertControlPlaneJsonValueIsReviewable(
   for (const [key, item] of Object.entries(value)) {
     if (isForbiddenControlPlaneFieldName(key)) {
       throw new Error(
-        `${context} record "${record.id}" field "${record.entity}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secrets or provider truth.`,
       );
     }
 
@@ -661,11 +655,36 @@ function parseMaybeJson(value: string): Record<string, unknown> | unknown[] | un
 }
 
 function instanceControlPlaneEntitySchema(entityName: string) {
-  if (!instanceControlPlaneEntityNames.includes(entityName as InstanceControlPlaneEntityName)) {
+  if (!isInstanceControlPlaneEntityName(entityName)) {
     return undefined;
   }
 
-  return instanceControlPlaneSchema.entities[entityName as InstanceControlPlaneEntityName];
+  return instanceControlPlaneSchema.entities[entityName];
+}
+
+function parseInstanceArchiveControlPlaneEntity(
+  context: string,
+  value: unknown,
+): InstanceControlPlaneEntityName {
+  const entity = parseNonEmptyString(context, value);
+
+  if (isInstanceControlPlaneEntityName(entity)) {
+    return entity;
+  }
+
+  return parseInstanceControlPlaneBoundaryEntityName(context, entity);
+}
+
+function controlPlaneEntityLabel(entityName: string): string {
+  if (isInstanceControlPlaneEntityName(entityName)) {
+    return formatInstanceControlPlaneBoundaryEntityName(entityName);
+  }
+
+  return entityName;
+}
+
+function controlPlaneFieldLabel(record: Pick<StoredRecord, "entity">, fieldName: string): string {
+  return `${controlPlaneEntityLabel(record.entity)}.${fieldName}`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -959,7 +978,25 @@ function canonicalInstanceArchiveControlPlane(
   return {
     schemaKey: controlPlane.schemaKey,
     schemaUpdatedAt: controlPlane.schemaUpdatedAt,
-    records: canonicalStoredRecords(controlPlane.records),
+    records: controlPlane.records
+      .map(canonicalInstanceArchiveControlPlaneRecord)
+      .sort(compareRecords),
+  };
+}
+
+function canonicalInstanceArchiveControlPlaneRecord(record: StoredRecord): StoredRecord {
+  const entity = parseInstanceArchiveControlPlaneEntity(
+    `Instance archive controlPlane record "${record.id}" entity`,
+    record.entity,
+  );
+  const canonical = canonicalStoredRecord({
+    ...record,
+    entity,
+  });
+
+  return {
+    ...canonical,
+    entity: formatInstanceControlPlaneBoundaryEntityName(entity),
   };
 }
 

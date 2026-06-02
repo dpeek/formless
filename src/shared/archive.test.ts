@@ -102,10 +102,17 @@ describe("portable archive protocol", () => {
     });
     const parsed = parseInstanceArchive(archive);
     const formatted = formatInstanceArchive(parsed);
+    const formattedArchive = JSON.parse(formatted) as InstanceArchive;
 
     expect(parsed.controlPlane?.records.map((record) => record.entity)).toContain(
       "deploy-desired-resource",
     );
+    expect(formattedArchive.controlPlane?.records.map((record) => record.entity)).toContain(
+      "instance:deploy-desired-resource",
+    );
+    expect(
+      parseInstanceArchive(formattedArchive).controlPlane?.records.map((record) => record.entity),
+    ).toContain("deploy-desired-resource");
     expect(JSON.stringify(parsed.controlPlane)).not.toContain("rec_site");
     expect(formatInstanceArchive(parseInstanceArchive(JSON.parse(formatted)))).toBe(formatted);
     const controlPlane = archive.controlPlane;

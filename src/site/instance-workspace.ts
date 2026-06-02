@@ -26,8 +26,10 @@ import {
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneAppRouteId,
+  isInstanceControlPlaneEntityName,
   type InstanceControlPlaneAppRouteCapability,
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneAppRouteSurface,
@@ -2611,7 +2613,11 @@ function comparableControlPlaneValues(record: StoredRecord): RecordValues {
 }
 
 function controlPlaneRecordKey(record: Pick<StoredRecord, "entity" | "id">) {
-  return `${record.entity}:${record.id}`;
+  const entityName = isInstanceControlPlaneEntityName(record.entity)
+    ? formatInstanceControlPlaneBoundaryEntityName(record.entity)
+    : record.entity;
+
+  return `${entityName}:${record.id}`;
 }
 
 function controlPlaneRecordCount(

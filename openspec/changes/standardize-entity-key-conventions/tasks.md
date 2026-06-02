@@ -40,11 +40,19 @@
 
 ## 4. Archive And Workspace Record Source
 
-- [ ] 4.1 Emit qualified entity names for control-plane records at portable archive boundaries.
-- [ ] 4.2 Emit qualified entity names for deterministic workspace record source used by `browser-workspace-control-plane`.
-- [ ] 4.3 Map qualified boundary names back to schema-local entity keys before Authority validation.
-- [ ] 4.4 Update drift reports, logs, diagnostics, and CLI output that identify record entity types to use qualified names.
-- [ ] 4.5 Reconcile `destroy-instance` source-of-truth wording that still refers to target and deploy intent in `formless.json`.
+- [x] 4.1 Emit qualified entity names for control-plane records at portable archive boundaries.
+- [x] 4.2 Emit qualified entity names for deterministic workspace record source used by `browser-workspace-control-plane`.
+- [x] 4.3 Map qualified boundary names back to schema-local entity keys before Authority validation.
+- [x] 4.4 Update drift reports, logs, diagnostics, and CLI output that identify record entity types to use qualified names.
+- [x] 4.5 Reconcile `destroy-instance` source-of-truth wording that still refers to target and deploy intent in `formless.json`.
+
+- Files changed: `src/shared/instance-control-plane.ts`, `src/shared/archive.ts`, `src/site/archive-workflows.ts`, `src/site/instance-workspace.ts`, `src/shared/archive.test.ts`, and `src/site/cli.test.ts`.
+- Evidence: instance control-plane archive and workspace-source JSON now emits record entities as qualified names such as `instance:app-install`, `instance:app-route`, and `instance:deploy-desired-resource`; archive parsing maps those qualified boundary names back to local entity keys before validation and Authority restore.
+- Boundary output evidence: CLI restore requests serialize archives through archive formatting before POST, workspace pull/save tests assert raw archive source uses qualified names, parsed archive tests assert internal records remain local, and changed control-plane drift record keys now use qualified entity names.
+- Diagnostics evidence: archive validation and remote control-plane archiveability errors now report qualified control-plane field labels such as `instance:deploy-desired-resource.inputsJson`.
+- Source-of-truth reconciliation: `formless.json` remains the reviewable selected-target/deploy-adapter metadata used by destroy, while app, route, domain, and deploy intent records crossing archive or workspace-source boundaries are represented as schema-owned control-plane records with qualified entity names.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T02:47:04.685Z.
+- Smoke: not run; this section changed archive, workspace-source, CLI request, and diagnostic boundaries without browser-visible generated UI behavior.
 
 ## 5. Compatibility Adapters
 

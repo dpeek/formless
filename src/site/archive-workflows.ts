@@ -28,7 +28,11 @@ import {
   type BundledAppPackage,
 } from "../shared/app-installs.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  formatInstanceControlPlaneBoundaryEntityName,
+  isInstanceControlPlaneEntityName,
+} from "../shared/instance-control-plane.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
@@ -220,7 +224,7 @@ function storedControlPlaneRecordValues(record: DeployControlPlaneRecord): Store
       !(typeof value === "number" && Number.isFinite(value))
     ) {
       throw new Error(
-        `Remote control-plane record "${record.id}" field "${record.entity}.${fieldName}" is not archiveable.`,
+        `Remote control-plane record "${record.id}" field "${remoteControlPlaneFieldLabel(record.entity, fieldName)}" is not archiveable.`,
       );
     }
 
@@ -228,6 +232,14 @@ function storedControlPlaneRecordValues(record: DeployControlPlaneRecord): Store
   }
 
   return values;
+}
+
+function remoteControlPlaneFieldLabel(entityName: string, fieldName: string): string {
+  const boundaryEntityName = isInstanceControlPlaneEntityName(entityName)
+    ? formatInstanceControlPlaneBoundaryEntityName(entityName)
+    : entityName;
+
+  return `${boundaryEntityName}.${fieldName}`;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -682,7 +694,7 @@ async function postRemoteArchiveRestore(
     apiUrl(target, INSTANCE_ARCHIVE_RESTORE_API_PATH),
     {
       body: JSON.stringify({
-        archive: input.archive,
+        archive: JSON.parse(formatPortableArchive(input.archive)) as unknown,
         mediaFiles: input.mediaFiles.map(archiveRestoreRequestMediaFile),
       }),
       headers: archiveRestoreRequestHeaders(input.adminToken, dependencies.env),

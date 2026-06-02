@@ -1088,9 +1088,10 @@ describe("Formless Site CLI", () => {
       "archives/instance",
       PORTABLE_ARCHIVE_MANIFEST_FILE,
     );
-    const pulledInstance = parsePortableArchive(
-      JSON.parse(await readFile(instanceArchivePath, "utf8")) as unknown,
-    );
+    const pulledInstanceJson = JSON.parse(
+      await readFile(instanceArchivePath, "utf8"),
+    ) as InstanceArchive;
+    const pulledInstance = parsePortableArchive(pulledInstanceJson);
 
     if (pulledInstance.kind !== INSTANCE_ARCHIVE_KIND) {
       throw new Error("Expected instance archive.");
@@ -1102,6 +1103,23 @@ describe("Formless Site CLI", () => {
 
     expect(pulledInstance.apps.map((app) => app.app.installId)).toEqual(["david", "james"]);
     expect(pulledInstance.capabilities).toContain("schema-owned-control-plane");
+    expect(
+      pulledInstanceJson.controlPlane?.records
+        .map((record) => `${record.entity}:${record.id}`)
+        .sort((left, right) => left.localeCompare(right)),
+    ).toEqual(
+      [
+        "instance:app-install:david",
+        "instance:app-route:app-route:david:admin",
+        "instance:app-route:app-route:david:publicSite",
+        "instance:app-route:app-route:david:schema",
+        "instance:deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
+        "instance:deploy-drift-report:deploy-drift:instance.primary",
+        "instance:deploy-target:instance.primary",
+        "instance:domain-mapping:domain-mapping:publicSite:dpeek.com",
+        "instance:provider-config-ref:provider-config:cloudflare:personal",
+      ].sort((left, right) => left.localeCompare(right)),
+    );
     expect(
       pulledInstance.controlPlane?.records
         .map((record) => `${record.entity}:${record.id}`)
@@ -2836,12 +2854,12 @@ describe("Formless Site CLI", () => {
     ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
-      "app-install",
-      "app-route",
-      "app-route",
-      "app-route",
-      "deploy-target",
-      "provider-config-ref",
+      "instance:app-install",
+      "instance:app-route",
+      "instance:app-route",
+      "instance:app-route",
+      "instance:deploy-target",
+      "instance:provider-config-ref",
     ]);
     expect(logs).toHaveLength(1);
     const lines = logs[0]?.split("\n") ?? [];
@@ -3338,14 +3356,13 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const instanceArchive = parsePortableArchive(
-      JSON.parse(
-        await readFile(
-          path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE),
-          "utf8",
-        ),
-      ) as unknown,
-    );
+    const instanceArchiveJson = JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ) as InstanceArchive;
+    const instanceArchive = parsePortableArchive(instanceArchiveJson);
     const appArchiveValue = parsePortableArchive(
       JSON.parse(
         await readFile(
@@ -3381,6 +3398,9 @@ describe("Formless Site CLI", () => {
     }
     expect(instanceArchive.capabilities).toContain("schema-owned-control-plane");
     expect(instanceArchive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(instanceArchiveJson.controlPlane?.records.map((record) => record.entity)).toContain(
+      "instance:domain-mapping",
+    );
     expect(instanceArchive.controlPlane?.records.map((record) => record.entity)).toContain(
       "domain-mapping",
     );
@@ -3483,7 +3503,7 @@ describe("Formless Site CLI", () => {
     await expect(
       runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher })),
     ).rejects.toThrow(
-      'Instance archive controlPlane records record "deploy-resource:instance.primary:custom-domain:dpeek.com" field "deploy-desired-resource.inputsJson" cannot store control-plane secret values.',
+      'Instance archive controlPlane records record "deploy-resource:instance.primary:custom-domain:dpeek.com" field "instance:deploy-desired-resource.inputsJson" cannot store control-plane secret values.',
     );
   });
 

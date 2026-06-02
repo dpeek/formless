@@ -1,8 +1,10 @@
 import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
+import { formatQualifiedEntityName, parseQualifiedEntityName } from "./schema-entity-names.ts";
 import type { AppSchema, EntityMutationPolicy, FieldEditor, FieldSchema } from "./schema.ts";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
+export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 
@@ -20,6 +22,40 @@ export const instanceControlPlaneEntityNames = [
 ] as const;
 
 export type InstanceControlPlaneEntityName = (typeof instanceControlPlaneEntityNames)[number];
+
+export function isInstanceControlPlaneEntityName(
+  value: string,
+): value is InstanceControlPlaneEntityName {
+  return instanceControlPlaneEntityNames.includes(value as InstanceControlPlaneEntityName);
+}
+
+export function formatInstanceControlPlaneBoundaryEntityName(
+  entityName: InstanceControlPlaneEntityName,
+): string {
+  return formatQualifiedEntityName({
+    schemaKey: INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+    entityKey: entityName,
+  });
+}
+
+export function parseInstanceControlPlaneBoundaryEntityName(
+  context: string,
+  value: string,
+): InstanceControlPlaneEntityName {
+  const qualifiedName = parseQualifiedEntityName(context, value);
+
+  if (qualifiedName.schemaKey !== INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY) {
+    throw new Error(
+      `${context} schema key must be "${INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY}".`,
+    );
+  }
+
+  if (!isInstanceControlPlaneEntityName(qualifiedName.entityKey)) {
+    throw new Error(`${context} entity "${value}" is not an instance control-plane entity.`);
+  }
+
+  return qualifiedName.entityKey;
+}
 
 export type InstanceControlPlaneRecord<Entity extends InstanceControlPlaneEntityName, Values> = {
   createdAt: string;
@@ -919,12 +955,6 @@ export const instanceControlPlaneSchema = {
     },
   },
 } satisfies AppSchema;
-
-export function isInstanceControlPlaneEntityName(
-  value: string,
-): value is InstanceControlPlaneEntityName {
-  return instanceControlPlaneEntityNames.includes(value as InstanceControlPlaneEntityName);
-}
 
 export function instanceControlPlaneStorageIdentityForInstall(
   installId: AppInstallId,
