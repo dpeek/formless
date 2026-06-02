@@ -166,10 +166,18 @@ Evidence 2026-06-02 grug:
 
 ## 11. Tests
 
-- [ ] 11.1 Add schema and Authority validation tests for mount routes, redirect routes, conflicts, host normalization, path normalization, and provider config eligibility.
+- [x] 11.1 Add schema and Authority validation tests for mount routes, redirect routes, conflicts, host normalization, path normalization, and provider config eligibility.
 - [ ] 11.2 Add migration tests for app route, domain mapping, redirect intent, provider evidence separation, and conflict blockers.
 - [ ] 11.3 Add runtime topology tests for app mounts, schema mounts, public Site mounts, exact-host mounts, redirects, disabled routes, and host-mounted Site route blocking.
 - [ ] 11.4 Add deployment projection and desired-state hash tests for route-derived domain, DNS, and redirect resources.
 - [ ] 11.5 Add workspace/archive drift tests for `instance:route` records and secret rejection.
 - [ ] 11.6 Add generated UI tests for the unified Routes surface and separated provider evidence.
 - [ ] 11.7 Add CLI compatibility tests for app install route summaries, domain APIs, deploy planning, destroy planning, and domain command output.
+
+Evidence 2026-06-02 grug:
+
+- Added `src/shared/instance-control-plane.test.ts` coverage for the flat unified `route` entity fields used by mount and redirect intent, including app install, provider config, redirect target, policy, and timestamp fields.
+- Extended `src/worker/control-plane-schema-validation.test.ts` Authority coverage for accepted exact-host mount routes with eligible provider config, accepted redirect routes, host normalization, path and prefix normalization, provider config references, redirect validation, public Site capability, and enabled route conflicts.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section adds schema and Authority validation tests only and does not change browser-visible behavior.

@@ -49,6 +49,94 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.runtime?.builder.editable).toBe(false);
   });
 
+  it("defines flat unified route fields for mount and redirect intent", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const routeFields = schema.entities.route?.fields;
+
+    expect(routeFields).toMatchObject({
+      enabled: { type: "boolean", required: true, default: true },
+      matchHost: { type: "text", required: false },
+      matchPath: { type: "text", required: true },
+      matchPrefix: { type: "text", required: false },
+      kind: {
+        type: "enum",
+        required: true,
+        values: {
+          mount: { label: "Mount" },
+          redirect: { label: "Redirect" },
+        },
+      },
+      targetProfile: {
+        type: "enum",
+        required: false,
+        values: {
+          app: { label: "App" },
+          instance: { label: "Instance" },
+          "public-site": { label: "Public Site" },
+        },
+      },
+      appInstall: {
+        type: "reference",
+        required: false,
+        to: "app-install",
+        displayField: "label",
+      },
+      surface: {
+        type: "enum",
+        required: false,
+        values: {
+          admin: { label: "Admin" },
+          "public-site": { label: "Public Site" },
+          schema: { label: "Schema" },
+        },
+      },
+      providerConfig: {
+        type: "reference",
+        required: false,
+        to: "provider-config-ref",
+        displayField: "label",
+      },
+      toHost: { type: "text", required: false },
+      toUrl: { type: "text", required: false, format: "href" },
+      statusCode: {
+        type: "enum",
+        required: false,
+        values: {
+          "301": { label: "301" },
+          "302": { label: "302" },
+          "303": { label: "303" },
+          "307": { label: "307" },
+          "308": { label: "308" },
+        },
+      },
+      preservePath: { type: "boolean", required: false, default: true },
+      preserveQueryString: { type: "boolean", required: false, default: true },
+      createdAt: { type: "text", required: true },
+      updatedAt: { type: "text", required: true },
+    });
+    expect(Object.keys(routeFields ?? {})).toEqual([
+      "enabled",
+      "matchHost",
+      "matchPath",
+      "matchPrefix",
+      "kind",
+      "targetProfile",
+      "appInstall",
+      "surface",
+      "providerConfig",
+      "toHost",
+      "toUrl",
+      "statusCode",
+      "preservePath",
+      "preserveQueryString",
+      "createdAt",
+      "updatedAt",
+    ]);
+    expect(schema.runtime?.controlPlane?.entities.route).toEqual({
+      immutableFields: ["kind"],
+    });
+  });
+
   it("records identity invariants outside mutable generated fields", () => {
     expect(INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("instance");
     expect(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:control-plane");

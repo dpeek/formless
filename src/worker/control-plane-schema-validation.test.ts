@@ -157,6 +157,49 @@ describe("control-plane schema runtime validation", () => {
       },
     });
 
+    const hostedMount = await authority.postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-route-exact-host-provider-config",
+      entity: "route",
+      op: "create",
+      values: mountRouteValues(siteInstall.record.id, {
+        matchHost: "app.example.com",
+        providerConfig: providerConfig.record.id,
+      }),
+    });
+
+    expect(hostedMount.record.values).toMatchObject({
+      kind: "mount",
+      matchHost: "app.example.com",
+      matchPath: "/apps/personal",
+      providerConfig: providerConfig.record.id,
+      targetProfile: "app",
+    });
+
+    const redirect = await authority.postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-route-redirect-to-url",
+      entity: "route",
+      op: "create",
+      values: redirectRouteValues({
+        matchHost: "docs.example.com",
+        toHost: undefined,
+        toUrl: "https://example.com/docs",
+        statusCode: "301",
+        preservePath: false,
+        preserveQueryString: false,
+      }),
+    });
+
+    expect(redirect.record.values).toMatchObject({
+      kind: "redirect",
+      matchHost: "docs.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      toUrl: "https://example.com/docs",
+      statusCode: "301",
+      preservePath: false,
+      preserveQueryString: false,
+    });
+
     await authority.expectError(
       "/api/mutations",
       {
@@ -181,6 +224,35 @@ describe("control-plane schema runtime validation", () => {
         }),
       },
       'Field "matchPath" must be a normalized absolute path.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-route-path-case-normalized",
+        entity: "route",
+        op: "create",
+        values: mountRouteValues(siteInstall.record.id, {
+          matchPath: "/Apps/personal",
+        }),
+      },
+      'Field "matchPath" must be a normalized absolute path.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-route-prefix-normalized",
+        entity: "route",
+        op: "create",
+        values: mountRouteValues(siteInstall.record.id, {
+          matchPath: "/sites/personal",
+          matchPrefix: "/sites/personal",
+          targetProfile: "public-site",
+          surface: "public-site",
+        }),
+      },
+      'Field "matchPrefix" must be a normalized absolute path prefix.',
     );
 
     await authority.expectError(
@@ -215,6 +287,20 @@ describe("control-plane schema runtime validation", () => {
     await authority.expectError(
       "/api/mutations",
       {
+        mutationId: "mutation-route-provider-config-reference",
+        entity: "route",
+        op: "create",
+        values: mountRouteValues(siteInstall.record.id, {
+          matchHost: "missing-provider.example.com",
+          providerConfig: "missing-provider",
+        }),
+      },
+      'Field "providerConfig" references unknown provider-config-ref record "missing-provider".',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
         mutationId: "mutation-route-public-site-capability",
         entity: "route",
         op: "create",
@@ -226,6 +312,19 @@ describe("control-plane schema runtime validation", () => {
         }),
       },
       'Field "appInstall" references app-install record',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-route-redirect-host-required",
+        entity: "route",
+        op: "create",
+        values: redirectRouteValues({
+          matchHost: undefined,
+        }),
+      },
+      'Field "matchHost" is required for redirect routes.',
     );
 
     await authority.expectError(
@@ -257,6 +356,19 @@ describe("control-plane schema runtime validation", () => {
     await authority.expectError(
       "/api/mutations",
       {
+        mutationId: "mutation-route-redirect-host-normalized",
+        entity: "route",
+        op: "create",
+        values: redirectRouteValues({
+          toHost: "WWW.Example.COM.",
+        }),
+      },
+      'Field "toHost" must be a normalized exact host.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
         mutationId: "mutation-route-redirect-url-normalized",
         entity: "route",
         op: "create",
@@ -266,6 +378,32 @@ describe("control-plane schema runtime validation", () => {
         }),
       },
       'Field "toUrl" must be a normalized absolute HTTPS URL without credentials or fragment.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-route-redirect-status-required",
+        entity: "route",
+        op: "create",
+        values: redirectRouteValues({
+          statusCode: undefined,
+        }),
+      },
+      'Field "statusCode" is required for redirect routes.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-route-redirect-preserve-path-boolean",
+        entity: "route",
+        op: "create",
+        values: redirectRouteValues({
+          preservePath: "yes",
+        }),
+      },
+      'Field "preservePath" must be a boolean.',
     );
 
     await authority.expectError(
