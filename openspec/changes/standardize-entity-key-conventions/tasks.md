@@ -88,9 +88,17 @@
 
 ## 7. Spec Promotion And Finalization
 
-- [ ] 7.1 Promote shipped entity key grammar and qualified name rules into `openspec/specs/app-schema/spec.md`.
-- [ ] 7.2 Promote instance control-plane kebab-case entity keys into `openspec/specs/instance-control-plane/spec.md`.
-- [ ] 7.3 Promote archive and workspace boundary naming rules into `openspec/specs/portable-archives/spec.md`.
-- [ ] 7.4 Promote Builder and generated UI naming behavior into `openspec/specs/generated-ui/spec.md`.
-- [ ] 7.5 Promote CLI, installed app, and runtime topology wording into `site-cli-publish`, `installed-apps`, and `runtime-topology` specs.
-- [ ] 7.6 Record decisions, blockers, evidence, and promotion notes in this change before marking the implementation ready.
+- [x] 7.1 Promote shipped entity key grammar and qualified name rules into `openspec/specs/app-schema/spec.md`.
+- [x] 7.2 Promote instance control-plane kebab-case entity keys into `openspec/specs/instance-control-plane/spec.md`.
+- [x] 7.3 Promote archive and workspace boundary naming rules into `openspec/specs/portable-archives/spec.md`.
+- [x] 7.4 Promote Builder and generated UI naming behavior into `openspec/specs/generated-ui/spec.md`.
+- [x] 7.5 Promote CLI, installed app, and runtime topology wording into `site-cli-publish`, `installed-apps`, and `runtime-topology` specs.
+- [x] 7.6 Record decisions, blockers, evidence, and promotion notes in this change before marking the implementation ready.
+
+- Files changed: `openspec/specs/app-schema/spec.md`, `openspec/specs/instance-control-plane/spec.md`, `openspec/specs/portable-archives/spec.md`, `openspec/specs/generated-ui/spec.md`, `openspec/specs/site-cli-publish/spec.md`, `openspec/specs/installed-apps/spec.md`, `openspec/specs/runtime-topology/spec.md`, and this `tasks.md`.
+- Promotion notes: promoted schema-local kebab-case entity grammar, qualified boundary entity names, instance control-plane local entity keys, qualified archive/workspace/drift naming, one-way legacy archive/workspace normalization evidence, Builder kebab-case authoring and clean labels, CLI canonical key use, installed app route records, and runtime topology route resolution.
+- Decisions: no new product or storage decisions; promotion follows shipped behavior and existing change decisions.
+- Blockers: none.
+- Evidence: `rg` over the promoted specs found no exact legacy control-plane entity keys `appInstall`, `appRoute`, `deployTarget`, `providerConfigRef`, `domainMapping`, `redirectIntent`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, or `deployDriftReport`.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T03:09:48.973Z.
+- Smoke: not run; this section changed promoted OpenSpec docs only and no app behavior changed.

@@ -21,13 +21,16 @@ records.
 - WHEN its storage identity is selected
 - THEN it uses schema key `instance-control-plane`, storage identity
   `instance:control-plane`, and API prefix `/api/formless/control-plane`
+- AND its external qualified entity namespace is `instance`
 - AND it defines flat records for app installs, app routes, deploy targets,
   provider config references, domain mappings, redirect intent, desired
   resources, deployment attempts, evidence summaries, and drift reports
-- AND those records use entity keys `appInstall`, `appRoute`, `deployTarget`,
-  `providerConfigRef`, `domainMapping`, `redirectIntent`,
-  `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and
-  `deployDriftReport`
+- AND those records use local entity keys `app-install`, `app-route`,
+  `deploy-target`, `provider-config-ref`, `domain-mapping`,
+  `redirect-intent`, `deploy-desired-resource`, `deploy-attempt`,
+  `deploy-evidence-summary`, and `deploy-drift-report`
+- AND external boundaries identify those records with qualified entity names
+  such as `instance:app-install` and `instance:deploy-target`
 - AND relationships between those records are represented through normal
   reference fields
 
@@ -42,14 +45,14 @@ records.
 
 ### Requirement: App Install Records
 
-The system SHALL represent installed app metadata as `appInstall` control-plane
+The system SHALL represent installed app metadata as `app-install` control-plane
 records.
 
 #### Scenario: App install identity record
 
 - GIVEN an app install is created
 - WHEN the control-plane write commits
-- THEN the `appInstall` record stores stable install identity, package app key,
+- THEN the `app-install` record stores stable install identity, package app key,
   label, status, created time, and updated time
 - AND install identity, package app key, and storage identity are immutable
   after creation
@@ -58,22 +61,22 @@ records.
 
 #### Scenario: Installed app data boundary
 
-- GIVEN an `appInstall` record exists
+- GIVEN an `app-install` record exists
 - WHEN installed app records, active schema, changes, action executions,
   snapshots, or sync state are read or written
 - THEN those facts remain in that install's app storage identity
-- AND the `appInstall` record does not contain the installed app's data records
+- AND the `app-install` record does not contain the installed app's data records
 
 ### Requirement: App Route Records
 
-The system SHALL represent app route bindings as `appRoute` control-plane
-records that reference `appInstall` records.
+The system SHALL represent app route bindings as `app-route` control-plane
+records that reference `app-install` records.
 
 #### Scenario: Default route records
 
 - GIVEN a package app install is created
 - WHEN default routes are materialized
-- THEN admin and schema route records are created for the `appInstall` record
+- THEN admin and schema route records are created for the `app-install` record
 - AND a public Site route record is created only when the package supports
   public Site routes
 - AND each route record stores route kind, path, optional prefix, surface,
@@ -84,7 +87,7 @@ records that reference `appInstall` records.
 - GIVEN route resolution, custom-domain mapping, deployment projection, archive
   export, or generated UI needs an installed app target
 - WHEN it resolves the target
-- THEN it uses an `appRoute` record that references the `appInstall` record
+- THEN it uses an `app-route` record that references the `app-install` record
 - AND the route does not duplicate installed app data or storage state
 
 #### Scenario: Route validation

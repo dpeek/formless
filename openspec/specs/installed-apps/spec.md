@@ -186,14 +186,14 @@ control-plane records.
 
 - GIVEN an authorized owner or admin creates a package app install
 - WHEN the runtime accepts the install
-- THEN it creates an `appInstall` control-plane record with stable install
+- THEN it creates an `app-install` control-plane record with stable install
   identity, package app key, label, status, created time, and updated time
 - AND the install is initialized from the package source schema and source seed
   records in the install-scoped app storage identity
 
 #### Scenario: Immutable install identity
 
-- GIVEN an existing `appInstall` record is edited
+- GIVEN an existing `app-install` record is edited
 - WHEN a patch is submitted
 - THEN label and supported display metadata can change
 - AND install identity, package app key, and install-scoped storage identity
@@ -226,7 +226,7 @@ schema-owned route records that target app install records.
 - GIVEN app routing, custom-domain targets, deployment graphs, archive export,
   or generated UI need to identify an app route
 - WHEN a route target is selected
-- THEN they reference an `appRoute` record that references an `appInstall`
+- THEN they reference an `app-route` record that references an `app-install`
   record
 - AND the install id remains the storage identity for installed app data
 
