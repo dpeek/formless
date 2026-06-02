@@ -71,3 +71,12 @@ Evidence:
 - Changed `scripts/agents.test.ts` to assert prompt self-containment, CLI-owned finalization wording, context-efficient worker docs, and removal of stale manual-promotion/post-review archive instructions.
 - `devstate check` at 2026-06-02T02:54:08.457Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
 - App behavior unchanged; browser smoke not needed.
+
+Finalization Evidence:
+
+- Finalization completed on `changes/mechanize-local-agent-finalization`; `git rebase main` reported the branch was up to date, with no conflicts.
+- Promoted shipped facts into `openspec/specs/local-agent-workers/spec.md` for lease recovery, section-first implementation, CLI-owned worker finalization, context-efficient prompts, and main-authored feedback handling.
+- `openspec validate mechanize-local-agent-finalization --strict --no-interactive`: `Change 'mechanize-local-agent-finalization' is valid`.
+- `devstate check` at 2026-06-02T02:57:27.810Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
+- OpenSpec archive intentionally not run for this finalization session per assignment.
+- App behavior unchanged; browser smoke not needed.
