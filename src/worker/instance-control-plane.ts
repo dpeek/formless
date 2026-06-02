@@ -20,8 +20,10 @@ import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneAppRouteId,
   instanceControlPlaneAppInstallRecord,
+  type InstanceControlPlaneRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
+  type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneRedirectStatusCode,
   type InstanceControlPlaneRouteValues,
@@ -569,9 +571,11 @@ async function handleCreateAppInstallAction(
     );
   }
 
+  const records = instanceControlPlaneRecordsForAppInstall({ install: result.install, now });
+  preflightAppInstallRecordSet(storage, records, now);
+
   await initializeInstalledAppStorageForInstall(result.install, env, request.url);
 
-  const records = instanceControlPlaneRecordsForAppInstall({ install: result.install, now });
   const outcome = noopWriteNotifier.apply(() =>
     createRecordSetForActionOutcome(
       storage,
@@ -588,6 +592,29 @@ async function handleCreateAppInstallAction(
   );
 
   return jsonResponse(outcome.response satisfies ActionResponse, 201);
+}
+
+function preflightAppInstallRecordSet(
+  storage: DurableObjectStorage,
+  records: [
+    InstanceControlPlaneRecord<"app-install", InstanceControlPlaneAppInstallValues>,
+    ...InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[],
+  ],
+  createdAt: string,
+) {
+  const pendingRecords: StoredRecord[] = records.map((record) => ({
+    createdAt,
+    entity: record.entity,
+    id: record.id,
+    values: record.values,
+  }));
+  const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema, {
+    additionalRecords: pendingRecords,
+  });
+
+  for (const record of pendingRecords) {
+    validate(record.entity, record.values, { ignoreRecordId: record.id });
+  }
 }
 
 async function initializeInstalledAppStorageForInstall(
@@ -620,8 +647,13 @@ async function initializeInstalledAppStorageForInstall(
 function validateControlPlaneRecordWrite(
   storage: DurableObjectStorage,
   schema: typeof instanceControlPlaneSource.schema,
+  options: { additionalRecords?: StoredRecord[] } = {},
 ) {
-  return (entityName: string, values: RecordValues, options?: { ignoreRecordId?: string }) => {
+  return (
+    entityName: string,
+    values: RecordValues,
+    recordOptions?: { ignoreRecordId?: string },
+  ) => {
     const entity = schema.entities[entityName];
 
     if (!entity) {
@@ -629,12 +661,13 @@ function validateControlPlaneRecordWrite(
     }
 
     const validated = validateRecordValues(values, entity, storage, {
+      additionalRecords: options.additionalRecords,
       entityName,
       schema,
-      existingRecordId: options?.ignoreRecordId,
+      existingRecordId: recordOptions?.ignoreRecordId,
     });
 
-    assertUniqueConstraints(storage, schema, entityName, validated, options);
+    assertUniqueConstraints(storage, schema, entityName, validated, recordOptions);
   };
 }
 

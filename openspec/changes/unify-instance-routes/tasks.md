@@ -67,10 +67,19 @@ Evidence 2026-06-02 grug:
 
 ## 5. App Install Compatibility
 
-- [ ] 5.1 Create default admin, schema, and supported public Site route records when an app install is created.
-- [ ] 5.2 Derive existing app install API route summaries from route records.
-- [ ] 5.3 Keep create app install request validation compatible while rejecting invalid generated route records before app storage initialization.
-- [ ] 5.4 Prove installed app storage identity remains based on app install id, not route path or host.
+- [x] 5.1 Create default admin, schema, and supported public Site route records when an app install is created.
+- [x] 5.2 Derive existing app install API route summaries from route records.
+- [x] 5.3 Keep create app install request validation compatible while rejecting invalid generated route records before app storage initialization.
+- [x] 5.4 Prove installed app storage identity remains based on app install id, not route path or host.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/worker/authority-validation.ts` so control-plane validation can preflight a pending record set, including route references and enabled-route conflicts among generated records before commit.
+- Changed `src/worker/instance-control-plane.ts` so `createAppInstall` builds and validates generated app-install/admin/schema/public Site route records before installed app storage bootstrap, then commits the same records through existing Authority validation.
+- Extended `src/worker/instance-app-installs.test.ts` to prove route-derived app install summaries include edited route paths and public Site prefixes, generated route conflicts reject legacy create-install requests without recording the install, and installed app storage identity remains `app:<installId>` after route path edits.
+- `devstate start`: initial output had services starting; `.devstate/status.md` then showed checks ok and services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes app install API/storage compatibility and Authority validation, not browser-visible UI.
 
 ## 6. Domain API Compatibility
 

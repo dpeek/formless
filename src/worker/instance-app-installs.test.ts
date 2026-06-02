@@ -8,6 +8,7 @@ import type {
 import {
   rateSeedRecords,
   rateSourceSchema,
+  siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
@@ -145,6 +146,7 @@ describe("instance app install API routes", () => {
         adminRoute: "/apps/personal-admin",
         installId: "personal",
         publicRoute: "/sites/personal",
+        publicRoutePrefix: "/sites/personal/",
         schemaRoute: "/apps/personal/schema",
       }),
     );
@@ -153,6 +155,77 @@ describe("instance app install API routes", () => {
       ["schema", "/apps/personal/schema"],
       ["publicSite", "/sites/personal"],
     ]);
+  });
+
+  it("rejects app installs whose generated route records conflict before recording the install", async () => {
+    const now = "2026-06-02T00:00:00.000Z";
+    const conflictingRoute = await postAdminJson<MutationResponse>(
+      "/api/formless/control-plane/mutations",
+      {
+        mutationId: "mutation-reserve-personal-admin-route",
+        entity: "route",
+        op: "create",
+        values: {
+          enabled: true,
+          "match-path": "/apps/personal",
+          kind: "mount",
+          "target-profile": "instance",
+          surface: "admin",
+          "created-at": now,
+          "updated-at": now,
+        },
+      },
+    );
+    const rejected = await postAdminJson<AppInstallFailureResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(conflictingRoute.response.status).toBe(200);
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body.error).toContain(
+      'Enabled route match "<hostless>/apps/personal" conflicts with enabled route',
+    );
+    expect(after.body.installs).toEqual([]);
+  });
+
+  it("keeps installed app storage identity based on install id after route path edits", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+    const routeEdit = await postAdminJson<MutationResponse>(
+      "/api/formless/control-plane/mutations",
+      {
+        mutationId: "mutation-personal-admin-storage-identity-route",
+        entity: "route",
+        op: "patch",
+        recordId: "route:personal:admin",
+        values: {
+          "match-path": "/apps/personal-admin",
+          "updated-at": "2026-06-02T00:00:00.000Z",
+        },
+      },
+    );
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
+
+    expect(routeEdit.response.status).toBe(200);
+    expect(
+      controlPlane.body.records.find(
+        (record) => record.entity === "app-install" && record.id === "personal",
+      )?.values.storageIdentity,
+    ).toBe("app:personal");
+    expect(installs.body.installs[0]).toMatchObject({
+      adminRoute: "/apps/personal-admin",
+      installId: "personal",
+      schemaRoute: "/apps/personal/schema",
+    });
+    expect(bootstrap.body.schema).toEqual(siteSourceSchema);
   });
 
   it("persists Tasks installs and bootstraps from the bundled Tasks source", async () => {

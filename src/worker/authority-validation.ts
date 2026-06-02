@@ -389,6 +389,7 @@ export function validateRecordValues(
   entity: EntitySchema,
   storage: DurableObjectStorage,
   runtimeOptions?: {
+    additionalRecords?: StoredRecord[];
     entityName: string;
     existingRecordId?: string;
     schema: AppSchema;
@@ -421,7 +422,11 @@ export function validateRecordValues(
         throw new Error("Reference field validation returned a non-string value.");
       }
 
-      const targetRecord = getStoredRecord(storage, result.value);
+      const targetRecord = getStoredRecordForValidation(
+        storage,
+        result.value,
+        runtimeOptions?.additionalRecords,
+      );
       if (!targetRecord) {
         throw new BadRequestError(
           `Field "${fieldName}" references unknown ${field.to} record "${result.value}".`,
@@ -454,10 +459,29 @@ export function validateRecordValues(
       runtimeOptions.entityName,
       storage,
       runtimeOptions.existingRecordId,
+      runtimeOptions.additionalRecords,
     );
   }
 
   return validated;
+}
+
+function getStoredRecordForValidation(
+  storage: DurableObjectStorage,
+  recordId: string,
+  additionalRecords: StoredRecord[] | undefined,
+) {
+  return (
+    additionalRecords?.find((record) => record.id === recordId && !record.deletedAt) ??
+    getStoredRecord(storage, recordId)
+  );
+}
+
+function getBootstrapRecordsForValidation(
+  storage: DurableObjectStorage,
+  additionalRecords: StoredRecord[] | undefined,
+) {
+  return [...getBootstrapRecords(storage), ...(additionalRecords ?? [])];
 }
 
 function assertRuntimeHistoryAllowsGenericMutation(
@@ -640,16 +664,24 @@ function validateRuntimeControlPlaneValues(
   entityName: string,
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const metadata = runtimeControlPlaneEntityMetadata(schema, entityName);
   const routeValidation = metadata?.routeValidation;
 
   if (routeValidation) {
-    validateRuntimeRouteValues(values, routeValidation, entityName, storage, existingRecordId);
+    validateRuntimeRouteValues(
+      values,
+      routeValidation,
+      entityName,
+      storage,
+      existingRecordId,
+      additionalRecords,
+    );
   }
 
   if (isInstanceControlPlaneRouteValidationEntity(schema, entityName)) {
-    validateInstanceControlPlaneRouteValues(values, storage, existingRecordId);
+    validateInstanceControlPlaneRouteValues(values, storage, existingRecordId, additionalRecords);
   }
 }
 
@@ -659,6 +691,7 @@ function validateRuntimeRouteValues(
   entityName: string,
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const path = stringRecordValue(values, routeValidation.pathField);
   const prefix =
@@ -695,6 +728,7 @@ function validateRuntimeRouteValues(
       routeValidation.prefixField,
       routeValidation.enabledField,
       existingRecordId,
+      additionalRecords,
     );
   }
 }
@@ -707,11 +741,12 @@ function assertEnabledRouteIsUnique(
   prefixField: string | undefined,
   enabledField: string,
   existingRecordId: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const path = values[pathField];
   const prefix = prefixField === undefined ? undefined : values[prefixField];
 
-  for (const record of getBootstrapRecords(storage)) {
+  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
     if (
       record.id === existingRecordId ||
       record.entity !== entityName ||
@@ -762,6 +797,7 @@ function validateInstanceControlPlaneRouteValues(
   values: RecordValues,
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const matchHost = optionalStringRecordValue(values, "match-host");
   const matchPath = stringRecordValue(values, "match-path");
@@ -786,7 +822,14 @@ function validateInstanceControlPlaneRouteValues(
   }
 
   if (kind === "mount") {
-    validateInstanceControlPlaneMountRoute(values, storage, matchHost, matchPath, matchPrefix);
+    validateInstanceControlPlaneMountRoute(
+      values,
+      storage,
+      matchHost,
+      matchPath,
+      matchPrefix,
+      additionalRecords,
+    );
   } else if (kind === "redirect") {
     validateInstanceControlPlaneRedirectRoute(values, matchHost);
   } else {
@@ -794,7 +837,12 @@ function validateInstanceControlPlaneRouteValues(
   }
 
   if (values.enabled === true) {
-    assertEnabledInstanceControlPlaneRouteIsUnique(values, storage, existingRecordId);
+    assertEnabledInstanceControlPlaneRouteIsUnique(
+      values,
+      storage,
+      existingRecordId,
+      additionalRecords,
+    );
   }
 }
 
@@ -804,6 +852,7 @@ function validateInstanceControlPlaneMountRoute(
   matchHost: string | undefined,
   matchPath: string,
   matchPrefix: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const targetProfile = optionalStringRecordValue(values, "target-profile");
   const appInstall = optionalStringRecordValue(values, "app-install");
@@ -845,7 +894,7 @@ function validateInstanceControlPlaneMountRoute(
     throw new BadRequestError(`Field "app-install" is required for ${targetProfile} mount routes.`);
   }
 
-  const install = getStoredRecord(storage, appInstall);
+  const install = getStoredRecordForValidation(storage, appInstall, additionalRecords);
 
   if (!install || install.entity !== "app-install" || install.deletedAt) {
     throw new BadRequestError(
@@ -1022,10 +1071,11 @@ function assertEnabledInstanceControlPlaneRouteIsUnique(
   values: RecordValues,
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
   const candidate = instanceRouteMatch(values);
 
-  for (const record of getBootstrapRecords(storage)) {
+  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
     if (
       record.id === existingRecordId ||
       record.entity !== "route" ||
