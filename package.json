@@ -25,7 +25,6 @@
   "scripts": {
     "agents": "bun run scripts/agents.ts",
     "browser": "agent-browser",
-    "smoke:object-list": "bun run scripts/object-list-smoke.ts",
     "check": "vp check --fix",
     "test": "vp test --reporter=agent",
     "dev": "vp dev",

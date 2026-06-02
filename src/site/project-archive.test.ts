@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -213,7 +214,7 @@ describe("Site project app archive import", () => {
 });
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.join(process.cwd(), ".tmp-site-archive-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-site-archive-test-"));
 
   tempDirs.push(tempDir);
   return tempDir;

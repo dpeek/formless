@@ -1,5 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -142,9 +143,7 @@ type RewriteBody = {
 };
 
 async function writeSqlMigrationHarness() {
-  const tempRoot = resolve("tmp", "test");
-  await mkdir(tempRoot, { recursive: true });
-  harnessDir = await mkdtemp(join(tempRoot, ".sql-migration-harness-"));
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-sql-migration-harness-"));
   const harnessPath = join(harnessDir, "sql-migration-harness.ts");
 
   await writeFile(

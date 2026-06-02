@@ -1,5 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -53,7 +54,7 @@ describe("instance domain mapping state migrations", () => {
 });
 
 async function writeDomainMappingStateHarness() {
-  harnessDir = await mkdtemp(resolve(".domain-mapping-state-harness-"));
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-domain-mapping-state-harness-"));
   const harnessPath = join(harnessDir, "domain-mapping-state-harness.ts");
 
   await writeFile(

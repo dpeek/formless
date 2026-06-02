@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
@@ -304,9 +305,7 @@ async function fetchOperationHarness(input: ExecuteOperationInput) {
 }
 
 async function writeAuthorityOperationHarness() {
-  const tempRoot = resolve("tmp", "test");
-  await mkdir(tempRoot, { recursive: true });
-  operationHarnessDir = await mkdtemp(join(tempRoot, ".authority-operation-harness-"));
+  operationHarnessDir = await mkdtemp(join(tmpdir(), "formless-authority-operation-harness-"));
   const harnessPath = join(operationHarnessDir, "authority-operation-harness.ts");
 
   await writeFile(

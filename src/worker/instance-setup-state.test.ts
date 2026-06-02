@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { OwnerSetupCompleteRequest } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -244,7 +245,7 @@ function fetchInstanceSetup(path: string, init: Parameters<Harness["fetch"]>[1] 
 }
 
 async function writeInstanceSetupHarness() {
-  instanceSetupHarnessDir = await mkdtemp(resolve(".instance-setup-harness-"));
+  instanceSetupHarnessDir = await mkdtemp(join(tmpdir(), "formless-instance-setup-harness-"));
   const tempDir = instanceSetupHarnessDir;
   const harnessPath = join(tempDir, "instance-setup-harness.ts");
 

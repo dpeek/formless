@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
@@ -116,7 +117,7 @@ describe("Formless instance workspace secret state", () => {
 });
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.resolve(".instance-workspace-secrets-test-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-instance-workspace-secrets-test-"));
 
   tempDirs.push(tempDir);
   await mkdir(tempDir, { recursive: true });

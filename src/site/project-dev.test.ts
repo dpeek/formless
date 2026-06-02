@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -212,7 +213,7 @@ type CapturedFetchRequest = {
 };
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.resolve(".site-project-dev-test-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-site-project-dev-test-"));
 
   tempDirs.push(tempDir);
   return tempDir;

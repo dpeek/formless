@@ -1,5 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -76,7 +77,7 @@ describe("instance app install state", () => {
 });
 
 async function writeAppInstallStateHarness() {
-  harnessDir = await mkdtemp(resolve(".instance-app-installs-state-harness-"));
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-instance-app-installs-state-harness-"));
   const harnessPath = join(harnessDir, "instance-app-installs-state-harness.ts");
 
   await writeFile(

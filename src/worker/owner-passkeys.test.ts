@@ -1,6 +1,7 @@
 import { createHash, createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type {
@@ -798,7 +799,7 @@ function base64UrlDecode(value: string): Uint8Array {
 }
 
 async function writeOwnerPasskeyHarness() {
-  harnessDir = await mkdtemp(resolve("tmp", "test", ".owner-passkey-api-harness-"));
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-owner-passkey-api-harness-"));
   const path = join(harnessDir, "owner-passkey-api-harness.ts");
 
   await writeFile(

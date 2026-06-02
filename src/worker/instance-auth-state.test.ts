@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -370,10 +371,7 @@ function fetchInstanceAuth(path: string, init: Parameters<Harness["fetch"]>[1] =
 }
 
 async function writeInstanceAuthHarness() {
-  const tempRoot = resolve("tmp", "test");
-
-  await mkdir(tempRoot, { recursive: true });
-  instanceAuthHarnessDir = await mkdtemp(join(tempRoot, ".instance-auth-harness-"));
+  instanceAuthHarnessDir = await mkdtemp(join(tmpdir(), "formless-instance-auth-harness-"));
   const tempDir = instanceAuthHarnessDir;
   const harnessPath = join(tempDir, "instance-auth-harness.ts");
 

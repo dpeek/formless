@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -5153,7 +5154,7 @@ describe("Formless Site CLI", () => {
 });
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.resolve("tmp/test/site-cli-test-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-site-cli-test-"));
 
   tempDirs.push(tempDir);
   return tempDir;

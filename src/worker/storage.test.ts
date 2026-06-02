@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join, resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
@@ -1031,9 +1032,7 @@ function fetchStorage(path: string, init: Parameters<Harness["fetch"]>[1] = {}) 
 }
 
 async function writeStorageHarness() {
-  const tempRoot = resolve("tmp", "test");
-  await mkdir(tempRoot, { recursive: true });
-  storageHarnessDir = await mkdtemp(join(tempRoot, ".storage-harness-"));
+  storageHarnessDir = await mkdtemp(join(tmpdir(), "formless-storage-harness-"));
   const tempDir = storageHarnessDir;
   const harnessPath = join(tempDir, "storage-harness.ts");
 

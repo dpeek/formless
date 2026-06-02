@@ -1,5 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -45,7 +46,7 @@ describe("passkey dependency boundary", () => {
 });
 
 async function writePasskeyDependencyHarness() {
-  harnessDir = await mkdtemp(resolve(".passkey-dependency-harness-"));
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-passkey-dependency-harness-"));
   const harnessPath = join(harnessDir, "passkey-dependency-harness.ts");
 
   await writeFile(
