@@ -30,10 +30,17 @@ Evidence:
 
 ## 3. Workspace Archive Composition
 
-- [ ] 3.1 Compose instance archives from control-plane record source, app archives, and media payloads instead of manifest app/domain/deploy declarations.
-- [ ] 3.2 Validate app archive presence, install id, package app key, package facts, and media references before restore or push mutation.
-- [ ] 3.3 Preserve installed app data under install-scoped app archives and outside control-plane records.
-- [ ] 3.4 Add archive composition and restore tests for missing archives, mismatched installs, secret rejection, and app data boundaries.
+- [x] 3.1 Compose instance archives from control-plane record source, app archives, and media payloads instead of manifest app/domain/deploy declarations.
+- [x] 3.2 Validate app archive presence, install id, package app key, package facts, and media references before restore or push mutation.
+- [x] 3.3 Preserve installed app data under install-scoped app archives and outside control-plane records.
+- [x] 3.4 Add archive composition and restore tests for missing archives, mismatched installs, secret rejection, and app data boundaries.
+
+Evidence:
+
+- Changed `src/site/instance-workspace.ts`, `src/site/cli.ts`, and `src/site/cli.test.ts`.
+- Local dev and push archive readers now derive install archives from control-plane `app-install` records, require matching install-scoped app archives, validate bundled package revision/source schema facts, and reject missing, duplicate, or wrong-size media payloads before restore calls.
+- Added local dev restore coverage for composing an instance archive from record source plus app archive media, missing app archive rejection, mismatched install id rejection, package fact rejection, missing media rejection, secret-looking record source rejection, and app data staying in app archives instead of control-plane records.
+- `devstate check` green at 2026-06-02T09:11:59.885Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 
 ## 4. Local Dev And Browser Bootstrap
 

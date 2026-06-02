@@ -25,7 +25,11 @@ import {
   normalizePortableArchive,
   type ArchiveNormalizationEvidence,
 } from "../shared/archive-normalizers.ts";
-import { packageAppFactsForKey, type AppInstall } from "../shared/app-installs.ts";
+import {
+  findBundledAppPackage,
+  packageAppFactsForKey,
+  type AppInstall,
+} from "../shared/app-installs.ts";
 import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
@@ -1933,40 +1937,11 @@ async function readCompleteWorkspaceAppArchives(
   manifest: FormlessInstanceWorkspaceManifest,
   controlPlane: InstanceArchiveControlPlane,
 ): Promise<WorkspaceArchiveDirectory[]> {
-  const archives: WorkspaceArchiveDirectory[] = [];
-
-  for (const app of controlPlaneAppInstallRecords(controlPlane)) {
-    const archivePath = workspaceAppArchivePath(manifest, app.installId);
-    const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, archivePath));
-
-    if (!archive) {
-      throw new Error(`Formless instance local dev requires local app archive ${archivePath}.`);
-    }
-
-    if (archive.archive.kind !== APP_ARCHIVE_KIND) {
-      throw new Error(`Formless instance local dev requires ${archivePath} to be an app archive.`);
-    }
-
-    if (archive.archive.app.installId !== app.installId) {
-      throw new Error(
-        `Formless instance local dev app archive ${archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
-      );
-    }
-
-    if (archive.archive.app.packageAppKey !== app.packageAppKey) {
-      throw new Error(
-        `Formless instance local dev app archive ${archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
-      );
-    }
-
-    archives.push(archive);
-  }
-
-  return archives.sort((left, right) => {
-    const leftInstall = left.archive.kind === APP_ARCHIVE_KIND ? left.archive.app.installId : "";
-    const rightInstall = right.archive.kind === APP_ARCHIVE_KIND ? right.archive.app.installId : "";
-
-    return leftInstall.localeCompare(rightInstall);
+  return readRequiredWorkspaceAppArchives({
+    controlPlane,
+    manifest,
+    operation: "local dev",
+    workspaceRoot,
   });
 }
 
@@ -1990,17 +1965,27 @@ async function readWorkspaceAppArchiveMapForCheck(
   return archives;
 }
 
-function controlPlaneAppInstallRecords(
-  controlPlane: InstanceArchiveControlPlane | undefined,
-): Array<{
+type WorkspaceControlPlaneAppInstallRecord = {
   installId: string;
   packageAppKey: string;
-}> {
+  packageRevision?: number;
+  sourceSchemaHash?: string;
+};
+
+function controlPlaneAppInstallRecords(
+  controlPlane: InstanceArchiveControlPlane | undefined,
+): WorkspaceControlPlaneAppInstallRecord[] {
   return (controlPlane?.records ?? [])
     .filter((record) => record.entity === "app-install" && !record.deletedAt)
     .map((record) => ({
       installId: String(record.values.installId),
       packageAppKey: String(record.values.packageAppKey),
+      ...(numberRecordValue(record, "packageRevision") === undefined
+        ? {}
+        : { packageRevision: numberRecordValue(record, "packageRevision") }),
+      ...(stringRecordValue(record, "sourceSchemaHash") === undefined
+        ? {}
+        : { sourceSchemaHash: stringRecordValue(record, "sourceSchemaHash") }),
     }))
     .sort((left, right) => left.installId.localeCompare(right.installId));
 }
@@ -2583,6 +2568,12 @@ function booleanRecordValue(record: StoredRecord, fieldName: string): boolean | 
   const value = record.values[fieldName];
 
   return typeof value === "boolean" ? value : undefined;
+}
+
+function numberRecordValue(record: StoredRecord, fieldName: string): number | undefined {
+  const value = record.values[fieldName];
+
+  return typeof value === "number" ? value : undefined;
 }
 
 function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive: T): T {
@@ -3188,34 +3179,35 @@ async function readWorkspaceAppArchivesForPush(
   manifest: FormlessInstanceWorkspaceManifest,
   controlPlane: InstanceArchiveControlPlane | undefined,
 ): Promise<WorkspaceArchiveDirectory[]> {
+  return readRequiredWorkspaceAppArchives({
+    controlPlane,
+    manifest,
+    operation: "push",
+    workspaceRoot,
+  });
+}
+
+async function readRequiredWorkspaceAppArchives(input: {
+  controlPlane: InstanceArchiveControlPlane | undefined;
+  manifest: FormlessInstanceWorkspaceManifest;
+  operation: "local dev" | "push";
+  workspaceRoot: string;
+}): Promise<WorkspaceArchiveDirectory[]> {
   const archives: WorkspaceArchiveDirectory[] = [];
 
-  for (const app of controlPlaneAppInstallRecords(controlPlane)) {
-    const archivePath = workspaceAppArchivePath(manifest, app.installId);
-    const archiveRoot = path.join(workspaceRoot, archivePath);
+  for (const app of controlPlaneAppInstallRecords(input.controlPlane)) {
+    const archivePath = workspaceAppArchivePath(input.manifest, app.installId);
+    const archiveRoot = path.join(input.workspaceRoot, archivePath);
     const archive = await readArchiveDirectoryForCheck(archiveRoot);
 
-    if (!archive) {
-      throw new Error(`Formless instance push requires local app archive ${archivePath}.`);
-    }
+    validateRequiredWorkspaceAppArchive({
+      archive,
+      archivePath,
+      install: app,
+      operation: input.operation,
+    });
 
-    if (archive.archive.kind !== APP_ARCHIVE_KIND) {
-      throw new Error(`Formless instance push requires ${archivePath} to be an app archive.`);
-    }
-
-    if (archive.archive.app.installId !== app.installId) {
-      throw new Error(
-        `Formless instance push app archive ${archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
-      );
-    }
-
-    if (archive.archive.app.packageAppKey !== app.packageAppKey) {
-      throw new Error(
-        `Formless instance push app archive ${archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
-      );
-    }
-
-    archives.push(archive);
+    archives.push(archive as WorkspaceArchiveDirectory);
   }
 
   return archives.sort((left, right) => {
@@ -3224,6 +3216,139 @@ async function readWorkspaceAppArchivesForPush(
 
     return leftInstall.localeCompare(rightInstall);
   });
+}
+
+function validateRequiredWorkspaceAppArchive(input: {
+  archive: WorkspaceArchiveDirectory | undefined;
+  archivePath: string;
+  install: WorkspaceControlPlaneAppInstallRecord;
+  operation: "local dev" | "push";
+}): asserts input is {
+  archive: WorkspaceArchiveDirectory;
+  archivePath: string;
+  install: WorkspaceControlPlaneAppInstallRecord;
+  operation: "local dev" | "push";
+} {
+  const prefix = `Formless instance ${input.operation}`;
+
+  if (!input.archive) {
+    throw new Error(`${prefix} requires local app archive ${input.archivePath}.`);
+  }
+
+  if (input.archive.archive.kind !== APP_ARCHIVE_KIND) {
+    throw new Error(`${prefix} requires ${input.archivePath} to be an app archive.`);
+  }
+
+  const archiveApp = input.archive.archive.app;
+
+  if (archiveApp.installId !== input.install.installId) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} has install id "${archiveApp.installId}", expected "${input.install.installId}".`,
+    );
+  }
+
+  if (archiveApp.packageAppKey !== input.install.packageAppKey) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} has package "${archiveApp.packageAppKey}", expected "${input.install.packageAppKey}".`,
+    );
+  }
+
+  const packageApp = findBundledAppPackage(input.install.packageAppKey);
+
+  if (!packageApp) {
+    throw new Error(
+      `${prefix} app install "${input.install.installId}" references unsupported package "${input.install.packageAppKey}".`,
+    );
+  }
+
+  if (
+    input.install.packageRevision !== undefined &&
+    input.install.packageRevision !== packageApp.packageRevision
+  ) {
+    throw new Error(
+      `${prefix} app install "${input.install.installId}" has package revision ${input.install.packageRevision}, expected ${packageApp.packageRevision}.`,
+    );
+  }
+
+  if (
+    input.install.sourceSchemaHash !== undefined &&
+    input.install.sourceSchemaHash !== packageApp.sourceSchemaHash
+  ) {
+    throw new Error(
+      `${prefix} app install "${input.install.installId}" has source schema hash "${input.install.sourceSchemaHash}", expected "${packageApp.sourceSchemaHash}".`,
+    );
+  }
+
+  if (archiveApp.packageRevision !== packageApp.packageRevision) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} has package revision ${archiveApp.packageRevision}, expected ${packageApp.packageRevision}.`,
+    );
+  }
+
+  if (archiveApp.sourceSchemaKey !== packageApp.sourceSchemaKey) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} has source schema key "${archiveApp.sourceSchemaKey}", expected "${packageApp.sourceSchemaKey}".`,
+    );
+  }
+
+  if (archiveApp.sourceSchemaHash !== packageApp.sourceSchemaHash) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} has source schema hash "${archiveApp.sourceSchemaHash}", expected "${packageApp.sourceSchemaHash}".`,
+    );
+  }
+
+  validateWorkspaceAppArchiveMediaReferences({
+    archive: input.archive,
+    archivePath: input.archivePath,
+    operation: input.operation,
+  });
+}
+
+function validateWorkspaceAppArchiveMediaReferences(input: {
+  archive: WorkspaceArchiveDirectory;
+  archivePath: string;
+  operation: "local dev" | "push";
+}) {
+  const prefix = `Formless instance ${input.operation}`;
+
+  if (input.archive.archive.kind !== APP_ARCHIVE_KIND) {
+    return;
+  }
+
+  if (input.archive.missingMediaFiles.length > 0) {
+    throw new Error(
+      `${prefix} app archive ${input.archivePath} is missing media files: ${input.archive.missingMediaFiles.join(", ")}.`,
+    );
+  }
+
+  const mediaFilesByPath = new Map(
+    input.archive.mediaFiles.map((file) => [file.archivePath, file]),
+  );
+  const seenArchivePaths = new Set<string>();
+
+  for (const object of input.archive.archive.media.objects) {
+    if (seenArchivePaths.has(object.archivePath)) {
+      throw new Error(
+        `${prefix} app archive ${input.archivePath} has duplicate media file "${object.archivePath}".`,
+      );
+    }
+
+    seenArchivePaths.add(object.archivePath);
+
+    const file = mediaFilesByPath.get(object.archivePath);
+
+    if (!file) {
+      throw new Error(
+        `${prefix} app archive ${input.archivePath} is missing media file "${object.archivePath}".`,
+      );
+    }
+
+    if (file.byteSize !== object.byteSize) {
+      throw new Error(
+        `${prefix} app archive ${input.archivePath} media file "${object.archivePath}" has ${file.byteSize} bytes, expected ${object.byteSize}.`,
+      );
+    }
+  }
 }
 
 async function writeComposedWorkspacePushArchive(input: {

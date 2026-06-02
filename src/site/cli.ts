@@ -1696,7 +1696,7 @@ function formatInstanceWorkspacePushResult(
     `Instance workspace push ${result.mode === "apply" ? "applied" : "dry run"}.`,
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    "Source: declared workspace app archives.",
+    "Source: control-plane record source and app archives.",
     `Source apps: ${result.source.appCount}.`,
     `Source records: ${result.source.recordCount}.`,
     `Source media files: ${result.source.mediaCount}.`,

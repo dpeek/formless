@@ -51,7 +51,11 @@ import {
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";
 import { formatSiteProjectRecords } from "./project-source.ts";
-import { readFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
+import {
+  formlessInstanceControlPlaneRecordSourcePath,
+  readFormlessInstanceControlPlaneRecordSource,
+  writeFormlessInstanceControlPlaneRecordSource,
+} from "./instance-workspace-record-source.ts";
 import {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_ALCHEMY_APP_NAME,
@@ -3324,7 +3328,7 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
   });
 
-  it.skip("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore", async () => {
+  it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from record source", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
@@ -3337,6 +3341,7 @@ describe("Formless Site CLI", () => {
     });
 
     await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
     await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
       david: Buffer.from([4, 5, 6]),
     });
@@ -3368,7 +3373,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restored: app archives")),
+      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
     );
     child.close(0);
     await run;
@@ -3407,14 +3412,174 @@ describe("Formless Site CLI", () => {
       dryRun: false,
       installCollisions: "reject",
     });
+    expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
+      "instance:app-install",
+      "instance:deploy-desired-resource",
+      "instance:deploy-target",
+      "instance:provider-config-ref",
+      "instance:route",
+      "instance:route",
+      "instance:route",
+      "instance:route",
+    ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(restoreBody.archive.apps[0]?.data.kind).toBe("storeSnapshot");
+    expect(JSON.stringify(restoreBody.archive.controlPlane)).not.toContain(
+      "media/images/cover.png",
+    );
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
     expect(logs).toEqual([
       "Instance shell: http://localhost:4444/",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
-      `Workspace archive restored: app archives (1 apps, ${mediaRecords().length} records, 1 media).`,
+      `Workspace archive restored: record source (1 apps, ${mediaRecords().length} records, 1 media).`,
     ]);
     expect(child.killed).toBe(false);
+  });
+
+  it("rejects missing local app archive before local dev restore", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const requests: CapturedFetchRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "dev", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          env: { PORT: "4447" },
+          fetch: localInstanceDevFetch(requests, []),
+          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance local dev requires local app archive archives/apps/david.",
+    );
+
+    expect(child.killed).toBe(true);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4447/api/formless/app-installs",
+      "GET http://localhost:4447/api/formless/app-installs",
+    ]);
+  });
+
+  it("rejects mismatched app archive identity and package facts before local dev restore", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/apps/david"),
+      appArchive("james", "James Peek"),
+    );
+
+    await expect(
+      runFormlessCli(
+        ["instance", "dev", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          env: { PORT: "4448" },
+          fetch: localInstanceDevFetch([], []),
+          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        }),
+      ),
+    ).rejects.toThrow(
+      'Formless instance local dev app archive archives/apps/david has install id "james", expected "david".',
+    );
+
+    const wrongFacts = appArchive("david", "David Peek");
+    const factsChild = new FakeCliDevChild();
+
+    wrongFacts.app.packageRevision = 999;
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), wrongFacts);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "dev", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          env: { PORT: "4449" },
+          fetch: localInstanceDevFetch([], []),
+          spawn: (() => factsChild as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance local dev app archive archives/apps/david has package revision 999, expected 1.",
+    );
+  });
+
+  it("rejects missing media payloads before local dev restore", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const localDavid = appArchive("david", "David Peek", {
+      mediaBytes: Buffer.from([4, 5, 6]),
+      records: mediaRecords(),
+    });
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "dev", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          env: { PORT: "4450" },
+          fetch: localInstanceDevFetch([], []),
+          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance local dev app archive archives/apps/david is missing media files: media/david/media/images/cover.png.",
+    );
+  });
+
+  it("rejects secret-looking control-plane record source before local dev restore", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const manifestPath = path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE);
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(manifestPath, "utf8"),
+    );
+    const deployDesiredResourceSourcePath = formlessInstanceControlPlaneRecordSourcePath(
+      workspaceRoot,
+      manifest,
+      "deploy-desired-resource",
+    );
+    const deployDesiredResourceSource = JSON.parse(
+      await readFile(deployDesiredResourceSourcePath, "utf8"),
+    ) as { records: StoredRecord[] };
+
+    deployDesiredResourceSource.records = deployDesiredResourceSource.records.map((record) => ({
+      ...record,
+      values: {
+        ...record.values,
+        inputsJson: JSON.stringify({ host: "dpeek.com", apiToken: "CF_API_TOKEN_secret" }),
+      },
+    }));
+    await writeFile(
+      deployDesiredResourceSourcePath,
+      `${JSON.stringify(deployDesiredResourceSource, null, 2)}\n`,
+    );
+
+    await expect(
+      runFormlessCli(
+        ["instance", "dev", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          env: { PORT: "4451" },
+          fetch: localInstanceDevFetch([], []),
+          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        }),
+      ),
+    ).rejects.toThrow("cannot store control-plane secret values");
   });
 
   it("runs top-level workspace dev from the nearest manifest with empty local state", async () => {
@@ -3560,6 +3725,7 @@ describe("Formless Site CLI", () => {
       "deploy-drift-report",
     );
     expect(JSON.stringify(controlPlane)).not.toContain("CF_API_TOKEN");
+    expect(JSON.stringify(controlPlane)).not.toContain("media/images/cover.png");
     expect(appArchiveValue.data.kind).toBe("storeSnapshot");
     expect(appArchiveValue.media.objects).toHaveLength(1);
     await expect(
@@ -5362,6 +5528,25 @@ async function writeWorkspaceManifest(
       ...(options.domains === undefined ? {} : { domains: options.domains }),
     }),
   );
+}
+
+async function writeWorkspaceControlPlaneRecordSource(
+  workspaceRoot: string,
+  records: StoredRecord[] = controlPlaneRecords(),
+) {
+  const manifest = parseFormlessInstanceWorkspaceManifestJson(
+    await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+  );
+
+  await writeFormlessInstanceControlPlaneRecordSource({
+    controlPlane: {
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      schemaUpdatedAt: "2026-05-26T00:00:00.000Z",
+      records,
+    },
+    manifest,
+    workspaceRoot,
+  });
 }
 
 type TestWorkspaceApp = ReturnType<typeof workspaceApp> & {
