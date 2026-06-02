@@ -5,8 +5,12 @@ import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations
 import {
   InstallAppDialogForm,
   InstanceShellRouteView,
+  WorkspaceOperationProgress,
+  displaySafeEntries,
   type InstanceShellRouteState,
+  type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
+import type { LocalWorkspaceGatewayOperation } from "../../client/workspace-gateway.ts";
 
 describe("instance shell route view", () => {
   it("renders generated control-plane app, route, and deployment surfaces", () => {
@@ -45,6 +49,179 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
     expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");
     expect(html).not.toContain("Rate-card app backed by the bundled Estii schema");
+  });
+
+  it("renders local workspace gateway controls and browser onboarding state", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={readyState({ installs: [] })}
+        workspaceGatewayState={workspaceGatewayState({
+          currentOperation: workspaceOperation({
+            operation: "status",
+            result: {
+              summary: {
+                fields: { initialized: false },
+                title: "Workspace not initialized",
+              },
+            },
+            summary: {
+              fields: { initialized: false },
+              title: "Workspace not initialized",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-formless-workspace-gateway="local"');
+    expect(html).toContain('data-formless-workspace-operation-controls="true"');
+    expect(html).toContain("Initialize");
+    expect(html).toContain("Save");
+    expect(html).toContain("Check");
+    expect(html).toContain("Pull");
+    expect(html).toContain("Push");
+    expect(html).toContain("Credentials");
+    expect(html).toContain("Plan deploy");
+    expect(html).toContain("Apply deploy");
+    expect(html).toContain('data-formless-workspace-onboarding="local"');
+    expect(html).toContain(
+      'data-formless-onboarding-generated-record-controls="routes deployments"',
+    );
+    expect(html).toContain("Workspace source has not been created.");
+    expect(html).toContain('data-formless-control-plane-screen="apps"');
+    expect(html).not.toContain("workspacePath");
+    expect(html).not.toContain("/Users/");
+  });
+
+  it("renders first app onboarding while keeping generated record editors mounted", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={readyState({ installs: [] })}
+        workspaceGatewayState={workspaceGatewayState({
+          csrfToken: "csrf-token",
+          currentOperation: workspaceOperation({
+            operation: "status",
+            result: {
+              summary: {
+                fields: { initialized: true },
+                title: "Workspace status",
+              },
+            },
+            summary: {
+              fields: { initialized: true },
+              title: "Workspace status",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(html).toContain("Install first app");
+    expect(html).toContain('data-formless-control-plane-screen="routes"');
+    expect(html).toContain('data-formless-control-plane-screen="deployments"');
+    expect(html).toContain(
+      'data-formless-onboarding-generated-record-controls="routes deployments"',
+    );
+  });
+
+  it("renders display-safe operation progress without raw paths or credentials", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceOperationProgress
+        operation={workspaceOperation({
+          errors: [
+            {
+              at: "2026-06-02T00:00:02.000Z",
+              message:
+                'Failed at /Users/dpeek/workspace with CLOUDFLARE_API_TOKEN="secret" and Bearer abc123',
+            },
+          ],
+          logs: [
+            {
+              at: "2026-06-02T00:00:01.000Z",
+              id: "log-1",
+              level: "info",
+              message: "Read /Users/dpeek/workspace/records safely.",
+            },
+          ],
+          operation: "save",
+          result: {
+            details: {
+              rawAdapterOutput: "token leaked",
+              source: "/Users/dpeek/workspace/archives/instance",
+            },
+            summary: {
+              fields: {
+                token: "secret-token",
+                workspace: "/Users/dpeek/workspace",
+              },
+              title: "Workspace saved",
+            },
+          },
+          summary: {
+            fields: {
+              token: "secret-token",
+              workspace: "/Users/dpeek/workspace",
+            },
+            title: "Workspace saved",
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain("Workspace saved");
+    expect(html).toContain("&lt;path&gt;");
+    expect(html).toContain("[redacted]");
+    expect(html).not.toContain("/Users/dpeek");
+    expect(html).not.toContain("secret-token");
+    expect(html).not.toContain("token leaked");
+    expect(html).not.toContain("Bearer abc123");
+  });
+
+  it("renders external authorization URL prompts from gateway events", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceOperationProgress
+        operation={workspaceOperation({
+          events: [
+            {
+              at: "2026-06-02T00:00:02.000Z",
+              id: "event-1",
+              profileLabel: "Local Cloudflare",
+              provider: "cloudflare",
+              status: "waiting",
+              type: "externalAuthorizationUrl",
+              url: "https://dash.cloudflare.com/oauth/authorize?client_id=formless",
+            },
+          ],
+          operation: "credentialSetup",
+          status: "running",
+          summary: {
+            fields: { provider: "cloudflare" },
+            title: "Credential setup started",
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-formless-workspace-auth-url-events="true"');
+    expect(html).toContain("Cloudflare authorization");
+    expect(html).toContain("Local Cloudflare");
+    expect(html).toContain("Open authorization");
+    expect(html).not.toContain("token=");
+    expect(html).not.toContain("secret=");
+  });
+
+  it("keeps display-safe field rendering reusable for operation summaries", () => {
+    expect(
+      displaySafeEntries({
+        providerStatePayload: { token: "secret" },
+        recordCount: 3,
+        source: "/Users/dpeek/workspace/records",
+      }),
+    ).toEqual([
+      { key: "providerStatePayload", label: "Provider State Payload", value: "[redacted]" },
+      { key: "recordCount", label: "Record Count", value: "3" },
+      { key: "source", label: "Source", value: "<path>" },
+    ]);
   });
 
   it("renders the install dialog with a bundled app type switcher", () => {
@@ -410,6 +587,53 @@ function readyState(
     installs: [siteInstall({ installId: "site", label: "Site" })],
     packages: listBundledAppPackages(),
     status: "ready",
+    ...overrides,
+  };
+}
+
+function workspaceGatewayState(
+  overrides: Partial<Extract<WorkspaceGatewayRouteState, { status: "ready" }>> = {},
+): Extract<WorkspaceGatewayRouteState, { status: "ready" }> {
+  const statusOperation =
+    overrides.statusOperation ??
+    overrides.currentOperation ??
+    workspaceOperation({ operation: "status" });
+
+  return {
+    currentOperation: statusOperation,
+    status: "ready",
+    statusOperation,
+    ...overrides,
+  };
+}
+
+function workspaceOperation(
+  overrides: Partial<LocalWorkspaceGatewayOperation> = {},
+): LocalWorkspaceGatewayOperation {
+  return {
+    actor: "browser",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    errors: [],
+    events: [],
+    id: "op_status_00000001",
+    input: {},
+    kind: "formless.workspaceOperation",
+    logs: [],
+    operation: "status",
+    result: {
+      summary: {
+        fields: { initialized: true },
+        title: "Workspace status",
+      },
+    },
+    status: "succeeded",
+    summary: {
+      fields: { initialized: true },
+      title: "Workspace status",
+    },
+    updatedAt: "2026-06-02T00:00:01.000Z",
+    version: 1,
+    workspace: { label: "personal-sites" },
     ...overrides,
   };
 }

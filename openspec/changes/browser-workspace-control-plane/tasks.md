@@ -96,13 +96,22 @@ Evidence:
 
 ## 7. Browser Instance Management UI
 
-- [ ] 7.1 Add workspace gateway status and operation controls to local instance management surfaces.
-- [ ] 7.2 Add React-first browser onboarding flow for workspace init, first app install, save, check, and deploy entry points.
-- [ ] 7.3 Render operation progress and display-safe errors without exposing raw filesystem paths or credentials.
-- [ ] 7.4 Render external Cloudflare authorization URL prompts from gateway operation events and continue polling after the user opens the URL.
-- [ ] 7.5 Reuse generated create/edit field controls, create-field authoring facts, defaults, `visibleWhen`, and Authority-backed validation for onboarding steps that write schema records.
-- [ ] 7.6 Keep onboarding orchestration separate from generated field rendering so later schema-defined app setup flows can reuse the field/mutation layer.
-- [ ] 7.7 Add generated UI tests and browser smoke coverage for local onboarding, auth URL handoff, field-control reuse, validation behavior, and workspace operation controls.
+- [x] 7.1 Add workspace gateway status and operation controls to local instance management surfaces.
+- [x] 7.2 Add React-first browser onboarding flow for workspace init, first app install, save, check, and deploy entry points.
+- [x] 7.3 Render operation progress and display-safe errors without exposing raw filesystem paths or credentials.
+- [x] 7.4 Render external Cloudflare authorization URL prompts from gateway operation events and continue polling after the user opens the URL.
+- [x] 7.5 Reuse generated create/edit field controls, create-field authoring facts, defaults, `visibleWhen`, and Authority-backed validation for onboarding steps that write schema records.
+- [x] 7.6 Keep onboarding orchestration separate from generated field rendering so later schema-defined app setup flows can reuse the field/mutation layer.
+- [x] 7.7 Add generated UI tests and browser smoke coverage for local onboarding, auth URL handoff, field-control reuse, validation behavior, and workspace operation controls.
+
+Evidence:
+
+- Added `src/client/workspace-gateway.ts` and `src/client/workspace-gateway.test.ts` for browser-safe gateway status, operation start, progress reads, bootstrap retry, and CSRF request behavior.
+- Changed `src/app/routes/instance-shell.tsx` to load local workspace status before normal instance reads, render local workspace operation controls, initialize/save/check/pull/push/credential/deploy entry points, display operation progress/errors with UI redaction, and render Cloudflare/Alchemy authorization prompts that poll after opening.
+- Kept onboarding orchestration in the instance shell while route, provider config, deploy target, and desired-resource record authoring remain in generated control-plane sections; first app install stays on the Authority-backed app-install action path that initializes install storage.
+- Added `src/app/routes/instance-shell.test.tsx` coverage for local onboarding state, operation controls, generated record editor mounting, validation error display, display-safe progress redaction, authorization URL handoff, and operation summary rendering.
+- `devstate check` green at 2026-06-02T14:15:42.156Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-browser-workspace-ui-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
 
 ## 8. Gateway Deployment Flow
 

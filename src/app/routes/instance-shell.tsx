@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
@@ -35,7 +35,27 @@ import {
   DeploymentRuntimeApiError,
   fetchInstanceDeploymentStatus,
 } from "../../client/deployment-runtime.ts";
-import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
+import {
+  listBundledAppPackages,
+  type AppInstall,
+  type BundledAppPackage,
+  type PackageAppKey,
+} from "../../shared/app-installs.ts";
+import {
+  LocalWorkspaceGatewayApiError,
+  fetchLocalWorkspaceGatewayOperation,
+  fetchLocalWorkspaceGatewayStatus,
+  localWorkspaceGatewayBrowserConfig,
+  startLocalWorkspaceGatewayOperation,
+  type LocalWorkspaceGatewayConfig,
+  type LocalWorkspaceGatewayDisplayObject,
+  type LocalWorkspaceGatewayDisplayValue,
+  type LocalWorkspaceGatewayOperation,
+  type LocalWorkspaceGatewayOperationKind,
+  type LocalWorkspaceGatewayOperationLog,
+  type LocalWorkspaceGatewayResponse,
+  type LocalWorkspaceGatewayStartInput,
+} from "../../client/workspace-gateway.ts";
 import {
   deploymentStatusDisplaySummary,
   type InstanceDeploymentStatusResponse,
@@ -99,10 +119,26 @@ export type InstanceShellRouteState =
       status: "ready";
     };
 
+export type WorkspaceGatewayRouteState =
+  | { status: "unavailable" }
+  | { status: "loading" }
+  | {
+      activeOperationId?: string;
+      csrfToken?: string;
+      currentOperation?: LocalWorkspaceGatewayOperation;
+      error?: string;
+      status: "ready";
+      statusOperation?: LocalWorkspaceGatewayOperation;
+    };
+
 export function InstanceShellRoute() {
   const [, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
+  const workspaceGatewayConfig = useMemo(() => localWorkspaceGatewayBrowserConfig(), []);
+  const [workspaceGatewayState, setWorkspaceGatewayState] = useState<WorkspaceGatewayRouteState>(
+    () => (workspaceGatewayConfig ? { status: "loading" } : { status: "unavailable" }),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,6 +146,41 @@ export function InstanceShellRoute() {
 
     async function loadInstalls() {
       try {
+        const workspaceGatewayResponse = await loadInitialWorkspaceGatewayStatus({
+          config: workspaceGatewayConfig,
+          signal: controller.signal,
+        });
+
+        if (stopped) {
+          return;
+        }
+
+        if (workspaceGatewayResponse) {
+          setWorkspaceGatewayState((current) =>
+            workspaceGatewayReadyStateFromResponse(workspaceGatewayResponse, current),
+          );
+
+          if (workspaceInitialized(workspaceGatewayResponse.operation) === false) {
+            const packages = listBundledAppPackages();
+
+            setState({
+              domainAppliedStates: [],
+              installing: false,
+              installs: [],
+              packages,
+              status: "ready",
+            });
+            setInstallDrafts((current) =>
+              initializePackageInstallDrafts({
+                currentDrafts: current,
+                installs: [],
+                packages,
+              }),
+            );
+            return;
+          }
+        }
+
         const [
           appResponse,
           domainResponse,
@@ -164,7 +235,31 @@ export function InstanceShellRoute() {
       stopped = true;
       controller.abort();
     };
-  }, []);
+  }, [workspaceGatewayConfig]);
+
+  useEffect(() => {
+    if (
+      workspaceGatewayState.status !== "ready" ||
+      !workspaceGatewayState.activeOperationId ||
+      !workspaceGatewayState.currentOperation ||
+      !operationPollsAutomatically(workspaceGatewayState.currentOperation)
+    ) {
+      return;
+    }
+
+    const operationId = workspaceGatewayState.activeOperationId;
+    const operationKind = workspaceGatewayState.currentOperation.operation;
+    const intervalId = window.setInterval(() => {
+      void refreshWorkspaceGatewayOperation({
+        config: workspaceGatewayConfig,
+        operationId,
+        operationKind,
+        setWorkspaceGatewayState,
+      });
+    }, 1500);
+
+    return () => window.clearInterval(intervalId);
+  }, [workspaceGatewayConfig, workspaceGatewayState]);
 
   async function submitInstall(
     packageAppKey: PackageAppKey,
@@ -247,6 +342,58 @@ export function InstanceShellRoute() {
         installErrorPackageAppKey: packageAppKey,
       });
     }
+  }
+
+  async function startWorkspaceOperation(input: LocalWorkspaceGatewayStartInput) {
+    if (workspaceGatewayState.status !== "ready" || !workspaceGatewayConfig) {
+      return;
+    }
+
+    setWorkspaceGatewayState({
+      ...workspaceGatewayState,
+      error: undefined,
+    });
+
+    try {
+      const response = await startLocalWorkspaceGatewayOperation(input, {
+        config: workspaceGatewayConfig,
+        csrfToken: workspaceGatewayState.csrfToken,
+      });
+
+      if (!response) {
+        setWorkspaceGatewayState({ status: "unavailable" });
+        return;
+      }
+
+      setWorkspaceGatewayState((current) =>
+        workspaceGatewayReadyStateFromResponse(response, current, {
+          activeOperationId: response.operation.id,
+          currentOperation: response.operation,
+        }),
+      );
+    } catch (error) {
+      const message =
+        error instanceof LocalWorkspaceGatewayApiError || error instanceof Error
+          ? error.message
+          : "Workspace operation failed.";
+
+      setWorkspaceGatewayState({
+        ...workspaceGatewayState,
+        error: displaySafeText(message),
+      });
+    }
+  }
+
+  async function pollWorkspaceOperation(
+    operationId: string,
+    operationKind?: LocalWorkspaceGatewayOperationKind,
+  ) {
+    await refreshWorkspaceGatewayOperation({
+      config: workspaceGatewayConfig,
+      operationId,
+      operationKind,
+      setWorkspaceGatewayState,
+    });
   }
 
   async function submitDeleteDomainProviderResource(input: DomainProviderDeleteActionInput) {
@@ -499,6 +646,7 @@ export function InstanceShellRoute() {
       onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
       onRefreshDomainProviderPlan={refreshDomainProviderPlan}
       onSubmitDomainProviderApply={submitApplyDomainProviderPlan}
+      onPollWorkspaceOperation={pollWorkspaceOperation}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
           ...current,
@@ -506,9 +654,112 @@ export function InstanceShellRoute() {
         }))
       }
       onSubmitInstall={submitInstall}
+      onStartWorkspaceOperation={startWorkspaceOperation}
       state={state}
+      workspaceGatewayState={workspaceGatewayState}
     />
   );
+}
+
+async function loadInitialWorkspaceGatewayStatus({
+  config,
+  signal,
+}: {
+  config?: LocalWorkspaceGatewayConfig;
+  signal: AbortSignal;
+}): Promise<LocalWorkspaceGatewayResponse | undefined> {
+  if (!config) {
+    return undefined;
+  }
+
+  try {
+    return await fetchLocalWorkspaceGatewayStatus({ config, signal });
+  } catch (error) {
+    if (error instanceof LocalWorkspaceGatewayApiError && error.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function refreshWorkspaceGatewayOperation({
+  config,
+  operationId,
+  operationKind,
+  setWorkspaceGatewayState,
+}: {
+  config?: LocalWorkspaceGatewayConfig;
+  operationId: string;
+  operationKind?: LocalWorkspaceGatewayOperationKind;
+  setWorkspaceGatewayState: Dispatch<SetStateAction<WorkspaceGatewayRouteState>>;
+}) {
+  if (!config) {
+    return;
+  }
+
+  try {
+    const response = await fetchLocalWorkspaceGatewayOperation(
+      { operationId, operationKind },
+      { config },
+    );
+
+    if (!response) {
+      return;
+    }
+
+    setWorkspaceGatewayState((current) =>
+      workspaceGatewayReadyStateFromResponse(response, current, {
+        activeOperationId: response.operation.id,
+        currentOperation: response.operation,
+      }),
+    );
+  } catch (error) {
+    const message =
+      error instanceof LocalWorkspaceGatewayApiError || error instanceof Error
+        ? error.message
+        : "Workspace operation refresh failed.";
+
+    setWorkspaceGatewayState((current) =>
+      current.status === "ready"
+        ? {
+            ...current,
+            error: displaySafeText(message),
+          }
+        : current,
+    );
+  }
+}
+
+function workspaceGatewayReadyStateFromResponse(
+  response: LocalWorkspaceGatewayResponse,
+  current: WorkspaceGatewayRouteState,
+  overrides: Partial<Extract<WorkspaceGatewayRouteState, { status: "ready" }>> = {},
+): Extract<WorkspaceGatewayRouteState, { status: "ready" }> {
+  const currentReady = current.status === "ready" ? current : undefined;
+
+  return {
+    activeOperationId: currentReady?.activeOperationId,
+    csrfToken: response.csrfToken ?? currentReady?.csrfToken,
+    currentOperation: currentReady?.currentOperation ?? response.operation,
+    status: "ready",
+    statusOperation:
+      response.operation.operation === "status"
+        ? response.operation
+        : currentReady?.statusOperation,
+    ...overrides,
+  };
+}
+
+function workspaceInitialized(operation?: LocalWorkspaceGatewayOperation): boolean | undefined {
+  const initialized =
+    operation?.result?.summary.fields.initialized ?? operation?.summary.fields.initialized;
+
+  return typeof initialized === "boolean" ? initialized : undefined;
+}
+
+function operationPollsAutomatically(operation: LocalWorkspaceGatewayOperation): boolean {
+  return operation.status === "queued" || operation.status === "running";
 }
 
 async function fetchOptionalInstanceDeploymentStatus(
@@ -529,24 +780,33 @@ export function InstanceShellRouteView({
   installDrafts = {},
   onDeleteDomainProviderResource,
   onMarkDomainProviderResourceManuallyRemoved,
+  onPollWorkspaceOperation,
   onRefreshDomainProviderApplyJob,
   onRefreshDomainProviderDeleteJob,
   onRefreshDomainProviderPlan,
   onSubmitDomainProviderApply,
   onInstallDraftChange,
   onSubmitInstall,
+  onStartWorkspaceOperation,
   state,
+  workspaceGatewayState = { status: "unavailable" },
 }: {
   installDrafts?: PackageInstallDrafts;
   onDeleteDomainProviderResource?: (input: DomainProviderDeleteActionInput) => void;
   onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
+  onPollWorkspaceOperation?: (
+    operationId: string,
+    operationKind?: LocalWorkspaceGatewayOperationKind,
+  ) => void;
   onRefreshDomainProviderApplyJob?: () => void;
   onRefreshDomainProviderDeleteJob?: () => void;
   onRefreshDomainProviderPlan?: () => void;
   onSubmitDomainProviderApply?: () => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
+  onStartWorkspaceOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
   state: InstanceShellRouteState;
+  workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
 
@@ -573,6 +833,13 @@ export function InstanceShellRouteView({
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader />
+      <WorkspaceGatewayManagementSection
+        installCount={state.installs.length}
+        onInstallFirstApp={() => setInstallDialogOpen(true)}
+        onPollOperation={onPollWorkspaceOperation}
+        onStartOperation={onStartWorkspaceOperation}
+        state={workspaceGatewayState}
+      />
       <GeneratedInstanceAppsSection
         installDisabled={state.installing || state.packages.length === 0}
         onInstall={() => setInstallDialogOpen(true)}
@@ -598,6 +865,559 @@ export function InstanceShellRouteView({
       />
     </section>
   );
+}
+
+function WorkspaceGatewayManagementSection({
+  installCount,
+  onInstallFirstApp,
+  onPollOperation,
+  onStartOperation,
+  state,
+}: {
+  installCount: number;
+  onInstallFirstApp: () => void;
+  onPollOperation?: (
+    operationId: string,
+    operationKind?: LocalWorkspaceGatewayOperationKind,
+  ) => void;
+  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  state: WorkspaceGatewayRouteState;
+}) {
+  if (state.status === "unavailable") {
+    return null;
+  }
+
+  const operation = state.status === "ready" ? state.currentOperation : undefined;
+  const initialized =
+    state.status === "ready"
+      ? workspaceInitialized(state.statusOperation ?? state.currentOperation ?? operation)
+      : undefined;
+
+  return (
+    <section
+      aria-labelledby="workspace-gateway-heading"
+      className="space-y-3"
+      data-formless-workspace-gateway="local"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
+        <div className="min-w-0 space-y-1">
+          <h2 id="workspace-gateway-heading" className="text-sm font-semibold">
+            Workspace
+          </h2>
+          <p className="text-xs text-muted-fg">
+            {state.status === "loading"
+              ? "Loading local workspace status"
+              : initialized === false
+                ? "Not initialized"
+                : initialized === true
+                  ? "Initialized"
+                  : "Local gateway connected"}
+          </p>
+        </div>
+      </div>
+      <WorkspaceGatewayOperationControls
+        initialized={initialized}
+        onStartOperation={onStartOperation}
+        state={state}
+      />
+      <WorkspaceOnboardingFlowSection
+        initialized={initialized}
+        installCount={installCount}
+        onInstallFirstApp={onInstallFirstApp}
+        onStartOperation={onStartOperation}
+        state={state}
+      />
+      {state.status === "ready" ? (
+        <WorkspaceOperationProgress
+          error={state.error}
+          onPollOperation={onPollOperation}
+          operation={operation ?? state.statusOperation}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function WorkspaceGatewayOperationControls({
+  initialized,
+  onStartOperation,
+  state,
+}: {
+  initialized?: boolean;
+  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  state: WorkspaceGatewayRouteState;
+}) {
+  const busy =
+    state.status === "loading" ||
+    (state.status === "ready" &&
+      state.currentOperation !== undefined &&
+      operationPollsAutomatically(state.currentOperation));
+  const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
+  const canRunPostBootstrapOperation = canStart && Boolean(state.csrfToken);
+  const initDisabled = !canStart || initialized === true;
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2"
+      data-formless-workspace-operation-controls="true"
+    >
+      <Button
+        intent="outline"
+        isDisabled={initDisabled}
+        onPress={() => onStartOperation?.({ kind: "init" })}
+        size="sm"
+        type="button"
+      >
+        Initialize
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ check: false, kind: "save" })}
+        size="sm"
+        type="button"
+      >
+        Save
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "check" })}
+        size="sm"
+        type="button"
+      >
+        Check
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "pull" })}
+        size="sm"
+        type="button"
+      >
+        Pull
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ apply: false, kind: "push" })}
+        size="sm"
+        type="button"
+      >
+        Push
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "credentialSetup", provider: "cloudflare" })}
+        size="sm"
+        type="button"
+      >
+        Credentials
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "deployPlan" })}
+        size="sm"
+        type="button"
+      >
+        Plan deploy
+      </Button>
+      <Button
+        isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "deployApply" })}
+        size="sm"
+        type="button"
+      >
+        Apply deploy
+      </Button>
+    </div>
+  );
+}
+
+function WorkspaceOnboardingFlowSection({
+  initialized,
+  installCount,
+  onInstallFirstApp,
+  onStartOperation,
+  state,
+}: {
+  initialized?: boolean;
+  installCount: number;
+  onInstallFirstApp: () => void;
+  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  state: WorkspaceGatewayRouteState;
+}) {
+  if (initialized !== false && installCount > 0) {
+    return null;
+  }
+
+  const canInit =
+    state.status === "ready" && initialized === false && onStartOperation !== undefined;
+
+  return (
+    <div
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-2"
+      data-formless-workspace-onboarding="local"
+    >
+      <div className="min-w-0 space-y-2">
+        <h3 className="text-sm font-semibold">Local onboarding</h3>
+        <p className="text-xs text-muted-fg">
+          {initialized === false
+            ? "Workspace source has not been created."
+            : "No package apps are installed."}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {initialized === false ? (
+            <Button
+              isDisabled={!canInit}
+              onPress={() => onStartOperation?.({ kind: "init" })}
+              size="sm"
+              type="button"
+            >
+              Initialize workspace
+            </Button>
+          ) : null}
+          {initialized !== false && installCount === 0 ? (
+            <Button onPress={onInstallFirstApp} size="sm" type="button">
+              <AddIcon />
+              Install first app
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div
+        className="flex min-w-0 flex-wrap content-start gap-2 text-xs text-muted-fg"
+        data-formless-onboarding-generated-record-controls="routes deployments"
+      >
+        <span className="rounded border border-border px-2 py-1">Routes</span>
+        <span className="rounded border border-border px-2 py-1">Deployments</span>
+      </div>
+    </div>
+  );
+}
+
+export function WorkspaceOperationProgress({
+  error,
+  onPollOperation,
+  operation,
+}: {
+  error?: string;
+  onPollOperation?: (
+    operationId: string,
+    operationKind?: LocalWorkspaceGatewayOperationKind,
+  ) => void;
+  operation?: LocalWorkspaceGatewayOperation;
+}) {
+  if (!operation && !error) {
+    return null;
+  }
+
+  return (
+    <div
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
+      data-formless-workspace-operation-progress="true"
+    >
+      {operation ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">{operation.summary.title}</h3>
+              <p className="text-xs text-muted-fg">
+                {workspaceOperationKindLabel(operation.operation)} ·{" "}
+                {workspaceOperationStatusLabel(operation.status)}
+              </p>
+            </div>
+            <span className="text-xs text-muted-fg">
+              <code>{displaySafeText(operation.id)}</code>
+            </span>
+          </div>
+          <DisplaySafeObject fields={operation.summary.fields} />
+          {operation.result?.deployment ? (
+            <DisplaySafeObject fields={operation.result.deployment} heading="Deployment" />
+          ) : null}
+          {operation.result?.details ? (
+            <DisplaySafeObject fields={operation.result.details} heading="Details" />
+          ) : null}
+          <WorkspaceOperationEvents
+            events={operation.events}
+            onPollOperation={(operationId) => onPollOperation?.(operationId, operation.operation)}
+            operationId={operation.id}
+          />
+          <WorkspaceOperationLogs logs={operation.logs} />
+          <WorkspaceOperationErrors errors={operation.errors} />
+        </>
+      ) : null}
+      {error ? (
+        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+          {displaySafeText(error)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DisplaySafeObject({
+  fields,
+  heading,
+}: {
+  fields: LocalWorkspaceGatewayDisplayObject;
+  heading?: string;
+}) {
+  const entries = displaySafeEntries(fields);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="min-w-0 space-y-2">
+      {heading ? <h4 className="text-xs font-semibold">{heading}</h4> : null}
+      <dl className="grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
+        {entries.map((entry) => (
+          <div className="min-w-0" key={entry.key}>
+            <dt className="font-medium text-fg">{entry.label}</dt>
+            <dd className="break-words">{entry.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function WorkspaceOperationEvents({
+  events,
+  onPollOperation,
+  operationId,
+}: {
+  events: LocalWorkspaceGatewayOperation["events"];
+  onPollOperation: (operationId: string) => void;
+  operationId: string;
+}) {
+  const authorizationEvents = events
+    .map((event) =>
+      event.type === "externalAuthorizationUrl"
+        ? {
+            ...event,
+            url: displaySafeAuthorizationUrl(event.url, event.provider),
+          }
+        : undefined,
+    )
+    .filter((event): event is NonNullable<typeof event> => event !== undefined && event.url !== "");
+
+  if (authorizationEvents.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2" data-formless-workspace-auth-url-events="true">
+      {authorizationEvents.map((event) => (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded border border-dashed border-border px-3 py-2 text-xs"
+          key={event.id}
+        >
+          <span>
+            {workspaceProviderLabel(event.provider)} authorization ·{" "}
+            {displaySafeText(event.profileLabel)}
+          </span>
+          <Button
+            intent="outline"
+            onPress={() => {
+              window.open(event.url, "_blank", "noopener,noreferrer");
+              onPollOperation(operationId);
+            }}
+            size="sm"
+            type="button"
+          >
+            Open authorization
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkspaceOperationLogs({ logs }: { logs: LocalWorkspaceGatewayOperation["logs"] }) {
+  if (logs.length === 0) {
+    return null;
+  }
+
+  return (
+    <ol className="space-y-1 text-xs text-muted-fg">
+      {logs.map((log) => (
+        <li key={log.id}>
+          {workspaceOperationLogLevelLabel(log.level)} · {displaySafeText(log.message)}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WorkspaceOperationErrors({
+  errors,
+}: {
+  errors: LocalWorkspaceGatewayOperation["errors"];
+}) {
+  if (errors.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1">
+      {errors.map((operationError) => (
+        <p
+          className={fieldErrorStyles()}
+          data-slot="field-error"
+          key={`${operationError.at}:${operationError.message}`}
+          role="alert"
+        >
+          {displaySafeText(operationError.message)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+export function displaySafeEntries(fields: LocalWorkspaceGatewayDisplayObject): Array<{
+  key: string;
+  label: string;
+  value: string;
+}> {
+  return Object.entries(fields).map(([key, value]) => ({
+    key,
+    label: fieldKeyLabel(key),
+    value: displaySafeValue(key, value),
+  }));
+}
+
+function displaySafeValue(key: string, value: LocalWorkspaceGatewayDisplayValue): string {
+  if (isForbiddenDisplayKey(key)) {
+    return "[redacted]";
+  }
+
+  if (typeof value === "string") {
+    return displaySafeText(value);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => displaySafeValue(key, item)).join(", ");
+  }
+
+  const entries = Object.entries(value).map(([childKey, childValue]) => [
+    childKey,
+    displaySafeValue(childKey, childValue),
+  ]);
+
+  return entries
+    .map(([childKey, childValue]) => `${fieldKeyLabel(childKey)} ${childValue}`)
+    .join(", ");
+}
+
+export function displaySafeText(value: string): string {
+  return value
+    .replace(
+      /([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY|APIKEY)[A-Z0-9_]*=)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      "$1[redacted]",
+    )
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
+    .replace(/lease:[A-Za-z0-9._:-]+/gi, "[redacted]")
+    .replace(/CF_API_TOKEN[_A-Za-z0-9-]*/g, "[redacted]")
+    .replace(/\/Users\/[^\s,;'"<>)]+/g, "<path>")
+    .replace(/\/(?:tmp|var|etc|home)\/[^\s,;'"<>)]+/g, "<path>")
+    .replace(/[A-Za-z]:\\[^\s,;'"<>)]+/g, "<path>");
+}
+
+function displaySafeAuthorizationUrl(value: string, provider: "alchemy" | "cloudflare"): string {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    return "";
+  }
+
+  if (url.protocol !== "https:") {
+    return "";
+  }
+
+  for (const key of url.searchParams.keys()) {
+    if (isForbiddenDisplayKey(key)) {
+      return "";
+    }
+  }
+
+  const host = url.hostname.toLowerCase();
+
+  if (provider === "cloudflare" && host === "dash.cloudflare.com") {
+    return url.toString();
+  }
+
+  if (
+    provider === "alchemy" &&
+    (host === "alchemy.com" ||
+      host.endsWith(".alchemy.com") ||
+      host === "alchemy.run" ||
+      host.endsWith(".alchemy.run"))
+  ) {
+    return url.toString();
+  }
+
+  return "";
+}
+
+function isForbiddenDisplayKey(key: string): boolean {
+  const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
+
+  return (
+    normalized === "secret" ||
+    normalized === "secrets" ||
+    normalized.endsWith("token") ||
+    normalized.endsWith("password") ||
+    normalized.includes("apikey") ||
+    normalized.includes("credential") ||
+    normalized === "leasetoken" ||
+    normalized.includes("providerstate") ||
+    normalized.startsWith("raw")
+  );
+}
+
+function fieldKeyLabel(key: string): string {
+  return key
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll(/[-_]/g, " ")
+    .replace(/^\w/, (match) => match.toUpperCase());
+}
+
+function workspaceOperationKindLabel(kind: LocalWorkspaceGatewayOperationKind): string {
+  switch (kind) {
+    case "credentialSetup":
+      return "Credential setup";
+    case "deployApply":
+      return "Deploy apply";
+    case "deployPlan":
+      return "Deploy plan";
+    default:
+      return fieldKeyLabel(kind);
+  }
+}
+
+function workspaceOperationStatusLabel(status: LocalWorkspaceGatewayOperation["status"]): string {
+  return fieldKeyLabel(status);
+}
+
+function workspaceOperationLogLevelLabel(
+  level: LocalWorkspaceGatewayOperationLog["level"],
+): string {
+  return fieldKeyLabel(level);
+}
+
+function workspaceProviderLabel(provider: "alchemy" | "cloudflare"): string {
+  return provider === "cloudflare" ? "Cloudflare" : "Alchemy";
 }
 
 function GeneratedDeploymentManagementSection({
