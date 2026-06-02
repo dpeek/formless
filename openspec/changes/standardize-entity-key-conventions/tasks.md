@@ -28,10 +28,15 @@
 
 ## 3. Builder And Generated UI
 
-- [ ] 3.1 Update Builder entity creation and validation to accept parser-valid kebab-case entity keys.
-- [ ] 3.2 Keep saved entity keys locked after save and leave saved field, query, view, action, and screen keys unchanged.
-- [ ] 3.3 Render human-facing labels from kebab-case entity keys without treating hyphens as namespaces.
-- [ ] 3.4 Update generated instance management surfaces that assume entity keys are JavaScript identifiers.
+- [x] 3.1 Update Builder entity creation and validation to accept parser-valid kebab-case entity keys.
+- [x] 3.2 Keep saved entity keys locked after save and leave saved field, query, view, action, and screen keys unchanged.
+- [x] 3.3 Render human-facing labels from kebab-case entity keys without treating hyphens as namespaces.
+- [x] 3.4 Update generated instance management surfaces that assume entity keys are JavaScript identifiers.
+
+- Files changed: `src/client/schema-builder.ts`, `src/client/schema-builder.test.ts`, `src/client/views.test.ts`, `src/app/routes/schema.tsx`, and generated UI fixture expectations in `src/app.test.tsx`.
+- Evidence: Builder entity validation now delegates entity keys to schema-local kebab-case grammar while field and enum keys keep the existing Builder key rule. Builder creates `project-note` entities, derives `Project note` labels from hyphenated keys, exposes saved entity `keyLocked` projection state, and preserves saved field, query, view, and screen keys. Generated control-plane app screen model coverage verifies `app-install` and `app-route` entity names with existing camelCase view/query keys. Generated UI test fixtures use local kebab-case entity keys such as `task-placement` with existing relationship/query/view names preserved.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T02:37:09.566Z.
+- Smoke: `bun browser --ignore-https-errors --session grug-builder-kebab-smoke batch --bail "open https://standardize-entity-key-conventions.formless.local/site/schema" "wait 1000" "snapshot -i" "errors"` rendered the Schema Builder route. `bun browser --session grug-builder-kebab-smoke batch --bail "open https://standardize-entity-key-conventions.formless.local/" "wait 1000" "snapshot -i" "errors"` rendered App management, app-install/app-route generated sections, and deployment sections with no browser errors.
 
 ## 4. Archive And Workspace Record Source
 

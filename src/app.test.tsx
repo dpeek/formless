@@ -1427,7 +1427,7 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("&quot;siteHeader&quot;");
     expect(html).not.toContain("&quot;siteFooter&quot;");
     expect(html).toContain("&quot;block&quot;");
-    expect(html).toContain("&quot;blockPlacement&quot;");
+    expect(html).toContain("&quot;block-placement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
     expect(html).not.toContain("<code>estii</code>");
@@ -4640,7 +4640,7 @@ describe("generated forms and records", () => {
     }
 
     const task = schema.entities.task;
-    const taskPlacement = schema.entities.taskPlacement;
+    const taskPlacement = schema.entities["task-placement"];
     const column: Extract<TableColumnConfig, { type: "field" }> = {
       type: "field",
       key: "field:task",
@@ -6474,7 +6474,7 @@ function generatedDiscriminatedTaskSchema(
           delete: { enabled: false },
         },
       },
-      taskPlacement: {
+      "task-placement": {
         label: "Task placement",
         fields: {
           parent: { type: "reference", required: true, label: "Parent", to: "task" },
@@ -6492,7 +6492,7 @@ function generatedDiscriminatedTaskSchema(
       taskPlacements: {
         kind: "toMany",
         from: { entity: "task" },
-        to: { entity: "taskPlacement", field: "parent" },
+        to: { entity: "task-placement", field: "parent" },
       },
     },
     unions: {
@@ -6519,7 +6519,7 @@ function generatedDiscriminatedTaskSchema(
       },
       placementsForSelectedTask: {
         label: "Selected task",
-        entity: "taskPlacement",
+        entity: "task-placement",
         expression: {
           kind: "where",
           ref: { kind: "value", name: "parent" },
@@ -6597,7 +6597,7 @@ function generatedDiscriminatedTaskSchema(
       taskTreeHome: {
         type: "collection",
         label: "Task tree",
-        entity: "taskPlacement",
+        entity: "task-placement",
         navigation: { primary: false },
         context: {
           name: "task",
@@ -6700,7 +6700,7 @@ function discriminatedTaskRecord(
 function taskPlacementRecord(id: string, parent: string, task: string): StoredRecord {
   return {
     id,
-    entity: "taskPlacement",
+    entity: "task-placement",
     values: { parent, task, order: 1 },
     createdAt: "2026-05-11T00:00:01.000Z",
   };

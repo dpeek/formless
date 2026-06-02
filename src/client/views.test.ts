@@ -2122,6 +2122,43 @@ describe("home view model collections", () => {
     });
   });
 
+  it("selects app control-plane collections with kebab-case entity names", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const apps = selectScreenModelByPath(schema, "/");
+
+    if (!apps) {
+      throw new Error("Missing apps control-plane screen.");
+    }
+
+    expect(summarizeScreenModel(apps)).toEqual({
+      screenName: "apps",
+      label: "Apps",
+      primary: true,
+      layoutType: "stack",
+      sections: [
+        {
+          id: "app-installs",
+          label: "App installs",
+          viewName: "appInstallList",
+          entityName: "app-install",
+        },
+        {
+          id: "app-routes",
+          label: "App routes",
+          viewName: "appRouteList",
+          entityName: "app-route",
+        },
+      ],
+    });
+    expect(
+      apps.layout.sections.map((section) => section.collection.queries.defaultQueryName),
+    ).toEqual(["appInstallAll", "appRouteAll"]);
+    expect(apps.layout.sections.map((section) => section.collection.entity.label)).toEqual([
+      "App install",
+      "App route",
+    ]);
+  });
+
   it("selects deployment control-plane collections as read-only generated UI sections", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const deployments = selectScreenModelByPath(schema, "/deployments");

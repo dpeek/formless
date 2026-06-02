@@ -767,7 +767,7 @@ function CreateEntityDialog({
               className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
               onChange={(event) => onKeyChange(event.currentTarget.value)}
               onKeyDown={(event) => submitDialogOnEnter(event, onCreate)}
-              placeholder="project"
+              placeholder="project-note"
               value={keyValue}
             />
           </label>

@@ -6,6 +6,7 @@ import {
   type FieldSchema,
   type TextFieldFormat,
 } from "../shared/schema.ts";
+import { isSchemaLocalEntityKey } from "../shared/schema-entity-names.ts";
 
 export type SchemaBuilderDraft = {
   savedSchema: AppSchema;
@@ -18,6 +19,7 @@ export type SchemaBuilderProjection = {
 
 export type SchemaBuilderEntityProjection = {
   key: string;
+  keyLocked: boolean;
   label: string;
   saved: boolean;
   fields: SchemaBuilderFieldProjection[];
@@ -134,6 +136,17 @@ export function validateSchemaBuilderKey(
     return { ok: false, message: `${capitalize(kind)} key is required.` };
   }
 
+  if (kind === "entity") {
+    if (!isSchemaLocalEntityKey(key)) {
+      return {
+        ok: false,
+        message: "Entity key must be a singular kebab-case entity key.",
+      };
+    }
+
+    return { ok: true };
+  }
+
   if (!builderKeyPattern.test(key)) {
     return {
       ok: false,
@@ -151,6 +164,7 @@ export function projectSchemaBuilderDraft(draft: SchemaBuilderDraft): SchemaBuil
 
       return {
         key: entityKey,
+        keyLocked: savedEntity !== undefined,
         label: entity.label,
         saved: savedEntity !== undefined,
         fields: Object.entries(entity.fields).map(([fieldKey, field]) => {
@@ -641,9 +655,10 @@ function labelFromKey(key: string): string {
   const spaced = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
     .trim();
 
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
 function capitalize(value: string): string {

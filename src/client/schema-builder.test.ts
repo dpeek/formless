@@ -5,12 +5,13 @@ import {
   sourceLikeSiteSchema,
   sourceLikeTaskSchema,
 } from "../test/schema-builders.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
 import {
   applySchemaBuilderIntent,
   createSchemaBuilderDraft,
   projectSchemaBuilderDraft,
   serializeSchemaBuilderDraft,
+  validateSchemaBuilderKey,
   validateSchemaBuilderDraft,
   type SchemaBuilderDraft,
   type SchemaBuilderIntent,
@@ -52,6 +53,138 @@ describe("schema builder draft intents", () => {
     expect(schema.views.projectCreate).toBeUndefined();
     expect(schema.views.projectHome).toBeUndefined();
     expect(schema.screens?.projectScreen).toBeUndefined();
+  });
+
+  it("creates kebab-case entities with clean labels", () => {
+    const draft = applyIntents(
+      createSchemaBuilderDraft(sourceLikeTaskSchema()),
+      { type: "createEntity", key: "project-note" },
+      {
+        type: "addField",
+        entityKey: "project-note",
+        fieldKey: "title",
+        fieldType: "text",
+      },
+    );
+    const schema = serializeSchemaBuilderDraft(draft);
+    const projection = projectSchemaBuilderDraft(draft);
+
+    expect(schema.entities["project-note"]).toMatchObject({
+      label: "Project note",
+      fields: {
+        title: {
+          type: "text",
+          required: false,
+          label: "Title",
+        },
+      },
+    });
+    expect(projection.entities.find((entity) => entity.key === "project-note")).toMatchObject({
+      key: "project-note",
+      keyLocked: false,
+      label: "Project note",
+      saved: false,
+    });
+  });
+
+  it("validates Builder entity keys with parser kebab-case grammar only for entities", () => {
+    expect(validateSchemaBuilderKey("entity", "project-note")).toEqual({ ok: true });
+    expect(validateSchemaBuilderKey("entity", "appInstall")).toEqual({
+      ok: false,
+      message: "Entity key must be a singular kebab-case entity key.",
+    });
+    expect(validateSchemaBuilderKey("entity", "site:block")).toEqual({
+      ok: false,
+      message: "Entity key must be a singular kebab-case entity key.",
+    });
+    expect(validateSchemaBuilderKey("field", "dueDate")).toEqual({ ok: true });
+    expect(validateSchemaBuilderKey("field", "due-date")).toEqual({
+      ok: false,
+      message: "Field key must start with a letter and use only letters and numbers.",
+    });
+  });
+
+  it("keeps saved kebab-case entity keys locked while preserving saved schema keys", () => {
+    const base = sourceLikeTaskSchema();
+    const original: AppSchema = parseAppSchema({
+      ...base,
+      entities: {
+        ...base.entities,
+        "project-note": {
+          label: "Project note",
+          fields: {
+            createdAt: { type: "text", required: true, label: "Created at" },
+          },
+          mutations: {
+            create: { enabled: true },
+            patch: { enabled: true },
+            delete: { enabled: false },
+          },
+        },
+      },
+      queries: {
+        ...base.queries,
+        projectNoteAll: {
+          label: "Project notes",
+          entity: "project-note",
+          expression: { kind: "all" },
+        },
+      },
+      views: {
+        ...base.views,
+        projectNoteHome: {
+          type: "collection",
+          label: "Project notes",
+          entity: "project-note",
+          queries: [{ query: "projectNoteAll" }],
+          defaultQuery: "projectNoteAll",
+          result: { type: "list", itemView: "projectNoteItem" },
+        },
+      },
+      itemViews: {
+        ...base.itemViews,
+        projectNoteItem: {
+          entity: "project-note",
+          fields: {
+            createdAt: { editor: "text", commit: "field-commit" },
+          },
+        },
+      },
+      screens: {
+        ...base.screens,
+        projectNoteScreen: {
+          type: "workspace",
+          label: "Project notes",
+          navigation: { primary: false },
+          layout: {
+            type: "stack",
+            sections: [{ id: "project-notes", type: "collection", view: "projectNoteHome" }],
+          },
+        },
+      },
+    });
+    const draft = applyIntents(createSchemaBuilderDraft(original), {
+      type: "addField",
+      entityKey: "project-note",
+      fieldKey: "body",
+      fieldType: "text",
+    });
+    const schema = serializeSchemaBuilderDraft(draft);
+    const projection = projectSchemaBuilderDraft(draft);
+    const entityProjection = projection.entities.find((entity) => entity.key === "project-note");
+
+    expect(entityProjection).toMatchObject({
+      key: "project-note",
+      keyLocked: true,
+      saved: true,
+      fields: [
+        { key: "createdAt", keyLocked: true, saved: true },
+        { key: "body", keyLocked: false, saved: false },
+      ],
+    });
+    expect(schema.queries.projectNoteAll).toEqual(original.queries.projectNoteAll);
+    expect(schema.views.projectNoteHome).toEqual(original.views.projectNoteHome);
+    expect(schema.screens?.projectNoteScreen).toEqual(original.screens?.projectNoteScreen);
   });
 
   it("adds optional fields to source-owned entities without rewriting source-owned views", () => {
