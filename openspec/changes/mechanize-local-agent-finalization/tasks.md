@@ -1,0 +1,41 @@
+## 1. Lease Recovery
+
+- [ ] 1.1 Add lease classification helpers for valid active, stale active, blocked, released, and ready-for-review lease states.
+- [ ] 1.2 Detect stale `claiming`, `working`, and `finalizing` leases from dead recorded PIDs or heartbeat age older than the configured stale heartbeat window.
+- [ ] 1.3 Allow a worker to recover or release a stale active lease before claiming the change.
+- [ ] 1.4 Preserve valid `ready-for-review` leases while the review branch is unmerged and still exists.
+- [ ] 1.5 Release `ready-for-review` leases only after branch merge, branch deletion, or explicit release.
+- [ ] 1.6 Keep blocked leases visible with blocker evidence and an explicit recovery or release path.
+- [ ] 1.7 Add tests for stale active lease recovery, blocked lease release, ready-for-review retention, and ready-for-review cleanup after merge or branch deletion.
+- [ ] 1.8 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+## 2. CLI-Owned Finalization
+
+- [ ] 2.1 Update automatic finalization to rebase `changes/<change-id>` on local `main` before validation and archive.
+- [ ] 2.2 Run `openspec validate <change-id> --strict --no-interactive` during finalization and block with command evidence on failure.
+- [ ] 2.3 Run `openspec archive <change-id> --yes` on the review branch and use the archive output for canonical spec updates.
+- [ ] 2.4 Remove agent-authored manual spec promotion from finalization when OpenSpec archive can apply the change deltas.
+- [ ] 2.5 Reuse the latest implementation `devstate check` evidence when finalization does not change code, resolve conflicts, or otherwise invalidate that evidence.
+- [ ] 2.6 Rerun `devstate check` during finalization when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
+- [ ] 2.7 Keep the ready-for-review branch self-contained with code changes, completed tasks/evidence, canonical specs, and archived change files.
+- [ ] 2.8 Add tests for validate/archive command sequencing, check reuse, invalidated-check reruns, archive failure blocking, and ready-for-review branch state.
+- [ ] 2.9 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+## 3. Context-Efficient Prompt Packets
+
+- [ ] 3.1 Remove generic `openspec-apply-change` skill instructions from rendered worker prompts when the prompt has a concrete change id and mode.
+- [ ] 3.2 Render concrete OpenSpec CLI commands, task state, change state, and relevant file paths into implementation and finalization prompts when `scripts/agents.ts` already knows them.
+- [ ] 3.3 Stop requiring workers to reread `doc/agents/local-openspec-implement.md`, `doc/agents/local-openspec-finalize.md`, or `doc/agents/local-agent-workers.md` after `bun agents` injects the rendered prompt.
+- [ ] 3.4 Update implementation prompts to select the next ready `##` section from `tasks.md` before broad context reads, then load only files needed for that section.
+- [ ] 3.5 Allow current green `devstate start` or `devstate check` output to satisfy check evidence without immediate `.devstate/status.md` reread, while still reading the file after failures, stale output, conflict resolution, or exact evidence-copy needs.
+- [ ] 3.6 Add or update tests for prompt rendering, known OpenSpec state injection, no generic skill instruction, section-first context loading, and devstate evidence reuse.
+- [ ] 3.7 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+## 4. Worker Docs Alignment
+
+- [ ] 4.1 Update `doc/agents/local-agent-workers.md` as human and supervisor reference for CLI-owned validation/archive, conditional finalization checks, self-contained review branches, lease recovery, and context-efficient prompts.
+- [ ] 4.2 Update `doc/agents/local-openspec-finalize.md` to be a self-contained rendered prompt template with no manual spec promotion, strict validation, archive, conditional checks, and no instruction to reread itself.
+- [ ] 4.3 Update `doc/agents/local-openspec-implement.md` to be a self-contained rendered prompt template with one-section implementation, section-first context loading, focused context reads, evidence requirements, and no finalization/archive `##` task section.
+- [ ] 4.4 Update `AGENTS.md` local finalization and worker wording if needed so it keeps repo rules but no longer duplicates detailed workflow mechanics owned by supervisor code or rendered prompts.
+- [ ] 4.5 Add or update documentation-adjacent tests for the revised worker instructions and duplicated-instruction reduction.
+- [ ] 4.6 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
