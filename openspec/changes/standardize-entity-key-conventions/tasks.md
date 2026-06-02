@@ -71,13 +71,20 @@
 
 ## 6. Tests And Verification
 
-- [ ] 6.1 Add schema parser tests for valid kebab-case entity keys and invalid camelCase or qualified local entity keys.
-- [ ] 6.2 Add qualified entity name parse/format tests for archive, workspace source, drift, log, and diagnostic boundaries.
-- [ ] 6.3 Add Builder tests for kebab-case creation, invalid key feedback, clean labels, and saved key locking.
-- [ ] 6.4 Add instance control-plane tests for renamed entities, references, immutable fields, route target integrity, and installed app data boundary.
-- [ ] 6.5 Add archive and workspace record-source tests for qualified names, normalization evidence, unsupported spelling rejection, and app data separation.
-- [ ] 6.6 Run `devstate check` and use `./.devstate/status.md` as evidence.
-- [ ] 6.7 Smoke app behavior with `bun browser ...` if generated UI, workspace save/check, or browser-visible control-plane behavior changes.
+- [x] 6.1 Add schema parser tests for valid kebab-case entity keys and invalid camelCase or qualified local entity keys.
+- [x] 6.2 Add qualified entity name parse/format tests for archive, workspace source, drift, log, and diagnostic boundaries.
+- [x] 6.3 Add Builder tests for kebab-case creation, invalid key feedback, clean labels, and saved key locking.
+- [x] 6.4 Add instance control-plane tests for renamed entities, references, immutable fields, route target integrity, and installed app data boundary.
+- [x] 6.5 Add archive and workspace record-source tests for qualified names, normalization evidence, unsupported spelling rejection, and app data separation.
+- [x] 6.6 Run `devstate check` and use `./.devstate/status.md` as evidence.
+- [x] 6.7 Smoke app behavior with `bun browser ...` if generated UI, workspace save/check, or browser-visible control-plane behavior changes.
+
+- Files changed: `src/shared/schema.test.ts`, `src/client/schema-builder.test.ts`, `src/shared/instance-control-plane.test.ts`, `src/worker/control-plane-schema-validation.test.ts`, `src/worker/instance-control-plane.test.ts`, `src/shared/archive.test.ts`, `src/shared/archive-normalizers.test.ts`, and `src/site/cli.test.ts`.
+- Evidence: parser tests now cover `app-install` and `deploy-desired-resource` as valid local entity keys, non-canonical local key rejection, and qualified parse/format contexts for archive, workspace source, drift, log, and diagnostic boundaries. Builder tests cover kebab-case creation, invalid key feedback, clean labels, and saved key locking.
+- Control-plane evidence: instance control-plane tests assert local kebab-case entity keys, local reference targets, `instance` boundary formatting/parsing, immutable field metadata, missing route target rejection, default route records, and installed app data isolation.
+- Archive/workspace evidence: archive tests assert qualified formatting at archive boundaries, local parsing before Authority validation, qualified diagnostic labels, one-way legacy normalization evidence including qualified legacy spelling, unsupported spelling rejection, mixed spelling rejection, workspace archive qualified output, workspace parsed-local records, qualified control-plane drift output, and app data separation.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T03:04:56.490Z.
+- Smoke: not run; this section changed tests and verification artifacts only, without generated UI, workspace save/check behavior, or browser-visible control-plane behavior changes.
 
 ## 7. Spec Promotion And Finalization
 

@@ -93,6 +93,14 @@ describe("schema builder draft intents", () => {
       ok: false,
       message: "Entity key must be a singular kebab-case entity key.",
     });
+    expect(validateSchemaBuilderKey("entity", "ProjectNote")).toEqual({
+      ok: false,
+      message: "Entity key must be a singular kebab-case entity key.",
+    });
+    expect(validateSchemaBuilderKey("entity", "project_note")).toEqual({
+      ok: false,
+      message: "Entity key must be a singular kebab-case entity key.",
+    });
     expect(validateSchemaBuilderKey("entity", "site:block")).toEqual({
       ok: false,
       message: "Entity key must be a singular kebab-case entity key.",

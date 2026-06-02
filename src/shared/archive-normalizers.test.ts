@@ -85,7 +85,15 @@ describe("portable archive normalizers", () => {
         controlPlane: {
           schemaKey: "instance-control-plane",
           schemaUpdatedAt: now,
-          records: [controlPlaneAppInstallRecord({ entity: "appInstall" })],
+          records: [
+            controlPlaneAppInstallRecord({ entity: "appInstall" }),
+            controlPlaneAppInstallRecord({
+              entity: "instance:appInstall",
+              id: "docs",
+              installId: "docs",
+              label: "Docs",
+            }),
+          ],
         },
       }),
     );
@@ -93,7 +101,10 @@ describe("portable archive normalizers", () => {
     expect(normalized.evidence).toEqual([
       {
         archiveKind: INSTANCE_ARCHIVE_KIND,
-        details: ["appInstall -> instance:app-install (1 record)"],
+        details: [
+          "appInstall -> instance:app-install (1 record)",
+          "instance:appInstall -> instance:app-install (1 record)",
+        ],
         fromVersion: ARCHIVE_VERSION,
         normalizerId: "archive.instance.control-plane-entity-names",
         summary:
@@ -105,7 +116,7 @@ describe("portable archive normalizers", () => {
       normalized.archive.kind === INSTANCE_ARCHIVE_KIND
         ? normalized.archive.controlPlane?.records.map((record) => record.entity)
         : [],
-    ).toEqual(["app-install"]);
+    ).toEqual(["app-install", "app-install"]);
   });
 
   it("rejects mixed legacy and canonical control-plane entity spellings", () => {
@@ -134,6 +145,27 @@ describe("portable archive normalizers", () => {
       ),
     ).toThrow(
       'Instance archive controlPlane records mix legacy and canonical entity names for "instance:app-install".',
+    );
+  });
+
+  it("rejects unsupported control-plane entity spelling during normalization", () => {
+    expect(() =>
+      normalizePortableArchive(
+        instanceArchive({
+          capabilities: [
+            "installed-app-registry",
+            "schema-owned-control-plane",
+            "app-store-snapshots",
+          ],
+          controlPlane: {
+            schemaKey: "instance-control-plane",
+            schemaUpdatedAt: now,
+            records: [controlPlaneAppInstallRecord({ entity: "instance:app_install" })],
+          },
+        }),
+      ),
+    ).toThrow(
+      'Instance archive controlPlane records[0] entity must be a qualified entity name in "<schema-key>:<entity-key>" format with kebab-case schema and entity keys.',
     );
   });
 

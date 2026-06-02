@@ -1335,6 +1335,84 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
+  it("reports control-plane drift with qualified record names", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localApp = appArchive("david", "David Peek");
+    const localControlPlane = controlPlaneRecords();
+    const remoteControlPlane = localControlPlane.map((record) =>
+      record.id === "app-route:david:admin"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              path: "/apps/david-admin",
+            },
+          }
+        : record,
+    );
+    const fetcher = archiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [],
+      [domainMapping("dpeek.com", "david")],
+      remoteControlPlane,
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [workspaceApp("david", "David Peek")],
+      domains: [
+        { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+      ],
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/instance"), {
+      ...instanceArchive([localApp]),
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        records: localControlPlane,
+      },
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localApp);
+
+    await runFormlessCli(
+      ["instance", "check", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(logs).toEqual([
+      [
+        "Instance workspace check.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Drift: detected.",
+        "Local apps: 1. Remote apps: 1.",
+        "Local records: 0. Remote records: 0.",
+        "Local media files: 0. Remote media files: 0.",
+        "Local domains: 1. Remote domains: 1.",
+        "Missing remote installs: none.",
+        "Extra remote installs: none.",
+        "Package mismatches: none.",
+        "Changed records: none.",
+        "Changed control-plane records: instance:app-route:app-route:david:admin.",
+        "Changed media: none.",
+        "Changed domain mappings: none.",
+        "Changed archive paths: archives/instance.",
+      ].join("\n"),
+    ]);
+  });
+
   it("reports workspace archive drift by install set, package, records, and media", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");

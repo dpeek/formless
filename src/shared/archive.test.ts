@@ -132,6 +132,27 @@ describe("portable archive protocol", () => {
         },
       }),
     ).toThrow("cannot store control-plane secret");
+    expect(() =>
+      parseInstanceArchive({
+        ...archive,
+        controlPlane: {
+          ...controlPlane,
+          records: controlPlaneRecords().map((record) =>
+            record.entity === "app-route"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    appInstall: "missing",
+                  },
+                }
+              : record,
+          ),
+        },
+      }),
+    ).toThrow(
+      'Instance archive controlPlane records record "app-route:site:publicSite" field "instance:app-route.appInstall" references unknown instance:app-install record "missing".',
+    );
   });
 
   it("rejects unknown kinds, unsupported versions, and missing sections", () => {

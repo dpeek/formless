@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneDefaultRoutesForInstall,
   instanceControlPlaneEntityNames,
@@ -8,6 +10,7 @@ import {
   instanceControlPlaneSchema,
   isInstanceControlPlaneEntityName,
   isInstanceControlPlaneRouteSafePath,
+  parseInstanceControlPlaneBoundaryEntityName,
 } from "./instance-control-plane.ts";
 import { parseAppSchema } from "./schema.ts";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
@@ -19,9 +22,19 @@ import {
 describe("instance control-plane schema contracts", () => {
   it("defines the runtime-owned flat record schema", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
+    const referenceTargets = Object.values(schema.entities).flatMap((entity) =>
+      Object.values(entity.fields).flatMap((field) =>
+        field.type === "reference" ? [field.to] : [],
+      ),
+    );
 
     expect(Object.keys(schema.entities).sort()).toEqual(
       [...instanceControlPlaneEntityNames].sort(),
+    );
+    expect(Object.keys(schema.entities)).not.toContain("appInstall");
+    expect(referenceTargets.filter((target) => target.includes(":"))).toEqual([]);
+    expect(referenceTargets).toEqual(
+      expect.arrayContaining(["app-install", "app-route", "deploy-target"]),
     );
     expect(schema.relationships?.appRouteInstall).toEqual({
       kind: "toOne",
@@ -37,7 +50,23 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("records identity invariants outside mutable generated fields", () => {
+    expect(INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("instance");
     expect(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:control-plane");
+    expect(formatInstanceControlPlaneBoundaryEntityName("deploy-target")).toBe(
+      "instance:deploy-target",
+    );
+    expect(
+      parseInstanceControlPlaneBoundaryEntityName(
+        "Archive record entity",
+        "instance:deploy-target",
+      ),
+    ).toBe("deploy-target");
+    expect(() =>
+      parseInstanceControlPlaneBoundaryEntityName(
+        "Archive record entity",
+        "instance-control-plane:app-install",
+      ),
+    ).toThrow('Archive record entity schema key must be "instance".');
     expect(instanceControlPlaneImmutableFields["app-install"]).toEqual([
       "installId",
       "packageAppKey",

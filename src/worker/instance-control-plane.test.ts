@@ -139,15 +139,20 @@ describe("instance control-plane API routes", () => {
       },
     );
     const controlPlane = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
+    const installedSite = await getJson<BootstrapResponse>("/api/app-installs/site/work/bootstrap");
     const sync = await getJson<SyncResponse>(`${controlPlaneApi}/sync?after=0`);
 
     expect(appMutation.body.record.entity).toBe("block");
+    expect(
+      installedSite.body.records.some((record) => record.id === appMutation.body.record.id),
+    ).toBe(true);
     expect(controlPlane.body.records.map((record) => record.entity)).toEqual([
       "app-install",
       "app-route",
       "app-route",
       "app-route",
     ]);
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain("Installed only");
     expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
   });
 

@@ -76,6 +76,19 @@ describe("control-plane schema runtime validation", () => {
     await authority.expectError(
       "/api/mutations",
       {
+        mutationId: "mutation-control-plane-route-missing-target",
+        entity: "app-route",
+        op: "create",
+        values: routeValues("missing-install", {
+          path: "/apps/missing",
+        }),
+      },
+      'Field "appInstall" references unknown app-install record "missing-install".',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
         mutationId: "mutation-control-plane-route-reserved",
         entity: "app-route",
         op: "create",

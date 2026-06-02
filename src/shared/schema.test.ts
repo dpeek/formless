@@ -104,6 +104,20 @@ describe("schema entity names", () => {
       type: "collection",
       entity: "project-note",
     });
+
+    const minimal = parseAppSchema(
+      baseSchema({
+        entities: {
+          ...defaultEntities(),
+          "app-install": minimalTextEntity("App install"),
+          "deploy-desired-resource": minimalTextEntity("Deploy desired resource"),
+        },
+      }),
+    );
+
+    expect(Object.keys(minimal.entities)).toEqual(
+      expect.arrayContaining(["app-install", "deploy-desired-resource"]),
+    );
   });
 
   it("rejects non-canonical schema-local entity keys", () => {
@@ -144,13 +158,28 @@ describe("schema entity names", () => {
   });
 
   it("parses and formats qualified entity names for boundaries", () => {
-    expect(parseQualifiedEntityName("Boundary entity name", "instance:app-install")).toEqual({
-      schemaKey: "instance",
-      entityKey: "app-install",
-    });
-    expect(formatQualifiedEntityName({ schemaKey: "site", entityKey: "block-placement" })).toBe(
-      "site:block-placement",
+    const boundaryNames = [
+      ["Archive record entity", "instance:app-install"],
+      ["Workspace source record entity", "instance:app-route"],
+      ["Drift record entity", "instance:deploy-desired-resource"],
+      ["Log record entity", "site:block"],
+      ["Diagnostic record entity", "instance:deploy-drift-report"],
+    ] as const;
+
+    expect(boundaryNames.map(([context, name]) => parseQualifiedEntityName(context, name))).toEqual(
+      [
+        { schemaKey: "instance", entityKey: "app-install" },
+        { schemaKey: "instance", entityKey: "app-route" },
+        { schemaKey: "instance", entityKey: "deploy-desired-resource" },
+        { schemaKey: "site", entityKey: "block" },
+        { schemaKey: "instance", entityKey: "deploy-drift-report" },
+      ],
     );
+    expect(
+      boundaryNames.map(([context, name]) =>
+        formatQualifiedEntityName(parseQualifiedEntityName(context, name)),
+      ),
+    ).toEqual(boundaryNames.map(([, name]) => name));
 
     expect(() => parseQualifiedEntityName("Boundary entity name", "site:blockPlacement")).toThrow(
       'Boundary entity name must be a qualified entity name in "<schema-key>:<entity-key>" format with kebab-case schema and entity keys.',
@@ -212,6 +241,18 @@ describe("schema entity names", () => {
     );
   });
 });
+
+function minimalTextEntity(label: string) {
+  return {
+    label,
+    fields: { title: { type: "text", required: true, label: "Title" } },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  } as const;
+}
 
 describe("schema text fields", () => {
   it("parses text formats and text-compatible generated editors", () => {
