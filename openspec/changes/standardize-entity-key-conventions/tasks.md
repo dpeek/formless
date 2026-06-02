@@ -1,24 +1,25 @@
-## 1. Parser And Schema Grammar
+## 1. Existing Key Rewrite
 
-- [ ] 1.1 Add schema-local entity key validation for singular kebab-case keys and reject camelCase, qualified, underscored, dotted, slash-containing, empty, leading-digit, leading/trailing hyphen, and double-hyphen keys.
-- [ ] 1.2 Add qualified entity name parsing and formatting for `<schema-key>:<entity-key>` boundary names.
-- [ ] 1.3 Keep schema-internal entity references local when the target entity is declared in the same schema.
-- [ ] 1.4 Add parser errors that distinguish invalid local entity keys from invalid qualified boundary names.
+- [ ] 1.1 Rename existing instance control-plane schema entity keys from `appInstall`, `appRoute`, `domainMapping`, `redirectIntent`, `deployTarget`, `providerConfigRef`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and `deployDriftReport` to the canonical kebab-case keys before adding parser rejection for camelCase entity keys.
+- [ ] 1.2 Bulk update existing schema fixtures, seed records, generated models, test fixtures, source constants, and direct string lookups that embed the renamed control-plane entity keys.
+- [ ] 1.3 Update control-plane relationships and reference targets to use local kebab-case entity keys.
+- [ ] 1.4 Update app install, app route, domain, redirect, deploy target, provider reference, desired resource, attempt, evidence, and drift helpers to address entity keys as strings.
+- [ ] 1.5 Preserve storage identities such as `instance:control-plane` and `app:<installId>`.
+- [ ] 1.6 Confirm installed app content records remain outside instance control-plane records.
 
-## 2. Builder And Generated UI
+## 2. Parser And Schema Grammar
 
-- [ ] 2.1 Update Builder entity creation and validation to accept parser-valid kebab-case entity keys.
-- [ ] 2.2 Keep saved entity keys locked after save and leave saved field, query, view, action, and screen keys unchanged.
-- [ ] 2.3 Render human-facing labels from kebab-case entity keys without treating hyphens as namespaces.
-- [ ] 2.4 Update generated instance management surfaces that assume entity keys are JavaScript identifiers.
+- [ ] 2.1 Add schema-local entity key validation for singular kebab-case keys and reject camelCase, qualified, underscored, dotted, slash-containing, empty, leading-digit, leading/trailing hyphen, and double-hyphen keys.
+- [ ] 2.2 Add qualified entity name parsing and formatting for `<schema-key>:<entity-key>` boundary names.
+- [ ] 2.3 Keep schema-internal entity references local when the target entity is declared in the same schema.
+- [ ] 2.4 Add parser errors that distinguish invalid local entity keys from invalid qualified boundary names.
 
-## 3. Instance Control-Plane Key Migration
+## 3. Builder And Generated UI
 
-- [ ] 3.1 Rename instance control-plane schema entity keys from `appInstall`, `appRoute`, `domainMapping`, `redirectIntent`, `deployTarget`, `providerConfigRef`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and `deployDriftReport` to the canonical kebab-case keys.
-- [ ] 3.2 Update control-plane relationships and reference targets to use local kebab-case entity keys.
-- [ ] 3.3 Update app install, app route, domain, redirect, deploy target, provider reference, desired resource, attempt, evidence, and drift helpers to address entity keys as strings.
-- [ ] 3.4 Preserve storage identities such as `instance:control-plane` and `app:<installId>`.
-- [ ] 3.5 Confirm installed app content records remain outside instance control-plane records.
+- [ ] 3.1 Update Builder entity creation and validation to accept parser-valid kebab-case entity keys.
+- [ ] 3.2 Keep saved entity keys locked after save and leave saved field, query, view, action, and screen keys unchanged.
+- [ ] 3.3 Render human-facing labels from kebab-case entity keys without treating hyphens as namespaces.
+- [ ] 3.4 Update generated instance management surfaces that assume entity keys are JavaScript identifiers.
 
 ## 4. Archive And Workspace Record Source
 

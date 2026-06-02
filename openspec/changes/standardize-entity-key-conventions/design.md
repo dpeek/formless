@@ -109,6 +109,17 @@ Alternative: change the instance control-plane storage identity at the same
 time. That would make a naming cleanup mutate runtime identity and increase
 blast radius without helping schema entity naming.
 
+### Rewrite existing keys before parser enforcement
+
+Implementation should first bulk rewrite existing runtime-owned schemas,
+fixtures, generated models, source constants, and direct string lookups to use
+canonical kebab-case entity keys while the parser is still permissive. Parser
+rejection for camelCase local entity keys comes after committed source no
+longer depends on the old spelling.
+
+Alternative: enforce the parser grammar first. That makes current source
+schemas fail before the control-plane key rewrite can be shipped.
+
 ### Keep compatibility one-way and boundary-scoped
 
 Canonical runtime schema data uses kebab-case only. If existing supported
@@ -179,9 +190,10 @@ diagnostics less self-describing.
 
 ## Migration Plan
 
-1. Add parser grammar for schema-local entity keys and qualified entity names.
-2. Update runtime-owned instance control-plane schema definitions and tests to
-   use kebab-case entity keys.
+1. Bulk rewrite existing runtime-owned instance control-plane entity keys and
+   direct code, schema, fixture, generated model, and test references to
+   canonical kebab-case while parser validation remains permissive.
+2. Add parser grammar for schema-local entity keys and qualified entity names.
 3. Update Builder validation, generated labels, schema source mode, and saved
    key locking around kebab-case entity keys.
 4. Update archive, workspace record-source, drift, logs, and diagnostics to emit
