@@ -2137,6 +2137,13 @@ async function runIdleMaintenance(input: {
       completeBranchCount += 1;
       continue;
     }
+    if (
+      remainingWork === null &&
+      branchMergedIntoBase(input.cwd, branch, input.options.baseRef, input.runCommand)
+    ) {
+      completeBranchCount += 1;
+      continue;
+    }
 
     const branchPlan = ensureChangeBranch(input.cwd, changeId, {
       baseRef: input.options.baseRef,

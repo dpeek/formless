@@ -235,6 +235,12 @@ The system SHALL rebase existing local change review branches on local `main` th
 - **THEN** the worker scans existing `changes/*` branches and attempts to rebase eligible branches on local `main` through `agents/<worker-name>`
 - **AND** publishes successful rebases back to `changes/<change-id>`
 
+#### Scenario: Merged review branches are skipped
+
+- **WHEN** no OpenSpec change can be claimed
+- **AND** a local `changes/<change-id>` branch is already merged into local `main`
+- **THEN** idle maintenance ignores that branch instead of resetting `agents/<worker-name>` to it
+
 #### Scenario: Idle rebase structural conflict is resolved
 
 - **WHEN** an idle rebase has structural conflicts whose sides can coexist without changing runtime invariants

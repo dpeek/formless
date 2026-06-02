@@ -1389,6 +1389,120 @@ describe("local agent worker review branches", () => {
     }
   });
 
+  it("skips merged review branches whose OpenSpec changes are already archived", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
+    const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    let sessionCalls = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      commandCalls.push({ args, command, cwd });
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: "changes/archived-thing\n" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/archived-thing"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === `worktree add -b agents/igor ${worktreeDir} changes/archived-thing`
+      ) {
+        writeArchivedImplementationEvidence(worktreeDir, "archived-thing");
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/archived-thing") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change archived-thing --json"
+      ) {
+        return {
+          code: 1,
+          stderr: "Error: Change 'archived-thing' not found. No changes exist.",
+          stdout: "",
+        };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "merge-base --is-ancestor changes/archived-thing main"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async () => {
+          sessionCalls += 1;
+          return "plan-done";
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(sessionCalls).toBe(0);
+      expect(stdout).toContain("[agents] idle: change branches are complete");
+      expect(commandCalls).not.toContainEqual({
+        args: ["reset", "--keep", "changes/archived-thing"],
+        command: "git",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).not.toContainEqual({
+        args: ["instructions", "apply", "--change", "archived-thing", "--json"],
+        command: "openspec",
+        cwd: worktreeDir,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("starts finalization maintenance when a review-ready branch is behind main", async () => {
     const root = tempDir();
     const gitCommonDir = path.join(root, ".git");
