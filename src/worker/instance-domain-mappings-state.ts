@@ -352,6 +352,25 @@ export function forgetStoredInstanceDomainMapping(
   });
 }
 
+export function recordInstanceDomainMappingDesiredCleanup(
+  storage: DurableObjectStorage,
+  input: { mapping: InstanceDomainMapping; now: string },
+): {
+  desiredCleanupEvent: InstanceDomainMappingDesiredCleanupEvent;
+  desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
+} {
+  ensureInstanceDomainMappingTables(storage);
+
+  return storage.transactionSync(() => {
+    writeDesiredCleanupEvent(storage, input);
+
+    return {
+      desiredCleanupEvent: readLastDesiredCleanupEvent(storage),
+      desiredCleanupEvents: readDesiredCleanupEvents(storage),
+    };
+  });
+}
+
 export function readEnabledInstanceDomainMappingForHost(
   storage: DurableObjectStorage,
   input: {
@@ -394,14 +413,17 @@ export function readEnabledInstanceDomainMappingForHost(
 
 export function recordInstanceDomainMappingApplyEvidence(
   storage: DurableObjectStorage,
-  input: RecordInstanceDomainMappingApplyEvidenceRequest & { now: string },
+  input: RecordInstanceDomainMappingApplyEvidenceRequest & {
+    existingMappings?: readonly InstanceDomainMapping[];
+    now: string;
+  },
 ): RecordInstanceDomainMappingApplyEvidenceResult {
   ensureInstanceDomainMappingTables(storage);
 
   return storage.transactionSync(() => {
     const result = buildInstanceDomainMappingAppliedState({
       ...input,
-      existingMappings: readDomainMappings(storage),
+      existingMappings: input.existingMappings ?? readDomainMappings(storage),
     });
 
     if (!result.ok) {

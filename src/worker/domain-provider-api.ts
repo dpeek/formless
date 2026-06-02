@@ -69,6 +69,7 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
   type InstanceDomainMappingAppliedState,
+  type InstanceDomainMappingDesiredCleanupEvent,
 } from "../shared/instance-domain-mappings.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
@@ -76,6 +77,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   deleteInstanceDomainMappingAppliedState,
   readInstanceDomainMappingAppliedStates,
+  readInstanceDomainMappingDesiredCleanupEvents,
   readInstanceDomainMappings,
   recordInstanceDomainMappingApplyEvidence,
 } from "./instance-domain-mappings-state.ts";
@@ -87,6 +89,7 @@ import {
   writeDeploymentAttemptSuccess,
 } from "./deployment-runtime-state.ts";
 import {
+  readControlPlaneRecords,
   recordDeploymentAttemptInControlPlane,
   recordDeploymentEvidenceInControlPlane,
   syncDomainIntentToControlPlane,
@@ -99,7 +102,6 @@ import {
   ensureDomainProviderRedirectIntentsTable,
   readDomainProviderRedirectIntents,
   type DomainProviderRedirectIntentCleanupEventRow,
-  type DomainProviderRedirectIntentRow,
 } from "./domain-provider-redirect-intents-state.ts";
 import {
   createSqlStorageMigrationRegistry,
@@ -510,16 +512,28 @@ async function handleRedirectIntentsRequest(
       return jsonResponse({ error: parsed.error }, 400);
     }
 
-    const result = writeRedirectIntent(storage, {
+    const now = nowIsoString();
+    const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
+      storage,
+      env,
+      request.url,
+    );
+    const result = buildRedirectIntent({
+      currentRedirectIntents,
       intent: parsed.request,
-      now: nowIsoString(),
+      now,
     });
 
-    const redirectIntents = await readControlPlaneSyncedRedirectIntents(storage, env, request.url);
+    const redirectIntents = await writeControlPlaneRedirectIntents(storage, env, request.url, {
+      now,
+      redirectIntents: result.redirectIntents,
+    });
 
     return jsonResponse(
       {
-        redirectIntent: result,
+        redirectIntent:
+          redirectIntents.find((intent) => intent.fromHost === result.redirectIntent.fromHost) ??
+          result.redirectIntent,
         redirectIntents,
       } satisfies CreateInstanceDomainProviderRedirectIntentResponse,
       201,
@@ -545,19 +559,31 @@ async function handleRedirectIntentsRequest(
       return jsonResponse({ error: parsed.error }, 400);
     }
 
-    const result = disableRedirectIntent(storage, {
+    const now = nowIsoString();
+    const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
+      storage,
+      env,
+      request.url,
+    );
+    const result = disableRedirectIntent({
+      currentRedirectIntents,
       fromHost: parsed.request.fromHost,
-      now: nowIsoString(),
+      now,
     });
 
     if (!result.ok) {
       return jsonResponse({ error: result.error }, 404);
     }
 
-    const redirectIntents = await readControlPlaneSyncedRedirectIntents(storage, env, request.url);
+    const redirectIntents = await writeControlPlaneRedirectIntents(storage, env, request.url, {
+      now,
+      redirectIntents: result.redirectIntents,
+    });
 
     return jsonResponse({
-      redirectIntent: result.redirectIntent,
+      redirectIntent:
+        redirectIntents.find((intent) => intent.fromHost === result.redirectIntent.fromHost) ??
+        result.redirectIntent,
       redirectIntents,
     } satisfies DeleteInstanceDomainProviderRedirectIntentResponse);
   }
@@ -593,9 +619,16 @@ async function handleForgetRedirectIntentRequest(
     return jsonResponse({ error: parsed.error }, 400);
   }
 
+  const now = nowIsoString();
+  const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
+    storage,
+    env,
+    request.url,
+  );
   const result = forgetRedirectIntent(storage, {
+    currentRedirectIntents,
     fromHost: parsed.request.fromHost,
-    now: nowIsoString(),
+    now,
   });
 
   if (!result.ok) {
@@ -606,7 +639,10 @@ async function handleForgetRedirectIntentRequest(
     redirectIntent: result.redirectIntent,
     redirectIntentCleanupEvent: result.redirectIntentCleanupEvent,
     redirectIntentCleanupEvents: result.redirectIntentCleanupEvents,
-    redirectIntents: await readControlPlaneSyncedRedirectIntents(storage, env, request.url),
+    redirectIntents: await writeControlPlaneRedirectIntents(storage, env, request.url, {
+      now,
+      redirectIntents: result.redirectIntents,
+    }),
   } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
@@ -1581,15 +1617,15 @@ async function readControlPlaneSyncedDomainProviderIntent(
     );
   }
 
-  const legacyMappings = readInstanceDomainMappings(storage);
-  const legacyRedirectIntents = readDomainProviderRedirectIntents(storage);
-  const records = await syncDomainIntentToControlPlane({
-    env,
-    mappings: legacyMappings,
-    now: nowIsoString(),
-    redirectIntents: legacyRedirectIntents,
-    requestUrl,
-  });
+  const mappingCleanupEvents = readInstanceDomainMappingDesiredCleanupEvents(storage);
+  const redirectCleanupEvents = readRedirectIntentCleanupEvents(storage);
+  const legacyMappings = readInstanceDomainMappings(storage).filter(
+    (mapping) => !isForgottenDomainMapping(mapping, mappingCleanupEvents),
+  );
+  const legacyRedirectIntents = readDomainProviderRedirectIntents(storage).filter(
+    (intent) => !isForgottenRedirectIntent(intent, redirectCleanupEvents),
+  );
+  const records = await readControlPlaneRecords({ env, requestUrl });
 
   if (records === undefined) {
     return {
@@ -1598,9 +1634,34 @@ async function readControlPlaneSyncedDomainProviderIntent(
     };
   }
 
+  const mappings = mergeDomainMappings(
+    legacyMappings,
+    domainMappingsFromControlPlaneRecords(records, mappingCleanupEvents),
+  );
+  const redirectIntents = mergeRedirectIntents(
+    legacyRedirectIntents,
+    redirectIntentsFromControlPlaneRecords(records, redirectCleanupEvents),
+  );
+
+  if (legacyMappings.length === 0 && legacyRedirectIntents.length === 0) {
+    return { mappings, redirectIntents };
+  }
+
+  const syncedRecords = await syncDomainIntentToControlPlane({
+    env,
+    mappings,
+    now: nowIsoString(),
+    redirectIntents,
+    requestUrl,
+  });
+
+  if (syncedRecords === undefined) {
+    return { mappings, redirectIntents };
+  }
+
   return {
-    mappings: domainMappingsFromControlPlaneRecords(records, legacyMappings),
-    redirectIntents: redirectIntentsFromControlPlaneRecords(records, legacyRedirectIntents),
+    mappings: domainMappingsFromControlPlaneRecords(syncedRecords, mappingCleanupEvents),
+    redirectIntents: redirectIntentsFromControlPlaneRecords(syncedRecords, redirectCleanupEvents),
   };
 }
 
@@ -1615,16 +1676,17 @@ async function readControlPlaneSyncedRedirectIntents(
 
 function domainMappingsFromControlPlaneRecords(
   records: readonly StoredRecord[],
-  sourceMappings: readonly InstanceDomainMapping[],
+  cleanupEvents: readonly InstanceDomainMappingDesiredCleanupEvent[],
 ): InstanceDomainMapping[] {
-  const expectedIds = new Set(
-    sourceMappings.map((mapping) => `route:host:${mapping.profile}:${mapping.host}`),
-  );
-
   return listInstanceDomainMappings(
     records
       .filter(
-        (record) => !record.deletedAt && record.entity === "route" && expectedIds.has(record.id),
+        (record) =>
+          !record.deletedAt &&
+          record.entity === "route" &&
+          record.id.startsWith("route:host:") &&
+          record.values.kind === "mount" &&
+          typeof record.values["match-host"] === "string",
       )
       .map((record) => {
         const profile = domainMappingProfileFromRouteTarget(record.values["target-profile"]);
@@ -1643,7 +1705,7 @@ function domainMappingsFromControlPlaneRecords(
           updatedAt: String(record.values["updated-at"]),
         };
       }),
-  );
+  ).filter((mapping) => !isForgottenDomainMapping(mapping, cleanupEvents));
 }
 
 function domainMappingProfileFromRouteTarget(value: unknown): InstanceDomainMapping["profile"] {
@@ -1654,17 +1716,58 @@ function domainMappingProfileFromRouteTarget(value: unknown): InstanceDomainMapp
   return "publicSite";
 }
 
+function mergeDomainMappings(
+  legacyMappings: readonly InstanceDomainMapping[],
+  routeMappings: readonly InstanceDomainMapping[],
+): InstanceDomainMapping[] {
+  const mappings = new Map<string, InstanceDomainMapping>();
+
+  for (const mapping of legacyMappings) {
+    mappings.set(domainMappingKey(mapping), mapping);
+  }
+
+  for (const mapping of routeMappings) {
+    mappings.set(domainMappingKey(mapping), mapping);
+  }
+
+  return listInstanceDomainMappings([...mappings.values()]);
+}
+
+function isForgottenDomainMapping(
+  mapping: InstanceDomainMapping,
+  cleanupEvents: readonly InstanceDomainMappingDesiredCleanupEvent[],
+): boolean {
+  let lastCleanup: InstanceDomainMappingDesiredCleanupEvent | undefined;
+
+  for (const event of cleanupEvents) {
+    if (
+      event.host === mapping.host &&
+      event.profile === mapping.profile &&
+      (!lastCleanup || event.recordedAt > lastCleanup.recordedAt)
+    ) {
+      lastCleanup = event;
+    }
+  }
+
+  return lastCleanup !== undefined && lastCleanup.recordedAt >= mapping.updatedAt;
+}
+
+function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
+  return `${mapping.profile}:${mapping.host}`;
+}
+
 function redirectIntentsFromControlPlaneRecords(
   records: readonly StoredRecord[],
-  sourceRedirectIntents: readonly InstanceDomainProviderRedirectIntent[],
+  cleanupEvents: readonly InstanceDomainProviderRedirectIntentCleanupEvent[],
 ): InstanceDomainProviderRedirectIntent[] {
-  const expectedIds = new Set(
-    sourceRedirectIntents.map((intent) => `route:redirect:${intent.fromHost}`),
-  );
-
   return records
     .filter(
-      (record) => !record.deletedAt && record.entity === "route" && expectedIds.has(record.id),
+      (record) =>
+        !record.deletedAt &&
+        record.entity === "route" &&
+        record.id.startsWith("route:redirect:") &&
+        record.values.kind === "redirect" &&
+        typeof record.values["match-host"] === "string",
     )
     .map((record) => ({
       fromHost: String(record.values["match-host"]),
@@ -1677,77 +1780,116 @@ function redirectIntentsFromControlPlaneRecords(
       createdAt: String(record.values["created-at"]),
       updatedAt: String(record.values["updated-at"]),
     }))
+    .filter((intent) => !isForgottenRedirectIntent(intent, cleanupEvents))
     .sort((left, right) => left.fromHost.localeCompare(right.fromHost));
 }
 
-function writeRedirectIntent(
-  storage: DurableObjectStorage,
-  input: {
-    intent: CreateInstanceDomainProviderRedirectIntentRequest;
-    now: string;
-  },
-): InstanceDomainProviderRedirectIntent {
-  ensureDomainProviderRedirectIntentsTable(storage);
+function mergeRedirectIntents(
+  legacyIntents: readonly InstanceDomainProviderRedirectIntent[],
+  routeIntents: readonly InstanceDomainProviderRedirectIntent[],
+): InstanceDomainProviderRedirectIntent[] {
+  const intents = new Map<string, InstanceDomainProviderRedirectIntent>();
 
-  const current = readRedirectIntentByHost(storage, input.intent.fromHost);
+  for (const intent of legacyIntents) {
+    intents.set(intent.fromHost, intent);
+  }
+
+  for (const intent of routeIntents) {
+    intents.set(intent.fromHost, intent);
+  }
+
+  return [...intents.values()].sort((left, right) => left.fromHost.localeCompare(right.fromHost));
+}
+
+function isForgottenRedirectIntent(
+  intent: InstanceDomainProviderRedirectIntent,
+  cleanupEvents: readonly InstanceDomainProviderRedirectIntentCleanupEvent[],
+): boolean {
+  let lastCleanup: InstanceDomainProviderRedirectIntentCleanupEvent | undefined;
+
+  for (const event of cleanupEvents) {
+    if (
+      event.fromHost === intent.fromHost &&
+      (!lastCleanup || event.recordedAt > lastCleanup.recordedAt)
+    ) {
+      lastCleanup = event;
+    }
+  }
+
+  return lastCleanup !== undefined && lastCleanup.recordedAt >= intent.updatedAt;
+}
+
+async function writeControlPlaneRedirectIntents(
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+  requestUrl: string,
+  input: { now: string; redirectIntents: readonly InstanceDomainProviderRedirectIntent[] },
+): Promise<InstanceDomainProviderRedirectIntent[]> {
+  const records = await syncDomainIntentToControlPlane({
+    env,
+    now: input.now,
+    redirectIntents: [...input.redirectIntents],
+    requestUrl,
+  });
+
+  if (records === undefined) {
+    return [...input.redirectIntents].sort((left, right) =>
+      left.fromHost.localeCompare(right.fromHost),
+    );
+  }
+
+  return redirectIntentsFromControlPlaneRecords(records, readRedirectIntentCleanupEvents(storage));
+}
+
+function buildRedirectIntent(input: {
+  currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
+  intent: CreateInstanceDomainProviderRedirectIntentRequest;
+  now: string;
+}): {
+  redirectIntent: InstanceDomainProviderRedirectIntent;
+  redirectIntents: InstanceDomainProviderRedirectIntent[];
+} {
+  const current = input.currentRedirectIntents.find(
+    (intent) => intent.fromHost === input.intent.fromHost,
+  );
   const createdAt = current?.createdAt ?? input.now;
   const enabled = input.intent.enabled ?? true;
   const preservePath = input.intent.preservePath ?? true;
   const preserveQueryString = input.intent.preserveQueryString ?? true;
   const statusCode = input.intent.statusCode ?? 301;
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_redirect_intents (
-        from_host,
-        enabled,
-        to_host,
-        to_url,
-        preserve_path,
-        preserve_query_string,
-        status_code,
-        created_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(from_host) DO UPDATE SET
-        enabled = excluded.enabled,
-        to_host = excluded.to_host,
-        to_url = excluded.to_url,
-        preserve_path = excluded.preserve_path,
-        preserve_query_string = excluded.preserve_query_string,
-        status_code = excluded.status_code,
-        updated_at = excluded.updated_at
-    `,
-    input.intent.fromHost,
-    enabled ? 1 : 0,
-    input.intent.toHost ?? null,
-    input.intent.toUrl ?? null,
-    preservePath ? 1 : 0,
-    preserveQueryString ? 1 : 0,
-    statusCode,
+  const redirectIntent: InstanceDomainProviderRedirectIntent = {
     createdAt,
-    input.now,
-  );
+    enabled,
+    fromHost: input.intent.fromHost,
+    preservePath,
+    preserveQueryString,
+    statusCode,
+    ...(input.intent.toHost === undefined ? {} : { toHost: input.intent.toHost }),
+    ...(input.intent.toUrl === undefined ? {} : { toUrl: input.intent.toUrl }),
+    updatedAt: input.now,
+  };
 
-  const written = readRedirectIntentByHost(storage, input.intent.fromHost);
-
-  if (!written) {
-    throw new Error("Domain provider redirect intent was not written.");
-  }
-
-  return written;
+  return {
+    redirectIntent,
+    redirectIntents: mergeRedirectIntents(
+      input.currentRedirectIntents.filter((intent) => intent.fromHost !== input.intent.fromHost),
+      [redirectIntent],
+    ),
+  };
 }
 
-function disableRedirectIntent(
-  storage: DurableObjectStorage,
-  input: { fromHost: string; now: string },
-):
-  | { ok: true; redirectIntent: InstanceDomainProviderRedirectIntent }
+function disableRedirectIntent(input: {
+  currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
+  fromHost: string;
+  now: string;
+}):
+  | {
+      ok: true;
+      redirectIntent: InstanceDomainProviderRedirectIntent;
+      redirectIntents: InstanceDomainProviderRedirectIntent[];
+    }
   | { ok: false; error: string } {
-  ensureDomainProviderRedirectIntentsTable(storage);
-
-  const current = readRedirectIntentByHost(storage, input.fromHost);
+  const current = input.currentRedirectIntents.find((intent) => intent.fromHost === input.fromHost);
 
   if (!current) {
     return {
@@ -1756,29 +1898,29 @@ function disableRedirectIntent(
     };
   }
 
-  storage.sql.exec(
-    `
-      UPDATE instance_domain_provider_redirect_intents
-      SET enabled = 0, updated_at = ?
-      WHERE from_host = ?
-    `,
-    input.now,
-    input.fromHost,
-  );
+  const redirectIntent = {
+    ...current,
+    enabled: false,
+    updatedAt: input.now,
+  };
 
   return {
     ok: true,
-    redirectIntent: readRedirectIntentByHost(storage, input.fromHost) ?? {
-      ...current,
-      enabled: false,
-      updatedAt: input.now,
-    },
+    redirectIntent,
+    redirectIntents: mergeRedirectIntents(
+      input.currentRedirectIntents.filter((intent) => intent.fromHost !== input.fromHost),
+      [redirectIntent],
+    ),
   };
 }
 
 function forgetRedirectIntent(
   storage: DurableObjectStorage,
-  input: { fromHost: string; now: string },
+  input: {
+    currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
+    fromHost: string;
+    now: string;
+  },
 ):
   | {
       ok: true;
@@ -1792,7 +1934,9 @@ function forgetRedirectIntent(
   ensureDomainProviderAppliedResourcesTables(storage);
 
   return storage.transactionSync(() => {
-    const current = readRedirectIntentByHost(storage, input.fromHost);
+    const current = input.currentRedirectIntents.find(
+      (intent) => intent.fromHost === input.fromHost,
+    );
 
     if (!current) {
       return {
@@ -1839,39 +1983,11 @@ function forgetRedirectIntent(
       redirectIntent: current,
       redirectIntentCleanupEvent: readLastRedirectIntentCleanupEvent(storage),
       redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
-      redirectIntents: readDomainProviderRedirectIntents(storage),
+      redirectIntents: input.currentRedirectIntents.filter(
+        (intent) => intent.fromHost !== current.fromHost,
+      ),
     };
   });
-}
-
-function readRedirectIntentByHost(
-  storage: DurableObjectStorage,
-  fromHost: string,
-): InstanceDomainProviderRedirectIntent | undefined {
-  ensureDomainProviderRedirectIntentsTable(storage);
-
-  for (const row of storage.sql.exec<DomainProviderRedirectIntentRow>(
-    `
-      SELECT
-        from_host,
-        enabled,
-        to_host,
-        to_url,
-        preserve_path,
-        preserve_query_string,
-        status_code,
-        created_at,
-        updated_at
-      FROM instance_domain_provider_redirect_intents
-      WHERE from_host = ?
-      LIMIT 1
-    `,
-    fromHost,
-  )) {
-    return redirectIntentFromRow(row);
-  }
-
-  return undefined;
 }
 
 function readRedirectIntentCleanupEvents(
@@ -2174,11 +2290,18 @@ async function completeApplyJob(
     return { ok: false, error: validated.error, status: 400 };
   }
 
+  const currentIntent = await readControlPlaneSyncedDomainProviderIntent(
+    storage,
+    input.env,
+    input.requestUrl,
+  );
+
   for (const evidence of input.result.resources) {
     if (evidence.kind === "cloudflare-worker-custom-domain") {
       const recorded = recordInstanceDomainMappingApplyEvidence(storage, {
         action: evidence.action,
         alchemyResourceId: evidence.alchemyResourceId,
+        existingMappings: currentIntent.mappings,
         host: evidence.host,
         now: input.now,
         profile: evidence.profile,

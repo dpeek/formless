@@ -83,10 +83,19 @@ Evidence 2026-06-02 grug:
 
 ## 6. Domain API Compatibility
 
-- [ ] 6.1 Adapt existing custom-domain mapping APIs to read and write host mount route records.
-- [ ] 6.2 Adapt existing redirect APIs to read and write redirect route records.
-- [ ] 6.3 Keep existing domain command and API response shapes compatible where callers still depend on them.
-- [ ] 6.4 Keep provider evidence, cleanup, forget, manual cleanup, and delete workflows separate from route writes.
+- [x] 6.1 Adapt existing custom-domain mapping APIs to read and write host mount route records.
+- [x] 6.2 Adapt existing redirect APIs to read and write redirect route records.
+- [x] 6.3 Keep existing domain command and API response shapes compatible where callers still depend on them.
+- [x] 6.4 Keep provider evidence, cleanup, forget, manual cleanup, and delete workflows separate from route writes.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/worker/instance-domain-mappings.ts` so custom-domain compatibility reads merge route records with legacy rows, create/disable/forget writes sync host mount `route` records, and apply-evidence validation uses route-backed mappings while preserving existing response shapes.
+- Changed `src/worker/domain-provider-api.ts` so redirect compatibility reads merge route records with legacy rows, create/disable/forget writes redirect `route` records, and provider apply evidence, cleanup, manual cleanup, and delete job state remain in their existing provider evidence tables.
+- Added `readControlPlaneRecords` in `src/worker/deployment-control-plane-client.ts` and a desired-cleanup helper in `src/worker/instance-domain-mappings-state.ts` so compatibility APIs can read route state without moving provider evidence into route writes.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes domain and redirect API compatibility paths, not browser-visible UI.
 
 ## 7. Deployment Projection
 

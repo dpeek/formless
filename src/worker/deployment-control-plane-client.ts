@@ -60,6 +60,30 @@ export async function syncDomainIntentToControlPlane(input: {
   });
 }
 
+export async function readControlPlaneRecords(input: {
+  env: DeploymentControlPlaneClientEnv;
+  requestUrl: string;
+}): Promise<StoredRecord[] | undefined> {
+  if (!input.env.FORMLESS_AUTHORITY) {
+    return undefined;
+  }
+
+  const id = input.env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`, input.requestUrl), {
+      headers: { Accept: "application/json" },
+      method: "GET",
+    }),
+  );
+  const body = (await response.json()) as { error?: string; records?: StoredRecord[] };
+
+  if (!response.ok || !Array.isArray(body.records)) {
+    throw new Error(body.error ?? "Control-plane record read failed.");
+  }
+
+  return body.records;
+}
+
 export async function recordDeploymentAttemptInControlPlane(input: {
   attempt: DeploymentAttempt;
   env: DeploymentControlPlaneClientEnv;
