@@ -3,7 +3,9 @@
 ## Purpose
 
 App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, actions, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
+
 ## Requirements
+
 ### Requirement: Bundled Source Apps
 
 The system SHALL provide source schemas for the current bundled schema keys `tasks`, `estii`, `site`, and `crm`, and SHALL treat source seed records as stored-record shaped data.
@@ -443,4 +445,3 @@ append-only or action-created.
 - THEN it is created through an allowed action or runtime write path
 - AND ordinary generated patch or delete controls are not exposed for that
   history record
-

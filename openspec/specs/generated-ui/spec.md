@@ -3,7 +3,9 @@
 ## Purpose
 
 Generated UI renders React app surfaces selected from app schema models and runtime profiles. It turns screens, views, fields, read models, actions, and app storage identity into browser behavior for records without requiring custom app code.
+
 ## Requirements
+
 ### Requirement: Runtime Profile Routing
 
 The system SHALL select generated surfaces from the active runtime profile and route policy.
@@ -393,4 +395,3 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **THEN** desired route fields remain visually separate from provider evidence
   and cleanup state
 - **AND** route edits do not imply provider mutation
-

@@ -3,7 +3,9 @@
 ## Purpose
 
 Installed apps define the product instance app shape: stable app install identity, package-backed initialization, install-scoped routes, and install-scoped storage/API behavior. They let one Formless instance host multiple Site, Tasks, and Estii installs without mixing app data, browser replicas, public Site routes, or source schema-key storage.
+
 ## Requirements
+
 ### Requirement: App Install Identity
 
 The system SHALL treat an app install id as the stable instance-local identity for one app install.
@@ -282,4 +284,3 @@ and routes are backed by control-plane records.
 - **AND** unsupported packages, invalid install ids, duplicate install ids,
   invalid labels, and invalid default route records are rejected before
   installed app storage is initialized
-

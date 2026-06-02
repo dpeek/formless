@@ -1,8 +1,11 @@
 # crm-app Specification
 
 ## Purpose
+
 TBD - created by archiving change add-launch-crm-app. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: CRM Source App
 
 The system SHALL provide a bundled `crm` source app schema and source seed record set for startup audience and CRM workflows.
@@ -90,4 +93,3 @@ CRM SHALL remain a standalone app package in this change and SHALL NOT take over
 - **WHEN** CRM campaign, broadcast, recipient, or delivery-event records are stored
 - **THEN** no queued email sending job is scheduled by this change
 - **AND** delivery-event records are review data, not provider execution evidence from a new sending runtime
-
