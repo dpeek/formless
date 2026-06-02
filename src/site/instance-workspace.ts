@@ -547,7 +547,7 @@ export type DestroyFormlessInstanceWorkspaceRouteProviderResources = {
   resourceGraph: DeployResourceGraph;
   resourceCount: number;
   routeCount: number;
-  source: "instance:route" | "legacy-manifest-domain";
+  source: "instance:route";
 };
 
 export type DestroyFormlessInstanceWorkspaceResult = {
@@ -1218,6 +1218,7 @@ export async function runFormlessInstanceWorkspaceDev(
     });
 
     dependencies.log(`Instance shell: ${source}/`);
+    dependencies.log("Local bootstrap entry: complete workspace setup in the browser.");
     dependencies.log(`Local state: ${relativeDependencyPath(dependencies.cwd, localStateRoot)}.`);
 
     if (bootstrap.status === "restored") {
@@ -1651,9 +1652,7 @@ export async function planDeployLocalFormlessWorkspace(
 
   const account = await resolveLocalWorkspaceDeploymentAccount({
     accountDiscovery: dependencies.accountDiscovery,
-    manifest,
     providerConfig: deploymentSource.providerConfig,
-    selectedTarget: existingSelectedTarget,
   });
   const planned = planLocalWorkspaceDeployment({
     account,
@@ -1662,7 +1661,6 @@ export async function planDeployLocalFormlessWorkspace(
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
     providerConfig: deploymentSource.providerConfig,
-    selectedTarget: existingSelectedTarget,
     targetAlias: input.targetAlias,
   });
   const desiredState = projectLocalWorkspaceDeploymentDesiredState({
@@ -3186,25 +3184,25 @@ async function assertLocalOnboardingWorkspaceReady(workspaceRoot: string) {
     workspaceRoot,
     SITE_PROJECT_CONFIG_FILE,
     "standalone Site project file",
-    "Import or move the Site project before onboarding.",
+    "Import or move the Site project before browser setup.",
   );
   await assertNoLocalOnboardingConflict(
     workspaceRoot,
     SITE_PROJECT_RECORDS_FILE,
     "standalone Site project file",
-    "Import or move the Site project before onboarding.",
+    "Import or move the Site project before browser setup.",
   );
   await assertNoLocalOnboardingConflict(
     workspaceRoot,
     PORTABLE_ARCHIVE_MANIFEST_FILE,
     "portable archive source",
-    "Import or move existing archive source before onboarding.",
+    "Import or move existing archive source before browser setup.",
   );
   await assertNoLocalOnboardingConflict(
     workspaceRoot,
     DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
     "reviewable archive root",
-    "Move existing archive source before onboarding.",
+    "Move existing archive source before browser setup.",
   );
   await assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot);
 }
@@ -3219,7 +3217,7 @@ async function assertNoLocalOnboardingConflict(
 
   if (await fileSystemPathExists(filePath)) {
     throw new Error(
-      `formless onboard cannot initialize because ${label} exists at ${filePath}. ${guidance}`,
+      `Workspace browser setup cannot initialize because ${label} exists at ${filePath}. ${guidance}`,
     );
   }
 }
@@ -3246,7 +3244,7 @@ async function assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot: string
   }
 
   throw new Error(
-    `formless onboard cannot initialize because ignored .formless state exists at ${stateRoot}. Remove or move existing local state before onboarding.`,
+    `Workspace browser setup cannot initialize because ignored .formless state exists at ${stateRoot}. Remove or move existing local state before browser setup.`,
   );
 }
 
@@ -3256,7 +3254,7 @@ async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {
 
     if (await pathExists(manifestPath)) {
       throw new Error(
-        `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+        `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
       );
     }
   }
@@ -3327,65 +3325,6 @@ const controlPlaneIntentEntities = new Set([
   "provider-config-ref",
   "deploy-desired-resource",
 ]);
-
-function workspaceDomainControlPlaneRecords(
-  manifest: FormlessInstanceWorkspaceManifest,
-  input: {
-    appInstallIds: ReadonlySet<string>;
-    exportedAt: string;
-  },
-): StoredRecord[] {
-  return (manifest.domains ?? []).map((domain) => {
-    const surface = workspaceRouteSurface(domain.profile);
-    const values: RecordValues = {
-      enabled: domain.enabled,
-      matchHost: domain.host,
-      matchPath: "/",
-      matchPrefix: "/",
-      kind: "mount",
-      targetProfile: workspaceRouteTargetProfile(domain.profile),
-      ...(domain.targetInstallId === undefined || !input.appInstallIds.has(domain.targetInstallId)
-        ? {}
-        : { appInstall: domain.targetInstallId }),
-      ...(surface === undefined ? {} : { surface }),
-      createdAt: input.exportedAt,
-      updatedAt: input.exportedAt,
-    };
-
-    return {
-      id: workspaceDomainRouteRecordId(domain),
-      entity: "route",
-      values,
-      createdAt: input.exportedAt,
-    };
-  });
-}
-
-function workspaceDomainRouteRecordId(
-  domain: Pick<FormlessInstanceWorkspaceDomainIntent, "host" | "profile">,
-) {
-  return `route:host:${domain.profile}:${domain.host}`;
-}
-
-function workspaceRouteTargetProfile(profile: FormlessInstanceWorkspaceDomainIntent["profile"]) {
-  if (profile === "publicSite") {
-    return "public-site";
-  }
-
-  return profile;
-}
-
-function workspaceRouteSurface(profile: FormlessInstanceWorkspaceDomainIntent["profile"]) {
-  if (profile === "publicSite") {
-    return "public-site";
-  }
-
-  if (profile === "app") {
-    return "admin";
-  }
-
-  return undefined;
-}
 
 function workspaceDeployTargetId() {
   return "instance.primary";
@@ -3552,25 +3491,9 @@ type LocalWorkspaceDeploymentSource = {
 
 async function resolveLocalWorkspaceDeploymentAccount(input: {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
-  manifest: FormlessInstanceWorkspaceManifest;
   providerConfig?: StoredRecord;
-  selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
 }): Promise<FormlessInstanceDeploymentAccount> {
-  const configuredUrl = input.manifest.deploy?.workersDevUrl ?? input.selectedTarget?.url;
-  const configuredFacts =
-    configuredUrl === undefined
-      ? undefined
-      : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
-  const configuredAccountId =
-    stringRecordValue(input.providerConfig, "accountId") ??
-    input.manifest.deploy?.accountId?.trim();
-
-  if (configuredAccountId && configuredFacts) {
-    return {
-      id: configuredAccountId,
-      workersDevSubdomain: configuredFacts.workersDevSubdomain,
-    };
-  }
+  const configuredAccountId = stringRecordValue(input.providerConfig, "accountId");
 
   const accounts = await input.accountDiscovery.listAccounts({ credentialProfile: null });
 
@@ -3589,15 +3512,6 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
     );
   }
 
-  if (
-    configuredFacts !== undefined &&
-    account.workersDevSubdomain !== configuredFacts.workersDevSubdomain
-  ) {
-    throw new Error(
-      `Formless deploy target workers.dev subdomain "${configuredFacts.workersDevSubdomain}" does not match Cloudflare account "${account.workersDevSubdomain}".`,
-    );
-  }
-
   return account;
 }
 
@@ -3608,44 +3522,20 @@ function planLocalWorkspaceDeployment(input: {
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
   providerConfig?: StoredRecord;
-  selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
-  const configuredUrl = input.manifest.deploy?.workersDevUrl ?? input.selectedTarget?.url;
-  const configuredFacts =
-    configuredUrl === undefined
-      ? undefined
-      : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
-  const configuredWorkerName =
-    stringRecordValue(input.providerConfig, "workerName") ??
-    input.manifest.deploy?.workerName ??
-    configuredFacts?.workerName;
+  const configuredWorkerName = stringRecordValue(input.providerConfig, "workerName");
   const plan = planFormlessInstanceDeployment({
     account: input.account,
     instanceName: configuredWorkerName ?? input.manifest.name,
-    mediaBucketName: input.manifest.deploy?.mediaBucket,
-    migrationPolicy:
-      input.migrationPolicy ?? input.manifest.deploy?.migrationPolicy ?? ("new" as const),
+    migrationPolicy: input.migrationPolicy ?? ("new" as const),
     packageVersion: input.packageVersion,
   });
-
-  if (
-    configuredUrl !== undefined &&
-    normalizeFormlessInstanceWorkspaceTargetUrl(configuredUrl) !== plan.expectedUrl.url
-  ) {
-    throw new Error(
-      `Formless deploy target ${normalizeFormlessInstanceWorkspaceTargetUrl(
-        configuredUrl,
-      )} does not match planned target ${plan.expectedUrl.url}.`,
-    );
-  }
 
   const targetAlias =
     input.targetAlias ??
     stringRecordValue(input.deployTarget, "targetId") ??
     input.deployTarget?.id ??
-    input.selectedTarget?.alias ??
-    input.manifest.defaultTarget ??
     DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
   const selectedTarget = {
     alias: targetAlias,
@@ -3653,28 +3543,9 @@ function planLocalWorkspaceDeployment(input: {
   };
 
   return {
-    manifest: withWorkspaceDeploymentTarget(input.manifest, selectedTarget, plan),
+    manifest: input.manifest,
     plan,
     selectedTarget,
-  };
-}
-
-function withWorkspaceDeploymentTarget(
-  manifest: FormlessInstanceWorkspaceManifest,
-  target: FormlessInstanceWorkspaceTarget,
-  plan: FormlessInstanceDeploymentPlan,
-): FormlessInstanceWorkspaceManifest {
-  return {
-    ...manifest,
-    defaultTarget: target.alias,
-    targets: [...manifest.targets.filter((candidate) => candidate.alias !== target.alias), target],
-    deploy: {
-      accountId: plan.account.id,
-      mediaBucket: plan.resources.mediaBucket.name,
-      migrationPolicy: plan.migrationPolicy,
-      workerName: plan.resources.worker.name,
-      workersDevUrl: plan.expectedUrl.url,
-    },
   };
 }
 
@@ -4574,17 +4445,10 @@ async function readDestroyRouteProjectionSource(
     };
   }
 
-  const legacyDomainRoutes = workspaceDomainControlPlaneRecords(context.manifest, {
-    appInstallIds: new Set(controlPlaneAppInstallRecords(controlPlane).map((app) => app.installId)),
-    exportedAt: new Date(0).toISOString(),
-  })
-    .map(routeProjectionRecordFromStoredRecord)
-    .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined);
-
   return {
     providerConfigs: providerConfigProjectionRecordsFromStoredRecords(controlPlaneRecords),
-    routes: legacyDomainRoutes,
-    source: legacyDomainRoutes.length === 0 ? "instance:route" : "legacy-manifest-domain",
+    routes: [],
+    source: "instance:route",
   };
 }
 

@@ -156,12 +156,6 @@ export type FormlessCliCommand =
       workspacePath: string;
     }
   | { kind: "help" }
-  | {
-      credentialProfile: string | null;
-      instanceName: string | null;
-      kind: "onboard";
-      open: boolean;
-    }
   | { kind: "workspaceCheck"; targetAlias: string | null; workspacePath: string | null }
   | {
       confirm: string;
@@ -183,9 +177,8 @@ export function formlessCliUsage(): string {
     "Usage: formless <command>",
     "",
     "Commands:",
-    "  onboard [--name <name>]             Create a local Formless workspace",
-    "  dev [--workspace <path>]            Run the local Formless workspace instance",
-    "  save [--workspace <path>] [--check] Save local workspace state to archives",
+    "  dev [--workspace <path>]            Run local workspace and browser setup",
+    "  save [--workspace <path>] [--check] Save Authority state to record source and app archives",
     "  check [--workspace <path>] [--target <alias>]",
     "                                      Check workspace source and target drift",
     "  deploy [--workspace <path>] [--target <alias>]",
@@ -228,7 +221,9 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
 
   switch (command) {
     case "onboard":
-      return parseOnboardArgs(rest);
+      throw new Error(
+        "formless onboard has been removed. Run `formless dev` and complete setup in the browser.",
+      );
     case "dev":
       return parseWorkspaceDevArgs(rest);
     case "save":
@@ -258,46 +253,6 @@ export function normalizeSourceUrl(value: string): string {
   } catch {
     throw new Error(`Source URL is invalid: ${value}`);
   }
-}
-
-function parseOnboardArgs(args: string[]): FormlessCliCommand {
-  let credentialProfile: string | null = null;
-  let instanceName: string | null = null;
-  let open = false;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === "-h" || arg === "--help") {
-      throw new Error("Usage: formless onboard [--name <name>]");
-    }
-
-    if (arg === "--name") {
-      instanceName = readOptionValue(args, index, "--name");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--credential-profile") {
-      credentialProfile = readOptionValue(args, index, "--credential-profile");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--open") {
-      open = true;
-      continue;
-    }
-
-    if (arg === "--no-open") {
-      open = false;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless onboard: ${arg}`);
-  }
-
-  return { credentialProfile, instanceName, kind: "onboard", open };
 }
 
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {

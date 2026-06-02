@@ -148,8 +148,17 @@ Evidence:
 
 ## 9. CLI Rewire And Command Compatibility
 
-- [ ] 9.1 Remove `formless onboard` from public help and command handling, with any retained transition parser failing before filesystem, Authority, Cloudflare, Alchemy, or provider mutation.
-- [ ] 9.2 Rewire `formless dev`, `save`, `check`, `deploy`, and `instance ...` commands to the shared workspace operation layer.
-- [ ] 9.3 Update CLI output to describe `formless dev` as the local bootstrap entry, layout-only manifest, record source, app archives, intent drift, and deployment execution summaries returned by gateway/runtime operations.
-- [ ] 9.4 Remove manifest app/domain/deploy source behavior and update tests that previously expected manifest intent writeback.
-- [ ] 9.5 Preserve remaining command names and explicit apply/credential boundaries while dropping old manifest compatibility.
+- [x] 9.1 Remove `formless onboard` from public help and command handling, with any retained transition parser failing before filesystem, Authority, Cloudflare, Alchemy, or provider mutation.
+- [x] 9.2 Rewire `formless dev`, `save`, `check`, `deploy`, and `instance ...` commands to the shared workspace operation layer.
+- [x] 9.3 Update CLI output to describe `formless dev` as the local bootstrap entry, layout-only manifest, record source, app archives, intent drift, and deployment execution summaries returned by gateway/runtime operations.
+- [x] 9.4 Remove manifest app/domain/deploy source behavior and update tests that previously expected manifest intent writeback.
+- [x] 9.5 Preserve remaining command names and explicit apply/credential boundaries while dropping old manifest compatibility.
+
+Evidence:
+
+- Changed `src/site/cli-command.ts`, `src/site/cli.ts`, `src/site/instance-workspace.ts`, and `src/site/cli.test.ts`.
+- Removed `formless onboard` from usage and parser output; retained parser rejection now stops before command dispatch and points users to `formless dev` plus browser setup.
+- Rewired top-level `save`, `check`, `deploy`, and operation-backed `instance status|pull|check|push|deploy` through `runFormlessWorkspaceOperation`; `dev` records a workspace status operation before starting the local runtime.
+- Updated CLI output to name `formless dev` as the local bootstrap entry and to report layout-only manifest, control-plane record source, app archive, drift, and deployment execution summaries from operation state.
+- Removed legacy manifest domain fallback from destroy provider-resource collection and updated CLI tests that preserved old manifest target/deploy writeback expectations.
+- `devstate check` green at 2026-06-02T15:18:10.374Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.

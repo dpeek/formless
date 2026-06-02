@@ -94,9 +94,8 @@ describe("Formless Site CLI", () => {
       "Usage: formless <command>",
       "",
       "Commands:",
-      "  onboard [--name <name>]             Create a local Formless workspace",
-      "  dev [--workspace <path>]            Run the local Formless workspace instance",
-      "  save [--workspace <path>] [--check] Save local workspace state to archives",
+      "  dev [--workspace <path>]            Run local workspace and browser setup",
+      "  save [--workspace <path>] [--check] Save Authority state to record source and app archives",
       "  check [--workspace <path>] [--target <alias>]",
       "                                      Check workspace source and target drift",
       "  deploy [--workspace <path>] [--target <alias>]",
@@ -195,14 +194,12 @@ describe("Formless Site CLI", () => {
     expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
   });
 
-  it("parses onboard command defaults, options, and browser-open flags", () => {
-    expect(parseFormlessCliArgs(["onboard"])).toEqual({
-      credentialProfile: null,
-      instanceName: null,
-      kind: "onboard",
-      open: false,
-    });
-    expect(
+  it("rejects removed onboard command shapes before command dispatch", () => {
+    const removedMessage =
+      "formless onboard has been removed. Run `formless dev` and complete setup in the browser.";
+
+    expect(() => parseFormlessCliArgs(["onboard"])).toThrow(removedMessage);
+    expect(() =>
       parseFormlessCliArgs([
         "onboard",
         "--name",
@@ -211,18 +208,8 @@ describe("Formless Site CLI", () => {
         "personal",
         "--open",
       ]),
-    ).toEqual({
-      credentialProfile: "personal",
-      instanceName: "brother-instance",
-      kind: "onboard",
-      open: true,
-    });
-    expect(parseFormlessCliArgs(["onboard", "--open", "--no-open"])).toEqual({
-      credentialProfile: null,
-      instanceName: null,
-      kind: "onboard",
-      open: false,
-    });
+    ).toThrow(removedMessage);
+    expect(() => parseFormlessCliArgs(["onboard", "--help"])).toThrow(removedMessage);
   });
 
   it("rejects removed standalone Site project command shapes", () => {
@@ -267,15 +254,8 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["save", "--force"])).toThrow(
       "Unknown option for formless save: --force",
     );
-    expect(() => parseFormlessCliArgs(["onboard", "--help"])).toThrow(
-      "Usage: formless onboard [--name <name>]",
-    );
-    expect(() => parseFormlessCliArgs(["onboard", "--name"])).toThrow("Missing value for --name.");
-    expect(() => parseFormlessCliArgs(["onboard", "--credential-profile"])).toThrow(
-      "Missing value for --credential-profile.",
-    );
     expect(() => parseFormlessCliArgs(["onboard", "--bogus"])).toThrow(
-      "Unknown option for formless onboard: --bogus",
+      "formless onboard has been removed. Run `formless dev` and complete setup in the browser.",
     );
     expect(() => parseFormlessCliArgs(["check", "--target", "Remote"])).toThrow(
       "Formless instance workspace target alias must start with a lowercase letter",
@@ -832,13 +812,13 @@ describe("Formless Site CLI", () => {
         "Instance workspace initialized.",
         `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
         `Manifest: ${path.relative(tempDir, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE))}.`,
+        "Record source: records/instance-control-plane.",
+        "App archives: archives/apps.",
         `Secret state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/instance.env"))}.`,
-        "Targets: prod=https://personal.dpeek.workers.dev.",
-        "Default app policy: declared-installs.",
-        "Local apps: david (site), james (site).",
         `Deploy metadata: ${packageJson.version}.`,
         "Owner setup: complete (David Peek <david@example.com>).",
         "Remote apps: david (site: David Peek), james (site: James Peek).",
+        "Next: run `npx formless dev` and complete setup in the browser.",
       ].join("\n"),
     ]);
   });
@@ -902,12 +882,12 @@ describe("Formless Site CLI", () => {
       await expect(
         discoverFormlessInstanceWorkspaceRoot(path.join(legacyRoot, "nested")),
       ).rejects.toThrow(
-        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
       );
       await expect(
         runFormlessCli(["instance", "status", "--workspace", legacyRoot], cliDeps(tempDir)),
       ).rejects.toThrow(
-        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; create a new workspace with \`formless onboard\`.`,
+        `Legacy Formless workspace manifest found at <workspace>/${fileName}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
       );
     }
   });
@@ -1206,7 +1186,7 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
     const requests: CapturedFetchRequest[] = [];
 
-    await runFormlessCli(["onboard", "--name", "empty-workspace"], cliDeps(workspaceRoot));
+    await writeWorkspaceManifest(workspaceRoot);
     await runFormlessCli(
       ["check", "--workspace", "."],
       cliDeps(workspaceRoot, {
@@ -1230,14 +1210,14 @@ describe("Formless Site CLI", () => {
     expect(requests).toEqual([]);
     expect(logs).toEqual([
       [
-        "Formless workspace check.",
-        "Workspace: ..",
-        "Manifest: formless.json.",
-        "Target: none.",
-        "Remote drift: skipped.",
-        "Default app policy: none.",
-        "Local apps: none.",
-        "Archives: archives/instance, archives/apps.",
+        "Workspace operation: check (succeeded).",
+        "Workspace source: layout-only manifest, control-plane record source, app archives.",
+        "Summary: Workspace check.",
+        "initialized: true.",
+        "mode: local.",
+        "remoteDrift: skipped.",
+        "Details:",
+        "target: none.",
       ].join("\n"),
     ]);
   });
@@ -3384,6 +3364,7 @@ describe("Formless Site CLI", () => {
     expect((await stat(path.join(workspaceRoot, ".formless/local"))).isDirectory()).toBe(true);
     expect(logs).toEqual([
       "Instance shell: http://localhost:4443/",
+      "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
       "Workspace archive restore skipped: no workspace archives declared.",
     ]);
@@ -3492,6 +3473,7 @@ describe("Formless Site CLI", () => {
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
     expect(logs).toEqual([
       "Instance shell: http://localhost:4444/",
+      "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
       `Workspace archive restored: record source (1 apps, ${mediaRecords().length} records, 1 media).`,
     ]);
@@ -3650,15 +3632,10 @@ describe("Formless Site CLI", () => {
     const nestedRoot = path.join(workspaceRoot, "src", "site");
     const child = new FakeCliDevChild();
     const logs: string[] = [];
-    const onboardLogs: string[] = [];
     const requests: CapturedFetchRequest[] = [];
     const spawnCalls: CapturedSpawn[] = [];
 
-    await mkdir(workspaceRoot, { recursive: true });
-    await runFormlessCli(
-      ["onboard", "--name", "personal-sites"],
-      cliDeps(workspaceRoot, { logs: onboardLogs }),
-    );
+    await writeWorkspaceManifest(workspaceRoot);
     await mkdir(nestedRoot, { recursive: true });
 
     const run = runFormlessCli(
@@ -3702,6 +3679,7 @@ describe("Formless Site CLI", () => {
     ]);
     expect(logs).toEqual([
       "Instance shell: http://localhost:4446/",
+      "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(nestedRoot, path.join(workspaceRoot, ".formless/local"))}.`,
       "Workspace archive restore skipped: no workspace archives declared.",
     ]);
@@ -3757,7 +3735,7 @@ describe("Formless Site CLI", () => {
       controlPlaneRecords(),
     );
 
-    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+    await writeWorkspaceManifest(workspaceRoot);
 
     await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
 
@@ -3800,14 +3778,18 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:5173/api/formless/media/media/images/cover.png",
     ]);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Formless workspace save complete.");
-    expect(logs[0]).toContain("Source: http://localhost:5173.");
-    expect(logs[0]).toContain(`Manifest: ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}.`);
-    expect(logs[0]).toContain("Instance archive: records/instance-control-plane.");
-    expect(logs[0]).toContain("Records: 8.");
-    expect(logs[0]).toContain("Media files: 1.");
-    expect(logs[0]).toContain(`App archives: david (${mediaRecords().length} records, 1 media).`);
-    expect(logs[0]).toContain("Local apps: none.");
+    expect(logs[0]).toContain("Workspace operation: save (succeeded).");
+    expect(logs[0]).toContain(
+      "Workspace source: layout-only manifest, control-plane record source, app archives.",
+    );
+    expect(logs[0]).toContain("Summary: Workspace saved.");
+    expect(logs[0]).toContain("source: http://localhost:5173.");
+    expect(logs[0]).toContain("appCount: 1.");
+    expect(logs[0]).toContain("mediaCount: 1.");
+    expect(logs[0]).toContain("recordCount: 8.");
+    expect(logs[0]).toContain(
+      `appArchives: {"installId":"david","mediaCount":1,"recordCount":${mediaRecords().length}}.`,
+    );
   });
 
   it("checks local workspace source staleness without rewriting reviewable files", async () => {
@@ -3825,7 +3807,7 @@ describe("Formless Site CLI", () => {
       controlPlaneRecords(),
     );
 
-    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+    await writeWorkspaceManifest(workspaceRoot);
     const manifestBefore = await readFile(
       path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
       "utf8",
@@ -3848,7 +3830,9 @@ describe("Formless Site CLI", () => {
     await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
     await runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
 
-    expect(logs.at(-1)).toContain("Formless workspace save check ok.");
+    expect(logs.at(-1)).toContain("Workspace operation: save (succeeded).");
+    expect(logs.at(-1)).toContain("Summary: Workspace source current.");
+    expect(logs.at(-1)).toContain("mode: check.");
   });
 
   it("rejects secret-looking local Authority control-plane fields during workspace save", async () => {
@@ -3879,7 +3863,7 @@ describe("Formless Site CLI", () => {
       secretControlPlane,
     );
 
-    await runFormlessCli(["onboard", "--name", "personal-sites"], cliDeps(workspaceRoot));
+    await writeWorkspaceManifest(workspaceRoot);
 
     await expect(
       runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher })),
@@ -4377,7 +4361,7 @@ describe("Formless Site CLI", () => {
     expect(destroyInputs).toEqual([]);
   });
 
-  it.skip("deploys a local-first workspace, records ignored state, updates manifest target intent, and pushes saved archives", async () => {
+  it.skip("deploys a local-first workspace, records ignored state, preserves layout manifest, and pushes saved archives", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal");
     const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
@@ -4388,7 +4372,7 @@ describe("Formless Site CLI", () => {
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const localDavid = appArchive("david", "David Peek");
 
-    await runFormlessCli(["onboard", "--name", "personal"], cliDeps(workspaceRoot));
+    await writeWorkspaceManifest(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
@@ -4500,17 +4484,7 @@ describe("Formless Site CLI", () => {
         setupToken,
       },
     ]);
-    expect(manifest.defaultTarget).toBe("remote");
-    expect(manifest.targets).toEqual([
-      { alias: "remote", url: "https://personal.dpeek.workers.dev" },
-    ]);
-    expect(manifest.deploy).toEqual({
-      accountId: "account-123",
-      mediaBucket: "personal-media",
-      migrationPolicy: "new",
-      workerName: "personal",
-      workersDevUrl: "https://personal.dpeek.workers.dev",
-    });
+    expect(manifest).toEqual(layoutWorkspaceManifest("personal"));
     expect(JSON.stringify(manifest)).not.toContain("cf-token");
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
@@ -4589,7 +4563,7 @@ describe("Formless Site CLI", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const localDavid = appArchive("david", "David Peek", { records: [] });
 
-    await runFormlessCli(["onboard", "--name", "new-personal"], cliDeps(newWorkspaceRoot));
+    await writeWorkspaceManifest(newWorkspaceRoot);
 
     await expect(
       runFormlessCli(
@@ -4667,7 +4641,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("initializes a local Formless workspace from onboard without remote mutation", async () => {
+  it("rejects removed onboard command before workspace or provider mutation", async () => {
     const tempDir = await makeTempDir();
     const logs: string[] = [];
     const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
@@ -4691,22 +4665,20 @@ describe("Formless Site CLI", () => {
       },
     });
 
-    await runFormlessCli(
-      ["onboard", "--name", "brother-instance", "--credential-profile", "personal", "--open"],
-      dependencies,
+    await expect(
+      runFormlessCli(
+        ["onboard", "--name", "brother-instance", "--credential-profile", "personal", "--open"],
+        dependencies,
+      ),
+    ).rejects.toThrow(
+      "formless onboard has been removed. Run `formless dev` and complete setup in the browser.",
     );
 
-    const manifest = parseFormlessInstanceWorkspaceManifestJson(
-      await readFile(path.join(tempDir, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
-    );
-
-    expect(manifest).toEqual(layoutWorkspaceManifest("brother-instance"));
-    await expect(readFile(path.join(tempDir, ".gitignore"), "utf8")).resolves.toBe(".formless/\n");
-    await expect(stat(path.join(tempDir, "archives/instance"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    expect((await stat(path.join(tempDir, "archives/apps"))).isDirectory()).toBe(true);
-    expect((await stat(path.join(tempDir, ".formless/local"))).isDirectory()).toBe(true);
+    await expect(
+      stat(path.join(tempDir, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.join(tempDir, ".formless"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.join(tempDir, "archives"))).rejects.toMatchObject({ code: "ENOENT" });
 
     expect(accountDiscoveryInputs).toEqual([]);
     expect(commands).toEqual([]);
@@ -4715,77 +4687,7 @@ describe("Formless Site CLI", () => {
     expect(setupInputs).toEqual([]);
     expect(openedUrls).toEqual([]);
     expect(stateWrites).toEqual([]);
-    expect(logs).toEqual([
-      [
-        "Formless workspace initialized.",
-        "Workspace: .",
-        "Manifest: formless.json.",
-        "Ignored state: .formless/.",
-        "Archives: archives/instance, archives/apps.",
-        "Targets: none.",
-        "Default app policy: none.",
-        "Local apps: none.",
-        "Next:",
-        "  npx formless dev",
-        "  npx formless save",
-        "  npx formless deploy",
-        "First app: run `npx formless dev`, then install a package app in the local web UI.",
-      ].join("\n"),
-    ]);
-  });
-
-  it("rejects onboard when local workspace, Site, archive, or .formless state exists", async () => {
-    const cases: Array<{
-      create: (workspaceRoot: string) => Promise<void>;
-      message: (workspaceRoot: string) => string;
-    }> = [
-      {
-        create: (workspaceRoot) =>
-          writeFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "{}"),
-        message: (workspaceRoot) =>
-          `Formless instance workspace already exists at ${path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)}.`,
-      },
-      {
-        create: (workspaceRoot) =>
-          writeFile(path.join(workspaceRoot, "formless.config.json"), "{}"),
-        message: (workspaceRoot) =>
-          `formless onboard cannot initialize because standalone Site project file exists at ${path.join(workspaceRoot, "formless.config.json")}. Import or move the Site project before onboarding.`,
-      },
-      {
-        create: (workspaceRoot) => writeFile(path.join(workspaceRoot, "site.records.json"), "[]"),
-        message: (workspaceRoot) =>
-          `formless onboard cannot initialize because standalone Site project file exists at ${path.join(workspaceRoot, "site.records.json")}. Import or move the Site project before onboarding.`,
-      },
-      {
-        create: (workspaceRoot) =>
-          writeFile(path.join(workspaceRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "{}"),
-        message: (workspaceRoot) =>
-          `formless onboard cannot initialize because portable archive source exists at ${path.join(workspaceRoot, PORTABLE_ARCHIVE_MANIFEST_FILE)}. Import or move existing archive source before onboarding.`,
-      },
-      {
-        create: async (workspaceRoot) => {
-          await mkdir(path.join(workspaceRoot, "archives"), { recursive: true });
-        },
-        message: (workspaceRoot) =>
-          `formless onboard cannot initialize because reviewable archive root exists at ${path.join(workspaceRoot, "archives")}. Move existing archive source before onboarding.`,
-      },
-      {
-        create: async (workspaceRoot) => {
-          await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
-        },
-        message: (workspaceRoot) =>
-          `formless onboard cannot initialize because ignored .formless state exists at ${path.join(workspaceRoot, ".formless")}. Remove or move existing local state before onboarding.`,
-      },
-    ];
-
-    for (const conflict of cases) {
-      const workspaceRoot = await makeTempDir();
-
-      await conflict.create(workspaceRoot);
-      await expect(runFormlessCli(["onboard"], cliDeps(workspaceRoot))).rejects.toThrow(
-        conflict.message(workspaceRoot),
-      );
-    }
+    expect(logs).toEqual([]);
   });
 
   it("exports app archives and restores them through the archive API", async () => {

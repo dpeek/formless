@@ -33,10 +33,6 @@ import type {
   InstanceDomainProviderManualCleanupResponse,
   InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
-import {
-  deploymentStatusDisplaySummary,
-  type DeploymentStatus,
-} from "../shared/deployment-runtime.ts";
 import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import {
   nodeAlchemyDomainProviderRuntime,
@@ -47,11 +43,7 @@ import {
   type RunFormlessInstanceDomainProviderDeleteInput,
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
-import {
-  type FormlessInstanceWorkspaceApp,
-  type FormlessInstanceWorkspaceManifest,
-  type FormlessInstanceWorkspaceTarget,
-} from "./instance-workspace-config.ts";
+import { type FormlessInstanceWorkspaceTarget } from "./instance-workspace-config.ts";
 import type { ArchiveNormalizationEvidence } from "../shared/archive-normalizers.ts";
 import {
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
@@ -61,14 +53,12 @@ import {
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
   applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
-  checkLocalFormlessWorkspace as checkLocalFormlessWorkspaceCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   destroyLocalFormlessWorkspace as destroyLocalFormlessWorkspaceCommand,
   destroyFormlessInstanceWorkspace as destroyFormlessInstanceWorkspaceCommand,
   deployLocalFormlessWorkspace as deployLocalFormlessWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
-  initLocalFormlessWorkspaceOnboarding as initLocalFormlessWorkspaceOnboardingCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   planFormlessInstanceWorkspaceDomains as planFormlessInstanceWorkspaceDomainsCommand,
   resolveFormlessInstanceWorkspaceProviderContext,
@@ -83,7 +73,6 @@ import {
   type ApplyFormlessInstanceWorkspaceDomainsInput,
   type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
-  type CheckLocalFormlessWorkspaceResult,
   type DestroyLocalFormlessWorkspaceInput,
   type DestroyFormlessInstanceWorkspaceInput,
   type DestroyFormlessInstanceWorkspaceResult,
@@ -94,7 +83,6 @@ import {
   type FormlessInstanceWorkspaceStatusResult,
   type FormlessInstanceWorkspaceProviderContext,
   type InitFormlessInstanceWorkspaceResult,
-  type InitLocalFormlessWorkspaceOnboardingInput,
   type PlanFormlessInstanceWorkspaceDomainsInput,
   type PlanFormlessInstanceWorkspaceDomainsResult,
   type PullFormlessInstanceWorkspaceResult,
@@ -104,6 +92,13 @@ import {
   type SaveLocalFormlessWorkspaceInput,
   type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
+import {
+  runFormlessWorkspaceOperation,
+  type FormlessWorkspaceOperationDisplayObject,
+  type FormlessWorkspaceOperationDisplayValue,
+  type FormlessWorkspaceOperationInput,
+  type FormlessWorkspaceOperationState,
+} from "./instance-workspace-operations.ts";
 import {
   forgetFormlessInstanceDomainMapping,
   forgetFormlessInstanceDomainProviderRedirect,
@@ -390,8 +385,6 @@ export type FormlessCliDependencies = {
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
-export type OnboardFormlessInstanceResult = InitFormlessInstanceWorkspaceResult;
-
 async function resolveTopLevelFormlessWorkspacePath(
   input: { workspacePath?: string | null },
   dependencies: Pick<FormlessCliDependencies, "cwd">,
@@ -412,12 +405,15 @@ export async function runFormlessCli(
     case "help":
       dependencies.log(formlessCliUsage());
       return;
-    case "onboard": {
-      const result = await onboardFormlessInstance(command, dependencies);
-      dependencies.log(formatFormlessOnboardingResult(result, dependencies.cwd));
-      return;
-    }
     case "workspaceDev": {
+      await runCliWorkspaceOperation(
+        {
+          includeDeploymentStatus: false,
+          kind: "status",
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
       await runFormlessInstanceWorkspaceDev(
         {
           workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
@@ -430,31 +426,40 @@ export async function runFormlessCli(
       return;
     }
     case "workspaceCheck": {
-      const result = await checkLocalFormlessWorkspaceCommand(command, dependencies);
-      dependencies.log(formatLocalFormlessWorkspaceCheckResult(result, dependencies.cwd));
+      const result = await runCliWorkspaceOperation(
+        {
+          kind: "check",
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "workspaceSave": {
-      const result = await saveLocalFormlessWorkspaceCommand(
+      const result = await runCliWorkspaceOperation(
         {
           check: command.check,
-          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+          kind: "save",
+          workspacePath: command.workspacePath,
         },
         dependencies,
       );
-      dependencies.log(formatLocalFormlessWorkspaceSaveResult(result, dependencies.cwd));
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "workspaceDeploy": {
-      const result = await deployLocalFormlessWorkspace(
+      const result = await runCliWorkspaceOperation(
         {
+          kind: "deployApply",
           migrationPolicy: command.migrationPolicy,
           targetAlias: command.targetAlias,
-          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+          workspacePath: command.workspacePath,
         },
         dependencies,
       );
-      dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "workspaceDestroy": {
@@ -524,29 +529,67 @@ export async function runFormlessCli(
       return;
     }
     case "instanceStatus": {
-      const result = await getFormlessInstanceWorkspaceStatus(
-        { ...command, includeDeploymentStatus: true },
+      const result = await runCliWorkspaceOperation(
+        {
+          includeDeploymentStatus: true,
+          kind: "status",
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
         dependencies,
       );
-      dependencies.log(formatInstanceWorkspaceStatusResult(result, dependencies.cwd));
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "instancePull": {
-      const result = await pullFormlessInstanceWorkspace(command, dependencies);
-      dependencies.log(formatInstanceWorkspacePullResult(result, dependencies.cwd));
+      const result = await runCliWorkspaceOperation(
+        {
+          kind: "pull",
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "instanceCheck": {
-      const result = await checkFormlessInstanceWorkspace(command, dependencies);
-      dependencies.log(formatInstanceWorkspaceCheckResult(result, dependencies.cwd));
+      const result = await runCliWorkspaceOperation(
+        {
+          kind: "check",
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "instancePush": {
-      const result = await pushFormlessInstanceWorkspace(command, dependencies);
-      dependencies.log(formatInstanceWorkspacePushResult(result, dependencies.cwd));
+      const result = await runCliWorkspaceOperation(
+        {
+          allowStale: command.allowStale,
+          apply: command.apply,
+          kind: "push",
+          replace: command.replace,
+          replaceInstallSet: command.replaceInstallSet,
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "instanceDev":
+      await runCliWorkspaceOperation(
+        {
+          includeDeploymentStatus: false,
+          kind: "status",
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
       await runFormlessInstanceWorkspaceDev(command, dependencies, {
         devCommand: packageRunScriptCommand("dev", dependencies.env),
       });
@@ -567,8 +610,16 @@ export async function runFormlessCli(
       return;
     }
     case "instanceDeploy": {
-      const result = await deployFormlessInstanceWorkspace(command, dependencies);
-      dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
+      const result = await runCliWorkspaceOperation(
+        {
+          kind: "deployApply",
+          migrationPolicy: command.migrationPolicy,
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
     case "instanceDestroy": {
@@ -628,24 +679,24 @@ export async function runFormlessCli(
   }
 }
 
-export async function onboardFormlessInstance(
-  input: InitLocalFormlessWorkspaceOnboardingInput & {
-    credentialProfile?: string | null;
-    instanceName?: string | null;
-    open?: boolean;
-  },
-  dependencies: Pick<FormlessCliDependencies, "cwd" | "fetch"> = nodeFormlessCliDependencies(),
-): Promise<OnboardFormlessInstanceResult> {
-  return initLocalFormlessWorkspaceOnboardingCommand(
+async function runCliWorkspaceOperation(
+  input: FormlessWorkspaceOperationInput,
+  dependencies: FormlessCliDependencies,
+): Promise<FormlessWorkspaceOperationState> {
+  const state = await runFormlessWorkspaceOperation(
+    input,
     {
-      name: input.name ?? input.instanceName,
-      workspacePath: input.workspacePath,
+      ...dependencies,
+      packageVersion: packageJson.version,
     },
-    {
-      cwd: dependencies.cwd,
-      fetch: dependencies.fetch,
-    },
+    { actor: "cli" },
   );
+
+  if (state.status === "failed") {
+    throw new Error(state.errors[0]?.message ?? "Workspace operation failed.");
+  }
+
+  return state;
 }
 
 export async function exportInstanceArchive(
@@ -1512,28 +1563,56 @@ function formatArchiveNormalizationEvidence(
     .join("; ")}.`;
 }
 
-function formatFormlessOnboardingResult(
-  result: InitFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
+function formatCliWorkspaceOperationResult(state: FormlessWorkspaceOperationState): string {
   return [
-    "Formless workspace initialized.",
-    `Workspace: ${formatCliPathSentence(cwd, result.workspaceRoot)}`,
-    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
-    `Ignored state: ${formatCliDirectoryPath(cwd, path.join(result.workspaceRoot, ".formless"))}.`,
-    `Archives: ${formatCliPath(
-      cwd,
-      path.join(result.workspaceRoot, result.manifest.archives.instance),
-    )}, ${formatCliPath(cwd, path.join(result.workspaceRoot, result.manifest.archives.apps))}.`,
-    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
-    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
-    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
-    "Next:",
-    "  npx formless dev",
-    "  npx formless save",
-    "  npx formless deploy",
-    "First app: run `npx formless dev`, then install a package app in the local web UI.",
+    `Workspace operation: ${formatWorkspaceOperationLabel(state.operation)} (${state.status}).`,
+    "Workspace source: layout-only manifest, control-plane record source, app archives.",
+    `Summary: ${state.summary.title}.`,
+    ...formatCliDisplayFields(state.summary.fields),
+    ...(state.result?.details === undefined
+      ? []
+      : ["Details:", ...formatCliDisplayFields(state.result.details)]),
+    ...(state.result?.deployment === undefined
+      ? []
+      : ["Deployment execution summary:", ...formatCliDisplayFields(state.result.deployment)]),
   ].join("\n");
+}
+
+function formatWorkspaceOperationLabel(operation: FormlessWorkspaceOperationState["operation"]) {
+  switch (operation) {
+    case "credentialSetup":
+      return "credential setup";
+    case "deployApply":
+      return "deploy apply";
+    case "deployPlan":
+      return "deploy plan";
+    default:
+      return operation;
+  }
+}
+
+function formatCliDisplayFields(fields: FormlessWorkspaceOperationDisplayObject): string[] {
+  return Object.entries(fields)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}: ${formatCliDisplayValue(value)}.`);
+}
+
+function formatCliDisplayValue(value: FormlessWorkspaceOperationDisplayValue): string {
+  if (value === null) {
+    return "none";
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0
+      ? "none"
+      : value.map((entry) => formatCliDisplayValue(entry)).join(", ");
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }
 
 function formatInstanceWorkspaceInitResult(
@@ -1544,10 +1623,9 @@ function formatInstanceWorkspaceInitResult(
     "Instance workspace initialized.",
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Record source: ${result.manifest.source.records}.`,
+    `App archives: ${result.manifest.archives.apps}.`,
     `Secret state: ${formatCliPath(cwd, path.join(result.workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH))}.`,
-    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
-    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
-    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
     result.archiveSourcePath ? `Archive source: ${result.archiveSourcePath}.` : null,
     result.remoteStatus
       ? `Deploy metadata: ${formatDeployMetadataVersion(result.remoteStatus.deployMetadata.version)}.`
@@ -1558,172 +1636,7 @@ function formatInstanceWorkspaceInitResult(
     result.remoteStatus
       ? `Remote apps: ${formatRemoteInstalls(result.remoteStatus.appRegistry.installs)}.`
       : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
-}
-
-function formatInstanceWorkspaceStatusResult(
-  result: FormlessInstanceWorkspaceStatusResult,
-  cwd: string,
-): string {
-  return [
-    "Instance workspace status.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
-    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
-    `Default target: ${result.manifest.defaultTarget ?? "<none>"}.`,
-    `Selected target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Automation token: ${formatSecretState(result.secretState)}.`,
-    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
-    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
-    result.remoteStatus
-      ? `Deploy metadata: ${formatDeployMetadataVersion(result.remoteStatus.deployMetadata.version)}.`
-      : null,
-    result.remoteStatus
-      ? `Owner setup: ${formatOwnerSetup(result.remoteStatus.ownerSetup)}.`
-      : null,
-    result.remoteStatus
-      ? `Remote apps: ${formatRemoteInstalls(result.remoteStatus.appRegistry.installs)}.`
-      : null,
-    result.remoteStatus?.deployment
-      ? `Deployment: ${formatDeploymentStatus(result.remoteStatus.deployment.status)}.`
-      : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
-}
-
-function formatInstanceWorkspacePullResult(
-  result: PullFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
-  return [
-    "Instance workspace pulled.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Instance archive: ${formatCliPath(cwd, result.instanceArchive.archivePath)}.`,
-    `Apps: ${result.instanceArchive.appCount}.`,
-    `Records: ${result.instanceArchive.recordCount}.`,
-    `Media files: ${result.instanceArchive.mediaCount}.`,
-    `App archives: ${formatPulledAppArchives(result.appArchives)}.`,
-    `Domain mappings: ${formatWorkspaceDomainIntents(result.domains)}.`,
-  ].join("\n");
-}
-
-function formatInstanceWorkspaceCheckResult(
-  result: CheckFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
-  const drift = result.drift;
-
-  return [
-    "Instance workspace check.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Drift: ${drift.status === "no-drift" ? "none" : "detected"}.`,
-    `Local apps: ${drift.localAppCount}. Remote apps: ${drift.remoteAppCount}.`,
-    `Local records: ${drift.localRecordCount}. Remote records: ${drift.remoteRecordCount}.`,
-    `Local media files: ${drift.localMediaCount}. Remote media files: ${drift.remoteMediaCount}.`,
-    `Local domains: ${drift.localDomainCount}. Remote domains: ${drift.remoteDomainCount}.`,
-    formatArchiveNormalizationEvidence(drift.archiveNormalizationEvidence),
-    `Missing remote installs: ${formatList(drift.missingInstalls)}.`,
-    `Extra remote installs: ${formatList(drift.extraInstalls)}.`,
-    `Package mismatches: ${formatPackageMismatches(drift.packageMismatches)}.`,
-    `Changed records: ${formatList(drift.changedRecords)}.`,
-    `Changed control-plane records: ${formatList(drift.changedControlPlaneRecords)}.`,
-    `Changed media: ${formatList(drift.changedMedia)}.`,
-    `Changed domain mappings: ${formatDomainDesiredDrift(drift.domainDesiredDrift)}.`,
-    `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
-}
-
-function formatLocalFormlessWorkspaceCheckResult(
-  result: CheckLocalFormlessWorkspaceResult,
-  cwd: string,
-): string {
-  if (result.mode === "remote") {
-    return formatInstanceWorkspaceCheckResult(result.remote, cwd);
-  }
-
-  return [
-    "Formless workspace check.",
-    `Workspace: ${formatCliPath(cwd, path.dirname(result.manifestPath))}.`,
-    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
-    "Target: none.",
-    "Remote drift: skipped.",
-    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
-    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
-    `Archives: ${result.manifest.archives.instance}, ${result.manifest.archives.apps}.`,
-  ].join("\n");
-}
-
-function formatLocalFormlessWorkspaceSaveResult(
-  result: SaveLocalFormlessWorkspaceResult,
-  cwd: string,
-): string {
-  return [
-    `Formless workspace save ${result.mode === "check" ? "check ok" : "complete"}.`,
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Source: ${result.source}.`,
-    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
-    `Instance archive: ${formatCliPath(cwd, result.instanceArchive.archivePath)}.`,
-    `Apps: ${result.instanceArchive.appCount}.`,
-    `Records: ${result.instanceArchive.recordCount}.`,
-    `Media files: ${result.instanceArchive.mediaCount}.`,
-    `App archives: ${formatSavedAppArchives(result.appArchives)}.`,
-    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
-  ].join("\n");
-}
-
-function formatInstanceWorkspacePushResult(
-  result: PushFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
-  const dryRunSummary = result.dryRun.remote.report?.summary ?? result.dryRun.remote.plan?.summary;
-  const applySummary =
-    result.applyResult?.remote.report?.summary ?? result.applyResult?.remote.plan?.summary;
-  const dryRunErrors = result.dryRun.remote.errors ?? [];
-  const applyErrors = result.applyResult?.remote.errors ?? [];
-  const upgradePlanning =
-    result.mode === "dry-run" && result.dryRun.upgradePlanning
-      ? formatCliUpgradePlanningReport(result.dryRun.upgradePlanning).trimEnd()
-      : null;
-
-  return [
-    `Instance workspace push ${result.mode === "apply" ? "applied" : "dry run"}.`,
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    "Source: control-plane record source and app archives.",
-    `Source apps: ${result.source.appCount}.`,
-    `Source records: ${result.source.recordCount}.`,
-    `Source media files: ${result.source.mediaCount}.`,
-    `Replace existing installs: ${result.replace ? "yes" : "no"}.`,
-    `Replace install set: ${result.replaceInstallSet ? "requested" : "no"}.`,
-    result.backup ? `Backup: ${formatCliPath(cwd, result.backup.archivePath)}.` : "Backup: none.",
-    `Drift: ${result.drift.status === "no-drift" ? "none" : "detected"}.`,
-    `Missing remote installs: ${formatList(result.drift.missingInstalls)}.`,
-    `Extra remote installs: ${formatList(result.drift.extraInstalls)}.`,
-    `Changed records: ${formatList(result.drift.changedRecords)}.`,
-    `Changed control-plane records: ${formatList(result.drift.changedControlPlaneRecords)}.`,
-    `Changed media: ${formatList(result.drift.changedMedia)}.`,
-    `Changed domain mappings: ${formatDomainDesiredDrift(result.drift.domainDesiredDrift)}.`,
-    upgradePlanning,
-    formatArchiveNormalizationEvidence(result.dryRun.archiveNormalizationEvidence),
-    `Dry-run restore: ${result.dryRun.remote.ok ? "ok" : "failed"}.`,
-    dryRunSummary
-      ? `Dry-run created installs: ${formatList(dryRunSummary.createdInstalls)}.`
-      : null,
-    dryRunSummary
-      ? `Dry-run replaced installs: ${formatList(dryRunSummary.replacedInstalls)}.`
-      : null,
-    ...dryRunErrors.map((error) => `Dry-run error: ${error.message}`),
-    result.applyResult ? `Apply restore: ${result.applyResult.remote.ok ? "ok" : "failed"}.` : null,
-    applySummary ? `Apply created installs: ${formatList(applySummary.createdInstalls)}.` : null,
-    applySummary ? `Apply replaced installs: ${formatList(applySummary.replacedInstalls)}.` : null,
-    ...applyErrors.map((error) => `Apply error: ${error.message}`),
+    "Next: run `npx formless dev` and complete setup in the browser.",
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
@@ -1767,38 +1680,6 @@ function formatInstanceWorkspaceTokenRotateResult(
   ].join("\n");
 }
 
-function formatInstanceWorkspaceDeployResult(
-  result: DeployFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
-  return [
-    "Instance workspace deployed.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Worker: ${result.plan.resources.worker.name}.`,
-    `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
-    `Migration policy: ${result.migrationPolicy}.`,
-    "Runtime profile: server instance, client instance.",
-    `Deploy metadata: version ${result.healthCheck.version} verified.`,
-    `Deployment state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
-    ...(result.deploymentStatePath === undefined
-      ? []
-      : [`Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`]),
-    `Local deploy secrets: ${formatCliPath(cwd, result.localSecretEnv.path)}.`,
-    `Automation secret state: ${formatCliPath(cwd, result.secretPath)}.`,
-    ...(result.ownerSetup === undefined ? [] : [`Owner setup: ${result.ownerSetup.url}.`]),
-    ...(result.push === undefined
-      ? []
-      : [
-          `Data push: ${result.push.mode}.`,
-          `Dry-run restore: ${result.push.dryRun.remote.ok ? "ok" : "failed"}.`,
-          ...(result.push.applyResult === undefined
-            ? []
-            : [`Apply restore: ${result.push.applyResult.remote.ok ? "ok" : "failed"}.`]),
-        ]),
-  ].join("\n");
-}
-
 function formatInstanceWorkspaceDestroyResult(
   result: DestroyFormlessInstanceWorkspaceResult,
   cwd: string,
@@ -1829,14 +1710,11 @@ function formatDestroyRouteProviderResources(
     return "none";
   }
 
-  const source =
-    resources.source === "legacy-manifest-domain" ? "legacy manifest domains" : "instance:route";
-
   return `${resources.resourceCount} provider resource${
     resources.resourceCount === 1 ? "" : "s"
-  } from ${resources.routeCount} route${resources.routeCount === 1 ? "" : "s"} (${source}; ${
-    resources.enabledHosts.length === 0 ? "no hosts" : resources.enabledHosts.join(", ")
-  })`;
+  } from ${resources.routeCount} route${resources.routeCount === 1 ? "" : "s"} (${
+    resources.source
+  }; ${resources.enabledHosts.length === 0 ? "no hosts" : resources.enabledHosts.join(", ")})`;
 }
 
 function formatInstanceDomainProviderPlanResult(
@@ -1991,60 +1869,8 @@ function formatInstanceDomainProviderManualCleanupResult(
   ].join("\n");
 }
 
-function formatWorkspaceTargets(manifest: FormlessInstanceWorkspaceManifest): string {
-  if (manifest.targets.length === 0) {
-    return "none";
-  }
-
-  return manifest.targets.map((target) => `${target.alias}=${target.url}`).join(", ");
-}
-
 function formatSelectedTarget(target: FormlessInstanceWorkspaceTarget | undefined): string {
   return target ? `${target.alias} (${target.url})` : "<none>";
-}
-
-function formatWorkspaceApps(apps: readonly FormlessInstanceWorkspaceApp[]): string {
-  if (apps.length === 0) {
-    return "none";
-  }
-
-  return apps.map((app) => `${app.installId} (${app.packageAppKey})`).join(", ");
-}
-
-function formatPulledAppArchives(
-  apps: readonly PullFormlessInstanceWorkspaceResult["appArchives"][number][],
-): string {
-  if (apps.length === 0) {
-    return "none";
-  }
-
-  return apps
-    .map((app) => `${app.installId} (${app.recordCount} records, ${app.mediaCount} media)`)
-    .join(", ");
-}
-
-function formatSavedAppArchives(
-  apps: readonly SaveLocalFormlessWorkspaceResult["appArchives"][number][],
-): string {
-  if (apps.length === 0) {
-    return "none";
-  }
-
-  return apps
-    .map((app) => `${app.installId} (${app.recordCount} records, ${app.mediaCount} media)`)
-    .join(", ");
-}
-
-function formatWorkspaceDomainIntents(
-  domains: readonly PullFormlessInstanceWorkspaceResult["domains"][number][],
-): string {
-  if (domains.length === 0) {
-    return "none";
-  }
-
-  return domains
-    .map((domain) => `${domain.host} -> ${formatDomainIntentTarget(domain)}`)
-    .join(", ");
 }
 
 function formatDomainProviderResourceCounts(plan: InstanceDomainProviderPlanResponse): string {
@@ -2117,25 +1943,6 @@ function formatDeployMetadataVersion(version: string | null): string {
 
 function formatList(values: readonly string[]): string {
   return values.length === 0 ? "none" : values.join(", ");
-}
-
-function formatPackageMismatches(
-  mismatches: readonly {
-    installId: string;
-    localPackageAppKey: string;
-    remotePackageAppKey: string;
-  }[],
-): string {
-  if (mismatches.length === 0) {
-    return "none";
-  }
-
-  return mismatches
-    .map(
-      (mismatch) =>
-        `${mismatch.installId} (local ${mismatch.localPackageAppKey}, remote ${mismatch.remotePackageAppKey})`,
-    )
-    .join(", ");
 }
 
 function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
@@ -2247,23 +2054,6 @@ function formatOwnerSetup(status: {
   return owner.email ? `complete (${owner.name} <${owner.email}>)` : `complete (${owner.name})`;
 }
 
-function formatSecretState(state: FormlessInstanceWorkspaceStatusResult["secretState"]): string {
-  switch (state) {
-    case "env":
-      return "env override";
-    case "stored":
-      return "stored";
-    case "missing":
-      return "missing";
-  }
-}
-
-function formatDeploymentStatus(status: DeploymentStatus): string {
-  const summary = deploymentStatusDisplaySummary(status);
-
-  return `${summary.label}; ${summary.detail}`;
-}
-
 function formatCliPath(cwd: string, filePath: string): string {
   const relativePath = path.relative(cwd, filePath);
 
@@ -2280,18 +2070,6 @@ function formatCliPath(cwd: string, filePath: string): string {
   }
 
   return relativePath;
-}
-
-function formatCliDirectoryPath(cwd: string, filePath: string): string {
-  const formatted = formatCliPath(cwd, filePath);
-
-  return formatted.endsWith("/") ? formatted : `${formatted}/`;
-}
-
-function formatCliPathSentence(cwd: string, filePath: string): string {
-  const formatted = formatCliPath(cwd, filePath);
-
-  return formatted === "." ? "." : `${formatted}.`;
 }
 
 function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {
