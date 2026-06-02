@@ -16,11 +16,19 @@ Evidence 2026-06-02 grug:
 
 ## 2. Validation
 
-- [ ] 2.1 Validate normalized exact hosts, hostless route scope, absolute match paths, and optional prefix shape.
-- [ ] 2.2 Validate `mount` routes by target profile, required app install target, surface, package capability, and provider config eligibility.
-- [ ] 2.3 Validate `redirect` routes by target host or URL, status code, preserve-path policy, preserve-query-string policy, and absence of app-only target fields.
-- [ ] 2.4 Reject conflicting enabled routes for the same host scope and path or prefix match.
-- [ ] 2.5 Preserve host-mounted public Site blocking for generated admin shell, owner auth, schema-key routes, and installed app admin routes on that host.
+- [x] 2.1 Validate normalized exact hosts, hostless route scope, absolute match paths, and optional prefix shape.
+- [x] 2.2 Validate `mount` routes by target profile, required app install target, surface, package capability, and provider config eligibility.
+- [x] 2.3 Validate `redirect` routes by target host or URL, status code, preserve-path policy, preserve-query-string policy, and absence of app-only target fields.
+- [x] 2.4 Reject conflicting enabled routes for the same host scope and path or prefix match.
+- [x] 2.5 Preserve host-mounted public Site blocking for generated admin shell, owner auth, schema-key routes, and installed app admin routes on that host.
+
+Evidence 2026-06-02 grug:
+
+- Changed `src/worker/authority-validation.ts` to validate unified `route` records in Authority writes: canonical exact hosts, hostless scope, normalized absolute paths and prefixes, mount target/surface/app capability, redirect target and policy shape, provider-config eligibility, enabled-route overlaps, and host public Site root-prefix blocking.
+- Added focused Authority coverage in `src/worker/control-plane-schema-validation.test.ts` for unified `route` validation while preserving the legacy generic `app-route` metadata test.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes Authority write validation only and does not change browser-visible UI behavior.
 
 ## 3. Migration And Backfill
 
