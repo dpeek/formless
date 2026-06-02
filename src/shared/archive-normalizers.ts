@@ -8,11 +8,17 @@ import {
   type PortableArchive,
 } from "./archive.ts";
 import { packageAppFactsForKey } from "./app-installs.ts";
+import {
+  formatInstanceControlPlaneBoundaryEntityName,
+  isInstanceControlPlaneEntityName,
+  type InstanceControlPlaneEntityName,
+} from "./instance-control-plane.ts";
 
 export type ArchiveNormalizerArchiveKind = typeof APP_ARCHIVE_KIND | typeof INSTANCE_ARCHIVE_KIND;
 
 export type ArchiveNormalizationEvidence = {
   archiveKind: ArchiveNormalizerArchiveKind;
+  details?: string[];
   fromVersion: number;
   normalizerId: string;
   summary: string;
@@ -47,6 +53,21 @@ const archiveNormalizers = createArchiveNormalizerRegistry([
   },
 ] satisfies readonly ArchiveNormalizerDefinition[]);
 
+const legacyInstanceControlPlaneEntityNames: Record<string, InstanceControlPlaneEntityName> = {
+  appInstall: "app-install",
+  appRoute: "app-route",
+  deployAttempt: "deploy-attempt",
+  deployDesiredResource: "deploy-desired-resource",
+  deployDriftReport: "deploy-drift-report",
+  deployEvidenceSummary: "deploy-evidence-summary",
+  deployTarget: "deploy-target",
+  domainMapping: "domain-mapping",
+  providerConfigRef: "provider-config-ref",
+  redirectIntent: "redirect-intent",
+};
+
+const instanceControlPlaneEntityNameNormalizerId = "archive.instance.control-plane-entity-names";
+
 export function listArchiveNormalizers(): ArchiveNormalizationEvidence[] {
   return archiveNormalizers.map(({ normalize: _normalize, ...evidence }) => evidence);
 }
@@ -70,11 +91,14 @@ export function normalizePortableArchive(value: unknown): ArchiveNormalizationRe
   const object = parseArchiveEnvelope("Archive", value);
   const kind = parseArchiveKind(object.kind);
   const version = parseArchiveVersion(object.version);
+  let normalizedObject = object;
 
   if (version === ARCHIVE_VERSION) {
+    const entityNormalization = normalizeArchiveControlPlaneEntityNames(normalizedObject);
+
     return {
-      archive: parsePortableArchive(object),
-      evidence: [],
+      archive: parsePortableArchive(entityNormalization.value),
+      evidence: entityNormalization.evidence,
     };
   }
 
@@ -86,12 +110,13 @@ export function normalizePortableArchive(value: unknown): ArchiveNormalizationRe
     );
   }
 
-  const archive = parsePortableArchive(normalizer.normalize(object));
   const { normalize: _normalize, ...evidence } = normalizer;
+  normalizedObject = parseArchiveEnvelope("Archive", normalizer.normalize(object));
+  const entityNormalization = normalizeArchiveControlPlaneEntityNames(normalizedObject);
 
   return {
-    archive,
-    evidence: [evidence],
+    archive: parsePortableArchive(entityNormalization.value),
+    evidence: [evidence, ...entityNormalization.evidence],
   };
 }
 
@@ -214,6 +239,161 @@ function normalizeV1ArchivedAppInstall(context: string, value: unknown): Record<
   };
 }
 
+function normalizeArchiveControlPlaneEntityNames(input: Record<string, unknown>): {
+  evidence: ArchiveNormalizationEvidence[];
+  value: Record<string, unknown>;
+} {
+  if (input.kind !== INSTANCE_ARCHIVE_KIND) {
+    return { evidence: [], value: input };
+  }
+
+  const controlPlane = input.controlPlane;
+
+  if (!isPlainObject(controlPlane)) {
+    return { evidence: [], value: input };
+  }
+
+  if (!Array.isArray(controlPlane.records)) {
+    return { evidence: [], value: input };
+  }
+
+  const normalized = normalizeControlPlaneRecordEntityNames(controlPlane.records);
+
+  if (normalized.evidenceDetails.length === 0) {
+    return { evidence: [], value: input };
+  }
+
+  return {
+    evidence: [
+      {
+        archiveKind: INSTANCE_ARCHIVE_KIND,
+        details: normalized.evidenceDetails,
+        fromVersion: ARCHIVE_VERSION,
+        normalizerId: instanceControlPlaneEntityNameNormalizerId,
+        summary:
+          "Normalize legacy instance control-plane entity names to qualified kebab-case names.",
+        toVersion: ARCHIVE_VERSION,
+      },
+    ],
+    value: {
+      ...input,
+      controlPlane: {
+        ...controlPlane,
+        records: normalized.records,
+      },
+    },
+  };
+}
+
+function normalizeControlPlaneRecordEntityNames(records: unknown[]): {
+  evidenceDetails: string[];
+  records: unknown[];
+} {
+  const spellingsByEntity = new Map<InstanceControlPlaneEntityName, Set<"canonical" | "legacy">>();
+  const replacementsByOriginal = new Map<string, { count: number; to: string }>();
+
+  for (const record of records) {
+    if (!isPlainObject(record) || typeof record.entity !== "string") {
+      continue;
+    }
+
+    const spelling = classifyInstanceControlPlaneEntitySpelling(record.entity);
+
+    if (!spelling) {
+      continue;
+    }
+
+    const spellings = spellingsByEntity.get(spelling.entity) ?? new Set();
+    spellings.add(spelling.kind);
+    spellingsByEntity.set(spelling.entity, spellings);
+
+    if (spelling.kind === "legacy") {
+      const to = formatInstanceControlPlaneBoundaryEntityName(spelling.entity);
+      const existing = replacementsByOriginal.get(record.entity);
+
+      replacementsByOriginal.set(record.entity, {
+        count: (existing?.count ?? 0) + 1,
+        to,
+      });
+    }
+  }
+
+  for (const [entity, spellings] of spellingsByEntity) {
+    if (spellings.has("legacy") && spellings.has("canonical")) {
+      throw new Error(
+        `Instance archive controlPlane records mix legacy and canonical entity names for "${formatInstanceControlPlaneBoundaryEntityName(entity)}".`,
+      );
+    }
+  }
+
+  if (replacementsByOriginal.size === 0) {
+    return { evidenceDetails: [], records };
+  }
+
+  const normalizedRecords = records.map((record) => {
+    if (!isPlainObject(record) || typeof record.entity !== "string") {
+      return record;
+    }
+
+    const spelling = classifyInstanceControlPlaneEntitySpelling(record.entity);
+
+    if (!spelling || spelling.kind !== "legacy") {
+      return record;
+    }
+
+    return {
+      ...record,
+      entity: formatInstanceControlPlaneBoundaryEntityName(spelling.entity),
+    };
+  });
+
+  return {
+    evidenceDetails: [...replacementsByOriginal.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([from, replacement]) => {
+        const recordLabel = replacement.count === 1 ? "record" : "records";
+
+        return `${from} -> ${replacement.to} (${replacement.count} ${recordLabel})`;
+      }),
+    records: normalizedRecords,
+  };
+}
+
+function classifyInstanceControlPlaneEntitySpelling(value: string):
+  | {
+      entity: InstanceControlPlaneEntityName;
+      kind: "canonical" | "legacy";
+    }
+  | undefined {
+  const legacy = legacyInstanceControlPlaneEntityNames[value];
+
+  if (legacy) {
+    return { entity: legacy, kind: "legacy" };
+  }
+
+  if (isInstanceControlPlaneEntityName(value)) {
+    return { entity: value, kind: "canonical" };
+  }
+
+  const [schemaKey, entityKey, extra] = value.split(":");
+
+  if (schemaKey !== "instance" || entityKey === undefined || extra !== undefined) {
+    return undefined;
+  }
+
+  const legacyQualified = legacyInstanceControlPlaneEntityNames[entityKey];
+
+  if (legacyQualified) {
+    return { entity: legacyQualified, kind: "legacy" };
+  }
+
+  if (isInstanceControlPlaneEntityName(entityKey)) {
+    return { entity: entityKey, kind: "canonical" };
+  }
+
+  return undefined;
+}
+
 function parseArchiveEnvelope(context: string, value: unknown): Record<string, unknown> {
   const object = parseObject(context, value);
 
@@ -242,6 +422,10 @@ function parseObject(context: string, value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseArray(context: string, value: unknown): unknown[] {

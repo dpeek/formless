@@ -4914,6 +4914,62 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Archive restore dry run ok.");
   });
 
+  it("reports legacy control-plane entity normalization in archive restore dry-runs", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "legacy-control-plane-restore");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const archive: InstanceArchive = {
+      ...instanceArchive([appArchive("david", "David Peek")]),
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        records: controlPlaneRecords().map((record) =>
+          record.entity === "app-install" ? { ...record, entity: "appInstall" } : record,
+        ),
+      },
+    };
+
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
+      `${JSON.stringify(archive, null, 2)}\n`,
+    );
+    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
+
+    await runFormlessCli(
+      ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
+
+    expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toContain(
+      "instance:app-install",
+    );
+    expect(logs.at(-1)).toContain(
+      "Archive normalization: archive.instance.control-plane-entity-names formless.instanceArchive version 2->2 (appInstall -> instance:app-install (1 record)).",
+    );
+    expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+  });
+
   it("rejects unsupported archive versions before restore mutation", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "unsupported-instance-restore");

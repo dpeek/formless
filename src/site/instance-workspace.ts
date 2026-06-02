@@ -13,7 +13,10 @@ import {
   type InstanceArchiveControlPlane,
   type PortableArchive,
 } from "../shared/archive.ts";
-import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
+import {
+  normalizePortableArchive,
+  type ArchiveNormalizationEvidence,
+} from "../shared/archive-normalizers.ts";
 import {
   packageAppFactsForKey,
   type AppInstall,
@@ -235,6 +238,7 @@ export type FormlessInstanceWorkspacePackageMismatch = {
 };
 
 export type FormlessInstanceWorkspaceDriftSummary = {
+  archiveNormalizationEvidence: ArchiveNormalizationEvidence[];
   changedArchivePaths: string[];
   changedControlPlaneRecords: string[];
   domainDesiredDrift: FormlessInstanceWorkspaceDomainDesiredDrift[];
@@ -1722,6 +1726,7 @@ type WorkspaceArchiveDirectory = {
   archivePath: string;
   mediaFiles: ArchiveDiskMediaFile[];
   missingMediaFiles: string[];
+  normalizationEvidence: ArchiveNormalizationEvidence[];
 };
 
 type WorkspaceInstanceArchiveDirectory = WorkspaceArchiveDirectory & {
@@ -2057,7 +2062,8 @@ async function readArchiveDirectoryForCheck(
     throw error;
   }
 
-  const archive = normalizePortableArchive(JSON.parse(contents) as unknown).archive;
+  const normalized = normalizePortableArchive(JSON.parse(contents) as unknown);
+  const archive = normalized.archive;
   const mediaFiles: ArchiveDiskMediaFile[] = [];
   const missingMediaFiles: string[] = [];
 
@@ -2088,6 +2094,7 @@ async function readArchiveDirectoryForCheck(
     archivePath,
     mediaFiles,
     missingMediaFiles: missingMediaFiles.sort((left, right) => left.localeCompare(right)),
+    normalizationEvidence: normalized.evidence,
   };
 }
 
@@ -2377,6 +2384,7 @@ function workspaceAppArchiveDirectoryFromInstanceExport(
     missingMediaFiles: directory.missingMediaFiles.filter((archivePath) =>
       app.media.objects.some((object) => object.archivePath === archivePath),
     ),
+    normalizationEvidence: directory.normalizationEvidence,
   };
 }
 
@@ -2516,6 +2524,7 @@ function compareWorkspaceArchives(input: {
     packageMismatches.length > 0;
 
   return {
+    archiveNormalizationEvidence: workspaceArchiveNormalizationEvidence(input),
     changedArchivePaths: [...changedArchivePaths].sort((left, right) => left.localeCompare(right)),
     changedControlPlaneRecords: [...changedControlPlaneRecords].sort((left, right) =>
       left.localeCompare(right),
@@ -2548,6 +2557,48 @@ function compareWorkspaceArchives(input: {
     remoteRecordCount: remoteApps.reduce((count, app) => count + appRecordCount(app), 0),
     status: hasDrift ? "drift" : "no-drift",
   };
+}
+
+function workspaceArchiveNormalizationEvidence(input: {
+  localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
+  localInstanceArchive: WorkspaceArchiveDirectory | undefined;
+  remoteArchive: WorkspaceArchiveDirectory;
+}): ArchiveNormalizationEvidence[] {
+  return uniqueArchiveNormalizationEvidence([
+    ...(input.localInstanceArchive?.normalizationEvidence ?? []),
+    ...[...input.localAppArchives.values()].flatMap((archive) => archive.normalizationEvidence),
+    ...input.remoteArchive.normalizationEvidence,
+  ]);
+}
+
+function uniqueArchiveNormalizationEvidence(
+  evidence: readonly ArchiveNormalizationEvidence[],
+): ArchiveNormalizationEvidence[] {
+  const seen = new Set<string>();
+  const unique: ArchiveNormalizationEvidence[] = [];
+
+  for (const entry of evidence) {
+    const key = JSON.stringify({
+      archiveKind: entry.archiveKind,
+      details: entry.details ?? [],
+      fromVersion: entry.fromVersion,
+      normalizerId: entry.normalizerId,
+      toVersion: entry.toVersion,
+    });
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(entry);
+  }
+
+  return unique.sort((left, right) =>
+    `${left.normalizerId}:${left.details?.join(";") ?? ""}`.localeCompare(
+      `${right.normalizerId}:${right.details?.join(";") ?? ""}`,
+    ),
+  );
 }
 
 function changedControlPlaneIntentRecordKeys(

@@ -56,10 +56,18 @@
 
 ## 5. Compatibility Adapters
 
-- [ ] 5.1 Add one-way camelCase-to-kebab-case normalization for supported archive or workspace record-source readers only where existing artifacts require it.
-- [ ] 5.2 Report normalization evidence in dry-run, check, or diagnostic output.
-- [ ] 5.3 Reject mixed legacy and canonical entity-name spellings when they would address the same logical record set.
-- [ ] 5.4 Ensure normalization does not introduce runtime aliases, re-exports, dual canonical keys, or new schema versions.
+- [x] 5.1 Add one-way camelCase-to-kebab-case normalization for supported archive or workspace record-source readers only where existing artifacts require it.
+- [x] 5.2 Report normalization evidence in dry-run, check, or diagnostic output.
+- [x] 5.3 Reject mixed legacy and canonical entity-name spellings when they would address the same logical record set.
+- [x] 5.4 Ensure normalization does not introduce runtime aliases, re-exports, dual canonical keys, or new schema versions.
+
+- Files changed: `src/shared/archive-normalizers.ts`, `src/shared/archive-normalizers.test.ts`, `src/site/instance-workspace.ts`, `src/site/cli.ts`, and `src/site/cli.test.ts`.
+- Evidence: supported archive and workspace archive readers now normalize legacy instance control-plane record entity names such as `appInstall` to canonical qualified names such as `instance:app-install` before current archive parsing and Authority validation. Parsed runtime records remain local kebab-case records.
+- Output evidence: archive restore dry-runs and instance workspace check/push output report archive normalization evidence, including original and canonical entity names and record counts.
+- Mixed-spelling evidence: normalization rejects archives that mix legacy and canonical spellings for the same logical instance control-plane entity, such as `appInstall` with `instance:app-install`.
+- Compatibility boundary: the legacy spelling map is private to the archive normalizer; schema parsing, archive parsing, runtime schema constants, exports, schema versions, and canonical format output keep only canonical kebab-case entity names.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T02:56:44.685Z.
+- Smoke: not run; this section changed archive/workspace reader normalization and CLI/check diagnostics without browser-visible app behavior.
 
 ## 6. Tests And Verification
 

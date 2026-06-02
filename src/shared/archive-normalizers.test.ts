@@ -74,6 +74,69 @@ describe("portable archive normalizers", () => {
     expect(result.plan.steps.map((step) => step.kind)).toEqual(["createInstall", "restoreAppData"]);
   });
 
+  it("normalizes legacy control-plane entity names before current instance archive parsing", () => {
+    const normalized = normalizePortableArchive(
+      instanceArchive({
+        capabilities: [
+          "installed-app-registry",
+          "schema-owned-control-plane",
+          "app-store-snapshots",
+        ],
+        controlPlane: {
+          schemaKey: "instance-control-plane",
+          schemaUpdatedAt: now,
+          records: [controlPlaneAppInstallRecord({ entity: "appInstall" })],
+        },
+      }),
+    );
+
+    expect(normalized.evidence).toEqual([
+      {
+        archiveKind: INSTANCE_ARCHIVE_KIND,
+        details: ["appInstall -> instance:app-install (1 record)"],
+        fromVersion: ARCHIVE_VERSION,
+        normalizerId: "archive.instance.control-plane-entity-names",
+        summary:
+          "Normalize legacy instance control-plane entity names to qualified kebab-case names.",
+        toVersion: ARCHIVE_VERSION,
+      },
+    ]);
+    expect(
+      normalized.archive.kind === INSTANCE_ARCHIVE_KIND
+        ? normalized.archive.controlPlane?.records.map((record) => record.entity)
+        : [],
+    ).toEqual(["app-install"]);
+  });
+
+  it("rejects mixed legacy and canonical control-plane entity spellings", () => {
+    expect(() =>
+      normalizePortableArchive(
+        instanceArchive({
+          capabilities: [
+            "installed-app-registry",
+            "schema-owned-control-plane",
+            "app-store-snapshots",
+          ],
+          controlPlane: {
+            schemaKey: "instance-control-plane",
+            schemaUpdatedAt: now,
+            records: [
+              controlPlaneAppInstallRecord({ entity: "appInstall", id: "personal" }),
+              controlPlaneAppInstallRecord({
+                entity: "instance:app-install",
+                id: "docs",
+                installId: "docs",
+                label: "Docs",
+              }),
+            ],
+          },
+        }),
+      ),
+    ).toThrow(
+      'Instance archive controlPlane records mix legacy and canonical entity names for "instance:app-install".',
+    );
+  });
+
   it("rejects unsupported archive versions without a registered normalizer", () => {
     expect(() =>
       normalizePortableArchive({
@@ -172,5 +235,29 @@ function activeSiteRecord(id: string): StoredRecord {
       ...fixture.values,
     },
     createdAt: "2026-05-23T00:00:02.000Z",
+  };
+}
+
+function controlPlaneAppInstallRecord(input: {
+  entity: string;
+  id?: string;
+  installId?: string;
+  label?: string;
+}): StoredRecord {
+  const installId = input.installId ?? input.id ?? "personal";
+
+  return {
+    id: input.id ?? installId,
+    entity: input.entity,
+    values: {
+      installId,
+      packageAppKey: "site",
+      label: input.label ?? "Personal",
+      status: "installed",
+      storageIdentity: `app:${installId}`,
+      createdAt: now,
+      updatedAt: now,
+    },
+    createdAt: now,
   };
 }

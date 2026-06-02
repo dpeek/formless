@@ -52,6 +52,7 @@ import {
   type FormlessInstanceWorkspaceManifest,
   type FormlessInstanceWorkspaceTarget,
 } from "./instance-workspace-config.ts";
+import type { ArchiveNormalizationEvidence } from "../shared/archive-normalizers.ts";
 import {
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
   readFormlessInstanceWorkspaceSecretState,
@@ -1493,17 +1494,21 @@ function formatArchiveRestoreResult(
 }
 
 function formatArchiveNormalizationEvidence(
-  evidence: RestorePortableArchiveResult["archiveNormalizationEvidence"],
+  evidence: readonly ArchiveNormalizationEvidence[],
 ): string | null {
   if (evidence.length === 0) {
     return null;
   }
 
   return `Archive normalization: ${evidence
-    .map(
-      (entry) =>
-        `${entry.normalizerId} ${entry.archiveKind} version ${entry.fromVersion}->${entry.toVersion}`,
-    )
+    .map((entry) => {
+      const details =
+        entry.details === undefined || entry.details.length === 0
+          ? ""
+          : ` (${entry.details.join("; ")})`;
+
+      return `${entry.normalizerId} ${entry.archiveKind} version ${entry.fromVersion}->${entry.toVersion}${details}`;
+    })
     .join("; ")}.`;
 }
 
@@ -1621,6 +1626,7 @@ function formatInstanceWorkspaceCheckResult(
     `Local records: ${drift.localRecordCount}. Remote records: ${drift.remoteRecordCount}.`,
     `Local media files: ${drift.localMediaCount}. Remote media files: ${drift.remoteMediaCount}.`,
     `Local domains: ${drift.localDomainCount}. Remote domains: ${drift.remoteDomainCount}.`,
+    formatArchiveNormalizationEvidence(drift.archiveNormalizationEvidence),
     `Missing remote installs: ${formatList(drift.missingInstalls)}.`,
     `Extra remote installs: ${formatList(drift.extraInstalls)}.`,
     `Package mismatches: ${formatPackageMismatches(drift.packageMismatches)}.`,
@@ -1629,7 +1635,9 @@ function formatInstanceWorkspaceCheckResult(
     `Changed media: ${formatList(drift.changedMedia)}.`,
     `Changed domain mappings: ${formatDomainDesiredDrift(drift.domainDesiredDrift)}.`,
     `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
-  ].join("\n");
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }
 
 function formatLocalFormlessWorkspaceCheckResult(
@@ -1703,6 +1711,7 @@ function formatInstanceWorkspacePushResult(
     `Changed media: ${formatList(result.drift.changedMedia)}.`,
     `Changed domain mappings: ${formatDomainDesiredDrift(result.drift.domainDesiredDrift)}.`,
     upgradePlanning,
+    formatArchiveNormalizationEvidence(result.dryRun.archiveNormalizationEvidence),
     `Dry-run restore: ${result.dryRun.remote.ok ? "ok" : "failed"}.`,
     dryRunSummary
       ? `Dry-run created installs: ${formatList(dryRunSummary.createdInstalls)}.`
