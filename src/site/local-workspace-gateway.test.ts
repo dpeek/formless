@@ -1,11 +1,17 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import packageJson from "../../package.json";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
-import { FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE } from "./instance-workspace-config.ts";
+import {
+  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultFormlessInstanceWorkspaceManifest,
+  formatFormlessInstanceWorkspaceManifest,
+} from "./instance-workspace-config.ts";
+import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import {
   LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
@@ -254,6 +260,59 @@ describe("local workspace gateway", () => {
     expect(browserBearer.response.status).toBe(401);
   });
 
+  it("runs deploy plan through the gateway with record-source desired-state projection", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot);
+
+    const planned = await gatewayJson(
+      operationRequest({ kind: "deployPlan" }, browserHeaders({ cookie, csrf: true })),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          accountDiscovery: {
+            listAccounts: async () => [
+              {
+                id: "account-123",
+                workersDevSubdomain: "dpeek",
+              },
+            ],
+          },
+          operationIds: ["op_deploy_plan_00000001"],
+          packageVersion: packageJson.version,
+          timestamps: [
+            "2026-06-02T01:10:00.000Z",
+            "2026-06-02T01:10:01.000Z",
+            "2026-06-02T01:10:02.000Z",
+          ],
+        }),
+      },
+    );
+
+    expect(planned.response.status).toBe(200);
+    expect(planned.body.operation).toMatchObject({
+      actor: "browser",
+      id: "op_deploy_plan_00000001",
+      operation: "deployPlan",
+      result: {
+        deployment: {
+          desiredState: {
+            resourceCount: 1,
+            resourcesByKind: {
+              "cloudflare-worker-custom-domain": 1,
+            },
+            targetId: "instance.primary",
+          },
+          expectedUrl: "https://personal.dpeek.workers.dev",
+          workerName: "personal",
+        },
+      },
+      status: "succeeded",
+    });
+    expect(JSON.stringify(planned.body)).not.toContain("secret");
+  });
+
   it("scopes operation ids to the configured workspace root", async () => {
     const workspaceRoot = await makeTempDir();
     const otherWorkspaceRoot = await makeTempDir();
@@ -374,8 +433,12 @@ function gatewayEnv(
 function gatewayDeps(
   workspaceRoot: string,
   options: {
+    accountDiscovery?: {
+      listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
+    };
     credentialSetupUrl?: string;
     operationIds?: string[];
+    packageVersion?: string;
     setupComplete?: boolean;
     timestamps?: string[];
   } = {},
@@ -383,6 +446,9 @@ function gatewayDeps(
   const operationIds = [...(options.operationIds ?? [])];
 
   return {
+    ...(options.accountDiscovery === undefined
+      ? {}
+      : { accountDiscovery: options.accountDiscovery }),
     createOperationId: () => operationIds.shift() ?? "op_test_00000001",
     credentialSetup:
       options.credentialSetupUrl === undefined
@@ -413,6 +479,7 @@ function gatewayDeps(
     cwd: workspaceRoot,
     fetch: async () => Response.json({ setupComplete: options.setupComplete ?? false }),
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T01:00:00.000Z"])),
+    ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
     readOwnerSetupStatus: async () => ({ setupComplete: options.setupComplete ?? false }),
   };
 }
@@ -462,4 +529,105 @@ async function makeTempDir(): Promise<string> {
 
   tempDirs.push(tempDir);
   return tempDir;
+}
+
+async function writeWorkspaceManifest(workspaceRoot: string) {
+  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
+
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+    formatFormlessInstanceWorkspaceManifest(manifest),
+  );
+}
+
+async function writeDeployRecordSource(workspaceRoot: string) {
+  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
+  const now = "2026-05-26T00:00:00.000Z";
+
+  await writeFormlessInstanceControlPlaneRecordSource({
+    controlPlane: {
+      schemaKey: "instance-control-plane",
+      schemaUpdatedAt: now,
+      records: [
+        {
+          createdAt: now,
+          entity: "app-install",
+          id: "site",
+          values: {
+            createdAt: now,
+            installId: "site",
+            label: "Site",
+            packageAppKey: "site",
+            status: "installed",
+            storageIdentity: "app:site",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "route",
+          id: "route:site:admin",
+          values: {
+            appInstall: "site",
+            createdAt: now,
+            enabled: true,
+            kind: "mount",
+            matchPath: "/apps/site",
+            matchPrefix: "/apps/site/",
+            surface: "admin",
+            targetProfile: "app",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "route",
+          id: "route:host:public-site:www.example.com",
+          values: {
+            appInstall: "site",
+            createdAt: now,
+            enabled: true,
+            kind: "mount",
+            matchHost: "www.example.com",
+            matchPath: "/",
+            matchPrefix: "/",
+            providerConfig: "cloudflare-personal",
+            surface: "public-site",
+            targetProfile: "public-site",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "deploy-target",
+          id: "instance.primary",
+          values: {
+            createdAt: now,
+            enabled: true,
+            label: "Primary instance",
+            targetId: "instance.primary",
+            targetKind: "instance",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "provider-config-ref",
+          id: "cloudflare-personal",
+          values: {
+            accountId: "account-123",
+            configRef: "cloudflare-personal",
+            createdAt: now,
+            label: "Cloudflare personal",
+            providerFamily: "cloudflare",
+            updatedAt: now,
+            workerName: "personal",
+          },
+        },
+      ],
+    },
+    manifest,
+    workspaceRoot,
+  });
 }

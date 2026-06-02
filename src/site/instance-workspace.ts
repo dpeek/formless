@@ -5,9 +5,11 @@ import path from "node:path";
 
 import {
   projectDeployControlPlaneDesiredState,
+  type ControlPlaneAppInstallProjectionRecord,
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneRouteProjectionRecord,
   type ControlPlaneRedirectStatusCode,
+  type DeployResource,
   type DeployResourceGraph,
 } from "@dpeek/formless-deploy";
 
@@ -415,6 +417,7 @@ export type PlanDeployLocalFormlessWorkspaceDependencies = Pick<
 >;
 
 export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPlanResult & {
+  desiredState: LocalWorkspaceDeploymentDesiredState;
   existingSelectedTarget?: FormlessInstanceWorkspaceTarget;
   manifestPath: string;
   preflight?: CheckFormlessInstanceWorkspaceResult;
@@ -1297,6 +1300,11 @@ export async function planDeployLocalFormlessWorkspace(
   });
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
   const existingSelectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const preflight = existingSelectedTarget
     ? await checkFormlessInstanceWorkspace(
         {
@@ -1316,19 +1324,28 @@ export async function planDeployLocalFormlessWorkspace(
   const account = await resolveLocalWorkspaceDeploymentAccount({
     accountDiscovery: dependencies.accountDiscovery,
     manifest,
+    providerConfig: deploymentSource.providerConfig,
     selectedTarget: existingSelectedTarget,
   });
   const planned = planLocalWorkspaceDeployment({
     account,
+    deployTarget: deploymentSource.deployTarget,
     manifest,
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
+    providerConfig: deploymentSource.providerConfig,
     selectedTarget: existingSelectedTarget,
     targetAlias: input.targetAlias,
+  });
+  const desiredState = projectLocalWorkspaceDeploymentDesiredState({
+    controlPlane,
+    plan: planned.plan,
+    targetId: planned.selectedTarget.alias,
   });
 
   return {
     ...planned,
+    desiredState,
     ...(existingSelectedTarget === undefined ? {} : { existingSelectedTarget }),
     manifestPath,
     ...(preflight === undefined ? {} : { preflight }),
@@ -2627,20 +2644,29 @@ function comparableArchiveMediaJson(
   return JSON.stringify(stableValue(media));
 }
 
-function stringRecordValue(record: StoredRecord, fieldName: string): string | undefined {
-  const value = record.values[fieldName];
+function stringRecordValue(
+  record: StoredRecord | undefined,
+  fieldName: string,
+): string | undefined {
+  const value = record?.values[fieldName];
 
   return typeof value === "string" ? value : undefined;
 }
 
-function booleanRecordValue(record: StoredRecord, fieldName: string): boolean | undefined {
-  const value = record.values[fieldName];
+function booleanRecordValue(
+  record: StoredRecord | undefined,
+  fieldName: string,
+): boolean | undefined {
+  const value = record?.values[fieldName];
 
   return typeof value === "boolean" ? value : undefined;
 }
 
-function numberRecordValue(record: StoredRecord, fieldName: string): number | undefined {
-  const value = record.values[fieldName];
+function numberRecordValue(
+  record: StoredRecord | undefined,
+  fieldName: string,
+): number | undefined {
+  const value = record?.values[fieldName];
 
   return typeof value === "number" ? value : undefined;
 }
@@ -3070,15 +3096,136 @@ function requireWorkspaceDeployAccountId(manifest: FormlessInstanceWorkspaceMani
   return accountId;
 }
 
+function selectLocalWorkspaceDeploymentSource(
+  controlPlane: InstanceArchiveControlPlane | undefined,
+  targetAlias: string | null | undefined,
+): LocalWorkspaceDeploymentSource {
+  if (!controlPlane) {
+    throw new Error(
+      "Formless deploy plan requires schema-owned control-plane record source with a deploy target.",
+    );
+  }
+
+  const records = controlPlane.records.filter((record) => !record.deletedAt);
+  const deployTarget = selectLocalWorkspaceDeployTarget(records, targetAlias);
+  const providerConfig = selectLocalWorkspaceProviderConfig(records);
+
+  return {
+    deployTarget,
+    ...(providerConfig === undefined ? {} : { providerConfig }),
+  };
+}
+
+function selectLocalWorkspaceDeployTarget(
+  records: readonly StoredRecord[],
+  targetAlias: string | null | undefined,
+): StoredRecord {
+  const targets = records.filter(
+    (record) =>
+      record.entity === "deploy-target" &&
+      record.values.targetKind === "instance" &&
+      record.values.enabled !== false,
+  );
+  const requestedTargetId = targetAlias?.trim();
+
+  if (requestedTargetId) {
+    const target = targets.find(
+      (record) =>
+        record.id === requestedTargetId ||
+        stringRecordValue(record, "targetId") === requestedTargetId,
+    );
+
+    if (!target) {
+      throw new Error(`Formless deploy plan target "${requestedTargetId}" was not found.`);
+    }
+
+    return target;
+  }
+
+  const primary = targets.find(
+    (record) => stringRecordValue(record, "targetId") === workspaceDeployTargetId(),
+  );
+
+  if (primary) {
+    return primary;
+  }
+
+  if (targets.length === 1 && targets[0]) {
+    return targets[0];
+  }
+
+  if (targets.length === 0) {
+    throw new Error("Formless deploy plan requires an enabled instance deploy-target record.");
+  }
+
+  throw new Error(
+    "Formless deploy plan targetAlias is required when multiple deploy targets exist.",
+  );
+}
+
+function selectLocalWorkspaceProviderConfig(
+  records: readonly StoredRecord[],
+): StoredRecord | undefined {
+  const configs = records.filter(
+    (record) =>
+      record.entity === "provider-config-ref" && record.values.providerFamily === "cloudflare",
+  );
+  const referencedConfigIds = new Set(
+    records
+      .filter((record) => record.entity === "route" && !record.deletedAt)
+      .map((record) => stringRecordValue(record, "providerConfig"))
+      .filter((value): value is string => value !== undefined),
+  );
+  const referencedConfigs = configs.filter((record) => referencedConfigIds.has(record.id));
+
+  if (referencedConfigs.length === 1) {
+    return referencedConfigs[0];
+  }
+
+  if (referencedConfigs.length > 1) {
+    throw new Error(
+      "Formless deploy plan requires one Cloudflare provider-config-ref for provider-scoped routes.",
+    );
+  }
+
+  if (configs.length === 1) {
+    return configs[0];
+  }
+
+  if (configs.length > 1) {
+    throw new Error(
+      "Formless deploy plan requires one Cloudflare provider-config-ref or route providerConfig selection.",
+    );
+  }
+
+  return undefined;
+}
+
 type LocalWorkspaceDeploymentPlanResult = {
   manifest: FormlessInstanceWorkspaceManifest;
   plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 };
 
+type LocalWorkspaceDeploymentDesiredState = {
+  logicalIds: string[];
+  resourceCount: number;
+  resourceGraph: DeployResourceGraph;
+  resourcesByKind: Record<string, number>;
+  routeTargetCount: number;
+  sourceFingerprint: string;
+  targetId: string;
+};
+
+type LocalWorkspaceDeploymentSource = {
+  deployTarget: StoredRecord;
+  providerConfig?: StoredRecord;
+};
+
 async function resolveLocalWorkspaceDeploymentAccount(input: {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   manifest: FormlessInstanceWorkspaceManifest;
+  providerConfig?: StoredRecord;
   selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
 }): Promise<FormlessInstanceDeploymentAccount> {
   const configuredUrl = input.manifest.deploy?.workersDevUrl ?? input.selectedTarget?.url;
@@ -3086,7 +3233,9 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
     configuredUrl === undefined
       ? undefined
       : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
-  const configuredAccountId = input.manifest.deploy?.accountId?.trim();
+  const configuredAccountId =
+    stringRecordValue(input.providerConfig, "accountId") ??
+    input.manifest.deploy?.accountId?.trim();
 
   if (configuredAccountId && configuredFacts) {
     return {
@@ -3126,9 +3275,11 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
 
 function planLocalWorkspaceDeployment(input: {
   account: FormlessInstanceDeploymentAccount;
+  deployTarget?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
+  providerConfig?: StoredRecord;
   selectedTarget: FormlessInstanceWorkspaceTarget | undefined;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
@@ -3137,10 +3288,13 @@ function planLocalWorkspaceDeployment(input: {
     configuredUrl === undefined
       ? undefined
       : workersDevTargetFacts(configuredUrl, input.manifest.deploy?.workerName);
+  const configuredWorkerName =
+    stringRecordValue(input.providerConfig, "workerName") ??
+    input.manifest.deploy?.workerName ??
+    configuredFacts?.workerName;
   const plan = planFormlessInstanceDeployment({
     account: input.account,
-    instanceName:
-      input.manifest.deploy?.workerName ?? configuredFacts?.workerName ?? input.manifest.name,
+    instanceName: configuredWorkerName ?? input.manifest.name,
     mediaBucketName: input.manifest.deploy?.mediaBucket,
     migrationPolicy:
       input.migrationPolicy ?? input.manifest.deploy?.migrationPolicy ?? ("new" as const),
@@ -3160,6 +3314,8 @@ function planLocalWorkspaceDeployment(input: {
 
   const targetAlias =
     input.targetAlias ??
+    stringRecordValue(input.deployTarget, "targetId") ??
+    input.deployTarget?.id ??
     input.selectedTarget?.alias ??
     input.manifest.defaultTarget ??
     DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
@@ -3192,6 +3348,166 @@ function withWorkspaceDeploymentTarget(
       workersDevUrl: plan.expectedUrl.url,
     },
   };
+}
+
+function projectLocalWorkspaceDeploymentDesiredState(input: {
+  controlPlane: InstanceArchiveControlPlane | undefined;
+  plan: FormlessInstanceDeploymentPlan;
+  targetId: string;
+}): LocalWorkspaceDeploymentDesiredState {
+  const records = input.controlPlane?.records.filter((record) => !record.deletedAt) ?? [];
+  const appInstalls = appInstallProjectionRecordsFromStoredRecords(records);
+  const routes = records
+    .filter((record) => record.entity === "route")
+    .map(routeProjectionRecordFromStoredRecord)
+    .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined);
+  const providerConfigs = providerConfigProjectionRecordsFromStoredRecords(records);
+  const routeProjection = projectDeployControlPlaneDesiredState({
+    appInstalls,
+    instanceId: input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+    providerConfigs,
+    routes,
+    targetId: input.targetId,
+    workerName: input.plan.resources.worker.name,
+  });
+  const routeLogicalIds = new Set(
+    routeProjection.resourceGraph.resources.map((resource) => resource.logicalId),
+  );
+  const desiredResources = records
+    .filter(
+      (record) =>
+        record.entity === "deploy-desired-resource" &&
+        stringRecordValue(record, "deployTarget") === input.targetId &&
+        booleanRecordValue(record, "enabled") !== false,
+    )
+    .map(deployDesiredResourceFromStoredRecord)
+    .filter((resource) => !routeLogicalIds.has(resource.logicalId));
+  const resourceGraph: DeployResourceGraph = {
+    resources: [...routeProjection.resourceGraph.resources, ...desiredResources].sort(
+      compareDeployResources,
+    ),
+    targetId: input.targetId,
+  };
+  const sourceFingerprint =
+    resourceGraph.resources.length === routeProjection.resourceGraph.resources.length
+      ? routeProjection.sourceFingerprint
+      : (firstStringRecordValue(records, "deploy-desired-resource", "sourceFingerprint") ??
+        routeProjection.sourceFingerprint);
+
+  return {
+    logicalIds: resourceGraph.resources.map((resource) => resource.logicalId),
+    resourceCount: resourceGraph.resources.length,
+    resourceGraph,
+    resourcesByKind: resourceCountsByKind(resourceGraph),
+    routeTargetCount: routeProjection.routeTargets.length,
+    sourceFingerprint,
+    targetId: input.targetId,
+  };
+}
+
+function appInstallProjectionRecordsFromStoredRecords(
+  records: readonly StoredRecord[],
+): ControlPlaneAppInstallProjectionRecord[] {
+  return records
+    .filter((record) => record.entity === "app-install")
+    .map((record) => {
+      const installId = stringRecordValue(record, "installId");
+      const packageAppKey = stringRecordValue(record, "packageAppKey");
+
+      if (installId === undefined || packageAppKey === undefined) {
+        return undefined;
+      }
+
+      return {
+        id: record.id,
+        installId,
+        packageAppKey,
+      };
+    })
+    .filter((record): record is ControlPlaneAppInstallProjectionRecord => record !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function deployDesiredResourceFromStoredRecord(record: StoredRecord): DeployResource {
+  return {
+    dependencies: parseDeployResourceDependenciesJson(
+      stringRecordValue(record, "dependenciesJson"),
+    ),
+    inputs: parseDeployResourceInputsJson(stringRecordValue(record, "inputsJson")),
+    kind: stringRecordValue(record, "kind") as DeployResource["kind"],
+    logicalId: stringRecordValue(record, "logicalId") ?? record.id,
+    providerFamily: stringRecordValue(record, "providerFamily") as DeployResource["providerFamily"],
+    targetId: stringRecordValue(record, "deployTarget") ?? workspaceDeployTargetId(),
+  };
+}
+
+function parseDeployResourceInputsJson(value: string | undefined): DeployResource["inputs"] {
+  if (value === undefined) {
+    return {};
+  }
+
+  const parsed = JSON.parse(value) as unknown;
+
+  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as DeployResource["inputs"];
+  }
+
+  throw new Error("Control-plane deploy-desired-resource inputsJson must be an object.");
+}
+
+function parseDeployResourceDependenciesJson(
+  value: string | undefined,
+): DeployResource["dependencies"] {
+  if (value === undefined) {
+    return [];
+  }
+
+  const parsed = JSON.parse(value) as unknown;
+
+  if (Array.isArray(parsed)) {
+    return parsed as DeployResource["dependencies"];
+  }
+
+  throw new Error("Control-plane deploy-desired-resource dependenciesJson must be an array.");
+}
+
+function firstStringRecordValue(
+  records: readonly StoredRecord[],
+  entity: string,
+  fieldName: string,
+): string | undefined {
+  for (const record of records) {
+    if (record.entity !== entity) {
+      continue;
+    }
+
+    const value = stringRecordValue(record, fieldName);
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function resourceCountsByKind(resourceGraph: DeployResourceGraph): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const resource of resourceGraph.resources) {
+    counts[resource.kind] = (counts[resource.kind] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
+function compareDeployResources(left: DeployResource, right: DeployResource): number {
+  return (
+    left.targetId.localeCompare(right.targetId) ||
+    left.providerFamily.localeCompare(right.providerFamily) ||
+    left.kind.localeCompare(right.kind) ||
+    left.logicalId.localeCompare(right.logicalId)
+  );
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {

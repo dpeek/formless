@@ -17,8 +17,10 @@ import {
 } from "../shared/protocol.ts";
 import {
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultFormlessInstanceWorkspaceManifest,
   formatFormlessInstanceWorkspaceManifest,
 } from "./instance-workspace-config.ts";
+import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
   createFormlessWorkspaceOperationState,
@@ -133,6 +135,70 @@ describe("Formless workspace operations", () => {
     await expect(
       stat(path.join(workspaceRoot, "records/instance-control-plane/app-install.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("plans deploy from schema-owned record source and desired-state projection", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot);
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "deployPlan",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        operationIds: ["op_deploy_plan_00000001"],
+        packageVersion: packageJson.version,
+        timestamps: [
+          "2026-06-02T00:03:00.000Z",
+          "2026-06-02T00:03:01.000Z",
+          "2026-06-02T00:03:02.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(state).toMatchObject({
+      actor: "browser",
+      operation: "deployPlan",
+      result: {
+        deployment: {
+          desiredState: {
+            resourceCount: 1,
+            resourcesByKind: {
+              "cloudflare-worker-custom-domain": 1,
+            },
+            routeTargetCount: 2,
+            targetId: "instance.primary",
+          },
+          expectedUrl: "https://personal.dpeek.workers.dev",
+          targetAlias: "instance.primary",
+          workerName: "personal",
+        },
+        summary: {
+          fields: {
+            desiredResourceCount: 1,
+            expectedUrl: "https://personal.dpeek.workers.dev",
+            routeTargetCount: 2,
+            workerName: "personal",
+          },
+          title: "Deploy planned",
+        },
+      },
+      status: "succeeded",
+    });
+    expect(JSON.stringify(state)).not.toContain("secret");
   });
 
   it("persists display-safe deployment and cleanup summaries with secret redaction", async () => {
@@ -258,18 +324,26 @@ describe("Formless workspace operations", () => {
 function operationDeps(
   cwd: string,
   options: {
+    accountDiscovery?: {
+      listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
+    };
     fetch?: typeof fetch;
     operationIds?: string[];
+    packageVersion?: string;
     timestamps?: string[];
   } = {},
 ) {
   const operationIds = [...(options.operationIds ?? [])];
 
   return {
+    ...(options.accountDiscovery === undefined
+      ? {}
+      : { accountDiscovery: options.accountDiscovery }),
     createOperationId: () => operationIds.shift() ?? "op_test_00000000",
     cwd,
     fetch: options.fetch ?? fetch,
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T00:00:00.000Z"])),
+    ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
   };
 }
 
@@ -293,6 +367,84 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
       source: { records: "records/instance-control-plane" },
     }),
   );
+}
+
+async function writeDeployRecordSource(workspaceRoot: string) {
+  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
+  const now = "2026-05-26T00:00:00.000Z";
+
+  await writeFormlessInstanceControlPlaneRecordSource({
+    controlPlane: {
+      schemaKey: "instance-control-plane",
+      schemaUpdatedAt: now,
+      records: [
+        ...controlPlaneRecords(),
+        {
+          createdAt: now,
+          entity: "route",
+          id: "route:site:public-site",
+          values: {
+            appInstall: "david",
+            createdAt: now,
+            enabled: true,
+            kind: "mount",
+            matchPath: "/sites/david",
+            matchPrefix: "/sites/david/",
+            surface: "public-site",
+            targetProfile: "public-site",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "route",
+          id: "route:host:public-site:www.example.com",
+          values: {
+            appInstall: "david",
+            createdAt: now,
+            enabled: true,
+            kind: "mount",
+            matchHost: "www.example.com",
+            matchPath: "/",
+            matchPrefix: "/",
+            providerConfig: "cloudflare-personal",
+            surface: "public-site",
+            targetProfile: "public-site",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "deploy-target",
+          id: "instance.primary",
+          values: {
+            createdAt: now,
+            enabled: true,
+            label: "Primary instance",
+            targetId: "instance.primary",
+            targetKind: "instance",
+            updatedAt: now,
+          },
+        },
+        {
+          createdAt: now,
+          entity: "provider-config-ref",
+          id: "cloudflare-personal",
+          values: {
+            accountId: "account-123",
+            configRef: "cloudflare-personal",
+            createdAt: now,
+            label: "Cloudflare personal",
+            providerFamily: "cloudflare",
+            updatedAt: now,
+            workerName: "personal",
+          },
+        },
+      ],
+    },
+    manifest,
+    workspaceRoot,
+  });
 }
 
 function authorityExportFetch(

@@ -778,17 +778,26 @@ function summarizeDeployPlanResult(
 ): FormlessWorkspaceOperationResult {
   return {
     deployment: {
+      desiredState: {
+        logicalIds: result.desiredState.logicalIds,
+        resourceCount: result.desiredState.resourceCount,
+        resourcesByKind: result.desiredState.resourcesByKind,
+        routeTargetCount: result.desiredState.routeTargetCount,
+        sourceFingerprint: result.desiredState.sourceFingerprint,
+        targetId: result.desiredState.targetId,
+      },
       drift: result.preflight?.drift.status ?? "not-checked",
       expectedUrl: result.plan.expectedUrl.url,
       migrationPolicy: result.plan.migrationPolicy,
-      resourceCount: 4,
       targetAlias: result.selectedTarget.alias,
       workerName: result.plan.resources.worker.name,
     },
     summary: {
       fields: {
+        desiredResourceCount: result.desiredState.resourceCount,
         expectedUrl: result.plan.expectedUrl.url,
         migrationPolicy: result.plan.migrationPolicy,
+        routeTargetCount: result.desiredState.routeTargetCount,
         workerName: result.plan.resources.worker.name,
       },
       title: "Deploy planned",

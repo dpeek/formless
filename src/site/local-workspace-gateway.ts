@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
+import packageJson from "../../package.json";
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import {
   createFormlessWorkspaceOperationState,
@@ -12,7 +13,9 @@ import {
   type FormlessWorkspaceOperationInput,
   type FormlessWorkspaceOperationKind,
   type FormlessWorkspaceOperationResult,
+  type RunFormlessWorkspaceOperationDependencies,
 } from "./instance-workspace-operations.ts";
+import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
 
 export const LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX = "/api/formless/workspace";
@@ -48,7 +51,7 @@ export type LocalWorkspaceCredentialSetupResult = {
   result?: FormlessWorkspaceOperationResult;
 };
 
-export type LocalWorkspaceGatewayDependencies = {
+export type LocalWorkspaceGatewayDependencies = RunFormlessWorkspaceOperationDependencies & {
   createOperationId?: () => string;
   credentialSetup?: (
     input: LocalWorkspaceCredentialSetupInput,
@@ -135,9 +138,11 @@ export function createLocalWorkspaceGatewayMiddleware(
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const request = await nodeRequestFromIncomingMessage(req);
     const response = await handleLocalWorkspaceGatewayRequest(request, env, {
+      accountDiscovery: alchemyFormlessInstanceAccountDiscoveryAdapter,
       cwd: env[LOCAL_WORKSPACE_GATEWAY_ROOT_ENV] ?? process.cwd(),
       fetch,
       now: () => new Date().toISOString(),
+      packageVersion: packageJson.version,
       ...dependencyOverrides,
     });
 
@@ -459,12 +464,31 @@ function gatewayOperationResponse(
 function operationDependencies(
   dependencies: LocalWorkspaceGatewayDependencies,
   workspaceRoot: string,
-) {
+): RunFormlessWorkspaceOperationDependencies {
   return {
+    ...(dependencies.accountDiscovery === undefined
+      ? {}
+      : { accountDiscovery: dependencies.accountDiscovery }),
     createOperationId: dependencies.createOperationId,
     cwd: workspaceRoot,
+    ...(dependencies.deploymentAdapter === undefined
+      ? {}
+      : { deploymentAdapter: dependencies.deploymentAdapter }),
+    ...(dependencies.env === undefined ? {} : { env: dependencies.env }),
     fetch: dependencies.fetch,
+    ...(dependencies.healthCheck === undefined ? {} : { healthCheck: dependencies.healthCheck }),
+    ...(dependencies.localSecretEnv === undefined
+      ? {}
+      : { localSecretEnv: dependencies.localSecretEnv }),
     now: dependencies.now,
+    ...(dependencies.packageRoot === undefined ? {} : { packageRoot: dependencies.packageRoot }),
+    ...(dependencies.packageVersion === undefined
+      ? {}
+      : { packageVersion: dependencies.packageVersion }),
+    ...(dependencies.randomToken === undefined ? {} : { randomToken: dependencies.randomToken }),
+    ...(dependencies.setupCapability === undefined
+      ? {}
+      : { setupCapability: dependencies.setupCapability }),
   };
 }
 
