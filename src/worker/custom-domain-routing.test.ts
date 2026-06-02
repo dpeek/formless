@@ -12,6 +12,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 
 const adminToken = "test-admin-token";
+const controlPlaneApi = "/api/formless/control-plane";
 const mappedHost = "www.example.com";
 const mappedAppHost = "tasks.example.com";
 const installId = "personal";
@@ -304,6 +305,77 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/index.html", "/index.html"]);
   });
 
+  it("resolves exact-host public Site route records before ordinary host behavior", async () => {
+    await setupMappedSiteRouteRecord();
+    await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
+      mutationId: "mutation-route-record-home-label",
+      entity: "block",
+      op: "patch",
+      recordId: "rec_site_starter_page_home",
+      values: {
+        label: "Route record custom-domain home",
+      },
+    });
+
+    const home = await fetchMappedHost("/", {
+      headers: { Accept: "text/html" },
+    });
+    const homeHtml = await home.text();
+
+    expect(home.status).toBe(200);
+    expect(homeHtml).toContain("Route record custom-domain home");
+    expect(homeHtml).toContain(`<meta name="formless-runtime-profile" content="publishedSite" />`);
+  });
+
+  it("resolves exact-host app route records with installed app document hints", async () => {
+    await setupMappedAppRouteRecord();
+    assetRequests = [];
+
+    const home = await fetchHost(mappedAppHost, "/", {
+      headers: { Accept: "text/html" },
+    });
+    const schemaKeyApi = await fetchHost(mappedAppHost, "/api/tasks/bootstrap");
+    const homeHtml = await home.text();
+
+    expect(home.status).toBe(200);
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
+    );
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}" content="${taskInstallId}" />`,
+    );
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME}" content="tasks" />`,
+    );
+    expect(schemaKeyApi.status).toBe(404);
+    expect(assetRequests).toEqual(["/index.html"]);
+  });
+
+  it("resolves redirect route records with preserved path and query string", async () => {
+    await createRouteRecord("route:redirect:old.example.com", {
+      enabled: true,
+      "match-host": "old.example.com",
+      "match-path": "/",
+      "match-prefix": "/",
+      kind: "redirect",
+      "to-host": "new.example.com",
+      "status-code": "308",
+      "preserve-path": true,
+      "preserve-query-string": true,
+      "created-at": "2026-06-02T00:00:00.000Z",
+      "updated-at": "2026-06-02T00:00:00.000Z",
+    });
+
+    const redirected = await fetchHost("old.example.com", "/docs/start?ref=old", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+
+    expect(redirected.status).toBe(308);
+    expect(redirected.headers.get("Location")).toBe("https://new.example.com/docs/start?ref=old");
+    expect(assetRequests).toEqual([]);
+  });
+
   it("stops mapped public Site routing after desired mapping deletion", async () => {
     await setupMappedSite();
     await deleteAdminJson(`/api/formless/domain-mappings?host=${mappedHost}&profile=publicSite`);
@@ -346,6 +418,56 @@ async function setupMappedApp() {
     host: mappedAppHost,
     profile: "app",
     targetInstallId: taskInstallId,
+  });
+}
+
+async function setupMappedSiteRouteRecord() {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: "site",
+    installId,
+    label: "Personal",
+  });
+  await createRouteRecord(`route:host:publicSite:${mappedHost}`, {
+    enabled: true,
+    "match-host": mappedHost,
+    "match-path": "/",
+    "match-prefix": "/",
+    kind: "mount",
+    "target-profile": "public-site",
+    "app-install": installId,
+    surface: "public-site",
+    "created-at": "2026-06-02T00:00:00.000Z",
+    "updated-at": "2026-06-02T00:00:00.000Z",
+  });
+}
+
+async function setupMappedAppRouteRecord() {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: "tasks",
+    installId: taskInstallId,
+    label: "Task Workspace",
+  });
+  await createRouteRecord(`route:host:app:${mappedAppHost}`, {
+    enabled: true,
+    "match-host": mappedAppHost,
+    "match-path": "/",
+    "match-prefix": "/",
+    kind: "mount",
+    "target-profile": "app",
+    "app-install": taskInstallId,
+    surface: "admin",
+    "created-at": "2026-06-02T00:00:00.000Z",
+    "updated-at": "2026-06-02T00:00:00.000Z",
+  });
+}
+
+async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
+  await postAdminJson(`${controlPlaneApi}/mutations`, {
+    mutationId: `mutation-${recordId}`,
+    entity: "route",
+    op: "create",
+    recordId,
+    values,
   });
 }
 

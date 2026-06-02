@@ -49,11 +49,21 @@ Evidence 2026-06-02 grug:
 
 ## 4. Runtime Topology
 
-- [ ] 4.1 Resolve installed app admin and schema routes from enabled route records.
-- [ ] 4.2 Resolve installed Site public routes from enabled route records.
-- [ ] 4.3 Resolve exact-host public Site and app mappings from enabled route records before ordinary host profile behavior.
-- [ ] 4.4 Resolve redirect routes with configured status code, target, preserve-path policy, and preserve-query-string policy.
-- [ ] 4.5 Add deterministic match ordering for exact host, hostless, exact path, prefix path, redirect, and mount selection.
+- [x] 4.1 Resolve installed app admin and schema routes from enabled route records.
+- [x] 4.2 Resolve installed Site public routes from enabled route records.
+- [x] 4.3 Resolve exact-host public Site and app mappings from enabled route records before ordinary host profile behavior.
+- [x] 4.4 Resolve redirect routes with configured status code, target, preserve-path policy, and preserve-query-string policy.
+- [x] 4.5 Add deterministic match ordering for exact host, hostless, exact path, prefix path, redirect, and mount selection.
+
+Evidence 2026-06-02 grug:
+
+- Added `src/worker/instance-runtime-routes.ts` and a private control-plane runtime route resolver so Worker routing selects enabled `route` records directly without request-time domain mapping compatibility lookup.
+- Changed `src/worker/index.ts`, `src/worker/mapped-app-host.ts`, and `src/worker/mapped-site-host.ts` so exact-host mount routes drive mapped public Site SSR, mapped app shell hints, instance profile host behavior, auth blocking, and schema-key API blocking before ordinary host profile inference.
+- Added redirect route resolution with configured status code, `to-host`/`to-url` target, preserved path, and preserved query string handling.
+- Added runtime route ordering coverage for exact-host before hostless, exact path before prefix, redirect before mount, disabled-hostless exclusion for mapped-host lookup, and direct route-record Worker routing coverage for public Site, app, and redirect hosts.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-runtime-topology-smoke batch --bail "open https://unify-instance-routes.formless.local/" "wait 1000" "snapshot -i --max-output 6000" "errors"` loaded App management and the unified `Routes` surface with no browser errors.
 
 ## 5. App Install Compatibility
 

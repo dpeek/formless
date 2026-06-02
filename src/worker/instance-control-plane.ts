@@ -76,6 +76,10 @@ import {
   patchStoredRecordOutcome,
   type StorageSource,
 } from "./storage.ts";
+import {
+  INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH,
+  resolveInstanceRuntimeRouteFromRecords,
+} from "./instance-runtime-routes.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
@@ -170,6 +174,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 
     if (route.path === INTERNAL_SYNC_DOMAIN_INTENT_PATH) {
       return await handleInternalSyncDomainIntent(request, storage);
+    }
+
+    if (route.path === INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH) {
+      return handleInternalResolveRuntimeRoute(request, storage);
     }
 
     if (route.path === INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH) {
@@ -387,6 +395,37 @@ async function handleInternalSyncDomainIntent(
 
   return jsonResponse({
     records: activeControlPlaneRecords(storage),
+  });
+}
+
+function handleInternalResolveRuntimeRoute(
+  request: Request,
+  storage: DurableObjectStorage,
+): Response {
+  if (request.method !== "GET") {
+    return methodNotAllowedResponse("GET");
+  }
+
+  ensureControlPlaneStorage(storage);
+
+  const url = new URL(request.url);
+  const host = url.searchParams.get("host") ?? "";
+  const pathname = routeRequestPath(url.searchParams.get("path"));
+  const search = url.searchParams.get("search") ?? "";
+  const includeHostless = url.searchParams.get("includeHostless") !== "false";
+
+  return jsonResponse({
+    route:
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: readControlPlaneAppInstalls(storage),
+        records: activeControlPlaneRecords(storage),
+        request: {
+          host,
+          pathname,
+          search,
+        },
+        options: { includeHostless },
+      }) ?? null,
   });
 }
 
@@ -2107,6 +2146,14 @@ function recordValuesHash(values: RecordValues) {
   }
 
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function routeRequestPath(value: string | null): `/${string}` {
+  if (typeof value !== "string" || !value.startsWith("/")) {
+    return "/";
+  }
+
+  return value as `/${string}`;
 }
 
 function isInternalControlPlanePath(path: string) {

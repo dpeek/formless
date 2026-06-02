@@ -10,17 +10,12 @@ import {
 } from "@dpeek/formless-media/worker";
 import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
 import { handleInstanceDeploymentRuntimeApiRequest } from "./deployment-runtime-api.ts";
-import {
-  handleInstanceAppInstallsApiRequest,
-  lookupInstanceAppInstallForRequest,
-} from "./instance-app-installs.ts";
+import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.ts";
-import {
-  handleInstanceDomainMappingsApiRequest,
-  lookupEnabledInstanceRoutableDomainMappingForRequestHost,
-} from "./instance-domain-mappings.ts";
-import { mappedAppHostFromDomainMapping } from "./mapped-app-host.ts";
-import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
+import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
+import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes.ts";
+import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
+import { mappedSiteHostFromRuntimeRoute } from "./mapped-site-host.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
@@ -66,23 +61,23 @@ export type Env = TurnstileRuntimeEnv & {
 
 export default {
   async fetch(request, env) {
-    const domainMapping = await lookupEnabledInstanceRoutableDomainMappingForRequestHost(
-      request,
-      env,
-    );
-    const mappedAppInstall =
-      domainMapping?.profile === "app" && domainMapping.targetInstallId
-        ? await lookupInstanceAppInstallForRequest(request, env, domainMapping.targetInstallId)
-        : undefined;
-    const mappedAppHost = mappedAppHostFromDomainMapping(
-      domainMapping,
-      mappedAppInstall ? [mappedAppInstall] : [],
-    );
-    const isMappedAppProfileHost = domainMapping?.profile === "app";
+    const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(request, env, {
+      includeHostless: false,
+    });
+
+    if (runtimeRoute?.kind === "redirect") {
+      return redirectResponse(runtimeRoute.location, runtimeRoute.status);
+    }
+
+    const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
+    const mappedSiteHost = mappedSiteHostFromRuntimeRoute(runtimeRoute);
+    const mappedRouteTargetProfile =
+      runtimeRoute?.kind === "mount" ? runtimeRoute.targetProfile : undefined;
+    const isMappedAppProfileHost = mappedRouteTargetProfile === "app";
     const isMappedAuthBlockedProfileHost =
-      domainMapping?.profile === "app" || domainMapping?.profile === "publicSite";
+      mappedRouteTargetProfile === "app" || mappedRouteTargetProfile === "public-site";
     const effectiveRuntimeProfile = workerRuntimeProfileInput(
-      domainMapping?.profile === "instance"
+      mappedRouteTargetProfile === "instance"
         ? "instance"
         : isMappedAppProfileHost
           ? "app"
@@ -99,8 +94,6 @@ export default {
     if (mediaResponse) {
       return mediaResponse;
     }
-
-    const mappedSiteHost = mappedSiteHostFromDomainMapping(domainMapping);
 
     const siteIconResponse = await handleSiteIconRequest(request, env, {
       mappedSiteHost,

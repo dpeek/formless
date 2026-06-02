@@ -3,6 +3,7 @@ import {
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
+import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
 
 export type MappedSiteHost = {
   host: string;
@@ -29,4 +30,26 @@ export function mappedSiteHostFromDomainMapping(
   });
 
   return target ? { host: mapping.host, installId: mapping.targetInstallId, target } : undefined;
+}
+
+export function mappedSiteHostFromRuntimeRoute(
+  route: InstanceRuntimeRouteResolution | undefined,
+): MappedSiteHost | undefined {
+  if (
+    !route ||
+    route.kind !== "mount" ||
+    route.targetProfile !== "public-site" ||
+    route.surface !== "public-site" ||
+    !route.matchHost ||
+    !route.target ||
+    route.target.packageAppKey !== "site"
+  ) {
+    return undefined;
+  }
+
+  return {
+    host: route.matchHost,
+    installId: route.target.installId,
+    target: route.target,
+  };
 }

@@ -4,6 +4,7 @@ import {
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
+import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
 
 export type MappedAppHost = {
   host: string;
@@ -31,4 +32,24 @@ export function mappedAppHostFromDomainMapping(
   });
 
   return target ? { host: mapping.host, installId: install.installId, target } : undefined;
+}
+
+export function mappedAppHostFromRuntimeRoute(
+  route: InstanceRuntimeRouteResolution | undefined,
+): MappedAppHost | undefined {
+  if (
+    !route ||
+    route.kind !== "mount" ||
+    route.targetProfile !== "app" ||
+    !route.matchHost ||
+    !route.target
+  ) {
+    return undefined;
+  }
+
+  return {
+    host: route.matchHost,
+    installId: route.target.installId,
+    target: route.target,
+  };
 }
