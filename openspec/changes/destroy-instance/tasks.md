@@ -41,3 +41,9 @@ Evidence:
 - Deployment adapter coverage proves Alchemy destroy opens the existing `formless-instance` app/stage/root in `phase: "destroy"`, declares Worker, Durable Object namespace, and R2 resources, wraps provider secrets before Worker props, and reports custom-domain, DNS, redirect, and Alchemy destroy summaries.
 - `devstate check` passed on 2026-06-02; `.devstate/status.md` reports checks ok, web service ready, and test service pass.
 - Browser smoke not run; this section changes CLI/unit test coverage and one exported test seam, not browser UI behavior.
+
+Finalization:
+
+- Rebased `changes/destroy-instance` on local `main` on 2026-06-02 with no conflicts.
+- Promoted shipped destroy command, confirmation, provider resource teardown, ignored state preservation, credential boundary, and unified domain provider Alchemy ownership facts to `openspec/specs/site-cli-publish/spec.md`.
+- Finalization `devstate check` passed on 2026-06-02; `.devstate/status.md` reports checks ok, web service ready, and test service pass.
