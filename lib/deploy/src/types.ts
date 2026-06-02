@@ -86,18 +86,18 @@ export type DeployDesiredStateProjection = {
 };
 
 export type DeployDesiredStateProjectionInput = {
-  appRoutes?: readonly ControlPlaneAppRouteProjectionRecord[];
-  domainMappings?: readonly ControlPlaneDomainMappingProjectionRecord[];
+  appInstalls?: readonly ControlPlaneAppInstallProjectionRecord[];
   instanceId: string;
-  redirectIntents?: readonly ControlPlaneRedirectIntentProjectionRecord[];
+  providerConfigs?: readonly ControlPlaneProviderConfigProjectionRecord[];
+  routes?: readonly ControlPlaneRouteProjectionRecord[];
   targetId: string;
   workerName?: string;
 };
 
 export type DeployRouteTargetProjection = {
   appInstallId: string;
-  packageAppKey: string;
   path: string;
+  packageAppKey?: string;
   prefix?: string;
   routeId: string;
   routeKind: ControlPlaneAppRouteKind;
@@ -107,40 +107,43 @@ export type DeployRouteTargetProjection = {
 export type ControlPlaneAppRouteKind = "admin" | "publicSite" | "schema";
 export type ControlPlaneAppRouteSurface = "admin" | "publicSite" | "schema";
 
-export type ControlPlaneAppRouteProjectionRecord = {
-  appInstallId: string;
-  enabled: boolean;
+export type ControlPlaneAppInstallProjectionRecord = {
   id: string;
+  installId: string;
   packageAppKey: string;
-  path: string;
-  prefix?: string;
-  routeKind: ControlPlaneAppRouteKind;
-  surface: ControlPlaneAppRouteSurface;
 };
 
 export type ControlPlaneDomainMappingProfile = "app" | "instance" | "publicSite";
 
-export type ControlPlaneDomainMappingProjectionRecord = {
-  appInstallId?: string;
-  appRouteId?: string;
-  enabled: boolean;
-  host: string;
-  id: string;
-  profile: ControlPlaneDomainMappingProfile;
-};
+export type ControlPlaneRouteKind = "mount" | "redirect";
+export type ControlPlaneRouteSurface = "admin" | "public-site" | "schema";
+export type ControlPlaneRouteTargetProfile = "app" | "instance" | "public-site";
 
-export type ControlPlaneRedirectStatusCode = 301 | 302 | 303 | 307 | 308;
-
-export type ControlPlaneRedirectIntentProjectionRecord = {
+export type ControlPlaneRouteProjectionRecord = {
+  appInstall?: string;
   enabled: boolean;
-  fromHost: string;
   id: string;
-  preservePath: boolean;
-  preserveQueryString: boolean;
-  statusCode: ControlPlaneRedirectStatusCode;
+  kind: ControlPlaneRouteKind;
+  matchHost?: string;
+  matchPath: string;
+  matchPrefix?: string;
+  preservePath?: boolean;
+  preserveQueryString?: boolean;
+  providerConfig?: string;
+  statusCode?: ControlPlaneRedirectStatusCode | `${ControlPlaneRedirectStatusCode}`;
+  surface?: ControlPlaneRouteSurface;
+  targetProfile?: ControlPlaneRouteTargetProfile;
   toHost?: string;
   toUrl?: string;
 };
+
+export type ControlPlaneProviderConfigProjectionRecord = {
+  id: string;
+  providerFamily: DeployProviderFamily;
+  workerName?: string;
+};
+
+export type ControlPlaneRedirectStatusCode = 301 | 302 | 303 | 307 | 308;
 
 export type DeployEvidenceAction = "adopted" | "created" | "deleted" | "no-change" | "updated";
 

@@ -146,10 +146,18 @@ Evidence 2026-06-02 grug:
 
 ## 10. Deploy And Destroy Reconciliation
 
-- [ ] 10.1 Reconcile deploy planning so domain, DNS, and redirect resources are derived from enabled route records.
+- [x] 10.1 Reconcile deploy planning so domain, DNS, and redirect resources are derived from enabled route records.
 - [ ] 10.2 Reconcile `formless destroy` and `formless instance destroy` so custom-domain, DNS, and redirect provider resources are derived from enabled route records and selected deploy state.
 - [ ] 10.3 Preserve explicit cleanup and destroy workflows for provider mutation after route disablement or deletion.
 - [ ] 10.4 Keep route source language aligned with `browser-workspace-control-plane` before deterministic workspace record source is frozen.
+
+Evidence 2026-06-02 grug:
+
+- Changed `lib/deploy/src/types.ts`, `lib/deploy/src/index.ts`, and `lib/deploy/src/worker.ts` so runtime-neutral deploy projection inputs use flat app install, route, and provider-config records; enabled host mount routes derive custom-domain resources, enabled redirect routes derive redirect DNS and redirect rule resources, and hostless mount routes derive route targets.
+- Updated `lib/deploy/src/index.test.ts` to cover route-derived route targets, custom-domain resources with provider config worker names, redirect DNS/rule resources, disabled route exclusion, display-safe canonical JSON, and stable projection hashes.
+- `devstate start`: pass, services running.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes runtime-neutral deploy planning helpers and tests, not browser-visible UI behavior.
 
 ## 11. Tests
 

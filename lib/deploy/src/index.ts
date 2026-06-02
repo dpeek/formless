@@ -1,8 +1,10 @@
 import {
   DEPLOY_PUBLIC_CONTRACT_VERSION,
-  type ControlPlaneAppRouteProjectionRecord,
-  type ControlPlaneDomainMappingProjectionRecord,
-  type ControlPlaneRedirectIntentProjectionRecord,
+  type ControlPlaneAppInstallProjectionRecord,
+  type ControlPlaneDomainMappingProfile,
+  type ControlPlaneProviderConfigProjectionRecord,
+  type ControlPlaneRedirectStatusCode,
+  type ControlPlaneRouteProjectionRecord,
   type DeployDesiredStateProjection,
   type DeployDesiredStateProjectionInput,
   type DeployJsonValue,
@@ -18,12 +20,15 @@ export {
 } from "./types.ts";
 export type {
   ControlPlaneAppRouteKind,
-  ControlPlaneAppRouteProjectionRecord,
   ControlPlaneAppRouteSurface,
+  ControlPlaneAppInstallProjectionRecord,
   ControlPlaneDomainMappingProfile,
-  ControlPlaneDomainMappingProjectionRecord,
-  ControlPlaneRedirectIntentProjectionRecord,
+  ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneRedirectStatusCode,
+  ControlPlaneRouteKind,
+  ControlPlaneRouteProjectionRecord,
+  ControlPlaneRouteSurface,
+  ControlPlaneRouteTargetProfile,
   DeployActor,
   DeployActorKind,
   DeployAttemptMode,
@@ -58,22 +63,21 @@ const redirectPlaceholderDnsRecord = {
 export function projectDeployControlPlaneDesiredState(
   input: DeployDesiredStateProjectionInput,
 ): DeployDesiredStateProjection {
-  const routeTargets = projectDeployRouteTargets(input.appRoutes ?? []);
+  const routes = input.routes ?? [];
+  const providerConfigs = input.providerConfigs ?? [];
+  const routeTargets = projectDeployRouteTargets(routes, input.appInstalls ?? []);
+  const providerConfigsById = providerConfigRecordsById(providerConfigs);
   const resources = [
-    ...projectDomainMappingResources(input.domainMappings ?? [], {
+    ...projectRouteProviderResources(routes, {
       instanceId: input.instanceId,
-      routeTargets,
+      providerConfigs: providerConfigsById,
       targetId: input.targetId,
       workerName: input.workerName,
     }),
-    ...projectRedirectIntentResources(input.redirectIntents ?? [], {
-      instanceId: input.instanceId,
-      targetId: input.targetId,
-    }),
   ].sort(compareDeployResources);
   const projectionIntent = {
-    domainMappings: normalizeDomainMappingInputs(input.domainMappings ?? []),
-    redirectIntents: normalizeRedirectIntentInputs(input.redirectIntents ?? []),
+    providerConfigs: normalizeProviderConfigInputs(providerConfigs, routes),
+    routes: normalizeRouteInputs(routes),
     routeTargets,
     targetId: input.targetId,
   };
@@ -91,19 +95,39 @@ export function projectDeployControlPlaneDesiredState(
 }
 
 export function projectDeployRouteTargets(
-  routes: readonly ControlPlaneAppRouteProjectionRecord[],
+  routes: readonly ControlPlaneRouteProjectionRecord[],
+  appInstalls: readonly ControlPlaneAppInstallProjectionRecord[] = [],
 ): DeployRouteTargetProjection[] {
+  const appInstallsByInstallId = new Map(
+    appInstalls.map((install) => [install.installId, install]),
+  );
+
   return routes
-    .filter((route) => route.enabled)
-    .map((route) => ({
-      appInstallId: route.appInstallId,
-      packageAppKey: route.packageAppKey,
-      path: route.path,
-      ...(route.prefix === undefined ? {} : { prefix: route.prefix }),
-      routeId: route.id,
-      routeKind: route.routeKind,
-      surface: route.surface,
-    }))
+    .filter(
+      (route) =>
+        route.enabled &&
+        route.kind === "mount" &&
+        route.matchHost === undefined &&
+        route.appInstall !== undefined &&
+        routeTargetSurface(route) !== undefined,
+    )
+    .map((route) => {
+      const appInstallId = route.appInstall ?? "";
+      const appInstall = appInstallsByInstallId.get(appInstallId);
+      const surface = routeTargetSurface(route) ?? "admin";
+
+      return {
+        appInstallId,
+        path: route.matchPath,
+        ...(appInstall?.packageAppKey === undefined
+          ? {}
+          : { packageAppKey: appInstall.packageAppKey }),
+        ...(route.matchPrefix === undefined ? {} : { prefix: route.matchPrefix }),
+        routeId: route.id,
+        routeKind: surface,
+        surface,
+      };
+    })
     .sort(compareRouteTargets);
 }
 
@@ -162,108 +186,251 @@ export function deployLogicalResourceId(
     .join("-");
 }
 
-function projectDomainMappingResources(
-  mappings: readonly ControlPlaneDomainMappingProjectionRecord[],
+function projectRouteProviderResources(
+  routes: readonly ControlPlaneRouteProjectionRecord[],
   input: {
     instanceId: string;
-    routeTargets: readonly DeployRouteTargetProjection[];
+    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
     targetId: string;
     workerName?: string;
   },
 ): DeployResource[] {
-  const routeTargetsById = new Map(input.routeTargets.map((route) => [route.routeId, route]));
+  return routes
+    .filter((route) => route.enabled && typeof route.matchHost === "string")
+    .flatMap((route) => {
+      if (route.kind === "mount") {
+        const resource = projectRouteCustomDomainResource(route, input);
 
-  return mappings
-    .filter((mapping) => mapping.enabled)
-    .map((mapping) => {
-      const routeTarget =
-        mapping.appRouteId === undefined ? undefined : routeTargetsById.get(mapping.appRouteId);
+        return resource === undefined ? [] : [resource];
+      }
 
-      return {
-        dependencies: [],
-        inputs: {
-          adopt: false,
-          host: normalizeHost(mapping.host),
-          name: normalizeHost(mapping.host),
-          overrideExistingOrigin: false,
-          profile: mapping.profile,
-          ...(mapping.appInstallId === undefined ? {} : { appInstallId: mapping.appInstallId }),
-          ...(mapping.appRouteId === undefined ? {} : { appRouteId: mapping.appRouteId }),
-          ...(routeTarget === undefined ? {} : { routePath: routeTarget.path }),
-          ...(input.workerName === undefined ? {} : { workerName: input.workerName }),
-        },
-        kind: "cloudflare-worker-custom-domain",
-        logicalId: deployLogicalResourceId(
-          input.instanceId,
-          "custom-domain",
-          mapping.host,
-          mapping.profile,
-          mapping.appInstallId,
-          mapping.appRouteId,
-        ),
-        providerFamily: "cloudflare",
-        targetId: input.targetId,
-      } satisfies DeployResource;
+      if (route.kind === "redirect") {
+        return projectRouteRedirectResources(route, input);
+      }
+
+      return [];
     })
     .sort(compareDeployResources);
 }
 
-function projectRedirectIntentResources(
-  redirects: readonly ControlPlaneRedirectIntentProjectionRecord[],
+type ProviderConfigProjection = {
+  workerName?: string;
+};
+
+function providerConfigRecordsById(
+  providerConfigs: readonly ControlPlaneProviderConfigProjectionRecord[],
+): ReadonlyMap<string, ProviderConfigProjection> {
+  const records = new Map<string, ProviderConfigProjection>();
+
+  for (const providerConfig of providerConfigs) {
+    if (providerConfig.providerFamily !== "cloudflare") {
+      continue;
+    }
+
+    records.set(
+      providerConfig.id,
+      providerConfig.workerName === undefined ? {} : { workerName: providerConfig.workerName },
+    );
+  }
+
+  return records;
+}
+
+function projectRouteCustomDomainResource(
+  route: ControlPlaneRouteProjectionRecord,
+  input: {
+    instanceId: string;
+    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    targetId: string;
+    workerName?: string;
+  },
+): DeployResource | undefined {
+  const host = normalizeOptionalHost(route.matchHost);
+  const profile = domainMappingProfileFromRouteTarget(route.targetProfile);
+
+  if (host === undefined || profile === undefined) {
+    return undefined;
+  }
+
+  const targetInstallId = optionalText(route.appInstall);
+  const workerName = routeWorkerName(route.providerConfig, input);
+
+  return {
+    dependencies: [],
+    inputs: {
+      adopt: false,
+      host,
+      name: host,
+      overrideExistingOrigin: false,
+      profile,
+      ...(targetInstallId === undefined ? {} : { targetInstallId }),
+      ...(workerName === undefined ? {} : { workerName }),
+    },
+    kind: "cloudflare-worker-custom-domain",
+    logicalId: deployLogicalResourceId(
+      input.instanceId,
+      "custom-domain",
+      host,
+      profile,
+      targetInstallId,
+    ),
+    providerFamily: "cloudflare",
+    targetId: input.targetId,
+  };
+}
+
+function projectRouteRedirectResources(
+  route: ControlPlaneRouteProjectionRecord,
   input: { instanceId: string; targetId: string },
 ): DeployResource[] {
-  return redirects
-    .filter((redirect) => redirect.enabled)
-    .flatMap((redirect) => {
-      const fromHost = normalizeHost(redirect.fromHost);
-      const targetUrl = redirectTargetUrl(redirect);
-      const targetHost = redirect.toHost ?? hostFromUrl(redirect.toUrl) ?? "";
-      const dnsLogicalId = deployLogicalResourceId(input.instanceId, "redirect-dns", fromHost);
+  const redirect = redirectRouteIntent(route);
 
-      const resources: DeployResource[] = [
-        {
-          dependencies: [],
-          inputs: {
-            fromHost,
-            records: [
-              {
-                ...redirectPlaceholderDnsRecord,
-                name: fromHost,
-              },
-            ],
-          },
-          kind: "cloudflare-dns-records",
-          logicalId: dnsLogicalId,
-          providerFamily: "cloudflare",
-          targetId: input.targetId,
-        },
-        {
-          dependencies: [{ logicalId: dnsLogicalId, reason: "redirect placeholder dns" }],
-          inputs: {
-            description: `Formless redirect ${fromHost} to ${targetHost}`,
-            fromHost,
-            preservePath: redirect.preservePath,
-            preserveQueryString: redirect.preserveQueryString,
-            requestUrl: redirect.preservePath ? `https://${fromHost}/*` : `https://${fromHost}/`,
-            statusCode: redirect.statusCode,
-            targetHost,
-            targetUrl,
-          },
-          kind: "cloudflare-redirect-rule",
-          logicalId: deployLogicalResourceId(
-            input.instanceId,
-            "redirect-rule",
-            fromHost,
-            targetHost,
-          ),
-          providerFamily: "cloudflare",
-          targetId: input.targetId,
-        },
-      ];
+  if (redirect === undefined) {
+    return [];
+  }
 
-      return resources;
-    })
-    .sort(compareDeployResources);
+  const targetUrl = redirectTargetUrl(redirect);
+  const targetHost = redirect.toHost ?? hostFromUrl(redirect.toUrl) ?? "";
+  const dnsLogicalId = deployLogicalResourceId(input.instanceId, "redirect-dns", redirect.fromHost);
+
+  const resources: DeployResource[] = [
+    {
+      dependencies: [],
+      inputs: {
+        fromHost: redirect.fromHost,
+        records: [
+          {
+            ...redirectPlaceholderDnsRecord,
+            name: redirect.fromHost,
+          },
+        ],
+      },
+      kind: "cloudflare-dns-records",
+      logicalId: dnsLogicalId,
+      providerFamily: "cloudflare",
+      targetId: input.targetId,
+    },
+    {
+      dependencies: [{ logicalId: dnsLogicalId, reason: "redirect placeholder dns" }],
+      inputs: {
+        description: `Formless redirect ${redirect.fromHost} to ${targetHost}`,
+        fromHost: redirect.fromHost,
+        preservePath: redirect.preservePath,
+        preserveQueryString: redirect.preserveQueryString,
+        requestUrl: redirect.preservePath
+          ? `https://${redirect.fromHost}/*`
+          : `https://${redirect.fromHost}/`,
+        statusCode: redirect.statusCode,
+        targetHost,
+        targetUrl,
+      },
+      kind: "cloudflare-redirect-rule",
+      logicalId: deployLogicalResourceId(
+        input.instanceId,
+        "redirect-rule",
+        redirect.fromHost,
+        targetHost,
+      ),
+      providerFamily: "cloudflare",
+      targetId: input.targetId,
+    },
+  ];
+
+  return resources.sort(compareDeployResources);
+}
+
+type RedirectRouteIntent = {
+  fromHost: string;
+  preservePath: boolean;
+  preserveQueryString: boolean;
+  statusCode: ControlPlaneRedirectStatusCode;
+  toHost?: string;
+  toUrl?: string;
+};
+
+function redirectRouteIntent(
+  route: ControlPlaneRouteProjectionRecord,
+): RedirectRouteIntent | undefined {
+  const fromHost = normalizeOptionalHost(route.matchHost);
+
+  if (fromHost === undefined) {
+    return undefined;
+  }
+
+  const toHost = normalizeOptionalHost(route.toHost);
+  const toUrl = optionalText(route.toUrl);
+
+  return {
+    fromHost,
+    preservePath: route.preservePath !== false,
+    preserveQueryString: route.preserveQueryString !== false,
+    statusCode: redirectStatusCode(route.statusCode),
+    ...(toHost === undefined ? {} : { toHost }),
+    ...(toUrl === undefined ? {} : { toUrl }),
+  };
+}
+
+function routeTargetSurface(
+  route: ControlPlaneRouteProjectionRecord,
+): DeployRouteTargetProjection["surface"] | undefined {
+  if (route.surface === "admin" || route.surface === "schema") {
+    return route.surface;
+  }
+
+  if (route.surface === "public-site" || route.targetProfile === "public-site") {
+    return "publicSite";
+  }
+
+  return undefined;
+}
+
+function domainMappingProfileFromRouteTarget(
+  value: ControlPlaneRouteProjectionRecord["targetProfile"],
+): ControlPlaneDomainMappingProfile | undefined {
+  if (value === "app" || value === "instance") {
+    return value;
+  }
+
+  if (value === "public-site") {
+    return "publicSite";
+  }
+
+  return undefined;
+}
+
+function routeWorkerName(
+  providerConfigId: string | undefined,
+  input: {
+    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    workerName?: string;
+  },
+): string | undefined {
+  if (providerConfigId === undefined) {
+    return input.workerName;
+  }
+
+  return input.providerConfigs.get(providerConfigId)?.workerName ?? input.workerName;
+}
+
+function redirectStatusCode(
+  value: ControlPlaneRouteProjectionRecord["statusCode"],
+): ControlPlaneRedirectStatusCode {
+  switch (value) {
+    case 302:
+    case "302":
+      return 302;
+    case 303:
+    case "303":
+      return 303;
+    case 307:
+    case "307":
+      return 307;
+    case 308:
+    case "308":
+      return 308;
+    default:
+      return 301;
+  }
 }
 
 function canonicalizeDeployProjection(
@@ -319,39 +486,51 @@ function canonicalizeDeployJsonObject(value: Record<string, DeployJsonValue>) {
   );
 }
 
-function normalizeDomainMappingInputs(
-  mappings: readonly ControlPlaneDomainMappingProjectionRecord[],
+function normalizeProviderConfigInputs(
+  providerConfigs: readonly ControlPlaneProviderConfigProjectionRecord[],
+  routes: readonly ControlPlaneRouteProjectionRecord[],
 ): DeployJsonValue[] {
-  return mappings
-    .filter((mapping) => mapping.enabled)
-    .map((mapping) => ({
-      appInstallId: mapping.appInstallId ?? null,
-      appRouteId: mapping.appRouteId ?? null,
-      host: normalizeHost(mapping.host),
-      id: mapping.id,
-      profile: mapping.profile,
+  const referencedConfigIds = new Set(
+    routes
+      .filter((route) => route.enabled && route.providerConfig !== undefined)
+      .map((route) => route.providerConfig ?? ""),
+  );
+
+  return providerConfigs
+    .filter((providerConfig) => referencedConfigIds.has(providerConfig.id))
+    .map((providerConfig) => ({
+      id: providerConfig.id,
+      providerFamily: providerConfig.providerFamily,
+      workerName: providerConfig.workerName ?? null,
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
 
-function normalizeRedirectIntentInputs(
-  redirects: readonly ControlPlaneRedirectIntentProjectionRecord[],
+function normalizeRouteInputs(
+  routes: readonly ControlPlaneRouteProjectionRecord[],
 ): DeployJsonValue[] {
-  return redirects
-    .filter((redirect) => redirect.enabled)
-    .map((redirect) => ({
-      fromHost: normalizeHost(redirect.fromHost),
-      id: redirect.id,
-      preservePath: redirect.preservePath,
-      preserveQueryString: redirect.preserveQueryString,
-      statusCode: redirect.statusCode,
-      toHost: redirect.toHost ?? null,
-      toUrl: redirect.toUrl ?? null,
+  return routes
+    .filter((route) => route.enabled)
+    .map((route) => ({
+      appInstall: route.appInstall ?? null,
+      id: route.id,
+      kind: route.kind,
+      matchHost: normalizeOptionalHost(route.matchHost) ?? null,
+      matchPath: route.matchPath,
+      matchPrefix: route.matchPrefix ?? null,
+      preservePath: route.kind === "redirect" ? route.preservePath !== false : null,
+      preserveQueryString: route.kind === "redirect" ? route.preserveQueryString !== false : null,
+      providerConfig: route.providerConfig ?? null,
+      statusCode: route.kind === "redirect" ? redirectStatusCode(route.statusCode) : null,
+      surface: route.surface ?? null,
+      targetProfile: route.targetProfile ?? null,
+      toHost: normalizeOptionalHost(route.toHost) ?? null,
+      toUrl: route.toUrl ?? null,
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
 
-function redirectTargetUrl(redirect: ControlPlaneRedirectIntentProjectionRecord): string {
+function redirectTargetUrl(redirect: RedirectRouteIntent): string {
   if (redirect.toUrl !== undefined) {
     return redirect.toUrl;
   }
@@ -359,6 +538,18 @@ function redirectTargetUrl(redirect: ControlPlaneRedirectIntentProjectionRecord)
   const targetHost = redirect.toHost ?? redirect.fromHost;
 
   return redirect.preservePath ? `https://${targetHost}/${"$"}{1}` : `https://${targetHost}/`;
+}
+
+function normalizeOptionalHost(value: string | undefined): string | undefined {
+  const normalized = optionalText(value);
+
+  return normalized === undefined ? undefined : normalizeHost(normalized);
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : undefined;
 }
 
 function hostFromUrl(value: string | undefined): string | undefined {

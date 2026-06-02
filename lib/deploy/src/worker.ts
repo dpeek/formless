@@ -8,9 +8,9 @@ import type {
 export { projectDeployControlPlaneDesiredState } from "./index.ts";
 export { DEPLOY_CONTROL_PLANE_ACTION_IDS, DEPLOY_PUBLIC_CONTRACT_VERSION } from "./types.ts";
 export type {
-  ControlPlaneAppRouteProjectionRecord,
-  ControlPlaneDomainMappingProjectionRecord,
-  ControlPlaneRedirectIntentProjectionRecord,
+  ControlPlaneAppInstallProjectionRecord,
+  ControlPlaneProviderConfigProjectionRecord,
+  ControlPlaneRouteProjectionRecord,
   DeployDesiredStateProjection,
   DeployDesiredStateProjectionInput,
   DeploySecretReference,
