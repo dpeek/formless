@@ -99,6 +99,8 @@
 - Promotion notes: promoted schema-local kebab-case entity grammar, qualified boundary entity names, instance control-plane local entity keys, qualified archive/workspace/drift naming, one-way legacy archive/workspace normalization evidence, Builder kebab-case authoring and clean labels, CLI canonical key use, installed app route records, and runtime topology route resolution.
 - Decisions: no new product or storage decisions; promotion follows shipped behavior and existing change decisions.
 - Blockers: none.
+- Rebase: `git rebase main` completed cleanly after local `main` advanced to `b0d87cf` (`Add mechanize-local-agent-finalization change`); no conflict files.
+- Finalization fix: updated the bundled Site source schema hash fixture to match the canonical hash produced after the Site schema entity-key rename.
 - Evidence: `rg` over the promoted specs found no exact legacy control-plane entity keys `appInstall`, `appRoute`, `deployTarget`, `providerConfigRef`, `domainMapping`, `redirectIntent`, `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, or `deployDriftReport`.
-- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T03:09:48.973Z.
+- Checks: `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-06-02T03:13:23.346Z.
 - Smoke: not run; this section changed promoted OpenSpec docs only and no app behavior changed.
