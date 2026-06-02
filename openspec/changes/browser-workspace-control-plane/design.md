@@ -41,6 +41,16 @@ Alternative: bump the manifest version or keep app and domain summaries as gener
 
 Workspace source should include deterministic record files for the instance control-plane schema. App data and media can continue to move through app archives during this change. Push and local-dev restore compose an instance archive from record source plus app archives.
 
+The default manifest path `source.records` is `records/instance-control-plane`.
+Within that root, control-plane source is one JSON file per supported
+schema-owned entity: `app-install.json`, `route.json`, `deploy-target.json`,
+`provider-config-ref.json`, and `deploy-desired-resource.json`. Each file uses
+kind `formless.instanceControlPlaneRecordSource`, version `1`, schema key
+`instance-control-plane`, a `schemaUpdatedAt` timestamp, a qualified `entity`
+such as `instance:route`, and records whose `entity` values use the same
+qualified boundary name. Write helpers sort fields and records
+deterministically before writing.
+
 Alternative: keep only instance archive manifests as source. That is closer to the current implementation, but it makes review and browser authoring harder than normal schema-owned records.
 
 ### Keep deployment execution history out of record source

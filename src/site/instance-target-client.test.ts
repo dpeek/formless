@@ -431,12 +431,6 @@ function controlPlaneBootstrapResponse(): Response {
         id: "desired:www.example.com",
         values: { deployTarget: "instance.primary", logicalId: "custom-domain:www" },
       },
-      {
-        deletedAt: "2026-06-01T00:00:00.000Z",
-        entity: "deploy-attempt",
-        id: "attempt.deleted",
-        values: { deployTarget: "instance.primary" },
-      },
     ],
     schema: {},
   });

@@ -51,6 +51,7 @@ import {
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";
 import { formatSiteProjectRecords } from "./project-source.ts";
+import { readFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_ALCHEMY_APP_NAME,
@@ -3536,13 +3537,10 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const instanceArchiveJson = JSON.parse(
-      await readFile(
-        path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE),
-        "utf8",
-      ),
-    ) as InstanceArchive;
-    const instanceArchive = parsePortableArchive(instanceArchiveJson);
+    const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+      manifest,
+      workspaceRoot,
+    });
     const appArchiveValue = parsePortableArchive(
       JSON.parse(
         await readFile(
@@ -3553,20 +3551,15 @@ describe("Formless Site CLI", () => {
     );
 
     expect(manifest).toEqual(layoutWorkspaceManifest("personal-sites"));
-    expect(instanceArchive.kind).toBe(INSTANCE_ARCHIVE_KIND);
-    if (
-      instanceArchive.kind !== INSTANCE_ARCHIVE_KIND ||
-      appArchiveValue.kind !== APP_ARCHIVE_KIND
-    ) {
-      throw new Error("Expected saved instance and app archives.");
+    if (appArchiveValue.kind !== APP_ARCHIVE_KIND) {
+      throw new Error("Expected saved app archive.");
     }
-    expect(instanceArchive.capabilities).toContain("schema-owned-control-plane");
-    expect(instanceArchive.apps.map((app) => app.app.installId)).toEqual(["david"]);
-    expect(instanceArchiveJson.controlPlane?.records.map((record) => record.entity)).toContain(
-      "instance:route",
+    expect(controlPlane?.records.map((record) => record.entity)).toContain("route");
+    expect(controlPlane?.records.map((record) => record.entity)).toContain("app-install");
+    expect(controlPlane?.records.map((record) => record.entity)).not.toContain(
+      "deploy-drift-report",
     );
-    expect(instanceArchive.controlPlane?.records.map((record) => record.entity)).toContain("route");
-    expect(JSON.stringify(instanceArchive.controlPlane)).not.toContain("CF_API_TOKEN");
+    expect(JSON.stringify(controlPlane)).not.toContain("CF_API_TOKEN");
     expect(appArchiveValue.data.kind).toBe("storeSnapshot");
     expect(appArchiveValue.media.objects).toHaveLength(1);
     await expect(
@@ -3582,10 +3575,8 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("Formless workspace save complete.");
     expect(logs[0]).toContain("Source: http://localhost:5173.");
     expect(logs[0]).toContain(`Manifest: ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}.`);
-    expect(logs[0]).toContain(
-      `Instance archive: ${path.join("archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
-    );
-    expect(logs[0]).toContain(`Records: ${mediaRecords().length}.`);
+    expect(logs[0]).toContain("Instance archive: records/instance-control-plane.");
+    expect(logs[0]).toContain("Records: 8.");
     expect(logs[0]).toContain("Media files: 1.");
     expect(logs[0]).toContain(`App archives: david (${mediaRecords().length} records, 1 media).`);
     expect(logs[0]).toContain("Local apps: none.");
@@ -3615,13 +3606,13 @@ describe("Formless Site CLI", () => {
     await expect(
       runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher })),
     ).rejects.toThrow(
-      'Formless workspace source is stale: archives/instance. Run "npx formless save".',
+      'Formless workspace source is stale: archives/apps/david, records/instance-control-plane. Run "npx formless save".',
     );
     await expect(
       readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     ).resolves.toBe(manifestBefore);
     await expect(
-      stat(path.join(workspaceRoot, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE)),
+      stat(path.join(workspaceRoot, "records/instance-control-plane/app-install.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
 
     const logs: string[] = [];
@@ -4429,12 +4420,11 @@ describe("Formless Site CLI", () => {
 
     expect(manifest).toEqual(layoutWorkspaceManifest("brother-instance"));
     await expect(readFile(path.join(tempDir, ".gitignore"), "utf8")).resolves.toBe(".formless/\n");
-    expect((await stat(path.join(tempDir, "archives/instance"))).isDirectory()).toBe(true);
+    await expect(stat(path.join(tempDir, "archives/instance"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect((await stat(path.join(tempDir, "archives/apps"))).isDirectory()).toBe(true);
     expect((await stat(path.join(tempDir, ".formless/local"))).isDirectory()).toBe(true);
-    await expect(
-      readFile(path.join(tempDir, "archives/instance", PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
 
     expect(accountDiscoveryInputs).toEqual([]);
     expect(commands).toEqual([]);
@@ -5941,25 +5931,6 @@ function controlPlaneRecords(
         sourceFingerprint: "workspace",
         createdAt: now,
         updatedAt: now,
-      },
-      createdAt: now,
-    },
-    {
-      id: `deploy-drift:${deployTargetId}`,
-      entity: "deploy-drift-report",
-      values: {
-        deployTarget: deployTargetId,
-        versionId: "version-1",
-        desiredStateHash: "hash-1",
-        revision: 1,
-        status: options.driftStatus ?? "in-sync",
-        actorKind: "runner",
-        actorId: "runner",
-        affectedLogicalIdsJson: "[]",
-        createCount: 0,
-        updateCount: 0,
-        deleteCount: 0,
-        reportedAt: now,
       },
       createdAt: now,
     },

@@ -14,9 +14,6 @@ export const instanceControlPlaneEntityNames = [
   "deploy-target",
   "provider-config-ref",
   "deploy-desired-resource",
-  "deploy-attempt",
-  "deploy-evidence-summary",
-  "deploy-drift-report",
 ] as const;
 
 export type InstanceControlPlaneEntityName = (typeof instanceControlPlaneEntityNames)[number];
@@ -149,79 +146,9 @@ export type InstanceControlPlaneDeployDesiredResourceValues = {
   updatedAt: string;
 };
 
-export type InstanceControlPlaneDeploymentActorKind =
-  | "admin"
-  | "cliDeployer"
-  | "owner"
-  | "runner"
-  | "system";
-
-export type InstanceControlPlaneDeploymentAttemptMode = "apply" | "destroy" | "plan";
-export type InstanceControlPlaneDeploymentAttemptStatus =
-  | "failed"
-  | "planned"
-  | "started"
-  | "succeeded";
-
-export type InstanceControlPlaneDeployAttemptValues = {
-  deployTarget: string;
-  versionId: string;
-  desiredStateHash: string;
-  revision: number;
-  mode: InstanceControlPlaneDeploymentAttemptMode;
-  status: InstanceControlPlaneDeploymentAttemptStatus;
-  actorKind: InstanceControlPlaneDeploymentActorKind;
-  actorId: string;
-  runnerId?: string;
-  idempotencyKey: string;
-  startedAt: string;
-  updatedAt: string;
-  completedAt?: string;
-};
-
-export type InstanceControlPlaneDeploymentEvidenceAction =
-  | "adopted"
-  | "created"
-  | "deleted"
-  | "no-change"
-  | "updated";
-
-export type InstanceControlPlaneDeployEvidenceSummaryValues = {
-  deployAttempt: string;
-  deployDesiredResource?: string;
-  action: InstanceControlPlaneDeploymentEvidenceAction;
-  logicalId: string;
-  kind: InstanceControlPlaneDeploymentResourceKind;
-  providerFamily: InstanceControlPlaneProviderFamily;
-  providerResourceIdsJson: string;
-  displayName?: string;
-  alchemyResourceId?: string;
-  recordedAt: string;
-};
-
-export type InstanceControlPlaneDeploymentDriftStatus = "drifted" | "in-sync" | "unknown";
-
-export type InstanceControlPlaneDeployDriftReportValues = {
-  deployTarget: string;
-  versionId: string;
-  desiredStateHash: string;
-  revision: number;
-  status: InstanceControlPlaneDeploymentDriftStatus;
-  actorKind: InstanceControlPlaneDeploymentActorKind;
-  actorId: string;
-  affectedLogicalIdsJson: string;
-  createCount: number;
-  updateCount: number;
-  deleteCount: number;
-  reportedAt: string;
-};
-
 export type InstanceControlPlaneRecordValuesByEntity = {
   "app-install": InstanceControlPlaneAppInstallValues;
-  "deploy-attempt": InstanceControlPlaneDeployAttemptValues;
   "deploy-desired-resource": InstanceControlPlaneDeployDesiredResourceValues;
-  "deploy-drift-report": InstanceControlPlaneDeployDriftReportValues;
-  "deploy-evidence-summary": InstanceControlPlaneDeployEvidenceSummaryValues;
   "deploy-target": InstanceControlPlaneDeployTargetValues;
   "provider-config-ref": InstanceControlPlaneProviderConfigRefValues;
   route: InstanceControlPlaneRouteValues;
@@ -254,20 +181,11 @@ export type AnyInstanceControlPlaneRecord = {
 
 export const instanceControlPlaneImmutableFields = {
   "app-install": ["installId", "packageAppKey", "storageIdentity"],
-  "deploy-attempt": ["deployTarget", "versionId", "desiredStateHash", "revision", "idempotencyKey"],
   "deploy-desired-resource": ["deployTarget", "logicalId", "kind", "providerFamily"],
-  "deploy-drift-report": ["deployTarget", "versionId", "desiredStateHash", "revision"],
-  "deploy-evidence-summary": ["deployAttempt", "logicalId", "kind", "providerFamily"],
   "deploy-target": ["targetId", "targetKind"],
   "provider-config-ref": ["providerFamily", "configRef"],
   route: ["kind"],
 } as const satisfies Record<InstanceControlPlaneEntityName, readonly string[]>;
-
-export const instanceControlPlaneActionCreatedEntities = [
-  "deploy-attempt",
-  "deploy-evidence-summary",
-  "deploy-drift-report",
-] as const satisfies readonly InstanceControlPlaneEntityName[];
 
 export const instanceControlPlaneReservedRoutePaths = [
   "/api",
@@ -285,12 +203,6 @@ export const instanceControlPlaneReservedRoutePaths = [
 const editableMutations = {
   create: { enabled: true },
   patch: { enabled: true },
-  delete: { enabled: false },
-} satisfies EntityMutationPolicy;
-
-const appendOnlyMutations = {
-  create: { enabled: false },
-  patch: { enabled: false },
   delete: { enabled: false },
 } satisfies EntityMutationPolicy;
 
@@ -416,85 +328,6 @@ export const instanceControlPlaneSchema = {
         uniqueTargetLogicalId: { kind: "unique", fields: ["deployTarget", "logicalId"] },
       },
     },
-    "deploy-attempt": {
-      label: "Deploy attempt",
-      fields: {
-        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
-        versionId: textField("Version id"),
-        desiredStateHash: textField("Desired-state hash"),
-        revision: numberField("Revision"),
-        mode: enumField("Mode", {
-          apply: "Apply",
-          destroy: "Destroy",
-          plan: "Plan",
-        }),
-        status: enumField("Status", {
-          failed: "Failed",
-          planned: "Planned",
-          started: "Started",
-          succeeded: "Succeeded",
-        }),
-        actorKind: actorKindField(),
-        actorId: textField("Actor id"),
-        runnerId: optionalTextField("Runner id"),
-        idempotencyKey: textField("Idempotency key"),
-        startedAt: textField("Started at"),
-        updatedAt: textField("Updated at"),
-        completedAt: optionalTextField("Completed at"),
-      },
-      mutations: appendOnlyMutations,
-      constraints: {
-        uniqueIdempotency: { kind: "unique", fields: ["deployTarget", "idempotencyKey"] },
-      },
-    },
-    "deploy-evidence-summary": {
-      label: "Evidence summary",
-      fields: {
-        deployAttempt: referenceField("Deploy attempt", "deploy-attempt", "versionId"),
-        deployDesiredResource: optionalReferenceField(
-          "Desired resource",
-          "deploy-desired-resource",
-          "logicalId",
-        ),
-        action: enumField("Action", {
-          adopted: "Adopted",
-          created: "Created",
-          deleted: "Deleted",
-          "no-change": "No change",
-          updated: "Updated",
-        }),
-        logicalId: textField("Logical id"),
-        kind: deploymentResourceKindField(),
-        providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
-        providerResourceIdsJson: textField("Provider resource ids", "longText"),
-        displayName: optionalTextField("Display name"),
-        alchemyResourceId: optionalTextField("Alchemy resource id"),
-        recordedAt: textField("Recorded at"),
-      },
-      mutations: appendOnlyMutations,
-    },
-    "deploy-drift-report": {
-      label: "Drift report",
-      fields: {
-        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
-        versionId: textField("Version id"),
-        desiredStateHash: textField("Desired-state hash"),
-        revision: numberField("Revision"),
-        status: enumField("Status", {
-          drifted: "Drifted",
-          "in-sync": "In sync",
-          unknown: "Unknown",
-        }),
-        actorKind: actorKindField(),
-        actorId: textField("Actor id"),
-        affectedLogicalIdsJson: textField("Affected logical ids", "longText"),
-        createCount: numberField("Create"),
-        updateCount: numberField("Update"),
-        deleteCount: numberField("Delete"),
-        reportedAt: textField("Reported at"),
-      },
-      mutations: appendOnlyMutations,
-    },
   },
   relationships: {
     routeInstall: toOne("Route install", "route", "appInstall", "app-install"),
@@ -524,30 +357,6 @@ export const instanceControlPlaneSchema = {
       "route",
       "route",
     ),
-    deployAttemptTarget: toOne(
-      "Deploy attempt target",
-      "deploy-attempt",
-      "deployTarget",
-      "deploy-target",
-    ),
-    deployEvidenceAttempt: toOne(
-      "Evidence attempt",
-      "deploy-evidence-summary",
-      "deployAttempt",
-      "deploy-attempt",
-    ),
-    deployEvidenceDesiredResource: toOne(
-      "Evidence desired resource",
-      "deploy-evidence-summary",
-      "deployDesiredResource",
-      "deploy-desired-resource",
-    ),
-    deployDriftTarget: toOne(
-      "Drift target",
-      "deploy-drift-report",
-      "deployTarget",
-      "deploy-target",
-    ),
   },
   queries: {
     appInstallAll: allQuery("App installs", "app-install"),
@@ -571,9 +380,6 @@ export const instanceControlPlaneSchema = {
     deployTargetAll: allQuery("Deploy targets", "deploy-target"),
     providerConfigRefAll: allQuery("Provider config", "provider-config-ref"),
     deployDesiredResourceAll: allQuery("Desired resources", "deploy-desired-resource"),
-    deployAttemptAll: allQuery("Deploy attempts", "deploy-attempt"),
-    deployEvidenceSummaryAll: allQuery("Evidence summaries", "deploy-evidence-summary"),
-    deployDriftReportAll: allQuery("Drift reports", "deploy-drift-report"),
   },
   itemViews: {
     appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
@@ -589,13 +395,6 @@ export const instanceControlPlaneSchema = {
       "kind",
       "enabled",
     ]),
-    deployAttemptItem: itemView("deploy-attempt", ["versionId", "mode", "status", "updatedAt"]),
-    deployEvidenceSummaryItem: itemView("deploy-evidence-summary", [
-      "logicalId",
-      "action",
-      "recordedAt",
-    ]),
-    deployDriftReportItem: itemView("deploy-drift-report", ["versionId", "status", "reportedAt"]),
   },
   tableViews: {
     appInstallTable: tableView("app-install", [
@@ -653,34 +452,6 @@ export const instanceControlPlaneSchema = {
       "providerFamily",
       "enabled",
       "sourceFingerprint",
-    ]),
-    deployAttemptTable: tableView("deploy-attempt", [
-      "deployTarget",
-      "versionId",
-      "mode",
-      "status",
-      "actorKind",
-      "runnerId",
-      "updatedAt",
-    ]),
-    deployEvidenceSummaryTable: tableView("deploy-evidence-summary", [
-      "deployAttempt",
-      "deployDesiredResource",
-      "logicalId",
-      "kind",
-      "action",
-      "providerResourceIdsJson",
-      "recordedAt",
-    ]),
-    deployDriftReportTable: tableView("deploy-drift-report", [
-      "deployTarget",
-      "versionId",
-      "status",
-      "createCount",
-      "updateCount",
-      "deleteCount",
-      "affectedLogicalIdsJson",
-      "reportedAt",
     ]),
   },
   views: {
@@ -818,24 +589,6 @@ export const instanceControlPlaneSchema = {
       "deployDesiredResourceAll",
       "deployDesiredResourceTable",
     ),
-    deployAttemptList: collectionView(
-      "Deploy attempts",
-      "deploy-attempt",
-      "deployAttemptAll",
-      "deployAttemptTable",
-    ),
-    deployEvidenceSummaryList: collectionView(
-      "Evidence summaries",
-      "deploy-evidence-summary",
-      "deployEvidenceSummaryAll",
-      "deployEvidenceSummaryTable",
-    ),
-    deployDriftReportList: collectionView(
-      "Drift reports",
-      "deploy-drift-report",
-      "deployDriftReportAll",
-      "deployDriftReportTable",
-    ),
   },
   screens: {
     apps: {
@@ -877,9 +630,6 @@ export const instanceControlPlaneSchema = {
           { id: "deploy-targets", type: "collection", view: "deployTargetList" },
           { id: "provider-config", type: "collection", view: "providerConfigRefList" },
           { id: "desired-resources", type: "collection", view: "deployDesiredResourceList" },
-          { id: "attempts", type: "collection", view: "deployAttemptList" },
-          { id: "evidence", type: "collection", view: "deployEvidenceSummaryList" },
-          { id: "drift", type: "collection", view: "deployDriftReportList" },
         ],
       },
     },
@@ -895,20 +645,8 @@ export const instanceControlPlaneSchema = {
         route: {
           immutableFields: [...instanceControlPlaneImmutableFields.route],
         },
-        "deploy-attempt": {
-          immutableFields: [...instanceControlPlaneImmutableFields["deploy-attempt"]],
-          history: { kind: "actionCreated" },
-        },
         "deploy-desired-resource": {
           immutableFields: [...instanceControlPlaneImmutableFields["deploy-desired-resource"]],
-        },
-        "deploy-drift-report": {
-          immutableFields: [...instanceControlPlaneImmutableFields["deploy-drift-report"]],
-          history: { kind: "actionCreated" },
-        },
-        "deploy-evidence-summary": {
-          immutableFields: [...instanceControlPlaneImmutableFields["deploy-evidence-summary"]],
-          history: { kind: "actionCreated" },
         },
         "deploy-target": {
           immutableFields: [...instanceControlPlaneImmutableFields["deploy-target"]],
@@ -1101,10 +839,6 @@ function optionalBooleanField(label: string, defaultValue: boolean): FieldSchema
   return { type: "boolean", required: false, label, default: defaultValue };
 }
 
-function numberField(label: string): FieldSchema {
-  return { type: "number", required: true, label, integer: true, min: 0 };
-}
-
 function optionalNumberField(label: string): FieldSchema {
   return { type: "number", required: false, label, integer: true, min: 0 };
 }
@@ -1143,16 +877,6 @@ function referenceField(label: string, to: string, displayField: string): FieldS
 
 function optionalReferenceField(label: string, to: string, displayField: string): FieldSchema {
   return { type: "reference", required: false, label, to, displayField };
-}
-
-function actorKindField(): FieldSchema {
-  return enumField("Actor kind", {
-    admin: "Admin",
-    cliDeployer: "CLI deployer",
-    owner: "Owner",
-    runner: "Runner",
-    system: "System",
-  });
 }
 
 function deploymentResourceKindField(): FieldSchema {

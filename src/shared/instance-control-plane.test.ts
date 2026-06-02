@@ -175,9 +175,9 @@ describe("instance control-plane schema contracts", () => {
     expect(
       isRuntimeControlPlaneSecretReferenceField(schema, "provider-config-ref", "secretRef"),
     ).toBe(true);
-    expect(schema.runtime?.controlPlane?.entities["deploy-attempt"]?.history).toEqual({
-      kind: "actionCreated",
-    });
+    expect(schema.entities["deploy-attempt"]).toBeUndefined();
+    expect(schema.entities["deploy-evidence-summary"]).toBeUndefined();
+    expect(schema.entities["deploy-drift-report"]).toBeUndefined();
   });
 
   it("marks generated install and route editor fields by ownership", () => {
@@ -272,7 +272,7 @@ describe("instance control-plane schema contracts", () => {
     });
   });
 
-  it("renders deployment management as separate read-only generated sections", () => {
+  it("renders deployment intent as generated sections without execution history", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const deployments = schema.screens?.deployments;
 
@@ -280,9 +280,6 @@ describe("instance control-plane schema contracts", () => {
       "deployTargetList",
       "providerConfigRefList",
       "deployDesiredResourceList",
-      "deployAttemptList",
-      "deployEvidenceSummaryList",
-      "deployDriftReportList",
     ]);
     expect(schema.views.deployTargetList?.type === "collection").toBe(true);
     expect(
@@ -290,11 +287,9 @@ describe("instance control-plane schema contracts", () => {
         ? schema.views.deployTargetList.actions
         : undefined,
     ).toEqual([{ type: "create", createView: "deployTargetCreate" }]);
-    expect(
-      schema.views.deployAttemptList?.type === "collection"
-        ? schema.views.deployAttemptList.actions
-        : undefined,
-    ).toBeUndefined();
+    expect(schema.views.deployAttemptList).toBeUndefined();
+    expect(schema.views.deployEvidenceSummaryList).toBeUndefined();
+    expect(schema.views.deployDriftReportList).toBeUndefined();
     expect(schema.tableViews.deployDesiredResourceTable?.columns).toMatchObject([
       { field: "deployTarget", display: "readOnly" },
       { field: "route", display: "readOnly" },
@@ -304,25 +299,8 @@ describe("instance control-plane schema contracts", () => {
       { field: "enabled", display: "readOnly" },
       { field: "sourceFingerprint", display: "readOnly" },
     ]);
-    expect(schema.tableViews.deployEvidenceSummaryTable?.columns).toMatchObject([
-      { field: "deployAttempt", display: "readOnly" },
-      { field: "deployDesiredResource", display: "readOnly" },
-      { field: "logicalId", display: "readOnly" },
-      { field: "kind", display: "readOnly" },
-      { field: "action", display: "readOnly" },
-      { field: "providerResourceIdsJson", display: "readOnly" },
-      { field: "recordedAt", display: "readOnly" },
-    ]);
-    expect(schema.tableViews.deployDriftReportTable?.columns).toMatchObject([
-      { field: "deployTarget", display: "readOnly" },
-      { field: "versionId", display: "readOnly" },
-      { field: "status", display: "readOnly" },
-      { field: "createCount", display: "readOnly" },
-      { field: "updateCount", display: "readOnly" },
-      { field: "deleteCount", display: "readOnly" },
-      { field: "affectedLogicalIdsJson", display: "readOnly" },
-      { field: "reportedAt", display: "readOnly" },
-    ]);
+    expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();
+    expect(schema.tableViews.deployDriftReportTable).toBeUndefined();
   });
 
   it("derives default app route records without nesting installed app data", () => {

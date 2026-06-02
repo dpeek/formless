@@ -25,21 +25,14 @@ import {
   normalizePortableArchive,
   type ArchiveNormalizationEvidence,
 } from "../shared/archive-normalizers.ts";
-import {
-  packageAppFactsForKey,
-  type AppInstall,
-  type PackageAppKey,
-} from "../shared/app-installs.ts";
+import { packageAppFactsForKey, type AppInstall } from "../shared/app-installs.ts";
 import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
 } from "../shared/instance-domain-mappings.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
-  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   formatInstanceControlPlaneBoundaryEntityName,
-  instanceControlPlaneAppInstallRecord,
-  instanceControlPlaneRouteRecordsForAppInstall,
   isInstanceControlPlaneEntityName,
 } from "../shared/instance-control-plane.ts";
 import {
@@ -77,6 +70,10 @@ import {
   type FormlessInstanceWorkspaceMigrationPolicy,
   type FormlessInstanceWorkspaceTarget,
 } from "./instance-workspace-config.ts";
+import {
+  readFormlessInstanceControlPlaneRecordSource,
+  writeFormlessInstanceControlPlaneRecordSource,
+} from "./instance-workspace-record-source.ts";
 import {
   FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
@@ -254,7 +251,6 @@ export type FormlessInstanceWorkspaceDriftSummary = {
   localAppCount: number;
   localControlPlaneRecordCount: number;
   localMediaCount: number;
-  localProviderDriftReportCount: number;
   localRecordCount: number;
   missingInstalls: string[];
   packageMismatches: FormlessInstanceWorkspacePackageMismatch[];
@@ -262,7 +258,6 @@ export type FormlessInstanceWorkspaceDriftSummary = {
   remoteAppCount: number;
   remoteControlPlaneRecordCount: number;
   remoteMediaCount: number;
-  remoteProviderDriftReportCount: number;
   remoteRecordCount: number;
   status: "drift" | "no-drift";
 };
@@ -724,56 +719,63 @@ export async function pullFormlessInstanceWorkspace(
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
   const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "pull");
-  const instanceArchiveRoot = path.join(workspaceRoot, manifest.archives.instance);
+  const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "pull");
 
-  await prepareWorkspaceDirectories(workspaceRoot, manifest);
-  await rm(instanceArchiveRoot, { force: true, recursive: true });
+  try {
+    const instanceArchiveRoot = path.join(tempRoot, "instance");
 
-  const instanceArchive = await exportInstanceArchive(
-    {
-      outDir: instanceArchiveRoot,
-      target: selectedTarget.url,
-    },
-    dependencies,
-  );
-  const pulledInstanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
-
-  if (!pulledInstanceArchive || pulledInstanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
-    throw new Error("Formless instance pull did not write an instance archive.");
-  }
-
-  const appArchives: PullFormlessInstanceWorkspaceAppArchiveResult[] = [];
-
-  for (const app of archiveApps(pulledInstanceArchive.archive)) {
-    const archiveRoot = path.join(
-      workspaceRoot,
-      workspaceAppArchivePath(manifest, app.app.installId),
-    );
-    const archive = await pullWorkspaceAppArchive(
+    await prepareWorkspaceDirectories(workspaceRoot, manifest);
+    const instanceArchive = await exportInstanceArchive(
       {
-        archiveRoot,
-        installId: app.app.installId,
-        targetUrl: selectedTarget.url,
+        outDir: instanceArchiveRoot,
+        target: selectedTarget.url,
       },
       dependencies,
     );
+    const pulledInstanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
 
-    appArchives.push(archive);
+    if (!pulledInstanceArchive || pulledInstanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Formless instance pull did not write an instance archive.");
+    }
+
+    await writeFormlessInstanceControlPlaneRecordSource({
+      controlPlane: pulledInstanceArchive.archive.controlPlane,
+      manifest,
+      workspaceRoot,
+    });
+
+    const appArchives: PullFormlessInstanceWorkspaceAppArchiveResult[] = [];
+
+    for (const app of archiveApps(pulledInstanceArchive.archive)) {
+      const archiveRoot = path.join(
+        workspaceRoot,
+        workspaceAppArchivePath(manifest, app.app.installId),
+      );
+      const archive = await pullWorkspaceAppArchive(
+        {
+          archiveRoot,
+          installId: app.app.installId,
+          targetUrl: selectedTarget.url,
+        },
+        dependencies,
+      );
+
+      appArchives.push(archive);
+    }
+
+    const domains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(manifest));
+
+    return {
+      appArchives: appArchives.sort((left, right) => left.installId.localeCompare(right.installId)),
+      domains,
+      instanceArchive,
+      selectedTarget,
+      workspaceRoot,
+    };
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
   }
-
-  const domains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
-  await writeFile(
-    manifestPath,
-    formatFormlessInstanceWorkspaceManifest(withWorkspaceDomainIntents(manifest, domains)),
-  );
-
-  return {
-    appArchives: appArchives.sort((left, right) => left.installId.localeCompare(right.installId)),
-    domains,
-    instanceArchive,
-    selectedTarget,
-    workspaceRoot,
-  };
 }
 
 export async function checkFormlessInstanceWorkspace(
@@ -803,25 +805,15 @@ export async function checkFormlessInstanceWorkspace(
     }
 
     const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
-    const localInstanceArchive = await readArchiveDirectoryForCheck(
-      path.join(workspaceRoot, manifest.archives.instance),
-    );
-    const localAppArchives = new Map<string, WorkspaceArchiveDirectory>();
-
-    for (const app of manifest.apps) {
-      const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, app.archivePath));
-
-      if (archive) {
-        localAppArchives.set(app.installId, archive);
-      }
-    }
-
-    const localControlPlane = workspaceControlPlaneArchive({
-      exportedAt: dependencies.now(),
-      localAppArchives,
-      localInstanceArchive,
+    const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
       manifest,
+      workspaceRoot,
     });
+    const localAppArchives = await readWorkspaceAppArchiveMapForCheck(
+      workspaceRoot,
+      manifest,
+      localControlPlane,
+    );
 
     return {
       drift: compareWorkspaceArchives({
@@ -829,7 +821,6 @@ export async function checkFormlessInstanceWorkspace(
         localControlPlane,
         localDomainCount: manifest.domains?.length ?? 0,
         localAppArchives,
-        localInstanceArchive,
         manifest,
         remoteDomainCount: liveDomains.length,
         remoteArchive,
@@ -899,22 +890,18 @@ export async function saveLocalFormlessWorkspace(
       dependencies,
     );
     const nextManifest = workspaceManifestFromSavedAuthoritySource(manifest, exported.archive);
-    const instanceArchivePath = path.join(
-      workspaceRoot,
-      nextManifest.archives.instance,
-      PORTABLE_ARCHIVE_MANIFEST_FILE,
-    );
+    const recordSourcePath = path.join(workspaceRoot, nextManifest.source.records);
     const appArchives = savedWorkspaceAppArchiveSummaries(workspaceRoot, nextManifest, exported);
     const result: SaveLocalFormlessWorkspaceResult = {
       appArchives,
       instanceArchive: {
         appCount: exported.archive.apps.length,
-        archivePath: instanceArchivePath,
+        archivePath: recordSourcePath,
         mediaCount: exported.archive.apps.reduce(
           (count, app) => count + app.media.objects.length,
           0,
         ),
-        recordCount: exported.archive.apps.reduce((count, app) => count + appRecordCount(app), 0),
+        recordCount: exported.archive.controlPlane?.records.length ?? 0,
       },
       manifest: nextManifest,
       manifestPath,
@@ -995,22 +982,16 @@ export async function pushFormlessInstanceWorkspace(
     }
 
     const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
-    const localAppArchives = await readWorkspaceAppArchivesForPush(workspaceRoot, manifest);
-    const localInstanceArchive = await readArchiveDirectoryForCheck(
-      path.join(workspaceRoot, manifest.archives.instance),
-    );
     const exportedAt = dependencies.now();
-    const localControlPlane = workspaceControlPlaneArchive({
-      exportedAt,
-      localAppArchives: new Map(
-        localAppArchives.map((archive) => [
-          archive.archive.kind === APP_ARCHIVE_KIND ? archive.archive.app.installId : "",
-          archive,
-        ]),
-      ),
-      localInstanceArchive,
+    const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
       manifest,
+      workspaceRoot,
     });
+    const localAppArchives = await readWorkspaceAppArchivesForPush(
+      workspaceRoot,
+      manifest,
+      localControlPlane,
+    );
     const source = await writeComposedWorkspacePushArchive({
       archives: localAppArchives,
       archiveRoot: composedArchiveRoot,
@@ -1027,7 +1008,6 @@ export async function pushFormlessInstanceWorkspace(
           archive,
         ]),
       ),
-      localInstanceArchive,
       manifest,
       remoteDomainCount: liveDomains.length,
       remoteArchive,
@@ -1748,7 +1728,7 @@ type WorkspaceLocalBootstrapResult =
       appCount: number;
       mediaCount: number;
       recordCount: number;
-      sourceKind: "app archives" | "instance archive";
+      sourceKind: "record source";
       status: "restored";
     }
   | {
@@ -1769,7 +1749,7 @@ type WorkspaceLocalRestoreArchiveSource = {
   archiveRoot: string;
   mediaCount: number;
   recordCount: number;
-  sourceKind: "app archives" | "instance archive";
+  sourceKind: "record source";
 };
 
 const WORKSPACE_LOCAL_DEV_STATE_FILE = "dev.json";
@@ -1852,69 +1832,33 @@ async function workspaceLocalRestoreArchiveSource(input: {
   tempRoot: string;
   workspaceRoot: string;
 }): Promise<WorkspaceLocalRestoreArchiveSource | undefined> {
-  const appArchives = await readCompleteWorkspaceAppArchives(input.workspaceRoot, input.manifest);
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest: input.manifest,
+    workspaceRoot: input.workspaceRoot,
+  });
 
-  if (appArchives) {
-    const localInstanceArchive = await readArchiveDirectoryForCheck(
-      path.join(input.workspaceRoot, input.manifest.archives.instance),
-    );
-    const write = await writeComposedWorkspacePushArchive({
-      archiveRoot: path.join(input.tempRoot, "archive"),
-      archives: appArchives,
-      controlPlane: workspaceControlPlaneArchive({
-        exportedAt: input.exportedAt,
-        localAppArchives: new Map(
-          appArchives.map((archive) => [
-            archive.archive.kind === APP_ARCHIVE_KIND ? archive.archive.app.installId : "",
-            archive,
-          ]),
-        ),
-        localInstanceArchive,
-        manifest: input.manifest,
-      }),
-      exportedAt: input.exportedAt,
-    });
-
-    return {
-      appCount: write.appCount,
-      archiveRoot: path.dirname(write.archivePath),
-      mediaCount: write.mediaCount,
-      recordCount: write.recordCount,
-      sourceKind: "app archives",
-    };
+  if (!controlPlane) {
+    return undefined;
   }
 
-  const instanceArchiveRoot = path.join(input.workspaceRoot, input.manifest.archives.instance);
-  const instanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
-
-  if (!instanceArchive) {
-    if (input.manifest.apps.length === 0) {
-      return undefined;
-    }
-
-    throw new Error(
-      "Formless instance local dev requires workspace archives. Run `formless instance pull` first or add declared app archives.",
-    );
-  }
-
-  if (instanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
-    throw new Error(
-      `Formless instance local dev requires ${input.manifest.archives.instance} to be an instance archive.`,
-    );
-  }
+  const appArchives = await readCompleteWorkspaceAppArchives(
+    input.workspaceRoot,
+    input.manifest,
+    controlPlane,
+  );
+  const write = await writeComposedWorkspacePushArchive({
+    archiveRoot: path.join(input.tempRoot, "archive"),
+    archives: appArchives,
+    controlPlane,
+    exportedAt: input.exportedAt,
+  });
 
   return {
-    appCount: instanceArchive.archive.apps.length,
-    archiveRoot: instanceArchiveRoot,
-    mediaCount: instanceArchive.archive.apps.reduce(
-      (count, app) => count + app.media.objects.length,
-      0,
-    ),
-    recordCount: instanceArchive.archive.apps.reduce(
-      (count, app) => count + appRecordCount(app),
-      0,
-    ),
-    sourceKind: "instance archive",
+    appCount: write.appCount,
+    archiveRoot: path.dirname(write.archivePath),
+    mediaCount: write.mediaCount,
+    recordCount: write.recordCount,
+    sourceKind: "record source",
   };
 }
 
@@ -1987,35 +1931,31 @@ function workspaceLocalDevStatePath(
 async function readCompleteWorkspaceAppArchives(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
-): Promise<WorkspaceArchiveDirectory[] | undefined> {
-  if (manifest.apps.length === 0) {
-    return undefined;
-  }
-
+  controlPlane: InstanceArchiveControlPlane,
+): Promise<WorkspaceArchiveDirectory[]> {
   const archives: WorkspaceArchiveDirectory[] = [];
 
-  for (const app of manifest.apps) {
-    const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, app.archivePath));
+  for (const app of controlPlaneAppInstallRecords(controlPlane)) {
+    const archivePath = workspaceAppArchivePath(manifest, app.installId);
+    const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, archivePath));
 
     if (!archive) {
-      return undefined;
+      throw new Error(`Formless instance local dev requires local app archive ${archivePath}.`);
     }
 
     if (archive.archive.kind !== APP_ARCHIVE_KIND) {
-      throw new Error(
-        `Formless instance local dev requires ${app.archivePath} to be an app archive.`,
-      );
+      throw new Error(`Formless instance local dev requires ${archivePath} to be an app archive.`);
     }
 
     if (archive.archive.app.installId !== app.installId) {
       throw new Error(
-        `Formless instance local dev app archive ${app.archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
+        `Formless instance local dev app archive ${archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
       );
     }
 
     if (archive.archive.app.packageAppKey !== app.packageAppKey) {
       throw new Error(
-        `Formless instance local dev app archive ${app.archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
+        `Formless instance local dev app archive ${archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
       );
     }
 
@@ -2028,6 +1968,41 @@ async function readCompleteWorkspaceAppArchives(
 
     return leftInstall.localeCompare(rightInstall);
   });
+}
+
+async function readWorkspaceAppArchiveMapForCheck(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+  controlPlane: InstanceArchiveControlPlane | undefined,
+): Promise<Map<string, WorkspaceArchiveDirectory>> {
+  const archives = new Map<string, WorkspaceArchiveDirectory>();
+
+  for (const app of controlPlaneAppInstallRecords(controlPlane)) {
+    const archive = await readArchiveDirectoryForCheck(
+      path.join(workspaceRoot, workspaceAppArchivePath(manifest, app.installId)),
+    );
+
+    if (archive) {
+      archives.set(app.installId, archive);
+    }
+  }
+
+  return archives;
+}
+
+function controlPlaneAppInstallRecords(
+  controlPlane: InstanceArchiveControlPlane | undefined,
+): Array<{
+  installId: string;
+  packageAppKey: string;
+}> {
+  return (controlPlane?.records ?? [])
+    .filter((record) => record.entity === "app-install" && !record.deletedAt)
+    .map((record) => ({
+      installId: String(record.values.installId),
+      packageAppKey: String(record.values.packageAppKey),
+    }))
+    .sort((left, right) => left.installId.localeCompare(right.installId));
 }
 
 async function pullWorkspaceAppArchive(
@@ -2139,135 +2114,11 @@ async function exportWorkspaceSourceFromLocalAuthority(
 
 function workspaceManifestFromSavedAuthoritySource(
   manifest: FormlessInstanceWorkspaceManifest,
-  archive: InstanceArchive,
+  _archive: InstanceArchive,
 ): FormlessInstanceWorkspaceManifest {
-  const routes = savedWorkspaceAppRoutesByInstall(archive.controlPlane);
-  const apps = archive.apps
-    .map((app) => savedWorkspaceAppDeclaration(manifest, app, routes.get(app.app.installId)))
-    .sort((left, right) => left.installId.localeCompare(right.installId));
-  const domains =
-    archive.controlPlane === undefined
-      ? manifest.domains
-      : savedWorkspaceDomainIntents(archive.controlPlane);
-  const nextManifest: FormlessInstanceWorkspaceManifest = {
-    ...manifest,
-    apps,
-    defaultAppPolicy: apps.length === 0 ? "none" : "declared-installs",
-  };
-
-  if (domains === undefined || domains.length === 0) {
-    delete nextManifest.domains;
-  } else {
-    nextManifest.domains = domains;
-  }
-
   return parseFormlessInstanceWorkspaceManifestJson(
-    formatFormlessInstanceWorkspaceManifest(nextManifest),
+    formatFormlessInstanceWorkspaceManifest(manifest),
   );
-}
-
-function savedWorkspaceAppDeclaration(
-  manifest: FormlessInstanceWorkspaceManifest,
-  archive: AppArchive,
-  routes: FormlessInstanceWorkspaceApp["routes"] | undefined,
-): FormlessInstanceWorkspaceApp {
-  const declaration = appDeclarationFromArchive(
-    archive,
-    workspaceAppArchivePath(manifest, archive.app.installId),
-  );
-
-  return {
-    ...declaration,
-    ...(routes === undefined
-      ? {}
-      : {
-          routes: {
-            ...declaration.routes,
-            ...routes,
-          },
-        }),
-  };
-}
-
-function savedWorkspaceAppRoutesByInstall(
-  controlPlane: InstanceArchiveControlPlane | undefined,
-): Map<string, FormlessInstanceWorkspaceApp["routes"]> {
-  const routesByInstall = new Map<string, FormlessInstanceWorkspaceApp["routes"]>();
-
-  for (const record of controlPlane?.records ?? []) {
-    if (record.deletedAt || record.entity !== "route" || stringRecordValue(record, "matchHost")) {
-      continue;
-    }
-
-    const installId = stringRecordValue(record, "appInstall");
-    const surface = stringRecordValue(record, "surface");
-    const routePath = stringRecordValue(record, "matchPath");
-
-    if (!installId || !surface || !routePath) {
-      continue;
-    }
-
-    const routes = routesByInstall.get(installId) ?? {};
-
-    if (surface === "admin" && routePath.startsWith("/apps/")) {
-      routes.admin = routePath as `/apps/${string}`;
-    } else if (
-      surface === "schema" &&
-      routePath.startsWith("/apps/") &&
-      routePath.endsWith("/schema")
-    ) {
-      routes.schema = routePath as `/apps/${string}/schema`;
-    } else if (surface === "public-site" && routePath.startsWith("/sites/")) {
-      routes.public = routePath as `/sites/${string}`;
-    }
-
-    routesByInstall.set(installId, routes);
-  }
-
-  return routesByInstall;
-}
-
-function savedWorkspaceDomainIntents(
-  controlPlane: InstanceArchiveControlPlane,
-): FormlessInstanceWorkspaceDomainIntent[] {
-  return controlPlane.records
-    .filter(
-      (record) =>
-        !record.deletedAt &&
-        record.entity === "route" &&
-        stringRecordValue(record, "matchHost") !== undefined &&
-        stringRecordValue(record, "kind") === "mount",
-    )
-    .map((record) => {
-      const host = stringRecordValue(record, "matchHost") ?? "";
-      const profile = workspaceDomainProfileFromRoute(record);
-      const targetInstallId = stringRecordValue(record, "appInstall");
-      const enabled = booleanRecordValue(record, "enabled") ?? true;
-
-      return {
-        enabled,
-        host,
-        profile,
-        ...(targetInstallId === undefined ? {} : { targetInstallId }),
-      } as FormlessInstanceWorkspaceDomainIntent;
-    })
-    .sort((left, right) => {
-      const hostOrder = left.host.localeCompare(right.host);
-
-      return hostOrder === 0 ? left.profile.localeCompare(right.profile) : hostOrder;
-    });
-}
-
-function workspaceDomainProfileFromRoute(
-  record: StoredRecord,
-): FormlessInstanceWorkspaceDomainIntent["profile"] {
-  const targetProfile = stringRecordValue(record, "targetProfile");
-
-  if (targetProfile === "app" || targetProfile === "instance") {
-    return targetProfile;
-  }
-
-  return "publicSite";
 }
 
 function savedWorkspaceAppArchiveSummaries(
@@ -2303,39 +2154,27 @@ async function staleSavedWorkspaceSourcePaths(input: {
     stalePaths.add(path.basename(input.manifestPath));
   }
 
-  const localInstanceArchive = await readArchiveDirectoryForCheck(
-    path.join(input.workspaceRoot, input.nextManifest.archives.instance),
-  );
+  const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest: input.nextManifest,
+    workspaceRoot: input.workspaceRoot,
+  });
 
-  if (!workspaceArchiveDirectoryMatches(input.exported, localInstanceArchive)) {
-    stalePaths.add(input.nextManifest.archives.instance);
+  if (
+    comparableControlPlaneIntentRecordsJson(localControlPlane) !==
+    comparableControlPlaneIntentRecordsJson(input.exported.archive.controlPlane)
+  ) {
+    stalePaths.add(input.nextManifest.source.records);
   }
 
-  for (const app of input.nextManifest.apps) {
-    const exportedApp = input.exported.archive.apps.find(
-      (candidate) => candidate.app.installId === app.installId,
-    );
-
-    if (!exportedApp) {
-      stalePaths.add(app.archivePath);
-      continue;
-    }
-
+  for (const exportedApp of input.exported.archive.apps) {
+    const appArchivePath = workspaceAppArchivePath(input.nextManifest, exportedApp.app.installId);
     const expected = workspaceAppArchiveDirectoryFromInstanceExport(input.exported, exportedApp);
     const local = await readArchiveDirectoryForCheck(
-      path.join(input.workspaceRoot, app.archivePath),
+      path.join(input.workspaceRoot, appArchivePath),
     );
 
     if (!workspaceArchiveDirectoryMatches(expected, local)) {
-      stalePaths.add(app.archivePath);
-    }
-  }
-
-  const nextAppArchivePaths = new Set(input.nextManifest.apps.map((app) => app.archivePath));
-
-  for (const app of input.manifest.apps) {
-    if (!nextAppArchivePaths.has(app.archivePath)) {
-      stalePaths.add(app.archivePath);
+      stalePaths.add(appArchivePath);
     }
   }
 
@@ -2349,10 +2188,10 @@ async function writeSavedWorkspaceSource(input: {
   workspaceRoot: string;
 }) {
   await prepareWorkspaceDirectories(input.workspaceRoot, input.nextManifest);
-  await writeWorkspaceArchiveDirectory({
-    archive: input.exported.archive,
-    archiveRoot: path.join(input.workspaceRoot, input.nextManifest.archives.instance),
-    mediaFiles: input.exported.mediaFiles,
+  await writeFormlessInstanceControlPlaneRecordSource({
+    controlPlane: input.exported.archive.controlPlane,
+    manifest: input.nextManifest,
+    workspaceRoot: input.workspaceRoot,
   });
   await rm(path.join(input.workspaceRoot, input.nextManifest.archives.apps), {
     force: true,
@@ -2439,14 +2278,14 @@ function compareWorkspaceArchives(input: {
   localControlPlane: InstanceArchiveControlPlane | undefined;
   localDomainCount: number;
   localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
-  localInstanceArchive: WorkspaceArchiveDirectory | undefined;
   manifest: FormlessInstanceWorkspaceManifest;
   remoteDomainCount: number;
   remoteArchive: WorkspaceArchiveDirectory;
 }): FormlessInstanceWorkspaceDriftSummary {
   const remoteApps = archiveApps(input.remoteArchive.archive);
   const remoteAppsByInstall = new Map(remoteApps.map((app) => [app.app.installId, app]));
-  const manifestAppsByInstall = new Map(input.manifest.apps.map((app) => [app.installId, app]));
+  const localApps = controlPlaneAppInstallRecords(input.localControlPlane);
+  const localAppsByInstall = new Map(localApps.map((app) => [app.installId, app]));
   const changedArchivePaths = new Set<string>();
   const changedControlPlaneRecords = new Set<string>();
   const changedMedia = new Set<string>();
@@ -2456,43 +2295,35 @@ function compareWorkspaceArchives(input: {
     input.remoteArchive.archive.kind === INSTANCE_ARCHIVE_KIND
       ? input.remoteArchive.archive.controlPlane
       : undefined;
-  const missingInstalls = input.manifest.apps
+  const missingInstalls = localApps
     .filter((app) => !remoteAppsByInstall.has(app.installId))
     .map((app) => app.installId)
     .sort((left, right) => left.localeCompare(right));
   const extraInstalls = remoteApps
-    .filter((app) => !manifestAppsByInstall.has(app.app.installId))
+    .filter((app) => !localAppsByInstall.has(app.app.installId))
     .map((app) => app.app.installId)
     .sort((left, right) => left.localeCompare(right));
 
-  if (
-    !input.localInstanceArchive ||
-    input.localInstanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND ||
-    comparableArchiveJson(input.localInstanceArchive.archive) !==
-      comparableArchiveJson(input.remoteArchive.archive)
-  ) {
-    changedArchivePaths.add(input.manifest.archives.instance);
-  }
-
   for (const installId of missingInstalls) {
-    const app = manifestAppsByInstall.get(installId);
+    const app = localAppsByInstall.get(installId);
 
     if (app) {
-      changedArchivePaths.add(app.archivePath);
+      changedArchivePaths.add(workspaceAppArchivePath(input.manifest, app.installId));
     }
   }
 
   for (const remoteApp of remoteApps) {
-    const manifestApp = manifestAppsByInstall.get(remoteApp.app.installId);
+    const localApp = localAppsByInstall.get(remoteApp.app.installId);
 
-    if (!manifestApp) {
+    if (!localApp) {
       continue;
     }
 
+    const archivePath = workspaceAppArchivePath(input.manifest, localApp.installId);
     const localArchive = input.localAppArchives.get(remoteApp.app.installId);
 
     if (!localArchive || localArchive.archive.kind !== APP_ARCHIVE_KIND) {
-      changedArchivePaths.add(manifestApp.archivePath);
+      changedArchivePaths.add(archivePath);
       continue;
     }
 
@@ -2504,13 +2335,13 @@ function compareWorkspaceArchives(input: {
         localPackageAppKey,
         remotePackageAppKey: remoteApp.app.packageAppKey,
       });
-      changedArchivePaths.add(manifestApp.archivePath);
+      changedArchivePaths.add(archivePath);
       continue;
     }
 
     if (comparableAppRecordsJson(localArchive.archive) !== comparableAppRecordsJson(remoteApp)) {
       changedRecords.add(remoteApp.app.installId);
-      changedArchivePaths.add(manifestApp.archivePath);
+      changedArchivePaths.add(archivePath);
     }
 
     if (
@@ -2518,7 +2349,7 @@ function compareWorkspaceArchives(input: {
       comparableAppMediaJson(input.remoteArchive, remoteApp)
     ) {
       changedMedia.add(remoteApp.app.installId);
-      changedArchivePaths.add(manifestApp.archivePath);
+      changedArchivePaths.add(archivePath);
     }
   }
 
@@ -2528,7 +2359,7 @@ function compareWorkspaceArchives(input: {
       remoteControlPlane,
     )) {
       changedControlPlaneRecords.add(recordKey);
-      changedArchivePaths.add(input.manifest.archives.instance);
+      changedArchivePaths.add(input.manifest.source.records);
     }
   }
 
@@ -2556,13 +2387,9 @@ function compareWorkspaceArchives(input: {
     changedRecords: [...changedRecords].sort((left, right) => left.localeCompare(right)),
     extraInstalls,
     localDomainCount: input.localDomainCount,
-    localAppCount: input.manifest.apps.length,
+    localAppCount: localApps.length,
     localControlPlaneRecordCount: input.localControlPlane?.records.length ?? 0,
     localMediaCount: localArchives.reduce((count, app) => count + app.media.objects.length, 0),
-    localProviderDriftReportCount: controlPlaneRecordCount(
-      input.localControlPlane,
-      "deploy-drift-report",
-    ),
     localRecordCount: localArchives.reduce((count, app) => count + appRecordCount(app), 0),
     missingInstalls,
     packageMismatches: packageMismatches.sort((left, right) =>
@@ -2572,10 +2399,6 @@ function compareWorkspaceArchives(input: {
     remoteAppCount: remoteApps.length,
     remoteControlPlaneRecordCount: remoteControlPlane?.records.length ?? 0,
     remoteMediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
-    remoteProviderDriftReportCount: controlPlaneRecordCount(
-      remoteControlPlane,
-      "deploy-drift-report",
-    ),
     remoteRecordCount: remoteApps.reduce((count, app) => count + appRecordCount(app), 0),
     status: hasDrift ? "drift" : "no-drift",
   };
@@ -2583,11 +2406,9 @@ function compareWorkspaceArchives(input: {
 
 function workspaceArchiveNormalizationEvidence(input: {
   localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
-  localInstanceArchive: WorkspaceArchiveDirectory | undefined;
   remoteArchive: WorkspaceArchiveDirectory;
 }): ArchiveNormalizationEvidence[] {
   return uniqueArchiveNormalizationEvidence([
-    ...(input.localInstanceArchive?.normalizationEvidence ?? []),
     ...[...input.localAppArchives.values()].flatMap((archive) => archive.normalizationEvidence),
     ...input.remoteArchive.normalizationEvidence,
   ]);
@@ -2666,6 +2487,16 @@ function comparableControlPlaneIntentRecords(
   return records;
 }
 
+function comparableControlPlaneIntentRecordsJson(
+  controlPlane: InstanceArchiveControlPlane | undefined,
+): string {
+  return JSON.stringify(
+    [...comparableControlPlaneIntentRecords(controlPlane).entries()].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
+}
+
 function comparableControlPlaneValues(record: StoredRecord): RecordValues {
   const values = Object.fromEntries(
     Object.entries(record.values).filter(
@@ -2691,16 +2522,6 @@ function controlPlaneRecordKey(record: Pick<StoredRecord, "entity" | "id">) {
     : record.entity;
 
   return `${entityName}:${record.id}`;
-}
-
-function controlPlaneRecordCount(
-  controlPlane: InstanceArchiveControlPlane | undefined,
-  entity: string,
-) {
-  return (
-    controlPlane?.records.filter((record) => record.entity === entity && !record.deletedAt)
-      .length ?? 0
-  );
 }
 
 function comparableArchiveJson(archive: PortableArchive): string {
@@ -3029,7 +2850,6 @@ async function prepareWorkspaceDirectories(
   manifest: FormlessInstanceWorkspaceManifest,
 ) {
   await Promise.all([
-    mkdir(path.join(workspaceRoot, manifest.archives.instance), { recursive: true }),
     mkdir(path.join(workspaceRoot, manifest.archives.apps), { recursive: true }),
     mkdir(path.join(workspaceRoot, manifest.local.stateRoot), { recursive: true }),
   ]);
@@ -3045,9 +2865,6 @@ function appRecordCount(app: AppArchive): number {
     : app.data.records.length;
 }
 
-const workspaceOwnedControlPlaneEntities = new Set(["app-install", "route"]);
-const workspaceDeployOwnedControlPlaneEntities = new Set(["deploy-target", "provider-config-ref"]);
-
 const controlPlaneIntentEntities = new Set([
   "app-install",
   "route",
@@ -3055,176 +2872,6 @@ const controlPlaneIntentEntities = new Set([
   "provider-config-ref",
   "deploy-desired-resource",
 ]);
-
-function workspaceControlPlaneArchive(input: {
-  exportedAt: string;
-  localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
-  localInstanceArchive: WorkspaceArchiveDirectory | undefined;
-  manifest: FormlessInstanceWorkspaceManifest;
-}): InstanceArchiveControlPlane | undefined {
-  const existing =
-    input.localInstanceArchive?.archive.kind === INSTANCE_ARCHIVE_KIND
-      ? input.localInstanceArchive.archive.controlPlane
-      : undefined;
-  const generatedRecords = workspaceOwnedControlPlaneRecords(input);
-  const generatedRecordIds = new Set(generatedRecords.map((record) => record.id));
-  const manifestAppInstallIds = new Set(input.manifest.apps.map((app) => app.installId));
-  const records = new Map<string, StoredRecord>();
-
-  for (const record of existing?.records ?? []) {
-    if (
-      shouldReplaceExistingWorkspaceControlPlaneRecord({
-        generatedRecordIds,
-        manifest: input.manifest,
-        manifestAppInstallIds,
-        record,
-      })
-    ) {
-      continue;
-    }
-
-    records.set(record.id, record);
-  }
-
-  for (const record of generatedRecords) {
-    records.set(record.id, record);
-  }
-
-  if (records.size === 0) {
-    return undefined;
-  }
-
-  const controlPlane: InstanceArchiveControlPlane = {
-    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-    schemaUpdatedAt: existing?.schemaUpdatedAt ?? input.exportedAt,
-    records: [...records.values()],
-  };
-
-  assertReviewableWorkspaceControlPlaneArchive(controlPlane, input.exportedAt);
-
-  return controlPlane;
-}
-
-function isWorkspaceOwnedControlPlaneRecord(
-  manifest: FormlessInstanceWorkspaceManifest,
-  record: Pick<StoredRecord, "entity">,
-): boolean {
-  return (
-    workspaceOwnedControlPlaneEntities.has(record.entity) ||
-    (manifest.deploy !== undefined && workspaceDeployOwnedControlPlaneEntities.has(record.entity))
-  );
-}
-
-function shouldReplaceExistingWorkspaceControlPlaneRecord(input: {
-  generatedRecordIds: ReadonlySet<string>;
-  manifest: FormlessInstanceWorkspaceManifest;
-  manifestAppInstallIds: ReadonlySet<string>;
-  record: StoredRecord;
-}): boolean {
-  if (input.generatedRecordIds.has(input.record.id)) {
-    return true;
-  }
-
-  if (input.record.entity === "route") {
-    const appInstallId = stringRecordValue(input.record, "appInstall");
-
-    return appInstallId !== undefined && !input.manifestAppInstallIds.has(appInstallId);
-  }
-
-  return isWorkspaceOwnedControlPlaneRecord(input.manifest, input.record);
-}
-
-function assertReviewableWorkspaceControlPlaneArchive(
-  controlPlane: InstanceArchiveControlPlane,
-  exportedAt: string,
-) {
-  formatInstanceArchive({
-    kind: INSTANCE_ARCHIVE_KIND,
-    version: ARCHIVE_VERSION,
-    exportedAt,
-    capabilities: [
-      "installed-app-registry",
-      "schema-owned-control-plane",
-      "app-store-snapshots",
-      "core-media-assets",
-    ],
-    restorePolicy: { dryRun: true, installCollisions: "reject" },
-    controlPlane,
-    apps: [],
-  });
-}
-
-function workspaceOwnedControlPlaneRecords(input: {
-  exportedAt: string;
-  localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
-  manifest: FormlessInstanceWorkspaceManifest;
-}): StoredRecord[] {
-  const records: StoredRecord[] = [];
-
-  for (const app of input.manifest.apps) {
-    const archive = appArchiveFromWorkspaceDirectory(input.localAppArchives.get(app.installId));
-    const install = workspaceAppInstallFromDeclaration(app, archive, input.exportedAt);
-
-    records.push(storedControlPlaneRecord(instanceControlPlaneAppInstallRecord(install)));
-
-    for (const route of workspaceAppRouteRecords(app, install)) {
-      records.push(route);
-    }
-  }
-
-  records.push(
-    ...workspaceDomainControlPlaneRecords(input.manifest, {
-      appInstallIds: new Set(input.manifest.apps.map((app) => app.installId)),
-      exportedAt: input.exportedAt,
-    }),
-    ...workspaceDeployControlPlaneRecords(input.manifest, input.exportedAt),
-  );
-
-  return records;
-}
-
-function workspaceAppInstallFromDeclaration(
-  app: FormlessInstanceWorkspaceApp,
-  archive: AppArchive | undefined,
-  exportedAt: string,
-): AppInstall {
-  const packageAppKey = (archive?.app.packageAppKey ?? app.packageAppKey) as PackageAppKey;
-  const packageFacts = archive?.app ?? packageAppFactsForKey(packageAppKey);
-  const publicPath = app.routes?.public ?? `/sites/${app.installId}`;
-
-  if (!packageFacts) {
-    throw new Error(`Workspace app "${app.installId}" package "${packageAppKey}" is unsupported.`);
-  }
-
-  return {
-    installId: app.installId,
-    packageAppKey,
-    packageRevision: packageFacts.packageRevision,
-    sourceSchemaHash: packageFacts.sourceSchemaHash,
-    label: archive?.app.label ?? app.label,
-    status: archive?.app.status ?? "installed",
-    createdAt: archive?.app.createdAt ?? exportedAt,
-    updatedAt: archive?.app.updatedAt ?? exportedAt,
-    adminRoute: app.routes?.admin ?? `/apps/${app.installId}`,
-    schemaRoute: app.routes?.schema ?? `/apps/${app.installId}/schema`,
-    ...(packageAppKey === "site" || app.routes?.public !== undefined
-      ? {
-          publicRoute: publicPath as `/${string}`,
-          publicRoutePrefix: `${publicPath}/` as `/${string}/`,
-        }
-      : {}),
-  };
-}
-
-function workspaceAppRouteRecords(
-  _app: FormlessInstanceWorkspaceApp,
-  install: AppInstall,
-): StoredRecord[] {
-  return instanceControlPlaneRouteRecordsForAppInstall({
-    install,
-    now: install.updatedAt,
-  }).map(storedControlPlaneRecord);
-}
 
 function workspaceDomainControlPlaneRecords(
   manifest: FormlessInstanceWorkspaceManifest,
@@ -3259,77 +2906,6 @@ function workspaceDomainControlPlaneRecords(
   });
 }
 
-function workspaceDeployControlPlaneRecords(
-  manifest: FormlessInstanceWorkspaceManifest,
-  exportedAt: string,
-): StoredRecord[] {
-  if (!manifest.deploy) {
-    return [];
-  }
-
-  const records: StoredRecord[] = [
-    {
-      id: workspaceDeployTargetId(),
-      entity: "deploy-target",
-      values: {
-        targetId: workspaceDeployTargetId(),
-        targetKind: "instance",
-        label: workspaceDeployTargetId(),
-        enabled: true,
-        createdAt: exportedAt,
-        updatedAt: exportedAt,
-      },
-      createdAt: exportedAt,
-    },
-  ];
-  const providerConfigRef = workspaceProviderConfigRefId(manifest);
-
-  if (providerConfigRef) {
-    records.push({
-      id: providerConfigRef,
-      entity: "provider-config-ref",
-      values: {
-        providerFamily: "cloudflare",
-        configRef: providerConfigRef,
-        label: "Cloudflare",
-        ...(manifest.deploy.accountId === undefined
-          ? {}
-          : { accountId: manifest.deploy.accountId }),
-        ...(manifest.deploy.workerName === undefined
-          ? {}
-          : { workerName: manifest.deploy.workerName }),
-        createdAt: exportedAt,
-        updatedAt: exportedAt,
-      },
-      createdAt: exportedAt,
-    });
-  }
-
-  return records;
-}
-
-function appArchiveFromWorkspaceDirectory(
-  directory: WorkspaceArchiveDirectory | undefined,
-): AppArchive | undefined {
-  return directory?.archive.kind === APP_ARCHIVE_KIND ? directory.archive : undefined;
-}
-
-function storedControlPlaneRecord(record: {
-  createdAt: string;
-  deletedAt?: string;
-  entity: string;
-  id: string;
-  values: RecordValues;
-}): StoredRecord {
-  return {
-    id: record.id,
-    entity: record.entity,
-    values: record.values,
-    createdAt: record.createdAt,
-    ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
-  };
-}
-
 function workspaceDomainRouteRecordId(
   domain: Pick<FormlessInstanceWorkspaceDomainIntent, "host" | "profile">,
 ) {
@@ -3358,20 +2934,6 @@ function workspaceRouteSurface(profile: FormlessInstanceWorkspaceDomainIntent["p
 
 function workspaceDeployTargetId() {
   return "instance.primary";
-}
-
-function workspaceProviderConfigRefId(
-  manifest: FormlessInstanceWorkspaceManifest,
-): string | undefined {
-  const deploy = manifest.deploy;
-
-  if (!deploy?.accountId && !deploy?.workerName) {
-    return undefined;
-  }
-
-  const key = deploy.workerName ?? deploy.accountId;
-
-  return key ? `provider-config:cloudflare:${key}` : undefined;
 }
 
 type WorkspaceTargetCommandName =
@@ -3624,30 +3186,32 @@ function workersDevTargetFacts(
 async function readWorkspaceAppArchivesForPush(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
+  controlPlane: InstanceArchiveControlPlane | undefined,
 ): Promise<WorkspaceArchiveDirectory[]> {
   const archives: WorkspaceArchiveDirectory[] = [];
 
-  for (const app of manifest.apps) {
-    const archiveRoot = path.join(workspaceRoot, app.archivePath);
+  for (const app of controlPlaneAppInstallRecords(controlPlane)) {
+    const archivePath = workspaceAppArchivePath(manifest, app.installId);
+    const archiveRoot = path.join(workspaceRoot, archivePath);
     const archive = await readArchiveDirectoryForCheck(archiveRoot);
 
     if (!archive) {
-      throw new Error(`Formless instance push requires local app archive ${app.archivePath}.`);
+      throw new Error(`Formless instance push requires local app archive ${archivePath}.`);
     }
 
     if (archive.archive.kind !== APP_ARCHIVE_KIND) {
-      throw new Error(`Formless instance push requires ${app.archivePath} to be an app archive.`);
+      throw new Error(`Formless instance push requires ${archivePath} to be an app archive.`);
     }
 
     if (archive.archive.app.installId !== app.installId) {
       throw new Error(
-        `Formless instance push app archive ${app.archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
+        `Formless instance push app archive ${archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
       );
     }
 
     if (archive.archive.app.packageAppKey !== app.packageAppKey) {
       throw new Error(
-        `Formless instance push app archive ${app.archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
+        `Formless instance push app archive ${archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
       );
     }
 
@@ -3786,23 +3350,6 @@ async function readLiveWorkspaceDomainIntents(
   );
 
   return liveMappings.mappings.map(workspaceDomainIntentFromLiveMapping);
-}
-
-function withWorkspaceDomainIntents(
-  manifest: FormlessInstanceWorkspaceManifest,
-  domains: readonly FormlessInstanceWorkspaceDomainIntent[],
-): FormlessInstanceWorkspaceManifest {
-  const next: FormlessInstanceWorkspaceManifest = {
-    ...manifest,
-  };
-
-  if (domains.length === 0) {
-    delete next.domains;
-  } else {
-    next.domains = [...domains];
-  }
-
-  return next;
 }
 
 function workspaceDomainIntentFromLiveMapping(
@@ -4129,12 +3676,10 @@ async function readDestroyRouteProjectionSource(
   routes: ControlPlaneRouteProjectionRecord[];
   source: DestroyFormlessInstanceWorkspaceRouteProviderResources["source"];
 }> {
-  const archiveRoot = path.join(context.workspaceRoot, context.manifest.archives.instance);
-  const localInstanceArchive = await readArchiveDirectoryForCheck(archiveRoot);
-  const controlPlane =
-    localInstanceArchive?.archive.kind === INSTANCE_ARCHIVE_KIND
-      ? localInstanceArchive.archive.controlPlane
-      : undefined;
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest: context.manifest,
+    workspaceRoot: context.workspaceRoot,
+  });
   const controlPlaneRecords = controlPlane?.records ?? [];
   const routeRecords = controlPlaneRecords
     .filter((record) => !record.deletedAt && record.entity === "route")
@@ -4151,7 +3696,7 @@ async function readDestroyRouteProjectionSource(
   }
 
   const legacyDomainRoutes = workspaceDomainControlPlaneRecords(context.manifest, {
-    appInstallIds: new Set(context.manifest.apps.map((app) => app.installId)),
+    appInstallIds: new Set(controlPlaneAppInstallRecords(controlPlane).map((app) => app.installId)),
     exportedAt: new Date(0).toISOString(),
   })
     .map(routeProjectionRecordFromStoredRecord)

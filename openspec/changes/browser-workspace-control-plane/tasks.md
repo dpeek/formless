@@ -13,12 +13,20 @@ Evidence:
 
 ## 2. Control-Plane Record Source
 
-- [ ] 2.1 Define deterministic workspace paths and file format for instance control-plane record source.
-- [ ] 2.2 Implement read/write helpers for schema-owned control-plane record files.
-- [ ] 2.3 Validate record source for supported entities, references, uniqueness, immutable fields, route conflicts, and secret-looking values.
-- [ ] 2.4 Add tests proving `app-install`, unified `route`, `deploy-target`, `provider-config-ref`, and `deploy-desired-resource` records round-trip through workspace source.
-- [ ] 2.5 Remove `deploy-attempt`, `deploy-evidence-summary`, and `deploy-drift-report` from workspace record source, instance archive source, restore input, source drift comparisons, and generated control-plane source views.
-- [ ] 2.6 Add tests proving deployment attempts, evidence summaries, drift reports, cleanup audit summaries, raw lease tokens, and provider state are not written to reviewable record source or restored as source records.
+- [x] 2.1 Define deterministic workspace paths and file format for instance control-plane record source.
+- [x] 2.2 Implement read/write helpers for schema-owned control-plane record files.
+- [x] 2.3 Validate record source for supported entities, references, uniqueness, immutable fields, route conflicts, and secret-looking values.
+- [x] 2.4 Add tests proving `app-install`, unified `route`, `deploy-target`, `provider-config-ref`, and `deploy-desired-resource` records round-trip through workspace source.
+- [x] 2.5 Remove `deploy-attempt`, `deploy-evidence-summary`, and `deploy-drift-report` from workspace record source, instance archive source, restore input, source drift comparisons, and generated control-plane source views.
+- [x] 2.6 Add tests proving deployment attempts, evidence summaries, drift reports, cleanup audit summaries, raw lease tokens, and provider state are not written to reviewable record source or restored as source records.
+
+Evidence:
+
+- Changed `src/site/instance-workspace-record-source.ts`, `src/site/instance-workspace.ts`, `src/shared/instance-control-plane.ts`, `src/shared/archive-normalizers.ts`, `src/site/instance-target-client.ts`, and generated UI/schema tests.
+- Added deterministic record source files under manifest `source.records`, with one JSON file per `app-install`, `route`, `deploy-target`, `provider-config-ref`, and `deploy-desired-resource` entity.
+- Added `src/site/instance-workspace-record-source.test.ts` for round-trip, unsupported file rejection, secret/raw lease/provider-state rejection, identity validation, route conflict validation, and deployment execution-history exclusion.
+- Updated archive/schema/client/CLI tests proving execution-history entities are rejected from archive restore/source and removed from generated control-plane views.
+- `devstate check` green at 2026-06-02T09:02:47.428Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 
 ## 3. Workspace Archive Composition
 

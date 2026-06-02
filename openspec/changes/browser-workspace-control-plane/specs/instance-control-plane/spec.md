@@ -52,6 +52,16 @@ canonical source for workspace-authored instance intent.
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:app-install` and
   `instance:route`
+- **AND** the default workspace record source root is
+  `records/instance-control-plane`
+- **AND** record source under that root is stored as one deterministic JSON file
+  per supported entity: `app-install.json`, `route.json`,
+  `deploy-target.json`, `provider-config-ref.json`, and
+  `deploy-desired-resource.json`
+- **AND** each file declares kind
+  `formless.instanceControlPlaneRecordSource`, version `1`, schema key
+  `instance-control-plane`, a `schemaUpdatedAt` timestamp, the qualified
+  entity name, and records for only that entity
 - **AND** `formless.json` does not duplicate those records as app, route,
   domain, or deploy intent
 - **AND** `deploy-attempt`, `deploy-evidence-summary`, and

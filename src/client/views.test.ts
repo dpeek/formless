@@ -2216,7 +2216,7 @@ describe("home view model collections", () => {
     );
   });
 
-  it("selects deployment control-plane collections as read-only generated UI sections", () => {
+  it("selects deployment control-plane intent collections as generated UI sections", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const deployments = selectScreenModelByPath(schema, "/deployments");
 
@@ -2248,52 +2248,11 @@ describe("home view model collections", () => {
           viewName: "deployDesiredResourceList",
           entityName: "deploy-desired-resource",
         },
-        {
-          id: "attempts",
-          label: "Deploy attempts",
-          viewName: "deployAttemptList",
-          entityName: "deploy-attempt",
-        },
-        {
-          id: "evidence",
-          label: "Evidence summaries",
-          viewName: "deployEvidenceSummaryList",
-          entityName: "deploy-evidence-summary",
-        },
-        {
-          id: "drift",
-          label: "Drift reports",
-          viewName: "deployDriftReportList",
-          entityName: "deploy-drift-report",
-        },
       ],
     });
-    const driftSection = deployments.layout.sections.find((section) => section.id === "drift");
-    const evidenceSection = deployments.layout.sections.find(
-      (section) => section.id === "evidence",
-    );
-
-    expect(
-      driftSection?.collection.result.type === "table"
-        ? driftSection.collection.result.columns.map(readOnlyTableColumnSummary)
-        : [],
-    ).toEqual([
-      { key: "field:deployTarget", display: "readOnly" },
-      { key: "field:versionId", display: "readOnly" },
-      { key: "field:status", display: "readOnly" },
-      { key: "field:createCount", display: "readOnly" },
-      { key: "field:updateCount", display: "readOnly" },
-      { key: "field:deleteCount", display: "readOnly" },
-      { key: "field:affectedLogicalIdsJson", display: "readOnly" },
-      { key: "field:reportedAt", display: "readOnly" },
-    ]);
-    expect(
-      evidenceSection?.collection.result.type === "table"
-        ? evidenceSection.collection.result.columns.map(readOnlyTableColumnSummary)
-        : [],
-    ).toContainEqual({ key: "field:providerResourceIdsJson", display: "readOnly" });
-    expect(evidenceSection?.collection.actions).toEqual([]);
-    expect(driftSection?.collection.actions).toEqual([]);
+    expect(deployments.layout.sections.map((section) => section.id)).not.toContain("attempts");
+    expect(deployments.layout.sections.map((section) => section.id)).not.toContain("evidence");
+    expect(deployments.layout.sections.map((section) => section.id)).not.toContain("drift");
   });
 
   it("selects site editor and settings as primary screen models", () => {
@@ -3001,12 +2960,5 @@ function summarizeHomeAction(action: HomeActionConfig) {
     showAffectedCountOnSuccess: action.ui.showAffectedCountOnSuccess,
     targetCountQueryKind: action.ui.targetCount?.query.kind ?? null,
     targetCountDisplay: action.ui.targetCount?.display.type ?? null,
-  };
-}
-
-function readOnlyTableColumnSummary(column: TableColumnConfig) {
-  return {
-    key: column.key,
-    display: column.display,
   };
 }

@@ -176,6 +176,47 @@ describe("portable archive protocol", () => {
     );
   });
 
+  it("rejects deployment execution history as instance control-plane source", () => {
+    const archive = instanceArchive({
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: "instance-control-plane",
+        schemaUpdatedAt: now,
+        records: [
+          ...controlPlaneRecords(),
+          {
+            id: "deploy-drift:instance.primary",
+            entity: "deploy-drift-report",
+            values: {
+              deployTarget: "instance.primary",
+              versionId: "version-1",
+              desiredStateHash: "hash-1",
+              revision: 1,
+              status: "in-sync",
+              actorKind: "runner",
+              actorId: "runner",
+              affectedLogicalIdsJson: "[]",
+              createCount: 0,
+              updateCount: 0,
+              deleteCount: 0,
+              reportedAt: now,
+            },
+            createdAt: now,
+          },
+        ],
+      },
+    });
+
+    expect(() => parseInstanceArchive(archive)).toThrow(
+      'Instance archive controlPlane records record "deploy-drift:instance.primary" references unknown entity "deploy-drift-report".',
+    );
+  });
+
   it("rejects unknown kinds, unsupported versions, and missing sections", () => {
     expect(() => parsePortableArchive({ kind: "formless.futureArchive", version: 1 })).toThrow(
       'Archive kind "formless.futureArchive" is unsupported.',
@@ -417,25 +458,6 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
         sourceFingerprint: "source",
         createdAt: now,
         updatedAt: now,
-      },
-      createdAt: now,
-    },
-    {
-      id: "deploy-drift:instance.primary",
-      entity: "deploy-drift-report",
-      values: {
-        deployTarget: "instance.primary",
-        versionId: "version-1",
-        desiredStateHash: "hash-1",
-        revision: 1,
-        status: "in-sync",
-        actorKind: "runner",
-        actorId: "runner",
-        affectedLogicalIdsJson: "[]",
-        createCount: 0,
-        updateCount: 0,
-        deleteCount: 0,
-        reportedAt: now,
       },
       createdAt: now,
     },

@@ -110,6 +110,15 @@ control-plane records without storing secrets or deployment execution history.
   as schema-owned record files
 - **AND** those record files identify control-plane records with qualified
   kebab-case entity names at the workspace boundary
+- **AND** record source is rooted at manifest `source.records`, defaults to
+  `records/instance-control-plane`, and writes deterministic entity files for
+  `instance:app-install`, `instance:route`, `instance:deploy-target`,
+  `instance:provider-config-ref`, and
+  `instance:deploy-desired-resource`
+- **AND** each entity file declares kind
+  `formless.instanceControlPlaneRecordSource`, version `1`, schema key
+  `instance-control-plane`, a `schemaUpdatedAt` timestamp, the qualified
+  entity name, and records for only that entity
 - **AND** `formless.json` does not duplicate that intent
 - **AND** deployment attempts, evidence summaries, drift reports, and cleanup
   audit summaries are available only through deployment runtime or gateway
