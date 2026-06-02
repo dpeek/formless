@@ -5,6 +5,7 @@ Implement one ready `##` task section from OpenSpec change `{{change_id}}`.
 Worker: `{{worker_name}}`.
 
 You are one local OpenSpec worker session. Ship exactly one ready `##` task section from `tasks.md`, then stop.
+This rendered prompt is self-contained for this session.
 
 ## Known OpenSpec State
 
@@ -48,9 +49,10 @@ You are one local OpenSpec worker session. Ship exactly one ready `##` task sect
 10. Mark only completed task checkboxes in the selected `##` section complete.
 11. Record evidence in `openspec/changes/{{change_id}}/tasks.md` or the owning change artifact: files changed, checks, smoke if needed, blockers if any.
 12. Run `devstate check`. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-13. If app behavior changed, smoke with `bun browser ...` and record evidence.
-14. Commit the `##` section with a concise message. Do not amend existing commits. Do not merge into `main`.
-15. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
+13. Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.
+14. If app behavior changed, smoke with `bun browser ...` and record evidence.
+15. Commit the `##` section with a concise message. Do not amend existing commits. Do not merge into `main`.
+16. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
 
 ## Signals
 

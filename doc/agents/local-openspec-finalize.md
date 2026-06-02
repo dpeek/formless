@@ -5,6 +5,7 @@ Finalize OpenSpec change `{{change_id}}`.
 Worker: `{{worker_name}}`.
 
 You are a local OpenSpec finalization session. Finalize before marking the branch ready for review.
+This rendered prompt is self-contained for this session.
 
 ## Known OpenSpec State
 
@@ -29,7 +30,7 @@ You are a local OpenSpec finalization session. Finalize before marking the branc
 ## Concrete Commands
 
 - Refresh apply state if known state is absent or stale: `openspec instructions apply --change "{{change_id}}" --json`.
-- Validate before archive: `openspec validate {{change_id}} --strict --no-interactive`.
+- Strict validation before archive: `openspec validate {{change_id}} --strict --no-interactive`.
 - Archive and apply spec deltas: `openspec archive {{change_id}} --yes`.
 - Rebase on local main: `git rebase main`.
 - Run checks only when finalization invalidates current implementation evidence: `devstate check`.
@@ -41,9 +42,9 @@ You are a local OpenSpec finalization session. Finalize before marking the branc
 3. Verify required tasks are shipped or intentionally closed. Stop with `<blocked/>` if the change is not ready.
 4. Rebase current branch on local `main`. Use `git rebase main`; resolve clear structural conflicts and stop with `<blocked/>` only for semantic conflicts.
 5. Read updated change artifacts after the rebase only when local `main` changed them. Reconcile implementation to match updated artifacts before continuing.
-6. Run `openspec validate {{change_id}} --strict --no-interactive`; block with command evidence on failure.
+6. Run `openspec validate {{change_id}} --strict --no-interactive` before archive; block with command evidence on failure.
 7. Run `openspec archive {{change_id}} --yes`; use archive output for canonical spec updates and block with command evidence on failure.
-8. Do not manually promote shipped facts into `openspec/specs/*/spec.md` when OpenSpec archive can apply the change deltas.
+8. Treat OpenSpec archive output as the spec promotion path. Do not manually promote shipped facts into `openspec/specs/*/spec.md` when OpenSpec archive can apply the change deltas.
 9. Reuse latest implementation `devstate check` evidence when finalization did not change code, resolve conflicts, edit generated output, or otherwise invalidate the checked tree.
 10. Run `devstate check` only when finalization invalidates prior evidence or evidence validity is unclear. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
 11. Update owning change artifacts so finalization status and latest evidence are recorded.

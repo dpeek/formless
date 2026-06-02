@@ -10,6 +10,7 @@
 - [x] 1.8 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
 
 Evidence:
+
 - Changed `scripts/agents.ts` to classify leases, release stale active leases before claim discovery, release review-ready leases only after branch deletion or merge into `main`, and print blocked lease evidence during idle output.
 - Changed `scripts/agents.test.ts` to cover PID and heartbeat staleness, stale active recovery, blocked lease release, ready-for-review retention, and cleanup after branch deletion or merge.
 - `devstate check` at 2026-06-02T02:27:30.413Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
@@ -55,9 +56,18 @@ Evidence:
 
 ## 4. Worker Docs Alignment
 
-- [ ] 4.1 Update `doc/agents/local-agent-workers.md` as human and supervisor reference for CLI-owned validation/archive, conditional finalization checks, self-contained review branches, lease recovery, and context-efficient prompts.
-- [ ] 4.2 Update `doc/agents/local-openspec-finalize.md` to be a self-contained rendered prompt template with no manual spec promotion, strict validation, archive, conditional checks, and no instruction to reread itself.
-- [ ] 4.3 Update `doc/agents/local-openspec-implement.md` to be a self-contained rendered prompt template with one-section implementation, section-first context loading, focused context reads, evidence requirements, and no finalization/archive `##` task section.
-- [ ] 4.4 Update `AGENTS.md` local finalization and worker wording if needed so it keeps repo rules but no longer duplicates detailed workflow mechanics owned by supervisor code or rendered prompts.
-- [ ] 4.5 Add or update documentation-adjacent tests for the revised worker instructions and duplicated-instruction reduction.
-- [ ] 4.6 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+- [x] 4.1 Update `doc/agents/local-agent-workers.md` as human and supervisor reference for CLI-owned validation/archive, conditional finalization checks, self-contained review branches, lease recovery, and context-efficient prompts.
+- [x] 4.2 Update `doc/agents/local-openspec-finalize.md` to be a self-contained rendered prompt template with no manual spec promotion, strict validation, archive, conditional checks, and no instruction to reread itself.
+- [x] 4.3 Update `doc/agents/local-openspec-implement.md` to be a self-contained rendered prompt template with one-section implementation, section-first context loading, focused context reads, evidence requirements, and no finalization/archive `##` task section.
+- [x] 4.4 Update `AGENTS.md` local finalization and worker wording if needed so it keeps repo rules but no longer duplicates detailed workflow mechanics owned by supervisor code or rendered prompts.
+- [x] 4.5 Add or update documentation-adjacent tests for the revised worker instructions and duplicated-instruction reduction.
+- [x] 4.6 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+Evidence:
+
+- Changed `doc/agents/local-agent-workers.md` to document CLI-owned validation/archive, conditional finalization checks, self-contained review branches, ready-for-review lease retention, and context-efficient rendered prompts.
+- Changed `doc/agents/local-openspec-finalize.md` and `doc/agents/local-openspec-implement.md` to mark rendered prompts self-contained, keep implementation sessions away from finalization/archive work, and keep finalization on strict validation plus OpenSpec archive output.
+- Changed `AGENTS.md` to keep repo rules while moving per-session mechanics to rendered prompts and supervisor-owned finalization.
+- Changed `scripts/agents.test.ts` to assert prompt self-containment, CLI-owned finalization wording, context-efficient worker docs, and removal of stale manual-promotion/post-review archive instructions.
+- `devstate check` at 2026-06-02T02:54:08.457Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
+- App behavior unchanged; browser smoke not needed.

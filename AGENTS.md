@@ -14,7 +14,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 - Always: this file.
 - Workstream: assigned committed OpenSpec change under `openspec/changes/<change-id>/`.
-- Task loop: `doc/agents/local-openspec-implement.md` or `doc/agents/local-openspec-finalize.md` when `bun agents` injects it.
+- Task loop: rendered prompt injected by `bun agents`; source prompt docs are reference, not required per-session reads.
 - Package scope: nearest package `AGENTS.md`, for example `lib/ui/AGENTS.md`.
 - Capability scope: relevant `openspec/specs/*/spec.md`.
 - Skill config: relevant file in `doc/agents/`.
@@ -22,9 +22,9 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 ## Agent Docs
 
-- `doc/agents/local-agent-workers.md`: local OpenSpec pull worker workflow.
-- `doc/agents/local-openspec-implement.md`: one-section implementation prompt body.
-- `doc/agents/local-openspec-finalize.md`: automatic finalization prompt body.
+- `doc/agents/local-agent-workers.md`: local OpenSpec pull worker human and supervisor reference.
+- `doc/agents/local-openspec-implement.md`: one-section implementation rendered prompt template.
+- `doc/agents/local-openspec-finalize.md`: automatic finalization rendered prompt template.
 
 ## Capability Specs
 
@@ -103,16 +103,17 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## Work
 
 1. Run `devstate start`.
-2. Read `./.devstate/status.md`; fix red status first.
-3. Read assigned OpenSpec change artifacts.
-4. Read nearest package `AGENTS.md` only when editing inside that package.
-5. Read relevant `openspec/specs/*/spec.md`.
-6. Ship exactly one ready `##` section from `openspec/changes/<change-id>/tasks.md` unless user explicitly asks for docs/planning only.
-7. Update only owning OpenSpec change artifacts with status, decisions, blockers, evidence, promotion notes.
-8. Run `devstate check`.
-9. Read `./.devstate/status.md`; fix issues.
-10. If app behavior changed, smoke with `bun browser ...`.
-11. End with changed files, checks, OpenSpec change status.
+2. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+3. Select the ready `##` section before broad context reads when doing implementation work.
+4. Read assigned OpenSpec change artifacts needed for the selected section or finalization prompt.
+5. Read nearest package `AGENTS.md` only when editing inside that package.
+6. Read relevant `openspec/specs/*/spec.md`.
+7. Ship exactly one ready `##` section from `openspec/changes/<change-id>/tasks.md` unless user explicitly asks for docs/planning only.
+8. Update only owning OpenSpec change artifacts with status, decisions, blockers, evidence, promotion notes.
+9. Run `devstate check`.
+10. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+11. If app behavior changed, smoke with `bun browser ...`.
+12. End with changed files, checks, OpenSpec change status.
 
 ## Workstream
 
@@ -122,20 +123,19 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Task statuses are task checkboxes plus recorded evidence in the owning change artifacts.
 - Mark or ship one `##` section at a time for a workstream.
 - Local OpenSpec implementation unit is one ready `##` section in `openspec/changes/<change-id>/tasks.md`.
-- Local OpenSpec workers auto-finalize before review and include promoted specs on the review branch.
+- Local OpenSpec workers auto-finalize before review and include OpenSpec archive output plus canonical specs on the review branch.
 
 ## Local OpenSpec Finalization
 
 For `bun agents watch <worker-name>`:
 
-- Finalize automatically when required tasks are shipped or intentionally closed.
-- Rebase on local `main` and reconcile updated change artifacts before marking ready.
+- Finalization is supervisor and rendered-prompt owned after required tasks are shipped or intentionally closed.
+- Rebase on local `main`, run strict OpenSpec validation, run OpenSpec archive on the review branch, and commit archive output.
+- Reuse latest implementation `devstate check` evidence unless rebase, conflict resolution, code changes, generated output edits, or unclear coverage invalidate it.
 - Resolve clear structural rebase conflicts; block only on semantic conflicts that require product, storage, security, public API, or user-intent decisions.
-- Promote shipped facts into relevant `openspec/specs/*/spec.md` on the branch.
-- Leave a clean review-ready `changes/<change-id>` branch.
+- Leave a clean review-ready `changes/<change-id>` branch with code changes, completed evidence, canonical specs, and archived change files.
 - Keep review-ready branches rebased on local `main`; workers rerun finalization when `main` advances.
 - Detach the worker worktree from `changes/<change-id>` at the final branch tip before marking ready.
-- Do not archive the OpenSpec change; archiving is a separate process after review and merge.
 - Do not merge unless user asks.
 
 ## Rules
@@ -143,7 +143,7 @@ For `bun agents watch <worker-name>`:
 - Bun scripts only.
 - `devstate` owns dev, test, check output.
 - Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually during normal agent work.
-- Use `./.devstate/status.md` as check evidence.
+- Use current devstate output or `./.devstate/status.md` as check evidence.
 - Preserve user changes.
 - Keep data model flat.
 - Compose in view/query/projection/action layer.

@@ -59,16 +59,21 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - One implementation session ships one ready `##` section from `openspec/changes/<change-id>/tasks.md`.
 - The section includes that `##` heading and its task checkboxes until the next `##` heading or end of file.
 - A section session does not cross into another `##` section.
+- Rendered implementation prompts include known OpenSpec state, concrete commands, task state, and relevant file paths.
+- Implementation prompts select the active `##` section before broad context reads and then load only section-relevant artifacts, specs, docs, and code.
+- Prompt source docs are templates and human reference, not required per-session context after `bun agents` injects a rendered prompt.
 - If the selected section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, the worker records blocker evidence and split guidance.
-- The section session runs `devstate check`, reads `.devstate/status.md`, commits the section, and records evidence in the owning change artifacts.
+- The section session runs `devstate check`, commits the section, and records evidence from current devstate output or `.devstate/status.md` when exact status-file evidence is needed.
 - Implementation section commits do not rebase by default.
 - If a worker resumes a worktree already mid-rebase, it follows the rebase conflict policy before selecting more work.
 - When all required tasks are shipped or closed, the worker runs finalization before review.
-- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, detaches the worker worktree at the final branch tip, and marks the branch ready for review.
-- Review-ready means the branch is a clean merge candidate with promoted specs included.
+- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits archive output, detaches the worker worktree at the final branch tip, and marks the branch ready for review.
+- Finalization reuses latest implementation `devstate check` evidence when rebase, archive, and artifact reconciliation do not invalidate it.
+- Finalization reruns `devstate check` when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
+- Review-ready means the branch is a clean merge candidate with code changes, completed task evidence, canonical specs, and archived change files included.
 - Review-ready branches must not remain checked out by worker worktrees.
-- Review-ready branches retain their lease until manual release or repository cleanup removes the local worker state.
-- Workers do not archive OpenSpec changes. Archiving is a separate process after review and merge.
+- Review-ready branches retain their lease until branch merge, branch deletion, or explicit release.
+- Workers do not merge review-ready branches into `main`.
 
 ## Rebase Conflict Policy
 
@@ -82,13 +87,13 @@ The state root is shared by worktrees from the same clone and is not tracked.
 ## Feedback Loop
 
 - Humans may provide implementation feedback by editing the committed change artifacts on local `main`.
-- The worker rebases the change branch on local `main`, reads the updated change artifacts, and updates implementation and promoted spec diffs to match.
+- The worker rebases the change branch on local `main`, reads the updated change artifacts, and updates implementation, task evidence, OpenSpec artifacts, and any archive output to match.
 - If feedback has semantic conflicts with shipped behavior, the worker records blocker evidence instead of guessing.
 
 ## Idle Maintenance
 
 - Each watch pass first scans `ready-for-review` leases.
-- If a review-ready branch does not contain local `main`, the worker adopts the lease, runs a finalization session, rebases on local `main`, runs checks, detaches the worktree, and marks the branch ready again.
+- If a review-ready branch does not contain local `main`, the worker adopts the lease, runs finalization maintenance, rebases on local `main`, runs checks only when evidence is invalidated or unclear, detaches the worktree, and marks the branch ready again.
 - If no change can be claimed or refreshed, the worker scans unleased local `changes/*` branches.
 - Eligible unleased branches with remaining OpenSpec work are rebased on local `main`.
 - Semantic rebase conflicts are recorded as blocked status with evidence.
