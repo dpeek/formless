@@ -193,3 +193,9 @@ Evidence 2026-06-02 Codex:
 - Verified CLI compatibility coverage for app install route summaries, domain APIs, domain provider redirects, deploy planning, destroy planning, and domain command output in `src/worker/instance-app-installs.test.ts`, `src/worker/instance-domain-mappings.test.ts`, `src/worker/domain-provider-api.test.ts`, and `src/site/cli.test.ts`.
 - `devstate check`: pass, checks ok and services running.
 - Browser smoke: not run; this section changes tests and OpenSpec task evidence only.
+
+Finalization evidence 2026-06-02 Codex:
+
+- Fixed `src/worker/miniflare-test.ts` so temporary Worker harness entrypoints resolve the worktree `node_modules` during esbuild bundling.
+- Guarded `src/worker/passkey-dependency.test.ts` cleanup after harness setup failures to keep dependency evidence single-cause.
+- `devstate check`: pass, checks ok and services running at `https://grug.formless.local`.

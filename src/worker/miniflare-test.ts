@@ -36,6 +36,7 @@ export async function createWorkerHarness(
     external: ["cloudflare:workers"],
     format: "esm",
     loader: { ".wasm": "copy" },
+    nodePaths: [resolve("node_modules")],
     outfile: scriptPath,
     platform: "browser",
   });

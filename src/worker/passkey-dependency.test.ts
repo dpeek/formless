@@ -15,7 +15,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await harness.dispose();
+  await harness?.dispose();
 
   if (harnessDir) {
     await rm(harnessDir, { recursive: true, force: true });

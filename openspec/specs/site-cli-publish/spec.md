@@ -234,110 +234,112 @@ The system SHALL import a standalone Site project as an installed Site app archi
 ### Requirement: Instance Workspace
 
 The system SHALL manage reviewable Formless workspaces whose `formless.json`
-manifests describe targets, archives, deploy settings, app policy, local state,
-and domain intent without storing secrets.
+manifests describe workspace layout and local configuration while instance
+intent lives in schema-owned record source.
 
 #### Scenario: Pull and check
 
-- GIVEN an instance workspace targets a remote Formless instance
-- WHEN `formless instance pull` runs and then `formless instance check` runs
-- THEN target instance and app archives are written into the workspace
-- AND check reports archive and desired-domain drift against the selected target
+- **GIVEN** an instance workspace targets a remote Formless instance
+- **WHEN** `formless instance pull` runs and then `formless instance check`
+  runs
+- **THEN** target instance archives, app archives, and control-plane record
+  source are written into the workspace
+- **AND** check reports app, route, domain, redirect, deployment, app record,
+  and media drift against the selected target from schema-owned records
 
 #### Scenario: Push apply
 
-- GIVEN workspace archives are ready and target drift is acknowledged when needed
-- WHEN `formless instance push --apply` runs
-- THEN the workflow takes a fresh whole-instance backup
-- AND dry-runs before applying the composed instance archive restore
+- **GIVEN** workspace source is ready and target drift is acknowledged when
+  needed
+- **WHEN** `formless instance push --apply` runs
+- **THEN** the workflow takes a fresh whole-instance backup
+- **AND** dry-runs before applying the composed instance archive restore
 
 ### Requirement: Domain And Deploy Commands
 
 The system SHALL keep deployment, destroy, remote provider apply, and fallback
-Cloudflare domain mutations explicit and credential-scoped.
+Cloudflare domain mutations explicit and credential-scoped while using route
+records for domain and redirect intent.
 
 #### Scenario: First workspace deploy
 
-- GIVEN a local Formless workspace has saved archive source and no remote target
-- WHEN `formless deploy` runs with Cloudflare credentials available to the CLI
-- THEN the deployment uses the instance runtime profile
-- AND deploy metadata is verified after upload
-- AND target and deploy intent are written to `formless.json`
-- AND display-safe Cloudflare target facts are copied to ignored `.formless/`
-  deploy state
-- AND Cloudflare API tokens, Alchemy secrets, automation admin tokens, and owner
-  setup tokens are stored only under ignored `.formless/` state
-- AND saved workspace archives are dry-run restored before remote data mutation
-  is applied
-- AND saved workspace archives are pushed after deploy verification unless
+- **GIVEN** a local Formless workspace has saved source and no remote target
+- **WHEN** `formless deploy` runs with Cloudflare credentials available to the
+  CLI or local workspace gateway
+- **THEN** the deployment uses the instance runtime profile
+- **AND** deploy metadata is verified after upload
+- **AND** target, deploy, domain, and redirect intent are written to
+  schema-owned control-plane record source, not duplicated in `formless.json`
+- **AND** domain and redirect intent is written as `instance:route` records
+- **AND** display-safe Cloudflare target facts are copied to ignored
+  `.formless/` deploy state
+- **AND** Cloudflare API tokens, Alchemy secrets, automation admin tokens, and
+  owner setup tokens are stored only under ignored `.formless/` state
+- **AND** saved workspace source is dry-run restored before remote data
+  mutation is applied
+- **AND** saved workspace source is pushed after deploy verification unless
   target identity or remote drift requires explicit acknowledgement
 
 #### Scenario: Instance deploy
 
-- GIVEN a workspace has a configured remote target
-- WHEN `formless instance deploy` runs
-- THEN the deployment uses the instance runtime profile
-- AND deploy metadata is verified after upload
+- **GIVEN** a claimed instance workspace is configured
+- **WHEN** `formless instance deploy` runs
+- **THEN** the deployment uses the instance runtime profile
+- **AND** deploy metadata is verified after upload
+- **AND** custom-domain, DNS, and redirect desired resources are projected from
+  enabled `instance:route` records
 
 #### Scenario: Workspace destroy
 
-- GIVEN a local Formless workspace targets a Cloudflare-backed instance
-- WHEN `formless destroy --confirm <workerName>` runs with Cloudflare
+- **GIVEN** a local Formless workspace targets a Cloudflare-backed instance
+- **WHEN** `formless destroy --confirm <workerName>` runs with Cloudflare
   credentials and ignored deploy state available to the CLI
-- THEN the selected target's Worker, Durable Object namespace, R2 media bucket,
-  Worker assets, Worker secrets, custom-domain provider resources, DNS provider
-  resources, redirect provider resources, and Alchemy deploy state are destroyed
-- AND `formless.json`, instance archives, and app archives remain in place
-- AND ignored deploy state for the selected target is removed or marked
-  destroyed only after provider destroy succeeds
-- AND provider credentials and admin tokens remain outside workspace manifests,
-  portable archives, browser responses, and spec artifacts
+- **THEN** the selected target's Worker, Durable Object namespace, R2 media
+  bucket, Worker assets, Worker secrets, custom-domain provider resources, DNS
+  provider resources, redirect provider resources, and Alchemy deploy state are
+  destroyed
+- **AND** custom-domain, DNS, and redirect desired resources are derived from
+  enabled `instance:route` records instead of separate domain or redirect
+  records
+- **AND** reviewable workspace source remains unchanged
+- **AND** provider credentials and admin tokens remain outside workspace
+  manifests, record source, portable archives, browser responses, and spec
+  artifacts
 
 #### Scenario: Instance destroy
 
-- GIVEN a workspace has a configured remote target
-- WHEN `formless instance destroy --confirm <workerName>` runs with Cloudflare
-  credentials and ignored deploy state available to the CLI
-- THEN the selected target's Worker, Durable Object namespace, R2 media bucket,
-  Worker assets, Worker secrets, custom-domain provider resources, DNS provider
-  resources, redirect provider resources, and Alchemy deploy state are destroyed
-- AND reviewable workspace source remains unchanged
-
-#### Scenario: Destroy confirmation
-
-- GIVEN a workspace targets a Cloudflare-backed instance
-- WHEN `formless destroy` or `formless instance destroy` runs without
-  `--confirm <workerName>` matching the selected deployment Worker name
-- THEN the command fails before Cloudflare or Alchemy mutation
-
-#### Scenario: Destroy with enabled domain intent
-
-- GIVEN a workspace contains enabled domain intent for the selected target
-- WHEN `formless destroy --confirm <workerName>` or
-  `formless instance destroy --confirm <workerName>` runs with default Alchemy
-  Cloudflare credentials available to the CLI
-- THEN the command destroys the enabled domain provider resources in the same
-  Alchemy app and stage as the selected instance Worker, Durable Object
-  namespace, and R2 media bucket
-- AND no separate domain delete command is required for resources owned by that
-  instance Alchemy app
+- **GIVEN** a workspace has a configured remote target
+- **WHEN** `formless instance destroy --confirm <workerName>` runs with
+  Cloudflare credentials and ignored deploy state available to the CLI
+- **THEN** the selected target's Worker, Durable Object namespace, R2 media
+  bucket, Worker assets, Worker secrets, custom-domain provider resources, DNS
+  provider resources, redirect provider resources, and Alchemy deploy state are
+  destroyed
+- **AND** custom-domain, DNS, and redirect desired resources are derived from
+  enabled `instance:route` records instead of separate domain or redirect
+  records
+- **AND** reviewable workspace source remains unchanged
 
 #### Scenario: Domain apply
 
-- GIVEN workspace domain intent contains enabled exact-host profile mappings and Cloudflare credentials are available to the CLI or provider runner
-- WHEN a domain apply command runs
-- THEN preflight checks run before mutation
-- AND domain provider resources for the selected target are recorded under the
-  same Alchemy app, stage, and deploy state root as the selected instance Worker,
-  Durable Object namespace, and R2 media bucket
-- AND browser clients, portable archives, and workspace manifests do not receive Cloudflare API credentials
+- **GIVEN** workspace route intent contains enabled exact-host mount routes or
+  redirect routes and Cloudflare credentials are available to the CLI or
+  provider runner
+- **WHEN** a domain apply command runs
+- **THEN** preflight checks run before mutation
+- **AND** domain provider resources for the selected target are recorded under
+  the same Alchemy app, stage, and deploy state root as the selected instance
+  Worker, Durable Object namespace, and R2 media bucket
+- **AND** browser clients, portable archives, record source, and workspace
+  manifests do not receive Cloudflare API credentials
 
 #### Scenario: Automation admin token
 
-- GIVEN an instance workspace needs automation write access
-- WHEN `formless instance token adopt` or `rotate` runs
-- THEN ignored workspace secret state stores the automation admin token
-- AND the reviewable workspace manifest does not store the secret
+- **GIVEN** an instance workspace needs automation write access
+- **WHEN** `formless instance token adopt` or `rotate` runs
+- **THEN** ignored workspace secret state stores the automation admin token
+- **AND** the reviewable workspace manifest and record source do not store the
+  secret
 
 ### Requirement: Deployment-Aware Domain Runner CLI
 
@@ -372,63 +374,51 @@ generic deployment protocol facts when the target supports them.
 
 ### Requirement: Schema Control-Plane Protocol
 
-The Site CLI SHALL use the instance protocol to query schema-owned app install,
-route, and deployment records when the target supports them.
+The Site CLI SHALL use the instance protocol and local workspace operation
+layer to query, write, save, and compare schema-owned app install, route, and
+deployment records when the target supports them.
 
 #### Scenario: CLI reads deployment records
 
-- GIVEN a claimed instance workspace targets a runtime with schema-owned
+- **GIVEN** a claimed instance workspace targets a runtime with schema-owned
   control-plane records
-- WHEN CLI status, check, pull, push, plan, deploy, or domain workflows need
+- **WHEN** CLI status, check, pull, push, plan, deploy, or domain workflows need
   instance control-plane state
-- THEN they read allowed app install, route, domain, and deployment records
-  through the instance control-plane protocol using canonical entity keys such
-  as `app-install`, `app-route`, `domain-mapping`, `redirect-intent`,
-  `deploy-target`, `provider-config-ref`, `deploy-desired-resource`,
-  `deploy-attempt`, `deploy-evidence-summary`, and `deploy-drift-report`
-- AND provider credentials remain in CLI or runner-held secret locations
-
-#### Scenario: CLI writes qualified workspace record source
-
-- GIVEN a local workspace operation writes reviewable control-plane record
-  source
-- WHEN CLI save, pull, push, check, deploy, or domain workflows emit record
-  entity identity outside the declaring schema
-- THEN they use qualified entity names such as `instance:app-install`,
-  `instance:app-route`, `instance:domain-mapping`, and
-  `instance:deploy-target`
-- AND installed app data remains scoped to app archive or app snapshot payloads
-  instead of instance control-plane records
+- **THEN** they read allowed app install, route, and deployment records through
+  the instance control-plane protocol or workspace record source
+- **AND** provider credentials remain in CLI, gateway, or runner-held secret
+  locations
 
 #### Scenario: CLI binds exact desired-state version
 
-- GIVEN `formless instance domains run-apply` or a deployment command starts
+- **GIVEN** `formless instance domains run-apply` or a deployment command starts
   against a schema-owned target
-- WHEN the command reads desired deployment state
-- THEN it binds existing deployment-runtime attempt and writeback calls to the
-  exact desired-state version and idempotency key
-- AND runner-held credentials remain outside browser, archive, and workspace
-  manifest responses
+- **WHEN** the command reads desired deployment state
+- **THEN** it binds existing deployment-runtime attempt and writeback calls to
+  the exact desired-state version and idempotency key
+- **AND** runner-held credentials remain outside browser, archive, record
+  source, and workspace manifest responses
 
 #### Scenario: CLI reads app routes
 
-- GIVEN an instance workspace needs installed app or public Site route state
-- WHEN route state is available as schema-owned records
-- THEN the CLI reads `app-install` and `app-route` records
-- AND route drift is reported by comparing route records rather than
-  hand-derived install route strings
-- AND external drift output identifies those records as `instance:app-install`
-  and `instance:app-route`
+- **GIVEN** an instance workspace needs installed app, public Site, exact-host,
+  or redirect route state
+- **WHEN** route state is available as schema-owned records
+- **THEN** the CLI reads `app-install` and `route` records
+- **AND** route drift is reported by comparing route records rather than
+  hand-derived install route strings, domain mapping records, redirect records,
+  or manifest route summaries
 
 ### Requirement: Compatible Domain Commands
 
-The Site CLI SHALL keep existing domain command surfaces stable while
-deployment intent moves to schema-owned records.
+The Site CLI SHALL keep existing domain command surfaces stable while domain
+and redirect intent moves to `route` records.
 
 #### Scenario: Existing command output
 
-- GIVEN users run existing domain remote-plan, run-apply, run-delete, forget,
-  manual cleanup, or direct fallback commands
-- WHEN those commands execute
-- THEN command names and credential boundaries remain stable
-- AND output may include schema-owned deployment record ids when available
+- **GIVEN** users run existing domain remote-plan, run-apply, run-delete,
+  forget, manual cleanup, or direct fallback commands
+- **WHEN** those commands execute
+- **THEN** command names and credential boundaries remain stable
+- **AND** output may include schema-owned route and deployment record ids when
+  available
