@@ -139,6 +139,7 @@ const promptDir = path.resolve(scriptDir, "..", "doc", "agents");
 const leaseFileName = "lease.json";
 const defaultBaseRef = "main";
 const defaultIntervalSeconds = 60;
+export const defaultStaleLeaseHeartbeatMs = 6 * 60 * 60 * 1000;
 
 class UsageError extends Error {}
 
@@ -174,6 +175,120 @@ function runOrThrow(
 
 function nowIso(now: () => Date): string {
   return now().toISOString();
+}
+
+const activeLeaseStates = new Set<WorkerState>(["claiming", "working", "finalizing"]);
+
+export type ChangeLeaseClassification =
+  | {
+      kind: "blocked";
+      lease: LeaseRecord;
+    }
+  | {
+      kind: "ready-for-review";
+      lease: LeaseRecord;
+    }
+  | {
+      kind: "released";
+      lease?: LeaseRecord;
+      reason: string;
+    }
+  | {
+      kind: "stale-active";
+      lease: LeaseRecord;
+      reason: string;
+    }
+  | {
+      kind: "valid-active";
+      lease: LeaseRecord;
+    };
+
+function isActiveLeaseState(state: WorkerState): boolean {
+  return activeLeaseStates.has(state);
+}
+
+function defaultIsProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return typeof error === "object" && error !== null && "code" in error && error.code === "EPERM";
+  }
+}
+
+function staleHeartbeatReason(
+  lease: LeaseRecord,
+  now: Date,
+  staleHeartbeatMs: number,
+): string | null {
+  const heartbeatMs = Date.parse(lease.heartbeatAt);
+  if (!Number.isFinite(heartbeatMs)) {
+    return `heartbeat ${lease.heartbeatAt} is invalid`;
+  }
+
+  const ageMs = now.getTime() - heartbeatMs;
+  if (ageMs > staleHeartbeatMs) {
+    return `heartbeat ${lease.heartbeatAt} is older than ${Math.round(staleHeartbeatMs / 1000)}s`;
+  }
+
+  return null;
+}
+
+export function classifyChangeLease(
+  lease: LeaseRecord | null,
+  options: {
+    isProcessAlive?: (pid: number) => boolean;
+    now?: () => Date;
+    staleHeartbeatMs?: number;
+  } = {},
+): ChangeLeaseClassification {
+  if (!lease) {
+    return { kind: "released", reason: "lease does not exist" };
+  }
+
+  if (lease.state === "released") {
+    return { kind: "released", lease, reason: "lease state is released" };
+  }
+
+  if (lease.state === "blocked") {
+    return { kind: "blocked", lease };
+  }
+
+  if (lease.state === "ready-for-review") {
+    return { kind: "ready-for-review", lease };
+  }
+
+  if (!isActiveLeaseState(lease.state)) {
+    return {
+      kind: "released",
+      lease,
+      reason: `lease state ${lease.state} does not block claims`,
+    };
+  }
+
+  const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
+  const staleHeartbeatMs = options.staleHeartbeatMs ?? defaultStaleLeaseHeartbeatMs;
+  const now = (options.now ?? (() => new Date()))();
+  const reasons: string[] = [];
+
+  if (typeof lease.pid === "number" && !isProcessAlive(lease.pid)) {
+    reasons.push(`recorded pid ${lease.pid} is not alive`);
+  }
+
+  const heartbeatReason = staleHeartbeatReason(lease, now, staleHeartbeatMs);
+  if (heartbeatReason) {
+    reasons.push(heartbeatReason);
+  }
+
+  if (reasons.length > 0) {
+    return { kind: "stale-active", lease, reason: reasons.join("; ") };
+  }
+
+  return { kind: "valid-active", lease };
 }
 
 function writeLine(stream: Pick<NodeJS.WriteStream, "write">, value: string): void {
@@ -359,6 +474,7 @@ export function updateChangeLease(
     ...patch,
     owner: patch.owner ? validateWorkerName(patch.owner) : lease.owner,
     heartbeatAt: nowIso(now),
+    pid: isActiveLeaseState(patch.state ?? lease.state) ? process.pid : lease.pid,
     updatedAt: nowIso(now),
   };
   writeJsonFile(leasePath(stateRoot, changeId), updated);
@@ -613,6 +729,124 @@ function branchIncludesBase(
   }
 
   throw new Error(`git merge-base --is-ancestor ${baseRef} ${branch} failed:\n${result.stderr}`);
+}
+
+function branchMergedIntoBase(
+  cwd: string,
+  branch: string,
+  baseRef: string,
+  runCommand: CommandRunner,
+): boolean {
+  const result = runCommand(cwd, "git", ["merge-base", "--is-ancestor", branch, baseRef]);
+  if (result.code === 0) {
+    return true;
+  }
+
+  if (result.code === 1) {
+    return false;
+  }
+
+  throw new Error(`git merge-base --is-ancestor ${branch} ${baseRef} failed:\n${result.stderr}`);
+}
+
+function readyForReviewReleaseReason(input: {
+  baseRef: string;
+  cwd: string;
+  lease: LeaseRecord;
+  runCommand: CommandRunner;
+}): string | null {
+  if (!branchExists(input.cwd, input.lease.branch, input.runCommand)) {
+    return `branch ${input.lease.branch} no longer exists`;
+  }
+
+  if (branchMergedIntoBase(input.cwd, input.lease.branch, input.baseRef, input.runCommand)) {
+    return `branch ${input.lease.branch} is merged into ${input.baseRef}`;
+  }
+
+  return null;
+}
+
+function releaseLeaseWithNotice(input: {
+  changeId: string;
+  reason: string;
+  stateRoot: string;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}): void {
+  if (releaseChangeLease(input.stateRoot, input.changeId, null)) {
+    writeLine(input.stdout, `[agents] released ${input.changeId}: ${input.reason}`);
+  }
+}
+
+function cleanupRecoverableChangeLeases(input: {
+  baseRef: string;
+  cwd: string;
+  now: () => Date;
+  runCommand: CommandRunner;
+  stateRoot: string;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}): void {
+  for (const lease of listChangeLeases(input.stateRoot)) {
+    const classification = classifyChangeLease(lease, { now: input.now });
+
+    if (classification.kind === "stale-active") {
+      releaseLeaseWithNotice({
+        changeId: lease.changeId,
+        reason: `stale ${lease.state} lease recovered: ${classification.reason}`,
+        stateRoot: input.stateRoot,
+        stdout: input.stdout,
+      });
+      continue;
+    }
+
+    if (classification.kind === "released") {
+      releaseLeaseWithNotice({
+        changeId: lease.changeId,
+        reason: classification.reason,
+        stateRoot: input.stateRoot,
+        stdout: input.stdout,
+      });
+      continue;
+    }
+
+    if (classification.kind !== "ready-for-review") {
+      continue;
+    }
+
+    const reason = readyForReviewReleaseReason({
+      baseRef: input.baseRef,
+      cwd: input.cwd,
+      lease,
+      runCommand: input.runCommand,
+    });
+    if (reason) {
+      releaseLeaseWithNotice({
+        changeId: lease.changeId,
+        reason: `ready-for-review lease complete: ${reason}`,
+        stateRoot: input.stateRoot,
+        stdout: input.stdout,
+      });
+    }
+  }
+}
+
+function writeBlockedLeaseNotices(input: {
+  now: () => Date;
+  stateRoot: string;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}): void {
+  for (const lease of listChangeLeases(input.stateRoot)) {
+    const classification = classifyChangeLease(lease, { now: input.now });
+    if (classification.kind !== "blocked") {
+      continue;
+    }
+
+    writeLine(
+      input.stdout,
+      `[agents] blocked ${lease.changeId}: ${
+        lease.latestEvidence?.message ?? "blocked without recorded evidence"
+      }`,
+    );
+  }
 }
 
 function findReadyForReviewLeaseNeedingRebase(input: {
@@ -1294,6 +1528,11 @@ async function runIdleMaintenance(input: {
         state: "idle",
       }),
     );
+    writeBlockedLeaseNotices({
+      now: input.now,
+      stateRoot: input.paths.root,
+      stdout: input.stdout,
+    });
     writeLine(input.stdout, "[agents] idle: no claimable work");
     return 0;
   }
@@ -1376,6 +1615,11 @@ async function runIdleMaintenance(input: {
     return 0;
   }
 
+  writeBlockedLeaseNotices({
+    now: input.now,
+    stateRoot: input.paths.root,
+    stdout: input.stdout,
+  });
   writeLine(input.stdout, "[agents] idle: change branches are leased");
   return 0;
 }
@@ -1392,6 +1636,15 @@ async function runWatchOnce(input: {
   const paths = resolveAgentStatePaths(input.cwd, input.runCommand);
   if (!input.options.dryRun) {
     ensureAgentStateDirs(paths);
+    cleanupRecoverableChangeLeases({
+      baseRef: input.options.baseRef,
+      cwd: input.cwd,
+      now: input.now,
+      runCommand: input.runCommand,
+      stateRoot: paths.root,
+      stdout: input.stdout,
+    });
+
     const ownedLease = findWorkerActiveLease(paths.root, input.options.workerName);
     if (ownedLease) {
       const branchPlan = ensureChangeBranch(input.cwd, ownedLease.changeId, {
@@ -1471,7 +1724,7 @@ async function runWatchOnce(input: {
     return 0;
   }
 
-  const claim = createChangeLease(paths.root, {
+  let claim = createChangeLease(paths.root, {
     changeId: change.changeId,
     latestEvidence: {
       at: nowIso(input.now),
@@ -1480,6 +1733,30 @@ async function runWatchOnce(input: {
     now: input.now,
     owner: input.options.workerName,
   });
+
+  if (!claim.claimed) {
+    const classification = classifyChangeLease(claim.lease, { now: input.now });
+    if (classification.kind === "stale-active" || classification.kind === "released") {
+      releaseLeaseWithNotice({
+        changeId: change.changeId,
+        reason:
+          classification.kind === "stale-active"
+            ? `stale ${classification.lease.state} lease recovered: ${classification.reason}`
+            : classification.reason,
+        stateRoot: paths.root,
+        stdout: input.stdout,
+      });
+      claim = createChangeLease(paths.root, {
+        changeId: change.changeId,
+        latestEvidence: {
+          at: nowIso(input.now),
+          message: `claimed ${change.changeId}`,
+        },
+        now: input.now,
+        owner: input.options.workerName,
+      });
+    }
+  }
 
   if (!claim.claimed) {
     writeLine(input.stderr, `[agents] ${change.changeId} already leased`);

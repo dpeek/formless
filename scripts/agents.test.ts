@@ -8,6 +8,7 @@ import {
   branchNameForChange,
   buildLocalOpenSpecFinalizationPrompt,
   buildLocalOpenSpecImplementationPrompt,
+  classifyChangeLease,
   createChangeLease,
   detachWorktreeAtBranchTip,
   discoverClaimableOpenSpecChanges,
@@ -85,6 +86,73 @@ describe("local agent worker state", () => {
       expect(releaseChangeLease(paths.root, "add-thing", "olga")).toBe(false);
       expect(releaseChangeLease(paths.root, "add-thing", "igor")).toBe(true);
       expect(readChangeLease(paths.root, "add-thing")).toBeNull();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("classifies valid, stale, blocked, released, and review-ready leases", () => {
+    const root = tempDir();
+    const paths = agentStatePaths(root);
+    ensureAgentStateDirs(paths);
+
+    try {
+      const fresh = createChangeLease(paths.root, {
+        changeId: "fresh-thing",
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        owner: "igor",
+        state: "working",
+      }).lease;
+      const stale = createChangeLease(paths.root, {
+        changeId: "stale-thing",
+        now: () => new Date("2026-05-27T00:00:00.000Z"),
+        owner: "igor",
+        state: "working",
+      }).lease;
+      const blocked = createChangeLease(paths.root, {
+        changeId: "blocked-thing",
+        owner: "igor",
+        state: "blocked",
+      }).lease;
+      const reviewReady = createChangeLease(paths.root, {
+        changeId: "review-thing",
+        owner: "igor",
+        state: "ready-for-review",
+      }).lease;
+
+      expect(
+        classifyChangeLease(fresh, {
+          isProcessAlive: () => true,
+          now: () => new Date("2026-05-28T00:01:00.000Z"),
+          staleHeartbeatMs: 60 * 60 * 1000,
+        }).kind,
+      ).toBe("valid-active");
+      expect(
+        classifyChangeLease(stale, {
+          isProcessAlive: () => true,
+          now: () => new Date("2026-05-28T00:00:00.000Z"),
+          staleHeartbeatMs: 60 * 60 * 1000,
+        }),
+      ).toMatchObject({ kind: "stale-active" });
+      expect(
+        classifyChangeLease(
+          fresh
+            ? {
+                ...fresh,
+                heartbeatAt: "2026-05-28T00:00:00.000Z",
+                pid: 12345,
+              }
+            : null,
+          {
+            isProcessAlive: () => false,
+            now: () => new Date("2026-05-28T00:01:00.000Z"),
+            staleHeartbeatMs: 60 * 60 * 1000,
+          },
+        ),
+      ).toMatchObject({ kind: "stale-active", reason: "recorded pid 12345 is not alive" });
+      expect(classifyChangeLease(blocked).kind).toBe("blocked");
+      expect(classifyChangeLease(reviewReady).kind).toBe("ready-for-review");
+      expect(classifyChangeLease(null)).toMatchObject({ kind: "released" });
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -180,6 +248,176 @@ describe("local agent worker discovery", () => {
           stateRoot: paths.root,
         }),
       ).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("recovers a stale active lease before claiming work", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const paths = agentStatePaths(gitCommonDir);
+    ensureAgentStateDirs(paths);
+    createChangeLease(paths.root, {
+      changeId: "add-thing",
+      now: () => new Date("2026-05-27T00:00:00.000Z"),
+      owner: "olga",
+      state: "working",
+    });
+    let sessionCalls = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 1 }, state: "in_progress" }),
+        };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") ===
+          `worktree add -b changes/add-thing ${path.join(root, "tmp", "worktree", "igor")} main`
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async (input) => {
+          sessionCalls += 1;
+          expect(input.changeId).toBe("add-thing");
+          expect(input.mode).toBe("implement");
+          return "task-done";
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(sessionCalls).toBe(1);
+      expect(stdout).toContain("[agents] released add-thing: stale working lease recovered");
+      expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
+        owner: "igor",
+        state: "working",
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps blocked leases visible and releasable", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const paths = agentStatePaths(gitCommonDir);
+    ensureAgentStateDirs(paths);
+    createChangeLease(paths.root, {
+      changeId: "add-thing",
+      latestEvidence: {
+        at: "2026-05-28T00:00:00.000Z",
+        message: "branch setup failed for add-thing",
+      },
+      owner: "olga",
+      state: "blocked",
+    });
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+    const streams = {
+      stderr: {
+        write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+      } as Pick<NodeJS.WriteStream, "write">,
+      stdout: {
+        write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+      } as Pick<NodeJS.WriteStream, "write">,
+    };
+
+    try {
+      const watchCode = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:01:00.000Z"),
+        runCommand,
+        ...streams,
+      });
+      expect(watchCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(stdout).toContain("[agents] blocked add-thing: branch setup failed for add-thing");
+      expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
+        latestEvidence: {
+          message: "branch setup failed for add-thing",
+        },
+        state: "blocked",
+      });
+
+      const releaseCode = await runAgentsCli(["release", "add-thing", "--owner", "olga"], {
+        cwd: root,
+        runCommand,
+        ...streams,
+      });
+
+      expect(releaseCode).toBe(0);
+      expect(readChangeLease(paths.root, "add-thing")).toBeNull();
+      expect(stdout).toContain("released add-thing");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -349,6 +587,13 @@ describe("local agent worker review branches", () => {
         args.join(" ") === "merge-base --is-ancestor main changes/add-thing"
       ) {
         return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "merge-base --is-ancestor changes/add-thing main"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
       }
 
       throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
@@ -526,6 +771,13 @@ describe("local agent worker review branches", () => {
 
       if (
         command === "git" &&
+        args.join(" ") === "merge-base --is-ancestor changes/add-thing main"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
         args.join(" ") ===
           `worktree add ${path.join(root, "tmp", "worktree", "igor")} changes/add-thing`
       ) {
@@ -578,6 +830,114 @@ describe("local agent worker review branches", () => {
       });
     } finally {
       rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("releases review-ready leases after branch deletion or merge", async () => {
+    for (const scenario of [
+      {
+        branchExists: false,
+        branchMerged: false,
+        branchList: "",
+        expectedNotice:
+          "[agents] released add-thing: ready-for-review lease complete: branch changes/add-thing no longer exists",
+      },
+      {
+        branchExists: true,
+        branchMerged: true,
+        branchList: "changes/add-thing\n",
+        expectedNotice:
+          "[agents] released add-thing: ready-for-review lease complete: branch changes/add-thing is merged into main",
+      },
+    ]) {
+      const root = tempDir();
+      const gitCommonDir = path.join(root, ".git");
+      const paths = agentStatePaths(gitCommonDir);
+      ensureAgentStateDirs(paths);
+      createChangeLease(paths.root, {
+        changeId: "add-thing",
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        owner: "olga",
+        state: "ready-for-review",
+      });
+      let sessionCalls = 0;
+      let stdout = "";
+      let stderr = "";
+      const runCommand: CommandRunner = (_cwd, command, args) => {
+        if (
+          command === "git" &&
+          args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+        ) {
+          return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+        }
+
+        if (
+          command === "git" &&
+          args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+        ) {
+          return { code: scenario.branchExists ? 0 : 1, stderr: "", stdout: "" };
+        }
+
+        if (
+          command === "git" &&
+          args.join(" ") === "merge-base --is-ancestor changes/add-thing main"
+        ) {
+          return { code: scenario.branchMerged ? 0 : 1, stderr: "", stdout: "" };
+        }
+
+        if (
+          command === "git" &&
+          args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+        ) {
+          return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+        }
+
+        if (
+          command === "openspec" &&
+          args.join(" ") === "instructions apply --change add-thing --json"
+        ) {
+          return {
+            code: 0,
+            stderr: "",
+            stdout: JSON.stringify({ progress: { remaining: 0 }, state: "all_done" }),
+          };
+        }
+
+        if (
+          command === "git" &&
+          args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+        ) {
+          return { code: 0, stderr: "", stdout: scenario.branchList };
+        }
+
+        throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+      };
+
+      try {
+        const code = await runAgentsCli(["watch", "igor", "--once"], {
+          cwd: root,
+          now: () => new Date("2026-05-28T00:01:00.000Z"),
+          runCommand,
+          runSession: async () => {
+            sessionCalls += 1;
+            return "plan-done";
+          },
+          stderr: {
+            write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+          } as Pick<NodeJS.WriteStream, "write">,
+          stdout: {
+            write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+          } as Pick<NodeJS.WriteStream, "write">,
+        });
+
+        expect(code).toBe(0);
+        expect(stderr).toBe("");
+        expect(sessionCalls).toBe(0);
+        expect(stdout).toContain(scenario.expectedNotice);
+        expect(readChangeLease(paths.root, "add-thing")).toBeNull();
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+      }
     }
   });
 });

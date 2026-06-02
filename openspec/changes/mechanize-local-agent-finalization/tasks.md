@@ -1,13 +1,19 @@
 ## 1. Lease Recovery
 
-- [ ] 1.1 Add lease classification helpers for valid active, stale active, blocked, released, and ready-for-review lease states.
-- [ ] 1.2 Detect stale `claiming`, `working`, and `finalizing` leases from dead recorded PIDs or heartbeat age older than the configured stale heartbeat window.
-- [ ] 1.3 Allow a worker to recover or release a stale active lease before claiming the change.
-- [ ] 1.4 Preserve valid `ready-for-review` leases while the review branch is unmerged and still exists.
-- [ ] 1.5 Release `ready-for-review` leases only after branch merge, branch deletion, or explicit release.
-- [ ] 1.6 Keep blocked leases visible with blocker evidence and an explicit recovery or release path.
-- [ ] 1.7 Add tests for stale active lease recovery, blocked lease release, ready-for-review retention, and ready-for-review cleanup after merge or branch deletion.
-- [ ] 1.8 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+- [x] 1.1 Add lease classification helpers for valid active, stale active, blocked, released, and ready-for-review lease states.
+- [x] 1.2 Detect stale `claiming`, `working`, and `finalizing` leases from dead recorded PIDs or heartbeat age older than the configured stale heartbeat window.
+- [x] 1.3 Allow a worker to recover or release a stale active lease before claiming the change.
+- [x] 1.4 Preserve valid `ready-for-review` leases while the review branch is unmerged and still exists.
+- [x] 1.5 Release `ready-for-review` leases only after branch merge, branch deletion, or explicit release.
+- [x] 1.6 Keep blocked leases visible with blocker evidence and an explicit recovery or release path.
+- [x] 1.7 Add tests for stale active lease recovery, blocked lease release, ready-for-review retention, and ready-for-review cleanup after merge or branch deletion.
+- [x] 1.8 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+Evidence:
+- Changed `scripts/agents.ts` to classify leases, release stale active leases before claim discovery, release review-ready leases only after branch deletion or merge into `main`, and print blocked lease evidence during idle output.
+- Changed `scripts/agents.test.ts` to cover PID and heartbeat staleness, stale active recovery, blocked lease release, ready-for-review retention, and cleanup after branch deletion or merge.
+- `devstate check` at 2026-06-02T02:27:30.413Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
+- App behavior unchanged; browser smoke not needed.
 
 ## 2. CLI-Owned Finalization
 
