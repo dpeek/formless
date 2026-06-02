@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Local Workspace Runtime
+### Requirement: Local First Onboarding
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
 before any Cloudflare account or deployment mutation, while browser onboarding
