@@ -118,12 +118,12 @@ Evidence:
 - [x] 8.1 Implement deploy plan through the local gateway using schema-owned route/deploy records and desired-state projection.
 - [x] 8.2 Implement deploy apply through the local gateway as a trusted local deployer with exact desired-state writeback.
 - [x] 8.3 Return display-safe plan/apply attempt, evidence, drift, cleanup, and writeback summaries from gateway operation status/results without requiring schema-owned deployment history records.
-- [ ] 8.4 Implement browser-initiated Cloudflare credential setup through an API-first trusted local Alchemy profile adapter.
-- [ ] 8.5 Use existing default or named Alchemy profile credentials when available, otherwise create an Alchemy OAuth profile through auth URL handoff and browser-visible account selection.
-- [ ] 8.6 Do not expose browser token paste during onboarding.
-- [ ] 8.7 Keep Cloudflare API-token creation out of first browser onboarding unless explicit high-privilege bootstrap credentials are added in a later change.
-- [ ] 8.8 Resolve Cloudflare, Alchemy, admin, and automation credentials only from environment, local Alchemy profile storage, or ignored `.formless/` secret state.
-- [ ] 8.9 Add tests for credential setup, auth URL capture, no pasted-token path, no browser API-token creation path, plan/apply success, stale desired-state rejection, missing credentials, drift refusal, gateway-returned execution summaries, and no-secret browser responses.
+- [x] 8.4 Implement browser-initiated Cloudflare credential setup through an API-first trusted local Alchemy profile adapter.
+- [x] 8.5 Use existing default or named Alchemy profile credentials when available, otherwise create an Alchemy OAuth profile through auth URL handoff and browser-visible account selection.
+- [x] 8.6 Do not expose browser token paste during onboarding.
+- [x] 8.7 Keep Cloudflare API-token creation out of first browser onboarding unless explicit high-privilege bootstrap credentials are added in a later change.
+- [x] 8.8 Resolve Cloudflare, Alchemy, admin, and automation credentials only from environment, local Alchemy profile storage, or ignored `.formless/` secret state.
+- [x] 8.9 Add tests for credential setup, auth URL capture, no pasted-token path, no browser API-token creation path, plan/apply success, stale desired-state rejection, missing credentials, drift refusal, gateway-returned execution summaries, and no-secret browser responses.
 
 - Changed `src/site/instance-workspace.ts` so local deploy plan reads schema-owned control-plane record source, selects enabled `deploy-target` and Cloudflare `provider-config-ref` records, resolves the Cloudflare account through the local planning adapter, and projects route plus desired-resource records into display-safe desired-state counts and logical ids.
 - Changed `src/site/local-workspace-gateway.ts` so the Node-only local gateway passes deploy planning dependencies and package version into semantic workspace operations.
@@ -140,6 +140,11 @@ Evidence:
 - Updated `src/site/instance-workspace-operations.test.ts` and `src/site/local-workspace-gateway.test.ts` to cover gateway-returned execution summaries, exact runtime writeback response details, no deployment history source files, and no admin token, Alchemy password, or lease token in browser-visible output.
 - `devstate check` green at 2026-06-02T14:48:42.963Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 - Browser smoke: `bun browser --ignore-https-errors --session grug-deploy-summaries-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
+- Added `src/site/instance-workspace-credential-setup.ts` as the trusted local Alchemy Cloudflare credential setup adapter. It validates existing Alchemy profiles through the Cloudflare account API path, starts an OAuth profile flow with Alchemy default Cloudflare scopes when credentials are missing, emits only an allowlisted authorization URL operation event, stores OAuth credentials and selected account provider metadata in local Alchemy profile storage, and returns display-safe account options or selected account facts.
+- Changed `src/site/local-workspace-gateway.ts` and `src/client/workspace-gateway.ts` so browser-started credential setup can pass only provider/profile/account selection fields, runs through the default local Alchemy adapter when no test adapter is injected, keeps the operation running while the local OAuth callback completes, and resolves gateway env credentials from the local runtime process.
+- Updated `src/site/instance-workspace-credential-setup.test.ts` and `src/site/local-workspace-gateway.test.ts` to cover existing profile validation, OAuth auth URL capture, async continuation, browser-visible account selection, rejected pasted-token/API-key inputs, no browser API-token creation path, operation summaries, plan/apply coverage from prior section-8 tasks, stale desired-state/drift/missing-credential coverage from prior section-8 tests, and no secret text in browser-visible responses.
+- `devstate check` green at 2026-06-02T15:00:13.011Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-cloudflare-credential-setup-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
 
 ## 9. CLI Rewire And Command Compatibility
 

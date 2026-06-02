@@ -176,6 +176,13 @@ describe("local workspace gateway", () => {
       { kind: "status", rawAdapterOutput: "hidden" },
       { kind: "status", providerState: { account: "raw" } },
       { kind: "init", name: "CF_API_TOKEN=secret" },
+      { apiToken: "pasted-browser-token", kind: "credentialSetup", provider: "cloudflare" },
+      { globalApiKey: "pasted-browser-key", kind: "credentialSetup", provider: "cloudflare" },
+      {
+        cloudflareApiToken: "token-management-bootstrap",
+        kind: "credentialSetup",
+        provider: "cloudflare",
+      },
     ]) {
       const rejected = await gatewayJson(operationRequest(body, bootstrapHeaders()), {
         deps: gatewayDeps(workspaceRoot),
@@ -241,6 +248,83 @@ describe("local workspace gateway", () => {
     });
     expect(JSON.stringify(accepted.body)).not.toContain("secret-token");
     expect(JSON.stringify(accepted.body)).not.toContain("raw adapter");
+  });
+
+  it("passes browser-selected Cloudflare account id to credential setup without token input", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+    const credentialSetupInputs: Array<{
+      accountId?: string;
+      profileLabel?: string;
+      provider: "cloudflare";
+    }> = [];
+    const accepted = await gatewayJson(
+      operationRequest(
+        {
+          accountId: "acct_personal",
+          kind: "credentialSetup",
+          profileLabel: "personal",
+          provider: "cloudflare",
+        },
+        browserHeaders({ cookie, csrf: true }),
+      ),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          credentialSetup: async (input) => {
+            credentialSetupInputs.push({
+              accountId: input.accountId,
+              profileLabel: input.profileLabel,
+              provider: input.provider,
+            });
+
+            return {
+              result: {
+                summary: {
+                  fields: {
+                    profile: input.profileLabel ?? "default",
+                    provider: input.provider,
+                    selectedAccountId: input.accountId ?? "",
+                    status: "validated",
+                  },
+                  title: "Cloudflare credentials ready",
+                },
+              },
+              status: "succeeded",
+            };
+          },
+          operationIds: ["op_credential_account_00000001"],
+        }),
+      },
+    );
+
+    expect(accepted.response.status).toBe(200);
+    expect(credentialSetupInputs).toEqual([
+      {
+        accountId: "acct_personal",
+        profileLabel: "personal",
+        provider: "cloudflare",
+      },
+    ]);
+    expect(accepted.body.operation).toMatchObject({
+      id: "op_credential_account_00000001",
+      input: {
+        accountId: "acct_personal",
+        profileLabel: "personal",
+        provider: "cloudflare",
+      },
+      operation: "credentialSetup",
+      status: "succeeded",
+      summary: {
+        fields: {
+          profile: "personal",
+          provider: "cloudflare",
+          selectedAccountId: "acct_personal",
+          status: "validated",
+        },
+        title: "Cloudflare credentials ready",
+      },
+    });
+    expect(JSON.stringify(accepted.body)).not.toContain("pasted-browser-token");
   });
 
   it("allows admin bearer only for non-browser automation callers", async () => {
@@ -553,6 +637,7 @@ function gatewayDeps(
     accountDiscovery?: {
       listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
     };
+    credentialSetup?: LocalWorkspaceGatewayDependencies["credentialSetup"];
     credentialSetupUrl?: string;
     deploymentAdapter?: {
       deploy: (input: { plan: { expectedUrl: { url: string } } }) => Promise<{ url: string }>;
@@ -575,7 +660,8 @@ function gatewayDeps(
       : { accountDiscovery: options.accountDiscovery }),
     createOperationId: () => operationIds.shift() ?? "op_test_00000001",
     credentialSetup:
-      options.credentialSetupUrl === undefined
+      options.credentialSetup ??
+      (options.credentialSetupUrl === undefined
         ? undefined
         : async (input) => ({
             events: [
@@ -599,7 +685,7 @@ function gatewayDeps(
                 title: "Credential setup started",
               },
             },
-          }),
+          })),
     cwd: workspaceRoot,
     ...(options.deploymentAdapter === undefined
       ? {}

@@ -95,7 +95,12 @@ export type LocalWorkspaceGatewayStartInput =
       replaceInstallSet?: boolean;
       targetAlias?: string | null;
     }
-  | { kind: "credentialSetup"; profileLabel?: string | null; provider: "cloudflare" }
+  | {
+      accountId?: string | null;
+      kind: "credentialSetup";
+      profileLabel?: string | null;
+      provider: "cloudflare";
+    }
   | {
       kind: "deployApply" | "deployPlan";
       migrationPolicy?: "existing" | "new" | null;

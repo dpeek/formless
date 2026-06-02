@@ -3,6 +3,7 @@ import path from "node:path";
 
 import packageJson from "../../package.json";
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
+import { setupCloudflareCredentialsWithAlchemyProfile } from "./instance-workspace-credential-setup.ts";
 import {
   createFormlessWorkspaceOperationState,
   readFormlessWorkspaceOperationState,
@@ -13,6 +14,7 @@ import {
   type FormlessWorkspaceOperationInput,
   type FormlessWorkspaceOperationKind,
   type FormlessWorkspaceOperationResult,
+  type FormlessWorkspaceOperationStatus,
   type RunFormlessWorkspaceOperationDependencies,
 } from "./instance-workspace-operations.ts";
 import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
@@ -41,14 +43,17 @@ export type LocalWorkspaceGatewayEnv = {
 };
 
 export type LocalWorkspaceCredentialSetupInput = {
+  accountId?: string | undefined;
   profileLabel?: string | undefined;
   provider: "cloudflare";
   workspaceRoot: string;
 };
 
 export type LocalWorkspaceCredentialSetupResult = {
+  continue?: () => Promise<LocalWorkspaceCredentialSetupResult>;
   events?: readonly Omit<FormlessWorkspaceOperationEvent, "id">[];
   result?: FormlessWorkspaceOperationResult;
+  status?: FormlessWorkspaceOperationStatus;
 };
 
 export type LocalWorkspaceGatewayDependencies = RunFormlessWorkspaceOperationDependencies & {
@@ -70,6 +75,7 @@ type GatewayAuthorization =
     };
 
 type CredentialSetupOperationInput = {
+  accountId?: string | null;
   kind: "credentialSetup";
   profileLabel?: string | null;
   provider: "cloudflare";
@@ -140,6 +146,7 @@ export function createLocalWorkspaceGatewayMiddleware(
     const response = await handleLocalWorkspaceGatewayRequest(request, env, {
       accountDiscovery: alchemyFormlessInstanceAccountDiscoveryAdapter,
       cwd: env[LOCAL_WORKSPACE_GATEWAY_ROOT_ENV] ?? process.cwd(),
+      env,
       fetch,
       now: () => new Date().toISOString(),
       packageVersion: packageJson.version,
@@ -270,6 +277,7 @@ async function runCredentialSetupGatewayOperation(
     id: dependencies.createOperationId?.(),
     input: {
       provider: input.provider,
+      ...(input.accountId ? { accountId: input.accountId } : {}),
       ...(input.profileLabel ? { profileLabel: input.profileLabel } : {}),
     },
     kind: "credentialSetup",
@@ -284,11 +292,11 @@ async function runCredentialSetupGatewayOperation(
   });
 
   try {
-    if (!dependencies.credentialSetup) {
-      throw new Error("Workspace credential setup adapter is not configured.");
-    }
-
-    const result = await dependencies.credentialSetup({
+    const result = await (
+      dependencies.credentialSetup ??
+      ((credentialInput) => defaultCloudflareCredentialSetupAdapter(credentialInput, dependencies))
+    )({
+      accountId: input.accountId ?? undefined,
       profileLabel: input.profileLabel ?? undefined,
       provider: input.provider,
       workspaceRoot,
@@ -297,15 +305,35 @@ async function runCredentialSetupGatewayOperation(
       fields: { provider: input.provider },
       title: "Credential setup started",
     };
-
-    return await updateFormlessWorkspaceOperationState(operation.id, {
+    const status = result.status ?? "succeeded";
+    const completed = await updateFormlessWorkspaceOperationState(operation.id, {
       events: result.events,
-      logs: [{ at: dependencies.now(), level: "info", message: "credentialSetup completed." }],
+      logs: [
+        {
+          at: dependencies.now(),
+          level: "info",
+          message:
+            status === "running"
+              ? "credentialSetup awaiting authorization."
+              : "credentialSetup completed.",
+        },
+      ],
       result: result.result ?? { summary },
-      status: "succeeded",
+      status,
       summary,
       workspaceRoot,
     });
+
+    if (status === "running" && result.continue) {
+      void completeCredentialSetupGatewayOperation({
+        continueCredentialSetup: result.continue,
+        dependencies,
+        operationId: operation.id,
+        workspaceRoot,
+      });
+    }
+
+    return completed;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
@@ -320,6 +348,83 @@ async function runCredentialSetupGatewayOperation(
       workspaceRoot,
     });
   }
+}
+
+async function completeCredentialSetupGatewayOperation(input: {
+  continueCredentialSetup: () => Promise<LocalWorkspaceCredentialSetupResult>;
+  dependencies: Pick<LocalWorkspaceGatewayDependencies, "now">;
+  operationId: string;
+  workspaceRoot: string;
+}) {
+  try {
+    const result = await input.continueCredentialSetup();
+    const summary = result.result?.summary ?? {
+      fields: {},
+      title: "Credential setup completed",
+    };
+    const status = result.status ?? "succeeded";
+    const completed = await updateFormlessWorkspaceOperationState(input.operationId, {
+      events: result.events,
+      logs: [
+        {
+          at: input.dependencies.now(),
+          level: "info",
+          message:
+            status === "running"
+              ? "credentialSetup awaiting authorization."
+              : "credentialSetup completed.",
+        },
+      ],
+      result: result.result ?? { summary },
+      status,
+      summary,
+      workspaceRoot: input.workspaceRoot,
+    });
+
+    if (status === "running" && result.continue) {
+      void completeCredentialSetupGatewayOperation({
+        continueCredentialSetup: result.continue,
+        dependencies: input.dependencies,
+        operationId: input.operationId,
+        workspaceRoot: input.workspaceRoot,
+      });
+    }
+
+    return completed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return updateFormlessWorkspaceOperationState(input.operationId, {
+      errors: [{ message }],
+      logs: [{ at: input.dependencies.now(), level: "error", message }],
+      status: "failed",
+      summary: {
+        fields: { error: message },
+        title: "Operation failed",
+      },
+      workspaceRoot: input.workspaceRoot,
+    });
+  }
+}
+
+async function defaultCloudflareCredentialSetupAdapter(
+  input: LocalWorkspaceCredentialSetupInput,
+  dependencies: Pick<LocalWorkspaceGatewayDependencies, "accountDiscovery" | "env" | "now">,
+): Promise<LocalWorkspaceCredentialSetupResult> {
+  return setupCloudflareCredentialsWithAlchemyProfile(
+    {
+      accountId: input.accountId,
+      env: dependencies.env,
+      profileLabel: input.profileLabel,
+      workspaceRoot: input.workspaceRoot,
+    },
+    {
+      ...(dependencies.accountDiscovery === undefined
+        ? {}
+        : { accountDiscovery: dependencies.accountDiscovery }),
+      now: dependencies.now,
+    },
+  );
 }
 
 async function authorizeGatewayRequest(
@@ -577,6 +682,7 @@ async function parseGatewayStartInput(
 
         return {
           input: {
+            accountId: optionalString(body.accountId),
             kind,
             profileLabel: optionalString(body.profileLabel),
             provider,
