@@ -17,15 +17,23 @@ Evidence:
 
 ## 2. CLI-Owned Finalization
 
-- [ ] 2.1 Update automatic finalization to rebase `changes/<change-id>` on local `main` before validation and archive.
-- [ ] 2.2 Run `openspec validate <change-id> --strict --no-interactive` during finalization and block with command evidence on failure.
-- [ ] 2.3 Run `openspec archive <change-id> --yes` on the review branch and use the archive output for canonical spec updates.
-- [ ] 2.4 Remove agent-authored manual spec promotion from finalization when OpenSpec archive can apply the change deltas.
-- [ ] 2.5 Reuse the latest implementation `devstate check` evidence when finalization does not change code, resolve conflicts, or otherwise invalidate that evidence.
-- [ ] 2.6 Rerun `devstate check` during finalization when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
-- [ ] 2.7 Keep the ready-for-review branch self-contained with code changes, completed tasks/evidence, canonical specs, and archived change files.
-- [ ] 2.8 Add tests for validate/archive command sequencing, check reuse, invalidated-check reruns, archive failure blocking, and ready-for-review branch state.
-- [ ] 2.9 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+- [x] 2.1 Update automatic finalization to rebase `changes/<change-id>` on local `main` before validation and archive.
+- [x] 2.2 Run `openspec validate <change-id> --strict --no-interactive` during finalization and block with command evidence on failure.
+- [x] 2.3 Run `openspec archive <change-id> --yes` on the review branch and use the archive output for canonical spec updates.
+- [x] 2.4 Remove agent-authored manual spec promotion from finalization when OpenSpec archive can apply the change deltas.
+- [x] 2.5 Reuse the latest implementation `devstate check` evidence when finalization does not change code, resolve conflicts, or otherwise invalidate that evidence.
+- [x] 2.6 Rerun `devstate check` during finalization when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
+- [x] 2.7 Keep the ready-for-review branch self-contained with code changes, completed tasks/evidence, canonical specs, and archived change files.
+- [x] 2.8 Add tests for validate/archive command sequencing, check reuse, invalidated-check reruns, archive failure blocking, and ready-for-review branch state.
+- [x] 2.9 Run `devstate check` and record evidence for this section from current devstate output or `./.devstate/status.md` when the file is needed.
+
+Evidence:
+
+- Changed `scripts/agents.ts` so supervisor-owned finalization rebases on local `main`, runs strict non-interactive OpenSpec validation, runs `openspec archive <change-id> --yes`, commits resulting archive/spec changes, detaches at branch tip, and marks the lease ready for review.
+- Changed `scripts/agents.ts` to reuse the latest implementation `devstate check` evidence when rebase/archive changes are docs/spec-only, rerun `devstate check` when finalization changes code or evidence is missing/unclear, and block with command evidence on finalization command failures.
+- Changed `scripts/agents.test.ts` to cover validate/archive sequencing, reused check evidence, invalidated-check reruns, archive failure blocking, ready-for-review branch state, and already-archived maintenance.
+- `devstate check` at 2026-06-02T02:37:06.972Z: checks ok; `vp check --fix` pass; web service ready; test service pass.
+- App behavior unchanged; browser smoke not needed.
 
 ## 3. Context-Efficient Prompt Packets
 

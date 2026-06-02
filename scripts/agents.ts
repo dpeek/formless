@@ -134,6 +134,16 @@ type CodexSessionRunner = (input: {
   stdout: Pick<NodeJS.WriteStream, "write">;
 }) => Promise<"blocked" | "none" | "plan-done" | "task-done">;
 
+type FinalizationOutcome =
+  | {
+      evidence: AgentEvidence;
+      signal: "blocked";
+    }
+  | {
+      evidence: AgentEvidence;
+      signal: "plan-done";
+    };
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const promptDir = path.resolve(scriptDir, "..", "doc", "agents");
 const leaseFileName = "lease.json";
@@ -944,6 +954,370 @@ function changeHasRemainingWork(cwd: string, changeId: string, runCommand: Comma
   return !changeNeedsFinalization(cwd, changeId, runCommand);
 }
 
+function commandText(command: string, args: string[]): string {
+  return [command, ...args].join(" ");
+}
+
+function statusPathFromLine(line: string): string {
+  const rawPath = line.slice(3).trim();
+  const renameIndex = rawPath.lastIndexOf(" -> ");
+  return renameIndex === -1 ? rawPath : rawPath.slice(renameIndex + 4);
+}
+
+function parseGitStatusPaths(stdout: string): string[] {
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .map(statusPathFromLine);
+}
+
+function changedFilesBetween(
+  cwd: string,
+  beforeRef: string,
+  afterRef: string,
+  runCommand: CommandRunner,
+): string[] | null {
+  const result = runCommand(cwd, "git", ["diff", "--name-only", beforeRef, afterRef]);
+  if (result.code !== 0) {
+    return null;
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((filePath) => filePath.trim())
+    .filter(Boolean);
+}
+
+function changedFilesInWorktree(cwd: string, runCommand: CommandRunner): string[] | null {
+  const result = runCommand(cwd, "git", ["status", "--short", "--untracked-files=all"]);
+  if (result.code !== 0) {
+    return null;
+  }
+
+  return parseGitStatusPaths(result.stdout);
+}
+
+function isCodeOrGeneratedPath(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  if (
+    normalized === "AGENTS.md" ||
+    normalized.endsWith(".md") ||
+    normalized.startsWith("doc/") ||
+    normalized.startsWith("openspec/")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function activeChangeTasksPath(worktreeDir: string, changeId: string): string {
+  return path.join(worktreeDir, "openspec", "changes", validateChangeId(changeId), "tasks.md");
+}
+
+function archivedChangeDirs(worktreeDir: string, changeId: string): string[] {
+  const archiveRoot = path.join(worktreeDir, "openspec", "changes", "archive");
+  if (!existsSync(archiveRoot)) {
+    return [];
+  }
+
+  return readdirSync(archiveRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name === changeId || name.endsWith(`-${changeId}`))
+    .sort()
+    .map((name) => path.join(archiveRoot, name));
+}
+
+function changeHasActiveArtifacts(worktreeDir: string, changeId: string): boolean {
+  return existsSync(activeChangeTasksPath(worktreeDir, changeId));
+}
+
+function changeHasArchivedArtifacts(worktreeDir: string, changeId: string): boolean {
+  return archivedChangeDirs(worktreeDir, changeId).some((dir) =>
+    existsSync(path.join(dir, "tasks.md")),
+  );
+}
+
+function latestImplementationCheckEvidence(worktreeDir: string, changeId: string): string | null {
+  const taskPaths = [
+    activeChangeTasksPath(worktreeDir, changeId),
+    ...archivedChangeDirs(worktreeDir, changeId).map((dir) => path.join(dir, "tasks.md")),
+  ].filter((filePath) => existsSync(filePath));
+
+  for (const taskPath of taskPaths) {
+    const lines = readFileSync(taskPath, "utf8").split(/\r?\n/);
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index]?.trim();
+      if (line?.includes("devstate check")) {
+        return line.replace(/^- /, "");
+      }
+    }
+  }
+
+  return null;
+}
+
+function readDevstateStatusSummary(worktreeDir: string): string | null {
+  const statusPath = path.join(worktreeDir, ".devstate", "status.md");
+  if (!existsSync(statusPath)) {
+    return null;
+  }
+
+  const lines = readFileSync(statusPath, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const summaryIndex = lines.findIndex((line) => line === "## Summary");
+  if (summaryIndex === -1) {
+    return lines.slice(0, 4).join("; ");
+  }
+
+  return lines
+    .slice(summaryIndex + 1, summaryIndex + 5)
+    .filter((line) => line.startsWith("- "))
+    .join("; ");
+}
+
+function finalizationBlockedEvidence(input: {
+  at: string;
+  command?: string;
+  message: string;
+}): FinalizationOutcome {
+  const evidence: AgentEvidence = {
+    at: input.at,
+    message: input.message,
+  };
+  if (input.command) {
+    evidence.command = input.command;
+  }
+
+  return {
+    evidence,
+    signal: "blocked",
+  };
+}
+
+function runFinalizationCommand(input: {
+  at: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  failurePrefix: string;
+  runCommand: CommandRunner;
+}): CommandResult | FinalizationOutcome {
+  const result = input.runCommand(input.cwd, input.command, input.args);
+  if (result.code === 0) {
+    return result;
+  }
+
+  return finalizationBlockedEvidence({
+    at: input.at,
+    command: commandText(input.command, input.args),
+    message: `${input.failurePrefix}: ${result.stderr.trim() || result.stdout.trim()}`,
+  });
+}
+
+function commitFinalizationChanges(input: {
+  at: string;
+  changeId: string;
+  changedFiles: string[];
+  cwd: string;
+  runCommand: CommandRunner;
+}): FinalizationOutcome | null {
+  if (input.changedFiles.length === 0) {
+    return null;
+  }
+
+  const addResult = runFinalizationCommand({
+    at: input.at,
+    args: ["add", "-A"],
+    command: "git",
+    cwd: input.cwd,
+    failurePrefix: "failed to stage finalization changes",
+    runCommand: input.runCommand,
+  });
+  if ("signal" in addResult) {
+    return addResult;
+  }
+
+  const commitResult = runFinalizationCommand({
+    at: input.at,
+    args: ["commit", "-m", `Finalize ${input.changeId}`],
+    command: "git",
+    cwd: input.cwd,
+    failurePrefix: "failed to commit finalization changes",
+    runCommand: input.runCommand,
+  });
+  return "signal" in commitResult ? commitResult : null;
+}
+
+function runAutomaticFinalization(input: {
+  branchPlan: BranchPlan;
+  change: CommittedOpenSpecChange;
+  now: () => Date;
+  options: WatchOptions;
+  runCommand: CommandRunner;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}): FinalizationOutcome {
+  const at = nowIso(input.now);
+  const cwd = input.branchPlan.worktreeDir;
+  const changeId = input.change.changeId;
+  const implementationCheck = latestImplementationCheckEvidence(cwd, changeId);
+  writeLine(input.stdout, `[agents] finalize ${changeId}`);
+
+  const beforeHeadResult = runFinalizationCommand({
+    at,
+    args: ["rev-parse", "--verify", "HEAD"],
+    command: "git",
+    cwd,
+    failurePrefix: "failed to read branch head before finalization rebase",
+    runCommand: input.runCommand,
+  });
+  if ("signal" in beforeHeadResult) {
+    return beforeHeadResult;
+  }
+  const beforeHead = beforeHeadResult.stdout.trim();
+  const finalizationCommands = [`git rebase ${input.options.baseRef}`];
+
+  const rebaseResult = runFinalizationCommand({
+    at,
+    args: ["rebase", input.options.baseRef],
+    command: "git",
+    cwd,
+    failurePrefix: `finalization rebase failed for ${input.branchPlan.branch}`,
+    runCommand: input.runCommand,
+  });
+  if ("signal" in rebaseResult) {
+    input.runCommand(cwd, "git", ["rebase", "--abort"]);
+    return rebaseResult;
+  }
+
+  const afterHeadResult = runFinalizationCommand({
+    at,
+    args: ["rev-parse", "--verify", "HEAD"],
+    command: "git",
+    cwd,
+    failurePrefix: "failed to read branch head after finalization rebase",
+    runCommand: input.runCommand,
+  });
+  if ("signal" in afterHeadResult) {
+    return afterHeadResult;
+  }
+  const afterHead = afterHeadResult.stdout.trim();
+  const rebaseChangedFiles = changedFilesBetween(cwd, beforeHead, afterHead, input.runCommand);
+
+  if (changeHasActiveArtifacts(cwd, changeId)) {
+    finalizationCommands.push(`openspec validate ${changeId} --strict --no-interactive`);
+    const validateResult = runFinalizationCommand({
+      at,
+      args: ["validate", changeId, "--strict", "--no-interactive"],
+      command: "openspec",
+      cwd,
+      failurePrefix: `openspec validate failed for ${changeId}`,
+      runCommand: input.runCommand,
+    });
+    if ("signal" in validateResult) {
+      return validateResult;
+    }
+
+    finalizationCommands.push(`openspec archive ${changeId} --yes`);
+    const archiveResult = runFinalizationCommand({
+      at,
+      args: ["archive", changeId, "--yes"],
+      command: "openspec",
+      cwd,
+      failurePrefix: `openspec archive failed for ${changeId}`,
+      runCommand: input.runCommand,
+    });
+    if ("signal" in archiveResult) {
+      return archiveResult;
+    }
+  } else if (!changeHasArchivedArtifacts(cwd, changeId)) {
+    return finalizationBlockedEvidence({
+      at,
+      message: `cannot finalize ${changeId}: active or archived OpenSpec artifacts not found`,
+    });
+  } else {
+    writeLine(input.stdout, `[agents] ${changeId} already archived; skipping archive`);
+  }
+
+  const changedFilesBeforeCheck = changedFilesInWorktree(cwd, input.runCommand);
+  const rebaseCodeFiles = rebaseChangedFiles?.filter(isCodeOrGeneratedPath) ?? [];
+  const finalizationCodeFiles = changedFilesBeforeCheck?.filter(isCodeOrGeneratedPath) ?? [];
+  let checkReason: string | null = null;
+
+  if (!implementationCheck) {
+    checkReason = "latest implementation devstate check evidence not found";
+  } else if (rebaseChangedFiles === null) {
+    checkReason = "could not inspect finalization rebase diff";
+  } else if (changedFilesBeforeCheck === null) {
+    checkReason = "could not inspect finalization worktree changes";
+  } else if (rebaseCodeFiles.length > 0) {
+    checkReason = `finalization rebase changed code: ${rebaseCodeFiles.join(", ")}`;
+  } else if (finalizationCodeFiles.length > 0) {
+    checkReason = `finalization changed code: ${finalizationCodeFiles.join(", ")}`;
+  }
+
+  if (checkReason) {
+    writeLine(input.stdout, `[agents] finalization check ${changeId}: ${checkReason}`);
+    const checkResult = runFinalizationCommand({
+      at,
+      args: ["check"],
+      command: "devstate",
+      cwd,
+      failurePrefix: `devstate check failed during finalization for ${changeId}`,
+      runCommand: input.runCommand,
+    });
+    if ("signal" in checkResult) {
+      return checkResult;
+    }
+    const statusSummary = readDevstateStatusSummary(cwd);
+    writeLine(
+      input.stdout,
+      `[agents] finalization check ok ${changeId}: ${statusSummary ?? checkResult.stdout.trim()}`,
+    );
+  } else {
+    writeLine(
+      input.stdout,
+      `[agents] reused implementation check for ${changeId}: ${implementationCheck}`,
+    );
+  }
+
+  const changedFiles = changedFilesInWorktree(cwd, input.runCommand);
+  if (changedFiles === null) {
+    return finalizationBlockedEvidence({
+      at,
+      command: "git status --short --untracked-files=all",
+      message: "failed to inspect finalization changes before commit",
+    });
+  }
+
+  const commitFailure = commitFinalizationChanges({
+    at,
+    changeId,
+    changedFiles,
+    cwd,
+    runCommand: input.runCommand,
+  });
+  if (commitFailure) {
+    return commitFailure;
+  }
+
+  return {
+    evidence: {
+      at,
+      command: finalizationCommands.join("; "),
+      message:
+        checkReason === null
+          ? `finalized ${changeId}; reused implementation check evidence`
+          : `finalized ${changeId}; ran devstate check because ${checkReason}`,
+    },
+    signal: "plan-done",
+  };
+}
+
 function tryChangeHasRemainingWork(
   cwd: string,
   changeId: string,
@@ -1315,19 +1689,34 @@ async function runClaimedChange(input: {
     input.now,
   );
 
-  const signal = await input.runSession({
-    changeId: input.change.changeId,
-    dangerous: input.options.dangerous,
-    mode,
-    now: input.now,
-    paths: input.paths,
-    workerName: input.options.workerName,
-    worktreeDir: input.branchPlan.worktreeDir,
-    stdout: input.stdout,
-  });
+  let outcomeEvidence: AgentEvidence | null = null;
+  const signal =
+    mode === "finalize"
+      ? (() => {
+          const outcome = runAutomaticFinalization({
+            branchPlan: input.branchPlan,
+            change: input.change,
+            now: input.now,
+            options: input.options,
+            runCommand: input.runCommand,
+            stdout: input.stdout,
+          });
+          outcomeEvidence = outcome.evidence;
+          return outcome.signal;
+        })()
+      : await input.runSession({
+          changeId: input.change.changeId,
+          dangerous: input.options.dangerous,
+          mode,
+          now: input.now,
+          paths: input.paths,
+          workerName: input.options.workerName,
+          worktreeDir: input.branchPlan.worktreeDir,
+          stdout: input.stdout,
+        });
 
   if (signal === "blocked" || signal === "none") {
-    const blockedEvidence: AgentEvidence = {
+    const blockedEvidence: AgentEvidence = outcomeEvidence ?? {
       at: nowIso(input.now),
       message: `worker stopped with ${signal}`,
     };
@@ -1393,8 +1782,13 @@ async function runClaimedChange(input: {
 
     const readyEvidence: AgentEvidence = {
       at: nowIso(input.now),
-      message: `branch ${input.branchPlan.branch} ready for review; worker detached at ${detachedCommit}`,
+      message: `${
+        outcomeEvidence?.message ?? `finalized ${input.change.changeId}`
+      }; branch ${input.branchPlan.branch} ready for review; worker detached at ${detachedCommit}`,
     };
+    if (outcomeEvidence?.command) {
+      readyEvidence.command = outcomeEvidence.command;
+    }
     writeWorkerStatus(
       input.paths.root,
       makeWorkerStatus({

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -37,6 +37,64 @@ function readyChangeFiles(changeId = "add-thing"): string {
     `openspec/changes/${changeId}/tasks.md`,
     `openspec/changes/${changeId}/specs/local-agent-workers/spec.md`,
   ].join("\n");
+}
+
+function writeImplementationEvidence(worktreeDir: string, changeId = "add-thing"): void {
+  const changeDir = path.join(worktreeDir, "openspec", "changes", changeId);
+  mkdirSync(changeDir, { recursive: true });
+  writeFileSync(
+    path.join(changeDir, "tasks.md"),
+    [
+      "## 1. Work",
+      "",
+      "- [x] Run `devstate check` and record evidence.",
+      "",
+      "Evidence:",
+      "- `devstate check` at 2026-05-28T00:00:00.000Z: checks ok.",
+      "",
+    ].join("\n"),
+  );
+}
+
+function writeArchivedImplementationEvidence(worktreeDir: string, changeId = "add-thing"): void {
+  const changeDir = path.join(
+    worktreeDir,
+    "openspec",
+    "changes",
+    "archive",
+    `2026-05-28-${changeId}`,
+  );
+  mkdirSync(changeDir, { recursive: true });
+  writeFileSync(
+    path.join(changeDir, "tasks.md"),
+    [
+      "## 1. Work",
+      "",
+      "- [x] Run `devstate check` and record evidence.",
+      "",
+      "Evidence:",
+      "- `devstate check` at 2026-05-28T00:00:00.000Z: checks ok.",
+      "",
+    ].join("\n"),
+  );
+}
+
+function writeDevstateStatus(worktreeDir: string): void {
+  const statusDir = path.join(worktreeDir, ".devstate");
+  mkdirSync(statusDir, { recursive: true });
+  writeFileSync(
+    path.join(statusDir, "status.md"),
+    [
+      "# Dev Tool State",
+      "",
+      "## Summary",
+      "",
+      "- checks: ok",
+      "- services: running",
+      "- updated: 2026-05-28T00:00:00.000Z",
+      "",
+    ].join("\n"),
+  );
 }
 
 describe("local agent worker state", () => {
@@ -510,13 +568,16 @@ describe("local agent worker review branches", () => {
     ]);
   });
 
-  it("keeps finalized changes leased so watch does not finalize them again", async () => {
+  it("validates, archives, commits, and keeps finalized changes leased", async () => {
     const root = tempDir();
     const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
     const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
     let branchExists = false;
     let remainingWork = 1;
     let sessionCalls = 0;
+    let headReads = 0;
+    let committed = false;
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
@@ -550,6 +611,7 @@ describe("local agent worker review branches", () => {
         args[3] === "changes/add-thing"
       ) {
         branchExists = true;
+        writeImplementationEvidence(worktreeDir);
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -565,6 +627,53 @@ describe("local agent worker review branches", () => {
             state: remainingWork === 0 ? "all_done" : "in_progress",
           }),
         };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
+        headReads += 1;
+        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "rebase main") {
+        return { code: 0, stderr: "", stdout: "Current branch changes/add-thing is up to date.\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "diff --name-only before123 after123") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "validate add-thing --strict --no-interactive"
+      ) {
+        return { code: 0, stderr: "", stdout: "Change 'add-thing' is valid\n" };
+      }
+
+      if (command === "openspec" && args.join(" ") === "archive add-thing --yes") {
+        return { code: 0, stderr: "", stdout: "Archived add-thing\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "status --short --untracked-files=all") {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: committed
+            ? ""
+            : [
+                " M openspec/specs/local-agent-workers/spec.md",
+                " D openspec/changes/add-thing/tasks.md",
+                "?? openspec/changes/archive/2026-05-28-add-thing/tasks.md",
+              ].join("\n"),
+        };
+      }
+
+      if (command === "git" && args.join(" ") === "add -A") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "commit -m Finalize add-thing") {
+        committed = true;
+        return { code: 0, stderr: "", stdout: "[changes/add-thing abc123] Finalize add-thing\n" };
       }
 
       if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
@@ -615,13 +724,8 @@ describe("local agent worker review branches", () => {
         runSession: async (input) => {
           sessionCalls += 1;
           expect(input.changeId).toBe("add-thing");
-          if (sessionCalls === 1) {
-            expect(input.mode).toBe("implement");
-            remainingWork = 0;
-            return "plan-done";
-          }
-
-          expect(input.mode).toBe("finalize");
+          expect(input.mode).toBe("implement");
+          remainingWork = 0;
           return "plan-done";
         },
         ...streams,
@@ -629,11 +733,16 @@ describe("local agent worker review branches", () => {
       const paths = agentStatePaths(gitCommonDir);
 
       expect(firstCode).toBe(0);
+      const readyLease = readChangeLease(paths.root, "add-thing");
       expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
         changeId: "add-thing",
         owner: "igor",
         state: "ready-for-review",
       });
+      expect(readyLease?.latestEvidence?.command).toBe(
+        "git rebase main; openspec validate add-thing --strict --no-interactive; openspec archive add-thing --yes",
+      );
+      expect(readyLease?.latestEvidence?.message).toContain("reused implementation check evidence");
       expect(readWorkerStatus(paths.root, "igor")).toMatchObject({
         currentChange: "add-thing",
         state: "ready-for-review",
@@ -651,13 +760,322 @@ describe("local agent worker review branches", () => {
       });
 
       expect(secondCode).toBe(0);
-      expect(sessionCalls).toBe(2);
+      expect(sessionCalls).toBe(1);
       expect(stdout).toContain("[agents] idle: change branches are leased");
+      expect(stdout).toContain("[agents] reused implementation check for add-thing");
       expect(stderr).toBe("");
+      expect(commandCalls).toContainEqual({
+        args: ["rebase", "main"],
+        command: "git",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["validate", "add-thing", "--strict", "--no-interactive"],
+        command: "openspec",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["archive", "add-thing", "--yes"],
+        command: "openspec",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["commit", "-m", "Finalize add-thing"],
+        command: "git",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).not.toContainEqual({
+        args: ["check"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
       expect(commandCalls).toContainEqual({
         args: ["checkout", "--detach", "abc123"],
         command: "git",
-        cwd: path.join(root, "tmp", "worktree", "igor"),
+        cwd: worktreeDir,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("reruns devstate check when finalization rebase changes code", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
+    const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    let branchExists = false;
+    let remainingWork = 1;
+    let sessionCalls = 0;
+    let headReads = 0;
+    let committed = false;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      commandCalls.push({ args, command, cwd });
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: branchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args[0] === "worktree" &&
+        args[1] === "add" &&
+        args[2] === "-b" &&
+        args[3] === "changes/add-thing"
+      ) {
+        branchExists = true;
+        writeImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            progress: { remaining: remainingWork },
+            state: remainingWork === 0 ? "all_done" : "in_progress",
+          }),
+        };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
+        headReads += 1;
+        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "rebase main") {
+        return { code: 0, stderr: "", stdout: "Successfully rebased\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "diff --name-only before123 after123") {
+        return { code: 0, stderr: "", stdout: "scripts/agents.ts\n" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "validate add-thing --strict --no-interactive"
+      ) {
+        return { code: 0, stderr: "", stdout: "Change 'add-thing' is valid\n" };
+      }
+
+      if (command === "openspec" && args.join(" ") === "archive add-thing --yes") {
+        return { code: 0, stderr: "", stdout: "Archived add-thing\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "status --short --untracked-files=all") {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: committed ? "" : " M openspec/specs/local-agent-workers/spec.md\n",
+        };
+      }
+
+      if (command === "devstate" && args.join(" ") === "check") {
+        writeDevstateStatus(worktreeDir);
+        return { code: 0, stderr: "", stdout: "# Dev Tool State\n\n## Summary\n\n- checks: ok\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "add -A") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "commit -m Finalize add-thing") {
+        committed = true;
+        return { code: 0, stderr: "", stdout: "[changes/add-thing abc123] Finalize add-thing\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "abc123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async (input) => {
+          sessionCalls += 1;
+          expect(input.mode).toBe("implement");
+          remainingWork = 0;
+          return "plan-done";
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+      const paths = agentStatePaths(gitCommonDir);
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(sessionCalls).toBe(1);
+      expect(stdout).toContain(
+        "[agents] finalization check add-thing: finalization rebase changed code: scripts/agents.ts",
+      );
+      expect(stdout).toContain("[agents] finalization check ok add-thing: - checks: ok");
+      expect(commandCalls).toContainEqual({
+        args: ["check"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(readChangeLease(paths.root, "add-thing")?.latestEvidence?.message).toContain(
+        "ran devstate check because finalization rebase changed code: scripts/agents.ts",
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("blocks with command evidence when archive fails", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
+    let branchExists = false;
+    let remainingWork = 1;
+    let sessionCalls = 0;
+    let headReads = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: branchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args[0] === "worktree" &&
+        args[1] === "add" &&
+        args[2] === "-b" &&
+        args[3] === "changes/add-thing"
+      ) {
+        branchExists = true;
+        writeImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            progress: { remaining: remainingWork },
+            state: remainingWork === 0 ? "all_done" : "in_progress",
+          }),
+        };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
+        headReads += 1;
+        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "rebase main") {
+        return { code: 0, stderr: "", stdout: "Current branch changes/add-thing is up to date.\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "diff --name-only before123 after123") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "validate add-thing --strict --no-interactive"
+      ) {
+        return { code: 0, stderr: "", stdout: "Change 'add-thing' is valid\n" };
+      }
+
+      if (command === "openspec" && args.join(" ") === "archive add-thing --yes") {
+        return { code: 1, stderr: "archive failed\n", stdout: "" };
+      }
+
+      throw new Error(`unexpected command in ${cwd}: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async (input) => {
+          sessionCalls += 1;
+          expect(input.mode).toBe("implement");
+          remainingWork = 0;
+          return "plan-done";
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+      const paths = agentStatePaths(gitCommonDir);
+
+      expect(code).toBe(1);
+      expect(stderr).toBe("");
+      expect(sessionCalls).toBe(1);
+      expect(stdout).toContain("[agents] finalize add-thing");
+      expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
+        latestEvidence: {
+          command: "openspec archive add-thing --yes",
+          message: "openspec archive failed for add-thing: archive failed",
+        },
+        state: "blocked",
+      });
+      expect(readWorkerStatus(paths.root, "igor")).toMatchObject({
+        currentChange: "add-thing",
+        state: "blocked",
       });
     } finally {
       rmSync(root, { force: true, recursive: true });
@@ -736,6 +1154,7 @@ describe("local agent worker review branches", () => {
   it("starts finalization maintenance when a review-ready branch is behind main", async () => {
     const root = tempDir();
     const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
     const paths = agentStatePaths(gitCommonDir);
     ensureAgentStateDirs(paths);
     createChangeLease(paths.root, {
@@ -745,6 +1164,7 @@ describe("local agent worker review branches", () => {
       state: "ready-for-review",
     });
     let sessionCalls = 0;
+    let headReads = 0;
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
@@ -776,11 +1196,25 @@ describe("local agent worker review branches", () => {
         return { code: 1, stderr: "", stdout: "" };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") ===
-          `worktree add ${path.join(root, "tmp", "worktree", "igor")} changes/add-thing`
-      ) {
+      if (command === "git" && args.join(" ") === `worktree add ${worktreeDir} changes/add-thing`) {
+        writeArchivedImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
+        headReads += 1;
+        return { code: 0, stderr: "", stdout: headReads === 1 ? "before456\n" : "after456\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "rebase main") {
+        return { code: 0, stderr: "", stdout: "Successfully rebased\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "diff --name-only before456 after456") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "status --short --untracked-files=all") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -802,9 +1236,7 @@ describe("local agent worker review branches", () => {
         runCommand,
         runSession: async (input) => {
           sessionCalls += 1;
-          expect(input.mode).toBe("finalize");
-          expect(input.changeId).toBe("add-thing");
-          expect(input.worktreeDir).toBe(path.join(root, "tmp", "worktree", "igor"));
+          expect(input.mode).toBe("implement");
           return "plan-done";
         },
         stderr: {
@@ -817,8 +1249,9 @@ describe("local agent worker review branches", () => {
 
       expect(code).toBe(0);
       expect(stderr).toBe("");
-      expect(sessionCalls).toBe(1);
+      expect(sessionCalls).toBe(0);
       expect(stdout).toContain("[agents] ready maintenance add-thing");
+      expect(stdout).toContain("[agents] add-thing already archived; skipping archive");
       expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
         changeId: "add-thing",
         owner: "igor",
