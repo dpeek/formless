@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -407,6 +407,29 @@ export type DeployLocalFormlessWorkspaceDependencies =
     now: () => string;
     setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
   };
+
+export type PlanDeployLocalFormlessWorkspaceDependencies = Pick<
+  DeployLocalFormlessWorkspaceDependencies,
+  "accountDiscovery" | "cwd" | "fetch" | "now" | "packageVersion"
+>;
+
+export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPlanResult & {
+  existingSelectedTarget?: FormlessInstanceWorkspaceTarget;
+  manifestPath: string;
+  preflight?: CheckFormlessInstanceWorkspaceResult;
+  workspaceRoot: string;
+};
+
+export type PlanDeployFormlessInstanceWorkspaceDependencies = Pick<
+  DeployFormlessInstanceWorkspaceDependencies,
+  "cwd" | "packageVersion"
+>;
+
+export type PlanDeployFormlessInstanceWorkspaceResult = {
+  plan: FormlessInstanceDeploymentPlan;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
 
 export type DestroyFormlessInstanceWorkspaceInput = {
   confirm: string;
@@ -1165,42 +1188,8 @@ export async function deployLocalFormlessWorkspace(
   input: DeployLocalFormlessWorkspaceInput,
   dependencies: DeployLocalFormlessWorkspaceDependencies,
 ): Promise<DeployFormlessInstanceWorkspaceResult> {
-  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
-    cwd: dependencies.cwd,
-    workspacePath: input.workspacePath,
-  });
-  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const existingSelectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
-
-  if (existingSelectedTarget) {
-    const preflight = await checkFormlessInstanceWorkspace(
-      {
-        targetAlias: existingSelectedTarget.alias,
-        workspacePath: workspaceRoot,
-      },
-      dependencies,
-    );
-
-    if (preflight.drift.status === "drift") {
-      throw new Error(
-        "Formless deploy refused because remote drift was detected; review `formless check` and retry after saving or pulling the workspace source.",
-      );
-    }
-  }
-
-  const account = await resolveLocalWorkspaceDeploymentAccount({
-    accountDiscovery: dependencies.accountDiscovery,
-    manifest,
-    selectedTarget: existingSelectedTarget,
-  });
-  const planned = planLocalWorkspaceDeployment({
-    account,
-    manifest,
-    migrationPolicy: input.migrationPolicy,
-    packageVersion: dependencies.packageVersion,
-    selectedTarget: existingSelectedTarget,
-    targetAlias: input.targetAlias,
-  });
+  const planned = await planDeployLocalFormlessWorkspace(input, dependencies);
+  const workspaceRoot = planned.workspaceRoot;
   const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
   let adminToken = resolveFormlessInstanceWorkspaceAdminToken({
     env: dependencies.env,
@@ -1256,10 +1245,10 @@ export async function deployLocalFormlessWorkspace(
     url: deploymentUrl,
   });
 
-  await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(planned.manifest));
+  await writeFile(planned.manifestPath, formatFormlessInstanceWorkspaceManifest(planned.manifest));
 
   const ownerSetup =
-    existingSelectedTarget === undefined
+    planned.existingSelectedTarget === undefined
       ? await createLocalWorkspaceOwnerSetup({
           adminToken,
           deploymentUrl,
@@ -1269,7 +1258,7 @@ export async function deployLocalFormlessWorkspace(
       : undefined;
   const push = await pushFormlessInstanceWorkspace(
     {
-      allowStale: existingSelectedTarget === undefined,
+      allowStale: planned.existingSelectedTarget === undefined,
       apply: true,
       replace: true,
       replaceInstallSet: false,
@@ -1297,19 +1286,61 @@ export async function deployLocalFormlessWorkspace(
   };
 }
 
+export async function planDeployLocalFormlessWorkspace(
+  input: DeployLocalFormlessWorkspaceInput,
+  dependencies: PlanDeployLocalFormlessWorkspaceDependencies,
+): Promise<PlanDeployLocalFormlessWorkspaceResult> {
+  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
+  const existingSelectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+  const preflight = existingSelectedTarget
+    ? await checkFormlessInstanceWorkspace(
+        {
+          targetAlias: existingSelectedTarget.alias,
+          workspacePath: workspaceRoot,
+        },
+        dependencies,
+      )
+    : undefined;
+
+  if (preflight?.drift.status === "drift") {
+    throw new Error(
+      "Formless deploy refused because remote drift was detected; review `formless check` and retry after saving or pulling the workspace source.",
+    );
+  }
+
+  const account = await resolveLocalWorkspaceDeploymentAccount({
+    accountDiscovery: dependencies.accountDiscovery,
+    manifest,
+    selectedTarget: existingSelectedTarget,
+  });
+  const planned = planLocalWorkspaceDeployment({
+    account,
+    manifest,
+    migrationPolicy: input.migrationPolicy,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget: existingSelectedTarget,
+    targetAlias: input.targetAlias,
+  });
+
+  return {
+    ...planned,
+    ...(existingSelectedTarget === undefined ? {} : { existingSelectedTarget }),
+    manifestPath,
+    ...(preflight === undefined ? {} : { preflight }),
+    workspaceRoot,
+  };
+}
+
 export async function deployFormlessInstanceWorkspace(
   input: DeployFormlessInstanceWorkspaceInput,
   dependencies: DeployFormlessInstanceWorkspaceDependencies,
 ): Promise<DeployFormlessInstanceWorkspaceResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "deploy");
-  const plan = formlessInstanceWorkspaceDeploymentPlan({
-    manifest,
-    migrationPolicy: input.migrationPolicy,
-    packageVersion: dependencies.packageVersion,
-    selectedTarget,
-  });
+  const planned = await planDeployFormlessInstanceWorkspace(input, dependencies);
+  const { plan, selectedTarget, workspaceRoot } = planned;
   const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
   const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
     env: dependencies.env,
@@ -1361,6 +1392,27 @@ export async function deployFormlessInstanceWorkspace(
     migrationPolicy: plan.migrationPolicy,
     plan,
     secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
+    selectedTarget,
+    workspaceRoot,
+  };
+}
+
+export async function planDeployFormlessInstanceWorkspace(
+  input: DeployFormlessInstanceWorkspaceInput,
+  dependencies: PlanDeployFormlessInstanceWorkspaceDependencies,
+): Promise<PlanDeployFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "deploy");
+  const plan = formlessInstanceWorkspaceDeploymentPlan({
+    manifest,
+    migrationPolicy: input.migrationPolicy,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget,
+  });
+
+  return {
+    plan,
     selectedTarget,
     workspaceRoot,
   };
@@ -2783,12 +2835,7 @@ async function assertLocalOnboardingWorkspaceReady(workspaceRoot: string) {
     "reviewable archive root",
     "Move existing archive source before onboarding.",
   );
-  await assertNoLocalOnboardingConflict(
-    workspaceRoot,
-    ".formless",
-    "ignored .formless state",
-    "Remove or move existing local state before onboarding.",
-  );
+  await assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot);
 }
 
 async function assertNoLocalOnboardingConflict(
@@ -2804,6 +2851,32 @@ async function assertNoLocalOnboardingConflict(
       `formless onboard cannot initialize because ${label} exists at ${filePath}. ${guidance}`,
     );
   }
+}
+
+async function assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot: string) {
+  const stateRoot = path.join(workspaceRoot, ".formless");
+  let entries: Array<{ isDirectory(): boolean; name: string }>;
+
+  try {
+    entries = await readdir(stateRoot, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return;
+    }
+
+    throw error;
+  }
+
+  const hasOnlyOperationState =
+    entries.length === 1 && entries[0]?.isDirectory() && entries[0].name === "operations";
+
+  if (hasOnlyOperationState) {
+    return;
+  }
+
+  throw new Error(
+    `formless onboard cannot initialize because ignored .formless state exists at ${stateRoot}. Remove or move existing local state before onboarding.`,
+  );
 }
 
 async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {

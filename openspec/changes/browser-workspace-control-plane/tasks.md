@@ -58,11 +58,18 @@ Evidence:
 
 ## 5. Shared Workspace Operation Layer
 
-- [ ] 5.1 Extract shared workspace operations for init, status, save, check, pull, push, deploy plan, and deploy apply.
-- [ ] 5.2 Add display-safe operation result and progress models with ids, status, timestamps, summaries, logs, and errors.
-- [ ] 5.3 Persist display-safe operation state under ignored `.formless/operations/` without secrets or raw adapter/tool output.
-- [ ] 5.4 Keep operation inputs semantic and scoped to the resolved workspace root.
-- [ ] 5.5 Add unit tests for persisted operation progress, stale-source detection, deployment attempt/evidence/drift summaries, cleanup summaries, and display-safe output.
+- [x] 5.1 Extract shared workspace operations for init, status, save, check, pull, push, deploy plan, and deploy apply.
+- [x] 5.2 Add display-safe operation result and progress models with ids, status, timestamps, summaries, logs, and errors.
+- [x] 5.3 Persist display-safe operation state under ignored `.formless/operations/` without secrets or raw adapter/tool output.
+- [x] 5.4 Keep operation inputs semantic and scoped to the resolved workspace root.
+- [x] 5.5 Add unit tests for persisted operation progress, stale-source detection, deployment attempt/evidence/drift summaries, cleanup summaries, and display-safe output.
+
+Evidence:
+
+- Added `src/site/instance-workspace-operations.ts` with semantic operation inputs for init, status, save, check, pull, push, deploy plan, and deploy apply, plus display-safe operation state persisted under `.formless/operations/`.
+- Changed `src/site/instance-workspace.ts` to expose deploy planning helpers used by the operation layer and to allow `.formless/operations/` as the only ignored state present before browser workspace init.
+- Added `src/site/instance-workspace-operations.test.ts` coverage for persisted init progress, stale save-check failure without source rewrite, deployment attempt/evidence/drift and cleanup summaries, and secret/raw-output redaction.
+- `devstate check` green at 2026-06-02T09:30:30.920Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 
 ## 6. Local Workspace Gateway API
 
