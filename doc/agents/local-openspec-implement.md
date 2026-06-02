@@ -22,7 +22,8 @@ This rendered prompt is self-contained for this session.
 ## Assignment
 
 - Change: `{{change_id}}`.
-- Branch: `changes/{{change_id}}`.
+- Review branch: `changes/{{change_id}}`.
+- Worker branch: `agents/{{worker_name}}`.
 - Worker worktree: `./tmp/worktree/{{worker_name}}`.
 - Queue source: committed `openspec/changes/{{change_id}}/` on local `main`.
 - Update only owning change artifacts under `openspec/changes/{{change_id}}/`.

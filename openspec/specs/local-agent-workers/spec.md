@@ -75,56 +75,66 @@ The system SHALL use an atomic local lease to claim one OpenSpec change for one 
 - **THEN** worker status exposes blocker evidence
 - **AND** an explicit release or recovery path can clear the blocked lease so future workers are not trapped forever
 
-### Requirement: Stable change branches
+### Requirement: Stable review branches
 
-The system SHALL use `changes/<change-id>` as the implementation branch for a claimed OpenSpec change.
+The system SHALL use `changes/<change-id>` as the review branch for a claimed OpenSpec change.
 
-#### Scenario: Worker creates change branch
+#### Scenario: Worker creates review branch
 
 - **WHEN** `igor` claims `add-thing` and no `changes/add-thing` branch exists
 - **THEN** the supervisor creates `changes/add-thing` from local `main`
 
-#### Scenario: Worker resumes change branch
+#### Scenario: Worker resumes review branch
 
 - **WHEN** `changes/add-thing` exists and `add-thing` is claimable or assigned to the worker
-- **THEN** the supervisor checks out that branch in the worker worktree instead of creating a worker-named branch
+- **THEN** the supervisor uses `changes/add-thing` as the review branch for the claimed change
+
+#### Scenario: Worker publishes review branch
+
+- **WHEN** a worker session completes successfully on `agents/igor`
+- **THEN** the supervisor updates `changes/add-thing` to the `agents/igor` branch tip
 
 ### Requirement: Named worker worktrees
 
-The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktree path for a worker.
+The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktree path for a worker and `agents/<worker-name>` as the checked-out worker branch.
 
 #### Scenario: Worker prepares a claimed change
 
 - **WHEN** `igor` claims `add-thing` without a worktree override
-- **THEN** the supervisor uses `./tmp/worktree/igor` and checks out `changes/add-thing`
+- **THEN** the supervisor uses `./tmp/worktree/igor`
+- **AND** checks out `agents/igor`
+- **AND** resets `agents/igor` to `changes/add-thing` before starting the worker session
 
 #### Scenario: Worker reuses its worktree
 
 - **WHEN** `igor` later works on `other-thing`
-- **THEN** the supervisor reuses `./tmp/worktree/igor` and checks out `changes/other-thing`
+- **THEN** the supervisor reuses `./tmp/worktree/igor`
+- **AND** resets `agents/igor` to `changes/other-thing`
 
-### Requirement: Worker identity stays runtime metadata
+### Requirement: Worker identity stays separate from review branch identity
 
-The system SHALL record worker names in runtime status, leases, and logs, not in the required branch name.
+The system SHALL use worker names for runtime status, leases, logs, and checked-out worker branches while keeping `changes/<change-id>` as the stable review branch.
 
-#### Scenario: Named worker owns a branch temporarily
+#### Scenario: Named worker owns the writable branch temporarily
 
 - **WHEN** `igor` works on `add-thing`
-- **THEN** the branch remains `changes/add-thing` and the lease records `igor` as the current owner
+- **THEN** the worker writes on `agents/igor`
+- **AND** the lease records `igor` as the current owner
+- **AND** review output is published to `changes/add-thing`
 
 #### Scenario: Change can be handed off
 
 - **WHEN** `igor` releases `add-thing` and another worker later claims it
-- **THEN** the other worker continues on `changes/add-thing`
+- **THEN** the other worker resets its `agents/<worker-name>` branch to `changes/add-thing`
 
 ### Requirement: One active writer per change
 
-The system SHALL allow only one active worker lease for a change branch.
+The system SHALL allow only one active worker lease to publish to a change review branch.
 
 #### Scenario: Task sharing is not enabled
 
 - **WHEN** a change contains multiple ready tasks
-- **THEN** only the lease owner can write to `changes/<change-id>` for that change
+- **THEN** only the lease owner can publish to `changes/<change-id>` for that change
 
 ### Requirement: Local OpenSpec implementation loop
 
@@ -164,12 +174,12 @@ The system SHALL run each claimed change through a local OpenSpec loop that ship
 
 ### Requirement: Finalization before review
 
-The system SHALL finalize a completed change branch through OpenSpec CLI validation and archive before marking it ready for human review.
+The system SHALL finalize a completed worker branch through OpenSpec CLI validation and archive before publishing the review branch for human review.
 
 #### Scenario: Worker finalizes completed change
 
 - **WHEN** all required tasks are shipped or intentionally closed
-- **THEN** the worker rebases on local `main`, reconciles updated change artifacts, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits resulting changes, detaches the worker worktree at the final branch tip, and marks the branch ready for review
+- **THEN** the worker rebases `agents/<worker-name>` on local `main`, reconciles updated change artifacts, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits resulting changes, publishes the worker branch tip to `changes/<change-id>`, and marks the branch ready for review
 
 #### Scenario: Finalization reuses valid implementation check
 
@@ -205,17 +215,18 @@ The system SHALL finalize a completed change branch through OpenSpec CLI validat
 #### Scenario: Review-ready branch is not checked out by worker
 
 - **WHEN** a worker marks `changes/add-thing` ready for review
-- **THEN** the worker worktree is detached at the final branch tip
+- **THEN** the worker worktree remains on `agents/<worker-name>` at the final branch tip
 - **AND** `changes/add-thing` is free to check out from another worktree
 
 ### Requirement: Idle branch maintenance
 
-The system SHALL rebase existing local change branches on local `main` when no implementation work is claimable.
+The system SHALL rebase existing local change review branches on local `main` through the worker branch when no implementation work is claimable.
 
 #### Scenario: Worker has no claimable work
 
 - **WHEN** no OpenSpec change can be claimed
-- **THEN** the worker scans existing `changes/*` branches and attempts to rebase eligible branches on local `main`
+- **THEN** the worker scans existing `changes/*` branches and attempts to rebase eligible branches on local `main` through `agents/<worker-name>`
+- **AND** publishes successful rebases back to `changes/<change-id>`
 
 #### Scenario: Idle rebase structural conflict is resolved
 
@@ -238,12 +249,13 @@ The system SHALL leave review-ready change branches for a human to inspect and m
 
 ### Requirement: Main-authored feedback
 
-The system SHALL use rebases on local `main` to carry human-authored change feedback into active change branches.
+The system SHALL use rebases on local `main` to carry human-authored change feedback into active worker branches.
 
 #### Scenario: Worker receives changed docs from main
 
 - **WHEN** local `main` changes the OpenSpec artifacts for a claimed change before archive
-- **THEN** the worker rebases the change branch, reads the updated artifacts, and updates implementation, task evidence, and spec deltas to match
+- **THEN** the worker rebases `agents/<worker-name>`, reads the updated artifacts, updates implementation, task evidence, and spec deltas to match
+- **AND** publishes matching output to `changes/<change-id>`
 
 #### Scenario: Worker cannot reconcile feedback
 

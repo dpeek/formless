@@ -76,6 +76,7 @@ export type CommittedOpenSpecChange = {
 export type BranchPlan = {
   action: "create" | "resume";
   branch: string;
+  workerBranch: string;
   worktreeDir: string;
 };
 
@@ -353,6 +354,10 @@ export function validateWorkerName(workerName: string): string {
 
 export function branchNameForChange(changeId: string): string {
   return `changes/${validateChangeId(changeId)}`;
+}
+
+export function workerBranchName(workerName: string): string {
+  return `agents/${validateWorkerName(workerName)}`;
 }
 
 export function changeIdFromBranch(branch: string): string | null {
@@ -676,6 +681,7 @@ export function planChangeBranch(
   return {
     action: exists ? "resume" : "create",
     branch,
+    workerBranch: workerBranchName(options.workerName),
     worktreeDir: path.resolve(options.worktreeDir ?? worktreeDirForWorker(cwd, options.workerName)),
   };
 }
@@ -694,6 +700,7 @@ export function ensureChangeBranch(
   changeId: string,
   options: {
     baseRef?: string;
+    resetWorkerBranch?: boolean;
     runCommand?: CommandRunner;
     workerName: string;
     worktreeDir?: string | null;
@@ -705,6 +712,11 @@ export function ensureChangeBranch(
     workerName: options.workerName,
     worktreeDir: options.worktreeDir,
   });
+  const resetWorkerBranch = options.resetWorkerBranch ?? true;
+
+  if (!branchExists(cwd, plan.branch, runCommand)) {
+    runOrThrow(cwd, "git", ["branch", plan.branch, options.baseRef ?? defaultBaseRef], runCommand);
+  }
 
   if (existsSync(plan.worktreeDir)) {
     if (gitTopLevel(plan.worktreeDir, runCommand) !== path.resolve(plan.worktreeDir)) {
@@ -712,29 +724,54 @@ export function ensureChangeBranch(
     }
 
     const currentBranch = gitCurrentBranch(plan.worktreeDir, runCommand);
-    if (currentBranch === plan.branch) {
-      return plan;
+    if (currentBranch !== plan.workerBranch) {
+      if (branchExists(cwd, plan.workerBranch, runCommand)) {
+        runOrThrow(plan.worktreeDir, "git", ["checkout", plan.workerBranch], runCommand);
+      } else {
+        runOrThrow(
+          plan.worktreeDir,
+          "git",
+          ["checkout", "-b", plan.workerBranch, plan.branch],
+          runCommand,
+        );
+      }
     }
 
-    if (!branchExists(cwd, plan.branch, runCommand)) {
-      runOrThrow(
-        cwd,
-        "git",
-        ["branch", plan.branch, options.baseRef ?? defaultBaseRef],
-        runCommand,
-      );
+    if (resetWorkerBranch) {
+      runOrThrow(plan.worktreeDir, "git", ["reset", "--keep", plan.branch], runCommand);
     }
-    runOrThrow(plan.worktreeDir, "git", ["checkout", plan.branch], runCommand);
     return plan;
   }
 
   mkdirSync(path.dirname(plan.worktreeDir), { recursive: true });
-  const args =
-    plan.action === "create"
-      ? ["worktree", "add", "-b", plan.branch, plan.worktreeDir, options.baseRef ?? defaultBaseRef]
-      : ["worktree", "add", plan.worktreeDir, plan.branch];
+  const workerBranchExists = branchExists(cwd, plan.workerBranch, runCommand);
+  const args = workerBranchExists
+    ? ["worktree", "add", plan.worktreeDir, plan.workerBranch]
+    : ["worktree", "add", "-b", plan.workerBranch, plan.worktreeDir, plan.branch];
   runOrThrow(cwd, "git", args, runCommand);
+  if (resetWorkerBranch) {
+    runOrThrow(plan.worktreeDir, "git", ["reset", "--keep", plan.branch], runCommand);
+  }
   return plan;
+}
+
+export function publishWorkerBranchToChangeBranch(
+  branchPlan: BranchPlan,
+  runCommand = defaultCommandRunner,
+): string {
+  const commit = runOrThrow(
+    branchPlan.worktreeDir,
+    "git",
+    ["rev-parse", "--verify", "HEAD"],
+    runCommand,
+  ).trim();
+  runOrThrow(
+    branchPlan.worktreeDir,
+    "git",
+    ["branch", "-f", branchPlan.branch, commit],
+    runCommand,
+  );
+  return commit;
 }
 
 export function listLocalChangeBranches(cwd: string, runCommand = defaultCommandRunner): string[] {
@@ -904,16 +941,6 @@ function findReadyForReviewLeaseNeedingRebase(input: {
         !branchIncludesBase(input.cwd, lease.branch, input.baseRef, input.runCommand),
     ) ?? null
   );
-}
-
-export function detachWorktreeAtBranchTip(
-  cwd: string,
-  branch: string,
-  runCommand = defaultCommandRunner,
-): string {
-  const commit = runOrThrow(cwd, "git", ["rev-parse", "--verify", branch], runCommand).trim();
-  runOrThrow(cwd, "git", ["checkout", "--detach", commit], runCommand);
-  return commit;
 }
 
 function readPromptTemplate(name: "local-openspec-finalize" | "local-openspec-implement"): string {
@@ -1311,7 +1338,7 @@ function runAutomaticFinalization(input: {
     args: ["rebase", input.options.baseRef],
     command: "git",
     cwd,
-    failurePrefix: `finalization rebase failed for ${input.branchPlan.branch}`,
+    failurePrefix: `finalization rebase failed for ${input.branchPlan.workerBranch}`,
     runCommand: input.runCommand,
   });
   if ("signal" in rebaseResult) {
@@ -1769,7 +1796,7 @@ function showDryRunClaim(input: {
   writeLine(input.stdout, `[agents] would claim ${input.change.changeId}`);
   writeLine(
     input.stdout,
-    `[agents] branch ${input.branchPlan.branch} ${input.branchPlan.action} ${input.branchPlan.worktreeDir}`,
+    `[agents] branch ${input.branchPlan.branch} ${input.branchPlan.action} via ${input.branchPlan.workerBranch} ${input.branchPlan.worktreeDir}`,
   );
   writeLine(input.stdout, `[agents] status ${JSON.stringify(status)}`);
   writeLine(
@@ -1885,51 +1912,47 @@ async function runClaimedChange(input: {
     return 1;
   }
 
+  let publishedCommit: string;
+  try {
+    publishedCommit = publishWorkerBranchToChangeBranch(input.branchPlan, input.runCommand);
+  } catch (error) {
+    const blockedEvidence: AgentEvidence = {
+      at: nowIso(input.now),
+      message: `failed to publish ${input.branchPlan.workerBranch} to ${
+        input.branchPlan.branch
+      }: ${error instanceof Error ? error.message : String(error)}`,
+    };
+    writeWorkerStatus(
+      input.paths.root,
+      makeWorkerStatus({
+        branch: input.branchPlan.branch,
+        currentChange: input.change.changeId,
+        latestEvidence: blockedEvidence,
+        now: input.now,
+        owner: input.options.workerName,
+        state: "blocked",
+      }),
+    );
+    updateChangeLease(
+      input.paths.root,
+      input.change.changeId,
+      { latestEvidence: blockedEvidence, state: "blocked" },
+      input.now,
+    );
+    return 1;
+  }
+
   if (mode === "implement" && signal === "plan-done") {
     writeLine(input.stdout, `[agents] ${input.change.changeId} starting automatic finalization`);
     return runClaimedChange(input);
   }
 
   if (mode === "finalize" && signal === "plan-done") {
-    let detachedCommit: string;
-    try {
-      detachedCommit = detachWorktreeAtBranchTip(
-        input.branchPlan.worktreeDir,
-        input.branchPlan.branch,
-        input.runCommand,
-      );
-    } catch (error) {
-      const blockedEvidence: AgentEvidence = {
-        at: nowIso(input.now),
-        message: `failed to detach worker worktree from ${input.branchPlan.branch}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-      writeWorkerStatus(
-        input.paths.root,
-        makeWorkerStatus({
-          branch: input.branchPlan.branch,
-          currentChange: input.change.changeId,
-          latestEvidence: blockedEvidence,
-          now: input.now,
-          owner: input.options.workerName,
-          state: "blocked",
-        }),
-      );
-      updateChangeLease(
-        input.paths.root,
-        input.change.changeId,
-        { latestEvidence: blockedEvidence, state: "blocked" },
-        input.now,
-      );
-      return 1;
-    }
-
     const readyEvidence: AgentEvidence = {
       at: nowIso(input.now),
       message: `${
         outcomeEvidence?.message ?? `finalized ${input.change.changeId}`
-      }; branch ${input.branchPlan.branch} ready for review; worker detached at ${detachedCommit}`,
+      }; branch ${input.branchPlan.branch} ready for review at ${publishedCommit}; worker branch ${input.branchPlan.workerBranch} remains checked out`,
     };
     if (outcomeEvidence?.command) {
       readyEvidence.command = outcomeEvidence.command;
@@ -2108,10 +2131,35 @@ async function runIdleMaintenance(input: {
       input.options.baseRef,
     ]);
     if (result.code === 0) {
+      let publishedCommit: string;
+      try {
+        publishedCommit = publishWorkerBranchToChangeBranch(branchPlan, input.runCommand);
+      } catch (error) {
+        const evidence: AgentEvidence = {
+          at: nowIso(input.now),
+          command: `git branch -f ${branchPlan.branch} HEAD`,
+          message: `idle rebase publish failed for ${branch}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+        writeWorkerStatus(
+          input.paths.root,
+          makeWorkerStatus({
+            branch,
+            currentChange: changeId,
+            latestEvidence: evidence,
+            now: input.now,
+            owner: input.options.workerName,
+            state: "blocked",
+          }),
+        );
+        writeLine(input.stdout, `[agents] idle rebase publish blocked ${branch}`);
+        return 1;
+      }
       const evidence: AgentEvidence = {
         at: nowIso(input.now),
         command: `git rebase ${input.options.baseRef}`,
-        message: `rebased ${branch}`,
+        message: `rebased ${branch} at ${publishedCommit}`,
       };
       writeWorkerStatus(
         input.paths.root,
@@ -2188,6 +2236,7 @@ async function runWatchOnce(input: {
     if (ownedLease) {
       const branchPlan = ensureChangeBranch(input.cwd, ownedLease.changeId, {
         baseRef: input.options.baseRef,
+        resetWorkerBranch: false,
         runCommand: input.runCommand,
         workerName: input.options.workerName,
         worktreeDir: input.options.worktreeDir,

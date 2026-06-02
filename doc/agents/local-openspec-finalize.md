@@ -22,7 +22,8 @@ This rendered prompt is self-contained for this session.
 ## Assignment
 
 - Change: `{{change_id}}`.
-- Branch: `changes/{{change_id}}`.
+- Review branch: `changes/{{change_id}}`.
+- Worker branch: `agents/{{worker_name}}`.
 - Worker worktree: `./tmp/worktree/{{worker_name}}`.
 - Update owning change artifacts under `openspec/changes/{{change_id}}/` and canonical specs changed by OpenSpec archive.
 - Do not use external systems as queue, lock, or status store.
@@ -49,7 +50,7 @@ This rendered prompt is self-contained for this session.
 10. Run `devstate check` only when finalization invalidates prior evidence or evidence validity is unclear. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
 11. Update owning change artifacts so finalization status and latest evidence are recorded.
 12. Commit finalization changes with a concise message when files changed. Do not create an empty commit only for a clean rebase. Do not amend existing commits.
-13. Detach the worker worktree at the final `changes/{{change_id}}` branch tip before marking ready.
+13. Leave `changes/{{change_id}}` as the review branch and do not check it out in the worker worktree.
 14. Do not merge into `main`.
 15. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
 

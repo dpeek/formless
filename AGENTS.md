@@ -149,12 +149,12 @@ Data stays flat. Compose in query, view, projection, action layer.
 For `bun agents watch <worker-name>`:
 
 - Finalization is supervisor and rendered-prompt owned after required tasks are shipped or intentionally closed.
-- Rebase on local `main`, run strict OpenSpec validation, run OpenSpec archive on the review branch, and commit archive output.
+- Rebase on local `main`, run strict OpenSpec validation, run OpenSpec archive on the worker branch, publish to the review branch, and commit archive output.
 - Reuse latest implementation `devstate check` evidence unless rebase, conflict resolution, code changes, generated output edits, or unclear coverage invalidate it.
 - Resolve clear structural rebase conflicts; block only on semantic conflicts that require product, storage, security, public API, or user-intent decisions.
 - Leave a clean review-ready `changes/<change-id>` branch with code changes, completed evidence, canonical specs, and archived change files.
 - Keep review-ready branches rebased on local `main`; workers rerun finalization when `main` advances.
-- Detach the worker worktree from `changes/<change-id>` at the final branch tip before marking ready.
+- Keep the worker worktree on `agents/<worker-name>` and leave `changes/<change-id>` free for review after marking ready.
 - Do not merge unless user asks.
 
 ## Rules

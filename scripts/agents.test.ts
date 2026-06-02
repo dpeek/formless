@@ -10,17 +10,19 @@ import {
   buildLocalOpenSpecImplementationPrompt,
   classifyChangeLease,
   createChangeLease,
-  detachWorktreeAtBranchTip,
   discoverClaimableOpenSpecChanges,
   ensureAgentStateDirs,
+  ensureChangeBranch,
   findWorkerActiveLease,
   makeWorkerStatus,
   planChangeBranch,
+  publishWorkerBranchToChangeBranch,
   readChangeLease,
   readWorkerStatus,
   releaseChangeLease,
   resolveAgentStatePaths,
   runAgentsCli,
+  workerBranchName,
   worktreeDirForWorker,
   writeWorkerStatus,
   type ApplyInstructions,
@@ -351,6 +353,7 @@ describe("local agent worker discovery", () => {
       state: "working",
     });
     let sessionCalls = 0;
+    let reviewBranchExists = false;
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (_cwd, command, args) => {
@@ -383,14 +386,38 @@ describe("local agent worker discovery", () => {
         command === "git" &&
         args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
       ) {
+        return { code: reviewBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch changes/add-thing main") {
+        reviewBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
         return { code: 1, stderr: "", stdout: "" };
       }
 
       if (
         command === "git" &&
         args.join(" ") ===
-          `worktree add -b changes/add-thing ${path.join(root, "tmp", "worktree", "igor")} main`
+          `worktree add -b agents/igor ${path.join(root, "tmp", "worktree", "igor")} changes/add-thing`
       ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
+        return { code: 0, stderr: "", stdout: "abc123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch -f changes/add-thing abc123") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -539,11 +566,12 @@ describe("local agent worker discovery", () => {
     expect(discoverClaimableOpenSpecChanges("/repo", { runCommand })).toEqual([]);
   });
 
-  it("uses stable change branch names", () => {
+  it("uses stable review branch and worker branch names", () => {
     const missingBranch: CommandRunner = () => ({ code: 1, stderr: "", stdout: "" });
     const existingBranch: CommandRunner = () => ({ code: 0, stderr: "", stdout: "" });
 
     expect(branchNameForChange("add-thing")).toBe("changes/add-thing");
+    expect(workerBranchName("igor")).toBe("agents/igor");
     expect(worktreeDirForWorker("/repo", "igor")).toBe("/repo/tmp/worktree/igor");
     expect(
       planChangeBranch("/repo", "add-thing", {
@@ -553,6 +581,7 @@ describe("local agent worker discovery", () => {
     ).toMatchObject({
       action: "create",
       branch: "changes/add-thing",
+      workerBranch: "agents/igor",
       worktreeDir: "/repo/tmp/worktree/igor",
     });
     expect(
@@ -563,20 +592,69 @@ describe("local agent worker discovery", () => {
     ).toMatchObject({
       action: "resume",
       branch: "changes/add-thing",
+      workerBranch: "agents/igor",
       worktreeDir: "/repo/tmp/worktree/igor",
     });
+  });
+
+  it("does not reset the worker branch when resuming an active lease", () => {
+    const root = tempDir();
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
+    mkdirSync(worktreeDir, { recursive: true });
+    const calls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      calls.push({ args, command, cwd });
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --show-toplevel") {
+        return { code: 0, stderr: "", stdout: `${worktreeDir}\n` };
+      }
+
+      if (command === "git" && args.join(" ") === "branch --show-current") {
+        return { code: 0, stderr: "", stdout: "agents/igor\n" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      expect(
+        ensureChangeBranch(root, "add-thing", {
+          resetWorkerBranch: false,
+          runCommand,
+          workerName: "igor",
+          worktreeDir,
+        }),
+      ).toMatchObject({
+        branch: "changes/add-thing",
+        workerBranch: "agents/igor",
+        worktreeDir,
+      });
+      expect(calls).not.toContainEqual({
+        args: ["reset", "--keep", "changes/add-thing"],
+        command: "git",
+        cwd: worktreeDir,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 });
 
 describe("local agent worker review branches", () => {
-  it("detaches the worker worktree at the review-ready branch tip", () => {
+  it("publishes the worker branch tip to the review branch", () => {
     const calls: Array<{ args: string[]; command: string; cwd: string }> = [];
     const runCommand: CommandRunner = (cwd, command, args) => {
       calls.push({ args, command, cwd });
-      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
+      if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
         return { code: 0, stderr: "", stdout: "abc123\n" };
       }
-      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+      if (command === "git" && args.join(" ") === "branch -f changes/add-thing abc123") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -584,16 +662,24 @@ describe("local agent worker review branches", () => {
     };
 
     expect(
-      detachWorktreeAtBranchTip("/repo/tmp/worktree/igor", "changes/add-thing", runCommand),
+      publishWorkerBranchToChangeBranch(
+        {
+          action: "resume",
+          branch: "changes/add-thing",
+          workerBranch: "agents/igor",
+          worktreeDir: "/repo/tmp/worktree/igor",
+        },
+        runCommand,
+      ),
     ).toBe("abc123");
     expect(calls).toEqual([
       {
-        args: ["rev-parse", "--verify", "changes/add-thing"],
+        args: ["rev-parse", "--verify", "HEAD"],
         command: "git",
         cwd: "/repo/tmp/worktree/igor",
       },
       {
-        args: ["checkout", "--detach", "abc123"],
+        args: ["branch", "-f", "changes/add-thing", "abc123"],
         command: "git",
         cwd: "/repo/tmp/worktree/igor",
       },
@@ -605,10 +691,11 @@ describe("local agent worker review branches", () => {
     const gitCommonDir = path.join(root, ".git");
     const worktreeDir = path.join(root, "tmp", "worktree", "igor");
     const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
-    let branchExists = false;
+    let reviewBranchExists = false;
+    let workerBranchExists = false;
     let remainingWork = 1;
     let sessionCalls = 0;
-    let headReads = 0;
+    const headReads = ["impl123\n", "before123\n", "after123\n", "final123\n"];
     let committed = false;
     let stdout = "";
     let stderr = "";
@@ -632,7 +719,19 @@ describe("local agent worker review branches", () => {
         command === "git" &&
         args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
       ) {
-        return { code: branchExists ? 0 : 1, stderr: "", stdout: "" };
+        return { code: reviewBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch changes/add-thing main") {
+        reviewBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: workerBranchExists ? 0 : 1, stderr: "", stdout: "" };
       }
 
       if (
@@ -640,10 +739,14 @@ describe("local agent worker review branches", () => {
         args[0] === "worktree" &&
         args[1] === "add" &&
         args[2] === "-b" &&
-        args[3] === "changes/add-thing"
+        args[3] === "agents/igor"
       ) {
-        branchExists = true;
+        workerBranchExists = true;
         writeImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -662,12 +765,11 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
-        headReads += 1;
-        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+        return { code: 0, stderr: "", stdout: headReads.shift() ?? "final123\n" };
       }
 
       if (command === "git" && args.join(" ") === "rebase main") {
-        return { code: 0, stderr: "", stdout: "Current branch changes/add-thing is up to date.\n" };
+        return { code: 0, stderr: "", stdout: "Current branch agents/igor is up to date.\n" };
       }
 
       if (command === "git" && args.join(" ") === "diff --name-only before123 after123") {
@@ -705,14 +807,14 @@ describe("local agent worker review branches", () => {
 
       if (command === "git" && args.join(" ") === "commit -m Finalize add-thing") {
         committed = true;
-        return { code: 0, stderr: "", stdout: "[changes/add-thing abc123] Finalize add-thing\n" };
+        return { code: 0, stderr: "", stdout: "[agents/igor abc123] Finalize add-thing\n" };
       }
 
-      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
-        return { code: 0, stderr: "", stdout: "abc123\n" };
-      }
-
-      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+      if (
+        command === "git" &&
+        (args.join(" ") === "branch -f changes/add-thing impl123" ||
+          args.join(" ") === "branch -f changes/add-thing final123")
+      ) {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -822,7 +924,7 @@ describe("local agent worker review branches", () => {
         cwd: worktreeDir,
       });
       expect(commandCalls).toContainEqual({
-        args: ["checkout", "--detach", "abc123"],
+        args: ["branch", "-f", "changes/add-thing", "final123"],
         command: "git",
         cwd: worktreeDir,
       });
@@ -836,10 +938,11 @@ describe("local agent worker review branches", () => {
     const gitCommonDir = path.join(root, ".git");
     const worktreeDir = path.join(root, "tmp", "worktree", "igor");
     const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
-    let branchExists = false;
+    let reviewBranchExists = false;
+    let workerBranchExists = false;
     let remainingWork = 1;
     let sessionCalls = 0;
-    let headReads = 0;
+    const headReads = ["impl123\n", "before123\n", "after123\n", "final123\n"];
     let committed = false;
     let stdout = "";
     let stderr = "";
@@ -863,7 +966,19 @@ describe("local agent worker review branches", () => {
         command === "git" &&
         args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
       ) {
-        return { code: branchExists ? 0 : 1, stderr: "", stdout: "" };
+        return { code: reviewBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch changes/add-thing main") {
+        reviewBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: workerBranchExists ? 0 : 1, stderr: "", stdout: "" };
       }
 
       if (
@@ -871,10 +986,14 @@ describe("local agent worker review branches", () => {
         args[0] === "worktree" &&
         args[1] === "add" &&
         args[2] === "-b" &&
-        args[3] === "changes/add-thing"
+        args[3] === "agents/igor"
       ) {
-        branchExists = true;
+        workerBranchExists = true;
         writeImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -893,8 +1012,7 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
-        headReads += 1;
-        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+        return { code: 0, stderr: "", stdout: headReads.shift() ?? "final123\n" };
       }
 
       if (command === "git" && args.join(" ") === "rebase main") {
@@ -935,14 +1053,14 @@ describe("local agent worker review branches", () => {
 
       if (command === "git" && args.join(" ") === "commit -m Finalize add-thing") {
         committed = true;
-        return { code: 0, stderr: "", stdout: "[changes/add-thing abc123] Finalize add-thing\n" };
+        return { code: 0, stderr: "", stdout: "[agents/igor abc123] Finalize add-thing\n" };
       }
 
-      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
-        return { code: 0, stderr: "", stdout: "abc123\n" };
-      }
-
-      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+      if (
+        command === "git" &&
+        (args.join(" ") === "branch -f changes/add-thing impl123" ||
+          args.join(" ") === "branch -f changes/add-thing final123")
+      ) {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -993,10 +1111,11 @@ describe("local agent worker review branches", () => {
     const root = tempDir();
     const gitCommonDir = path.join(root, ".git");
     const worktreeDir = path.join(root, "tmp", "worktree", "igor");
-    let branchExists = false;
+    let reviewBranchExists = false;
+    let workerBranchExists = false;
     let remainingWork = 1;
     let sessionCalls = 0;
-    let headReads = 0;
+    const headReads = ["impl123\n", "before123\n", "after123\n"];
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
@@ -1018,7 +1137,19 @@ describe("local agent worker review branches", () => {
         command === "git" &&
         args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
       ) {
-        return { code: branchExists ? 0 : 1, stderr: "", stdout: "" };
+        return { code: reviewBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch changes/add-thing main") {
+        reviewBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: workerBranchExists ? 0 : 1, stderr: "", stdout: "" };
       }
 
       if (
@@ -1026,10 +1157,14 @@ describe("local agent worker review branches", () => {
         args[0] === "worktree" &&
         args[1] === "add" &&
         args[2] === "-b" &&
-        args[3] === "changes/add-thing"
+        args[3] === "agents/igor"
       ) {
-        branchExists = true;
+        workerBranchExists = true;
         writeImplementationEvidence(worktreeDir);
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -1048,12 +1183,11 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
-        headReads += 1;
-        return { code: 0, stderr: "", stdout: headReads === 1 ? "before123\n" : "after123\n" };
+        return { code: 0, stderr: "", stdout: headReads.shift() ?? "after123\n" };
       }
 
       if (command === "git" && args.join(" ") === "rebase main") {
-        return { code: 0, stderr: "", stdout: "Current branch changes/add-thing is up to date.\n" };
+        return { code: 0, stderr: "", stdout: "Current branch agents/igor is up to date.\n" };
       }
 
       if (command === "git" && args.join(" ") === "diff --name-only before123 after123") {
@@ -1069,6 +1203,10 @@ describe("local agent worker review branches", () => {
 
       if (command === "openspec" && args.join(" ") === "archive add-thing --yes") {
         return { code: 1, stderr: "archive failed\n", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch -f changes/add-thing impl123") {
+        return { code: 0, stderr: "", stdout: "" };
       }
 
       throw new Error(`unexpected command in ${cwd}: ${command} ${args.join(" ")}`);
@@ -1196,7 +1334,8 @@ describe("local agent worker review branches", () => {
       state: "ready-for-review",
     });
     let sessionCalls = 0;
-    let headReads = 0;
+    let workerBranchExists = false;
+    const headReads = ["before456\n", "after456\n", "final456\n"];
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
@@ -1228,14 +1367,28 @@ describe("local agent worker review branches", () => {
         return { code: 1, stderr: "", stdout: "" };
       }
 
-      if (command === "git" && args.join(" ") === `worktree add ${worktreeDir} changes/add-thing`) {
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: workerBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === `worktree add -b agents/igor ${worktreeDir} changes/add-thing`
+      ) {
+        workerBranchExists = true;
         writeArchivedImplementationEvidence(worktreeDir);
         return { code: 0, stderr: "", stdout: "" };
       }
 
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
       if (command === "git" && args.join(" ") === "rev-parse --verify HEAD") {
-        headReads += 1;
-        return { code: 0, stderr: "", stdout: headReads === 1 ? "before456\n" : "after456\n" };
+        return { code: 0, stderr: "", stdout: headReads.shift() ?? "final456\n" };
       }
 
       if (command === "git" && args.join(" ") === "rebase main") {
@@ -1250,11 +1403,7 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: "" };
       }
 
-      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
-        return { code: 0, stderr: "", stdout: "def456\n" };
-      }
-
-      if (command === "git" && args.join(" ") === "checkout --detach def456") {
+      if (command === "git" && args.join(" ") === "branch -f changes/add-thing final456") {
         return { code: 0, stderr: "", stdout: "" };
       }
 
@@ -1493,6 +1642,8 @@ describe("local OpenSpec implementation prompt", () => {
     );
     expect(prompt).toContain('Status command: openspec status --change "add-thing" --json');
     expect(prompt).toContain("Apply state: ready");
+    expect(prompt).toContain("Review branch: `changes/add-thing`.");
+    expect(prompt).toContain("Worker branch: `agents/igor`.");
     expect(prompt).toContain("Progress: 1/3 complete, 2 remaining");
     expect(prompt).toContain(
       "First unchecked task: 2: 2.1 Select section before broad context reads.",
@@ -1551,7 +1702,7 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
     expect(prompt).toContain("Do not create an empty commit only for a clean rebase.");
     expect(prompt).toContain(
-      "Detach the worker worktree at the final `changes/add-thing` branch tip before marking ready.",
+      "Leave `changes/add-thing` as the review branch and do not check it out in the worker worktree.",
     );
     expect(prompt).not.toContain("openspec-apply-change");
     expect(prompt).not.toContain("doc/agents/local-openspec-implement.md");
@@ -1575,6 +1726,9 @@ describe("local agent worker instruction docs", () => {
     expect(agents).toContain(
       "Use current devstate output or `./.devstate/status.md` as check evidence.",
     );
+    expect(agents).toContain(
+      "Keep the worker worktree on `agents/<worker-name>` and leave `changes/<change-id>` free for review after marking ready.",
+    );
     expect(agents).not.toContain("promote shipped facts");
     expect(agents).not.toContain("Do not archive the OpenSpec change");
     expect(agents).not.toContain("Archiving is a separate process after review and merge");
@@ -1592,6 +1746,8 @@ describe("local agent worker instruction docs", () => {
     expect(workerDoc).toContain(
       "runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`",
     );
+    expect(workerDoc).toContain("Checked-out worker branch: `agents/<worker-name>`.");
+    expect(workerDoc).toContain("publishes the worker branch tip back to `changes/<change-id>`");
     expect(workerDoc).toContain(
       "Finalization reuses latest implementation `devstate check` evidence",
     );

@@ -6,7 +6,7 @@ Local agent workers pull ready OpenSpec changes from local Git state.
 
 - Start one worker: `bun agents watch <worker-name>`.
 - Dry-run one pass: `bun agents watch <worker-name> --once --dry-run`.
-- Worker names are runtime metadata. They do not affect branch names.
+- Worker names determine the checked-out `agents/<worker-name>` branch. Review output still lands on `changes/<change-id>`.
 
 ## Queue
 
@@ -39,7 +39,7 @@ The state root is shared by worktrees from the same clone and is not tracked.
 
 - A worker claims a change by atomically creating `leases/<change-id>/`.
 - The lease record stores change id, owner, branch, state, heartbeat time, and latest evidence.
-- Only the active lease owner writes to `changes/<change-id>`.
+- Only the active lease owner publishes to `changes/<change-id>`.
 - Branch existence is not ownership.
 - A review-ready branch keeps a `ready-for-review` lease so workers do not reclaim the committed change from local `main`.
 - An idle worker may adopt a `ready-for-review` lease only to refresh a branch that no longer contains local `main`; use `bun agents release <change-id>` only when intentionally reopening implementation ownership.
@@ -47,11 +47,13 @@ The state root is shared by worktrees from the same clone and is not tracked.
 ## Branches
 
 - Default worker worktree: `./tmp/worktree/<worker-name>`.
-- Implementation branch: `changes/<change-id>`.
-- If the branch does not exist, the supervisor creates it from local `main`.
-- If the branch exists, the supervisor resumes it in the worker worktree.
-- A worker reuses its named worktree across changes by checking out the active `changes/<change-id>` branch.
-- A handoff keeps the same branch and changes only lease/status owner metadata.
+- Review branch: `changes/<change-id>`.
+- Checked-out worker branch: `agents/<worker-name>`.
+- If the review branch does not exist, the supervisor creates it from local `main`.
+- The supervisor checks out `agents/<worker-name>` in the worker worktree and resets it to `changes/<change-id>` before a new claim or maintenance pass.
+- A worker reuses its named worktree across changes by resetting its `agents/<worker-name>` branch to the active review branch.
+- After a successful implementation or finalization session, the supervisor publishes the worker branch tip back to `changes/<change-id>`.
+- A handoff keeps the same review branch and changes only lease/status owner metadata.
 
 ## Work Loop
 
@@ -67,11 +69,11 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - Implementation section commits do not rebase by default.
 - If a worker resumes a worktree already mid-rebase, it follows the rebase conflict policy before selecting more work.
 - When all required tasks are shipped or closed, the worker runs finalization before review.
-- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits archive output, detaches the worker worktree at the final branch tip, and marks the branch ready for review.
+- Finalization rebases the worker branch on local `main`, reconciles changed OpenSpec artifacts from `main`, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits archive output, publishes the worker branch tip to the review branch, and marks the branch ready for review.
 - Finalization reuses latest implementation `devstate check` evidence when rebase, archive, and artifact reconciliation do not invalidate it.
 - Finalization reruns `devstate check` when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
 - Review-ready means the branch is a clean merge candidate with code changes, completed task evidence, canonical specs, and archived change files included.
-- Review-ready branches must not remain checked out by worker worktrees.
+- Review-ready `changes/<change-id>` branches must not remain checked out by worker worktrees.
 - Review-ready branches retain their lease until branch merge, branch deletion, or explicit release.
 - Workers do not merge review-ready branches into `main`.
 
@@ -87,19 +89,19 @@ The state root is shared by worktrees from the same clone and is not tracked.
 ## Feedback Loop
 
 - Humans may provide implementation feedback by editing the committed change artifacts on local `main`.
-- The worker rebases the change branch on local `main`, reads the updated change artifacts, and updates implementation, task evidence, OpenSpec artifacts, and any archive output to match.
+- The worker rebases `agents/<worker-name>` on local `main`, reads the updated change artifacts, updates implementation, task evidence, OpenSpec artifacts, and any archive output to match, then publishes to `changes/<change-id>`.
 - If feedback has semantic conflicts with shipped behavior, the worker records blocker evidence instead of guessing.
 
 ## Idle Maintenance
 
 - Each watch pass first scans `ready-for-review` leases.
-- If a review-ready branch does not contain local `main`, the worker adopts the lease, runs finalization maintenance, rebases on local `main`, runs checks only when evidence is invalidated or unclear, detaches the worktree, and marks the branch ready again.
+- If a review-ready branch does not contain local `main`, the worker adopts the lease, runs finalization maintenance on `agents/<worker-name>`, rebases on local `main`, runs checks only when evidence is invalidated or unclear, publishes to `changes/<change-id>`, and marks the branch ready again.
 - If no change can be claimed or refreshed, the worker scans unleased local `changes/*` branches.
-- Eligible unleased branches with remaining OpenSpec work are rebased on local `main`.
+- Eligible unleased branches with remaining OpenSpec work are rebased through `agents/<worker-name>` and published back to `changes/<change-id>`.
 - Semantic rebase conflicts are recorded as blocked status with evidence.
 
 ## Human Boundary
 
 - Workers leave review-ready `changes/<change-id>` branches.
-- Workers detach from review-ready branches after finalization.
+- Workers do not check out review-ready `changes/<change-id>` branches after finalization.
 - Workers do not merge into `main`.
