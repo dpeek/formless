@@ -44,10 +44,17 @@ Evidence:
 
 ## 4. Local Dev And Browser Bootstrap
 
-- [ ] 4.1 Let local dev start in an empty or layout-only workspace and mount browser onboarding state.
-- [ ] 4.2 Restore local Authority state from control-plane record source and app archives on first run or after local reset.
-- [ ] 4.3 Let browser-created app installs initialize app storage and save back to record source plus app archives.
-- [ ] 4.4 Add local dev tests for empty workspace, initialized workspace, reset rebuild, and first app install from browser state.
+- [x] 4.1 Let local dev start in an empty or layout-only workspace and mount browser onboarding state.
+- [x] 4.2 Restore local Authority state from control-plane record source and app archives on first run or after local reset.
+- [x] 4.3 Let browser-created app installs initialize app storage and save back to record source plus app archives.
+- [x] 4.4 Add local dev tests for empty workspace, initialized workspace, reset rebuild, and first app install from browser state.
+
+Evidence:
+
+- Changed `src/site/instance-workspace.ts` so `formless dev` uses an in-memory default layout when `formless.json` is absent, while other workspace commands still require the reviewable manifest.
+- Added active `src/site/cli.test.ts` coverage for empty workspace dev startup, layout/record-source restore into local Authority, local reset rebuild from record source plus app archives, and saving browser-created local Authority installs back to deterministic record source plus app archives.
+- `devstate check` green at 2026-06-02T09:18:18.737Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-browser-workspace-bootstrap-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "snapshot -i --max-output 6000" "errors"` loaded the instance shell with App installs, Routes, and Deployments surfaces and no browser errors.
 
 ## 5. Shared Workspace Operation Layer
 

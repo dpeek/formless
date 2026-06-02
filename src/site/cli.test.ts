@@ -3328,6 +3328,70 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
   });
 
+  it("starts instance workspace dev from an empty workspace for browser onboarding", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "empty-workspace");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+
+    const run = runFormlessCli(
+      ["dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: { PORT: "4443" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+    );
+    child.close(0);
+    await run;
+
+    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls[0]).toMatchObject({
+      args: ["run", "dev"],
+      command: "npm",
+      cwd: "/package",
+    });
+    expect(spawnCalls[0]?.env).toMatchObject({
+      FORMLESS_LAUNCH_FIXTURE: "empty",
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
+      PORT: "4443",
+      VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+    });
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4443/api/formless/app-installs",
+      "GET http://localhost:4443/api/formless/app-installs",
+    ]);
+    await expect(
+      stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await stat(path.join(workspaceRoot, "archives/apps"))).isDirectory()).toBe(true);
+    expect((await stat(path.join(workspaceRoot, ".formless/local"))).isDirectory()).toBe(true);
+    expect(logs).toEqual([
+      "Instance shell: http://localhost:4443/",
+      `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
+      "Workspace archive restore skipped: no workspace archives declared.",
+    ]);
+    expect(child.killed).toBe(false);
+  });
+
   it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from record source", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -3679,7 +3743,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("saves local Authority installed apps into deterministic workspace archives", async () => {
+  it("saves browser-created local Authority installed apps into deterministic workspace archives", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -3874,6 +3938,60 @@ describe("Formless Site CLI", () => {
         "Next dev run will rebuild local runtime state from workspace archives.",
       ].join("\n"),
     ]);
+  });
+
+  it("rebuilds local runtime state from workspace source after local reset", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/apps/david"),
+      appArchive("david", "David Peek"),
+    );
+    await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
+    await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
+
+    await runFormlessCli(
+      ["instance", "reset-local", "--workspace", workspaceRoot],
+      cliDeps(tempDir),
+    );
+
+    const run = runFormlessCli(
+      ["instance", "dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: { PORT: "4450" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
+    );
+    child.close(0);
+    await run;
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4450/api/formless/app-installs",
+      "GET http://localhost:4450/api/formless/app-installs",
+      "POST http://localhost:4450/api/formless/archive/restore",
+    ]);
+    await expect(
+      stat(path.join(workspaceRoot, ".formless/local/wrangler/state.txt")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/local/dev.json"), "utf8"),
+    ).resolves.toContain('"sourceUrl": "http://localhost:4450"');
+    expect(logs.at(-1)).toBe(
+      "Workspace archive restored: record source (1 apps, 0 records, 0 media).",
+    );
+    expect(child.killed).toBe(false);
   });
 
   it.skip("deploys a claimed instance workspace with instance runtime vars and existing migration policy", async () => {

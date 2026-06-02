@@ -1089,7 +1089,7 @@ export async function runFormlessInstanceWorkspaceDev(
   dependencies: DevFormlessInstanceWorkspaceDependencies,
 ): Promise<void> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const manifest = await readWorkspaceManifestForDev(workspaceRoot);
   const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
 
@@ -2725,6 +2725,26 @@ async function readWorkspaceManifest(workspaceRoot: string): Promise<{
     manifest: parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
     manifestPath,
   };
+}
+
+async function readWorkspaceManifestForDev(
+  workspaceRoot: string,
+): Promise<FormlessInstanceWorkspaceManifest> {
+  const manifestPath = workspaceManifestPath(workspaceRoot);
+
+  await assertNoLegacyWorkspaceManifest(workspaceRoot);
+
+  try {
+    return parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return defaultFormlessInstanceWorkspaceManifest({
+        name: defaultWorkspaceName(workspaceRoot),
+      });
+    }
+
+    throw error;
+  }
 }
 
 async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
