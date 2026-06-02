@@ -10,11 +10,22 @@ This is not shipped behavior. Shipped behavior lives in
 This is not a commitment. Work starts when a committed OpenSpec change owns the
 work.
 
-## Candidate Changes
+## Current Focus: Launch CRM
+
+1. `add-launch-crm-app`: add installable CRM app with contacts, audiences, campaigns, broadcasts.
+2. `add-crm-public-subscribe-action`: make CRM own subscribe writes, audiences, consent source.
+3. `add-site-crm-subscribe-bindings`: let Site subscribe blocks target a CRM install and audience.
+4. `retire-site-owned-subscribers`: move Site away from owning contact subscription records.
+5. `add-campaign-drafts`: add campaign and message draft records with generated authoring views.
+6. `add-broadcast-recipient-snapshots`: snapshot broadcast recipients from audiences or segments.
+7. `add-contact-segments`: add segment records and membership or query rules.
+8. `add-suppression-preferences`: add unsubscribe, suppression, and preference-center records.
+9. `add-email-broadcast-jobs`: send broadcasts through queued email jobs with delivery events.
+
+## Later Candidate Changes
 
 ### Apps And Schema
 
-- `add-rich-source-app`: add a non-Site app proving related records, actions, read models.
 - `improve-reference-authoring`: improve generated reference selection and scoped child creation.
 - `expand-schema-actions`: add more schema-declared action kinds for non-Site workflows.
 - `expand-query-read-models`: add query or read-model capability required by one concrete app.
@@ -64,11 +75,7 @@ work.
 - `harden-admin-token-and-publish`: harden admin bearer and publish boundaries.
 - `add-authenticated-actions`: add action execution for passkey-backed owner and user sessions.
 - `expand-public-action-forms`: reuse public action policy for more public forms.
-- `add-contact-unsubscribe-suppression`: add unsubscribe, suppression, and preference-center flows.
-- `add-contact-topics-segments`: add contact topics and segments.
-- `add-email-broadcast-jobs`: add Cloudflare Email Service sending through queued broadcast jobs.
 - `add-turnstile-provisioning`: add Turnstile provisioning through deployment/runtime configuration.
-- `promote-contacts-capability`: promote Site contact subscriptions into a shared Contacts or CRM capability.
 
 ### Extensibility And New Capabilities
 
