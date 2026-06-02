@@ -1099,26 +1099,24 @@ describe("instance deployment runtime API routes", () => {
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
 
-    expect(
-      controlPlane.body.records
-        .filter((record) => record.entity === "deploy-attempt")
-        .map((record) => ({
-          id: record.id,
-          status: record.values.status,
-        })),
-    ).toEqual(
-      expect.arrayContaining([
-        { id: planStarted.body.attempt.attemptId, status: "planned" },
-        { id: applyStarted.body.attempt.attemptId, status: "succeeded" },
-        { id: failureStarted.body.attempt.attemptId, status: "failed" },
-      ]),
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-attempt",
     );
-    expect(
-      controlPlane.body.records.filter((record) => record.entity === "deploy-evidence-summary"),
-    ).toHaveLength(1);
-    expect(
-      controlPlane.body.records.filter((record) => record.entity === "deploy-drift-report"),
-    ).toHaveLength(1);
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-evidence-summary",
+    );
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-drift-report",
+    );
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
+      planStarted.body.attempt.attemptId,
+    );
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
+      applyStarted.body.attempt.attemptId,
+    );
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
+      failureStarted.body.attempt.attemptId,
+    );
     expect(JSON.stringify(controlPlane.body.records)).not.toContain(success.body.lease.token);
 
     const staleDrift = await postDeploymentDrift({

@@ -90,8 +90,6 @@ import {
 } from "./deployment-runtime-state.ts";
 import {
   readControlPlaneRecords,
-  recordDeploymentAttemptInControlPlane,
-  recordDeploymentEvidenceInControlPlane,
   syncDomainIntentToControlPlane,
 } from "./deployment-control-plane-client.ts";
 import { buildPrimaryInstanceDeploymentDesiredStateProjection } from "./deployment-runtime-projection.ts";
@@ -861,13 +859,6 @@ async function startDomainProviderDeploymentAttempt(
     };
   }
 
-  await recordDeploymentAttemptInControlPlane({
-    attempt: started.attempt,
-    env: input.env,
-    requestUrl: input.requestUrl,
-    target: primaryInstanceDeploymentTarget,
-  });
-
   return {
     actor: input.actor,
     attempt: started.attempt,
@@ -910,7 +901,7 @@ async function failDomainProviderDeploymentAttempt(
     runnerId?: string;
   },
 ) {
-  const result = writeDeploymentAttemptFailure(storage, {
+  writeDeploymentAttemptFailure(storage, {
     actor: input.actor,
     attemptId: input.attemptId,
     desiredState: input.desiredState,
@@ -922,15 +913,6 @@ async function failDomainProviderDeploymentAttempt(
       displayMessage: input.displayMessage,
     },
   });
-
-  if (result.ok) {
-    await recordDeploymentAttemptInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-  }
 }
 
 async function deleteWithAuthorization(
@@ -2496,15 +2478,6 @@ async function writeDomainProviderApplyDeploymentFailure(
     },
   });
 
-  if (result.ok) {
-    await recordDeploymentAttemptInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-  }
-
   return deploymentWritebackResult(result);
 }
 
@@ -2536,25 +2509,6 @@ async function writeDomainProviderApplyDeploymentSuccess(
     now: input.now,
     runnerId: input.runnerId ?? input.job.runnerId,
   });
-
-  if (result.ok) {
-    await recordDeploymentAttemptInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-    await recordDeploymentEvidenceInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      evidence: input.resources.map((resource) =>
-        deploymentEvidenceSummaryFromApplyEvidence(resource, deployment.desiredState.targetId),
-      ),
-      now: input.now,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-  }
 
   return deploymentWritebackResult(result);
 }
@@ -2588,15 +2542,6 @@ async function writeDomainProviderDeleteDeploymentFailure(
       displayMessage: input.error,
     },
   });
-
-  if (result.ok) {
-    await recordDeploymentAttemptInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-  }
 
   return deploymentWritebackResult(result);
 }
@@ -2646,23 +2591,6 @@ async function writeDomainProviderDeleteDeploymentSuccess(
     now: input.now,
     runnerId: input.runnerId ?? input.job.runnerId,
   });
-
-  if (result.ok) {
-    await recordDeploymentAttemptInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-    await recordDeploymentEvidenceInControlPlane({
-      attempt: result.attempt,
-      env: input.env,
-      evidence,
-      now: input.now,
-      requestUrl: input.requestUrl,
-      target: primaryInstanceDeploymentTarget,
-    });
-  }
 
   return deploymentWritebackResult(result);
 }

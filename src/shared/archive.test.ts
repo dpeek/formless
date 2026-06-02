@@ -191,7 +191,7 @@ describe("portable archive protocol", () => {
           ...controlPlaneRecords(),
           {
             id: "deploy-drift:instance.primary",
-            entity: "deploy-drift-report",
+            entity: "instance:deploy-drift-report",
             values: {
               deployTarget: "instance.primary",
               versionId: "version-1",
@@ -213,7 +213,7 @@ describe("portable archive protocol", () => {
     });
 
     expect(() => parseInstanceArchive(archive)).toThrow(
-      'Instance archive controlPlane records record "deploy-drift:instance.primary" references unknown entity "deploy-drift-report".',
+      'Instance archive controlPlane records record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
     );
   });
 

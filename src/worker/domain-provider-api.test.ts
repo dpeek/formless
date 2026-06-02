@@ -838,23 +838,13 @@ describe("instance domain provider API routes", () => {
     const controlPlaneHistory = await getJson<BootstrapResponse>(
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
-    const attemptRecords = controlPlaneHistory.body.records.filter(
-      (record) => record.entity === "deploy-attempt",
-    );
-    const evidenceRecords = controlPlaneHistory.body.records.filter(
-      (record) => record.entity === "deploy-evidence-summary",
-    );
 
-    expect(attemptRecords.map((record) => record.values.status)).toEqual([
-      "succeeded",
-      "succeeded",
-    ]);
-    expect(evidenceRecords.map((record) => record.values.action)).toEqual([
-      "created",
-      "created",
-      "deleted",
-      "deleted",
-    ]);
+    expect(controlPlaneHistory.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-attempt",
+    );
+    expect(controlPlaneHistory.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-evidence-summary",
+    );
   });
 
   it("marks manually removed redirect and DNS evidence without Cloudflare credentials", async () => {

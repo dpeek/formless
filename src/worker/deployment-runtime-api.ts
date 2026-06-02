@@ -48,12 +48,7 @@ import {
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import {
-  recordDeploymentAttemptInControlPlane,
-  recordDeploymentDriftInControlPlane,
-  recordDeploymentEvidenceInControlPlane,
-  type DeploymentControlPlaneClientEnv,
-} from "./deployment-control-plane-client.ts";
+import type { DeploymentControlPlaneClientEnv } from "./deployment-control-plane-client.ts";
 import {
   heartbeatDeploymentAttemptLease,
   INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
@@ -277,13 +272,6 @@ async function handleAttemptStartRequest(
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
 
-  await recordDeploymentAttemptInControlPlane({
-    attempt: result.attempt,
-    env,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
-
   return jsonResponse(
     {
       attempt: result.attempt,
@@ -338,13 +326,6 @@ async function handleAttemptHeartbeatRequest(
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
 
-  await recordDeploymentAttemptInControlPlane({
-    attempt: result.attempt,
-    env,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
-
   return jsonResponse({
     attempt: result.attempt,
     lease: result.lease,
@@ -394,13 +375,6 @@ async function handleAttemptPlanWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
-
-  await recordDeploymentAttemptInControlPlane({
-    attempt: result.attempt,
-    env,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -453,21 +427,6 @@ async function handleAttemptSuccessWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
-
-  await recordDeploymentAttemptInControlPlane({
-    attempt: result.attempt,
-    env,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
-  await recordDeploymentEvidenceInControlPlane({
-    attempt: result.attempt,
-    env,
-    evidence: parsed.request.evidence,
-    now,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -522,13 +481,6 @@ async function handleAttemptFailureWritebackRequest(
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
 
-  await recordDeploymentAttemptInControlPlane({
-    attempt: result.attempt,
-    env,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
-
   return jsonResponse({
     attempt: result.attempt,
     ...(result.lease === undefined ? {} : { lease: result.lease }),
@@ -579,14 +531,6 @@ async function handleDriftWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
-
-  await recordDeploymentDriftInControlPlane({
-    env,
-    now,
-    report: result.report,
-    requestUrl: request.url,
-    target: primaryInstanceDeploymentTarget,
-  });
 
   return jsonResponse({
     report: result.report,

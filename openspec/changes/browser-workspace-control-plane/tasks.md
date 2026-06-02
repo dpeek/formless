@@ -26,6 +26,7 @@ Evidence:
 - Added deterministic record source files under manifest `source.records`, with one JSON file per `app-install`, `route`, `deploy-target`, `provider-config-ref`, and `deploy-desired-resource` entity.
 - Added `src/site/instance-workspace-record-source.test.ts` for round-trip, unsupported file rejection, secret/raw lease/provider-state rejection, identity validation, route conflict validation, and deployment execution-history exclusion.
 - Updated archive/schema/client/CLI tests proving execution-history entities are rejected from archive restore/source and removed from generated control-plane views.
+- 2026-06-02 recovery: Reapplied the deployment execution-history boundary after the branch lost the blocker fix; removed stale runtime/domain mirroring into control-plane and updated archive/control-plane tests to keep `deploy-attempt`, `deploy-evidence-summary`, and `deploy-drift-report` outside schema-owned records.
 - `devstate check` green at 2026-06-02T09:02:47.428Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 
 ## 3. Workspace Archive Composition

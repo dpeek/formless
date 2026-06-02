@@ -344,7 +344,6 @@ describe("instance archive restore API", () => {
         "route:route:host:publicSite:archive.example.com",
         "route:route:redirect:old.archive.example.com",
         "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:archive.example.com",
-        "deploy-drift-report:deploy-drift:instance.primary",
       ]),
     );
     expect(serializedControlPlane).not.toContain("site-main");
@@ -611,25 +610,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
         preserveQueryString: true,
         createdAt: now,
         updatedAt: now,
-      },
-    },
-    {
-      id: "deploy-drift:instance.primary",
-      entity: "deploy-drift-report",
-      createdAt: now,
-      values: {
-        deployTarget: "instance.primary",
-        versionId: "desired.v1",
-        desiredStateHash: `sha256:${"a".repeat(64)}`,
-        revision: 1,
-        status: "drifted",
-        actorKind: "runner",
-        actorId: "runner:primary",
-        affectedLogicalIdsJson: JSON.stringify(["custom-domain:archive.example.com"]),
-        createCount: 0,
-        updateCount: 1,
-        deleteCount: 0,
-        reportedAt: now,
       },
     },
   ];

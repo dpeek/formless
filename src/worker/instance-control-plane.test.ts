@@ -195,7 +195,7 @@ describe("instance control-plane API routes", () => {
     });
   });
 
-  it("backfills legacy route intent records while preserving provider evidence records", async () => {
+  it("backfills legacy route intent records without deployment execution history records", async () => {
     const now = "2026-06-02T00:00:00.000Z";
     const restored = await postAdminJson<BootstrapResponse>(
       `${controlPlaneApi}/snapshot/restore`,
@@ -203,9 +203,6 @@ describe("instance control-plane API routes", () => {
         legacyAppInstallRecord("personal", now),
         legacyProviderConfigRecord(now),
         legacyDeployTargetRecord(now),
-        legacyDeployAttemptRecord(now),
-        legacyDeployEvidenceRecord(now),
-        legacyDeployDriftRecord(now),
         legacyAppRouteRecord("legacy:personal:admin", {
           appInstall: "personal",
           routeKind: "admin",
@@ -240,12 +237,6 @@ describe("instance control-plane API routes", () => {
     const routes = controlPlane.body.records
       .filter((record) => record.entity === "route")
       .sort((left, right) => left.id.localeCompare(right.id));
-    const evidence = controlPlane.body.records.find(
-      (record) => record.entity === "deploy-evidence-summary",
-    );
-    const drift = controlPlane.body.records.find(
-      (record) => record.entity === "deploy-drift-report",
-    );
 
     expect(restored.response.status).toBe(200);
     expect(routes).toEqual([
@@ -290,17 +281,17 @@ describe("instance control-plane API routes", () => {
         }),
       }),
     ]);
-    expect(evidence?.values).toMatchObject({
-      deployAttempt: "attempt:legacy",
-      logicalId: "primary-custom-domain-www-example-com-publicsite-personal",
-      providerResourceIdsJson: JSON.stringify(["worker-domain-1"]),
-    });
-    expect(drift?.values).toMatchObject({
-      deployTarget: "instance.primary",
-      affectedLogicalIdsJson: JSON.stringify(["primary-custom-domain-www-example-com"]),
-    });
     expect(JSON.stringify(routes)).not.toContain("worker-domain-1");
     expect(JSON.stringify(routes)).not.toContain("affectedLogicalIdsJson");
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-attempt",
+    );
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-evidence-summary",
+    );
+    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
+      "deploy-drift-report",
+    );
     expect(
       controlPlane.body.records
         .filter((record) =>
@@ -691,70 +682,6 @@ function legacyDeployTargetRecord(now: string): StoredRecord {
       enabled: true,
       createdAt: now,
       updatedAt: now,
-    },
-  };
-}
-
-function legacyDeployAttemptRecord(now: string): StoredRecord {
-  return {
-    id: "attempt:legacy",
-    entity: "deploy-attempt",
-    createdAt: now,
-    values: {
-      deployTarget: "instance.primary",
-      versionId: "desired.instance.primary.1",
-      desiredStateHash: `sha256:${"a".repeat(64)}`,
-      revision: 1,
-      mode: "apply",
-      status: "succeeded",
-      actorKind: "runner",
-      actorId: "domain-provider.apply",
-      runnerId: "runner-legacy",
-      idempotencyKey: "legacy-apply",
-      startedAt: now,
-      updatedAt: now,
-      completedAt: now,
-    },
-  };
-}
-
-function legacyDeployEvidenceRecord(now: string): StoredRecord {
-  return {
-    id: "deploy-evidence:attempt:legacy:primary-custom-domain-www-example-com-publicsite-personal",
-    entity: "deploy-evidence-summary",
-    createdAt: now,
-    values: {
-      deployAttempt: "attempt:legacy",
-      action: "created",
-      logicalId: "primary-custom-domain-www-example-com-publicsite-personal",
-      kind: "cloudflare-worker-custom-domain",
-      providerFamily: "cloudflare",
-      providerResourceIdsJson: JSON.stringify(["worker-domain-1"]),
-      displayName: "www.example.com",
-      alchemyResourceId: "alchemy-domain-1",
-      recordedAt: now,
-    },
-  };
-}
-
-function legacyDeployDriftRecord(now: string): StoredRecord {
-  return {
-    id: "deploy-drift:instance.primary",
-    entity: "deploy-drift-report",
-    createdAt: now,
-    values: {
-      deployTarget: "instance.primary",
-      versionId: "desired.instance.primary.1",
-      desiredStateHash: `sha256:${"a".repeat(64)}`,
-      revision: 1,
-      status: "drifted",
-      actorKind: "runner",
-      actorId: "domain-provider.drift",
-      affectedLogicalIdsJson: JSON.stringify(["primary-custom-domain-www-example-com"]),
-      createCount: 0,
-      updateCount: 1,
-      deleteCount: 0,
-      reportedAt: now,
     },
   };
 }

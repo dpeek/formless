@@ -2,20 +2,11 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
 } from "../shared/instance-control-plane.ts";
-import type {
-  DeploymentAttempt,
-  DeploymentDriftReport,
-  DeploymentResource,
-  DeploymentResourceEvidenceSummary,
-  DeploymentTarget,
-} from "../shared/deployment-runtime.ts";
+import type { DeploymentResource, DeploymentTarget } from "../shared/deployment-runtime.ts";
 import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
-  INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH,
-  INTERNAL_RECORD_DEPLOYMENT_DRIFT_PATH,
-  INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH,
   INTERNAL_SYNC_DOMAIN_INTENT_PATH,
   INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH,
 } from "./instance-control-plane.ts";
@@ -82,57 +73,6 @@ export async function readControlPlaneRecords(input: {
   }
 
   return body.records;
-}
-
-export async function recordDeploymentAttemptInControlPlane(input: {
-  attempt: DeploymentAttempt;
-  env: DeploymentControlPlaneClientEnv;
-  requestUrl: string;
-  target: DeploymentTarget;
-}): Promise<void> {
-  await postInternalControlPlaneRecords(input.env, input.requestUrl, {
-    body: {
-      attempt: input.attempt,
-      target: input.target,
-    },
-    path: INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH,
-  });
-}
-
-export async function recordDeploymentEvidenceInControlPlane(input: {
-  attempt: DeploymentAttempt;
-  env: DeploymentControlPlaneClientEnv;
-  evidence: DeploymentResourceEvidenceSummary[];
-  now: string;
-  requestUrl: string;
-  target: DeploymentTarget;
-}): Promise<void> {
-  await postInternalControlPlaneRecords(input.env, input.requestUrl, {
-    body: {
-      attempt: input.attempt,
-      evidence: input.evidence,
-      now: input.now,
-      target: input.target,
-    },
-    path: INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH,
-  });
-}
-
-export async function recordDeploymentDriftInControlPlane(input: {
-  env: DeploymentControlPlaneClientEnv;
-  now: string;
-  report: DeploymentDriftReport;
-  requestUrl: string;
-  target: DeploymentTarget;
-}): Promise<void> {
-  await postInternalControlPlaneRecords(input.env, input.requestUrl, {
-    body: {
-      now: input.now,
-      report: input.report,
-      target: input.target,
-    },
-    path: INTERNAL_RECORD_DEPLOYMENT_DRIFT_PATH,
-  });
 }
 
 async function postInternalControlPlaneRecords(

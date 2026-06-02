@@ -1054,7 +1054,6 @@ describe("Formless Site CLI", () => {
       [
         "instance:app-install:david",
         "instance:deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
-        "instance:deploy-drift-report:deploy-drift:instance.primary",
         "instance:deploy-target:instance.primary",
         "instance:provider-config-ref:provider-config:cloudflare:personal",
         "instance:route:route:david:admin",
@@ -1071,7 +1070,6 @@ describe("Formless Site CLI", () => {
       [
         "app-install:david",
         "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
-        "deploy-drift-report:deploy-drift:instance.primary",
         "deploy-target:instance.primary",
         "provider-config-ref:provider-config:cloudflare:personal",
         "route:route:david:admin",
