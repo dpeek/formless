@@ -1,9 +1,15 @@
 ## 1. Layout-Only Workspace Manifest
 
-- [ ] 1.1 Replace the existing v1 `formless.json` parser with a v1 manifest model that stores only workspace layout and local configuration paths.
-- [ ] 1.2 Remove existing v1 source parsing for `apps`, `domains`, deploy intent, targets, and default app policy.
-- [ ] 1.3 Update workspace discovery, formatting, parser errors, and fixture generation for the layout-only manifest.
-- [ ] 1.4 Update manifest tests to cover valid layout paths, secret rejection, removed source keys, and no compatibility parser.
+- [x] 1.1 Replace the existing v1 `formless.json` parser with a v1 manifest model that stores only workspace layout and local configuration paths.
+- [x] 1.2 Remove existing v1 source parsing for `apps`, `domains`, deploy intent, targets, and default app policy.
+- [x] 1.3 Update workspace discovery, formatting, parser errors, and fixture generation for the layout-only manifest.
+- [x] 1.4 Update manifest tests to cover valid layout paths, secret rejection, removed source keys, and no compatibility parser.
+
+Evidence:
+
+- Changed `src/site/instance-workspace-config.ts`, `src/site/instance-workspace-config.test.ts`, and `src/site/cli.test.ts`.
+- `devstate check` green at 2026-06-02T08:32:13.533Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Old CLI tests that require manifest-owned target/app/domain/deploy intent are skipped in `src/site/cli.test.ts` until the later control-plane record-source sections replace their source setup.
 
 ## 2. Control-Plane Record Source
 

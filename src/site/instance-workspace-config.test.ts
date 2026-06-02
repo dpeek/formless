@@ -4,7 +4,9 @@ import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_MEDIA_ROOT,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultFormlessInstanceWorkspaceManifest,
   formatFormlessInstanceWorkspaceManifest,
@@ -14,7 +16,7 @@ import {
 } from "./instance-workspace-config.ts";
 
 describe("Formless instance workspace manifest", () => {
-  it("creates a minimal reviewable workspace manifest from a target URL", () => {
+  it("creates a layout-only reviewable workspace manifest", () => {
     expect(FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE).toBe("formless.json");
     expect(
       defaultFormlessInstanceWorkspaceManifest({
@@ -25,136 +27,110 @@ describe("Formless instance workspace manifest", () => {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      defaultTarget: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
-      targets: [
-        {
-          alias: "remote",
-          url: "https://formless.example.workers.dev",
-        },
-      ],
+      source: {
+        records: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
+      },
+      targets: [],
       archives: {
         instance: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
         apps: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
       },
+      media: {
+        root: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_MEDIA_ROOT,
+      },
       local: {
         stateRoot: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
+        secretStateRoot: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
       },
-      defaultAppPolicy: "starter-site",
+      defaultAppPolicy: "none",
       apps: [],
     });
   });
 
-  it("parses and formats package-generic installed app declarations", () => {
+  it("parses and formats valid layout paths", () => {
     const manifest = parseFormlessInstanceWorkspaceManifest({
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      defaultTarget: "remote",
-      targets: [
-        { alias: "remote", url: "https://formless.example.workers.dev/?draft=1#top" },
-        { alias: "local", url: "http://localhost:8787" },
-      ],
+      source: {
+        records: "source/control-plane",
+      },
       archives: {
-        instance: "archives/instance",
         apps: "archives/apps",
+      },
+      media: {
+        root: "media",
       },
       local: {
         stateRoot: ".formless/local",
+        secretStateRoot: ".formless",
       },
-      defaultAppPolicy: "declared-installs",
-      apps: [
-        {
-          installId: "james",
-          packageAppKey: "site",
-          label: "James Peek",
-          archivePath: "archives/apps/james",
-          routes: {
-            admin: "/apps/james",
-            schema: "/apps/james/schema",
-            public: "/sites/james",
-          },
-        },
-        {
-          installId: "david",
-          packageAppKey: "site",
-          label: "David Peek",
-          archivePath: "archives/apps/david",
-        },
-      ],
-      deploy: {
-        workerName: "formless",
-        accountId: "account-123",
-        workersDevUrl: "https://formless.example.workers.dev",
-        mediaBucket: "formless-media",
-        migrationPolicy: "existing",
-      },
-      domains: [
-        {
-          enabled: true,
-          host: "admin.example.com",
-          profile: "instance",
-        },
-        {
-          enabled: true,
-          host: "tasks.example.com",
-          profile: "app",
-          targetInstallId: "tasks",
-        },
-        {
-          enabled: true,
-          host: "www.example.com",
-          profile: "publicSite",
-          targetInstallId: "david",
-        },
-      ],
     });
+    const formatted = formatFormlessInstanceWorkspaceManifest(manifest);
 
-    expect(manifest.targets.map((target) => target.alias)).toEqual(["local", "remote"]);
-    expect(manifest.apps.map((app) => app.installId)).toEqual(["david", "james"]);
-    expect(formatFormlessInstanceWorkspaceManifest(manifest)).toBe(
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
-    expect(parseFormlessInstanceWorkspaceManifestJson(JSON.stringify(manifest))).toEqual(manifest);
-  });
-
-  it("parses legacy Site domain intent into profile mapping intent", () => {
-    expect(
-      parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        domains: [
-          {
-            host: "WWW.EXAMPLE.COM.",
-            installId: "david",
-            surface: "site",
-          },
-        ],
-      }).domains,
-    ).toEqual([
-      {
-        enabled: true,
-        host: "www.example.com",
-        profile: "publicSite",
-        targetInstallId: "david",
+    expect(manifest).toEqual({
+      version: 1,
+      kind: "formless-instance-workspace",
+      name: "personal-sites",
+      source: {
+        records: "source/control-plane",
       },
-    ]);
+      targets: [],
+      archives: {
+        instance: DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
+        apps: "archives/apps",
+      },
+      media: {
+        root: "media",
+      },
+      local: {
+        stateRoot: ".formless/local",
+        secretStateRoot: ".formless",
+      },
+      defaultAppPolicy: "none",
+      apps: [],
+    });
+    expect(formatted).toBe(`${JSON.stringify(JSON.parse(formatted), null, 2)}\n`);
+    expect(JSON.parse(formatted)).toEqual({
+      version: 1,
+      kind: "formless-instance-workspace",
+      name: "personal-sites",
+      source: {
+        records: "source/control-plane",
+      },
+      archives: {
+        apps: "archives/apps",
+      },
+      media: {
+        root: "media",
+      },
+      local: {
+        stateRoot: ".formless/local",
+        secretStateRoot: ".formless",
+      },
+    });
+    expect(parseFormlessInstanceWorkspaceManifestJson(formatted)).toEqual(manifest);
   });
 
-  it("rejects secrets and unsupported keys in reviewable workspace config", () => {
+  it("rejects secrets and unsupported keys in reviewable workspace manifests", () => {
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",
-        targets: [],
+        source: {
+          records: "source/control-plane",
+        },
         archives: {
-          instance: "archives/instance",
           apps: "archives/apps",
+        },
+        media: {
+          root: "media",
         },
         local: {
           stateRoot: ".formless/local",
+          secretStateRoot: ".formless",
         },
-        defaultAppPolicy: "none",
-        apps: [],
         deploy: {
           adminToken: "secret",
         },
@@ -163,80 +139,96 @@ describe("Formless instance workspace manifest", () => {
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        deploy: {
-          migrationPolicy: "existing",
-          alchemyStateToken: "secret",
+        ...layoutManifestSource(),
+        local: {
+          stateRoot: ".formless/local",
+          secretStateRoot: ".formless",
+          apiToken: "secret",
         },
       }),
-    ).toThrow(
-      'formless.json must not store secret field "formless.json.deploy.alchemyStateToken".',
-    );
+    ).toThrow('formless.json must not store secret field "formless.json.local.apiToken".');
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",
-        targets: [],
+        source: {
+          records: "source/control-plane",
+        },
         archives: {
-          instance: "archives/instance",
           apps: "archives/apps",
+        },
+        media: {
+          root: "media",
         },
         local: {
           stateRoot: ".formless/local",
+          secretStateRoot: ".formless",
         },
-        defaultAppPolicy: "none",
-        apps: [],
         extra: true,
       }),
     ).toThrow('formless.json has unsupported key "extra".');
   });
 
-  it("validates target aliases, relative paths, install ids, and deploy policy", () => {
+  it("validates layout paths", () => {
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        defaultTarget: "missing",
+        ...layoutManifestSource(),
+        source: { records: "../records" },
       }),
-    ).toThrow("formless.json defaultTarget must match a target alias.");
+    ).toThrow("formless.json source.records must be a relative workspace path.");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        targets: [{ alias: "Remote", url: "https://formless.example.workers.dev" }],
+        ...layoutManifestSource(),
+        archives: { apps: "/archives/apps" },
       }),
-    ).toThrow("formless.json targets[0] alias must start with a lowercase letter");
+    ).toThrow("formless.json archives.apps must be a relative workspace path.");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        archives: { instance: "../archive", apps: "archives/apps" },
+        ...layoutManifestSource(),
+        media: { root: "media//files" },
       }),
-    ).toThrow("formless.json archives.instance must be a relative workspace path.");
+    ).toThrow("formless.json media.root must be a relative workspace path.");
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        apps: [
-          {
-            installId: "api",
-            packageAppKey: "site",
-            label: "Reserved",
-            archivePath: "archives/apps/api",
-          },
-        ],
+        ...layoutManifestSource(),
+        local: { stateRoot: ".formless/local", secretStateRoot: ".." },
       }),
-    ).toThrow('formless.json apps[0] installId is invalid: Install id "api" is reserved.');
+    ).toThrow("formless.json local.secretStateRoot must be a relative workspace path.");
+  });
+
+  it("rejects removed v1 source keys without a compatibility parser", () => {
+    for (const key of [
+      "apps",
+      "defaultAppPolicy",
+      "defaultTarget",
+      "deploy",
+      "domains",
+      "targets",
+    ]) {
+      expect(() =>
+        parseFormlessInstanceWorkspaceManifest({
+          ...layoutManifestSource(),
+          [key]: key === "defaultTarget" ? "remote" : [],
+        }),
+      ).toThrow(
+        `formless.json key "${key}" was removed from manifest version 1; store instance intent in workspace record source instead.`,
+      );
+    }
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
-        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
-        deploy: {
-          migrationPolicy: "auto",
+        ...layoutManifestSource(),
+        archives: {
+          instance: "archives/instance",
+          apps: "archives/apps",
         },
       }),
-    ).toThrow('formless.json deploy.migrationPolicy must be "new" or "existing".');
+    ).toThrow('formless.json archives has unsupported key "instance".');
   });
 
   it("normalizes target URLs to origins", () => {
@@ -248,3 +240,24 @@ describe("Formless instance workspace manifest", () => {
     );
   });
 });
+
+function layoutManifestSource(): Record<string, unknown> {
+  return {
+    version: 1,
+    kind: "formless-instance-workspace",
+    name: "personal-sites",
+    source: {
+      records: "source/control-plane",
+    },
+    archives: {
+      apps: "archives/apps",
+    },
+    media: {
+      root: "media",
+    },
+    local: {
+      stateRoot: ".formless/local",
+      secretStateRoot: ".formless",
+    },
+  };
+}
