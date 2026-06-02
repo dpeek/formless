@@ -147,6 +147,7 @@ For `bun agents watch <worker-name>`:
 - Preserve user changes.
 - Keep data model flat.
 - Compose in view/query/projection/action layer.
+- Backwards compat is not yet a concern: no shims, re-exports, migrations and new schema versions.
 - Tests must not depend on exact `schema/apps/site/seed-records.json` content.
 - Use `src/test/site-records.ts` fixtures for Site record shape.
 - Claims in docs must point to code, schema, tests, specs, or shipped behavior.
