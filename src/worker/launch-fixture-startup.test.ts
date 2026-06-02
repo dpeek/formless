@@ -48,7 +48,23 @@ describe("worker launch fixture startup", () => {
         .filter((record) => record.entity === "app-install")
         .map((record) => record.id),
     ).toEqual(["docs", "projects", "site"]);
-    expect(controlPlane.records.filter((record) => record.entity === "app-route")).toHaveLength(9);
+    expect(controlPlane.records.filter((record) => record.entity === "route")).toHaveLength(9);
+    expect(
+      controlPlane.records
+        .filter((record) => record.entity === "route")
+        .map((record) => [record.values.appInstall, record.values.matchPath, record.values.surface])
+        .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
+    ).toEqual([
+      ["docs", "/apps/docs", "admin"],
+      ["docs", "/apps/docs/schema", "schema"],
+      ["projects", "/apps/projects", "admin"],
+      ["projects", "/apps/projects/schema", "schema"],
+      ["site", "/apps/site", "admin"],
+      ["site", "/apps/site/schema", "schema"],
+      ["docs", "/sites/docs", "public-site"],
+      ["projects", "/sites/projects", "public-site"],
+      ["site", "/sites/site", "public-site"],
+    ]);
     expect(legacySite.status).toBe(404);
     expect(docs.schema).toEqual(siteSourceSchema);
     expect(docs.cursor).toBe(siteSeedRecords.length);

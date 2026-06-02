@@ -10,8 +10,11 @@ import type {
   BootstrapResponse,
   MutationResponse,
   StoreSnapshot,
+  StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
+import type { AppSchema, EntityMutationPolicy } from "../shared/schema.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -190,6 +193,161 @@ describe("instance control-plane API routes", () => {
       installId: "personal",
       schemaRoute: "/apps/personal/schema",
     });
+  });
+
+  it("backfills legacy route intent records while preserving provider evidence records", async () => {
+    const now = "2026-06-02T00:00:00.000Z";
+    const restored = await postAdminJson<BootstrapResponse>(
+      `${controlPlaneApi}/snapshot/restore`,
+      legacyRouteIntentSnapshot(now, [
+        legacyAppInstallRecord("personal", now),
+        legacyProviderConfigRecord(now),
+        legacyDeployTargetRecord(now),
+        legacyDeployAttemptRecord(now),
+        legacyDeployEvidenceRecord(now),
+        legacyDeployDriftRecord(now),
+        legacyAppRouteRecord("legacy:personal:admin", {
+          appInstall: "personal",
+          routeKind: "admin",
+          path: "/apps/personal-legacy",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        }),
+        legacyDomainMappingRecord("legacy:domain:www.example.com", {
+          host: "www.example.com",
+          profile: "publicSite",
+          targetInstallId: "personal",
+          providerConfigRef: "provider-config:cloudflare:primary",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        }),
+        legacyRedirectIntentRecord("legacy:redirect:old.example.com", {
+          fromHost: "old.example.com",
+          toHost: "www.example.com",
+          statusCode: "308",
+          preservePath: true,
+          preserveQueryString: false,
+          providerConfigRef: "provider-config:cloudflare:primary",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ]),
+    );
+    const controlPlane = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
+    const routes = controlPlane.body.records
+      .filter((record) => record.entity === "route")
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const evidence = controlPlane.body.records.find(
+      (record) => record.entity === "deploy-evidence-summary",
+    );
+    const drift = controlPlane.body.records.find(
+      (record) => record.entity === "deploy-drift-report",
+    );
+
+    expect(restored.response.status).toBe(200);
+    expect(routes).toEqual([
+      expect.objectContaining({
+        id: "route:host:publicSite:www.example.com",
+        values: expect.objectContaining({
+          appInstall: "personal",
+          enabled: true,
+          kind: "mount",
+          matchHost: "www.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          providerConfig: "provider-config:cloudflare:primary",
+          surface: "public-site",
+          targetProfile: "public-site",
+        }),
+      }),
+      expect.objectContaining({
+        id: "route:personal:admin",
+        values: expect.objectContaining({
+          appInstall: "personal",
+          enabled: true,
+          kind: "mount",
+          matchPath: "/apps/personal-legacy",
+          surface: "admin",
+          targetProfile: "app",
+        }),
+      }),
+      expect.objectContaining({
+        id: "route:redirect:old.example.com",
+        values: expect.objectContaining({
+          enabled: true,
+          kind: "redirect",
+          matchHost: "old.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          preservePath: true,
+          preserveQueryString: false,
+          providerConfig: "provider-config:cloudflare:primary",
+          statusCode: "308",
+          toHost: "www.example.com",
+        }),
+      }),
+    ]);
+    expect(evidence?.values).toMatchObject({
+      deployAttempt: "attempt:legacy",
+      logicalId: "primary-custom-domain-www-example-com-publicsite-personal",
+      providerResourceIdsJson: JSON.stringify(["worker-domain-1"]),
+    });
+    expect(drift?.values).toMatchObject({
+      deployTarget: "instance.primary",
+      affectedLogicalIdsJson: JSON.stringify(["primary-custom-domain-www-example-com"]),
+    });
+    expect(JSON.stringify(routes)).not.toContain("worker-domain-1");
+    expect(JSON.stringify(routes)).not.toContain("affectedLogicalIdsJson");
+    expect(
+      controlPlane.body.records
+        .filter((record) =>
+          ["app-route", "domain-mapping", "redirect-intent"].includes(record.entity),
+        )
+        .map((record) => record.id)
+        .sort(),
+    ).toEqual([
+      "legacy:domain:www.example.com",
+      "legacy:personal:admin",
+      "legacy:redirect:old.example.com",
+    ]);
+  });
+
+  it("reports legacy route migration blockers before conflicting routes become active", async () => {
+    const now = "2026-06-02T00:00:00.000Z";
+    await postAdminJson<BootstrapResponse>(
+      `${controlPlaneApi}/snapshot/restore`,
+      legacyRouteIntentSnapshot(now, [
+        legacyAppInstallRecord("personal", now),
+        routeRecord("route:reserved", {
+          enabled: true,
+          matchPath: "/apps/personal",
+          kind: "mount",
+          targetProfile: "instance",
+          surface: "admin",
+          createdAt: now,
+          updatedAt: now,
+        }),
+        legacyAppRouteRecord("legacy:personal:admin", {
+          appInstall: "personal",
+          routeKind: "admin",
+          path: "/apps/personal",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ]),
+    );
+
+    const blocked = await harness.fetch(`${controlPlaneApi}/bootstrap`);
+    const body = (await blocked.json()) as FailureResponse;
+
+    expect(blocked.status).toBe(400);
+    expect(body.error).toBe(
+      'Legacy route migration blocker: legacy app-route "legacy:personal:admin" match "<hostless>/apps/personal" conflicts with route "route:reserved".',
+    );
   });
 
   it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {
@@ -391,4 +549,279 @@ function secretSnapshot(now: string): StoreSnapshot {
       },
     ],
   };
+}
+
+function legacyRouteIntentSnapshot(now: string, records: StoredRecord[]): StoreSnapshot {
+  return {
+    kind: "formless.storeSnapshot",
+    version: 1,
+    schemaKey: "instance-control-plane",
+    exportedAt: now,
+    schemaUpdatedAt: now,
+    sourceCursor: 0,
+    schema: legacyRouteIntentSchema(),
+    records,
+  };
+}
+
+function legacyRouteIntentSchema(): AppSchema {
+  return {
+    ...instanceControlPlaneSchema,
+    entities: {
+      ...instanceControlPlaneSchema.entities,
+      "app-route": {
+        label: "App route",
+        fields: {
+          appInstall: referenceField("App install", "app-install", "label"),
+          routeKind: enumField("Route kind", {
+            admin: "Admin",
+            publicSite: "Public Site",
+            schema: "Schema",
+          }),
+          path: textField("Path"),
+          prefix: optionalTextField("Prefix"),
+          enabled: booleanField("Enabled", true),
+          createdAt: textField("Created at"),
+          updatedAt: textField("Updated at"),
+        },
+        mutations: legacyEditableMutations,
+      },
+      "domain-mapping": {
+        label: "Domain mapping",
+        fields: {
+          host: textField("Host"),
+          profile: enumField("Profile", {
+            app: "App",
+            instance: "Instance",
+            publicSite: "Public Site",
+          }),
+          targetInstallId: optionalTextField("Target install id"),
+          providerConfigRef: optionalReferenceField(
+            "Provider config",
+            "provider-config-ref",
+            "label",
+          ),
+          enabled: booleanField("Enabled", true),
+          createdAt: textField("Created at"),
+          updatedAt: textField("Updated at"),
+        },
+        mutations: legacyEditableMutations,
+      },
+      "redirect-intent": {
+        label: "Redirect intent",
+        fields: {
+          fromHost: textField("From host"),
+          toHost: optionalTextField("To host"),
+          toUrl: optionalTextField("To URL"),
+          statusCode: enumField("Status code", {
+            "301": "301",
+            "302": "302",
+            "303": "303",
+            "307": "307",
+            "308": "308",
+          }),
+          preservePath: booleanField("Preserve path", true),
+          preserveQueryString: booleanField("Preserve query string", true),
+          providerConfigRef: optionalReferenceField(
+            "Provider config",
+            "provider-config-ref",
+            "label",
+          ),
+          enabled: booleanField("Enabled", true),
+          createdAt: textField("Created at"),
+          updatedAt: textField("Updated at"),
+        },
+        mutations: legacyEditableMutations,
+      },
+    },
+  } as AppSchema;
+}
+
+const legacyEditableMutations = {
+  create: { enabled: true },
+  patch: { enabled: true },
+  delete: { enabled: false },
+} satisfies EntityMutationPolicy;
+
+function legacyAppInstallRecord(installId: string, now: string): StoredRecord {
+  return {
+    id: installId,
+    entity: "app-install",
+    createdAt: now,
+    values: {
+      installId,
+      packageAppKey: "site",
+      packageRevision: 1,
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      label: "Personal Site",
+      status: "installed",
+      storageIdentity: `app:${installId}`,
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+}
+
+function legacyProviderConfigRecord(now: string): StoredRecord {
+  return {
+    id: "provider-config:cloudflare:primary",
+    entity: "provider-config-ref",
+    createdAt: now,
+    values: {
+      providerFamily: "cloudflare",
+      configRef: "cloudflare-primary",
+      label: "Cloudflare primary",
+      workerName: "formless-primary",
+      secretRef: "secret:cloudflare:primary",
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+}
+
+function legacyDeployTargetRecord(now: string): StoredRecord {
+  return {
+    id: "instance.primary",
+    entity: "deploy-target",
+    createdAt: now,
+    values: {
+      targetId: "instance.primary",
+      targetKind: "instance",
+      label: "Primary",
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+}
+
+function legacyDeployAttemptRecord(now: string): StoredRecord {
+  return {
+    id: "attempt:legacy",
+    entity: "deploy-attempt",
+    createdAt: now,
+    values: {
+      deployTarget: "instance.primary",
+      versionId: "desired.instance.primary.1",
+      desiredStateHash: `sha256:${"a".repeat(64)}`,
+      revision: 1,
+      mode: "apply",
+      status: "succeeded",
+      actorKind: "runner",
+      actorId: "domain-provider.apply",
+      runnerId: "runner-legacy",
+      idempotencyKey: "legacy-apply",
+      startedAt: now,
+      updatedAt: now,
+      completedAt: now,
+    },
+  };
+}
+
+function legacyDeployEvidenceRecord(now: string): StoredRecord {
+  return {
+    id: "deploy-evidence:attempt:legacy:primary-custom-domain-www-example-com-publicsite-personal",
+    entity: "deploy-evidence-summary",
+    createdAt: now,
+    values: {
+      deployAttempt: "attempt:legacy",
+      action: "created",
+      logicalId: "primary-custom-domain-www-example-com-publicsite-personal",
+      kind: "cloudflare-worker-custom-domain",
+      providerFamily: "cloudflare",
+      providerResourceIdsJson: JSON.stringify(["worker-domain-1"]),
+      displayName: "www.example.com",
+      alchemyResourceId: "alchemy-domain-1",
+      recordedAt: now,
+    },
+  };
+}
+
+function legacyDeployDriftRecord(now: string): StoredRecord {
+  return {
+    id: "deploy-drift:instance.primary",
+    entity: "deploy-drift-report",
+    createdAt: now,
+    values: {
+      deployTarget: "instance.primary",
+      versionId: "desired.instance.primary.1",
+      desiredStateHash: `sha256:${"a".repeat(64)}`,
+      revision: 1,
+      status: "drifted",
+      actorKind: "runner",
+      actorId: "domain-provider.drift",
+      affectedLogicalIdsJson: JSON.stringify(["primary-custom-domain-www-example-com"]),
+      createCount: 0,
+      updateCount: 1,
+      deleteCount: 0,
+      reportedAt: now,
+    },
+  };
+}
+
+function legacyAppRouteRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "app-route",
+    createdAt: String(values.createdAt),
+    values,
+  };
+}
+
+function legacyDomainMappingRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "domain-mapping",
+    createdAt: String(values.createdAt),
+    values,
+  };
+}
+
+function legacyRedirectIntentRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "redirect-intent",
+    createdAt: String(values.createdAt),
+    values,
+  };
+}
+
+function routeRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "route",
+    createdAt: String(values.createdAt),
+    values,
+  };
+}
+
+function textField(label: string) {
+  return { type: "text", required: true, label };
+}
+
+function optionalTextField(label: string) {
+  return { type: "text", required: false, label };
+}
+
+function booleanField(label: string, defaultValue: boolean) {
+  return { type: "boolean", required: true, label, default: defaultValue };
+}
+
+function enumField(label: string, values: Record<string, string>) {
+  return {
+    type: "enum",
+    required: true,
+    label,
+    values: Object.fromEntries(
+      Object.entries(values).map(([value, valueLabel]) => [value, { label: valueLabel }]),
+    ),
+  };
+}
+
+function referenceField(label: string, to: string, displayField: string) {
+  return { type: "reference", required: true, label, to, displayField };
+}
+
+function optionalReferenceField(label: string, to: string, displayField: string) {
+  return { type: "reference", required: false, label, to, displayField };
 }

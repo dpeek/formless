@@ -167,12 +167,12 @@ Evidence 2026-06-02 grug:
 ## 11. Tests
 
 - [x] 11.1 Add schema and Authority validation tests for mount routes, redirect routes, conflicts, host normalization, path normalization, and provider config eligibility.
-- [ ] 11.2 Add migration tests for app route, domain mapping, redirect intent, provider evidence separation, and conflict blockers.
-- [ ] 11.3 Add runtime topology tests for app mounts, schema mounts, public Site mounts, exact-host mounts, redirects, disabled routes, and host-mounted Site route blocking.
-- [ ] 11.4 Add deployment projection and desired-state hash tests for route-derived domain, DNS, and redirect resources.
-- [ ] 11.5 Add workspace/archive drift tests for `instance:route` records and secret rejection.
-- [ ] 11.6 Add generated UI tests for the unified Routes surface and separated provider evidence.
-- [ ] 11.7 Add CLI compatibility tests for app install route summaries, domain APIs, deploy planning, destroy planning, and domain command output.
+- [x] 11.2 Add migration tests for app route, domain mapping, redirect intent, provider evidence separation, and conflict blockers.
+- [x] 11.3 Add runtime topology tests for app mounts, schema mounts, public Site mounts, exact-host mounts, redirects, disabled routes, and host-mounted Site route blocking.
+- [x] 11.4 Add deployment projection and desired-state hash tests for route-derived domain, DNS, and redirect resources.
+- [x] 11.5 Add workspace/archive drift tests for `instance:route` records and secret rejection.
+- [x] 11.6 Add generated UI tests for the unified Routes surface and separated provider evidence.
+- [x] 11.7 Add CLI compatibility tests for app install route summaries, domain APIs, deploy planning, destroy planning, and domain command output.
 
 Evidence 2026-06-02 grug:
 
@@ -181,3 +181,15 @@ Evidence 2026-06-02 grug:
 - `devstate start`: pass, services running.
 - `devstate check`: pass, checks ok and services running.
 - Browser smoke: not run; this section adds schema and Authority validation tests only and does not change browser-visible behavior.
+
+Evidence 2026-06-02 Codex:
+
+- Extended `src/worker/instance-control-plane.test.ts` with legacy snapshot migration coverage proving `app-route`, `domain-mapping`, and `redirect-intent` records backfill to `route` records, provider evidence and drift rows stay outside route records, and legacy route conflicts return migration blockers before activation.
+- Updated `src/worker/launch-fixture-startup.test.ts` so multi-Site launch fixture coverage asserts nine generated `route` records instead of stale `app-route` records.
+- Extended `src/worker/instance-runtime-routes.test.ts` with focused route resolver coverage for app admin mounts, schema mounts, public Site prefix mounts, exact-host public Site mounts, and disabled route exclusion; existing `src/worker/custom-domain-routing.test.ts` covers redirect routes and host-mounted Site route blocking.
+- Verified route-derived deployment projection and desired-state hash coverage in `src/worker/deployment-runtime-api.test.ts` and `lib/deploy/src/index.test.ts`.
+- Verified workspace/archive `instance:route` drift and secret rejection coverage in `src/site/cli.test.ts`, `src/shared/archive.test.ts`, and `src/worker/archive-api.test.ts`.
+- Extended `src/shared/instance-control-plane.test.ts` generated UI coverage so the unified Routes screen contains route list and provider-config grouping while deploy evidence and drift views remain separate.
+- Verified CLI compatibility coverage for app install route summaries, domain APIs, domain provider redirects, deploy planning, destroy planning, and domain command output in `src/worker/instance-app-installs.test.ts`, `src/worker/instance-domain-mappings.test.ts`, `src/worker/domain-provider-api.test.ts`, and `src/site/cli.test.ts`.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes tests and OpenSpec task evidence only.

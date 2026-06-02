@@ -175,6 +175,7 @@ describe("instance control-plane schema contracts", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const routeTable = schema.tableViews.routeTable;
     const routesByProviderConfigList = schema.views.routesByProviderConfigList;
+    const routesScreen = schema.screens?.routes;
 
     expect(schema.views.appInstallList?.type === "collection").toBe(true);
     expect(
@@ -215,6 +216,12 @@ describe("instance control-plane schema contracts", () => {
       },
       defaultQuery: "routesForSelectedProviderConfig",
     });
+    expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual([
+      "routeList",
+      "routesByProviderConfigList",
+    ]);
+    expect(JSON.stringify(routesScreen)).not.toContain("deployEvidenceSummaryList");
+    expect(JSON.stringify(routesScreen)).not.toContain("deployDriftReportList");
     expect(
       routeTable?.actions?.editRoute?.type === "editRecord"
         ? routeTable.actions.editRoute.editView
