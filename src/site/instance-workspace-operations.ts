@@ -778,6 +778,7 @@ function summarizeDeployPlanResult(
 ): FormlessWorkspaceOperationResult {
   return {
     deployment: {
+      cleanup: notRunDeploymentCleanupSummary(),
       desiredState: {
         logicalIds: result.desiredState.logicalIds,
         resourceCount: result.desiredState.resourceCount,
@@ -786,18 +787,42 @@ function summarizeDeployPlanResult(
         sourceFingerprint: result.desiredState.sourceFingerprint,
         targetId: result.desiredState.targetId,
       },
-      drift: result.preflight?.drift.status ?? "not-checked",
+      drift:
+        result.preflight === undefined
+          ? { status: "not-checked" }
+          : summarizeDrift(result.preflight.drift),
+      evidence: emptyDeploymentEvidenceSummary(),
       expectedUrl: result.plan.expectedUrl.url,
       migrationPolicy: result.plan.migrationPolicy,
+      plan: {
+        affectedLogicalIds: result.desiredState.logicalIds,
+        changes: {
+          create: result.desiredState.resourceCount,
+          delete: 0,
+          noChange: 0,
+          update: 0,
+        },
+        resourceCount: result.desiredState.resourceCount,
+        resourcesByKind: result.desiredState.resourcesByKind,
+        routeTargetCount: result.desiredState.routeTargetCount,
+        targetId: result.desiredState.targetId,
+      },
       targetAlias: result.selectedTarget.alias,
+      writeback: {
+        status: "not-run",
+      },
       workerName: result.plan.resources.worker.name,
     },
     summary: {
       fields: {
+        cleanupStatus: "not-run",
         desiredResourceCount: result.desiredState.resourceCount,
+        drift: result.preflight?.drift.status ?? "not-checked",
+        evidenceCount: 0,
         expectedUrl: result.plan.expectedUrl.url,
         migrationPolicy: result.plan.migrationPolicy,
         routeTargetCount: result.desiredState.routeTargetCount,
+        writebackStatus: "not-run",
         workerName: result.plan.resources.worker.name,
       },
       title: "Deploy planned",
@@ -808,10 +833,17 @@ function summarizeDeployPlanResult(
 function summarizeDeployApplyResult(
   result: DeployFormlessInstanceWorkspaceResult,
 ): FormlessWorkspaceOperationResult {
+  const writeback = result.deploymentWriteback;
+
   return {
     deployment: {
+      attempt: writeback?.attempt ?? null,
+      cleanup: notRunDeploymentCleanupSummary(),
+      drift: result.push ? summarizeDrift(result.push.drift) : { status: "not-checked" },
+      evidence: writeback?.evidence ?? emptyDeploymentEvidenceSummary(),
       healthCheckVersion: result.healthCheck.version,
       migrationPolicy: result.migrationPolicy,
+      plan: writeback?.plan ?? null,
       push: result.push
         ? {
             applyRestoreOk: result.push.applyResult?.remote.ok ?? null,
@@ -822,31 +854,53 @@ function summarizeDeployApplyResult(
         : null,
       targetAlias: result.selectedTarget.alias,
       url: result.deployment.url,
-      writeback: result.deploymentWriteback
+      writeback: writeback
         ? {
-            attemptId: result.deploymentWriteback.attemptId,
-            desiredState: result.deploymentWriteback.desiredState,
-            evidenceCount: result.deploymentWriteback.evidenceCount,
-            resourceCount: result.deploymentWriteback.resourceCount,
-            resourcesByKind: result.deploymentWriteback.resourcesByKind,
-            runnerId: result.deploymentWriteback.runnerId,
-            status: result.deploymentWriteback.status,
-            targetId: result.deploymentWriteback.targetId,
+            attemptId: writeback.attemptId,
+            desiredState: writeback.desiredState,
+            evidenceCount: writeback.evidenceCount,
+            planRecordedAt: writeback.writeback.planRecordedAt,
+            resourceCount: writeback.resourceCount,
+            resourcesByKind: writeback.resourcesByKind,
+            runnerId: writeback.runnerId,
+            status: writeback.status,
+            successCompletedAt: writeback.writeback.successCompletedAt,
+            targetId: writeback.targetId,
           }
         : null,
       workerName: result.plan.resources.worker.name,
     },
     summary: {
       fields: {
-        attemptId: result.deploymentWriteback?.attemptId ?? null,
-        desiredStateVersion: result.deploymentWriteback?.desiredState.versionId ?? null,
+        attemptId: writeback?.attemptId ?? null,
+        cleanupStatus: "not-run",
+        desiredStateVersion: writeback?.desiredState.versionId ?? null,
+        drift: result.push?.drift.status ?? "not-checked",
+        evidenceCount: writeback?.evidenceCount ?? 0,
         healthCheckVersion: result.healthCheck.version,
         migrationPolicy: result.migrationPolicy,
         url: result.deployment.url,
+        writebackStatus: writeback?.status ?? "not-run",
         workerName: result.plan.resources.worker.name,
       },
       title: "Deploy applied",
     },
+  };
+}
+
+function emptyDeploymentEvidenceSummary(): FormlessWorkspaceOperationDisplayObject {
+  return {
+    actionsByKind: {},
+    count: 0,
+    logicalIds: [],
+    resourcesByKind: {},
+  };
+}
+
+function notRunDeploymentCleanupSummary(): FormlessWorkspaceOperationDisplayObject {
+  return {
+    affectedLogicalIds: [],
+    status: "not-run",
   };
 }
 

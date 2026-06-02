@@ -389,11 +389,32 @@ describe("local workspace gateway", () => {
       operation: "deployApply",
       result: {
         deployment: {
+          attempt: {
+            attemptId: "attempt.local-gateway.1",
+            mode: "apply",
+            status: "succeeded",
+            targetId: "instance.primary",
+          },
+          cleanup: {
+            status: "not-run",
+          },
+          drift: {
+            status: "drift",
+          },
+          evidence: {
+            count: 0,
+          },
+          plan: {
+            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+          },
           writeback: {
             attemptId: "attempt.local-gateway.1",
             desiredState: deploymentDesiredStateRef(),
+            evidenceCount: 0,
+            planRecordedAt: "2026-06-02T01:11:02.000Z",
             runnerId: "local-gateway",
             status: "succeeded",
+            successCompletedAt: "2026-06-02T01:11:03.000Z",
           },
         },
       },

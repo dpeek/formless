@@ -184,6 +184,9 @@ describe("Formless workspace operations", () => {
       operation: "deployPlan",
       result: {
         deployment: {
+          cleanup: {
+            status: "not-run",
+          },
           desiredState: {
             resourceCount: 1,
             resourcesByKind: {
@@ -192,15 +195,31 @@ describe("Formless workspace operations", () => {
             routeTargetCount: 2,
             targetId: "instance.primary",
           },
-          expectedUrl: "https://personal.dpeek.workers.dev",
-          targetAlias: "instance.primary",
-          workerName: "personal",
+          drift: {
+            status: "not-checked",
+          },
+          evidence: {
+            count: 0,
+          },
+          plan: {
+            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+            resourceCount: 1,
+            routeTargetCount: 2,
+            targetId: "instance.primary",
+          },
+          writeback: {
+            status: "not-run",
+          },
         },
         summary: {
           fields: {
+            cleanupStatus: "not-run",
             desiredResourceCount: 1,
+            drift: "not-checked",
+            evidenceCount: 0,
             expectedUrl: "https://personal.dpeek.workers.dev",
             routeTargetCount: 2,
+            writebackStatus: "not-run",
             workerName: "personal",
           },
           title: "Deploy planned",
@@ -208,6 +227,11 @@ describe("Formless workspace operations", () => {
       },
       status: "succeeded",
     });
+    expect(
+      (state.result?.deployment?.plan as { affectedLogicalIds?: unknown[] } | null | undefined)
+        ?.affectedLogicalIds,
+    ).toHaveLength(1);
+    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
   });
 
@@ -274,20 +298,49 @@ describe("Formless workspace operations", () => {
       operation: "deployApply",
       result: {
         deployment: {
+          attempt: {
+            attemptId: "attempt.local-gateway.1",
+            completedAt: "2026-06-02T00:04:03.000Z",
+            mode: "apply",
+            runnerId: null,
+            startedAt: "2026-06-02T00:04:02.000Z",
+            status: "succeeded",
+            targetId: "instance.primary",
+          },
+          cleanup: {
+            status: "not-run",
+          },
+          drift: {
+            status: "drift",
+          },
+          evidence: {
+            count: 0,
+            logicalIds: [],
+          },
+          plan: {
+            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+            recordedAt: "2026-06-02T00:04:02.000Z",
+          },
           writeback: {
             attemptId: "attempt.local-gateway.1",
             desiredState,
             evidenceCount: 0,
+            planRecordedAt: "2026-06-02T00:04:02.000Z",
             resourceCount: 1,
             runnerId: "local-gateway",
             status: "succeeded",
+            successCompletedAt: "2026-06-02T00:04:03.000Z",
             targetId: "instance.primary",
           },
         },
         summary: {
           fields: {
             attemptId: "attempt.local-gateway.1",
+            cleanupStatus: "not-run",
             desiredStateVersion: desiredState.versionId,
+            drift: "drift",
+            evidenceCount: 0,
+            writebackStatus: "succeeded",
           },
           title: "Deploy applied",
         },
@@ -301,6 +354,7 @@ describe("Formless workspace operations", () => {
       desiredState,
       leaseToken: "lease:local-gateway",
     });
+    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("generated-admin-token");
     expect(JSON.stringify(state)).not.toContain("alchemy-password");
     expect(JSON.stringify(state)).not.toContain("lease:local-gateway");
@@ -425,6 +479,18 @@ describe("Formless workspace operations", () => {
     expect(await listFormlessWorkspaceOperationStates(workspaceRoot)).toHaveLength(1);
   });
 });
+
+async function expectNoDeploymentHistoryRecordSource(workspaceRoot: string) {
+  for (const fileName of [
+    "deploy-attempt.json",
+    "deploy-evidence-summary.json",
+    "deploy-drift-report.json",
+  ]) {
+    await expect(
+      stat(path.join(workspaceRoot, "records/instance-control-plane", fileName)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  }
+}
 
 function operationDeps(
   cwd: string,

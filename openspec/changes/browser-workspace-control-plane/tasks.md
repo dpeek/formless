@@ -117,7 +117,7 @@ Evidence:
 
 - [x] 8.1 Implement deploy plan through the local gateway using schema-owned route/deploy records and desired-state projection.
 - [x] 8.2 Implement deploy apply through the local gateway as a trusted local deployer with exact desired-state writeback.
-- [ ] 8.3 Return display-safe plan/apply attempt, evidence, drift, cleanup, and writeback summaries from gateway operation status/results without requiring schema-owned deployment history records.
+- [x] 8.3 Return display-safe plan/apply attempt, evidence, drift, cleanup, and writeback summaries from gateway operation status/results without requiring schema-owned deployment history records.
 - [ ] 8.4 Implement browser-initiated Cloudflare credential setup through an API-first trusted local Alchemy profile adapter.
 - [ ] 8.5 Use existing default or named Alchemy profile credentials when available, otherwise create an Alchemy OAuth profile through auth URL handoff and browser-visible account selection.
 - [ ] 8.6 Do not expose browser token paste during onboarding.
@@ -136,6 +136,10 @@ Evidence:
 - Added `src/site/instance-workspace-operations.test.ts` and `src/site/local-workspace-gateway.test.ts` coverage for deploy apply through operation and owner-session gateway paths, exact desired-state start/plan/success request bodies, and no admin token, Alchemy password, or lease token in browser-visible operation output.
 - `devstate check` green at 2026-06-02T14:39:50.892Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
 - Browser smoke: `bun browser --ignore-https-errors --session grug-deploy-apply-gateway-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
+- Changed `src/site/instance-workspace.ts` and `src/site/instance-workspace-operations.ts` so deploy plan/apply operation results return display-safe plan, attempt, evidence, drift, cleanup, and runtime writeback summaries while keeping deployment history out of schema-owned record source.
+- Updated `src/site/instance-workspace-operations.test.ts` and `src/site/local-workspace-gateway.test.ts` to cover gateway-returned execution summaries, exact runtime writeback response details, no deployment history source files, and no admin token, Alchemy password, or lease token in browser-visible output.
+- `devstate check` green at 2026-06-02T14:48:42.963Z: `vp check --fix` passed, web service ready, `vp test --watch --reporter=agent --no-color` passed.
+- Browser smoke: `bun browser --ignore-https-errors --session grug-deploy-summaries-smoke batch --bail "open https://grug.formless.local/" "wait 1000" "errors"` loaded the local shell with no browser errors.
 
 ## 9. CLI Rewire And Command Compatibility
 

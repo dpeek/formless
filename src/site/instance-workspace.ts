@@ -40,8 +40,11 @@ import {
 } from "../shared/instance-domain-mappings.ts";
 import type {
   DeploymentActor,
+  DeploymentAttempt,
   DeploymentDesiredStateVersionRef,
+  DeploymentPlanChangeCounts,
   DeploymentPlanSummary,
+  DeploymentResourceEvidenceSummary,
   DeploymentResourceKind,
 } from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
@@ -477,15 +480,50 @@ export type DeployLocalFormlessWorkspaceOwnerSetup = {
   url: string;
 };
 
+export type DeployLocalFormlessWorkspaceAttemptSummary = {
+  attemptId: string;
+  completedAt?: string;
+  mode: string;
+  runnerId: string | null;
+  startedAt: string;
+  status: string;
+  targetId: string;
+};
+
+export type DeployLocalFormlessWorkspacePlanSummary = {
+  blockerCount: number;
+  changes: DeploymentPlanChangeCounts;
+  displayText: string | null;
+  recordedAt: string;
+  warningCount: number;
+};
+
+export type DeployLocalFormlessWorkspaceEvidenceSummary = {
+  actionsByKind: Record<string, number>;
+  count: number;
+  logicalIds: string[];
+  resourcesByKind: Record<string, number>;
+};
+
+export type DeployLocalFormlessWorkspaceRuntimeWritebackSummary = {
+  planRecordedAt: string;
+  status: "succeeded";
+  successCompletedAt: string;
+};
+
 export type DeployLocalFormlessWorkspaceWriteback = {
   attemptId: string;
+  attempt: DeployLocalFormlessWorkspaceAttemptSummary;
   desiredState: DeploymentDesiredStateVersionRef;
+  evidence: DeployLocalFormlessWorkspaceEvidenceSummary;
   evidenceCount: number;
+  plan: DeployLocalFormlessWorkspacePlanSummary;
   resourceCount: number;
   resourcesByKind: Record<DeploymentResourceKind, number>;
   runnerId: string;
   status: "succeeded";
   targetId: string;
+  writeback: DeployLocalFormlessWorkspaceRuntimeWritebackSummary;
 };
 
 export type DeployFormlessInstanceWorkspaceResult = {
@@ -1376,7 +1414,7 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
   }
 
   try {
-    await writeFormlessInstanceDeploymentAttemptPlan(
+    const planWriteback = await writeFormlessInstanceDeploymentAttemptPlan(
       {
         adminToken: input.adminToken,
         request: {
@@ -1411,8 +1449,11 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
 
     return {
       attemptId: success.attempt.attemptId,
+      attempt: summarizeLocalWorkspaceDeploymentAttempt(success.attempt),
       desiredState,
+      evidence: summarizeLocalWorkspaceDeploymentEvidence(success.result.evidence),
       evidenceCount: success.result.evidence.length,
+      plan: summarizeLocalWorkspaceDeploymentPlan(planWriteback.plan),
       resourceCount: runtimeDesiredState.desiredState.display.resourceCount,
       resourcesByKind: runtimeDesiredResourcesByKind(
         runtimeDesiredState.desiredState.display.resourcesByKind,
@@ -1420,6 +1461,11 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
       runnerId,
       status: "succeeded",
       targetId: desiredState.targetId,
+      writeback: {
+        planRecordedAt: planWriteback.plan.recordedAt,
+        status: "succeeded",
+        successCompletedAt: success.result.completedAt,
+      },
     };
   } catch (error) {
     await writeFormlessInstanceDeploymentAttemptFailure(
@@ -1440,6 +1486,55 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
 
     throw error;
   }
+}
+
+function summarizeLocalWorkspaceDeploymentAttempt(
+  attempt: DeploymentAttempt,
+): DeployLocalFormlessWorkspaceAttemptSummary {
+  return {
+    attemptId: attempt.attemptId,
+    ...(attempt.completedAt === undefined ? {} : { completedAt: attempt.completedAt }),
+    mode: attempt.mode,
+    runnerId: attempt.runnerId ?? null,
+    startedAt: attempt.startedAt,
+    status: attempt.status,
+    targetId: attempt.targetId,
+  };
+}
+
+function summarizeLocalWorkspaceDeploymentPlan(input: {
+  recordedAt: string;
+  summary: DeploymentPlanSummary;
+}): DeployLocalFormlessWorkspacePlanSummary {
+  return {
+    blockerCount: input.summary.blockers.length,
+    changes: input.summary.changes,
+    displayText: input.summary.displayText ?? null,
+    recordedAt: input.recordedAt,
+    warningCount: input.summary.warnings.length,
+  };
+}
+
+function summarizeLocalWorkspaceDeploymentEvidence(
+  evidence: readonly DeploymentResourceEvidenceSummary[],
+): DeployLocalFormlessWorkspaceEvidenceSummary {
+  return {
+    actionsByKind: countBy(evidence, (entry) => entry.action),
+    count: evidence.length,
+    logicalIds: evidence.map((entry) => entry.logicalId),
+    resourcesByKind: countBy(evidence, (entry) => entry.kind),
+  };
+}
+
+function countBy<T>(items: readonly T[], selectKey: (item: T) => string): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const item of items) {
+    const key = selectKey(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+
+  return counts;
 }
 
 function assertRuntimeDesiredStateMatchesLocalProjection(input: {
