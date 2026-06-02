@@ -5,7 +5,26 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import packageJson from "../../package.json";
+import {
+  APP_ARCHIVE_KIND,
+  ARCHIVE_VERSION,
+  formatAppArchive,
+  type AppArchive,
+} from "../shared/archive.ts";
+import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import { packageAppFactsForKey, listBundledAppPackages } from "../shared/app-installs.ts";
+import {
+  STORE_SNAPSHOT_KIND,
+  STORE_SNAPSHOT_VERSION,
+  type StoreSnapshot,
+  type StoredRecord,
+} from "../shared/protocol.ts";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
+import { siteSourceSchema } from "../test/schema-apps.ts";
+import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
 import {
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultFormlessInstanceWorkspaceManifest,
@@ -28,6 +47,7 @@ const bootstrapToken = "bootstrap-local-token";
 const csrfToken = "csrf-local-token";
 const ownerSecret = "owner-session-secret";
 const adminToken = "admin-local-token";
+const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 afterEach(async () => {
   await Promise.all(
@@ -313,6 +333,82 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(planned.body)).not.toContain("secret");
   });
 
+  it("runs deploy apply through the gateway with exact desired-state writeback", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+    const requests: CapturedRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot);
+    await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
+
+    const applied = await gatewayJson(
+      operationRequest({ kind: "deployApply" }, browserHeaders({ cookie, csrf: true })),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          accountDiscovery: {
+            listAccounts: async () => [
+              {
+                id: "account-123",
+                workersDevSubdomain: "dpeek",
+              },
+            ],
+          },
+          deploymentAdapter: {
+            deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+          },
+          fetch: deployApplyFetch(requests, "site"),
+          operationIds: ["op_deploy_apply_00000001"],
+          packageRoot: "/package",
+          packageVersion: packageJson.version,
+          randomTokens: ["generated-admin-token", setupToken],
+          timestamps: [
+            "2026-06-02T01:11:00.000Z",
+            "2026-06-02T01:11:01.000Z",
+            "2026-06-02T01:11:02.000Z",
+            "2026-06-02T01:11:03.000Z",
+          ],
+        }),
+      },
+    );
+
+    expect(applied.response.status).toBe(200);
+    if (
+      typeof applied.body.operation === "object" &&
+      applied.body.operation !== null &&
+      "status" in applied.body.operation &&
+      applied.body.operation.status !== "succeeded" &&
+      "summary" in applied.body.operation
+    ) {
+      const summary = applied.body.operation.summary;
+      throw new Error(JSON.stringify(summary));
+    }
+    expect(applied.body.operation).toMatchObject({
+      actor: "browser",
+      id: "op_deploy_apply_00000001",
+      operation: "deployApply",
+      result: {
+        deployment: {
+          writeback: {
+            attemptId: "attempt.local-gateway.1",
+            desiredState: deploymentDesiredStateRef(),
+            runnerId: "local-gateway",
+            status: "succeeded",
+          },
+        },
+      },
+      status: "succeeded",
+    });
+    expect(
+      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
+        requestByPath(requests, "/api/formless/deployments/attempts/success"),
+      ),
+    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
+    expect(JSON.stringify(applied.body)).not.toContain("generated-admin-token");
+    expect(JSON.stringify(applied.body)).not.toContain("alchemy-password");
+    expect(JSON.stringify(applied.body)).not.toContain("lease:local-gateway");
+  });
+
   it("scopes operation ids to the configured workspace root", async () => {
     const workspaceRoot = await makeTempDir();
     const otherWorkspaceRoot = await makeTempDir();
@@ -437,13 +533,20 @@ function gatewayDeps(
       listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
     };
     credentialSetupUrl?: string;
+    deploymentAdapter?: {
+      deploy: (input: { plan: { expectedUrl: { url: string } } }) => Promise<{ url: string }>;
+    };
+    fetch?: typeof fetch;
     operationIds?: string[];
+    packageRoot?: string;
     packageVersion?: string;
+    randomTokens?: string[];
     setupComplete?: boolean;
     timestamps?: string[];
   } = {},
 ): LocalWorkspaceGatewayDependencies {
   const operationIds = [...(options.operationIds ?? [])];
+  const randomTokens = [...(options.randomTokens ?? [])];
 
   return {
     ...(options.accountDiscovery === undefined
@@ -477,10 +580,45 @@ function gatewayDeps(
             },
           }),
     cwd: workspaceRoot,
-    fetch: async () => Response.json({ setupComplete: options.setupComplete ?? false }),
+    ...(options.deploymentAdapter === undefined
+      ? {}
+      : { deploymentAdapter: options.deploymentAdapter }),
+    fetch:
+      options.fetch ??
+      (async () => Response.json({ setupComplete: options.setupComplete ?? false })),
+    healthCheck: {
+      check: async (input: { expectedVersion: string; url: string }) => ({
+        cacheControl: "no-store",
+        metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
+        packageVersion: input.expectedVersion,
+        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+        url: input.url,
+        version: input.expectedVersion,
+      }),
+    },
+    localSecretEnv: {
+      ensure: async (input: { root: string }) => ({
+        created: false,
+        path: path.join(input.root, "deploy.env"),
+        secrets: { ALCHEMY_PASSWORD: "alchemy-password" },
+      }),
+    },
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T01:00:00.000Z"])),
+    ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
     ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
+    randomToken: () => randomTokens.shift() ?? "generated-token",
     readOwnerSetupStatus: async () => ({ setupComplete: options.setupComplete ?? false }),
+    setupCapability: {
+      create: async (input: { deploymentUrl: string }) => ({
+        capabilityCreated: true,
+        endpointUrl: new URL(
+          "/api/formless/setup/capability",
+          `${input.deploymentUrl}/`,
+        ).toString(),
+        setupComplete: false,
+      }),
+    },
   };
 }
 
@@ -539,6 +677,194 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
     path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
     formatFormlessInstanceWorkspaceManifest(manifest),
   );
+}
+
+type CapturedRequest = {
+  body?: string;
+  headers: Record<string, string>;
+  method: string;
+  url: string;
+};
+
+function deployApplyFetch(requests: CapturedRequest[], installId: string): typeof fetch {
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+
+    requests.push({
+      body: typeof init?.body === "string" ? init.body : undefined,
+      headers: normalizeHeaders(init?.headers),
+      method: init?.method ?? "GET",
+      url: requestUrl,
+    });
+
+    if (parsedUrl.pathname === "/api/formless/deploy") {
+      return Response.json({
+        packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageAppKey: appPackage.packageAppKey,
+          packageRevision: appPackage.packageRevision,
+          sourceSchemaHash: appPackage.sourceSchemaHash,
+        })),
+        packageVersion: packageJson.version,
+        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+        version: packageJson.version,
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/app-installs") {
+      return Response.json({
+        installs: [installedSite(installId, "Site")],
+        packages: listBundledAppPackages(),
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
+      return Response.json({
+        cursor: 1,
+        records: gatewayControlPlaneRecords(installId),
+        schema: {},
+      });
+    }
+
+    if (parsedUrl.pathname === `/api/app-installs/site/${installId}/snapshot`) {
+      return Response.json(snapshot([]));
+    }
+
+    if (parsedUrl.pathname === "/api/formless/domain-mappings") {
+      return Response.json({ mappings: [] });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/archive/restore") {
+      const body = parseCapturedBody<{ archive?: { restorePolicy?: { dryRun?: boolean } } }>(init);
+      const dryRun = body.archive?.restorePolicy?.dryRun !== false;
+
+      return Response.json(
+        dryRun
+          ? { ok: true, plan: { summary: restoreSummary(installId) } }
+          : { ok: true, report: { applied: true, summary: restoreSummary(installId) } },
+      );
+    }
+
+    if (parsedUrl.pathname === "/api/formless/deployments/desired-state") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        desiredState: {
+          ...desiredState,
+          createdAt: "2026-06-02T01:11:02.000Z",
+          display: {
+            resourceCount: 1,
+            resourcesByKind: { "cloudflare-worker-custom-domain": 1 },
+            title: "Primary instance target",
+          },
+          resourceGraph: { resources: [], targetId: desiredState.targetId },
+          schemaVersion: 1,
+          source: { fingerprint: "source-1", intentRevision: 1 },
+        },
+        target: { kind: "instance", targetId: desiredState.targetId },
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/deployments/attempts/start") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json(
+        {
+          attempt: deploymentAttempt({ desiredState, status: "started" }),
+          lease: {
+            actor: {
+              actorId: "local-gateway.deploy",
+              displayName: "Local workspace gateway",
+              kind: "cli",
+              runnerId: "local-gateway",
+            },
+            acquiredAt: "2026-06-02T01:11:02.000Z",
+            attemptId: "attempt.local-gateway.1",
+            expiresAt: "2026-06-02T01:21:02.000Z",
+            leaseId: "lease.local-gateway.1",
+            mode: "apply",
+            status: "active",
+            targetId: desiredState.targetId,
+            token: "lease:local-gateway",
+          },
+          replayed: false,
+        },
+        { status: 201 },
+      );
+    }
+
+    if (parsedUrl.pathname === "/api/formless/deployments/attempts/plan") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        attempt: deploymentAttempt({ desiredState, status: "started" }),
+        plan: {
+          ...desiredState,
+          attemptId: "attempt.local-gateway.1",
+          kind: "plan",
+          recordedAt: "2026-06-02T01:11:02.000Z",
+          summary: {
+            blockers: [],
+            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+            warnings: [],
+          },
+        },
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/deployments/attempts/success") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        attempt: deploymentAttempt({
+          completedAt: "2026-06-02T01:11:03.000Z",
+          desiredState,
+          status: "succeeded",
+        }),
+        lease: {
+          attemptId: "attempt.local-gateway.1",
+          leaseId: "lease.local-gateway.1",
+          releasedAt: "2026-06-02T01:11:03.000Z",
+          status: "released",
+          targetId: desiredState.targetId,
+          token: "lease:local-gateway",
+        },
+        result: {
+          ...desiredState,
+          alchemy: { app: "formless-instance", scope: "instance.primary", stage: "personal" },
+          attemptId: "attempt.local-gateway.1",
+          completedAt: "2026-06-02T01:11:03.000Z",
+          evidence: [],
+          kind: "success",
+          runnerId: "local-gateway",
+        },
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/deployments/attempts/failure") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        attempt: deploymentAttempt({ desiredState, status: "failed" }),
+        result: {
+          ...desiredState,
+          actor: {
+            actorId: "local-gateway.deploy",
+            kind: "cli",
+            runnerId: "local-gateway",
+          },
+          attemptId: "attempt.local-gateway.1",
+          failedAt: "2026-06-02T01:11:03.000Z",
+          kind: "failure",
+          summary: { code: "local-gateway-deploy-apply-failed", displayMessage: "failed" },
+        },
+      });
+    }
+
+    return Response.json({ error: "not found" }, { status: 404 });
+  };
 }
 
 async function writeDeployRecordSource(workspaceRoot: string) {
@@ -630,4 +956,182 @@ async function writeDeployRecordSource(workspaceRoot: string) {
     manifest,
     workspaceRoot,
   });
+}
+
+async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string, label: string) {
+  const archiveRoot = path.join(workspaceRoot, "archives/apps", installId);
+
+  await mkdir(archiveRoot, { recursive: true });
+  await writeFile(
+    path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
+    formatAppArchive(appArchive(installId, label)),
+  );
+}
+
+function appArchive(installId: string, label: string): AppArchive {
+  const facts = packageAppFactsForKey("site");
+
+  if (!facts) {
+    throw new Error("Missing bundled package facts for site.");
+  }
+
+  return {
+    kind: APP_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["app-store-snapshots", "core-media-assets"],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    app: {
+      installId,
+      packageAppKey: "site",
+      packageRevision: facts.packageRevision,
+      sourceSchemaKey: "site",
+      sourceSchemaHash: facts.sourceSchemaHash,
+      label,
+      status: "installed",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    },
+    data: {
+      kind: "storeSnapshot",
+      snapshot: snapshot([]),
+    },
+    media: { objects: [] },
+  };
+}
+
+function installedSite(installId: string, label: string) {
+  const facts = packageAppFactsForKey("site");
+
+  if (!facts) {
+    throw new Error("Missing bundled package facts for site.");
+  }
+
+  return {
+    adminRoute: `/apps/${installId}` as `/apps/${string}`,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey: "site" as const,
+    packageRevision: facts.packageRevision,
+    publicRoute: `/sites/${installId}` as `/sites/${string}`,
+    publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
+    schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
+    sourceSchemaHash: facts.sourceSchemaHash,
+    status: "installed" as const,
+    updatedAt: "2026-05-01T00:00:00.000Z",
+  };
+}
+
+function snapshot(records: StoredRecord[]): StoreSnapshot {
+  return {
+    exportedAt: "2026-05-12T02:00:00.000Z",
+    kind: STORE_SNAPSHOT_KIND,
+    records,
+    schema: siteSourceSchema,
+    schemaKey: "site",
+    schemaUpdatedAt: "2026-05-01T00:00:00.000Z",
+    sourceCursor: 1,
+    version: STORE_SNAPSHOT_VERSION,
+  };
+}
+
+function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return [
+    {
+      createdAt: now,
+      entity: "app-install",
+      id: installId,
+      values: {
+        createdAt: now,
+        installId,
+        label: "Site",
+        packageAppKey: "site",
+        status: "installed",
+        storageIdentity: `app:${installId}`,
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "route",
+      id: `route:${installId}:admin`,
+      values: {
+        appInstall: installId,
+        createdAt: now,
+        enabled: true,
+        kind: "mount",
+        matchPath: `/apps/${installId}`,
+        surface: "admin",
+        targetProfile: "app",
+        updatedAt: now,
+      },
+    },
+  ];
+}
+
+function deploymentDesiredStateRef() {
+  return {
+    hash: `sha256:${"b".repeat(64)}`,
+    revision: 3,
+    targetId: "instance.primary",
+    versionId: "desired.instance.primary.3",
+  };
+}
+
+function deploymentAttempt(input: {
+  completedAt?: string;
+  desiredState: ReturnType<typeof deploymentDesiredStateRef>;
+  status: "failed" | "started" | "succeeded";
+}) {
+  return {
+    ...input.desiredState,
+    ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
+    actor: {
+      actorId: "local-gateway.deploy",
+      displayName: "Local workspace gateway",
+      kind: "cli",
+      runnerId: "local-gateway",
+    },
+    attemptId: "attempt.local-gateway.1",
+    idempotencyKey: "local-gateway-deploy:instance.primary:desired.instance.primary.3",
+    mode: "apply",
+    startedAt: "2026-06-02T01:11:02.000Z",
+    status: input.status,
+    updatedAt: "2026-06-02T01:11:03.000Z",
+  };
+}
+
+function restoreSummary(installId: string) {
+  return {
+    appCount: 1,
+    createdInstalls: [],
+    mediaCountsByApp: { [installId]: 0 },
+    recordCountsByApp: { [installId]: { total: 0 } },
+    replacedInstalls: [installId],
+  };
+}
+
+function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  return Object.fromEntries(new Headers(headers).entries());
+}
+
+function requestByPath(requests: readonly CapturedRequest[], pathname: string): CapturedRequest {
+  const request = requests.find((candidate) => new URL(candidate.url).pathname === pathname);
+
+  if (!request) {
+    throw new Error(`Expected request to ${pathname}.`);
+  }
+
+  return request;
+}
+
+function capturedRequestJson<T>(request: CapturedRequest): T {
+  return JSON.parse(request.body ?? "{}") as T;
+}
+
+function parseCapturedBody<T>(init: RequestInit | undefined): T {
+  return JSON.parse(typeof init?.body === "string" ? init.body : "{}") as T;
 }

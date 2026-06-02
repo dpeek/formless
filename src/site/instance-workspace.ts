@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   projectDeployControlPlaneDesiredState,
+  stableDeployJsonStringify,
   type ControlPlaneAppInstallProjectionRecord,
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneRouteProjectionRecord,
@@ -37,6 +38,12 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
 } from "../shared/instance-domain-mappings.ts";
+import type {
+  DeploymentActor,
+  DeploymentDesiredStateVersionRef,
+  DeploymentPlanSummary,
+  DeploymentResourceKind,
+} from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
   formatInstanceControlPlaneBoundaryEntityName,
@@ -93,10 +100,19 @@ import {
   type FormlessInstanceWorkspaceSecretState,
 } from "./instance-workspace-secrets.ts";
 import {
+  deployDesiredStateVersionRef,
+  type DeployDesiredStateVersionLike,
+} from "@dpeek/formless-deploy/client";
+import {
   recordFormlessInstanceDomainMappingApplyEvidence,
+  readFormlessInstanceDeploymentDesiredState,
   readFormlessInstanceDomainMappings,
   readFormlessInstanceTargetStatus,
+  startFormlessInstanceDeploymentAttempt,
   type FormlessInstanceTargetStatus,
+  writeFormlessInstanceDeploymentAttemptFailure,
+  writeFormlessInstanceDeploymentAttemptPlan,
+  writeFormlessInstanceDeploymentAttemptSuccess,
 } from "./instance-target-client.ts";
 import {
   exportAppArchive,
@@ -109,6 +125,7 @@ import {
 } from "./archive-workflows.ts";
 import {
   ALCHEMY_PASSWORD_ENV_NAME,
+  FORMLESS_ALCHEMY_APP_NAME,
   FORMLESS_INSTANCE_LOCAL_ENV_FILE,
   planFormlessInstanceDeployment,
   createFormlessInstanceState,
@@ -315,6 +332,7 @@ export type PushFormlessInstanceWorkspaceInput = {
   replace?: boolean;
   replaceInstallSet?: boolean;
   targetAlias?: string | null;
+  targetOverride?: FormlessInstanceWorkspaceTarget;
   workspacePath?: string;
 };
 
@@ -459,10 +477,22 @@ export type DeployLocalFormlessWorkspaceOwnerSetup = {
   url: string;
 };
 
+export type DeployLocalFormlessWorkspaceWriteback = {
+  attemptId: string;
+  desiredState: DeploymentDesiredStateVersionRef;
+  evidenceCount: number;
+  resourceCount: number;
+  resourcesByKind: Record<DeploymentResourceKind, number>;
+  runnerId: string;
+  status: "succeeded";
+  targetId: string;
+};
+
 export type DeployFormlessInstanceWorkspaceResult = {
   deployment: DeployFormlessInstanceResult;
   deploymentStateRoot: string;
   deploymentStatePath?: string;
+  deploymentWriteback?: DeployLocalFormlessWorkspaceWriteback;
   healthCheck: CheckFormlessInstanceDeployMetadataResult;
   localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
   migrationPolicy: FormlessInstanceWorkspaceMigrationPolicy;
@@ -978,7 +1008,8 @@ export async function pushFormlessInstanceWorkspace(
 ): Promise<PushFormlessInstanceWorkspaceResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "push");
+  const selectedTarget =
+    input.targetOverride ?? requireWorkspaceTarget(manifest, input.targetAlias, "push");
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
 
@@ -1249,8 +1280,6 @@ export async function deployLocalFormlessWorkspace(
     url: deploymentUrl,
   });
 
-  await writeFile(planned.manifestPath, formatFormlessInstanceWorkspaceManifest(planned.manifest));
-
   const ownerSetup =
     planned.existingSelectedTarget === undefined
       ? await createLocalWorkspaceOwnerSetup({
@@ -1267,7 +1296,17 @@ export async function deployLocalFormlessWorkspace(
       replace: true,
       replaceInstallSet: false,
       targetAlias: planned.selectedTarget.alias,
+      targetOverride: planned.selectedTarget,
       workspacePath: workspaceRoot,
+    },
+    dependencies,
+  );
+  const deploymentWriteback = await writeLocalWorkspaceDeploymentApplyWriteback(
+    {
+      adminToken,
+      desiredState: planned.desiredState,
+      plan: planned.plan,
+      targetUrl: deploymentUrl,
     },
     dependencies,
   );
@@ -1278,6 +1317,7 @@ export async function deployLocalFormlessWorkspace(
     },
     deploymentStatePath,
     deploymentStateRoot,
+    deploymentWriteback,
     healthCheck,
     localSecretEnv,
     migrationPolicy: planned.plan.migrationPolicy,
@@ -1288,6 +1328,199 @@ export async function deployLocalFormlessWorkspace(
     selectedTarget: planned.selectedTarget,
     workspaceRoot,
   };
+}
+
+async function writeLocalWorkspaceDeploymentApplyWriteback(
+  input: {
+    adminToken: string;
+    desiredState: LocalWorkspaceDeploymentDesiredState;
+    plan: FormlessInstanceDeploymentPlan;
+    targetUrl: string;
+  },
+  dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "fetch" | "now">,
+): Promise<DeployLocalFormlessWorkspaceWriteback> {
+  const runtimeDesiredState = await readFormlessInstanceDeploymentDesiredState(
+    {
+      targetId: input.desiredState.targetId,
+      targetUrl: input.targetUrl,
+    },
+    dependencies,
+  );
+
+  assertRuntimeDesiredStateMatchesLocalProjection({
+    local: input.desiredState,
+    runtime: runtimeDesiredState.desiredState,
+  });
+
+  const desiredState = deployDesiredStateVersionRef(
+    runtimeDesiredState.desiredState as DeployDesiredStateVersionLike,
+  );
+  const runnerId = "local-gateway";
+  const actor = localWorkspaceDeploymentActor(runnerId);
+  const started = await startFormlessInstanceDeploymentAttempt(
+    {
+      adminToken: input.adminToken,
+      request: {
+        actor,
+        desiredState,
+        idempotencyKey: localWorkspaceDeploymentApplyIdempotencyKey(desiredState),
+        mode: "apply",
+      },
+      targetUrl: input.targetUrl,
+    },
+    dependencies,
+  );
+
+  if (!started.lease) {
+    throw new Error("Local workspace deploy apply writeback did not acquire a deployment lease.");
+  }
+
+  try {
+    await writeFormlessInstanceDeploymentAttemptPlan(
+      {
+        adminToken: input.adminToken,
+        request: {
+          attemptId: started.attempt.attemptId,
+          desiredState,
+          runnerId,
+          summary: localWorkspaceDeploymentPlanSummary(input.desiredState),
+        },
+        targetUrl: input.targetUrl,
+      },
+      dependencies,
+    );
+    const success = await writeFormlessInstanceDeploymentAttemptSuccess(
+      {
+        adminToken: input.adminToken,
+        request: {
+          alchemy: {
+            app: FORMLESS_ALCHEMY_APP_NAME,
+            scope: desiredState.targetId,
+            stage: input.plan.instanceName,
+          },
+          attemptId: started.attempt.attemptId,
+          desiredState,
+          evidence: [],
+          leaseToken: started.lease.token,
+          runnerId,
+        },
+        targetUrl: input.targetUrl,
+      },
+      dependencies,
+    );
+
+    return {
+      attemptId: success.attempt.attemptId,
+      desiredState,
+      evidenceCount: success.result.evidence.length,
+      resourceCount: runtimeDesiredState.desiredState.display.resourceCount,
+      resourcesByKind: runtimeDesiredResourcesByKind(
+        runtimeDesiredState.desiredState.display.resourcesByKind,
+      ),
+      runnerId,
+      status: "succeeded",
+      targetId: desiredState.targetId,
+    };
+  } catch (error) {
+    await writeFormlessInstanceDeploymentAttemptFailure(
+      {
+        adminToken: input.adminToken,
+        request: {
+          actor,
+          attemptId: started.attempt.attemptId,
+          desiredState,
+          leaseToken: started.lease.token,
+          runnerId,
+          summary: localWorkspaceDeploymentFailureSummary(error),
+        },
+        targetUrl: input.targetUrl,
+      },
+      dependencies,
+    );
+
+    throw error;
+  }
+}
+
+function assertRuntimeDesiredStateMatchesLocalProjection(input: {
+  local: LocalWorkspaceDeploymentDesiredState;
+  runtime: {
+    display: {
+      resourceCount: number;
+      resourcesByKind: Record<string, number>;
+    };
+    targetId: string;
+  };
+}): void {
+  if (input.runtime.targetId !== input.local.targetId) {
+    throw new Error(
+      `Local deploy apply desired-state target "${input.local.targetId}" did not match runtime target "${input.runtime.targetId}".`,
+    );
+  }
+
+  if (input.runtime.display.resourceCount !== input.local.resourceCount) {
+    throw new Error(
+      `Local deploy apply desired-state resource count ${input.local.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
+    );
+  }
+
+  if (
+    stableDeployJsonStringify(input.runtime.display.resourcesByKind) !==
+    stableDeployJsonStringify(input.local.resourcesByKind)
+  ) {
+    throw new Error("Local deploy apply desired-state resource kinds did not match runtime.");
+  }
+}
+
+function localWorkspaceDeploymentActor(runnerId: string): DeploymentActor {
+  return {
+    actorId: "local-gateway.deploy",
+    displayName: "Local workspace gateway",
+    kind: "cli",
+    runnerId,
+  };
+}
+
+function localWorkspaceDeploymentApplyIdempotencyKey(
+  desiredState: DeploymentDesiredStateVersionRef,
+): string {
+  return `local-gateway-deploy:${desiredState.targetId}:${desiredState.versionId}:${desiredState.hash}`;
+}
+
+function localWorkspaceDeploymentPlanSummary(
+  desiredState: LocalWorkspaceDeploymentDesiredState,
+): DeploymentPlanSummary {
+  return {
+    blockers: [],
+    changes: {
+      create: desiredState.resourceCount,
+      delete: 0,
+      noChange: 0,
+      update: 0,
+    },
+    displayText: `${desiredState.resourceCount} deployment resource${
+      desiredState.resourceCount === 1 ? "" : "s"
+    } planned from workspace source.`,
+    warnings: [],
+  };
+}
+
+function localWorkspaceDeploymentFailureSummary(error: unknown) {
+  const message = error instanceof Error ? error.message : "Local workspace deploy apply failed.";
+
+  return {
+    code: "local-gateway-deploy-apply-failed",
+    displayMessage: message,
+  };
+}
+
+function runtimeDesiredResourcesByKind(
+  resourcesByKind: Record<string, number>,
+): Record<DeploymentResourceKind, number> {
+  return Object.fromEntries(Object.entries(resourcesByKind)) as Record<
+    DeploymentResourceKind,
+    number
+  >;
 }
 
 export async function planDeployLocalFormlessWorkspace(

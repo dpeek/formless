@@ -822,10 +822,24 @@ function summarizeDeployApplyResult(
         : null,
       targetAlias: result.selectedTarget.alias,
       url: result.deployment.url,
+      writeback: result.deploymentWriteback
+        ? {
+            attemptId: result.deploymentWriteback.attemptId,
+            desiredState: result.deploymentWriteback.desiredState,
+            evidenceCount: result.deploymentWriteback.evidenceCount,
+            resourceCount: result.deploymentWriteback.resourceCount,
+            resourcesByKind: result.deploymentWriteback.resourcesByKind,
+            runnerId: result.deploymentWriteback.runnerId,
+            status: result.deploymentWriteback.status,
+            targetId: result.deploymentWriteback.targetId,
+          }
+        : null,
       workerName: result.plan.resources.worker.name,
     },
     summary: {
       fields: {
+        attemptId: result.deploymentWriteback?.attemptId ?? null,
+        desiredStateVersion: result.deploymentWriteback?.desiredState.versionId ?? null,
         healthCheckVersion: result.healthCheck.version,
         migrationPolicy: result.migrationPolicy,
         url: result.deployment.url,
