@@ -1193,7 +1193,7 @@ function PackageTypeSwitcher({
   return (
     <div
       aria-label="Install app type"
-      className="grid grid-cols-3 gap-1 rounded-md border border-border bg-muted p-1"
+      className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted p-1 sm:grid-cols-4"
       role="tablist"
     >
       {packages.map((appPackage) => {

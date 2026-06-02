@@ -8,6 +8,8 @@ import type { AppSchema } from "../shared/schema.ts";
 import {
   rateSeedRecords,
   rateSourceSchema,
+  crmSeedRecords,
+  crmSourceSchema,
   siteSeedRecords,
   siteSourceSchema,
   taskSeedRecords,
@@ -113,6 +115,36 @@ describe("worker launch fixture initialization", () => {
     ]);
     expect(second.createdInstalls).toEqual([]);
     expect(second.installs).toEqual(first.installs);
+  });
+
+  it("initializes CRM fixture app metadata without Site public routes", async () => {
+    const first = await getJson<InstanceInitializationResponse>(
+      "/instance?fixture=crm",
+      "instance-crm",
+    );
+    const second = await getJson<InstanceInitializationResponse>(
+      "/instance?fixture=crm",
+      "instance-crm",
+    );
+
+    expect(first.fixtureName).toBe("crm");
+    expect(first.createdInstalls.map((install) => install.installId)).toEqual(["crm"]);
+    expect(first.installs.map((install) => install.installId)).toEqual(["crm"]);
+    expect(first.installs.map((install) => install.packageAppKey)).toEqual(["crm"]);
+    expect(first.installs.map((install) => install.adminRoute)).toEqual(["/apps/crm"]);
+    expect(first.installs.map((install) => install.schemaRoute)).toEqual(["/apps/crm/schema"]);
+    expect(first.installs.map((install) => install.publicRoute)).toEqual([undefined]);
+    expect(second.createdInstalls).toEqual([]);
+    expect(second.installs).toEqual(first.installs);
+  });
+
+  it("initializes fixture-installed CRM storage from the CRM source seed", async () => {
+    const body = await getJson<AppStorageInitializationResponse>("/app/crm?fixture=crm", "app-crm");
+
+    expect(body.schema).toEqual(crmSourceSchema);
+    expect(body.schemaUpdatedAt).toEqual(expect.any(String));
+    expect(body.cursor).toBe(crmSeedRecords.length);
+    expect(recordIds(body.records)).toEqual(recordIds(crmSeedRecords));
   });
 
   it("initializes fixture-installed Site storage from the selected source seed", async () => {

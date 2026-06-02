@@ -16,6 +16,7 @@ describe("instance shell route view", () => {
           site: { installId: "docs", label: "Docs Site" },
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
+          crm: { installId: "crm", label: "CRM" },
         }}
         state={readyState({
           installs: [
@@ -53,6 +54,7 @@ describe("instance shell route view", () => {
           site: { installId: "docs", label: "Docs Site" },
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
+          crm: { installId: "crm", label: "CRM" },
         }}
         state={readyState({
           installs: [],
@@ -66,12 +68,42 @@ describe("instance shell route view", () => {
     expect(html).toContain("Site");
     expect(html).toContain("Tasks");
     expect(html).toContain("Estii");
+    expect(html).toContain("CRM");
     expect(html).toContain("Public website app backed by the bundled Site schema");
     expect(html).toContain("Install Site");
     expect(html).toContain('value="Docs Site"');
     expect(html).toContain('value="docs"');
     expect(html).not.toContain('value="Task Space"');
     expect(html).not.toContain('value="Rates"');
+    expect(html).not.toContain('value="CRM"');
+    expect(html).not.toContain('value="crm"');
+  });
+
+  it("renders CRM package defaults in the install dialog when CRM is selected", () => {
+    const packages = listBundledAppPackages();
+    const crmPackage = packages.find((appPackage) => appPackage.packageAppKey === "crm");
+
+    if (!crmPackage) {
+      throw new Error("Missing bundled CRM package.");
+    }
+
+    const html = renderToStaticMarkup(
+      <InstallAppDialogForm
+        state={readyState({
+          installs: [],
+          packages: [crmPackage, ...packages.filter((appPackage) => appPackage !== crmPackage)],
+        })}
+      />,
+    );
+
+    expect(html).toContain("Site");
+    expect(html).toContain("Tasks");
+    expect(html).toContain("Estii");
+    expect(html).toContain("CRM");
+    expect(html).toContain("CRM app backed by the bundled CRM schema and demo records.");
+    expect(html).toContain("Install CRM");
+    expect(html).toContain('value="CRM"');
+    expect(html).toContain('value="crm"');
   });
 
   it("renders install errors in the dialog with generated app management mounted", () => {

@@ -10,7 +10,13 @@ const now = "2026-05-23T00:00:00.000Z";
 
 describe("launch fixture registry", () => {
   it("lists and resolves named product instance fixtures", () => {
-    expect(listLaunchFixtureNames()).toEqual(["empty", "default-site", "multi-site", "mixed-apps"]);
+    expect(listLaunchFixtureNames()).toEqual([
+      "empty",
+      "default-site",
+      "multi-site",
+      "mixed-apps",
+      "crm",
+    ]);
     expect(resolveLaunchFixture("empty")).toEqual({
       appInstalls: [],
       description: "Product instance with no installed apps.",
@@ -114,5 +120,36 @@ describe("launch fixture registry", () => {
       { kind: "source", seedRecordsKey: "tasks" },
       { kind: "source", seedRecordsKey: "estii" },
     ]);
+  });
+
+  it("creates a CRM initialization plan without Site public routes", () => {
+    expect(createLaunchFixtureInitializationPlan("crm", { now })).toEqual({
+      appInstalls: [
+        {
+          fixtureName: "crm",
+          initialization: {
+            installId: "crm",
+            packageAppKey: "crm",
+            seedRecordsKey: "crm",
+            sourceSchemaKey: "crm",
+          },
+          install: {
+            adminRoute: "/apps/crm",
+            createdAt: now,
+            installId: "crm",
+            label: "CRM",
+            packageAppKey: "crm",
+            packageRevision: 1,
+            schemaRoute: "/apps/crm/schema",
+            sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+            status: "installed",
+            updatedAt: now,
+          },
+          seed: { kind: "source", seedRecordsKey: "crm" },
+        },
+      ],
+      fixtureName: "crm",
+      label: "CRM",
+    });
   });
 });

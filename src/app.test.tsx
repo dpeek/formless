@@ -75,6 +75,8 @@ import type { SchemaKey } from "./shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "./shared/schema.ts";
 import type { NumericExpression } from "./shared/read-model.ts";
 import {
+  crmSeedRecords,
+  crmSourceSchema,
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
   siteSourceSchema,
@@ -1015,6 +1017,46 @@ describe("App smoke routes", () => {
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:rates");
   });
 
+  it("renders installed CRM generated UI from the install-scoped target", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+      }),
+    ];
+    const installedWorld = findRuntimeWorldMountByRoute(createDevRuntimeProfile(), "/apps/crm", {
+      appInstalls,
+    });
+
+    if (
+      !installedWorld?.target ||
+      typeof installedWorld.target !== "object" ||
+      installedWorld.target.kind !== "appInstall"
+    ) {
+      throw new Error("Expected installed CRM target for /apps/crm.");
+    }
+
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), installedWorld.target);
+    const html = renderRoute("/apps/crm", undefined, appInstalls);
+
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Contacts" });
+    expectAppSettings(html, {
+      appLabel: "CRM",
+      resetScopeLabel: "CRM app install crm",
+      schemaKey: "crm",
+      schemaRoute: "/apps/crm/schema",
+      syncWorldKey: "app:crm",
+    });
+    expect(html).toContain('href="/apps/crm/audiences"');
+    expect(html).toContain('href="/apps/crm/campaigns"');
+    expect(html).toContain('href="/apps/crm/broadcasts"');
+    expect(html).toContain("Create Contact");
+    expect(html).toContain("Email addresses");
+    expect(html).not.toContain("Loading CRM...");
+    expect(installedWorld.target.browserDatabaseName).toBe("formless:app:crm");
+  });
+
   it("routes installed Estii setup through the app-relative setup screen", () => {
     const appInstalls = [
       appInstallFixture({
@@ -1151,6 +1193,11 @@ describe("App smoke routes", () => {
         label: "Rates",
         packageAppKey: "estii",
       }),
+      appInstallFixture({
+        installId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+      }),
     ];
     const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, "/apps/personal/settings", {
       appInstalls,
@@ -1194,6 +1241,14 @@ describe("App smoke routes", () => {
         key: "estii:rates",
         label: "Rates",
         packageAppKey: "estii",
+      },
+      {
+        href: "/apps/crm",
+        installId: "crm",
+        isCurrent: false,
+        key: "crm:crm",
+        label: "CRM",
+        packageAppKey: "crm",
       },
     ]);
     expect(
@@ -1431,6 +1486,41 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
     expect(html).not.toContain("<code>estii</code>");
+  });
+
+  it('renders the "/crm/schema" route', () => {
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
+    const html = renderRoute("/crm/schema");
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="workbench-tool"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Schema" });
+    expectAppSettings(html, {
+      appLabel: "CRM",
+      schemaKey: "crm",
+      schemaRoute: "/crm/schema",
+    });
+    expect(html).toContain('aria-label="CRM screens"');
+    expect(html).toContain('href="/crm/audiences"');
+    expect(html).not.toContain("CRM Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">crm</span>");
+    expect(html).toContain('aria-label="Schema editor mode"');
+    expect(html).toContain('aria-label="Schema builder"');
+    expect(html).toContain('aria-label="Schema entities"');
+    expect(html).toContain('data-entity-key="company"');
+    expect(html).toContain('data-field-key="name"');
+    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).toContain("Save schema");
+    expect(html).not.toContain("Open app");
+    expect(html).not.toContain("Reset schema and seed data");
+    expect(html).toContain("&quot;contactHome&quot;");
+    expect(html).toContain("&quot;companyContacts&quot;");
+    expect(html).toContain("&quot;broadcast-recipient&quot;");
+    expect(html).not.toContain("<code>tasks</code>");
+    expect(html).not.toContain("<code>site</code>");
   });
 
   it('renders the "/pages/home" public site route outside generated admin navigation', () => {

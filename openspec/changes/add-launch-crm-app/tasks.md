@@ -24,6 +24,12 @@ Evidence 2026-06-02 thag:
 
 ## 3. Launch Fixtures And Generated Navigation
 
-- [ ] 3.1 Add a `crm` launch fixture that installs CRM at `/apps/crm` and `/apps/crm/schema` without Site public route metadata.
-- [ ] 3.2 Update generated workbench routing/navigation so `/crm`, `/crm/schema`, and installed CRM app routes mount the generated app/schema surfaces.
-- [ ] 3.3 Update instance management install controls and tests so CRM appears with the bundled packages and uses its default install draft values.
+- [x] 3.1 Add a `crm` launch fixture that installs CRM at `/apps/crm` and `/apps/crm/schema` without Site public route metadata.
+- [x] 3.2 Update generated workbench routing/navigation so `/crm`, `/crm/schema`, and installed CRM app routes mount the generated app/schema surfaces.
+- [x] 3.3 Update instance management install controls and tests so CRM appears with the bundled packages and uses its default install draft values.
+
+Evidence 2026-06-02 thag:
+
+- Files changed: `src/shared/launch-fixtures.ts`, `src/shared/launch-fixtures.test.ts`, `src/worker/launch-fixtures.test.ts`, `src/worker/launch-fixture-startup.test.ts`, `src/app.test.tsx`, `src/app/routes/instance-shell.tsx`, `src/app/routes/instance-shell.test.tsx`.
+- Checks: `devstate check` passed; status showed `vp check --fix` pass, web service ready, watch tests pass.
+- Smoke: `bun browser --ignore-https-errors --session thag-crm open https://thag.formless.local/crm`, `bun browser --ignore-https-errors --session thag-crm snapshot --compact --depth 4`, `bun browser --ignore-https-errors --session thag-crm open https://thag.formless.local/crm/schema`, and `bun browser --ignore-https-errors --session thag-crm snapshot --compact --depth 4` passed; snapshots showed CRM runtime navigation, Contacts/Audiences/Campaigns/Broadcasts links, CRM settings Schema link, generated Contacts/Email addresses/Companies sections, and the CRM schema editor.

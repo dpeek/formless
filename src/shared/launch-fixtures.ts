@@ -6,7 +6,7 @@ import {
 } from "./app-installs.ts";
 import type { SchemaKey } from "./schema-apps.ts";
 
-export type LaunchFixtureName = "empty" | "default-site" | "multi-site" | "mixed-apps";
+export type LaunchFixtureName = "empty" | "default-site" | "multi-site" | "mixed-apps" | "crm";
 
 export type LaunchFixtureSeedChoice = {
   kind: "source";
@@ -113,6 +113,19 @@ const launchFixtureDefinitions = {
     description: "Product instance with Site, Tasks, and Estii installed.",
     label: "Mixed Apps",
     name: "mixed-apps",
+  },
+  crm: {
+    appInstalls: [
+      {
+        installId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+        seed: { kind: "source", seedRecordsKey: "crm" },
+      },
+    ],
+    description: "Product instance with the bundled CRM app installed.",
+    label: "CRM",
+    name: "crm",
   },
 } as const satisfies Record<LaunchFixtureName, LaunchFixtureDefinition>;
 
