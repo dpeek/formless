@@ -3,19 +3,17 @@
 ## Purpose
 
 App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, actions, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
-
 ## Requirements
-
 ### Requirement: Bundled Source Apps
 
-The system SHALL provide source schemas for the current bundled schema keys `tasks`, `estii`, and `site`, and SHALL treat source seed records as stored-record shaped data.
+The system SHALL provide source schemas for the current bundled schema keys `tasks`, `estii`, `site`, and `crm`, and SHALL treat source seed records as stored-record shaped data.
 
 #### Scenario: Load current source app
 
-- GIVEN a current schema key `tasks`, `estii`, or `site`
-- WHEN the runtime loads the source schema
-- THEN the app schema is available for that schema key
-- AND seed records can initialize records without being interpreted as change rows
+- **GIVEN** a current schema key `tasks`, `estii`, `site`, or `crm`
+- **WHEN** the runtime loads the source schema
+- **THEN** the app schema is available for that schema key
+- **AND** seed records can initialize records without being interpreted as change rows
 
 ### Requirement: Package App Revision Facts
 
@@ -24,16 +22,16 @@ app revision and source schema hash.
 
 #### Scenario: Parse schema language version
 
-- WHEN an app schema is parsed
-- THEN `schema.version` continues to represent the schema language version
-- AND package app revision is not read from `schema.version`
+- **WHEN** an app schema is parsed
+- **THEN** `schema.version` continues to represent the schema language version
+- **AND** package app revision is not read from `schema.version`
 
 #### Scenario: Describe bundled package app revision
 
-- WHEN bundled Site, Tasks, or Estii package metadata is read
-- THEN the package declares a monotonic package revision and deterministic
+- **WHEN** bundled Site, Tasks, Estii, or CRM package metadata is read
+- **THEN** the package declares a monotonic package revision and deterministic
   source schema hash
-- AND current bundled packages can start at package revision `1`
+- **AND** current bundled packages can start at package revision `1`
 
 ### Requirement: Package App Schema Migrations
 
@@ -445,3 +443,4 @@ append-only or action-created.
 - THEN it is created through an allowed action or runtime write path
 - AND ordinary generated patch or delete controls are not exposed for that
   history record
+
