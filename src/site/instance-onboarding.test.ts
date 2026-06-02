@@ -4,10 +4,12 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
+import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import {
   checkFormlessInstanceDeployMetadata,
   createFormlessInstanceOwnerSetupCapability,
   deployFormlessInstanceWithAlchemy,
+  destroyFormlessInstanceWithAlchemy,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
   ensureFormlessInstanceLocalSecretEnv,
@@ -31,6 +33,7 @@ import {
   type CheckFormlessInstanceDeployMetadataInput,
   type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
+  type DestroyFormlessInstanceInput,
   type EnsureFormlessInstanceLocalSecretEnvDependencies,
   type FormlessInstanceOwnerSetupCapabilityAdapter,
   type SelectFormlessInstanceAccountInput,
@@ -1041,6 +1044,132 @@ describe("Alchemy Formless instance deployment", () => {
     });
     expect(buckets[0]?.props).toMatchObject({ adopt: true });
     expect(workers[0]?.props).toMatchObject({ adopt: true });
+  });
+
+  it("destroys the existing instance app and state root without exposing provider credentials in Worker props", async () => {
+    const apps: Array<{
+      name: typeof FORMLESS_ALCHEMY_APP_NAME;
+      options: AlchemyFormlessInstanceDeploymentAppOptions;
+    }> = [];
+    const buckets: Array<{ props: unknown }> = [];
+    const namespaces: Array<{ props: unknown }> = [];
+    const secrets: string[] = [];
+    const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
+    let finalized = 0;
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async (name, options) => {
+        apps.push({ name, options });
+
+        return {
+          finalize: async () => {
+            finalized += 1;
+          },
+        };
+      },
+      createDurableObjectNamespace: (_id, props) => {
+        namespaces.push({ props });
+
+        return { type: "durable-object-namespace" };
+      },
+      createR2Bucket: async (_id, props) => {
+        buckets.push({ props });
+
+        return { type: "r2-bucket" };
+      },
+      createSecret: (value) => {
+        secrets.push(value);
+
+        return { type: "secret", index: secrets.length };
+      },
+      deployViteWorker: async (_id, props) => {
+        workers.push({ props });
+
+        return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      packageVersion: "0.1.8",
+    });
+    const input: DestroyFormlessInstanceInput = {
+      credentialProfile: "personal",
+      domainProviderPlan: planDomainProviderResources({
+        instanceId: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+        mappings: [
+          {
+            enabled: true,
+            host: "app.example.com",
+            profile: "instance",
+          },
+        ],
+        redirectIntents: [
+          {
+            enabled: true,
+            fromHost: "old.example.com",
+            toHost: "app.example.com",
+          },
+        ],
+        workerName: plan.resources.worker.name,
+        zones: [{ id: "zone-1", name: "example.com" }],
+      }),
+      packageRoot: "/package",
+      plan,
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
+        CLOUDFLARE_API_TOKEN: "cf-token",
+      },
+      stateRoot: "/workspace/.formless/deploy/brother-instance",
+    };
+
+    const result = await destroyFormlessInstanceWithAlchemy(input, dependencies);
+
+    expect(result.resources).toEqual({
+      alchemyState: "destroyed",
+      customDomains: 1,
+      dnsRecords: 1,
+      durableObjectNamespace: "destroyed",
+      mediaBucket: "destroyed",
+      redirectRules: 1,
+      worker: "destroyed",
+      workerAssets: "destroyed",
+      workerSecrets: "destroyed",
+    });
+    expect(apps).toEqual([
+      {
+        name: FORMLESS_ALCHEMY_APP_NAME,
+        options: {
+          phase: "destroy",
+          password: "alchemy-password",
+          profile: "personal",
+          rootDir: "/workspace/.formless/deploy/brother-instance",
+          stage: "brother-instance",
+        },
+      },
+    ]);
+    expect(buckets[0]?.props).toMatchObject({
+      accountId: "account-123",
+      name: "brother-instance-media",
+      profile: "personal",
+    });
+    expect(namespaces[0]?.props).toEqual({
+      className: "FormlessAuthority",
+      sqlite: true,
+    });
+    expect(workers[0]?.props).toMatchObject({
+      accountId: "account-123",
+      cwd: "/package",
+      name: "brother-instance",
+      profile: "personal",
+    });
+    expect(workers[0]?.props.build.env).toEqual(plan.runtimeVars);
+    expect(JSON.stringify(workers[0]?.props)).not.toContain("cf-token");
+    expect(JSON.stringify(workers[0]?.props)).not.toContain("alchemy-password");
+    expect(secrets).toEqual(["alchemy-password", "cf-token", "destroy-placeholder"]);
+    expect(finalized).toBe(1);
   });
 
   it("rejects missing package roots, admin tokens, or Alchemy passwords before mutation", async () => {

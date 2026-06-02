@@ -26,8 +26,18 @@ Evidence:
 
 ## 3. Tests And Evidence
 
-- [ ] 3.1 Add parser and usage tests for both destroy commands, target options, missing confirmation, wrong confirmation, and unknown options.
-- [ ] 3.2 Add workspace destroy tests for top-level and advanced commands covering successful destroy, source preservation, ignored state cleanup, missing deploy state, missing target, and enabled domain intent teardown.
-- [ ] 3.3 Add domain provider tests proving domain apply records resources under the same instance Alchemy app/stage/root as Worker, Durable Object namespace, and R2 resources.
-- [ ] 3.4 Add deployment adapter tests proving Alchemy uses the existing app/stage/root in destroy phase and does not leak provider credentials into manifests, archives, logs, or specs.
-- [ ] 3.5 Run `devstate check`, read `.devstate/status.md`, and record check evidence in this task file.
+- [x] 3.1 Add parser and usage tests for both destroy commands, target options, missing confirmation, wrong confirmation, and unknown options.
+- [x] 3.2 Add workspace destroy tests for top-level and advanced commands covering successful destroy, source preservation, ignored state cleanup, missing deploy state, missing target, and enabled domain intent teardown.
+- [x] 3.3 Add domain provider tests proving domain apply records resources under the same instance Alchemy app/stage/root as Worker, Durable Object namespace, and R2 resources.
+- [x] 3.4 Add deployment adapter tests proving Alchemy uses the existing app/stage/root in destroy phase and does not leak provider credentials into manifests, archives, logs, or specs.
+- [x] 3.5 Run `devstate check`, read `.devstate/status.md`, and record check evidence in this task file.
+
+Evidence:
+
+- Files changed: `src/site/cli.ts`, `src/site/cli.test.ts`, `src/site/instance-onboarding.test.ts`.
+- Parser coverage now includes destroy `--confirm` missing-value cases in addition to existing usage, target, missing-confirm, and unknown-option cases.
+- Workspace destroy coverage now asserts top-level and advanced destroy paths, wrong confirmation pre-mutation guard, missing target guard, source/archive preservation, `.formless/deploy/<workerName>` cleanup, automation token preservation, missing deploy state, incomplete deploy secrets, and enabled domain intent reporting.
+- Domain provider coverage proves workspace domain apply resolves to `formless-instance`, the selected Worker stage, and `.formless/deploy/<workerName>` state root with deploy-state secrets.
+- Deployment adapter coverage proves Alchemy destroy opens the existing `formless-instance` app/stage/root in `phase: "destroy"`, declares Worker, Durable Object namespace, and R2 resources, wraps provider secrets before Worker props, and reports custom-domain, DNS, redirect, and Alchemy destroy summaries.
+- `devstate check` passed on 2026-06-02; `.devstate/status.md` reports checks ok, web service ready, and test service pass.
+- Browser smoke not run; this section changes CLI/unit test coverage and one exported test seam, not browser UI behavior.

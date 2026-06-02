@@ -51,19 +51,24 @@ import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-con
 import { formatSiteProjectRecords } from "./project-source.ts";
 import {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
+  FORMLESS_ALCHEMY_APP_NAME,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   discoverFormlessInstanceWorkspaceRoot,
   formatFormlessInstanceWorkspaceManifest,
+  planFormlessInstanceDeployment,
   parseFormlessInstanceWorkspaceManifestJson,
   resolveFormlessInstanceWorkspaceRoot,
   runFormlessCli,
+  workspaceDomainProviderAlchemyRuntime,
   type CheckFormlessInstanceDeployMetadataInput,
   type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
   type DestroyFormlessInstanceInput,
   type DestroyFormlessInstanceResult,
+  type DomainProviderAlchemyRuntime,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
+  type FormlessInstanceWorkspaceProviderContext,
   type WriteFormlessInstanceStateInput,
 } from "./cli.ts";
 
@@ -273,6 +278,9 @@ describe("Formless Site CLI", () => {
     );
     expect(() => parseFormlessCliArgs(["destroy"])).toThrow(
       "Missing required option for formless destroy: --confirm.",
+    );
+    expect(() => parseFormlessCliArgs(["destroy", "--confirm"])).toThrow(
+      "Missing value for --confirm.",
     );
     expect(() => parseFormlessCliArgs(["destroy", "--confirm", "personal", "--force"])).toThrow(
       "Unknown option for formless destroy: --force",
@@ -704,6 +712,9 @@ describe("Formless Site CLI", () => {
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
     expect(() => parseFormlessCliArgs(["instance", "destroy"])).toThrow(
       "Missing required option for formless instance destroy: --confirm.",
+    );
+    expect(() => parseFormlessCliArgs(["instance", "destroy", "--confirm"])).toThrow(
+      "Missing value for --confirm.",
     );
     expect(() =>
       parseFormlessCliArgs(["instance", "destroy", "--confirm", "personal", "--force"]),
@@ -1935,6 +1946,92 @@ describe("Formless Site CLI", () => {
         "Resources: 1.",
         "Evidence writes: 1.",
       ].join("\n"),
+    ]);
+  });
+
+  it("binds workspace domain provider apply to the instance Alchemy app and deploy state root", async () => {
+    const selectedTarget = {
+      alias: "remote",
+      url: "https://personal.dpeek.workers.dev",
+    };
+    const deploymentStateRoot = "/workspace/.formless/deploy/personal";
+    const context: FormlessInstanceWorkspaceProviderContext = {
+      credentialProfile: "personal-profile",
+      deploymentStatePath: path.join(deploymentStateRoot, "formless.instance.json"),
+      deploymentStateRoot,
+      localSecretPath: path.join(deploymentStateRoot, "deploy.env"),
+      manifest: {
+        version: 1,
+        kind: "formless-instance-workspace",
+        name: "personal-sites",
+        defaultTarget: "remote",
+        targets: [selectedTarget],
+        archives: { instance: "archives/instance", apps: "archives/apps" },
+        local: { stateRoot: ".formless/local" },
+        defaultAppPolicy: "declared-installs",
+        apps: [workspaceApp("david", "David Peek")],
+        deploy: {
+          accountId: "account-123",
+          mediaBucket: "personal-media",
+          migrationPolicy: "existing",
+          workerName: "personal",
+        },
+      },
+      plan: planFormlessInstanceDeployment({
+        account: {
+          id: "account-123",
+          workersDevSubdomain: "dpeek",
+        },
+        instanceName: "personal",
+        mediaBucketName: "personal-media",
+        migrationPolicy: "existing",
+        packageVersion: packageJson.version,
+      }),
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
+        CLOUDFLARE_API_TOKEN: "state-cf-token",
+      },
+      selectedTarget,
+      workspaceRoot: "/workspace",
+    };
+    const runtimeInputs: unknown[] = [];
+    const fakeRuntime: DomainProviderAlchemyRuntime = {
+      factories: {} as DomainProviderAlchemyRuntime["factories"],
+      password: "alchemy-password",
+      runner: async (_appName, _options, apply) => apply(),
+    };
+
+    const runtime = workspaceDomainProviderAlchemyRuntime(context, async (input) => {
+      runtimeInputs.push(input);
+
+      return fakeRuntime;
+    });
+    if (!runtime) {
+      throw new Error("Expected workspace domain provider runtime.");
+    }
+    const result = await runtime({
+      accountId: "account-123",
+      env: {
+        ALCHEMY_PASSWORD: "ambient-password",
+        CLOUDFLARE_API_TOKEN: "ambient-token",
+        UNRELATED: "kept",
+      },
+    });
+
+    expect(result).toBe(fakeRuntime);
+    expect(runtimeInputs).toEqual([
+      {
+        accountId: "account-123",
+        appName: FORMLESS_ALCHEMY_APP_NAME,
+        env: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+          ALCHEMY_PROFILE: "personal-profile",
+          CLOUDFLARE_API_TOKEN: "state-cf-token",
+          UNRELATED: "kept",
+        },
+        rootDir: deploymentStateRoot,
+        stage: "personal",
+      },
     ]);
   });
 
@@ -3541,6 +3638,10 @@ describe("Formless Site CLI", () => {
   it("destroys a claimed instance workspace after confirmation", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
+    const manifestPath = path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE);
+    const deploymentStateRoot = path.join(workspaceRoot, ".formless/deploy/personal");
+    const instanceArchiveRoot = path.join(workspaceRoot, "archives/instance");
+    const appArchiveRoot = path.join(workspaceRoot, "archives/apps/david");
     const destroyInputs: DestroyFormlessInstanceInput[] = [];
     const logs: string[] = [];
 
@@ -3555,6 +3656,14 @@ describe("Formless Site CLI", () => {
         },
       ],
     });
+    const originalManifest = await readFile(manifestPath, "utf8");
+    await writeArchiveDirectory(
+      instanceArchiveRoot,
+      instanceArchive([appArchive("david", "David Peek")]),
+    );
+    await writeArchiveDirectory(appArchiveRoot, appArchive("david", "David Peek"));
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(path.join(workspaceRoot, ".formless/instance.env"), "FORMLESS_ADMIN_TOKEN=x\n");
     await writeWorkspaceDeployState(workspaceRoot);
 
     await runFormlessCli(
@@ -3601,6 +3710,21 @@ describe("Formless Site CLI", () => {
         },
       },
     });
+    expect(destroyInputs[0]?.domainProviderPlan).toMatchObject({
+      instanceId: "personal",
+      workerName: "personal",
+    });
+    await expect(readFile(manifestPath, "utf8")).resolves.toBe(originalManifest);
+    await expect(
+      readFile(path.join(instanceArchiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
+    ).resolves.toContain("formless.instanceArchive");
+    await expect(
+      readFile(path.join(appArchiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
+    ).resolves.toContain("formless.appArchive");
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
+    ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
+    expect(await pathExists(deploymentStateRoot)).toBe(false);
     expect(logs).toEqual([
       [
         "Instance workspace destroyed.",
@@ -3611,17 +3735,14 @@ describe("Formless Site CLI", () => {
         "Media bucket: personal-media.",
         "Domain resources: 1 enabled host (dpeek.com).",
         "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 0, Alchemy state destroyed.",
-        `Ignored deploy state: ${path.relative(
-          tempDir,
-          path.join(workspaceRoot, ".formless/deploy/personal"),
-        )}.`,
+        `Ignored deploy state: ${path.relative(tempDir, deploymentStateRoot)}.`,
         `Deployment facts: ${path.relative(
           tempDir,
-          path.join(workspaceRoot, ".formless/deploy/personal/formless.instance.json"),
+          path.join(deploymentStateRoot, "formless.instance.json"),
         )}.`,
         `Local deploy secrets: ${path.relative(
           tempDir,
-          path.join(workspaceRoot, ".formless/deploy/personal/deploy.env"),
+          path.join(deploymentStateRoot, "deploy.env"),
         )}.`,
       ].join("\n"),
     ]);
@@ -3650,6 +3771,47 @@ describe("Formless Site CLI", () => {
     expect(destroyInputs[0]?.stateRoot).toBe(path.join(workspaceRoot, ".formless/deploy/personal"));
   });
 
+  it("refuses destroy before provider mutation when no workspace target is selected", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+
+    await mkdir(workspaceRoot, { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      formatFormlessInstanceWorkspaceManifest({
+        version: 1,
+        kind: "formless-instance-workspace",
+        name: "personal-sites",
+        targets: [],
+        archives: { instance: "archives/instance", apps: "archives/apps" },
+        local: { stateRoot: ".formless/local" },
+        defaultAppPolicy: "declared-installs",
+        apps: [workspaceApp("david", "David Peek")],
+        deploy: {
+          accountId: "account-123",
+          mediaBucket: "personal-media",
+          migrationPolicy: "existing",
+          workerName: "personal",
+        },
+      }),
+    );
+
+    await expect(
+      runFormlessCli(
+        ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "personal"],
+        cliDeps(tempDir, {
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return { resources: destroyedResourceSummary() };
+          },
+        }),
+      ),
+    ).rejects.toThrow("Formless instance destroy requires a workspace target.");
+    expect(destroyInputs).toEqual([]);
+  });
+
   it("refuses destroy before provider mutation when confirmation or deploy state is invalid", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -3658,6 +3820,18 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceDeployState(workspaceRoot);
 
+    await expect(
+      runFormlessCli(
+        ["destroy", "--workspace", workspaceRoot, "--confirm", "wrong"],
+        cliDeps(tempDir, {
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return { resources: destroyedResourceSummary() };
+          },
+        }),
+      ),
+    ).rejects.toThrow('Formless instance destroy confirmation must match Worker name "personal".');
     await expect(
       runFormlessCli(
         ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "wrong"],
@@ -4863,6 +5037,20 @@ function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
   }
 
   return JSON.parse(request.body) as T;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 class FakeCliDevChild extends EventEmitter {

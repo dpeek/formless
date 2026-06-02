@@ -1167,11 +1167,12 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
   );
 }
 
-function workspaceDomainProviderAlchemyRuntime(
+export function workspaceDomainProviderAlchemyRuntime(
   context: FormlessInstanceWorkspaceProviderContext,
+  createRuntime: typeof nodeAlchemyDomainProviderRuntime = nodeAlchemyDomainProviderRuntime,
 ): RunFormlessInstanceDomainProviderApplyDependencies["runtime"] {
   return ({ accountId, env }) =>
-    nodeAlchemyDomainProviderRuntime({
+    createRuntime({
       accountId,
       appName: FORMLESS_ALCHEMY_APP_NAME,
       env: workspaceDomainProviderEnv(env, context),
