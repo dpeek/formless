@@ -1656,6 +1656,7 @@ describe("Formless Site CLI", () => {
     const leaseToken = "lease:cli-success";
 
     await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
 
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: true });
@@ -1959,6 +1960,7 @@ describe("Formless Site CLI", () => {
     const leaseToken = "lease:cli-failure";
 
     await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
 
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: true });
@@ -2263,6 +2265,7 @@ describe("Formless Site CLI", () => {
     };
 
     await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
 
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: true });
@@ -2347,7 +2350,13 @@ describe("Formless Site CLI", () => {
           "--admin-token",
           "admin-token",
         ],
-        cliDeps(tempDir, { env: {}, fetch: responses.fetcher(requests) }),
+        cliDeps(tempDir, {
+          domainProviderApplyRuntime: async () => {
+            throw new Error("Domain provider runner requires ALCHEMY_PASSWORD.");
+          },
+          env: {},
+          fetch: responses.fetcher(requests),
+        }),
       ),
     ).rejects.toThrow("Domain provider runner requires ALCHEMY_PASSWORD.");
 

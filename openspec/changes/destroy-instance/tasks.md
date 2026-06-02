@@ -12,11 +12,17 @@ Evidence:
 
 ## 2. Provider Destroy And State Handling
 
-- [ ] 2.1 Extend the instance deployment adapter boundary with a destroy operation that receives the deployment plan, domain provider plan, credential profile, package root, secrets, and deploy state root.
-- [ ] 2.2 Move domain provider apply/delete Alchemy ownership to the selected instance app, stage, and `.formless/deploy/<workerName>` state root.
-- [ ] 2.3 Implement Alchemy destroy by opening the existing Formless instance app/stage with `phase: "destroy"` and the selected `.formless/deploy/<workerName>` state root.
-- [ ] 2.4 Treat provider already-missing results as successful no-ops when the provider exposes that state, while preserving retryable state on other failures.
-- [ ] 2.5 After successful provider destroy, remove or mark stale only ignored deploy state for the selected target while preserving `formless.json`, workspace archives, app archives, and ignored automation token state.
+- [x] 2.1 Extend the instance deployment adapter boundary with a destroy operation that receives the deployment plan, domain provider plan, credential profile, package root, secrets, and deploy state root.
+- [x] 2.2 Move domain provider apply/delete Alchemy ownership to the selected instance app, stage, and `.formless/deploy/<workerName>` state root.
+- [x] 2.3 Implement Alchemy destroy by opening the existing Formless instance app/stage with `phase: "destroy"` and the selected `.formless/deploy/<workerName>` state root.
+- [x] 2.4 Treat provider already-missing results as successful no-ops when the provider exposes that state, while preserving retryable state on other failures.
+- [x] 2.5 After successful provider destroy, remove or mark stale only ignored deploy state for the selected target while preserving `formless.json`, workspace archives, app archives, and ignored automation token state.
+
+Evidence:
+
+- Files changed: `src/site/instance-onboarding.ts`, `src/site/instance-workspace.ts`, `src/site/domain-provider-runner.ts`, `src/site/cli.ts`, `src/site/cli.test.ts`.
+- `devstate check` passed on 2026-06-02; `.devstate/status.md` reports checks ok, web service ready, and test service pass.
+- Browser smoke not run; this section changes CLI provider destroy/domain-runner behavior, not browser UI behavior.
 
 ## 3. Tests And Evidence
 

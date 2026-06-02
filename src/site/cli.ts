@@ -39,6 +39,7 @@ import {
 } from "../shared/deployment-runtime.ts";
 import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import {
+  nodeAlchemyDomainProviderRuntime,
   runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
   runFormlessInstanceDomainProviderDelete as runFormlessInstanceDomainProviderDeleteCommand,
   type RunFormlessInstanceDomainProviderApplyDependencies,
@@ -69,6 +70,7 @@ import {
   initLocalFormlessWorkspaceOnboarding as initLocalFormlessWorkspaceOnboardingCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   planFormlessInstanceWorkspaceDomains as planFormlessInstanceWorkspaceDomainsCommand,
+  resolveFormlessInstanceWorkspaceProviderContext,
   resolveFormlessInstanceWorkspaceRoot as resolveFormlessInstanceWorkspaceRootCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
   runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
@@ -89,6 +91,7 @@ import {
   type DeployFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceStatusResult,
+  type FormlessInstanceWorkspaceProviderContext,
   type InitFormlessInstanceWorkspaceResult,
   type InitLocalFormlessWorkspaceOnboardingInput,
   type PlanFormlessInstanceWorkspaceDomainsInput,
@@ -115,6 +118,7 @@ import {
   fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   ensureFormlessInstanceLocalSecretEnv,
   FORMLESS_HOME_DIRECTORY,
+  FORMLESS_ALCHEMY_APP_NAME,
   writeFormlessInstanceState,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
@@ -208,6 +212,7 @@ export {
   formlessInstanceWorkspaceDevEnv,
   formlessInstanceWorkspaceLocalStateRoot,
   formlessInstanceWorkspaceWranglerPersistPath,
+  resolveFormlessInstanceWorkspaceProviderContext,
   resolveFormlessInstanceWorkspaceRoot,
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
@@ -233,6 +238,7 @@ export {
   type FormlessInstanceWorkspaceStatusDependencies,
   type FormlessInstanceWorkspaceStatusInput,
   type FormlessInstanceWorkspaceStatusResult,
+  type FormlessInstanceWorkspaceProviderContext,
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceDiscoveryResult,
   type FormlessInstanceWorkspaceDriftSummary,
@@ -1057,6 +1063,19 @@ export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
     );
   }
 
+  const providerContext = await resolveFormlessInstanceWorkspaceProviderContext(
+    {
+      commandName: "domains run",
+      targetAlias: input.targetAlias,
+      workspacePath: status.workspaceRoot,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      packageVersion: packageJson.version,
+    },
+  );
+
   return runFormlessInstanceDomainProviderApplyCommand(
     {
       adminToken,
@@ -1070,7 +1089,7 @@ export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
       env: dependencies.env,
       fetch: dependencies.fetch,
       ...(dependencies.domainProviderApplyRuntime === undefined
-        ? {}
+        ? { runtime: workspaceDomainProviderAlchemyRuntime(providerContext) }
         : { runtime: dependencies.domainProviderApplyRuntime }),
     },
   );
@@ -1088,7 +1107,7 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "env" | "fetch" | "randomToken"
+    "cwd" | "domainProviderApplyRuntime" | "env" | "fetch" | "randomToken"
   > = nodeFormlessCliDependencies(),
 ): Promise<RunFormlessInstanceDomainProviderDeleteResult> {
   const status = await getFormlessInstanceWorkspaceStatus(
@@ -1115,6 +1134,18 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
     dependencies,
     "run-delete",
   );
+  const providerContext = await resolveFormlessInstanceWorkspaceProviderContext(
+    {
+      commandName: "domains run",
+      targetAlias: input.targetAlias,
+      workspacePath: status.workspaceRoot,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      packageVersion: packageJson.version,
+    },
+  );
 
   return runFormlessInstanceDomainProviderDeleteCommand(
     {
@@ -1129,8 +1160,38 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
       createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
       env: dependencies.env,
       fetch: dependencies.fetch,
+      ...(dependencies.domainProviderApplyRuntime === undefined
+        ? { runtime: workspaceDomainProviderAlchemyRuntime(providerContext) }
+        : { runtime: dependencies.domainProviderApplyRuntime }),
     },
   );
+}
+
+function workspaceDomainProviderAlchemyRuntime(
+  context: FormlessInstanceWorkspaceProviderContext,
+): RunFormlessInstanceDomainProviderApplyDependencies["runtime"] {
+  return ({ accountId, env }) =>
+    nodeAlchemyDomainProviderRuntime({
+      accountId,
+      appName: FORMLESS_ALCHEMY_APP_NAME,
+      env: workspaceDomainProviderEnv(env, context),
+      rootDir: context.deploymentStateRoot,
+      stage: context.plan.instanceName,
+    });
+}
+
+function workspaceDomainProviderEnv(
+  env: NodeJS.ProcessEnv,
+  context: FormlessInstanceWorkspaceProviderContext,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ALCHEMY_PASSWORD: context.secrets.ALCHEMY_PASSWORD,
+    ...(context.credentialProfile === null ? {} : { ALCHEMY_PROFILE: context.credentialProfile }),
+    ...(context.secrets.CLOUDFLARE_API_TOKEN === undefined
+      ? {}
+      : { CLOUDFLARE_API_TOKEN: context.secrets.CLOUDFLARE_API_TOKEN }),
+  };
 }
 
 export async function forgetFormlessInstanceDomainRouteFromWorkspace(

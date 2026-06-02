@@ -55,12 +55,14 @@ import {
 export const ALCHEMY_STATE_TOKEN_ENV_NAME = "ALCHEMY_STATE_TOKEN";
 
 export type DomainProviderAlchemyRuntime = {
+  appName?: string;
   factories: AlchemyDomainProviderFactories;
   password: string;
   preflight?: (input: { plan: InstanceDomainProviderApplyReadyResponse["plan"] }) => Promise<void>;
   rootDir?: string;
   runner: AlchemyDomainProviderRunner;
-  stateStore: AlchemyOptions["stateStore"];
+  stage?: string;
+  stateStore?: AlchemyOptions["stateStore"];
 };
 
 export type RunFormlessInstanceDomainProviderApplyInput = {
@@ -177,12 +179,13 @@ export async function runFormlessInstanceDomainProviderApply(
     await runtime.preflight?.({ plan: apply.job.plan });
 
     const alchemy = await applyAlchemyDomainProviderPlan({
-      appName: `formless-domain-${apply.plan.instanceId}`,
+      appName: domainProviderAlchemyAppName(runtime, apply.plan),
       factories: runtime.factories,
       password: runtime.password,
       plan: apply.job.plan,
       rootDir: runtime.rootDir,
       runner: runtime.runner,
+      stage: domainProviderAlchemyStage(runtime),
       stateStore: runtime.stateStore,
     });
     const resources = applyEvidenceFromAlchemyResult({
@@ -305,10 +308,11 @@ export async function runFormlessInstanceDomainProviderDelete(
     });
 
     const alchemy = await destroyDomainProviderDeleteTargets({
-      appName: `formless-domain-${deleteJob.plan.instanceId}`,
+      appName: domainProviderAlchemyAppName(runtime, deleteJob.plan),
       plan: deleteJob.job.plan,
       runtime,
       rootDir: runtime.rootDir,
+      stage: domainProviderAlchemyStage(runtime),
       targets: deleteJob.job.targets,
     });
     const resources = deleteEvidenceFromAlchemyResult({
@@ -480,7 +484,7 @@ async function writeDeploymentApplySuccessIfNeeded(
         adminToken: input.adminToken,
         request: {
           alchemy: {
-            app: `formless-domain-${input.plan.instanceId}`,
+            app: input.alchemy.appName,
             scope: deployment.targetId,
             stage: input.alchemy.stage,
           },
@@ -540,13 +544,14 @@ async function destroyDomainProviderDeleteTargets(input: {
   plan: InstanceDomainProviderDeleteReadyResponse["plan"];
   rootDir?: string;
   runtime: DomainProviderAlchemyRuntime;
+  stage?: string;
   targets: Readonly<InstanceDomainProviderDeleteReadyResponse["targets"]>;
 }): Promise<AlchemyDomainProviderApplyResult> {
   const plannedResources = new Map(
     input.plan.resources.map((resource) => [resource.logicalId, resource]),
   );
   const resources: AlchemyDomainProviderApplyResult["resources"] = [];
-  let stage = "production";
+  let stage = input.stage ?? "production";
 
   for (const target of input.targets) {
     const resource = plannedResources.get(target.logicalId);
@@ -567,6 +572,7 @@ async function destroyDomainProviderDeleteTargets(input: {
         },
         rootDir: input.rootDir,
         runner: input.runtime.runner,
+        stage: input.stage,
         stateStore: input.runtime.stateStore,
       });
 
@@ -592,49 +598,77 @@ async function destroyDomainProviderDeleteTargets(input: {
   };
 }
 
+function domainProviderAlchemyAppName(
+  runtime: DomainProviderAlchemyRuntime,
+  plan: DomainProviderPlan,
+): string {
+  return runtime.appName ?? `formless-domain-${plan.instanceId}`;
+}
+
+function domainProviderAlchemyStage(runtime: DomainProviderAlchemyRuntime): string {
+  return runtime.stage ?? "production";
+}
+
 export async function nodeAlchemyDomainProviderRuntime(input: {
   accountId: string;
+  appName?: string;
   env: NodeJS.ProcessEnv;
+  rootDir?: string;
+  stage?: string;
 }): Promise<DomainProviderAlchemyRuntime> {
   const alchemyPassword = requiredEnv(input.env, "ALCHEMY_PASSWORD");
-  const alchemyStateToken = requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME);
-  const cloudflareApiToken = cloudflareApiTokenFromEnv(input.env);
+  const alchemyStateToken =
+    input.rootDir === undefined ? requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME) : undefined;
+  const cloudflareApiToken =
+    input.rootDir === undefined
+      ? cloudflareApiTokenFromEnv(input.env)
+      : optionalCloudflareApiTokenFromEnv(input.env);
   const [{ default: alchemy }, cloudflare, state] = await Promise.all([
     import("alchemy"),
     import("alchemy/cloudflare"),
     import("alchemy/state"),
   ]);
-  const apiToken = alchemy.secret(cloudflareApiToken);
-  const stateToken = alchemy.secret(alchemyStateToken);
+  const apiToken =
+    cloudflareApiToken === undefined ? undefined : alchemy.secret(cloudflareApiToken);
+  const stateToken =
+    alchemyStateToken === undefined ? undefined : alchemy.secret(alchemyStateToken);
+  const profile = input.env.ALCHEMY_PROFILE?.trim() || input.env.CLOUDFLARE_PROFILE?.trim();
+  const credentialOptions = apiToken === undefined ? (profile ? { profile } : {}) : { apiToken };
 
   return {
+    ...(input.appName === undefined ? {} : { appName: input.appName }),
     factories: {
       CustomDomain: (id, props) =>
         cloudflare.CustomDomain(id, {
           ...props,
           accountId: input.accountId,
-          apiToken,
+          ...credentialOptions,
         }),
       DnsRecords: (id, props) =>
         cloudflare.DnsRecords(id, {
           ...props,
-          apiToken,
+          ...credentialOptions,
         }),
       RedirectRule: (id, props) =>
         cloudflare.RedirectRule(id, {
           ...props,
-          apiToken,
+          ...credentialOptions,
         }),
     },
     password: alchemyPassword,
-    preflight: ({ plan }) =>
-      assertCloudflareDomainProviderResourcePreflight({
-        client: createFetchCloudflareDomainClient({
-          apiToken: cloudflareApiToken,
-          fetch: globalThis.fetch,
+    ...(cloudflareApiToken === undefined
+      ? {}
+      : {
+          preflight: ({ plan }) =>
+            assertCloudflareDomainProviderResourcePreflight({
+              client: createFetchCloudflareDomainClient({
+                apiToken: cloudflareApiToken,
+                fetch: globalThis.fetch,
+              }),
+              plan,
+            }),
         }),
-        plan,
-      }),
+    ...(input.rootDir === undefined ? {} : { rootDir: input.rootDir }),
     runner: async (appName, options, apply) => {
       const app = await alchemy(appName, options);
       const result = await apply();
@@ -643,12 +677,17 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
 
       return result;
     },
-    stateStore: (scope) =>
-      new state.CloudflareStateStore(scope, {
-        accountId: input.accountId,
-        apiToken,
-        stateToken,
-      }),
+    ...(input.stage === undefined ? {} : { stage: input.stage }),
+    ...(input.rootDir !== undefined
+      ? {}
+      : {
+          stateStore: (scope) =>
+            new state.CloudflareStateStore(scope, {
+              accountId: input.accountId,
+              ...credentialOptions,
+              stateToken,
+            }),
+        }),
   };
 }
 
@@ -962,13 +1001,19 @@ function normalizeRunnerId(value: string | null): string {
 }
 
 function cloudflareApiTokenFromEnv(env: NodeJS.ProcessEnv): string {
-  const value = env.CLOUDFLARE_API_TOKEN?.trim() ?? env.CF_API_TOKEN?.trim();
+  const value = optionalCloudflareApiTokenFromEnv(env);
 
   if (!value) {
     throw new Error("Domain provider runner requires CLOUDFLARE_API_TOKEN or CF_API_TOKEN.");
   }
 
   return value;
+}
+
+function optionalCloudflareApiTokenFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env.CLOUDFLARE_API_TOKEN?.trim() ?? env.CF_API_TOKEN?.trim();
+
+  return value || undefined;
 }
 
 function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {

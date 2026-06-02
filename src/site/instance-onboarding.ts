@@ -7,6 +7,7 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
 import { appendDotEnvValue, parseDotEnv } from "./dotenv.ts";
 
@@ -137,6 +138,7 @@ export type DeployFormlessInstanceResult = {
 
 export type DestroyFormlessInstanceInput = {
   credentialProfile: string | null;
+  domainProviderPlan: DomainProviderPlan;
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
   secrets: Omit<FormlessInstanceDeploymentSecrets, "FORMLESS_ADMIN_TOKEN">;
@@ -816,14 +818,89 @@ export async function deployFormlessInstanceWithAlchemy(
 
 export async function destroyFormlessInstanceWithAlchemy(
   input: DestroyFormlessInstanceInput,
+  dependencies?: AlchemyFormlessInstanceDeploymentDependencies,
 ): Promise<DestroyFormlessInstanceResult> {
-  parseRequiredString("Formless package root", input.packageRoot);
-  parseRequiredString("Formless instance Alchemy state root", input.stateRoot);
-  parseRequiredString("Alchemy encryption password", input.secrets.ALCHEMY_PASSWORD);
-  parseOptionalString("Cloudflare API token", input.secrets.CLOUDFLARE_API_TOKEN);
-  normalizeCredentialProfile(input.credentialProfile);
+  const resolvedDependencies = dependencies ?? (await nodeAlchemyFormlessInstanceDependencies());
+  const plan = input.plan;
+  const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
+  const packageRoot = parseRequiredString("Formless package root", input.packageRoot);
+  const stateRoot = parseRequiredString("Formless instance Alchemy state root", input.stateRoot);
+  const alchemyPassword = parseRequiredString(
+    "Alchemy encryption password",
+    input.secrets.ALCHEMY_PASSWORD,
+  );
+  const cloudflareApiToken = parseOptionalString(
+    "Cloudflare API token",
+    input.secrets.CLOUDFLARE_API_TOKEN,
+  );
+  const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
 
-  throw new Error("Alchemy Formless instance destroy is not implemented.");
+  try {
+    const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
+      phase: "destroy",
+      password: alchemyPassword,
+      ...profileOptions,
+      rootDir: stateRoot,
+      stage: plan.instanceName,
+    });
+    const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
+      adopt: plan.migrationPolicy === "existing",
+      accountId: plan.account.id,
+      ...profileOptions,
+      name: plan.resources.mediaBucket.name,
+    });
+    const authorityNamespace = resolvedDependencies.createDurableObjectNamespace("authority", {
+      className: plan.resources.authority.className,
+      sqlite: true,
+    });
+
+    await resolvedDependencies.deployViteWorker("worker", {
+      adopt: plan.migrationPolicy === "existing",
+      accountId: plan.account.id,
+      assets: formlessInstanceAlchemyAssets(),
+      bindings: {
+        [plan.resources.authority.bindingName]: authorityNamespace,
+        [plan.resources.mediaBucket.bindingName]: mediaBucket,
+        ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
+        ...(cloudflareApiToken === undefined
+          ? {}
+          : { CLOUDFLARE_API_TOKEN: resolvedDependencies.createSecret(cloudflareApiToken) }),
+        FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret("destroy-placeholder"),
+        FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
+        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
+          plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID,
+        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
+        FORMLESS_INSTANCE_AUTH_ORIGIN: plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
+        FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
+      },
+      build: {
+        command: "bun run build",
+        env: plan.runtimeVars,
+      },
+      compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
+      cwd: packageRoot,
+      entrypoint: "src/worker/index.ts",
+      name: plan.resources.worker.name,
+      previewSubdomains: false,
+      ...profileOptions,
+      url: plan.resources.worker.workersDevEnabled,
+    });
+
+    await app.finalize();
+
+    return {
+      resources: destroyResourceSummary("destroyed", input.domainProviderPlan),
+    };
+  } catch (error) {
+    if (!isProviderAlreadyMissingError(error)) {
+      throw error;
+    }
+
+    return {
+      resources: destroyResourceSummary("already-missing", input.domainProviderPlan),
+    };
+  }
 }
 
 export const alchemyFormlessInstanceDeploymentAdapter: FormlessInstanceDeploymentAdapter = {
@@ -897,6 +974,40 @@ function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorke
     not_found_handling: "single-page-application",
     run_worker_first: ["/*", "!/assets/*", "!/src/*", "!/@vite/*", "!/@react-refresh"],
   };
+}
+
+function destroyResourceSummary(
+  status: DestroyFormlessInstanceResourceStatus,
+  domainProviderPlan: DomainProviderPlan,
+): DestroyFormlessInstanceResourceSummary {
+  return {
+    alchemyState: status,
+    customDomains: domainProviderPlan.resources.filter(
+      (resource) => resource.kind === "cloudflare-worker-custom-domain",
+    ).length,
+    dnsRecords: domainProviderPlan.resources.filter(
+      (resource) => resource.kind === "cloudflare-dns-records",
+    ).length,
+    durableObjectNamespace: status,
+    mediaBucket: status,
+    redirectRules: domainProviderPlan.resources.filter(
+      (resource) => resource.kind === "cloudflare-redirect-rule",
+    ).length,
+    worker: status,
+    workerAssets: status,
+    workerSecrets: status,
+  };
+}
+
+function isProviderAlreadyMissingError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  return (
+    /\b404\b/.test(message) ||
+    message.includes("not found") ||
+    message.includes("does not exist") ||
+    message.includes("could not find")
+  );
 }
 
 async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormlessInstanceDeploymentDependencies> {

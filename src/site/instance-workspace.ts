@@ -23,6 +23,7 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
 } from "../shared/instance-domain-mappings.ts";
+import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   instanceControlPlaneAppInstallRecord,
@@ -448,6 +449,21 @@ export type DestroyFormlessInstanceWorkspaceResult = {
   domainResources: DestroyFormlessInstanceWorkspaceDomainResources;
   localSecretPath: string;
   plan: FormlessInstanceDeploymentPlan;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type FormlessInstanceWorkspaceProviderContext = {
+  credentialProfile: string | null;
+  deploymentStatePath: string;
+  deploymentStateRoot: string;
+  localSecretPath: string;
+  manifest: FormlessInstanceWorkspaceManifest;
+  plan: FormlessInstanceDeploymentPlan;
+  secrets: {
+    ALCHEMY_PASSWORD: string;
+    CLOUDFLARE_API_TOKEN?: string;
+  };
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
@@ -1383,15 +1399,15 @@ export async function destroyFormlessInstanceWorkspace(
     );
   }
 
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "destroy");
-  const plan = formlessInstanceWorkspaceDeploymentPlan({
-    commandName: "destroy",
-    manifest,
-    packageVersion: dependencies.packageVersion,
-    selectedTarget,
-  });
+  const providerContext = await resolveFormlessInstanceWorkspaceProviderContext(
+    {
+      commandName: "destroy",
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    dependencies,
+  );
+  const plan = providerContext.plan;
 
   if (input.confirm !== plan.resources.worker.name) {
     throw new Error(
@@ -1399,6 +1415,51 @@ export async function destroyFormlessInstanceWorkspace(
     );
   }
 
+  const domainResources = destroyDomainResourcesFromWorkspaceManifest(providerContext.manifest);
+  const result = await destroy({
+    credentialProfile: providerContext.credentialProfile,
+    domainProviderPlan: domainProviderPlanFromDeploymentPlan(plan),
+    packageRoot: dependencies.packageRoot,
+    plan,
+    secrets: providerContext.secrets,
+    stateRoot: providerContext.deploymentStateRoot,
+  });
+
+  await removeLocalWorkspaceDeployState(providerContext.deploymentStateRoot);
+
+  return {
+    deploymentStatePath: providerContext.deploymentStatePath,
+    deploymentStateRoot: providerContext.deploymentStateRoot,
+    destroy: result,
+    domainResources,
+    localSecretPath: providerContext.localSecretPath,
+    plan,
+    selectedTarget: providerContext.selectedTarget,
+    workspaceRoot: providerContext.workspaceRoot,
+  };
+}
+
+export async function resolveFormlessInstanceWorkspaceProviderContext(
+  input: {
+    commandName: "destroy" | "domains run";
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+    packageVersion: string;
+  },
+): Promise<FormlessInstanceWorkspaceProviderContext> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, input.commandName);
+  const plan = formlessInstanceWorkspaceDeploymentPlan({
+    commandName: input.commandName,
+    manifest,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget,
+  });
   const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, plan);
   const deploymentStatePath = await readRequiredLocalWorkspaceDeploymentState({
     deploymentStateRoot,
@@ -1408,22 +1469,15 @@ export async function destroyFormlessInstanceWorkspace(
     deploymentStateRoot,
     env: dependencies.env,
   });
-  const domainResources = destroyDomainResourcesFromWorkspaceManifest(manifest);
-  const result = await destroy({
-    credentialProfile: localSecretEnv.credentialProfile,
-    packageRoot: dependencies.packageRoot,
-    plan,
-    secrets: localSecretEnv.secrets,
-    stateRoot: deploymentStateRoot,
-  });
 
   return {
+    credentialProfile: localSecretEnv.credentialProfile,
     deploymentStatePath,
     deploymentStateRoot,
-    destroy: result,
-    domainResources,
     localSecretPath: localSecretEnv.path,
+    manifest,
     plan,
+    secrets: localSecretEnv.secrets,
     selectedTarget,
     workspaceRoot,
   };
@@ -3232,10 +3286,19 @@ function workspaceProviderConfigRefId(
   return key ? `provider-config:cloudflare:${key}` : undefined;
 }
 
+type WorkspaceTargetCommandName =
+  | "check"
+  | "deploy"
+  | "destroy"
+  | "domains plan"
+  | "domains run"
+  | "pull"
+  | "push";
+
 function requireWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
-  commandName: "check" | "deploy" | "destroy" | "domains plan" | "pull" | "push",
+  commandName: WorkspaceTargetCommandName,
 ): FormlessInstanceWorkspaceTarget {
   const target = selectWorkspaceTarget(manifest, targetAlias);
 
@@ -3381,7 +3444,7 @@ function withWorkspaceDeploymentTarget(
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
-  commandName?: "deploy" | "destroy";
+  commandName?: "deploy" | "destroy" | "domains run";
   manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
@@ -3949,6 +4012,22 @@ function destroyDomainResourcesFromWorkspaceManifest(
     enabledHosts,
     resourceCount: enabledHosts.length,
   };
+}
+
+function domainProviderPlanFromDeploymentPlan(
+  plan: FormlessInstanceDeploymentPlan,
+): DomainProviderPlan {
+  return {
+    blockers: [],
+    instanceId: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+    policy: "create-only",
+    resources: [],
+    workerName: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
+  };
+}
+
+async function removeLocalWorkspaceDeployState(deploymentStateRoot: string): Promise<void> {
+  await rm(deploymentStateRoot, { force: true, recursive: true });
 }
 
 async function copyLocalWorkspaceDeploySecretEnv(input: {
