@@ -40,6 +40,7 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
+import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
 import {
   rateSeedRecords,
   rateSourceSchema,
@@ -3905,21 +3906,35 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
 
     await writeWorkspaceManifest(workspaceRoot, {
-      domains: [
-        { enabled: true, host: "dpeek.com", profile: "instance" },
-        {
-          enabled: false,
-          host: "draft.dpeek.com",
-          profile: "publicSite",
-          targetInstallId: "david",
-        },
-      ],
+      domains: [{ enabled: true, host: "legacy.dpeek.com", profile: "instance" }],
     });
     const originalManifest = await readFile(manifestPath, "utf8");
-    await writeArchiveDirectory(
-      instanceArchiveRoot,
-      instanceArchive([appArchive("david", "David Peek")]),
-    );
+    const controlPlaneSourceRecords = [
+      ...controlPlaneRecords({ host: "dpeek.com" }).filter(
+        (record) =>
+          record.entity === "app-install" ||
+          record.entity === "route" ||
+          record.entity === "provider-config-ref" ||
+          record.entity === "deploy-target",
+      ),
+      redirectRouteRecord("old.dpeek.com", "dpeek.com"),
+      disabledHostRouteRecord("draft.dpeek.com", "david"),
+    ];
+
+    await writeArchiveDirectory(instanceArchiveRoot, {
+      ...instanceArchive([appArchive("david", "David Peek")]),
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      controlPlane: {
+        schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+        schemaUpdatedAt: "2026-05-26T00:00:00.000Z",
+        records: controlPlaneSourceRecords,
+      },
+    });
     await writeArchiveDirectory(appArchiveRoot, appArchive("david", "David Peek"));
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/instance.env"), "FORMLESS_ADMIN_TOKEN=x\n");
@@ -3931,7 +3946,7 @@ describe("Formless Site CLI", () => {
         destroy: async (input) => {
           destroyInputs.push(input);
 
-          return { resources: destroyedResourceSummary() };
+          return { resources: destroyedResourceSummary(input) };
         },
         logs,
         packageRoot: "/package",
@@ -3973,6 +3988,26 @@ describe("Formless Site CLI", () => {
       instanceId: "personal",
       workerName: "personal",
     });
+    expect(
+      destroyInputs[0]?.domainProviderResources?.resources.map((resource) => resource.kind),
+    ).toEqual([
+      "cloudflare-dns-records",
+      "cloudflare-redirect-rule",
+      "cloudflare-worker-custom-domain",
+    ]);
+    expect(
+      destroyInputs[0]?.domainProviderResources?.resources.map((resource) => {
+        const host = resource.inputs.host ?? resource.inputs.fromHost;
+
+        return typeof host === "string" ? host : "<missing>";
+      }),
+    ).toEqual(["old.dpeek.com", "old.dpeek.com", "dpeek.com"]);
+    expect(JSON.stringify(destroyInputs[0]?.domainProviderResources)).not.toContain(
+      "draft.dpeek.com",
+    );
+    expect(JSON.stringify(destroyInputs[0]?.domainProviderResources)).not.toContain(
+      "legacy.dpeek.com",
+    );
     await expect(readFile(manifestPath, "utf8")).resolves.toBe(originalManifest);
     await expect(
       readFile(path.join(instanceArchiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
@@ -3992,8 +4027,8 @@ describe("Formless Site CLI", () => {
         "Worker: personal.",
         "Durable Object namespace: personal-authority.",
         "Media bucket: personal-media.",
-        "Domain resources: 1 enabled host (dpeek.com).",
-        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 0, Alchemy state destroyed.",
+        "Route provider resources: 3 provider resources from 2 routes (instance:route; dpeek.com, old.dpeek.com).",
+        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 1, Alchemy state destroyed.",
         `Ignored deploy state: ${path.relative(tempDir, deploymentStateRoot)}.`,
         `Deployment facts: ${path.relative(
           tempDir,
@@ -6025,6 +6060,28 @@ function redirectRouteRecord(fromHost: string, toHost: string): StoredRecord {
   };
 }
 
+function disabledHostRouteRecord(host: string, installId: string): StoredRecord {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return {
+    id: `route:host:publicSite:${host}`,
+    entity: "route",
+    values: {
+      enabled: false,
+      matchHost: host,
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "public-site",
+      appInstall: installId,
+      surface: "public-site",
+      createdAt: now,
+      updatedAt: now,
+    },
+    createdAt: now,
+  };
+}
+
 function instanceDomainMapping(host: string) {
   return {
     createdAt: "2026-05-26T00:00:00.000Z",
@@ -6178,7 +6235,29 @@ function fakeCloudflareDomainClient(input: {
   };
 }
 
-function destroyedResourceSummary(): DestroyFormlessInstanceResult["resources"] {
+function destroyedResourceSummary(
+  input?: DestroyFormlessInstanceInput,
+): DestroyFormlessInstanceResult["resources"] {
+  if (input !== undefined) {
+    const resources =
+      input.domainProviderResources?.resources ?? input.domainProviderPlan.resources;
+
+    return {
+      alchemyState: "destroyed",
+      customDomains: resources.filter(
+        (resource) => resource.kind === "cloudflare-worker-custom-domain",
+      ).length,
+      dnsRecords: resources.filter((resource) => resource.kind === "cloudflare-dns-records").length,
+      durableObjectNamespace: "destroyed",
+      mediaBucket: "destroyed",
+      redirectRules: resources.filter((resource) => resource.kind === "cloudflare-redirect-rule")
+        .length,
+      worker: "destroyed",
+      workerAssets: "destroyed",
+      workerSecrets: "destroyed",
+    };
+  }
+
   return {
     alchemyState: "destroyed",
     customDomains: 1,

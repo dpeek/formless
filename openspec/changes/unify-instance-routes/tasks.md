@@ -147,9 +147,9 @@ Evidence 2026-06-02 grug:
 ## 10. Deploy And Destroy Reconciliation
 
 - [x] 10.1 Reconcile deploy planning so domain, DNS, and redirect resources are derived from enabled route records.
-- [ ] 10.2 Reconcile `formless destroy` and `formless instance destroy` so custom-domain, DNS, and redirect provider resources are derived from enabled route records and selected deploy state.
-- [ ] 10.3 Preserve explicit cleanup and destroy workflows for provider mutation after route disablement or deletion.
-- [ ] 10.4 Keep route source language aligned with `browser-workspace-control-plane` before deterministic workspace record source is frozen.
+- [x] 10.2 Reconcile `formless destroy` and `formless instance destroy` so custom-domain, DNS, and redirect provider resources are derived from enabled route records and selected deploy state.
+- [x] 10.3 Preserve explicit cleanup and destroy workflows for provider mutation after route disablement or deletion.
+- [x] 10.4 Keep route source language aligned with `browser-workspace-control-plane` before deterministic workspace record source is frozen.
 
 Evidence 2026-06-02 grug:
 
@@ -158,6 +158,11 @@ Evidence 2026-06-02 grug:
 - `devstate start`: pass, services running.
 - `devstate check`: pass, checks ok and services running.
 - Browser smoke: not run; this section changes runtime-neutral deploy planning helpers and tests, not browser-visible UI behavior.
+- Changed `src/site/instance-workspace.ts`, `src/site/instance-onboarding.ts`, and `src/site/cli.ts` so `formless destroy` and `formless instance destroy` read workspace `instance:route` records, project selected-target custom-domain, DNS, and redirect provider resources through the deploy projection helper, pass that resource graph to the destroy adapter, and report route-provider resource source language while leaving reviewable workspace source unchanged.
+- Preserved explicit provider mutation boundaries: disabled/deleted route writes still do not clean provider resources, legacy manifest domain intent is only a no-route-source compatibility fallback, and existing domain cleanup/delete/forget commands remain the explicit cleanup paths.
+- Updated `src/site/cli.test.ts` so destroy uses `instance:route` archive source over stale manifest domains, includes redirect DNS/rule resources, excludes disabled host routes, preserves workspace files, and counts route-derived resources in destroy output.
+- `devstate check`: pass, checks ok and services running.
+- Browser smoke: not run; this section changes CLI destroy planning and output, not browser-visible UI behavior.
 
 ## 11. Tests
 

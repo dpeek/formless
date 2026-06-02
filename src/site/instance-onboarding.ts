@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { DeployResourceGraph } from "@dpeek/formless-deploy";
+
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
@@ -139,6 +141,7 @@ export type DeployFormlessInstanceResult = {
 export type DestroyFormlessInstanceInput = {
   credentialProfile: string | null;
   domainProviderPlan: DomainProviderPlan;
+  domainProviderResources?: DeployResourceGraph;
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
   secrets: Omit<FormlessInstanceDeploymentSecrets, "FORMLESS_ADMIN_TOKEN">;
@@ -890,7 +893,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     await app.finalize();
 
     return {
-      resources: destroyResourceSummary("destroyed", input.domainProviderPlan),
+      resources: destroyResourceSummary("destroyed", input),
     };
   } catch (error) {
     if (!isProviderAlreadyMissingError(error)) {
@@ -898,7 +901,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     }
 
     return {
-      resources: destroyResourceSummary("already-missing", input.domainProviderPlan),
+      resources: destroyResourceSummary("already-missing", input),
     };
   }
 }
@@ -978,19 +981,22 @@ function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorke
 
 function destroyResourceSummary(
   status: DestroyFormlessInstanceResourceStatus,
-  domainProviderPlan: DomainProviderPlan,
+  input: Pick<DestroyFormlessInstanceInput, "domainProviderPlan" | "domainProviderResources">,
 ): DestroyFormlessInstanceResourceSummary {
+  const domainProviderResources =
+    input.domainProviderResources?.resources ?? input.domainProviderPlan.resources;
+
   return {
     alchemyState: status,
-    customDomains: domainProviderPlan.resources.filter(
+    customDomains: domainProviderResources.filter(
       (resource) => resource.kind === "cloudflare-worker-custom-domain",
     ).length,
-    dnsRecords: domainProviderPlan.resources.filter(
+    dnsRecords: domainProviderResources.filter(
       (resource) => resource.kind === "cloudflare-dns-records",
     ).length,
     durableObjectNamespace: status,
     mediaBucket: status,
-    redirectRules: domainProviderPlan.resources.filter(
+    redirectRules: domainProviderResources.filter(
       (resource) => resource.kind === "cloudflare-redirect-rule",
     ).length,
     worker: status,

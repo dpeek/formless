@@ -1812,7 +1812,9 @@ function formatInstanceWorkspaceDestroyResult(
     `Worker: ${result.plan.resources.worker.name}.`,
     `Durable Object namespace: ${result.plan.resources.authority.namespaceName}.`,
     `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
-    `Domain resources: ${formatDestroyDomainResources(result.domainResources)}.`,
+    `Route provider resources: ${formatDestroyRouteProviderResources(
+      result.routeProviderResources,
+    )}.`,
     `Destroyed resources: Worker ${resources.worker}, Durable Object namespace ${resources.durableObjectNamespace}, R2 media bucket ${resources.mediaBucket}, Worker assets ${resources.workerAssets}, Worker secrets ${resources.workerSecrets}, custom domains ${resources.customDomains}, DNS records ${resources.dnsRecords}, redirects ${resources.redirectRules}, Alchemy state ${resources.alchemyState}.`,
     `Ignored deploy state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
     `Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`,
@@ -1820,16 +1822,21 @@ function formatInstanceWorkspaceDestroyResult(
   ].join("\n");
 }
 
-function formatDestroyDomainResources(
-  resources: DestroyFormlessInstanceWorkspaceResult["domainResources"],
+function formatDestroyRouteProviderResources(
+  resources: DestroyFormlessInstanceWorkspaceResult["routeProviderResources"],
 ): string {
-  if (resources.enabledHosts.length === 0) {
+  if (resources.resourceCount === 0) {
     return "none";
   }
 
-  return `${resources.resourceCount} enabled host${
+  const source =
+    resources.source === "legacy-manifest-domain" ? "legacy manifest domains" : "instance:route";
+
+  return `${resources.resourceCount} provider resource${
     resources.resourceCount === 1 ? "" : "s"
-  } (${resources.enabledHosts.join(", ")})`;
+  } from ${resources.routeCount} route${resources.routeCount === 1 ? "" : "s"} (${source}; ${
+    resources.enabledHosts.length === 0 ? "no hosts" : resources.enabledHosts.join(", ")
+  })`;
 }
 
 function formatInstanceDomainProviderPlanResult(

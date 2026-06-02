@@ -3,6 +3,14 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path";
 
 import {
+  projectDeployControlPlaneDesiredState,
+  type ControlPlaneProviderConfigProjectionRecord,
+  type ControlPlaneRouteProjectionRecord,
+  type ControlPlaneRedirectStatusCode,
+  type DeployResourceGraph,
+} from "@dpeek/formless-deploy";
+
+import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
@@ -440,18 +448,21 @@ export type DeployFormlessInstanceWorkspaceResult = {
   workspaceRoot: string;
 };
 
-export type DestroyFormlessInstanceWorkspaceDomainResources = {
+export type DestroyFormlessInstanceWorkspaceRouteProviderResources = {
   enabledHosts: string[];
+  resourceGraph: DeployResourceGraph;
   resourceCount: number;
+  routeCount: number;
+  source: "instance:route" | "legacy-manifest-domain";
 };
 
 export type DestroyFormlessInstanceWorkspaceResult = {
   deploymentStatePath: string;
   deploymentStateRoot: string;
   destroy: DestroyFormlessInstanceResult;
-  domainResources: DestroyFormlessInstanceWorkspaceDomainResources;
   localSecretPath: string;
   plan: FormlessInstanceDeploymentPlan;
+  routeProviderResources: DestroyFormlessInstanceWorkspaceRouteProviderResources;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
@@ -1418,10 +1429,12 @@ export async function destroyFormlessInstanceWorkspace(
     );
   }
 
-  const domainResources = destroyDomainResourcesFromWorkspaceManifest(providerContext.manifest);
+  const routeProviderResources =
+    await destroyRouteProviderResourcesFromWorkspaceSource(providerContext);
   const result = await destroy({
     credentialProfile: providerContext.credentialProfile,
     domainProviderPlan: domainProviderPlanFromDeploymentPlan(plan),
+    domainProviderResources: routeProviderResources.resourceGraph,
     packageRoot: dependencies.packageRoot,
     plan,
     secrets: providerContext.secrets,
@@ -1434,9 +1447,9 @@ export async function destroyFormlessInstanceWorkspace(
     deploymentStatePath: providerContext.deploymentStatePath,
     deploymentStateRoot: providerContext.deploymentStateRoot,
     destroy: result,
-    domainResources,
     localSecretPath: providerContext.localSecretPath,
     plan,
+    routeProviderResources,
     selectedTarget: providerContext.selectedTarget,
     workspaceRoot: providerContext.workspaceRoot,
   };
@@ -4075,20 +4088,6 @@ function optionalDeploySecretValue(value: string | undefined): string | undefine
   return normalized ? normalized : undefined;
 }
 
-function destroyDomainResourcesFromWorkspaceManifest(
-  manifest: FormlessInstanceWorkspaceManifest,
-): DestroyFormlessInstanceWorkspaceDomainResources {
-  const enabledHosts = (manifest.domains ?? [])
-    .filter((domain) => domain.enabled)
-    .map((domain) => domain.host)
-    .sort((left, right) => left.localeCompare(right));
-
-  return {
-    enabledHosts,
-    resourceCount: enabledHosts.length,
-  };
-}
-
 function domainProviderPlanFromDeploymentPlan(
   plan: FormlessInstanceDeploymentPlan,
 ): DomainProviderPlan {
@@ -4099,6 +4098,217 @@ function domainProviderPlanFromDeploymentPlan(
     resources: [],
     workerName: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
   };
+}
+
+async function destroyRouteProviderResourcesFromWorkspaceSource(
+  context: FormlessInstanceWorkspaceProviderContext,
+): Promise<DestroyFormlessInstanceWorkspaceRouteProviderResources> {
+  const source = await readDestroyRouteProjectionSource(context);
+  const projection = projectDeployControlPlaneDesiredState({
+    instanceId: context.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+    providerConfigs: source.providerConfigs,
+    routes: source.routes,
+    targetId: workspaceDeployTargetId(),
+    workerName: context.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
+  });
+  const resourceGraph = projection.resourceGraph;
+
+  return {
+    enabledHosts: destroyRouteProviderResourceHosts(resourceGraph),
+    resourceGraph,
+    resourceCount: resourceGraph.resources.length,
+    routeCount: source.routes.filter(routeCanProjectProviderResource).length,
+    source: source.source,
+  };
+}
+
+async function readDestroyRouteProjectionSource(
+  context: FormlessInstanceWorkspaceProviderContext,
+): Promise<{
+  providerConfigs: ControlPlaneProviderConfigProjectionRecord[];
+  routes: ControlPlaneRouteProjectionRecord[];
+  source: DestroyFormlessInstanceWorkspaceRouteProviderResources["source"];
+}> {
+  const archiveRoot = path.join(context.workspaceRoot, context.manifest.archives.instance);
+  const localInstanceArchive = await readArchiveDirectoryForCheck(archiveRoot);
+  const controlPlane =
+    localInstanceArchive?.archive.kind === INSTANCE_ARCHIVE_KIND
+      ? localInstanceArchive.archive.controlPlane
+      : undefined;
+  const controlPlaneRecords = controlPlane?.records ?? [];
+  const routeRecords = controlPlaneRecords
+    .filter((record) => !record.deletedAt && record.entity === "route")
+    .map(routeProjectionRecordFromStoredRecord)
+    .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined);
+  const providerRouteRecords = routeRecords.filter(routeHasProviderScope);
+
+  if (providerRouteRecords.length > 0) {
+    return {
+      providerConfigs: providerConfigProjectionRecordsFromStoredRecords(controlPlaneRecords),
+      routes: routeRecords,
+      source: "instance:route",
+    };
+  }
+
+  const legacyDomainRoutes = workspaceDomainControlPlaneRecords(context.manifest, {
+    appInstallIds: new Set(context.manifest.apps.map((app) => app.installId)),
+    exportedAt: new Date(0).toISOString(),
+  })
+    .map(routeProjectionRecordFromStoredRecord)
+    .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined);
+
+  return {
+    providerConfigs: providerConfigProjectionRecordsFromStoredRecords(controlPlaneRecords),
+    routes: legacyDomainRoutes,
+    source: legacyDomainRoutes.length === 0 ? "instance:route" : "legacy-manifest-domain",
+  };
+}
+
+function routeProjectionRecordFromStoredRecord(
+  record: StoredRecord,
+): ControlPlaneRouteProjectionRecord | undefined {
+  const kind = stringRecordValue(record, "kind");
+  const matchPath = stringRecordValue(record, "matchPath");
+
+  if ((kind !== "mount" && kind !== "redirect") || matchPath === undefined) {
+    return undefined;
+  }
+
+  const statusCode = redirectStatusCodeRecordValue(record, "statusCode");
+  const appInstall = stringRecordValue(record, "appInstall");
+  const matchHost = stringRecordValue(record, "matchHost");
+  const matchPrefix = stringRecordValue(record, "matchPrefix");
+  const preservePath = booleanRecordValue(record, "preservePath");
+  const preserveQueryString = booleanRecordValue(record, "preserveQueryString");
+  const providerConfig = stringRecordValue(record, "providerConfig");
+  const surface = routeSurfaceRecordValue(record, "surface");
+  const targetProfile = routeTargetProfileRecordValue(record, "targetProfile");
+  const toHost = stringRecordValue(record, "toHost");
+  const toUrl = stringRecordValue(record, "toUrl");
+
+  return {
+    id: record.id,
+    enabled: booleanRecordValue(record, "enabled") ?? true,
+    kind,
+    matchPath,
+    ...(appInstall === undefined ? {} : { appInstall }),
+    ...(matchHost === undefined ? {} : { matchHost }),
+    ...(matchPrefix === undefined ? {} : { matchPrefix }),
+    ...(preservePath === undefined ? {} : { preservePath }),
+    ...(preserveQueryString === undefined ? {} : { preserveQueryString }),
+    ...(providerConfig === undefined ? {} : { providerConfig }),
+    ...(statusCode === undefined ? {} : { statusCode }),
+    ...(surface === undefined ? {} : { surface }),
+    ...(targetProfile === undefined ? {} : { targetProfile }),
+    ...(toHost === undefined ? {} : { toHost }),
+    ...(toUrl === undefined ? {} : { toUrl }),
+  };
+}
+
+function providerConfigProjectionRecordsFromStoredRecords(
+  records: readonly StoredRecord[],
+): ControlPlaneProviderConfigProjectionRecord[] {
+  return records
+    .filter(
+      (record) =>
+        !record.deletedAt &&
+        record.entity === "provider-config-ref" &&
+        stringRecordValue(record, "providerFamily") === "cloudflare",
+    )
+    .map((record) => {
+      const workerName = stringRecordValue(record, "workerName");
+
+      return {
+        id: record.id,
+        providerFamily: "cloudflare" as const,
+        ...(workerName === undefined ? {} : { workerName }),
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function redirectStatusCodeRecordValue(
+  record: StoredRecord,
+  fieldName: string,
+): ControlPlaneRedirectStatusCode | `${ControlPlaneRedirectStatusCode}` | undefined {
+  const value = record.values[fieldName];
+
+  if (
+    value === 301 ||
+    value === 302 ||
+    value === 303 ||
+    value === 307 ||
+    value === 308 ||
+    value === "301" ||
+    value === "302" ||
+    value === "303" ||
+    value === "307" ||
+    value === "308"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function routeSurfaceRecordValue(
+  record: StoredRecord,
+  fieldName: string,
+): ControlPlaneRouteProjectionRecord["surface"] | undefined {
+  const value = stringRecordValue(record, fieldName);
+
+  if (value === "admin" || value === "public-site" || value === "schema") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function routeTargetProfileRecordValue(
+  record: StoredRecord,
+  fieldName: string,
+): ControlPlaneRouteProjectionRecord["targetProfile"] | undefined {
+  const value = stringRecordValue(record, fieldName);
+
+  if (value === "app" || value === "instance" || value === "public-site") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function routeHasProviderScope(route: ControlPlaneRouteProjectionRecord): boolean {
+  return route.matchHost !== undefined && (route.kind === "redirect" || route.kind === "mount");
+}
+
+function routeCanProjectProviderResource(route: ControlPlaneRouteProjectionRecord): boolean {
+  if (!route.enabled || route.matchHost === undefined) {
+    return false;
+  }
+
+  if (route.kind === "redirect") {
+    return true;
+  }
+
+  return (
+    route.targetProfile === "app" ||
+    route.targetProfile === "instance" ||
+    route.targetProfile === "public-site"
+  );
+}
+
+function destroyRouteProviderResourceHosts(resourceGraph: DeployResourceGraph): string[] {
+  return [
+    ...new Set(
+      resourceGraph.resources
+        .map((resource) => {
+          const host = resource.inputs.host ?? resource.inputs.fromHost;
+
+          return typeof host === "string" ? host : undefined;
+        })
+        .filter((host): host is string => host !== undefined),
+    ),
+  ].sort((left, right) => left.localeCompare(right));
 }
 
 async function removeLocalWorkspaceDeployState(deploymentStateRoot: string): Promise<void> {
