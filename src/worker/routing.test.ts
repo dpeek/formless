@@ -187,14 +187,14 @@ describe("Worker document routing", () => {
       installedAppApiRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
-      workspaceGatewayApiRoutes: false,
+      workspaceGatewayApiRoutes: true,
     });
     expect(workerRuntimeRoutePolicy({ profile: "dev" })).toEqual({
       instanceBrowserRoutes: true,
       installedAppApiRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
-      workspaceGatewayApiRoutes: false,
+      workspaceGatewayApiRoutes: true,
     });
     expect(workerRuntimeRoutePolicy({ profile: "app" }).workspaceGatewayApiRoutes).toBe(false);
     expect(workerRuntimeRoutePolicy({ profile: "siteAuthoring" }).workspaceGatewayApiRoutes).toBe(

@@ -30,6 +30,7 @@ import {
 import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 import { handleInstanceUpgradeStatusApiRequest } from "./upgrade-status-api.ts";
+import { handleWorkerWorkspaceGatewayProxyRequest } from "./workspace-gateway-proxy.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -57,6 +58,10 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
+  FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN?: string;
+  FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN?: string;
+  FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN?: string;
+  FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL?: string;
 };
 
 export default {
@@ -93,6 +98,15 @@ export default {
           : env.FORMLESS_RUNTIME_PROFILE,
     );
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
+    const workspaceGatewayResponse = await handleWorkerWorkspaceGatewayProxyRequest(request, env, {
+      mappedHost: runtimeRoute?.kind === "mount" && runtimeRoute.matchHost !== undefined,
+      runtimeTopology: requestTopology,
+    });
+
+    if (workspaceGatewayResponse) {
+      return workspaceGatewayResponse;
+    }
+
     const mediaResponse = await handleMediaPackageRequest(request, {
       authorizeWrite: (writeRequest) => authorizeInstanceWrite(writeRequest, env),
       pathname: requestTopology.pathname,

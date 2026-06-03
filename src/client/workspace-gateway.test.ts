@@ -88,6 +88,9 @@ describe("client workspace gateway helpers", () => {
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBe(
             "bootstrap-token",
           );
+          expect(new Headers(init?.headers).get("x-formless-workspace-operation-kind")).toBe(
+            "init",
+          );
 
           return Response.json({ operation: operation({ operation: "init" }) });
         },
@@ -100,6 +103,9 @@ describe("client workspace gateway helpers", () => {
         config,
         fetcher: async (_input, init) => {
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBeNull();
+          expect(new Headers(init?.headers).get("x-formless-workspace-operation-kind")).toBe(
+            "save",
+          );
 
           return Response.json({ operation: operation({ operation: "save" }) });
         },

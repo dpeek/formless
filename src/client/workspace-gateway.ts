@@ -1,6 +1,7 @@
 import {
   LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
   localWorkspaceGatewayOperationApiPath,
   localWorkspaceGatewayOperationsApiPath,
   localWorkspaceGatewayReadOperationIntent,
@@ -175,13 +176,16 @@ export async function fetchLocalWorkspaceGatewayOperation(
     () =>
       fetcher(operationPath, {
         credentials: "same-origin",
-        headers: gatewayHeaders(config, { allowBootstrap }),
+        headers: gatewayHeaders(config, { allowBootstrap, operationKind: input.operationKind }),
         signal,
       }),
     () =>
       fetcher(operationPath, {
         credentials: "same-origin",
-        headers: gatewayHeaders(config, { allowBootstrap: false }),
+        headers: gatewayHeaders(config, {
+          allowBootstrap: false,
+          operationKind: input.operationKind,
+        }),
         signal,
       }),
   );
@@ -215,6 +219,7 @@ function gatewayHeaders(
     allowBootstrap: boolean;
     csrfToken?: string;
     includeJsonContentType?: boolean;
+    operationKind?: LocalWorkspaceGatewayOperationKind;
   },
 ): Headers {
   const headers = new Headers({ Accept: "application/json" });
@@ -229,6 +234,10 @@ function gatewayHeaders(
 
   if (options.csrfToken) {
     headers.set(LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER, options.csrfToken);
+  }
+
+  if (options.operationKind) {
+    headers.set(LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER, options.operationKind);
   }
 
   return headers;

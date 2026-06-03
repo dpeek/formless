@@ -51,11 +51,21 @@ Evidence 2026-06-03 gorp:
 
 ## 3. Worker Gateway Proxy
 
-- [ ] 3.1 Add Worker env/config parsing for `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` without passing workspace root or filesystem adapter values into Worker-visible config.
-- [ ] 3.2 Add Worker route handling for `/api/formless/workspace/*` that is eligible only for local instance/dev profiles with sidecar proxy config.
-- [ ] 3.3 Implement same-origin, bootstrap, owner-session, CSRF, operation-intent, and operation-id checks in the Worker proxy before forwarding browser requests.
-- [ ] 3.4 Proxy authorized requests to the sidecar over HTTP with internal proxy authorization and display-safe actor facts.
-- [ ] 3.5 Add Worker routing/proxy tests proving deployed, mapped-host, cross-origin, unauthenticated, and missing-sidecar requests fail before sidecar or provider mutation.
+- [x] 3.1 Add Worker env/config parsing for `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` without passing workspace root or filesystem adapter values into Worker-visible config.
+- [x] 3.2 Add Worker route handling for `/api/formless/workspace/*` that is eligible only for local instance/dev profiles with sidecar proxy config.
+- [x] 3.3 Implement same-origin, bootstrap, owner-session, CSRF, operation-intent, and operation-id checks in the Worker proxy before forwarding browser requests.
+- [x] 3.4 Proxy authorized requests to the sidecar over HTTP with internal proxy authorization and display-safe actor facts.
+- [x] 3.5 Add Worker routing/proxy tests proving deployed, mapped-host, cross-origin, unauthenticated, and missing-sidecar requests fail before sidecar or provider mutation.
+
+Evidence 2026-06-03 gorp:
+
+- Added `src/worker/workspace-gateway-proxy.ts` as the Worker-owned proxy boundary for `/api/formless/workspace/*`; it parses only sidecar URL/token plus browser authorization env, requires local instance/dev route eligibility and sidecar config, blocks mapped hosts, validates same-origin/bootstrap/owner-session/CSRF/start intent/read intent/operation ids before forwarding, and strips browser credentials before adding internal proxy authorization and display-safe actor facts.
+- Updated `src/worker/index.ts` to route workspace gateway API requests through the Worker proxy before generic API routing, and updated `src/worker/routing.ts` so only instance/dev profiles are gateway-route eligible.
+- Updated `vite.config.ts` Worker var forwarding for existing Worker auth secrets plus workspace gateway bootstrap token, CSRF token, sidecar URL, and proxy token; workspace root and filesystem adapter values remain absent from Worker-visible config.
+- Updated `src/client/workspace-gateway.ts` to include the already-known operation kind on operation read requests so the Worker can validate bootstrap read intent before proxying.
+- Added `src/worker/workspace-gateway-proxy.test.ts` coverage for config parsing, deployed profile rejection, mapped-host rejection, missing-sidecar rejection, cross-origin rejection, unauthenticated rejection, invalid operation id rejection, owner-session proxy forwarding, bootstrap operation limits, bootstrap read intent checks, and admin bearer automation forwarding.
+- Check evidence: `devstate check` passed at 2026-06-03T02:26:11.484Z with `vp check --fix` green and watch tests green.
+- Browser smoke evidence: `bun browser --ignore-https-errors open https://gorp.formless.local` and `bun browser snapshot -i --compact --depth 2` succeeded; the snapshot rendered the Instance shell with app, route, provider, and deployment regions.
 
 ## 4. Local Dev Startup
 
