@@ -76,6 +76,7 @@ import {
   type DestroyLocalFormlessWorkspaceInput,
   type DestroyFormlessInstanceWorkspaceInput,
   type DestroyFormlessInstanceWorkspaceResult,
+  type DevFormlessInstanceWorkspaceDependencies,
   type DeployLocalFormlessWorkspaceInput,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
@@ -380,6 +381,7 @@ export type FormlessCliDependencies = {
     options: FormlessCliRunCommandOptions,
   ) => Promise<void>;
   spawn: typeof nodeSpawn;
+  startWorkspaceGatewaySidecar?: DevFormlessInstanceWorkspaceDependencies["startWorkspaceGatewaySidecar"];
   stateRoot: string;
   stateWriter: FormlessInstanceStateWriter;
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
@@ -879,6 +881,7 @@ export async function runFormlessInstanceWorkspaceDev(
     | "randomToken"
     | "setupCapability"
     | "spawn"
+    | "startWorkspaceGatewaySidecar"
   > = nodeFormlessCliDependencies(),
   options: {
     devCommand?: FormlessInstanceWorkspaceDevCommand;

@@ -42,13 +42,8 @@ import {
 } from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
 import {
-  LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
   LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
 } from "../shared/workspace-gateway-protocol.ts";
 import {
   rateSeedRecords,
@@ -3242,6 +3237,7 @@ describe("Formless Site CLI", () => {
     const child = new FakeCliDevChild();
     const logs: string[] = [];
     const requests: CapturedFetchRequest[] = [];
+    const sidecars: CapturedWorkspaceGatewaySidecar[] = [];
     const spawnCalls: CapturedSpawn[] = [];
 
     const run = runFormlessCli(
@@ -3261,6 +3257,7 @@ describe("Formless Site CLI", () => {
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
+        startWorkspaceGatewaySidecar: fakeWorkspaceGatewaySidecar(sidecars),
       }),
     );
 
@@ -3311,24 +3308,14 @@ describe("Formless Site CLI", () => {
       "Workspace archive restore skipped: no workspace archives declared.",
     ]);
     expect(child.killed).toBe(false);
-
-    const sidecarEndpoint = spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
-    const proxyToken = spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
-
-    if (!sidecarEndpoint || !proxyToken) {
-      throw new Error("Expected workspace gateway sidecar proxy env.");
-    }
-
-    await expect(
-      fetch(new URL(LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH, sidecarEndpoint), {
-        headers: {
-          [LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER]: "browser",
-          [LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]: "bootstrap",
-          [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "status",
-          [LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: proxyToken,
-        },
-      }),
-    ).rejects.toThrow();
+    expect(sidecars).toMatchObject([
+      {
+        closed: true,
+        endpoint: spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV],
+        proxyToken: spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
+        workspaceRoot,
+      },
+    ]);
   });
 
   it("keeps workspace dev browser gateway config same-origin without sidecar proxy config", async () => {
@@ -5524,6 +5511,13 @@ type CapturedFetchRequest = {
   url: string;
 };
 
+type CapturedWorkspaceGatewaySidecar = {
+  closed: boolean;
+  endpoint: string;
+  proxyToken: string;
+  workspaceRoot: string;
+};
+
 function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
   if (!request || typeof request.body !== "string") {
     throw new Error("Expected captured request body to be a JSON string.");
@@ -6626,6 +6620,7 @@ function cliDeps(
     packageRoot?: string;
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
     spawn?: typeof spawn;
+    startWorkspaceGatewaySidecar?: FormlessCliDependencies["startWorkspaceGatewaySidecar"];
     stateRoot?: string;
     stateWrites?: WriteFormlessInstanceStateInput[];
   } = {},
@@ -6716,6 +6711,8 @@ function cliDeps(
       });
     },
     spawn: options.spawn ?? spawn,
+    startWorkspaceGatewaySidecar:
+      options.startWorkspaceGatewaySidecar ?? fakeWorkspaceGatewaySidecar(),
     stateRoot: options.stateRoot ?? path.join(cwd, ".formless"),
     stateWriter: {
       write: async (input) => {
@@ -6741,6 +6738,28 @@ function cliDeps(
         };
       },
     },
+  };
+}
+
+function fakeWorkspaceGatewaySidecar(
+  captures: CapturedWorkspaceGatewaySidecar[] = [],
+): NonNullable<FormlessCliDependencies["startWorkspaceGatewaySidecar"]> {
+  return async (input, dependencies) => {
+    const sidecar = {
+      closed: false,
+      endpoint: "http://127.0.0.1:1",
+      proxyToken: dependencies.createProxyToken?.() ?? "generated-token",
+      workspaceRoot: input.workspaceRoot,
+    };
+    captures.push(sidecar);
+
+    return {
+      close: async () => {
+        sidecar.closed = true;
+      },
+      endpoint: sidecar.endpoint,
+      proxyToken: sidecar.proxyToken,
+    };
   };
 }
 

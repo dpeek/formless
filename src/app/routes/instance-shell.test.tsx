@@ -667,13 +667,15 @@ function readyState(
 function workspaceGatewayState(
   overrides: Partial<Extract<WorkspaceGatewayRouteState, { status: "ready" }>> = {},
 ): Extract<WorkspaceGatewayRouteState, { status: "ready" }> {
+  const fallbackStatusOperation = workspaceOperation({ operation: "status" });
+  const currentOperation =
+    overrides.currentOperation ?? overrides.statusOperation ?? fallbackStatusOperation;
   const statusOperation =
     overrides.statusOperation ??
-    overrides.currentOperation ??
-    workspaceOperation({ operation: "status" });
+    (currentOperation.operation === "status" ? currentOperation : fallbackStatusOperation);
 
   return {
-    currentOperation: statusOperation,
+    currentOperation,
     status: "ready",
     statusOperation,
     ...overrides,
