@@ -14,9 +14,12 @@ import {
   ensureAgentStateDirs,
   ensureChangeBranch,
   findWorkerActiveLease,
+  formatFormlessChangeCommitMessage,
   makeWorkerStatus,
+  parseFormlessChangeCommitMessage,
   planChangeBranch,
   publishWorkerBranchToChangeBranch,
+  queryLocalFormlessChangeBranches,
   readChangeLease,
   readWorkerStatus,
   releaseChangeLease,
@@ -66,6 +69,42 @@ function readyApplyInstructions(changeId = "add-thing"): ApplyInstructions {
       { description: "2.2 Reuse devstate output evidence.", done: false, id: "3" },
     ],
   };
+}
+
+function validChangeCommitMessage(changeId = "add-thing"): string {
+  return [
+    `Implement ${changeId}`,
+    "",
+    "## Proposal",
+    "",
+    "Add the thing without changing storage shape.",
+    "",
+    "## Design",
+    "",
+    "Keep worker-owned state in the commit message.",
+    "",
+    "## Tasks",
+    "",
+    "### 1. Metadata",
+    "",
+    "- [ ] 1.1 Add parser.",
+    "- [x] 1.2 Keep old sections.",
+    "",
+    "## Evidence",
+    "",
+    "- Initial proposal commit.",
+    "",
+    "## Blockers",
+    "",
+    "-",
+    "",
+    `Formless-Change-Id: ${changeId}`,
+    "Formless-Change-Version: 1",
+    "Formless-Change-State: ready",
+    "Formless-Capabilities: local-agent-workers, spec-driven",
+    "Formless-Last-Evidence-At: 2026-05-28T00:00:00.000Z",
+    "",
+  ].join("\n");
 }
 
 function writeImplementationEvidence(worktreeDir: string, changeId = "add-thing"): void {
@@ -125,6 +164,243 @@ function writeDevstateStatus(worktreeDir: string): void {
     ].join("\n"),
   );
 }
+
+describe("Formless change metadata", () => {
+  it("parses valid proposal, design, tasks, evidence, blockers, and trailers", () => {
+    const result = parseFormlessChangeCommitMessage(validChangeCommitMessage(), {
+      branch: "changes/add-thing",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.errors.join("\n"));
+    }
+
+    expect(result.metadata.trailers).toEqual({
+      capabilities: ["local-agent-workers", "spec-driven"],
+      changeId: "add-thing",
+      lastEvidenceAt: "2026-05-28T00:00:00.000Z",
+      state: "ready",
+      version: "1",
+    });
+    expect(result.metadata.proposal).toBe("Add the thing without changing storage shape.");
+    expect(result.metadata.design).toBe("Keep worker-owned state in the commit message.");
+    expect(result.metadata.evidence).toBe("- Initial proposal commit.");
+    expect(result.metadata.blockers).toBe("-");
+    expect(result.metadata.taskSections).toEqual([
+      {
+        heading: "1. Metadata",
+        line: 1,
+        tasks: [
+          { description: "Add parser.", done: false, id: "1.1", line: 3 },
+          { description: "Keep old sections.", done: true, id: "1.2", line: 4 },
+        ],
+      },
+    ]);
+  });
+
+  it("formats task state, evidence, blockers, and trailers while preserving unchanged sections", () => {
+    const message = validChangeCommitMessage();
+    const formatted = formatFormlessChangeCommitMessage(message, {
+      appendEvidence: "- `devstate check`: checks ok.",
+      blockers: "-",
+      taskStates: [{ done: true, id: "1.1" }],
+      trailers: {
+        lastEvidenceAt: "2026-05-28T00:05:00.000Z",
+        state: "working",
+      },
+    });
+
+    expect(formatted).toContain("## Proposal\n\nAdd the thing without changing storage shape.");
+    expect(formatted).toContain("## Design\n\nKeep worker-owned state in the commit message.");
+    expect(formatted).toContain("- [x] 1.1 Add parser.");
+    expect(formatted).toContain("- Initial proposal commit.\n- `devstate check`: checks ok.");
+    expect(formatted).toContain("Formless-Change-State: working");
+    expect(formatted).toContain("Formless-Last-Evidence-At: 2026-05-28T00:05:00.000Z");
+
+    const parsed = parseFormlessChangeCommitMessage(formatted, { branch: "changes/add-thing" });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error(parsed.errors.join("\n"));
+    }
+    expect(parsed.metadata.tasks.filter((task) => !task.done)).toHaveLength(0);
+  });
+
+  it("reports missing required trailers", () => {
+    const result = parseFormlessChangeCommitMessage(
+      validChangeCommitMessage().replace("Formless-Change-State: ready\n", ""),
+      { branch: "changes/add-thing" },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected metadata to be invalid.");
+    }
+    expect(result.errors).toContain(
+      "Missing required change metadata trailer: Formless-Change-State",
+    );
+  });
+
+  it("reports branch and change id mismatches", () => {
+    const result = parseFormlessChangeCommitMessage(validChangeCommitMessage("add-thing"), {
+      branch: "changes/other-thing",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected metadata to be invalid.");
+    }
+    expect(result.errors).toContain(
+      "Change metadata id add-thing does not match branch changes/other-thing.",
+    );
+  });
+
+  it("reports malformed task sections", () => {
+    const result = parseFormlessChangeCommitMessage(
+      validChangeCommitMessage().replace("- [ ] 1.1 Add parser.", "- [maybe] 1.1 Add parser."),
+      { branch: "changes/add-thing" },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected metadata to be invalid.");
+    }
+    expect(result.errors).toContain(
+      "Malformed task checkbox at Tasks line 3: - [maybe] 1.1 Add parser.",
+    );
+  });
+
+  it("queries branch metadata from commit messages and ignores notes or untracked files", () => {
+    const commands: string[] = [];
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      commands.push([command, ...args].join(" "));
+      if (command === "git" && args[0] === "for-each-ref") {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: "changes/add-thing\nchanges/bad-thing\nfeature/ignored\n",
+        };
+      }
+      if (
+        command === "git" &&
+        args.join(" ") === "log --no-notes -1 --format=%B changes/add-thing"
+      ) {
+        return { code: 0, stderr: "", stdout: validChangeCommitMessage("add-thing") };
+      }
+      if (
+        command === "git" &&
+        args.join(" ") === "log --no-notes -1 --format=%B changes/bad-thing"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: validChangeCommitMessage("bad-thing").replace(
+            "Formless-Change-Id: bad-thing\n",
+            "",
+          ),
+        };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const result = queryLocalFormlessChangeBranches("/repo", runCommand);
+
+    expect(result.changes).toEqual([
+      {
+        blockerSummary: null,
+        branch: "changes/add-thing",
+        capabilities: ["local-agent-workers", "spec-driven"],
+        changeId: "add-thing",
+        latestEvidenceAt: "2026-05-28T00:00:00.000Z",
+        remainingTasks: 1,
+        state: "ready",
+        valid: true,
+      },
+    ]);
+    expect(result.invalid).toEqual([
+      {
+        branch: "changes/bad-thing",
+        errors: ["Missing required change metadata trailer: Formless-Change-Id"],
+        valid: false,
+      },
+    ]);
+    expect(commands.some((command) => command.startsWith("git notes"))).toBe(false);
+    expect(commands.some((command) => command.startsWith("git status"))).toBe(false);
+  });
+
+  it("prints JSON change query command output with invalid metadata errors", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (command === "git" && args[0] === "for-each-ref") {
+        return { code: 0, stderr: "", stdout: "changes/add-thing\nchanges/bad-thing\n" };
+      }
+      if (
+        command === "git" &&
+        args.join(" ") === "log --no-notes -1 --format=%B changes/add-thing"
+      ) {
+        return { code: 0, stderr: "", stdout: validChangeCommitMessage("add-thing") };
+      }
+      if (
+        command === "git" &&
+        args.join(" ") === "log --no-notes -1 --format=%B changes/bad-thing"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: validChangeCommitMessage("bad-thing").replace("Formless-Change-Version: 1\n", ""),
+        };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const code = await runAgentsCli(["changes", "--json"], {
+      cwd: "/repo",
+      runCommand,
+      stderr: {
+        write: (value) => {
+          stderr.push(String(value));
+          return true;
+        },
+      },
+      stdout: {
+        write: (value) => {
+          stdout.push(String(value));
+          return true;
+        },
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(stdout.join(""))).toEqual({
+      changes: [
+        {
+          blockerSummary: null,
+          branch: "changes/add-thing",
+          capabilities: ["local-agent-workers", "spec-driven"],
+          changeId: "add-thing",
+          latestEvidenceAt: "2026-05-28T00:00:00.000Z",
+          remainingTasks: 1,
+          state: "ready",
+          valid: true,
+        },
+      ],
+      invalid: [
+        {
+          branch: "changes/bad-thing",
+          errors: [
+            "Missing required change metadata trailer: Formless-Change-Version",
+            "Formless-Change-Version must be a positive integer.",
+          ],
+          valid: false,
+        },
+      ],
+    });
+  });
+});
 
 describe("local agent worker state", () => {
   it("resolves shared state under git common dir", () => {

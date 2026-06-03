@@ -1,9 +1,15 @@
 ## 1. Change Metadata Model
 
-- [ ] 1.1 Add a typed parser for Formless change commit messages with proposal, design, tasks, evidence, blocker, and trailer fields.
-- [ ] 1.2 Add a formatter that preserves unchanged sections while updating task state, evidence, blockers, and machine-readable trailers.
-- [ ] 1.3 Add tests for valid metadata, missing trailers, branch/change-id mismatch, malformed task sections, and non-authoritative Git notes or untracked files.
-- [ ] 1.4 Add JSON query helpers or `bun agents` commands that list valid change branches and report invalid metadata with actionable errors.
+- [x] 1.1 Add a typed parser for Formless change commit messages with proposal, design, tasks, evidence, blocker, and trailer fields.
+- [x] 1.2 Add a formatter that preserves unchanged sections while updating task state, evidence, blockers, and machine-readable trailers.
+- [x] 1.3 Add tests for valid metadata, missing trailers, branch/change-id mismatch, malformed task sections, and non-authoritative Git notes or untracked files.
+- [x] 1.4 Add JSON query helpers or `bun agents` commands that list valid change branches and report invalid metadata with actionable errors.
+
+Evidence:
+
+- Changed `scripts/agents.ts` to parse and format structured Formless change commit metadata, query local `changes/*` branch tip messages with `git log --no-notes`, and expose `bun agents changes --json` / `bun agents change <change-id> --json`.
+- Changed `scripts/agents.test.ts` to cover valid metadata, missing trailers, branch/change-id mismatch, malformed task sections, formatter preservation, non-authoritative notes or worktree files, query helper output, and JSON command output.
+- `devstate check` at 2026-06-03T02:01:18.169Z: checks ok; services running; web ready; test watcher pass.
 
 ## 2. Branch Queue Discovery
 

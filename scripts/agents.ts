@@ -59,6 +59,95 @@ export type WorkerStatus = {
   updatedAt: string;
 };
 
+export type FormlessChangeState = "blocked" | "draft" | "ready" | "ready-for-review" | "working";
+
+export type FormlessChangeTask = {
+  description: string;
+  done: boolean;
+  id: string;
+  line: number;
+};
+
+export type FormlessChangeTaskSection = {
+  heading: string;
+  line: number;
+  tasks: FormlessChangeTask[];
+};
+
+export type FormlessChangeTrailers = {
+  capabilities: string[];
+  changeId: string;
+  lastEvidenceAt: string | null;
+  state: FormlessChangeState;
+  version: string;
+};
+
+export type FormlessChangeCommitMetadata = {
+  blockers: string;
+  design: string;
+  evidence: string;
+  proposal: string;
+  raw: string;
+  taskSections: FormlessChangeTaskSection[];
+  tasks: FormlessChangeTask[];
+  title: string;
+  trailers: FormlessChangeTrailers;
+};
+
+export type FormlessChangeMetadataParseResult =
+  | {
+      errors: [];
+      metadata: FormlessChangeCommitMetadata;
+      ok: true;
+    }
+  | {
+      errors: string[];
+      metadata: null;
+      ok: false;
+    };
+
+export type FormlessChangeTaskStateUpdate = {
+  description?: string;
+  done: boolean;
+  id: string;
+};
+
+export type FormlessChangeCommitMessageUpdate = {
+  appendEvidence?: string | string[];
+  blockers?: string;
+  evidence?: string;
+  taskStates?: FormlessChangeTaskStateUpdate[];
+  trailers?: Partial<{
+    capabilities: string[];
+    changeId: string;
+    lastEvidenceAt: string | null;
+    state: FormlessChangeState;
+    version: string;
+  }>;
+};
+
+export type FormlessChangeQueryEntry = {
+  blockerSummary: string | null;
+  branch: string;
+  capabilities: string[];
+  changeId: string;
+  latestEvidenceAt: string | null;
+  remainingTasks: number;
+  state: FormlessChangeState;
+  valid: true;
+};
+
+export type InvalidFormlessChangeQueryEntry = {
+  branch: string;
+  errors: string[];
+  valid: false;
+};
+
+export type FormlessChangeQueryResult = {
+  changes: FormlessChangeQueryEntry[];
+  invalid: InvalidFormlessChangeQueryEntry[];
+};
+
 export type AgentStatePaths = {
   leases: string;
   logs: string;
@@ -96,13 +185,24 @@ type StatusOptions = {
   workerName: string | null;
 };
 
+type ChangesOptions = {
+  command: "changes";
+  json: boolean;
+};
+
+type ChangeOptions = {
+  changeId: string;
+  command: "change";
+  json: boolean;
+};
+
 type ReleaseOptions = {
   changeId: string;
   command: "release";
   owner: string | null;
 };
 
-type AgentsOptions = ReleaseOptions | StatusOptions | WatchOptions;
+type AgentsOptions = ChangeOptions | ChangesOptions | ReleaseOptions | StatusOptions | WatchOptions;
 
 type WorkerIo = {
   stderr: Pick<NodeJS.WriteStream, "write">;
@@ -363,6 +463,522 @@ export function workerBranchName(workerName: string): string {
 export function changeIdFromBranch(branch: string): string | null {
   const match = branch.match(/^changes\/(.+)$/);
   return match ? validateChangeId(match[1] ?? "") : null;
+}
+
+const formlessChangeTrailerNames = {
+  capabilities: "Formless-Capabilities",
+  changeId: "Formless-Change-Id",
+  lastEvidenceAt: "Formless-Last-Evidence-At",
+  state: "Formless-Change-State",
+  version: "Formless-Change-Version",
+} as const;
+
+const requiredFormlessChangeTrailers = [
+  formlessChangeTrailerNames.changeId,
+  formlessChangeTrailerNames.version,
+  formlessChangeTrailerNames.state,
+  formlessChangeTrailerNames.capabilities,
+  formlessChangeTrailerNames.lastEvidenceAt,
+] as const;
+
+const formlessChangeStates = new Set<FormlessChangeState>([
+  "blocked",
+  "draft",
+  "ready",
+  "ready-for-review",
+  "working",
+]);
+
+type CommitMessageParts = {
+  bodyLines: string[];
+  trailerLines: string[];
+};
+
+type IndexedCommitSection = {
+  content: string;
+  contentEnd: number;
+  contentStart: number;
+  heading: string;
+  key: string;
+  line: number;
+};
+
+function normalizeCommitMessage(message: string): string {
+  return message.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function trailerLineParts(line: string): { key: string; value: string } | null {
+  const match = line.match(/^([A-Za-z][A-Za-z0-9-]*):[ \t]*(.*)$/);
+  return match ? { key: match[1] ?? "", value: match[2] ?? "" } : null;
+}
+
+function splitCommitMessageParts(message: string): CommitMessageParts {
+  const lines = normalizeCommitMessage(message).replace(/\n+$/, "").split("\n");
+  let end = lines.length - 1;
+  while (end >= 0 && lines[end]?.trim() === "") {
+    end -= 1;
+  }
+
+  let start = end;
+  while (start >= 0 && trailerLineParts(lines[start] ?? "") !== null) {
+    start -= 1;
+  }
+
+  const trailerStart = start + 1;
+  const hasTrailerSeparator =
+    trailerStart <= end && (trailerStart === 0 || lines[start]?.trim() === "");
+  if (!hasTrailerSeparator) {
+    return { bodyLines: lines, trailerLines: [] };
+  }
+
+  return {
+    bodyLines: lines.slice(0, Math.max(start, 0)),
+    trailerLines: lines.slice(trailerStart, end + 1),
+  };
+}
+
+function normalizedSectionKey(heading: string): string | null {
+  const normalized = heading.trim().replace(/\s+/g, " ").toLowerCase();
+  if (normalized === "proposal") {
+    return "proposal";
+  }
+  if (normalized === "design") {
+    return "design";
+  }
+  if (normalized === "tasks") {
+    return "tasks";
+  }
+  if (normalized === "evidence") {
+    return "evidence";
+  }
+  if (normalized === "blocker" || normalized === "blockers") {
+    return "blockers";
+  }
+  return null;
+}
+
+function trimSectionContent(lines: string[]): string {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]?.trim() === "") {
+    start += 1;
+  }
+  while (end > start && lines[end - 1]?.trim() === "") {
+    end -= 1;
+  }
+  return lines.slice(start, end).join("\n");
+}
+
+function indexedCommitSections(bodyLines: string[]): IndexedCommitSection[] {
+  const headingIndexes: Array<{ heading: string; index: number; key: string }> = [];
+  for (let index = 0; index < bodyLines.length; index += 1) {
+    const match = bodyLines[index]?.match(/^##[ \t]+(.+?)\s*$/);
+    if (!match) {
+      continue;
+    }
+
+    const key = normalizedSectionKey(match[1] ?? "");
+    if (key) {
+      headingIndexes.push({ heading: match[1] ?? "", index, key });
+    }
+  }
+
+  return headingIndexes.map((section, index) => {
+    const contentStart = section.index + 1;
+    const contentEnd = headingIndexes[index + 1]?.index ?? bodyLines.length;
+    return {
+      content: trimSectionContent(bodyLines.slice(contentStart, contentEnd)),
+      contentEnd,
+      contentStart,
+      heading: section.heading,
+      key: section.key,
+      line: section.index + 1,
+    };
+  });
+}
+
+function parseCapabilities(value: string): string[] {
+  return value
+    .split(/[,\s]+/)
+    .map((capability) => capability.trim())
+    .filter((capability) => capability.length > 0);
+}
+
+function parseFormlessChangeTrailers(trailerLines: string[]): {
+  errors: string[];
+  trailers: FormlessChangeTrailers | null;
+} {
+  const errors: string[] = [];
+  const trailers = new Map<string, string>();
+
+  for (const line of trailerLines) {
+    const parts = trailerLineParts(line);
+    if (!parts) {
+      errors.push(`Malformed change metadata trailer: ${line}`);
+      continue;
+    }
+
+    if (trailers.has(parts.key)) {
+      errors.push(`Duplicate change metadata trailer: ${parts.key}`);
+      continue;
+    }
+    trailers.set(parts.key, parts.value.trim());
+  }
+
+  for (const key of requiredFormlessChangeTrailers) {
+    if (!trailers.has(key)) {
+      errors.push(`Missing required change metadata trailer: ${key}`);
+    }
+  }
+
+  const changeId = trailers.get(formlessChangeTrailerNames.changeId) ?? "";
+  if (changeId.length > 0) {
+    try {
+      validateChangeId(changeId);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const version = trailers.get(formlessChangeTrailerNames.version) ?? "";
+  if (!/^[1-9][0-9]*$/.test(version)) {
+    errors.push(`${formlessChangeTrailerNames.version} must be a positive integer.`);
+  }
+
+  const state = trailers.get(formlessChangeTrailerNames.state) ?? "";
+  if (!formlessChangeStates.has(state as FormlessChangeState)) {
+    errors.push(
+      `${formlessChangeTrailerNames.state} must be one of ${[...formlessChangeStates].join(", ")}.`,
+    );
+  }
+
+  const lastEvidenceAt = trailers.get(formlessChangeTrailerNames.lastEvidenceAt) ?? "";
+  if (lastEvidenceAt.length > 0 && Number.isNaN(Date.parse(lastEvidenceAt))) {
+    errors.push(`${formlessChangeTrailerNames.lastEvidenceAt} must be an ISO timestamp or empty.`);
+  }
+
+  if (errors.length > 0) {
+    return { errors, trailers: null };
+  }
+
+  return {
+    errors,
+    trailers: {
+      capabilities: parseCapabilities(trailers.get(formlessChangeTrailerNames.capabilities) ?? ""),
+      changeId,
+      lastEvidenceAt: lastEvidenceAt.length > 0 ? lastEvidenceAt : null,
+      state: state as FormlessChangeState,
+      version,
+    },
+  };
+}
+
+function parseFormlessTasks(tasksContent: string): {
+  errors: string[];
+  sections: FormlessChangeTaskSection[];
+  tasks: FormlessChangeTask[];
+} {
+  const errors: string[] = [];
+  const lines = normalizeCommitMessage(tasksContent).split("\n");
+  const sections: FormlessChangeTaskSection[] = [];
+  let currentSection: FormlessChangeTaskSection = {
+    heading: "Tasks",
+    line: 1,
+    tasks: [],
+  };
+  sections.push(currentSection);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const heading = line.match(/^#{3,6}[ \t]+(.+?)\s*$/);
+    if (heading) {
+      currentSection = {
+        heading: heading[1] ?? "",
+        line: index + 1,
+        tasks: [],
+      };
+      sections.push(currentSection);
+      continue;
+    }
+
+    const task = line.match(/^[ \t]*-[ \t]+\[([ xX])\][ \t]+(\S+)[ \t]+(.+?)\s*$/);
+    if (task) {
+      currentSection.tasks.push({
+        description: task[3] ?? "",
+        done: (task[1] ?? "") !== " ",
+        id: task[2] ?? "",
+        line: index + 1,
+      });
+      continue;
+    }
+
+    if (/^[ \t]*-[ \t]+\[[^\]]*\]/.test(line)) {
+      errors.push(`Malformed task checkbox at Tasks line ${index + 1}: ${line.trim()}`);
+    }
+  }
+
+  const tasks = sections.flatMap((section) => section.tasks);
+  if (tasks.length === 0) {
+    errors.push("Tasks section must contain at least one task checkbox.");
+  }
+
+  return {
+    errors,
+    sections: sections.filter((section) => section.tasks.length > 0),
+    tasks,
+  };
+}
+
+export function parseFormlessChangeCommitMessage(
+  message: string,
+  options: { branch?: string | null } = {},
+): FormlessChangeMetadataParseResult {
+  const errors: string[] = [];
+  const normalized = normalizeCommitMessage(message);
+  const parts = splitCommitMessageParts(normalized);
+  const { trailers, errors: trailerErrors } = parseFormlessChangeTrailers(parts.trailerLines);
+  errors.push(...trailerErrors);
+
+  if (options.branch) {
+    const branchChangeId = changeIdFromBranch(options.branch);
+    if (!branchChangeId) {
+      errors.push(`Change metadata branch must use changes/<change-id>: ${options.branch}`);
+    } else if (trailers && trailers.changeId !== branchChangeId) {
+      errors.push(
+        `Change metadata id ${trailers.changeId} does not match branch ${options.branch}.`,
+      );
+    }
+  }
+
+  const sections = indexedCommitSections(parts.bodyLines);
+  const byKey = new Map<string, IndexedCommitSection>();
+  for (const section of sections) {
+    if (byKey.has(section.key)) {
+      errors.push(`Duplicate change metadata section: ${section.heading}`);
+      continue;
+    }
+    byKey.set(section.key, section);
+  }
+
+  for (const key of ["proposal", "design", "tasks", "evidence", "blockers"]) {
+    if (!byKey.has(key)) {
+      errors.push(`Missing required change metadata section: ${key}`);
+    }
+  }
+
+  const parsedTasks = parseFormlessTasks(byKey.get("tasks")?.content ?? "");
+  errors.push(...parsedTasks.errors);
+
+  if (!trailers || errors.length > 0) {
+    return { errors, metadata: null, ok: false };
+  }
+
+  const firstSectionLine = sections[0]?.line ?? 1;
+  const title = trimSectionContent(parts.bodyLines.slice(0, firstSectionLine - 1))
+    .split("\n")[0]
+    ?.trim();
+
+  return {
+    errors: [],
+    metadata: {
+      blockers: byKey.get("blockers")?.content ?? "",
+      design: byKey.get("design")?.content ?? "",
+      evidence: byKey.get("evidence")?.content ?? "",
+      proposal: byKey.get("proposal")?.content ?? "",
+      raw: normalized,
+      taskSections: parsedTasks.sections,
+      tasks: parsedTasks.tasks,
+      title: title && title.length > 0 ? title : trailers.changeId,
+      trailers,
+    },
+    ok: true,
+  };
+}
+
+function findRequiredSection(sections: IndexedCommitSection[], key: string): IndexedCommitSection {
+  const section = sections.find((candidate) => candidate.key === key);
+  if (!section) {
+    throw new Error(`Cannot update missing change metadata section: ${key}`);
+  }
+  return section;
+}
+
+function normalizedReplacementLines(content: string): string[] {
+  const normalized = normalizeCommitMessage(content).replace(/\n+$/, "");
+  return normalized.length > 0 ? normalized.split("\n") : [];
+}
+
+function updateTaskStateContent(content: string, updates: FormlessChangeTaskStateUpdate[]): string {
+  const pending = new Map(updates.map((update) => [update.id, update]));
+  const lines = normalizeCommitMessage(content).split("\n");
+  const taskLine = /^([ \t]*-[ \t]+\[)([ xX])(\][ \t]+)(\S+)([ \t]+)(.+?)(\s*)$/;
+
+  const updatedLines = lines.map((line) => {
+    const match = line.match(taskLine);
+    if (!match) {
+      return line;
+    }
+
+    const id = match[4] ?? "";
+    const update = pending.get(id);
+    if (!update) {
+      return line;
+    }
+
+    pending.delete(id);
+    return [
+      match[1] ?? "",
+      update.done ? "x" : " ",
+      match[3] ?? "",
+      id,
+      match[5] ?? " ",
+      update.description ?? match[6] ?? "",
+      match[7] ?? "",
+    ].join("");
+  });
+
+  if (pending.size > 0) {
+    throw new Error(
+      `Cannot update missing change metadata tasks: ${[...pending.keys()].join(", ")}`,
+    );
+  }
+
+  return updatedLines.join("\n");
+}
+
+function updatedSectionContent(
+  section: IndexedCommitSection,
+  update: FormlessChangeCommitMessageUpdate,
+): string | null {
+  if (section.key === "tasks" && update.taskStates && update.taskStates.length > 0) {
+    return updateTaskStateContent(section.content, update.taskStates);
+  }
+
+  if (section.key === "evidence") {
+    if (typeof update.evidence === "string") {
+      return update.evidence;
+    }
+    if (update.appendEvidence !== undefined) {
+      const additions = Array.isArray(update.appendEvidence)
+        ? update.appendEvidence
+        : [update.appendEvidence];
+      const existing = section.content.trimEnd();
+      return [existing, ...additions].filter((line) => line.length > 0).join("\n");
+    }
+  }
+
+  if (section.key === "blockers" && typeof update.blockers === "string") {
+    return update.blockers;
+  }
+
+  return null;
+}
+
+function applySectionUpdates(
+  bodyLines: string[],
+  update: FormlessChangeCommitMessageUpdate,
+): string[] {
+  const sections = indexedCommitSections(bodyLines);
+  if (update.taskStates && update.taskStates.length > 0) {
+    findRequiredSection(sections, "tasks");
+  }
+  if (typeof update.evidence === "string" || update.appendEvidence !== undefined) {
+    findRequiredSection(sections, "evidence");
+  }
+  if (typeof update.blockers === "string") {
+    findRequiredSection(sections, "blockers");
+  }
+
+  const byLine = new Map(sections.map((section) => [section.line - 1, section]));
+  const output: string[] = [];
+  for (let index = 0; index < bodyLines.length; index += 1) {
+    const section = byLine.get(index);
+    if (!section) {
+      output.push(bodyLines[index] ?? "");
+      continue;
+    }
+
+    output.push(bodyLines[index] ?? "");
+    const replacement = updatedSectionContent(section, update);
+    if (replacement === null) {
+      output.push(...bodyLines.slice(section.contentStart, section.contentEnd));
+    } else {
+      const replacementLines = normalizedReplacementLines(replacement);
+      if (replacementLines.length > 0) {
+        output.push("", ...replacementLines, "");
+      } else {
+        output.push("");
+      }
+    }
+    index = section.contentEnd - 1;
+  }
+
+  return output;
+}
+
+function trailerUpdateEntries(
+  trailers: NonNullable<FormlessChangeCommitMessageUpdate["trailers"]>,
+): Map<string, string> {
+  const entries = new Map<string, string>();
+  if (trailers.changeId !== undefined) {
+    entries.set(formlessChangeTrailerNames.changeId, trailers.changeId);
+  }
+  if (trailers.version !== undefined) {
+    entries.set(formlessChangeTrailerNames.version, trailers.version);
+  }
+  if (trailers.state !== undefined) {
+    entries.set(formlessChangeTrailerNames.state, trailers.state);
+  }
+  if (trailers.capabilities !== undefined) {
+    entries.set(formlessChangeTrailerNames.capabilities, trailers.capabilities.join(", "));
+  }
+  if (trailers.lastEvidenceAt !== undefined) {
+    entries.set(formlessChangeTrailerNames.lastEvidenceAt, trailers.lastEvidenceAt ?? "");
+  }
+  return entries;
+}
+
+function applyTrailerUpdates(
+  trailerLines: string[],
+  update: FormlessChangeCommitMessageUpdate,
+): string[] {
+  const updates = update.trailers
+    ? trailerUpdateEntries(update.trailers)
+    : new Map<string, string>();
+  if (updates.size === 0) {
+    return trailerLines;
+  }
+
+  const seen = new Set<string>();
+  const output = trailerLines.map((line) => {
+    const parts = trailerLineParts(line);
+    if (!parts || !updates.has(parts.key)) {
+      return line;
+    }
+
+    seen.add(parts.key);
+    return `${parts.key}: ${updates.get(parts.key) ?? ""}`;
+  });
+
+  for (const key of requiredFormlessChangeTrailers) {
+    if (updates.has(key) && !seen.has(key)) {
+      output.push(`${key}: ${updates.get(key) ?? ""}`);
+    }
+  }
+
+  return output;
+}
+
+export function formatFormlessChangeCommitMessage(
+  message: string,
+  update: FormlessChangeCommitMessageUpdate,
+): string {
+  const parts = splitCommitMessageParts(message);
+  const bodyLines = applySectionUpdates(parts.bodyLines, update);
+  const trailerLines = applyTrailerUpdates(parts.trailerLines, update);
+  const body = bodyLines.join("\n").replace(/\n+$/, "");
+  const trailers = trailerLines.join("\n").replace(/\n+$/, "");
+  return trailers.length > 0 ? `${body}\n\n${trailers}\n` : `${body}\n`;
 }
 
 export function worktreeDirForWorker(repoRoot: string, workerName: string): string {
@@ -815,6 +1431,75 @@ export function listLocalChangeBranches(cwd: string, runCommand = defaultCommand
     .map((branch) => branch.trim())
     .filter((branch) => changeIdFromBranch(branch) !== null)
     .sort();
+}
+
+export function readFormlessChangeBranchCommitMessage(
+  cwd: string,
+  branch: string,
+  runCommand = defaultCommandRunner,
+): string {
+  return runOrThrow(cwd, "git", ["log", "--no-notes", "-1", "--format=%B", branch], runCommand);
+}
+
+function blockerSummary(blockers: string): string | null {
+  const summary = blockers
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && line !== "-");
+  return summary ?? null;
+}
+
+function metadataQueryEntry(
+  branch: string,
+  metadata: FormlessChangeCommitMetadata,
+): FormlessChangeQueryEntry {
+  return {
+    blockerSummary: blockerSummary(metadata.blockers),
+    branch,
+    capabilities: metadata.trailers.capabilities,
+    changeId: metadata.trailers.changeId,
+    latestEvidenceAt: metadata.trailers.lastEvidenceAt,
+    remainingTasks: metadata.tasks.filter((task) => !task.done).length,
+    state: metadata.trailers.state,
+    valid: true,
+  };
+}
+
+export function readFormlessChangeBranchMetadata(
+  cwd: string,
+  branch: string,
+  runCommand = defaultCommandRunner,
+): FormlessChangeMetadataParseResult {
+  return parseFormlessChangeCommitMessage(
+    readFormlessChangeBranchCommitMessage(cwd, branch, runCommand),
+    { branch },
+  );
+}
+
+export function queryLocalFormlessChangeBranches(
+  cwd: string,
+  runCommand = defaultCommandRunner,
+): FormlessChangeQueryResult {
+  const changes: FormlessChangeQueryEntry[] = [];
+  const invalid: InvalidFormlessChangeQueryEntry[] = [];
+
+  for (const branch of listLocalChangeBranches(cwd, runCommand)) {
+    const result = readFormlessChangeBranchMetadata(cwd, branch, runCommand);
+    if (result.ok) {
+      changes.push(metadataQueryEntry(branch, result.metadata));
+    } else {
+      invalid.push({
+        branch,
+        errors: result.errors,
+        valid: false,
+      });
+    }
+  }
+
+  return {
+    changes: changes.sort((left, right) => left.changeId.localeCompare(right.changeId)),
+    invalid: invalid.sort((left, right) => left.branch.localeCompare(right.branch)),
+  };
 }
 
 function branchIncludesBase(
@@ -1645,6 +2330,8 @@ async function runCodexSession(input: {
 function usage(): string {
   return [
     "Usage: bun agents watch <worker-name> [options]",
+    "       bun agents changes [--json]",
+    "       bun agents change <change-id> [--json]",
     "       bun agents status [worker-name]",
     "       bun agents release <change-id> [--owner <worker-name>]",
     "",
@@ -1725,6 +2412,41 @@ export function parseAgentsArgs(args: string[]): AgentsOptions | "help" {
     }
 
     return options;
+  }
+
+  if (command === "changes") {
+    let json = false;
+    for (let index = 1; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === "--json") {
+        json = true;
+        continue;
+      }
+
+      throw new UsageError(`Unknown option: ${arg}`);
+    }
+
+    return { command: "changes", json };
+  }
+
+  if (command === "change") {
+    const changeId = args[1];
+    if (!changeId || changeId.startsWith("-")) {
+      throw new UsageError("change requires <change-id>.");
+    }
+
+    let json = false;
+    for (let index = 2; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === "--json") {
+        json = true;
+        continue;
+      }
+
+      throw new UsageError(`Unknown option: ${arg}`);
+    }
+
+    return { changeId: validateChangeId(changeId), command: "change", json };
   }
 
   if (command === "status") {
@@ -2485,6 +3207,65 @@ function runStatus(
   return 0;
 }
 
+function runChanges(
+  options: ChangesOptions,
+  input: {
+    cwd: string;
+    runCommand: CommandRunner;
+    stdout: Pick<NodeJS.WriteStream, "write">;
+  },
+): number {
+  const result = queryLocalFormlessChangeBranches(input.cwd, input.runCommand);
+  if (options.json) {
+    writeLine(input.stdout, JSON.stringify(result, null, 2));
+    return 0;
+  }
+
+  for (const change of result.changes) {
+    writeLine(
+      input.stdout,
+      `${change.changeId} ${change.state} remaining=${change.remainingTasks} branch=${change.branch}`,
+    );
+  }
+  for (const invalid of result.invalid) {
+    writeLine(input.stdout, `${invalid.branch} invalid: ${invalid.errors.join("; ")}`);
+  }
+  return 0;
+}
+
+function runChange(
+  options: ChangeOptions,
+  input: {
+    cwd: string;
+    runCommand: CommandRunner;
+    stderr: Pick<NodeJS.WriteStream, "write">;
+    stdout: Pick<NodeJS.WriteStream, "write">;
+  },
+): number {
+  const branch = branchNameForChange(options.changeId);
+  const result = readFormlessChangeBranchMetadata(input.cwd, branch, input.runCommand);
+  if (!result.ok) {
+    const invalid = { branch, errors: result.errors, valid: false };
+    if (options.json) {
+      writeLine(input.stdout, JSON.stringify(invalid, null, 2));
+    } else {
+      writeLine(input.stderr, `${branch} invalid: ${result.errors.join("; ")}`);
+    }
+    return 1;
+  }
+
+  const entry = metadataQueryEntry(branch, result.metadata);
+  if (options.json) {
+    writeLine(input.stdout, JSON.stringify(entry, null, 2));
+  } else {
+    writeLine(
+      input.stdout,
+      `${entry.changeId} ${entry.state} remaining=${entry.remainingTasks} branch=${entry.branch}`,
+    );
+  }
+  return 0;
+}
+
 function runRelease(
   options: ReleaseOptions,
   input: {
@@ -2521,6 +3302,14 @@ export async function runAgentsCli(args: string[], deps: WorkerDeps = {}): Promi
 
     if (options.command === "watch") {
       return await runWatch(options, resolvedDeps);
+    }
+
+    if (options.command === "changes") {
+      return runChanges(options, resolvedDeps);
+    }
+
+    if (options.command === "change") {
+      return runChange(options, resolvedDeps);
     }
 
     if (options.command === "status") {
