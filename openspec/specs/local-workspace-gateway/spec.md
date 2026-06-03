@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change browser-workspace-control-plane. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Local Workspace Gateway
 
 The system SHALL expose browser-safe workspace operations from local workspace
@@ -308,4 +310,3 @@ runtime code and bundles.
 - **THEN** the gateway route is unavailable
 - **AND** no workspace filesystem, credential, Cloudflare, Alchemy, or provider
   mutation behavior is reachable
-

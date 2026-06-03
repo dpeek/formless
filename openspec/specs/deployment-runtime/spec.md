@@ -6,7 +6,9 @@ Deployment runtime versions Formless deployment intent for supported instance
 targets, coordinates exact-version deployment attempts, and stores audit/status
 summaries while deployers and Alchemy own provider mutation and provider
 resource state.
+
 ## Requirements
+
 ### Requirement: Versioned Desired Deployment State
 
 The system SHALL expose immutable desired deployment state versions for a
@@ -367,4 +369,3 @@ reviewable source.
   `deploy-evidence-summary`, or `deploy-drift-report` control-plane records
 - **AND** provider credentials, raw provider state, raw lease tokens, Alchemy
   state tokens, and runtime secrets are omitted
-
