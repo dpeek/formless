@@ -516,6 +516,98 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(accepted.body)).not.toContain("pasted-browser-token");
   });
 
+  it("runs Cloudflare credential setup through the sidecar without exposing local secrets", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+    const credentialSetupInputs: Array<{
+      profileLabel?: string;
+      provider: "cloudflare";
+      workspaceRoot: string;
+    }> = [];
+    const accepted = await gatewayJson(
+      operationRequest(
+        {
+          kind: "credentialSetup",
+          profileLabel: "personal",
+          provider: "cloudflare",
+        },
+        browserHeaders({ cookie, csrf: true }),
+      ),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          credentialSetup: async (input) => {
+            credentialSetupInputs.push({
+              profileLabel: input.profileLabel,
+              provider: input.provider,
+              workspaceRoot: input.workspaceRoot,
+            });
+
+            return {
+              events: [
+                {
+                  at: "2026-06-02T01:00:02.000Z",
+                  profileLabel: input.profileLabel ?? "Default",
+                  provider: "cloudflare",
+                  status: "waiting",
+                  type: "externalAuthorizationUrl",
+                  url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
+                },
+              ],
+              result: {
+                details: {
+                  alchemyPassword: "alchemy-password",
+                  providerToken: "cloudflare-provider-token",
+                  rawAdapterOutput: "CLOUDFLARE_API_TOKEN=cloudflare-provider-token",
+                },
+                summary: {
+                  fields: {
+                    localSecretPassword: "local-secret-value",
+                    profile: input.profileLabel ?? "default",
+                    provider: input.provider,
+                  },
+                  title: "Cloudflare credential setup waiting",
+                },
+              },
+              status: "running",
+            };
+          },
+          operationIds: ["op_credential_sidecar_00000001"],
+        }),
+      },
+    );
+    const serialized = JSON.stringify(accepted.body);
+
+    expect(accepted.response.status).toBe(200);
+    expect(credentialSetupInputs).toEqual([
+      {
+        profileLabel: "personal",
+        provider: "cloudflare",
+        workspaceRoot,
+      },
+    ]);
+    expect(accepted.body.operation).toMatchObject({
+      actor: "browser",
+      events: [
+        {
+          profileLabel: "personal",
+          provider: "cloudflare",
+          status: "waiting",
+          type: "externalAuthorizationUrl",
+          url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
+        },
+      ],
+      id: "op_credential_sidecar_00000001",
+      operation: "credentialSetup",
+      status: "running",
+    });
+    expect(serialized).not.toContain("cloudflare-provider-token");
+    expect(serialized).not.toContain("alchemy-password");
+    expect(serialized).not.toContain("local-secret-value");
+    expect(serialized).not.toContain(workspaceRoot);
+    expect(serialized).not.toContain(accepted.sidecar.endpoint);
+    expect(serialized).not.toContain(proxyToken);
+  });
+
   it("allows admin bearer only for non-browser automation callers", async () => {
     const workspaceRoot = await makeTempDir();
     const deps = gatewayDeps(workspaceRoot, {
@@ -617,33 +709,34 @@ describe("local workspace gateway", () => {
     await writeDeployRecordSource(workspaceRoot);
     await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
 
+    const deps = gatewayDeps(workspaceRoot, {
+      accountDiscovery: {
+        listAccounts: async () => [
+          {
+            id: "account-123",
+            workersDevSubdomain: "dpeek",
+          },
+        ],
+      },
+      deploymentAdapter: {
+        deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+      },
+      fetch: deployApplyFetch(requests, "site"),
+      operationIds: ["op_deploy_apply_00000001"],
+      packageRoot: "/package",
+      packageVersion: packageJson.version,
+      randomTokens: ["generated-admin-token", setupToken],
+      timestamps: [
+        "2026-06-02T01:11:00.000Z",
+        "2026-06-02T01:11:01.000Z",
+        "2026-06-02T01:11:02.000Z",
+        "2026-06-02T01:11:03.000Z",
+      ],
+    });
     const applied = await gatewayJson(
       operationRequest({ kind: "deployApply" }, browserHeaders({ cookie, csrf: true })),
       {
-        deps: gatewayDeps(workspaceRoot, {
-          accountDiscovery: {
-            listAccounts: async () => [
-              {
-                id: "account-123",
-                workersDevSubdomain: "dpeek",
-              },
-            ],
-          },
-          deploymentAdapter: {
-            deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
-          },
-          fetch: deployApplyFetch(requests, "site"),
-          operationIds: ["op_deploy_apply_00000001"],
-          packageRoot: "/package",
-          packageVersion: packageJson.version,
-          randomTokens: ["generated-admin-token", setupToken],
-          timestamps: [
-            "2026-06-02T01:11:00.000Z",
-            "2026-06-02T01:11:01.000Z",
-            "2026-06-02T01:11:02.000Z",
-            "2026-06-02T01:11:03.000Z",
-          ],
-        }),
+        deps,
       },
     );
 
@@ -697,12 +790,55 @@ describe("local workspace gateway", () => {
     });
     expect(
       capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
+        requestByPath(requests, "/api/formless/deployments/attempts/start"),
+      ),
+    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
+    expect(
+      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
+        requestByPath(requests, "/api/formless/deployments/attempts/plan"),
+      ),
+    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
+    expect(
+      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
         requestByPath(requests, "/api/formless/deployments/attempts/success"),
       ),
     ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
-    expect(JSON.stringify(applied.body)).not.toContain("generated-admin-token");
-    expect(JSON.stringify(applied.body)).not.toContain("alchemy-password");
-    expect(JSON.stringify(applied.body)).not.toContain("lease:local-gateway");
+    const requestCountAfterApply = requests.length;
+    const read = await gatewayJson(
+      new Request(
+        `http://local.test${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_deploy_apply_00000001`,
+        {
+          headers: browserHeaders({ cookie }),
+        },
+      ),
+      { deps },
+    );
+    const serializedApplied = JSON.stringify(applied.body);
+    const serializedRead = JSON.stringify(read.body);
+
+    expect(read.response.status).toBe(200);
+    expect(read.body.operation).toMatchObject({
+      id: "op_deploy_apply_00000001",
+      operation: "deployApply",
+      result: {
+        deployment: {
+          writeback: {
+            desiredState: deploymentDesiredStateRef(),
+            status: "succeeded",
+          },
+        },
+      },
+      status: "succeeded",
+    });
+    expect(requests).toHaveLength(requestCountAfterApply);
+    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
+    for (const serialized of [serializedApplied, serializedRead]) {
+      expect(serialized).not.toContain("generated-admin-token");
+      expect(serialized).not.toContain("alchemy-password");
+      expect(serialized).not.toContain("lease:local-gateway");
+      expect(serialized).not.toContain(applied.sidecar.endpoint);
+      expect(serialized).not.toContain(proxyToken);
+    }
   });
 
   it("scopes operation ids to the configured workspace root", async () => {
@@ -798,6 +934,7 @@ async function gatewayJson(
   return {
     body: (await response.json()) as Record<string, unknown>,
     response,
+    sidecar,
   };
 }
 
@@ -1234,6 +1371,18 @@ async function writeDeployRecordSource(workspaceRoot: string) {
     manifest,
     workspaceRoot,
   });
+}
+
+async function expectNoDeploymentHistoryRecordSource(workspaceRoot: string) {
+  for (const fileName of [
+    "deploy-attempt.json",
+    "deploy-evidence-summary.json",
+    "deploy-drift-report.json",
+  ]) {
+    await expect(
+      stat(path.join(workspaceRoot, "records/instance-control-plane", fileName)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  }
 }
 
 async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string, label: string) {

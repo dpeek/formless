@@ -7,6 +7,7 @@ import {
   InstanceShellRouteView,
   WorkspaceOperationProgress,
   displaySafeEntries,
+  operationPollsAutomatically,
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
@@ -91,6 +92,78 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain("workspacePath");
     expect(html).not.toContain("/Users/");
+  });
+
+  it("keeps workspace gateway controls unavailable without proxy status", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView state={readyState({ installs: [] })} />,
+    );
+
+    expect(html).not.toContain('data-formless-workspace-gateway="local"');
+    expect(html).not.toContain('data-formless-workspace-operation-controls="true"');
+    expect(html).not.toContain("Initialize workspace");
+    expect(html).not.toContain("Plan deploy");
+    expect(html).not.toContain("Apply deploy");
+  });
+
+  it("renders gateway proxy status and pollable operation progress without sidecar internals", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={readyState({ installs: [siteInstall({ installId: "site", label: "Site" })] })}
+        workspaceGatewayState={workspaceGatewayState({
+          activeOperationId: "op_deploy_plan_00000001",
+          csrfToken: "csrf-token",
+          currentOperation: workspaceOperation({
+            id: "op_deploy_plan_00000001",
+            operation: "deployPlan",
+            result: {
+              deployment: {
+                desiredStateVersion: "desired.instance.primary.3",
+                expectedUrl: "https://personal.dpeek.workers.dev",
+                providerToken: "secret-provider-token",
+              },
+              summary: {
+                fields: {
+                  provider: "cloudflare",
+                  proxyToken: "sidecar-proxy-token",
+                  status: "running",
+                },
+                title: "Deploy planning",
+              },
+            },
+            status: "running",
+            summary: {
+              fields: {
+                provider: "cloudflare",
+                proxyToken: "sidecar-proxy-token",
+                status: "running",
+              },
+              title: "Deploy planning",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-formless-workspace-gateway="local"');
+    expect(html).toContain('data-formless-workspace-operation-progress="true"');
+    expect(html).toContain("Initialized");
+    expect(html).toContain("Deploy planning");
+    expect(html).toContain("Deploy plan");
+    expect(html).toContain("Running");
+    expect(html).toContain("desired.instance.primary.3");
+    expect(html).toContain("https://personal.dpeek.workers.dev");
+    expect(html).toContain("[redacted]");
+    expect(html).not.toContain("secret-provider-token");
+    expect(html).not.toContain("sidecar-proxy-token");
+    expect(html).not.toContain("http://127.0.0.1:7777");
+  });
+
+  it("polls only queued or running workspace operations automatically", () => {
+    expect(operationPollsAutomatically(workspaceOperation({ status: "queued" }))).toBe(true);
+    expect(operationPollsAutomatically(workspaceOperation({ status: "running" }))).toBe(true);
+    expect(operationPollsAutomatically(workspaceOperation({ status: "succeeded" }))).toBe(false);
+    expect(operationPollsAutomatically(workspaceOperation({ status: "failed" }))).toBe(false);
   });
 
   it("renders first app onboarding while keeping generated record editors mounted", () => {

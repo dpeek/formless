@@ -758,7 +758,7 @@ function workspaceInitialized(operation?: LocalWorkspaceGatewayOperation): boole
   return typeof initialized === "boolean" ? initialized : undefined;
 }
 
-function operationPollsAutomatically(operation: LocalWorkspaceGatewayOperation): boolean {
+export function operationPollsAutomatically(operation: LocalWorkspaceGatewayOperation): boolean {
   return operation.status === "queued" || operation.status === "running";
 }
 

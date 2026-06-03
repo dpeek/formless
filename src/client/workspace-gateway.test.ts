@@ -16,20 +16,32 @@ describe("client workspace gateway helpers", () => {
   it("resolves browser config only when the local gateway API is present", () => {
     expect(
       localWorkspaceGatewayBrowserConfig({
+        FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "sidecar-proxy-token",
+        FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:7777",
         VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
         VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: "bootstrap-token",
       }),
     ).toEqual(config);
 
     expect(localWorkspaceGatewayBrowserConfig({})).toBeUndefined();
+    expect(JSON.stringify(config)).not.toContain("sidecar-proxy-token");
+    expect(JSON.stringify(config)).not.toContain("127.0.0.1");
   });
 
   it("reads status with bootstrap and retries without bootstrap after owner setup", async () => {
-    const calls: Array<{ headers: Headers; path: string }> = [];
+    const calls: Array<{
+      credentials?: RequestCredentials;
+      headers: Headers;
+      path: string;
+    }> = [];
     const response = await fetchLocalWorkspaceGatewayStatus({
       config,
       fetcher: async (input, init) => {
-        calls.push({ headers: new Headers(init?.headers), path: requestUrl(input) });
+        calls.push({
+          credentials: init?.credentials,
+          headers: new Headers(init?.headers),
+          path: requestUrl(input),
+        });
 
         if (calls.length === 1) {
           return Response.json(
@@ -50,6 +62,7 @@ describe("client workspace gateway helpers", () => {
       "/api/formless/workspace/status",
       "/api/formless/workspace/status",
     ]);
+    expect(calls.map((call) => call.credentials)).toEqual(["same-origin", "same-origin"]);
     expect(calls[0]?.headers.get("x-formless-workspace-bootstrap")).toBe("bootstrap-token");
     expect(calls[1]?.headers.get("x-formless-workspace-bootstrap")).toBeNull();
   });
@@ -63,6 +76,7 @@ describe("client workspace gateway helpers", () => {
         fetcher: async (input, init) => {
           expect(requestUrl(input)).toBe("/api/formless/workspace/operations");
           expect(init?.method).toBe("POST");
+          expect(init?.credentials).toBe("same-origin");
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBeNull();
           expect(new Headers(init?.headers).get("x-formless-csrf")).toBe("csrf-token");
           expect(typeof init?.body === "string" ? JSON.parse(init.body) : undefined).toEqual({
@@ -85,6 +99,7 @@ describe("client workspace gateway helpers", () => {
         config,
         fetcher: async (input, init) => {
           expect(requestUrl(input)).toBe("/api/formless/workspace/operations/op_init_00000001");
+          expect(init?.credentials).toBe("same-origin");
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBe(
             "bootstrap-token",
           );
@@ -102,6 +117,7 @@ describe("client workspace gateway helpers", () => {
       {
         config,
         fetcher: async (_input, init) => {
+          expect(init?.credentials).toBe("same-origin");
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBeNull();
           expect(new Headers(init?.headers).get("x-formless-workspace-operation-kind")).toBe(
             "save",

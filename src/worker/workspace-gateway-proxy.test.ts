@@ -181,6 +181,61 @@ describe("Worker workspace gateway proxy", () => {
     expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER)).toBeNull();
   });
 
+  it("requires matching CSRF cookie and header before forwarding browser mutations", async () => {
+    const ownerCookie = await ownerSessionCookie();
+    const cases: Array<{ headers: Record<string, string>; label: string }> = [
+      {
+        headers: {
+          Cookie: ownerCookie,
+          [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+        },
+        label: "header without cookie",
+      },
+      {
+        headers: {
+          Cookie: `${ownerCookie}; ${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+        },
+        label: "cookie without header",
+      },
+      {
+        headers: {
+          Cookie: `${ownerCookie}; ${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=wrong-token`,
+          [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+        },
+        label: "mismatched cookie",
+      },
+    ];
+
+    for (const testCase of cases) {
+      let forwarded = false;
+      const response = await handleWorkerWorkspaceGatewayProxyRequest(
+        new Request("https://example.com/api/formless/workspace/operations", {
+          body: JSON.stringify({ kind: "deployApply" }),
+          headers: {
+            ...testCase.headers,
+            "Content-Type": "application/json",
+            Origin: "https://example.com",
+          },
+          method: "POST",
+        }),
+        baseEnv,
+        {
+          fetch: async () => {
+            forwarded = true;
+            return Response.json({ operation: operation("deployApply") });
+          },
+        },
+      );
+      const body = await jsonBody(response);
+
+      expect(response?.status, testCase.label).toBe(403);
+      expect(body.error, testCase.label).toBe(
+        "Workspace gateway browser mutations require CSRF proof.",
+      );
+      expect(forwarded, testCase.label).toBe(false);
+    }
+  });
+
   it("limits bootstrap authorization to bootstrap-safe operation intents before forwarding", async () => {
     const initCalls: ProxyCall[] = [];
     const init = await handleWorkerWorkspaceGatewayProxyRequest(

@@ -85,7 +85,16 @@ Evidence 2026-06-03 gorp:
 
 ## 5. Browser, Credential, And Deploy Coverage
 
-- [ ] 5.1 Update generated instance shell tests for gateway proxy status, unavailable state, operation polling, CSRF cookie/header behavior, and external authorization prompts.
-- [ ] 5.2 Prove Cloudflare credential setup runs through the sidecar and does not expose provider tokens, Alchemy passwords, local secret values, sidecar URL, or internal proxy token to browser state.
-- [ ] 5.3 Prove deploy plan/apply operations run through the sidecar, preserve exact desired-state version/hash checks, and keep provider mutation out of Worker code.
-- [ ] 5.4 Prove operation status reads are proxied to sidecar operation state and do not create schema-owned deployment execution records.
+- [x] 5.1 Update generated instance shell tests for gateway proxy status, unavailable state, operation polling, CSRF cookie/header behavior, and external authorization prompts.
+- [x] 5.2 Prove Cloudflare credential setup runs through the sidecar and does not expose provider tokens, Alchemy passwords, local secret values, sidecar URL, or internal proxy token to browser state.
+- [x] 5.3 Prove deploy plan/apply operations run through the sidecar, preserve exact desired-state version/hash checks, and keep provider mutation out of Worker code.
+- [x] 5.4 Prove operation status reads are proxied to sidecar operation state and do not create schema-owned deployment execution records.
+
+Evidence 2026-06-03 gorp:
+
+- Updated `src/app/routes/instance-shell.test.tsx` and `src/app/routes/instance-shell.tsx` coverage for generated shell gateway unavailable state, ready proxy status, display-safe operation progress, external authorization prompt rendering, and queued/running operation polling classification.
+- Updated `src/client/workspace-gateway.test.ts` to prove browser gateway config keeps only the same-origin API base path/bootstrap token and status/start/read helpers send same-origin credentials with expected bootstrap, CSRF, and operation-kind headers.
+- Updated `src/worker/workspace-gateway-proxy.test.ts` to prove browser mutations require matching CSRF cookie/header proof before the Worker proxy forwards to the sidecar.
+- Updated `src/site/local-workspace-gateway.test.ts` to prove browser-triggered Cloudflare credential setup executes through the loopback sidecar, returns display-safe authorization events, and does not expose provider tokens, Alchemy passwords, local secret values, sidecar endpoint, or internal proxy token.
+- Strengthened sidecar deploy apply coverage in `src/site/local-workspace-gateway.test.ts` so start, plan, and success writeback all preserve the exact desired-state version/hash; operation status reads are served from sidecar operation state without additional deployment runtime calls and without schema-owned deployment history record source files.
+- Check evidence: `devstate check` passed at 2026-06-03T02:42:09.270Z with `vp check --fix` green and watch tests green.
