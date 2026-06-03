@@ -47,10 +47,18 @@ Evidence:
 
 ## 4. Git-backed Finalization
 
-- [ ] 4.1 Replace `openspec validate <change-id>` and `openspec archive <change-id> --yes` finalization with metadata validation and `openspec validate --specs --strict --no-interactive`.
-- [ ] 4.2 Preserve finalization rebase handling, structural conflict resolution, semantic conflict blocking, and check evidence reuse or rerun rules.
-- [ ] 4.3 Mark review-ready branches with structured metadata and ready-for-review leases without committing archived change files.
-- [ ] 4.4 Update finalization and maintenance tests to prove no archive command runs and review-ready branches include code, canonical specs, task evidence, and metadata.
+- [x] 4.1 Replace `openspec validate <change-id>` and `openspec archive <change-id> --yes` finalization with metadata validation and `openspec validate --specs --strict --no-interactive`.
+- [x] 4.2 Preserve finalization rebase handling, structural conflict resolution, semantic conflict blocking, and check evidence reuse or rerun rules.
+- [x] 4.3 Mark review-ready branches with structured metadata and ready-for-review leases without committing archived change files.
+- [x] 4.4 Update finalization and maintenance tests to prove no archive command runs and review-ready branches include code, canonical specs, task evidence, and metadata.
+
+Evidence:
+
+- Changed `scripts/agents.ts` so automatic finalization rebases the worker branch, validates the rebased tip commit metadata, requires all metadata tasks to be complete, runs `openspec validate --specs --strict --no-interactive`, reuses or reruns `devstate check` from metadata evidence, blocks on archived or unexpected uncommitted finalization files, amends the tip commit metadata to `ready-for-review`, and marks the lease ready for review.
+- Changed `doc/agents/local-openspec-finalize.md` so the rendered finalization prompt describes Git-backed metadata validation, canonical spec validation, no archive command, ready-for-review metadata, and check evidence rules.
+- Changed `scripts/agents.test.ts` finalization, maintenance, and prompt coverage for canonical spec validation failure, no archive command, metadata evidence, metadata amend, ready-for-review leases, and check rerun/reuse behavior.
+- `devstate check` at 2026-06-03T02:37:39.133Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes local agent supervisor finalization and tests only.
 
 ## 5. Skills and Instruction Source
 

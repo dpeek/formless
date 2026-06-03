@@ -3,12 +3,14 @@ import { spawn, spawnSync } from "node:child_process";
 import {
   createWriteStream,
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -242,14 +244,6 @@ type PromptRenderOptions = {
   baseRef?: string;
   branchDiff?: string | null;
   changeMetadata?: FormlessChangeCommitMetadata | null;
-};
-
-type ApplyInstructionsSummary = {
-  state: string;
-  progress: string;
-  firstUncheckedTask: string;
-  taskState: string;
-  filePaths: string;
 };
 
 type GitBackedImplementationPromptSummary = {
@@ -1704,82 +1698,6 @@ function renderPrompt(template: string, values: Record<string, string>): string 
   return rendered;
 }
 
-function taskLabel(task: ApplyInstructionsTask): string {
-  const description = task.description?.trim() || "task description not supplied";
-  return task.id ? `${task.id}: ${description}` : description;
-}
-
-function formatProgress(instructions: ApplyInstructions | null | undefined): string {
-  const progress = instructions?.progress;
-  if (!progress) {
-    return "not supplied by supervisor";
-  }
-
-  const complete = progress.complete ?? "unknown";
-  const total = progress.total ?? "unknown";
-  const remaining = progress.remaining ?? "unknown";
-  return `${complete}/${total} complete, ${remaining} remaining`;
-}
-
-function formatTaskState(instructions: ApplyInstructions | null | undefined): string {
-  const tasks = instructions?.tasks;
-  if (!tasks || tasks.length === 0) {
-    return "- Task list not supplied by supervisor; use the tasks file path below.";
-  }
-
-  return tasks.map((task) => `- [${task.done ? "x" : " "}] ${taskLabel(task)}`).join("\n");
-}
-
-function firstUncheckedTask(instructions: ApplyInstructions | null | undefined): string {
-  const task = instructions?.tasks?.find((candidate) => !candidate.done);
-  return task ? taskLabel(task) : "none reported";
-}
-
-function formatFilePaths(
-  changeId: string,
-  instructions: ApplyInstructions | null | undefined,
-): string {
-  const contextFiles = instructions?.contextFiles;
-  const entries = contextFiles
-    ? Object.entries(contextFiles).filter(([, files]) => files.length > 0)
-    : [];
-
-  if (entries.length === 0) {
-    return [
-      `- tasks: openspec/changes/${changeId}/tasks.md`,
-      `- proposal: openspec/changes/${changeId}/proposal.md`,
-      `- design: openspec/changes/${changeId}/design.md`,
-      `- specs: openspec/changes/${changeId}/specs/**/*.md`,
-    ].join("\n");
-  }
-
-  return entries
-    .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([artifactId, files]) => files.map((filePath) => `- ${artifactId}: ${filePath}`))
-    .join("\n");
-}
-
-function summarizeApplyInstructions(
-  changeId: string,
-  instructions: ApplyInstructions | null | undefined,
-): ApplyInstructionsSummary {
-  return {
-    filePaths: formatFilePaths(changeId, instructions),
-    firstUncheckedTask: firstUncheckedTask(instructions),
-    progress: formatProgress(instructions),
-    state: [
-      `- Change: ${instructions?.changeName ?? changeId}`,
-      `- Schema: ${instructions?.schemaName ?? "not supplied by supervisor"}`,
-      `- Apply state: ${instructions?.state ?? "not supplied by supervisor"}`,
-      `- Progress: ${formatProgress(instructions)}`,
-      `- First unchecked task: ${firstUncheckedTask(instructions)}`,
-      `- Apply command: openspec instructions apply --change "${changeId}" --json`,
-      `- Status command: openspec status --change "${changeId}" --json`,
-    ].join("\n"),
-    taskState: formatTaskState(instructions),
-  };
-}
-
 function formlessTaskLabel(task: FormlessChangeTask): string {
   return task.id ? `${task.id}: ${task.description}` : task.description;
 }
@@ -1948,12 +1866,13 @@ export function buildLocalOpenSpecFinalizationPrompt(
   options: PromptRenderOptions = {},
 ): string {
   const safeChangeId = validateChangeId(changeId);
-  const summary = summarizeApplyInstructions(safeChangeId, options.applyInstructions);
+  const summary = summarizeGitBackedImplementationPrompt(safeChangeId, options);
 
   return renderPrompt(readPromptTemplate("local-openspec-finalize"), {
     change_id: safeChangeId,
-    known_file_paths: summary.filePaths,
-    known_openspec_state: summary.state,
+    git_backed_helper_commands: summary.helperCommands,
+    known_branch_diff: summary.branchDiff,
+    known_change_metadata: summary.metadata,
     known_task_state: summary.taskState,
     worker_name: validateWorkerName(workerName),
   });
@@ -2051,47 +1970,12 @@ function isCodeOrGeneratedPath(filePath: string): boolean {
   return true;
 }
 
-function activeChangeTasksPath(worktreeDir: string, changeId: string): string {
-  return path.join(worktreeDir, "openspec", "changes", validateChangeId(changeId), "tasks.md");
-}
-
-function archivedChangeDirs(worktreeDir: string, changeId: string): string[] {
-  const archiveRoot = path.join(worktreeDir, "openspec", "changes", "archive");
-  if (!existsSync(archiveRoot)) {
-    return [];
-  }
-
-  return readdirSync(archiveRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .filter((name) => name === changeId || name.endsWith(`-${changeId}`))
-    .sort()
-    .map((name) => path.join(archiveRoot, name));
-}
-
-function changeHasActiveArtifacts(worktreeDir: string, changeId: string): boolean {
-  return existsSync(activeChangeTasksPath(worktreeDir, changeId));
-}
-
-function changeHasArchivedArtifacts(worktreeDir: string, changeId: string): boolean {
-  return archivedChangeDirs(worktreeDir, changeId).some((dir) =>
-    existsSync(path.join(dir, "tasks.md")),
-  );
-}
-
-function latestImplementationCheckEvidence(worktreeDir: string, changeId: string): string | null {
-  const taskPaths = [
-    activeChangeTasksPath(worktreeDir, changeId),
-    ...archivedChangeDirs(worktreeDir, changeId).map((dir) => path.join(dir, "tasks.md")),
-  ].filter((filePath) => existsSync(filePath));
-
-  for (const taskPath of taskPaths) {
-    const lines = readFileSync(taskPath, "utf8").split(/\r?\n/);
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index]?.trim();
-      if (line?.includes("devstate check")) {
-        return line.replace(/^- /, "");
-      }
+function latestImplementationCheckEvidence(metadata: FormlessChangeCommitMetadata): string | null {
+  const lines = metadata.evidence.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]?.trim();
+    if (line?.includes("devstate check")) {
+      return line.replace(/^- /, "");
     }
   }
 
@@ -2158,38 +2042,63 @@ function runFinalizationCommand(input: {
   });
 }
 
-function commitFinalizationChanges(input: {
+function archivedChangeStatusPaths(paths: string[]): string[] {
+  return paths.filter((filePath) =>
+    filePath.replaceAll("\\", "/").startsWith("openspec/changes/archive/"),
+  );
+}
+
+function finalizationReadyEvidenceLine(input: { at: string; message: string }): string {
+  return `- Finalization at ${input.at}: ${input.message}.`;
+}
+
+function amendFinalizationMetadata(input: {
   at: string;
   changeId: string;
-  changedFiles: string[];
   cwd: string;
+  evidenceMessage: string;
+  metadata: FormlessChangeCommitMetadata;
   runCommand: CommandRunner;
 }): FinalizationOutcome | null {
-  if (input.changedFiles.length === 0) {
-    return null;
+  const formattedMessage = formatFormlessChangeCommitMessage(input.metadata.raw, {
+    appendEvidence: finalizationReadyEvidenceLine({
+      at: input.at,
+      message: input.evidenceMessage,
+    }),
+    trailers: {
+      lastEvidenceAt: input.at,
+      state: "ready-for-review",
+    },
+  });
+  const parsed = parseFormlessChangeCommitMessage(formattedMessage, {
+    branch: branchNameForChange(input.changeId),
+  });
+  if (!parsed.ok) {
+    return finalizationBlockedEvidence({
+      at: input.at,
+      message: `finalization metadata update would make ${input.changeId} invalid: ${parsed.errors.join(
+        "; ",
+      )}`,
+    });
   }
 
-  const addResult = runFinalizationCommand({
-    at: input.at,
-    args: ["add", "-A"],
-    command: "git",
-    cwd: input.cwd,
-    failurePrefix: "failed to stage finalization changes",
-    runCommand: input.runCommand,
-  });
-  if ("signal" in addResult) {
-    return addResult;
-  }
+  const tempDir = mkdtempSync(path.join(tmpdir(), "formless-change-message-"));
+  const messagePath = path.join(tempDir, "message.txt");
+  writeFileSync(messagePath, formattedMessage);
 
-  const commitResult = runFinalizationCommand({
-    at: input.at,
-    args: ["commit", "-m", `Finalize ${input.changeId}`],
-    command: "git",
-    cwd: input.cwd,
-    failurePrefix: "failed to commit finalization changes",
-    runCommand: input.runCommand,
-  });
-  return "signal" in commitResult ? commitResult : null;
+  try {
+    const amendResult = runFinalizationCommand({
+      at: input.at,
+      args: ["commit", "--amend", "-F", messagePath],
+      command: "git",
+      cwd: input.cwd,
+      failurePrefix: "failed to amend finalization metadata",
+      runCommand: input.runCommand,
+    });
+    return "signal" in amendResult ? amendResult : null;
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 }
 
 function runAutomaticFinalization(input: {
@@ -2203,7 +2112,6 @@ function runAutomaticFinalization(input: {
   const at = nowIso(input.now);
   const cwd = input.branchPlan.worktreeDir;
   const changeId = input.change.changeId;
-  const implementationCheck = latestImplementationCheckEvidence(cwd, changeId);
   writeLine(input.stdout, `[agents] finalize ${changeId}`);
 
   const beforeHeadResult = runFinalizationCommand({
@@ -2247,41 +2155,51 @@ function runAutomaticFinalization(input: {
   const afterHead = afterHeadResult.stdout.trim();
   const rebaseChangedFiles = changedFilesBetween(cwd, beforeHead, afterHead, input.runCommand);
 
-  if (changeHasActiveArtifacts(cwd, changeId)) {
-    finalizationCommands.push(`openspec validate ${changeId} --strict --no-interactive`);
-    const validateResult = runFinalizationCommand({
-      at,
-      args: ["validate", changeId, "--strict", "--no-interactive"],
-      command: "openspec",
-      cwd,
-      failurePrefix: `openspec validate failed for ${changeId}`,
-      runCommand: input.runCommand,
-    });
-    if ("signal" in validateResult) {
-      return validateResult;
-    }
-
-    finalizationCommands.push(`openspec archive ${changeId} --yes`);
-    const archiveResult = runFinalizationCommand({
-      at,
-      args: ["archive", changeId, "--yes"],
-      command: "openspec",
-      cwd,
-      failurePrefix: `openspec archive failed for ${changeId}`,
-      runCommand: input.runCommand,
-    });
-    if ("signal" in archiveResult) {
-      return archiveResult;
-    }
-  } else if (!changeHasArchivedArtifacts(cwd, changeId)) {
+  const metadataCommand = ["log", "--no-notes", "-1", "--format=%B", "HEAD"];
+  finalizationCommands.push(`git ${metadataCommand.join(" ")}`);
+  const metadataResult = runFinalizationCommand({
+    at,
+    args: metadataCommand,
+    command: "git",
+    cwd,
+    failurePrefix: `failed to read change metadata for ${changeId}`,
+    runCommand: input.runCommand,
+  });
+  if ("signal" in metadataResult) {
+    return metadataResult;
+  }
+  const metadataParse = parseFormlessChangeCommitMessage(metadataResult.stdout, {
+    branch: input.branchPlan.branch,
+  });
+  if (!metadataParse.ok) {
     return finalizationBlockedEvidence({
       at,
-      message: `cannot finalize ${changeId}: active or archived OpenSpec artifacts not found`,
+      command: `git ${metadataCommand.join(" ")}`,
+      message: `invalid change metadata for ${changeId}: ${metadataParse.errors.join("; ")}`,
     });
-  } else {
-    writeLine(input.stdout, `[agents] ${changeId} already archived; skipping archive`);
+  }
+  if (remainingFormlessChangeTasks(metadataParse.metadata) > 0) {
+    return finalizationBlockedEvidence({
+      at,
+      command: `git ${metadataCommand.join(" ")}`,
+      message: `cannot finalize ${changeId}: change metadata still has unfinished tasks`,
+    });
   }
 
+  finalizationCommands.push("openspec validate --specs --strict --no-interactive");
+  const validateResult = runFinalizationCommand({
+    at,
+    args: ["validate", "--specs", "--strict", "--no-interactive"],
+    command: "openspec",
+    cwd,
+    failurePrefix: `openspec validate --specs failed for ${changeId}`,
+    runCommand: input.runCommand,
+  });
+  if ("signal" in validateResult) {
+    return validateResult;
+  }
+
+  const implementationCheck = latestImplementationCheckEvidence(metadataParse.metadata);
   const changedFilesBeforeCheck = changedFilesInWorktree(cwd, input.runCommand);
   const rebaseCodeFiles = rebaseChangedFiles?.filter(isCodeOrGeneratedPath) ?? [];
   const finalizationCodeFiles = changedFilesBeforeCheck?.filter(isCodeOrGeneratedPath) ?? [];
@@ -2332,26 +2250,48 @@ function runAutomaticFinalization(input: {
       message: "failed to inspect finalization changes before commit",
     });
   }
+  const archivedPaths = archivedChangeStatusPaths(changedFiles);
+  if (archivedPaths.length > 0) {
+    return finalizationBlockedEvidence({
+      at,
+      command: "git status --short --untracked-files=all",
+      message: `finalization produced archived change files for ${changeId}: ${archivedPaths.join(
+        ", ",
+      )}`,
+    });
+  }
+  if (changedFiles.length > 0) {
+    return finalizationBlockedEvidence({
+      at,
+      command: "git status --short --untracked-files=all",
+      message: `unexpected uncommitted finalization changes for ${changeId}: ${changedFiles.join(
+        ", ",
+      )}`,
+    });
+  }
 
-  const commitFailure = commitFinalizationChanges({
+  const evidenceMessage =
+    checkReason === null
+      ? `finalized ${changeId}; reused implementation check evidence`
+      : `finalized ${changeId}; ran devstate check because ${checkReason}`;
+  finalizationCommands.push("git commit --amend -F <metadata-message>");
+  const metadataFailure = amendFinalizationMetadata({
     at,
     changeId,
-    changedFiles,
     cwd,
+    evidenceMessage,
+    metadata: metadataParse.metadata,
     runCommand: input.runCommand,
   });
-  if (commitFailure) {
-    return commitFailure;
+  if (metadataFailure) {
+    return metadataFailure;
   }
 
   return {
     evidence: {
       at,
       command: finalizationCommands.join("; "),
-      message:
-        checkReason === null
-          ? `finalized ${changeId}; reused implementation check evidence`
-          : `finalized ${changeId}; ran devstate check because ${checkReason}`,
+      message: evidenceMessage,
     },
     signal: "plan-done",
   };
@@ -2475,7 +2415,9 @@ async function runCodexSession(input: {
   const prompt =
     input.mode === "finalize"
       ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName, {
-          applyInstructions: input.applyInstructions,
+          baseRef: input.baseRef,
+          branchDiff,
+          changeMetadata: input.changeMetadata,
         })
       : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
           baseRef: input.baseRef,
@@ -2687,7 +2629,8 @@ function dryRunCodexCommand(input: {
   const prompt =
     input.mode === "finalize"
       ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName, {
-          applyInstructions: input.applyInstructions,
+          baseRef: input.baseRef,
+          changeMetadata: input.changeMetadata,
         })
       : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
           baseRef: input.baseRef,
