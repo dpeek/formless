@@ -153,6 +153,7 @@ describe("Formless workspace operations", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployRecordSource(workspaceRoot);
+    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -168,6 +169,11 @@ describe("Formless workspace operations", () => {
             },
           ],
         },
+        fetch: authorityExportFetch(
+          [installedSite("david", "David Peek")],
+          { david: { records: [] } },
+          { controlPlaneRecords: deployControlPlaneRecords() },
+        ),
         operationIds: ["op_deploy_plan_00000001"],
         packageVersion: packageJson.version,
         timestamps: [
@@ -196,7 +202,7 @@ describe("Formless workspace operations", () => {
             targetId: "instance.primary",
           },
           drift: {
-            status: "not-checked",
+            status: "no-drift",
           },
           evidence: {
             count: 0,
@@ -215,7 +221,7 @@ describe("Formless workspace operations", () => {
           fields: {
             cleanupStatus: "not-run",
             desiredResourceCount: 1,
-            drift: "not-checked",
+            drift: "no-drift",
             evidenceCount: 0,
             expectedUrl: "https://personal.dpeek.workers.dev",
             routeTargetCount: 2,
@@ -311,7 +317,7 @@ describe("Formless workspace operations", () => {
             status: "not-run",
           },
           drift: {
-            status: "drift",
+            status: "no-drift",
           },
           evidence: {
             count: 0,
@@ -338,7 +344,7 @@ describe("Formless workspace operations", () => {
             attemptId: "attempt.local-gateway.1",
             cleanupStatus: "not-run",
             desiredStateVersion: desiredState.versionId,
-            drift: "drift",
+            drift: "no-drift",
             evidenceCount: 0,
             writebackStatus: "succeeded",
           },
@@ -589,71 +595,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
     controlPlane: {
       schemaKey: "instance-control-plane",
       schemaUpdatedAt: now,
-      records: [
-        ...controlPlaneRecords(),
-        {
-          createdAt: now,
-          entity: "route",
-          id: "route:site:public-site",
-          values: {
-            appInstall: "david",
-            createdAt: now,
-            enabled: true,
-            kind: "mount",
-            matchPath: "/sites/david",
-            matchPrefix: "/sites/david/",
-            surface: "public-site",
-            targetProfile: "public-site",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "route",
-          id: "route:host:public-site:www.example.com",
-          values: {
-            appInstall: "david",
-            createdAt: now,
-            enabled: true,
-            kind: "mount",
-            matchHost: "www.example.com",
-            matchPath: "/",
-            matchPrefix: "/",
-            providerConfig: "cloudflare-personal",
-            surface: "public-site",
-            targetProfile: "public-site",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "deploy-target",
-          id: "instance.primary",
-          values: {
-            createdAt: now,
-            enabled: true,
-            label: "Primary instance",
-            targetId: "instance.primary",
-            targetKind: "instance",
-            targetUrl: "https://personal.dpeek.workers.dev",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "provider-config-ref",
-          id: "cloudflare-personal",
-          values: {
-            accountId: "account-123",
-            configRef: "cloudflare-personal",
-            createdAt: now,
-            label: "Cloudflare personal",
-            providerFamily: "cloudflare",
-            updatedAt: now,
-            workerName: "personal",
-          },
-        },
-      ],
+      records: deployControlPlaneRecords(),
     },
     manifest,
     workspaceRoot,
@@ -663,6 +605,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
 function authorityExportFetch(
   installs: ReturnType<typeof installedSite>[],
   dataByInstall: Record<string, { records: StoredRecord[] }>,
+  options: { controlPlaneRecords?: StoredRecord[] } = {},
 ): typeof fetch {
   return async (url) => {
     const requestUrl =
@@ -696,9 +639,13 @@ function authorityExportFetch(
     if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
       return Response.json({
         cursor: 1,
-        records: controlPlaneRecords(),
+        records: options.controlPlaneRecords ?? controlPlaneRecords(),
         schema: {},
       });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/domain-mappings") {
+      return Response.json({ mappings: [] });
     }
 
     const snapshotMatch = parsedUrl.pathname.match(
@@ -794,7 +741,7 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
     }
 
     if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
-      return Response.json({ cursor: 1, records: controlPlaneRecords(), schema: {} });
+      return Response.json({ cursor: 1, records: deployControlPlaneRecords(), schema: {} });
     }
 
     if (parsedUrl.pathname === "/api/app-installs/site/david/snapshot") {
@@ -1074,6 +1021,76 @@ function controlPlaneRecords(): StoredRecord[] {
         surface: "admin",
         targetProfile: "app",
         updatedAt: now,
+      },
+    },
+  ];
+}
+
+function deployControlPlaneRecords(): StoredRecord[] {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return [
+    ...controlPlaneRecords(),
+    {
+      createdAt: now,
+      entity: "route",
+      id: "route:site:public-site",
+      values: {
+        appInstall: "david",
+        createdAt: now,
+        enabled: true,
+        kind: "mount",
+        matchPath: "/sites/david",
+        matchPrefix: "/sites/david/",
+        surface: "public-site",
+        targetProfile: "public-site",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "route",
+      id: "route:host:public-site:www.example.com",
+      values: {
+        appInstall: "david",
+        createdAt: now,
+        enabled: true,
+        kind: "mount",
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        providerConfig: "cloudflare-personal",
+        surface: "public-site",
+        targetProfile: "public-site",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "deploy-target",
+      id: "instance.primary",
+      values: {
+        createdAt: now,
+        enabled: true,
+        label: "Primary instance",
+        targetId: "instance.primary",
+        targetKind: "instance",
+        targetUrl: "https://personal.dpeek.workers.dev",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "provider-config-ref",
+      id: "cloudflare-personal",
+      values: {
+        accountId: "account-123",
+        configRef: "cloudflare-personal",
+        createdAt: now,
+        label: "Cloudflare personal",
+        providerFamily: "cloudflare",
+        updatedAt: now,
+        workerName: "personal",
       },
     },
   ];

@@ -370,6 +370,7 @@ describe("local workspace gateway", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployRecordSource(workspaceRoot);
+    await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
 
     const planned = await gatewayJson(
       operationRequest({ kind: "deployPlan" }, browserHeaders({ cookie, csrf: true })),
@@ -383,6 +384,7 @@ describe("local workspace gateway", () => {
               },
             ],
           },
+          fetch: deployApplyFetch([], "site"),
           operationIds: ["op_deploy_plan_00000001"],
           packageVersion: packageJson.version,
           timestamps: [
@@ -483,7 +485,7 @@ describe("local workspace gateway", () => {
             status: "not-run",
           },
           drift: {
-            status: "drift",
+            status: "no-drift",
           },
           evidence: {
             count: 0,
@@ -830,7 +832,7 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
     if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
       return Response.json({
         cursor: 1,
-        records: gatewayControlPlaneRecords(installId),
+        records: deployControlPlaneRecords(installId),
         schema: {},
       });
     }
@@ -982,84 +984,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
     controlPlane: {
       schemaKey: "instance-control-plane",
       schemaUpdatedAt: now,
-      records: [
-        {
-          createdAt: now,
-          entity: "app-install",
-          id: "site",
-          values: {
-            createdAt: now,
-            installId: "site",
-            label: "Site",
-            packageAppKey: "site",
-            status: "installed",
-            storageIdentity: "app:site",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "route",
-          id: "route:site:admin",
-          values: {
-            appInstall: "site",
-            createdAt: now,
-            enabled: true,
-            kind: "mount",
-            matchPath: "/apps/site",
-            matchPrefix: "/apps/site/",
-            surface: "admin",
-            targetProfile: "app",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "route",
-          id: "route:host:public-site:www.example.com",
-          values: {
-            appInstall: "site",
-            createdAt: now,
-            enabled: true,
-            kind: "mount",
-            matchHost: "www.example.com",
-            matchPath: "/",
-            matchPrefix: "/",
-            providerConfig: "cloudflare-personal",
-            surface: "public-site",
-            targetProfile: "public-site",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "deploy-target",
-          id: "instance.primary",
-          values: {
-            createdAt: now,
-            enabled: true,
-            label: "Primary instance",
-            targetId: "instance.primary",
-            targetKind: "instance",
-            targetUrl: "https://personal.dpeek.workers.dev",
-            updatedAt: now,
-          },
-        },
-        {
-          createdAt: now,
-          entity: "provider-config-ref",
-          id: "cloudflare-personal",
-          values: {
-            accountId: "account-123",
-            configRef: "cloudflare-personal",
-            createdAt: now,
-            label: "Cloudflare personal",
-            providerFamily: "cloudflare",
-            updatedAt: now,
-            workerName: "personal",
-          },
-        },
-      ],
+      records: deployControlPlaneRecords("site"),
     },
     manifest,
     workspaceRoot,
@@ -1175,6 +1100,60 @@ function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
         surface: "admin",
         targetProfile: "app",
         updatedAt: now,
+      },
+    },
+  ];
+}
+
+function deployControlPlaneRecords(installId: string): StoredRecord[] {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return [
+    ...gatewayControlPlaneRecords(installId),
+    {
+      createdAt: now,
+      entity: "route",
+      id: "route:host:public-site:www.example.com",
+      values: {
+        appInstall: installId,
+        createdAt: now,
+        enabled: true,
+        kind: "mount",
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        providerConfig: "cloudflare-personal",
+        surface: "public-site",
+        targetProfile: "public-site",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "deploy-target",
+      id: "instance.primary",
+      values: {
+        createdAt: now,
+        enabled: true,
+        label: "Primary instance",
+        targetId: "instance.primary",
+        targetKind: "instance",
+        targetUrl: "https://personal.dpeek.workers.dev",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "provider-config-ref",
+      id: "cloudflare-personal",
+      values: {
+        accountId: "account-123",
+        configRef: "cloudflare-personal",
+        createdAt: now,
+        label: "Cloudflare personal",
+        providerFamily: "cloudflare",
+        updatedAt: now,
+        workerName: "personal",
       },
     },
   ];

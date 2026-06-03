@@ -22,6 +22,7 @@ export async function syncDeploymentProjectionToControlPlane(input: {
   resources: DeploymentResource[];
   sourceFingerprint: string;
   target: DeploymentTarget;
+  targetUrl: string;
 }): Promise<StoredRecord[] | undefined> {
   return postInternalControlPlaneRecords(input.env, input.requestUrl, {
     body: {
@@ -29,6 +30,7 @@ export async function syncDeploymentProjectionToControlPlane(input: {
       resources: input.resources,
       sourceFingerprint: input.sourceFingerprint,
       target: input.target,
+      targetUrl: input.targetUrl,
     },
     path: INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH,
   });

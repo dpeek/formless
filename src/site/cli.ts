@@ -395,6 +395,25 @@ async function resolveTopLevelFormlessWorkspacePath(
   });
 }
 
+async function resolveTopLevelFormlessWorkspaceDevPath(
+  input: { workspacePath?: string | null },
+  dependencies: Pick<FormlessCliDependencies, "cwd">,
+): Promise<string> {
+  try {
+    return await resolveTopLevelFormlessWorkspacePath(input, dependencies);
+  } catch (error) {
+    if (
+      (input.workspacePath === undefined || input.workspacePath === null) &&
+      error instanceof Error &&
+      error.message.includes("Could not find formless.json")
+    ) {
+      return path.resolve(dependencies.cwd);
+    }
+
+    throw error;
+  }
+}
+
 export async function runFormlessCli(
   args: string[],
   dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
@@ -416,7 +435,7 @@ export async function runFormlessCli(
       );
       await runFormlessInstanceWorkspaceDev(
         {
-          workspacePath: await resolveTopLevelFormlessWorkspacePath(command, dependencies),
+          workspacePath: await resolveTopLevelFormlessWorkspaceDevPath(command, dependencies),
         },
         dependencies,
         {

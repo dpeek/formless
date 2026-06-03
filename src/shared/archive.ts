@@ -411,10 +411,14 @@ function parseInstanceArchiveControlPlaneRecord(context: string, value: unknown)
     ...("deletedAt" in object ? ["deletedAt"] : []),
   ]);
 
-  const entity = parseInstanceArchiveControlPlaneEntity(`${context} entity`, object.entity);
+  const id = parseNonEmptyString(`${context} id`, object.id);
+  const entity = parseInstanceArchiveControlPlaneEntity(
+    `${context} record "${id}" entity`,
+    object.entity,
+  );
 
   const record = {
-    id: parseNonEmptyString(`${context} id`, object.id),
+    id,
     entity,
     values: parseRecordValues(`${context} values`, object.values),
     createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),

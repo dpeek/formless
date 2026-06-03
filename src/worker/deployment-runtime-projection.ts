@@ -67,6 +67,7 @@ export async function buildPrimaryInstanceDeploymentDesiredStateProjection(
       kind: "instance",
       targetId: input.targetId,
     },
+    targetUrl: new URL(input.requestUrl).origin,
   });
 
   return projection;

@@ -3290,6 +3290,54 @@ describe("Formless Site CLI", () => {
     expect(child.killed).toBe(false);
   });
 
+  it("starts workspace dev from an empty current directory for browser onboarding", async () => {
+    const workspaceRoot = await makeTempDir();
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+
+    const run = runFormlessCli(
+      ["dev"],
+      cliDeps(workspaceRoot, {
+        env: { PORT: "4443" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await expect(
+      Promise.race([run, waitUntil(() => spawnCalls.length > 0).then(() => "spawned")]),
+    ).resolves.toBe("spawned");
+    child.close(0);
+    await run;
+
+    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls[0]?.env).toMatchObject({
+      FORMLESS_LAUNCH_FIXTURE: "empty",
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
+      PORT: "4443",
+      VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+    });
+    await expect(
+      stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(logs).toContain("Local bootstrap entry: complete workspace setup in the browser.");
+    expect(child.killed).toBe(false);
+  });
+
   it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from record source", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");

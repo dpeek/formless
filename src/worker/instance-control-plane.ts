@@ -859,9 +859,15 @@ function syncDeploymentProjectionRecords(
     resources: DeploymentResource[];
     sourceFingerprint: string;
     target: DeploymentTarget;
+    targetUrl: string;
   },
 ) {
-  const targetRecordId = upsertDeploymentTargetRecord(storage, input.target, input.now);
+  const targetRecordId = upsertDeploymentTargetRecord(
+    storage,
+    input.target,
+    input.targetUrl,
+    input.now,
+  );
   const nextResourceRecordIds = new Set<string>();
 
   for (const resource of input.resources) {
@@ -959,12 +965,14 @@ function syncDomainIntentRecords(
 function upsertDeploymentTargetRecord(
   storage: DurableObjectStorage,
   target: DeploymentTarget,
+  targetUrl: string,
   now: string,
 ) {
   const existing = getStoredRecord(storage, target.targetId);
   const values: RecordValues = {
     targetId: target.targetId,
     targetKind: target.kind,
+    targetUrl,
     label: target.label ?? target.targetId,
     enabled: true,
     createdAt: stringRecordValue(existing?.values.createdAt) ?? now,
@@ -1230,17 +1238,19 @@ function parseInternalDeploymentProjectionRequest(value: unknown): {
   resources: DeploymentResource[];
   sourceFingerprint: string;
   target: DeploymentTarget;
+  targetUrl: string;
 } {
   if (!isRecord(value)) {
     throw new BadRequestError("Deployment projection request must be an object.");
   }
 
   const target = parseDeploymentTarget(value.target);
+  const targetUrl = parseRequiredString("targetUrl", value.targetUrl);
   const resources = parseDeploymentResources(value.resources);
   const sourceFingerprint = parseRequiredString("sourceFingerprint", value.sourceFingerprint);
   const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
 
-  return { now, resources, sourceFingerprint, target };
+  return { now, resources, sourceFingerprint, target, targetUrl };
 }
 
 function parseDeploymentTarget(value: unknown): DeploymentTarget {
