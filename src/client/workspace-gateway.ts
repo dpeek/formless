@@ -1,125 +1,41 @@
-export const LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER = "x-formless-workspace-bootstrap";
-export const LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER = "x-formless-csrf";
+import {
+  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
+  localWorkspaceGatewayOperationApiPath,
+  localWorkspaceGatewayOperationsApiPath,
+  localWorkspaceGatewayReadOperationIntent,
+  localWorkspaceGatewayStartOperationIntent,
+  localWorkspaceGatewayStatusApiPath,
+  type LocalWorkspaceGatewayApiErrorBody,
+  type LocalWorkspaceGatewayOperationKind,
+  type LocalWorkspaceGatewayResponse,
+  type LocalWorkspaceGatewayStartInput,
+} from "../shared/workspace-gateway-protocol.ts";
 
-export type LocalWorkspaceGatewayOperationKind =
-  | "check"
-  | "credentialSetup"
-  | "deployApply"
-  | "deployPlan"
-  | "init"
-  | "pull"
-  | "push"
-  | "save"
-  | "status";
-
-export type LocalWorkspaceGatewayOperationStatus = "failed" | "queued" | "running" | "succeeded";
-
-export type LocalWorkspaceGatewayDisplayValue =
-  | boolean
-  | null
-  | number
-  | string
-  | LocalWorkspaceGatewayDisplayValue[]
-  | { [key: string]: LocalWorkspaceGatewayDisplayValue };
-
-export type LocalWorkspaceGatewayDisplayObject = {
-  [key: string]: LocalWorkspaceGatewayDisplayValue;
-};
-
-export type LocalWorkspaceGatewayOperationSummary = {
-  fields: LocalWorkspaceGatewayDisplayObject;
-  title: string;
-};
-
-export type LocalWorkspaceGatewayOperationLog = {
-  at: string;
-  id: string;
-  level: "error" | "info" | "warning";
-  message: string;
-};
-
-export type LocalWorkspaceGatewayOperationError = {
-  at: string;
-  message: string;
-};
-
-export type LocalWorkspaceGatewayExternalAuthorizationEvent = {
-  at: string;
-  id: string;
-  profileLabel: string;
-  provider: "alchemy" | "cloudflare";
-  status: "waiting";
-  type: "externalAuthorizationUrl";
-  url: string;
-};
-
-export type LocalWorkspaceGatewayOperationEvent = LocalWorkspaceGatewayExternalAuthorizationEvent;
-
-export type LocalWorkspaceGatewayOperationResult = {
-  deployment?: LocalWorkspaceGatewayDisplayObject;
-  details?: LocalWorkspaceGatewayDisplayObject;
-  summary: LocalWorkspaceGatewayOperationSummary;
-};
-
-export type LocalWorkspaceGatewayOperation = {
-  actor: "automation" | "browser" | "cli" | "system";
-  completedAt?: string;
-  createdAt: string;
-  errors: LocalWorkspaceGatewayOperationError[];
-  events: LocalWorkspaceGatewayOperationEvent[];
-  id: string;
-  input: LocalWorkspaceGatewayDisplayObject;
-  kind: "formless.workspaceOperation";
-  logs: LocalWorkspaceGatewayOperationLog[];
-  operation: LocalWorkspaceGatewayOperationKind;
-  result?: LocalWorkspaceGatewayOperationResult;
-  startedAt?: string;
-  status: LocalWorkspaceGatewayOperationStatus;
-  summary: LocalWorkspaceGatewayOperationSummary;
-  updatedAt: string;
-  version: 1;
-  workspace: {
-    label: string;
-  };
-};
-
-export type LocalWorkspaceGatewayStartInput =
-  | { check?: boolean; kind: "save" }
-  | { includeDeploymentStatus?: boolean; kind: "status"; targetAlias?: string | null }
-  | { kind: "check" | "pull"; targetAlias?: string | null }
-  | {
-      allowStale?: boolean;
-      apply?: boolean;
-      kind: "push";
-      replace?: boolean;
-      replaceInstallSet?: boolean;
-      targetAlias?: string | null;
-    }
-  | {
-      accountId?: string | null;
-      kind: "credentialSetup";
-      profileLabel?: string | null;
-      provider: "cloudflare";
-    }
-  | {
-      kind: "deployApply" | "deployPlan";
-      migrationPolicy?: "existing" | "new" | null;
-      targetAlias?: string | null;
-    }
-  | { kind: "init"; name?: string | null };
-
-export type LocalWorkspaceGatewayResponse = {
-  csrfToken?: string;
-  operation: LocalWorkspaceGatewayOperation;
-};
+export {
+  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
+} from "../shared/workspace-gateway-protocol.ts";
+export type {
+  LocalWorkspaceGatewayApiErrorBody,
+  LocalWorkspaceGatewayDisplayObject,
+  LocalWorkspaceGatewayDisplayValue,
+  LocalWorkspaceGatewayExternalAuthorizationEvent,
+  LocalWorkspaceGatewayOperation,
+  LocalWorkspaceGatewayOperationError,
+  LocalWorkspaceGatewayOperationEvent,
+  LocalWorkspaceGatewayOperationKind,
+  LocalWorkspaceGatewayOperationLog,
+  LocalWorkspaceGatewayOperationResult,
+  LocalWorkspaceGatewayOperationStatus,
+  LocalWorkspaceGatewayOperationSummary,
+  LocalWorkspaceGatewayResponse,
+  LocalWorkspaceGatewayStartInput,
+} from "../shared/workspace-gateway-protocol.ts";
 
 export type LocalWorkspaceGatewayConfig = {
   apiBasePath: string;
   bootstrapToken?: string;
-};
-
-export type LocalWorkspaceGatewayApiErrorBody = {
-  error: string;
 };
 
 export class LocalWorkspaceGatewayApiError extends Error {
@@ -169,13 +85,13 @@ export async function fetchLocalWorkspaceGatewayStatus({
 
   return gatewayRequestWithBootstrapRetry(
     () =>
-      fetcher(`${config.apiBasePath}/status`, {
+      fetcher(localWorkspaceGatewayStatusApiPath(config.apiBasePath), {
         credentials: "same-origin",
         headers: gatewayHeaders(config, { allowBootstrap: true }),
         signal,
       }),
     () =>
-      fetcher(`${config.apiBasePath}/status`, {
+      fetcher(localWorkspaceGatewayStatusApiPath(config.apiBasePath), {
         credentials: "same-origin",
         headers: gatewayHeaders(config, { allowBootstrap: false }),
         signal,
@@ -201,15 +117,15 @@ export async function startLocalWorkspaceGatewayOperation(
     return undefined;
   }
 
-  const allowBootstrap = input.kind === "init" || input.kind === "status";
+  const { bootstrapAllowed } = localWorkspaceGatewayStartOperationIntent(input);
 
   return gatewayRequestWithBootstrapRetry(
     () =>
-      fetcher(`${config.apiBasePath}/operations`, {
+      fetcher(localWorkspaceGatewayOperationsApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
         credentials: "same-origin",
         headers: gatewayHeaders(config, {
-          allowBootstrap,
+          allowBootstrap: bootstrapAllowed,
           csrfToken,
           includeJsonContentType: true,
         }),
@@ -217,7 +133,7 @@ export async function startLocalWorkspaceGatewayOperation(
         signal,
       }),
     () =>
-      fetcher(`${config.apiBasePath}/operations`, {
+      fetcher(localWorkspaceGatewayOperationsApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
         credentials: "same-origin",
         headers: gatewayHeaders(config, {
@@ -247,8 +163,13 @@ export async function fetchLocalWorkspaceGatewayOperation(
     return undefined;
   }
 
-  const allowBootstrap = input.operationKind === "init" || input.operationKind === "status";
-  const operationPath = `${config.apiBasePath}/operations/${encodeURIComponent(input.operationId)}`;
+  const allowBootstrap = input.operationKind
+    ? localWorkspaceGatewayReadOperationIntent(input.operationKind).bootstrapAllowed
+    : false;
+  const operationPath = localWorkspaceGatewayOperationApiPath(
+    input.operationId,
+    config.apiBasePath,
+  );
 
   return gatewayRequestWithBootstrapRetry(
     () =>

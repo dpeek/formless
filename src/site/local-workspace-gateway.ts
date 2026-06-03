@@ -3,6 +3,28 @@ import path from "node:path";
 
 import packageJson from "../../package.json";
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
+import {
+  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
+  LOCAL_WORKSPACE_GATEWAY_ENABLED_ENV,
+  LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
+  LOCAL_WORKSPACE_GATEWAY_ROOT_ENV,
+  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
+  isLocalWorkspaceGatewayPath,
+  localWorkspaceGatewayOperationPath,
+  localWorkspaceGatewayReadOperationIntent,
+  localWorkspaceGatewayStartOperationIntent,
+  localWorkspaceGatewayStatusIntent,
+  parseLocalWorkspaceGatewayOperationId,
+  parseLocalWorkspaceGatewayStartInput,
+  type LocalWorkspaceGatewayCredentialSetupStartInput,
+  type LocalWorkspaceGatewayOperationIntent,
+  type LocalWorkspaceGatewayStartInput,
+  type LocalWorkspaceGatewayStartInputParseResult,
+} from "../shared/workspace-gateway-protocol.ts";
 import { setupCloudflareCredentialsWithAlchemyProfile } from "./instance-workspace-credential-setup.ts";
 import {
   createFormlessWorkspaceOperationState,
@@ -12,25 +34,12 @@ import {
   type FormlessWorkspaceOperationActor,
   type FormlessWorkspaceOperationEvent,
   type FormlessWorkspaceOperationInput,
-  type FormlessWorkspaceOperationKind,
   type FormlessWorkspaceOperationResult,
   type FormlessWorkspaceOperationStatus,
   type RunFormlessWorkspaceOperationDependencies,
 } from "./instance-workspace-operations.ts";
 import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
-
-export const LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX = "/api/formless/workspace";
-export const LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH = `${LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/status`;
-export const LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH = `${LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/operations`;
-export const LOCAL_WORKSPACE_GATEWAY_ENABLED_ENV = "FORMLESS_LOCAL_WORKSPACE_GATEWAY";
-export const LOCAL_WORKSPACE_GATEWAY_ROOT_ENV = "FORMLESS_WORKSPACE_GATEWAY_ROOT";
-export const LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV =
-  "FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN";
-export const LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV = "FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN";
-export const LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER = "x-formless-workspace-bootstrap";
-export const LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER = "x-formless-csrf";
-export const LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME = "formless_workspace_csrf";
 
 export type LocalWorkspaceGatewayEnv = {
   FORMLESS_ADMIN_TOKEN?: string;
@@ -74,17 +83,6 @@ type GatewayAuthorization =
       status: number;
     };
 
-type CredentialSetupOperationInput = {
-  accountId?: string | null;
-  kind: "credentialSetup";
-  profileLabel?: string | null;
-  provider: "cloudflare";
-};
-
-type GatewayStartInput = CredentialSetupOperationInput | FormlessWorkspaceOperationInput;
-
-const operationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
-
 export async function handleLocalWorkspaceGatewayRequest(
   request: Request,
   env: LocalWorkspaceGatewayEnv,
@@ -118,7 +116,7 @@ export async function handleLocalWorkspaceGatewayRequest(
     return handleWorkspaceGatewayStartOperation(request, env, dependencies, workspaceRoot);
   }
 
-  const operationMatch = gatewayOperationPath(url.pathname);
+  const operationMatch = localWorkspaceGatewayOperationPath(url.pathname);
 
   if (operationMatch) {
     if (request.method !== "GET") {
@@ -168,11 +166,12 @@ async function handleWorkspaceGatewayStatus(
   dependencies: LocalWorkspaceGatewayDependencies,
   workspaceRoot: string,
 ): Promise<Response> {
-  const authorization = await authorizeGatewayRequest(request, env, dependencies, {
-    bootstrapOperations: new Set(["status"]),
-    mutation: false,
-    operation: "status",
-  });
+  const authorization = await authorizeGatewayRequest(
+    request,
+    env,
+    dependencies,
+    localWorkspaceGatewayStatusIntent(),
+  );
 
   if ("error" in authorization) {
     return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -199,15 +198,16 @@ async function handleWorkspaceGatewayStartOperation(
 ): Promise<Response> {
   const parsed = await parseGatewayStartInput(request);
 
-  if ("error" in parsed) {
+  if (!parsed.ok) {
     return displaySafeJson({ error: parsed.error }, 400);
   }
 
-  const authorization = await authorizeGatewayRequest(request, env, dependencies, {
-    bootstrapOperations: new Set(["init", "status"]),
-    mutation: parsed.input.kind !== "status",
-    operation: parsed.input.kind,
-  });
+  const authorization = await authorizeGatewayRequest(
+    request,
+    env,
+    dependencies,
+    localWorkspaceGatewayStartOperationIntent(parsed.input),
+  );
 
   if ("error" in authorization) {
     return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -237,14 +237,19 @@ async function handleWorkspaceGatewayReadOperation(
   workspaceRoot: string,
   operationId: string,
 ): Promise<Response> {
-  if (!operationIdPattern.test(operationId)) {
-    return displaySafeJson({ error: "Workspace operation id is invalid." }, 400);
+  const parsedOperationId = parseLocalWorkspaceGatewayOperationId(operationId);
+
+  if (!parsedOperationId.ok) {
+    return displaySafeJson({ error: parsedOperationId.error }, 400);
   }
 
   let operation;
 
   try {
-    operation = await readFormlessWorkspaceOperationState({ operationId, workspaceRoot });
+    operation = await readFormlessWorkspaceOperationState({
+      operationId: parsedOperationId.operationId,
+      workspaceRoot,
+    });
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
       return displaySafeJson({ error: "Workspace operation was not found." }, 404);
@@ -253,11 +258,12 @@ async function handleWorkspaceGatewayReadOperation(
     throw error;
   }
 
-  const authorization = await authorizeGatewayRequest(request, env, dependencies, {
-    bootstrapOperations: new Set(["init", "status"]),
-    mutation: false,
-    operation: operation.operation,
-  });
+  const authorization = await authorizeGatewayRequest(
+    request,
+    env,
+    dependencies,
+    localWorkspaceGatewayReadOperationIntent(operation.operation),
+  );
 
   if ("error" in authorization) {
     return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -267,7 +273,7 @@ async function handleWorkspaceGatewayReadOperation(
 }
 
 async function runCredentialSetupGatewayOperation(
-  input: CredentialSetupOperationInput,
+  input: LocalWorkspaceGatewayCredentialSetupStartInput,
   dependencies: LocalWorkspaceGatewayDependencies,
   workspaceRoot: string,
   actor: FormlessWorkspaceOperationActor,
@@ -431,18 +437,14 @@ async function authorizeGatewayRequest(
   request: Request,
   env: LocalWorkspaceGatewayEnv,
   dependencies: LocalWorkspaceGatewayDependencies,
-  intent: {
-    bootstrapOperations: ReadonlySet<FormlessWorkspaceOperationKind>;
-    mutation: boolean;
-    operation: FormlessWorkspaceOperationKind;
-  },
+  intent: LocalWorkspaceGatewayOperationIntent,
 ): Promise<GatewayAuthorization> {
   if (!isSameOriginOrNoOrigin(request)) {
     return { error: "Workspace gateway requests must be same-origin.", status: 403 };
   }
 
   if (matchesBootstrapCapability(request, env)) {
-    if (!intent.bootstrapOperations.has(intent.operation)) {
+    if (!intent.bootstrapAllowed) {
       return {
         error: "Workspace bootstrap authorization is limited to status and init operations.",
         status: 403,
@@ -460,7 +462,7 @@ async function authorizeGatewayRequest(
     return { actor: "automation", via: "admin-bearer" };
   }
 
-  if (intent.mutation && !isSameOriginWithOrigin(request)) {
+  if (intent.mutating && !isSameOriginWithOrigin(request)) {
     return {
       error: "Workspace gateway browser mutations require a same-origin Origin header.",
       status: 403,
@@ -470,7 +472,7 @@ async function authorizeGatewayRequest(
   const ownerSession = await validateOwnerSessionCookie(request, env);
 
   if (ownerSession.ok) {
-    if (intent.mutation && !validCsrfProof(request, env)) {
+    if (intent.mutating && !validCsrfProof(request, env)) {
       return { error: "Workspace gateway browser mutations require CSRF proof.", status: 403 };
     }
 
@@ -484,7 +486,7 @@ async function authorizeGatewayRequest(
 }
 
 function matchesBootstrapCapability(request: Request, env: LocalWorkspaceGatewayEnv): boolean {
-  const expected = env.FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN?.trim();
+  const expected = env[LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV]?.trim();
 
   return (
     expected !== undefined &&
@@ -505,7 +507,7 @@ function matchesAdminBearer(request: Request, env: LocalWorkspaceGatewayEnv): bo
 }
 
 function validCsrfProof(request: Request, env: LocalWorkspaceGatewayEnv): boolean {
-  const expected = env.FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN?.trim();
+  const expected = env[LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
 
   if (!expected) {
     return false;
@@ -545,7 +547,7 @@ function gatewayOperationResponse(
   operation: unknown,
 ): Response {
   const headers = new Headers();
-  const csrfToken = env.FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN?.trim();
+  const csrfToken = env[LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
   const includeCsrfToken =
     authorization.via === "owner-session" && authorization.actor === "browser";
 
@@ -599,106 +601,20 @@ function operationDependencies(
 
 async function parseGatewayStartInput(
   request: Request,
-): Promise<{ input: GatewayStartInput } | { error: string }> {
+): Promise<LocalWorkspaceGatewayStartInputParseResult> {
   let body: unknown;
 
   try {
     body = await request.json();
   } catch {
-    return { error: "Workspace gateway operation request must be JSON." };
+    return { error: "Workspace gateway operation request must be JSON.", ok: false };
   }
 
-  const forbidden = forbiddenGatewayInput(body);
-
-  if (forbidden) {
-    return { error: forbidden };
-  }
-
-  if (!isRecord(body)) {
-    return { error: "Workspace gateway operation request must be an object." };
-  }
-
-  const kind = typeof body.kind === "string" ? body.kind : body.operation;
-
-  if (typeof kind !== "string") {
-    return { error: 'Workspace gateway operation request must include "kind".' };
-  }
-
-  try {
-    switch (kind) {
-      case "init":
-        return { input: { kind, name: optionalString(body.name) } };
-      case "status":
-        return {
-          input: {
-            includeDeploymentStatus: optionalBoolean(body.includeDeploymentStatus),
-            kind,
-            targetAlias: optionalString(body.targetAlias),
-          },
-        };
-      case "save":
-        return { input: { check: optionalBoolean(body.check), kind } };
-      case "check":
-      case "pull":
-        return { input: { kind, targetAlias: optionalString(body.targetAlias) } };
-      case "push":
-        return {
-          input: {
-            allowStale: optionalBoolean(body.allowStale),
-            apply: optionalBoolean(body.apply),
-            kind,
-            replace: optionalBoolean(body.replace),
-            replaceInstallSet: optionalBoolean(body.replaceInstallSet),
-            targetAlias: optionalString(body.targetAlias),
-          },
-        };
-      case "deployPlan":
-      case "deployApply": {
-        const migrationPolicy = optionalString(body.migrationPolicy);
-
-        if (
-          migrationPolicy !== undefined &&
-          migrationPolicy !== null &&
-          migrationPolicy !== "existing" &&
-          migrationPolicy !== "new"
-        ) {
-          return { error: 'Workspace gateway migrationPolicy must be "new" or "existing".' };
-        }
-
-        return {
-          input: {
-            kind,
-            migrationPolicy,
-            targetAlias: optionalString(body.targetAlias),
-          },
-        };
-      }
-      case "credentialSetup": {
-        const provider = optionalString(body.provider);
-
-        if (provider !== "cloudflare") {
-          return { error: 'Workspace credential setup provider must be "cloudflare".' };
-        }
-
-        return {
-          input: {
-            accountId: optionalString(body.accountId),
-            kind,
-            profileLabel: optionalString(body.profileLabel),
-            provider,
-          },
-        };
-      }
-      default:
-        return { error: `Workspace gateway operation "${kind}" is not supported.` };
-    }
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
-  }
+  return parseLocalWorkspaceGatewayStartInput(body);
 }
 
 function withWorkspaceRoot(
-  input: Exclude<GatewayStartInput, CredentialSetupOperationInput>,
+  input: Exclude<LocalWorkspaceGatewayStartInput, LocalWorkspaceGatewayCredentialSetupStartInput>,
   workspaceRoot: string,
 ): FormlessWorkspaceOperationInput {
   return {
@@ -707,91 +623,11 @@ function withWorkspaceRoot(
   } as FormlessWorkspaceOperationInput;
 }
 
-function forbiddenGatewayInput(value: unknown, label = "request"): string | undefined {
-  if (typeof value === "string") {
-    if (secretLookingText(value)) {
-      return `Workspace gateway ${label} includes secret-looking text.`;
-    }
-
-    if (pathTraversalText(value) || shellCommandText(value)) {
-      return `Workspace gateway ${label} includes forbidden path or shell text.`;
-    }
-
-    return undefined;
-  }
-
-  if (Array.isArray(value)) {
-    for (const [index, item] of value.entries()) {
-      const forbidden = forbiddenGatewayInput(item, `${label}[${index}]`);
-
-      if (forbidden) {
-        return forbidden;
-      }
-    }
-
-    return undefined;
-  }
-
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    if (forbiddenGatewayInputKey(key)) {
-      return `Workspace gateway request includes forbidden key "${key}".`;
-    }
-
-    const forbidden = forbiddenGatewayInput(child, `${label}.${key}`);
-
-    if (forbidden) {
-      return forbidden;
-    }
-  }
-
-  return undefined;
-}
-
-function forbiddenGatewayInputKey(key: string): boolean {
-  const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
-
-  return (
-    normalized === "path" ||
-    normalized === "workspacepath" ||
-    normalized === "filepath" ||
-    normalized === "filesystem" ||
-    normalized === "command" ||
-    normalized === "shell" ||
-    normalized.startsWith("raw") ||
-    normalized.includes("providerstate") ||
-    normalized.endsWith("token") ||
-    normalized.endsWith("secret") ||
-    normalized.endsWith("password") ||
-    normalized.includes("apikey")
-  );
-}
-
-function secretLookingText(value: string): boolean {
-  return /(?:TOKEN|PASSWORD|SECRET|API[_-]?KEY)\s*=/i.test(value) || /^Bearer\s+/i.test(value);
-}
-
-function pathTraversalText(value: string): boolean {
-  return (
-    value.includes("../") ||
-    value.includes("..\\") ||
-    /^\/(?:etc|tmp|Users|var|home)\//.test(value) ||
-    /^[A-Za-z]:\\/.test(value)
-  );
-}
-
-function shellCommandText(value: string): boolean {
-  return /(?:^|[;&|]\s*)(?:bash|curl|rm|sh|zsh)(?:\s|$)/.test(value);
-}
-
 function localWorkspaceGatewayRoot(
   request: Request,
   env: LocalWorkspaceGatewayEnv,
 ): string | undefined {
-  if (env.FORMLESS_LOCAL_WORKSPACE_GATEWAY !== "1") {
+  if (env[LOCAL_WORKSPACE_GATEWAY_ENABLED_ENV] !== "1") {
     return undefined;
   }
 
@@ -804,32 +640,9 @@ function localWorkspaceGatewayRoot(
     return undefined;
   }
 
-  const workspaceRoot = env.FORMLESS_WORKSPACE_GATEWAY_ROOT?.trim();
+  const workspaceRoot = env[LOCAL_WORKSPACE_GATEWAY_ROOT_ENV]?.trim();
 
   return workspaceRoot ? path.resolve(workspaceRoot) : undefined;
-}
-
-function isLocalWorkspaceGatewayPath(pathname: string): boolean {
-  return (
-    pathname === LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX ||
-    pathname.startsWith(`${LOCAL_WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/`)
-  );
-}
-
-function gatewayOperationPath(pathname: string): { operationId: string } | undefined {
-  const suffix = pathname.slice(`${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/`.length);
-
-  if (pathname === LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH || suffix === pathname) {
-    return undefined;
-  }
-
-  const parts = suffix.split("/").filter(Boolean);
-
-  if (parts.length === 1 || (parts.length === 2 && parts[1] === "progress")) {
-    return { operationId: parts[0] ?? "" };
-  }
-
-  return undefined;
 }
 
 function isSameOriginOrNoOrigin(request: Request): boolean {
@@ -872,34 +685,6 @@ function methodNotAllowed(methods: string[]) {
     405,
     new Headers({ Allow: methods.join(", ") }),
   );
-}
-
-function optionalString(value: unknown): string | null | undefined {
-  if (value === undefined || value === null) {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    throw new Error("Workspace gateway string field must be a string.");
-  }
-
-  return value;
-}
-
-function optionalBoolean(value: unknown): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value !== "boolean") {
-    throw new Error("Workspace gateway boolean field must be a boolean.");
-  }
-
-  return value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

@@ -22,6 +22,13 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
+import {
+  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
+  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
+  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
+} from "../shared/workspace-gateway-protocol.ts";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
@@ -32,11 +39,6 @@ import {
 } from "./instance-workspace-config.ts";
 import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import {
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
-  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
   handleLocalWorkspaceGatewayRequest,
   type LocalWorkspaceGatewayDependencies,
   type LocalWorkspaceGatewayEnv,

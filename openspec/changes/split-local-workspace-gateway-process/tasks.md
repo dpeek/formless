@@ -1,15 +1,35 @@
 ## 0. Boundary Inventory
 
-- [ ] 0.1 Inventory current gateway imports, route handling, Vite middleware, local dev env, and browser config that mention workspace gateway behavior.
-- [ ] 0.2 Confirm no deployed Worker route currently exposes workspace gateway execution, and record the current failing boundary as implementation evidence.
-- [ ] 0.3 Identify the minimal Worker-safe gateway protocol surface needed by browser helpers, Worker proxy, and sidecar implementation.
+- [x] 0.1 Inventory current gateway imports, route handling, Vite middleware, local dev env, and browser config that mention workspace gateway behavior.
+- [x] 0.2 Confirm no deployed Worker route currently exposes workspace gateway execution, and record the current failing boundary as implementation evidence.
+- [x] 0.3 Identify the minimal Worker-safe gateway protocol surface needed by browser helpers, Worker proxy, and sidecar implementation.
+
+Evidence 2026-06-03 gorp:
+
+- Current executor ownership: `vite.config.ts` registers `formless-local-workspace-gateway`, dynamically loads `/src/site/local-workspace-gateway.ts`, and installs `createLocalWorkspaceGatewayMiddleware()` in Vite dev middleware.
+- Current gateway implementation: `src/site/local-workspace-gateway.ts` owns `/api/formless/workspace`, `/status`, `/operations`, and `/operations/:id`; reads `FORMLESS_LOCAL_WORKSPACE_GATEWAY`, `FORMLESS_WORKSPACE_GATEWAY_ROOT`, bootstrap, CSRF, owner-session, and admin bearer env; validates same-origin, bootstrap limits, operation ids, operation input, forbidden path/shell/secret-looking input; directly runs `runFormlessWorkspaceOperation`, operation-state reads/writes, Cloudflare credential setup, and Alchemy account discovery.
+- Current local operation modules: `src/site/instance-workspace-operations.ts` imports Node `fs`, `path`, and workspace helpers; persists `.formless/operations`; runs init, status, save, check, pull, push, deploy plan, and deploy apply; redacts operation output.
+- Current local dev env: `src/site/instance-workspace.ts` `formlessInstanceWorkspaceDevEnv()` sets `FORMLESS_LOCAL_WORKSPACE_GATEWAY=1`, `FORMLESS_WORKSPACE_GATEWAY_ROOT`, bootstrap and CSRF env, `FORMLESS_WRANGLER_PERSIST`, `VITE_FORMLESS_WORKSPACE_GATEWAY_API=/api/formless/workspace`, and `VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN`.
+- Current browser surface: `src/client/workspace-gateway.ts` defines the browser operation and response types, reads only the same-origin API base path plus bootstrap token from Vite env, calls `GET /status`, `POST /operations`, and `GET /operations/:id`, retries after bootstrap expiry, and sends CSRF proof for owner-session mutations. `src/app/routes/instance-shell.tsx` renders local workspace controls only when that browser config/status is available, with controls for init, save, check, pull, push, credential setup, deploy plan, and deploy apply.
+- Current Worker boundary: `src/worker/routing.ts` exposes a `workspaceGatewayApiRoutes` policy field but `workerRuntimeRoutePolicyFromKind()` returns `false` for every profile; `src/worker/routing.test.ts` asserts false for instance, dev, app, site-authoring, and published Site profiles. `src/worker/index.ts` has no `/api/formless/workspace/*` handler before normal API routing and final 404.
+- Import search evidence: `rg "local-workspace-gateway|instance-workspace-operations|instance-workspace-credential-setup|FORMLESS_WORKSPACE_GATEWAY|/api/formless/workspace" src/worker` found no Worker gateway implementation import or route handler; only routing policy/test mentions of `workspaceGatewayApiRoutes`.
+- Current failing boundary for this change: local browser gateway execution succeeds only through Vite's Node middleware path, while deployed Worker/runtime source has no route that can execute or proxy `/api/formless/workspace/*`; deployed, mapped-host, and non-local profiles therefore cannot expose workspace gateway execution today.
+- Minimal Worker-safe protocol surface for the next section: shared route constants/path parsing for prefix, status, operations, and operation reads; bootstrap and CSRF header/cookie names; browser response/display-safe operation state types; operation kind allowlist; start-input union for init, status, save, check, pull, push, credential setup, deploy plan, and deploy apply; operation-id pattern/parsing; bootstrap-limited operation classification (`status`, `init`, and reads of those operations only); mutating-operation classification for all operation starts except `status`; display-safe actor facts; and input validation helpers for supported provider, migration policy, forbidden keys, path traversal, shell text, and secret-looking values. This protocol surface must not import Node filesystem/path/process APIs, workspace operation execution, credential setup adapters, Alchemy/provider adapters, workspace roots, or local secret env.
 
 ## 1. Gateway Protocol And Boundary Tests
 
-- [ ] 1.1 Extract workspace gateway route constants, browser response types, operation input types, and operation-intent classification into Worker-safe shared modules.
-- [ ] 1.2 Update browser gateway helpers and local gateway implementation imports to use the shared protocol surface.
-- [ ] 1.3 Add an import-boundary test proving `src/worker` does not import local gateway sidecar implementation, workspace filesystem operation modules, local credential setup adapters, or Node filesystem/path/process APIs for gateway execution.
-- [ ] 1.4 Add protocol tests for gateway operation allowlists, operation id parsing, bootstrap-limited operations, and mutating operation classification.
+- [x] 1.1 Extract workspace gateway route constants, browser response types, operation input types, and operation-intent classification into Worker-safe shared modules.
+- [x] 1.2 Update browser gateway helpers and local gateway implementation imports to use the shared protocol surface.
+- [x] 1.3 Add an import-boundary test proving `src/worker` does not import local gateway sidecar implementation, workspace filesystem operation modules, local credential setup adapters, or Node filesystem/path/process APIs for gateway execution.
+- [x] 1.4 Add protocol tests for gateway operation allowlists, operation id parsing, bootstrap-limited operations, and mutating operation classification.
+
+Evidence 2026-06-03 gorp:
+
+- Added `src/shared/workspace-gateway-protocol.ts` as the Worker-safe gateway protocol surface: route/header/cookie/env constants, display-safe operation response types, start-input union, operation kind allowlist, operation id/path parsing, start/read/status intent classification, and input validation helpers for provider, migration policy, forbidden keys, path traversal, shell text, and secret-looking values.
+- Updated `src/client/workspace-gateway.ts` to re-export shared browser protocol types and use shared route/intent helpers; updated `src/site/local-workspace-gateway.ts` to import shared constants, input parsing, operation id parsing, and authorization intent classification while leaving local execution dependencies in `src/site`.
+- Added `src/worker/workspace-gateway-boundary.test.ts` to scan production `src/worker` TypeScript and reject imports of local gateway/instance-workspace sidecar modules plus Node filesystem/path/process APIs for gateway execution.
+- Added `src/shared/workspace-gateway-protocol.test.ts` covering operation allowlists, start input validation, operation id and read-path parsing, bootstrap-limited operations, and mutating start-operation classification.
+- Check evidence: `devstate check` passed at 2026-06-03T02:03:15.715Z with `vp check --fix` green and watch tests green.
 
 ## 2. Local Sidecar Gateway
 
