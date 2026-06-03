@@ -3,7 +3,9 @@
 ## Purpose
 
 Runtime topology defines the observable profile, route policy, mapped host, and request routing contracts for a Formless instance. It keeps product instance, dev workbench, app, Site authoring, and published Site behavior coherent across browser shells, APIs, static assets, SSR documents, indexing, icons, and public Site compatibility routes.
+
 ## Requirements
+
 ### Requirement: Profile Resolution
 
 The system SHALL resolve each runtime request to one runtime profile kind: `instance`, `dev`, `app`, `siteAuthoring`, or `publishedSite`.
