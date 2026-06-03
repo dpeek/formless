@@ -3279,7 +3279,9 @@ describe("Formless Site CLI", () => {
     await expect(
       stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    expect((await stat(path.join(workspaceRoot, "archives/apps"))).isDirectory()).toBe(true);
+    await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect((await stat(path.join(workspaceRoot, ".formless/local"))).isDirectory()).toBe(true);
     expect(logs).toEqual([
       "Instance shell: http://localhost:4443/",

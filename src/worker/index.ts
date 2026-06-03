@@ -61,6 +61,15 @@ export type Env = TurnstileRuntimeEnv & {
 
 export default {
   async fetch(request, env) {
+    const earlyInstanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(
+      request,
+      env,
+    );
+
+    if (earlyInstanceAppInstallsResponse) {
+      return earlyInstanceAppInstallsResponse;
+    }
+
     const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(request, env, {
       includeHostless: false,
     });
@@ -153,12 +162,6 @@ export default {
 
     if (instanceUpgradeStatusResponse) {
       return instanceUpgradeStatusResponse;
-    }
-
-    const instanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(request, env);
-
-    if (instanceAppInstallsResponse) {
-      return instanceAppInstallsResponse;
     }
 
     const instanceControlPlaneResponse = await handleInstanceControlPlaneApiRequest(request, env);

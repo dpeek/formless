@@ -1217,7 +1217,7 @@ export async function runFormlessInstanceWorkspaceDev(
   const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
 
-  await prepareWorkspaceDirectories(workspaceRoot, manifest);
+  await prepareWorkspaceDirectories(workspaceRoot, manifest, { appArchiveRoot: false });
 
   const child = dependencies.spawn(dependencies.devCommand.command, dependencies.devCommand.args, {
     cwd: dependencies.packageRoot,
@@ -3331,10 +3331,11 @@ async function assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot: string
     throw error;
   }
 
-  const hasOnlyOperationState =
-    entries.length === 1 && entries[0]?.isDirectory() && entries[0].name === "operations";
+  const hasOnlyIgnoredState = entries.every(
+    (entry) => entry.isDirectory() && (entry.name === "local" || entry.name === "operations"),
+  );
 
-  if (hasOnlyOperationState) {
+  if (hasOnlyIgnoredState) {
     return;
   }
 
@@ -3396,9 +3397,14 @@ async function readTextFileIfExists(filePath: string): Promise<string | null> {
 async function prepareWorkspaceDirectories(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
+  options: { appArchiveRoot?: boolean } = {},
 ) {
+  const appArchiveRoot = options.appArchiveRoot ?? true;
+
   await Promise.all([
-    mkdir(path.join(workspaceRoot, manifest.archives.apps), { recursive: true }),
+    ...(appArchiveRoot
+      ? [mkdir(path.join(workspaceRoot, manifest.archives.apps), { recursive: true })]
+      : []),
     mkdir(path.join(workspaceRoot, manifest.local.stateRoot), { recursive: true }),
   ]);
 }

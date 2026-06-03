@@ -1,7 +1,4 @@
-import {
-  installedAppStorageIdentity,
-  parseInstanceControlPlaneApiRoute,
-} from "../shared/app-storage-identity.ts";
+import { parseInstanceControlPlaneApiRoute } from "../shared/app-storage-identity.ts";
 import {
   appInstallRegistryError,
   createAppInstall,
@@ -494,8 +491,6 @@ async function handleCreateAppInstallAction(
   const records = instanceControlPlaneRecordsForAppInstall({ install: result.install, now });
   preflightAppInstallRecordSet(storage, records, now);
 
-  await initializeInstalledAppStorageForInstall(result.install, env, request.url);
-
   const outcome = noopWriteNotifier.apply(() =>
     createRecordSetForActionOutcome(
       storage,
@@ -534,33 +529,6 @@ function preflightAppInstallRecordSet(
 
   for (const record of pendingRecords) {
     validate(record.entity, record.values, { ignoreRecordId: record.id });
-  }
-}
-
-async function initializeInstalledAppStorageForInstall(
-  install: AppInstall,
-  env: InstanceControlPlaneApiEnv,
-  requestUrl: string,
-) {
-  const identity = installedAppStorageIdentity({
-    installId: install.installId,
-    packageAppKey: install.packageAppKey,
-  });
-
-  if (!identity) {
-    throw new BadRequestError(`Install "${install.installId}" does not resolve to app storage.`);
-  }
-
-  const id = env.FORMLESS_AUTHORITY.idFromName(identity.authorityName);
-  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(new URL(`${identity.apiRoutePrefix}/bootstrap`, requestUrl), {
-      headers: { Accept: "application/json" },
-      method: "GET",
-    }),
-  );
-
-  if (!response.ok) {
-    throw new BadRequestError(`Install "${install.installId}" storage could not be initialized.`);
   }
 }
 

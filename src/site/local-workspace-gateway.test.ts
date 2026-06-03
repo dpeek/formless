@@ -113,6 +113,9 @@ describe("local workspace gateway", () => {
       },
     });
 
+    await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
+    await writeFile(path.join(workspaceRoot, ".formless/local/dev.json"), "{}\n");
+
     const init = await gatewayJson(
       operationRequest({ kind: "init", name: "personal-sites" }, bootstrapHeaders()),
       {
