@@ -69,10 +69,19 @@ Evidence 2026-06-03 gorp:
 
 ## 4. Local Dev Startup
 
-- [ ] 4.1 Update `formless dev` workspace startup to start the sidecar, pass only sidecar proxy env to the local runtime, and stop the sidecar when the runtime child exits.
-- [ ] 4.2 Update workspace dev env construction so browser config keeps the same-origin gateway API base path while `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` stay out of browser-visible env.
-- [ ] 4.3 Remove Vite middleware ownership of gateway execution or reduce it to proxy-only behavior consistent with the sidecar boundary.
-- [ ] 4.4 Add local dev startup tests proving gateway controls become available only when the sidecar starts and become unavailable when sidecar config is absent.
+- [x] 4.1 Update `formless dev` workspace startup to start the sidecar, pass only sidecar proxy env to the local runtime, and stop the sidecar when the runtime child exits.
+- [x] 4.2 Update workspace dev env construction so browser config keeps the same-origin gateway API base path while `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` stay out of browser-visible env.
+- [x] 4.3 Remove Vite middleware ownership of gateway execution or reduce it to proxy-only behavior consistent with the sidecar boundary.
+- [x] 4.4 Add local dev startup tests proving gateway controls become available only when the sidecar starts and become unavailable when sidecar config is absent.
+
+Evidence 2026-06-03 gorp:
+
+- Updated `src/site/instance-workspace.ts` so `runFormlessInstanceWorkspaceDev()` starts a loopback workspace gateway sidecar before spawning the local runtime, passes only sidecar proxy URL/token plus existing local runtime/browser-safe gateway env to the child, removes workspace root and stale gateway env from child env, and closes the sidecar when the runtime child exits or startup fails.
+- Updated `src/site/cli.ts` to pass the local operation dependency set and package version into `formless dev` sidecar startup.
+- Removed the `formless-local-workspace-gateway` Vite middleware from `vite.config.ts`; local gateway requests now flow through the Worker proxy route, while Vite still forwards only Worker-private sidecar URL/token and bootstrap/CSRF vars.
+- Added `src/site/cli.test.ts` coverage for sidecar proxy env on startup, sidecar close after child exit, same-origin browser gateway API config, stale sidecar/root env stripping, and missing-sidecar proxy config absence.
+- Check evidence: `devstate check` passed at 2026-06-03T02:34:38.676Z with `vp check --fix` green and watch tests green.
+- Browser smoke evidence: `bun browser --ignore-https-errors open https://gorp.formless.local` and `bun browser snapshot -i --compact --depth 2` succeeded; the snapshot rendered the Instance shell with app, route, provider, and deployment regions.
 
 ## 5. Browser, Credential, And Deploy Coverage
 

@@ -866,7 +866,19 @@ export async function runFormlessInstanceWorkspaceDev(
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "env" | "fetch" | "log" | "now" | "packageRoot" | "spawn"
+    | "accountDiscovery"
+    | "cwd"
+    | "deploymentAdapter"
+    | "env"
+    | "fetch"
+    | "healthCheck"
+    | "localSecretEnv"
+    | "log"
+    | "now"
+    | "packageRoot"
+    | "randomToken"
+    | "setupCapability"
+    | "spawn"
   > = nodeFormlessCliDependencies(),
   options: {
     devCommand?: FormlessInstanceWorkspaceDevCommand;
@@ -875,6 +887,7 @@ export async function runFormlessInstanceWorkspaceDev(
   return runFormlessInstanceWorkspaceDevCommand(input, {
     ...dependencies,
     devCommand: options.devCommand ?? packageRunScriptCommand("dev", dependencies.env),
+    packageVersion: packageJson.version,
   });
 }
 

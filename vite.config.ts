@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import type { Plugin, ViteDevServer } from "vite";
 import { defineConfig } from "vite-plus";
 import { defaultExclude as defaultTestExclude } from "vite-plus/test/config";
 import {
@@ -53,7 +52,6 @@ const cloudflarePluginConfig: PluginConfig | undefined =
 
 export default defineConfig({
   plugins: [
-    localWorkspaceGatewayPlugin(),
     react(),
     tailwindcss(),
     ...(process.env.VITEST ? [] : [cloudflare(cloudflarePluginConfig)]),
@@ -127,26 +125,3 @@ function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
 function optionalWorkerVar(name: string, value: string | undefined): Record<string, string> {
   return value && value.length > 0 ? { [name]: value } : {};
 }
-
-function localWorkspaceGatewayPlugin(): Plugin {
-  return {
-    configureServer(server: ViteDevServer) {
-      let middlewarePromise:
-        | Promise<ReturnType<LocalWorkspaceGatewayModule["createLocalWorkspaceGatewayMiddleware"]>>
-        | undefined;
-
-      server.middlewares.use(async (req, res, next) => {
-        middlewarePromise ??= server
-          .ssrLoadModule("/src/site/local-workspace-gateway.ts")
-          .then((module) =>
-            (module as LocalWorkspaceGatewayModule).createLocalWorkspaceGatewayMiddleware(),
-          );
-
-        return (await middlewarePromise)(req, res, next);
-      });
-    },
-    name: "formless-local-workspace-gateway",
-  };
-}
-
-type LocalWorkspaceGatewayModule = typeof import("./src/site/local-workspace-gateway.ts");

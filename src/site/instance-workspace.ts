@@ -152,6 +152,14 @@ import {
 } from "./instance-onboarding.ts";
 import { packageExecCommand } from "./package-commands.ts";
 import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
+import {
+  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "../shared/workspace-gateway-protocol.ts";
+import type {
+  LocalWorkspaceGatewaySidecar,
+  StartLocalWorkspaceGatewaySidecarDependencies,
+} from "./local-workspace-gateway.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
   defaultAppPolicy?: FormlessInstanceWorkspaceDefaultAppPolicy;
@@ -385,7 +393,25 @@ export type DevFormlessInstanceWorkspaceDependencies = {
   now: () => string;
   packageRoot: string;
   spawn: typeof nodeSpawn;
-};
+  startWorkspaceGatewaySidecar?: (
+    input: {
+      env?: NodeJS.ProcessEnv;
+      workspaceRoot: string;
+    },
+    dependencies: StartLocalWorkspaceGatewaySidecarDependencies,
+  ) => Promise<LocalWorkspaceGatewaySidecar>;
+} & Partial<
+  Pick<
+    StartLocalWorkspaceGatewaySidecarDependencies,
+    | "accountDiscovery"
+    | "deploymentAdapter"
+    | "healthCheck"
+    | "localSecretEnv"
+    | "packageVersion"
+    | "randomToken"
+    | "setupCapability"
+  >
+>;
 
 export type ResetFormlessInstanceWorkspaceLocalStateInput = {
   workspacePath?: string;
@@ -1219,15 +1245,29 @@ export async function runFormlessInstanceWorkspaceDev(
 
   await prepareWorkspaceDirectories(workspaceRoot, manifest, { appArchiveRoot: false });
 
-  const child = dependencies.spawn(dependencies.devCommand.command, dependencies.devCommand.args, {
-    cwd: dependencies.packageRoot,
-    env: formlessInstanceWorkspaceDevEnv(dependencies.env ?? {}, workspaceRoot, manifest),
-    stdio: "pipe",
-  });
-
-  forwardDevOutput(child, dependencies.log, candidateOrigins);
+  const sidecar = await startWorkspaceGatewaySidecar(
+    {
+      env: dependencies.env,
+      workspaceRoot,
+    },
+    dependencies,
+  );
+  let child: ChildProcessWithoutNullStreams | undefined;
 
   try {
+    child = dependencies.spawn(dependencies.devCommand.command, dependencies.devCommand.args, {
+      cwd: dependencies.packageRoot,
+      env: formlessInstanceWorkspaceDevEnv(
+        dependencies.env ?? {},
+        workspaceRoot,
+        manifest,
+        sidecar,
+      ),
+      stdio: "pipe",
+    });
+
+    forwardDevOutput(child, dependencies.log, candidateOrigins);
+
     const source = await waitForInstanceDevServer(child, dependencies.fetch, candidateOrigins);
     const bootstrap = await bootstrapWorkspaceLocalInstance(
       {
@@ -1263,8 +1303,10 @@ export async function runFormlessInstanceWorkspaceDev(
 
     await waitForChildExit(child);
   } catch (error) {
-    child.kill();
+    child?.kill();
     throw error;
+  } finally {
+    await sidecar.close();
   }
 }
 
@@ -2092,13 +2134,13 @@ export function formlessInstanceWorkspaceDevEnv(
   env: NodeJS.ProcessEnv,
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
+  sidecar?: Pick<LocalWorkspaceGatewaySidecar, "endpoint" | "proxyToken"> | null,
 ): NodeJS.ProcessEnv {
   const bootstrapToken = randomWorkspaceGatewayToken();
   const csrfToken = randomWorkspaceGatewayToken();
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
     FORMLESS_LAUNCH_FIXTURE: "empty",
-    FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
     FORMLESS_OWNER_SESSION_SECRET:
       env.FORMLESS_OWNER_SESSION_SECRET && env.FORMLESS_OWNER_SESSION_SECRET.trim() !== ""
         ? env.FORMLESS_OWNER_SESSION_SECRET
@@ -2106,7 +2148,6 @@ export function formlessInstanceWorkspaceDevEnv(
     FORMLESS_RUNTIME_PROFILE: "instance",
     FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
     FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
-    FORMLESS_WORKSPACE_GATEWAY_ROOT: workspaceRoot,
     FORMLESS_WRANGLER_PERSIST: formlessInstanceWorkspaceWranglerPersistPath(
       workspaceRoot,
       manifest,
@@ -2116,11 +2157,23 @@ export function formlessInstanceWorkspaceDevEnv(
     VITE_FORMLESS_RUNTIME_PROFILE: "instance",
   };
 
+  if (sidecar) {
+    nextEnv[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV] = sidecar.endpoint;
+    nextEnv[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV] = sidecar.proxyToken;
+  } else {
+    delete nextEnv[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
+    delete nextEnv[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
+  }
+
   delete nextEnv.FORMLESS_ADMIN_TOKEN;
+  delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;
   delete nextEnv.FORMLESS_SITE_PROJECT_ID;
   delete nextEnv.FORMLESS_SITE_PROJECT_ROOT;
+  delete nextEnv.FORMLESS_WORKSPACE_GATEWAY_ROOT;
   delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN;
   delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL;
+  delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN;
+  delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL;
   delete nextEnv.VITE_FORMLESS_SITE_PROJECT_ID;
 
   return nextEnv;
@@ -2128,6 +2181,61 @@ export function formlessInstanceWorkspaceDevEnv(
 
 function randomWorkspaceGatewayToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+async function startWorkspaceGatewaySidecar(
+  input: {
+    env?: NodeJS.ProcessEnv;
+    workspaceRoot: string;
+  },
+  dependencies: DevFormlessInstanceWorkspaceDependencies,
+): Promise<LocalWorkspaceGatewaySidecar> {
+  if (dependencies.startWorkspaceGatewaySidecar) {
+    return dependencies.startWorkspaceGatewaySidecar(input, {
+      ...workspaceGatewaySidecarDependencies(dependencies),
+      ...(dependencies.randomToken === undefined
+        ? {}
+        : { createProxyToken: dependencies.randomToken }),
+    });
+  }
+
+  const { startLocalWorkspaceGatewaySidecar } = await import("./local-workspace-gateway.ts");
+
+  return startLocalWorkspaceGatewaySidecar(input, {
+    ...workspaceGatewaySidecarDependencies(dependencies),
+    ...(dependencies.randomToken === undefined
+      ? {}
+      : { createProxyToken: dependencies.randomToken }),
+  });
+}
+
+function workspaceGatewaySidecarDependencies(
+  dependencies: DevFormlessInstanceWorkspaceDependencies,
+): StartLocalWorkspaceGatewaySidecarDependencies {
+  return {
+    ...(dependencies.accountDiscovery === undefined
+      ? {}
+      : { accountDiscovery: dependencies.accountDiscovery }),
+    cwd: dependencies.cwd,
+    ...(dependencies.deploymentAdapter === undefined
+      ? {}
+      : { deploymentAdapter: dependencies.deploymentAdapter }),
+    env: dependencies.env,
+    fetch: dependencies.fetch,
+    ...(dependencies.healthCheck === undefined ? {} : { healthCheck: dependencies.healthCheck }),
+    ...(dependencies.localSecretEnv === undefined
+      ? {}
+      : { localSecretEnv: dependencies.localSecretEnv }),
+    now: dependencies.now,
+    packageRoot: dependencies.packageRoot,
+    ...(dependencies.packageVersion === undefined
+      ? {}
+      : { packageVersion: dependencies.packageVersion }),
+    ...(dependencies.randomToken === undefined ? {} : { randomToken: dependencies.randomToken }),
+    ...(dependencies.setupCapability === undefined
+      ? {}
+      : { setupCapability: dependencies.setupCapability }),
+  };
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(

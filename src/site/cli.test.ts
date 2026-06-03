@@ -42,6 +42,15 @@ import {
 } from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
 import {
+  LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
+  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
+} from "../shared/workspace-gateway-protocol.ts";
+import {
   rateSeedRecords,
   rateSourceSchema,
   siteSourceSchema,
@@ -60,7 +69,9 @@ import {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_ALCHEMY_APP_NAME,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultFormlessInstanceWorkspaceManifest,
   discoverFormlessInstanceWorkspaceRoot,
+  formlessInstanceWorkspaceDevEnv,
   formatFormlessInstanceWorkspaceManifest,
   planFormlessInstanceDeployment,
   parseFormlessInstanceWorkspaceManifestJson,
@@ -3267,11 +3278,21 @@ describe("Formless Site CLI", () => {
     });
     expect(spawnCalls[0]?.env).toMatchObject({
       FORMLESS_LAUNCH_FIXTURE: "empty",
+      [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: expect.any(String),
+      [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: expect.stringMatching(
+        /^http:\/\/127\.0\.0\.1:\d+\/?$/,
+      ),
       FORMLESS_RUNTIME_PROFILE: "instance",
       FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
       PORT: "4443",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     });
+    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4443/api/formless/app-installs",
       "GET http://localhost:4443/api/formless/app-installs",
@@ -3290,6 +3311,53 @@ describe("Formless Site CLI", () => {
       "Workspace archive restore skipped: no workspace archives declared.",
     ]);
     expect(child.killed).toBe(false);
+
+    const sidecarEndpoint = spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
+    const proxyToken = spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
+
+    if (!sidecarEndpoint || !proxyToken) {
+      throw new Error("Expected workspace gateway sidecar proxy env.");
+    }
+
+    await expect(
+      fetch(new URL(LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH, sidecarEndpoint), {
+        headers: {
+          [LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER]: "browser",
+          [LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]: "bootstrap",
+          [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "status",
+          [LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: proxyToken,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps workspace dev browser gateway config same-origin without sidecar proxy config", async () => {
+    const workspaceRoot = await makeTempDir();
+    const env = formlessInstanceWorkspaceDevEnv(
+      {
+        FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
+        [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "old-proxy-token",
+        [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1/",
+        FORMLESS_WORKSPACE_GATEWAY_ROOT: "/old/root",
+        VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "browser-proxy-token",
+        VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:1/",
+      },
+      workspaceRoot,
+      defaultFormlessInstanceWorkspaceManifest({ name: "local-workspace" }),
+      null,
+    );
+
+    expect(env).toMatchObject({
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
+    });
+    expect(env).not.toHaveProperty(LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV);
+    expect(env).not.toHaveProperty(LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV);
+    expect(env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
+    expect(env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
+    expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
+    expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
   });
 
   it("starts workspace dev from an empty current directory for browser onboarding", async () => {
