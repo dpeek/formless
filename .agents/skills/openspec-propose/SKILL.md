@@ -1,6 +1,6 @@
 ---
 name: openspec-propose
-description: Propose a new change with all artifacts generated in one step. Use when the user wants to quickly describe what they want to build and get a complete proposal with design, specs, and tasks ready for implementation.
+description: Legacy OpenSpec-directory proposal workflow. Use only when explicitly working with committed `openspec/changes/*` directories; use `formless-git-change-propose` for new Formless Git-backed changes.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -8,6 +8,8 @@ metadata:
   version: "1.0"
   generatedBy: "1.3.1"
 ---
+
+Legacy OpenSpec-directory workflow. Use `formless-git-change-propose` for new Formless Git-backed work. This skill only applies to committed `openspec/changes/<change-id>/` directories.
 
 Propose a new change - create the change and generate all artifacts in one step.
 

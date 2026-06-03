@@ -62,10 +62,20 @@ Evidence:
 
 ## 5. Skills and Instruction Source
 
-- [ ] 5.1 Add repo-owned Git-backed change skills for propose, apply, finalize, and exploration, with concrete branch metadata commands and worker guardrails.
-- [ ] 5.2 Move implementation and finalization prompt rules from `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` into the new skill-owned instruction source or skill-local templates.
-- [ ] 5.3 Bound or retire `.agents/skills/openspec-*` so they are clearly legacy OpenSpec-directory workflows and route new Formless work to the Git-backed skills.
-- [ ] 5.4 Update prompt rendering tests to prove worker prompts come from the Git-backed skill instruction source and no longer depend on duplicate `doc/agents/local-openspec-*` docs.
+- [x] 5.1 Add repo-owned Git-backed change skills for propose, apply, finalize, and exploration, with concrete branch metadata commands and worker guardrails.
+- [x] 5.2 Move implementation and finalization prompt rules from `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` into the new skill-owned instruction source or skill-local templates.
+- [x] 5.3 Bound or retire `.agents/skills/openspec-*` so they are clearly legacy OpenSpec-directory workflows and route new Formless work to the Git-backed skills.
+- [x] 5.4 Update prompt rendering tests to prove worker prompts come from the Git-backed skill instruction source and no longer depend on duplicate `doc/agents/local-openspec-*` docs.
+
+Evidence:
+
+- Added `.agents/skills/formless-git-change-propose/SKILL.md`, `.agents/skills/formless-git-change-apply/SKILL.md`, `.agents/skills/formless-git-change-finalize/SKILL.md`, and `.agents/skills/formless-git-change-explore/SKILL.md` with Git-backed branch metadata commands, task-section guardrails, finalization rules, and no OpenSpec archive flow for new Formless work.
+- Added skill-owned worker templates at `.agents/skills/formless-git-change-apply/templates/local-implement.md` and `.agents/skills/formless-git-change-finalize/templates/local-finalize.md`; changed `scripts/agents.ts` to render implementation and finalization prompts from those templates.
+- Replaced `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` with minimal pointers to the skill-owned templates.
+- Updated `.agents/skills/openspec-propose/SKILL.md`, `.agents/skills/openspec-apply-change/SKILL.md`, `.agents/skills/openspec-archive-change/SKILL.md`, and `.agents/skills/openspec-explore/SKILL.md` so their descriptions and bodies identify them as legacy OpenSpec-directory workflows and route new Formless work to the Git-backed skills.
+- Changed `scripts/agents.test.ts` to cover Git-backed skill presence, legacy skill routing, and prompt rendering from skill-owned templates instead of `doc/agents/local-openspec-*` docs.
+- `devstate check` at 2026-06-03T02:43:42.616Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes repo agent skills, worker prompt templates, docs pointers, and tests only.
 
 ## 6. Documentation and Specs
 

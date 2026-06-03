@@ -1,6 +1,6 @@
 ---
 name: openspec-apply-change
-description: Implement tasks from an OpenSpec change. Use when the user wants to start implementing, continue implementation, or work through tasks.
+description: Legacy OpenSpec-directory implementation workflow. Use only when explicitly working with committed `openspec/changes/*` directories; use `formless-git-change-apply` for new Formless Git-backed changes.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -8,6 +8,8 @@ metadata:
   version: "1.0"
   generatedBy: "1.3.1"
 ---
+
+Legacy OpenSpec-directory workflow. Use `formless-git-change-apply` for new Formless Git-backed work. This skill only applies to committed `openspec/changes/<change-id>/` directories.
 
 Implement tasks from an OpenSpec change.
 

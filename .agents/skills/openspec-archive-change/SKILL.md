@@ -1,6 +1,6 @@
 ---
 name: openspec-archive-change
-description: Archive a completed change in the experimental workflow. Use when the user wants to finalize and archive a change after implementation is complete.
+description: Legacy OpenSpec-directory archive workflow. Use only when explicitly archiving committed `openspec/changes/*` directories; use `formless-git-change-finalize` for new Formless Git-backed changes.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -8,6 +8,8 @@ metadata:
   version: "1.0"
   generatedBy: "1.3.1"
 ---
+
+Legacy OpenSpec-directory workflow. Use `formless-git-change-finalize` for new Formless Git-backed work. This skill only applies to committed `openspec/changes/<change-id>/` directories.
 
 Archive a completed change in the experimental workflow.
 

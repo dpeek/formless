@@ -284,7 +284,26 @@ type FinalizationOutcome =
     };
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const promptDir = path.resolve(scriptDir, "..", "doc", "agents");
+const gitBackedPromptTemplatePaths = {
+  finalize: path.resolve(
+    scriptDir,
+    "..",
+    ".agents",
+    "skills",
+    "formless-git-change-finalize",
+    "templates",
+    "local-finalize.md",
+  ),
+  implement: path.resolve(
+    scriptDir,
+    "..",
+    ".agents",
+    "skills",
+    "formless-git-change-apply",
+    "templates",
+    "local-implement.md",
+  ),
+} as const;
 const leaseFileName = "lease.json";
 const defaultBaseRef = "main";
 const defaultIntervalSeconds = 60;
@@ -1685,8 +1704,8 @@ function findReadyForReviewLeaseNeedingRebase(input: {
   );
 }
 
-function readPromptTemplate(name: "local-openspec-finalize" | "local-openspec-implement"): string {
-  return readFileSync(path.join(promptDir, `${name}.md`), "utf8").trim();
+function readGitBackedPromptTemplate(name: keyof typeof gitBackedPromptTemplatePaths): string {
+  return readFileSync(gitBackedPromptTemplatePaths[name], "utf8").trim();
 }
 
 function renderPrompt(template: string, values: Record<string, string>): string {
@@ -1849,7 +1868,7 @@ export function buildLocalOpenSpecImplementationPrompt(
   const safeChangeId = validateChangeId(changeId);
   const summary = summarizeGitBackedImplementationPrompt(safeChangeId, options);
 
-  return renderPrompt(readPromptTemplate("local-openspec-implement"), {
+  return renderPrompt(readGitBackedPromptTemplate("implement"), {
     change_id: safeChangeId,
     git_backed_helper_commands: summary.helperCommands,
     known_branch_diff: summary.branchDiff,
@@ -1868,7 +1887,7 @@ export function buildLocalOpenSpecFinalizationPrompt(
   const safeChangeId = validateChangeId(changeId);
   const summary = summarizeGitBackedImplementationPrompt(safeChangeId, options);
 
-  return renderPrompt(readPromptTemplate("local-openspec-finalize"), {
+  return renderPrompt(readGitBackedPromptTemplate("finalize"), {
     change_id: safeChangeId,
     git_backed_helper_commands: summary.helperCommands,
     known_branch_diff: summary.branchDiff,

@@ -2211,6 +2211,9 @@ describe("local OpenSpec implementation prompt", () => {
     expect(prompt).toContain("record blocker evidence plus split guidance in commit metadata");
     expect(prompt).toContain("This rendered prompt is self-contained for this session.");
     expect(prompt).toContain(
+      "Skill-owned instruction source: `.agents/skills/formless-git-change-apply/templates/local-implement.md`.",
+    );
+    expect(prompt).toContain(
       "Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.",
     );
     expect(prompt).toContain("Current green `devstate start` output can satisfy setup evidence");
@@ -2255,6 +2258,9 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).toContain("Reuse latest implementation `devstate check` evidence");
     expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
     expect(prompt).toContain(
+      "Skill-owned instruction source: `.agents/skills/formless-git-change-finalize/templates/local-finalize.md`.",
+    );
+    expect(prompt).toContain(
       "Leave `changes/add-thing` as the review branch and do not check it out in the worker worktree.",
     );
     expect(prompt).not.toContain("openspec-apply-change");
@@ -2267,6 +2273,81 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).not.toContain("doc/agents/local-openspec-implement.md");
     expect(prompt).not.toContain("doc/agents/local-openspec-finalize.md");
     expect(prompt).not.toContain("doc/agents/local-agent-workers.md");
+  });
+});
+
+describe("repo-owned Git-backed change skills", () => {
+  it("defines Git-backed propose, apply, finalize, and exploration skills", () => {
+    const skillNames = [
+      "formless-git-change-propose",
+      "formless-git-change-apply",
+      "formless-git-change-finalize",
+      "formless-git-change-explore",
+    ];
+
+    for (const skillName of skillNames) {
+      const skill = readFileSync(`.agents/skills/${skillName}/SKILL.md`, "utf8");
+      expect(skill).toContain(`name: ${skillName}`);
+      expect(skill).toContain("description:");
+      expect(skill).toContain("Use when");
+      expect(skill).toContain("Git-backed");
+      expect(skill).toContain("bun agents");
+    }
+
+    const propose = readFileSync(".agents/skills/formless-git-change-propose/SKILL.md", "utf8");
+    expect(propose).toContain("git checkout -b changes/<change-id> main");
+    expect(propose).toContain("Formless-Change-State: ready");
+    expect(propose).toContain("Do not run `openspec new change`");
+
+    const apply = readFileSync(".agents/skills/formless-git-change-apply/SKILL.md", "utf8");
+    expect(apply).toContain("templates/local-implement.md");
+    expect(apply).toContain("git log --no-notes -1 --format=%B HEAD");
+    expect(apply).toContain("Do not cross into another task section.");
+
+    const finalize = readFileSync(".agents/skills/formless-git-change-finalize/SKILL.md", "utf8");
+    expect(finalize).toContain("templates/local-finalize.md");
+    expect(finalize).toContain("openspec validate --specs --strict --no-interactive");
+    expect(finalize).toContain("Do not run `openspec archive`");
+
+    const explore = readFileSync(".agents/skills/formless-git-change-explore/SKILL.md", "utf8");
+    expect(explore).toContain("Exploration is not implementation.");
+    expect(explore).toContain("git diff --stat --find-renames main..changes/<change-id>");
+  });
+
+  it("renders worker prompts from skill-owned templates instead of doc prompts", () => {
+    const source = readFileSync("scripts/agents.ts", "utf8");
+
+    expect(source).toContain(".agents");
+    expect(source).toContain("formless-git-change-apply");
+    expect(source).toContain("formless-git-change-finalize");
+    expect(source).toContain("local-implement.md");
+    expect(source).toContain("local-finalize.md");
+    expect(source).not.toContain('doc", "agents');
+    expect(source).not.toContain("local-openspec-implement");
+    expect(source).not.toContain("local-openspec-finalize");
+
+    const implementDoc = readFileSync("doc/agents/local-openspec-implement.md", "utf8");
+    const finalizeDoc = readFileSync("doc/agents/local-openspec-finalize.md", "utf8");
+    expect(implementDoc).toContain("formless-git-change-apply/templates/local-implement.md");
+    expect(finalizeDoc).toContain("formless-git-change-finalize/templates/local-finalize.md");
+    expect(implementDoc).not.toContain("## Workflow");
+    expect(finalizeDoc).not.toContain("## Workflow");
+  });
+
+  it("bounds legacy OpenSpec-directory skills and routes new work to Git-backed skills", () => {
+    const legacySkills = [
+      ["openspec-propose", "formless-git-change-propose"],
+      ["openspec-apply-change", "formless-git-change-apply"],
+      ["openspec-archive-change", "formless-git-change-finalize"],
+      ["openspec-explore", "formless-git-change-explore"],
+    ];
+
+    for (const [legacySkill, gitBackedSkill] of legacySkills) {
+      const skill = readFileSync(`.agents/skills/${legacySkill}/SKILL.md`, "utf8");
+      expect(skill).toContain("Legacy OpenSpec-directory workflow.");
+      expect(skill).toContain(gitBackedSkill);
+      expect(skill).toContain("committed `openspec/changes/<change-id>/` directories");
+    }
   });
 });
 
