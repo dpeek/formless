@@ -33,11 +33,20 @@ Evidence 2026-06-03 gorp:
 
 ## 2. Local Sidecar Gateway
 
-- [ ] 2.1 Add a Node HTTP sidecar server for workspace gateway requests with loopback binding, generated endpoint, generated internal proxy token, and close lifecycle.
-- [ ] 2.2 Refactor `src/site/local-workspace-gateway.ts` so filesystem, operation state, credential setup, deploy plan, and deploy apply execution are sidecar-owned.
-- [ ] 2.3 Require internal proxy authorization for proxied browser requests before sidecar filesystem, Authority, Cloudflare, Alchemy, or provider mutation begins.
-- [ ] 2.4 Preserve direct non-browser automation authorization through the admin bearer boundary where explicitly configured.
-- [ ] 2.5 Add sidecar tests for unavailable root, internal token rejection, admin bearer automation, display-safe responses, operation progress persistence, and secret redaction.
+- [x] 2.1 Add a Node HTTP sidecar server for workspace gateway requests with loopback binding, generated endpoint, generated internal proxy token, and close lifecycle.
+- [x] 2.2 Refactor `src/site/local-workspace-gateway.ts` so filesystem, operation state, credential setup, deploy plan, and deploy apply execution are sidecar-owned.
+- [x] 2.3 Require internal proxy authorization for proxied browser requests before sidecar filesystem, Authority, Cloudflare, Alchemy, or provider mutation begins.
+- [x] 2.4 Preserve direct non-browser automation authorization through the admin bearer boundary where explicitly configured.
+- [x] 2.5 Add sidecar tests for unavailable root, internal token rejection, admin bearer automation, display-safe responses, operation progress persistence, and secret redaction.
+
+Evidence 2026-06-03 gorp:
+
+- Added sidecar proxy env/header constants in `src/shared/workspace-gateway-protocol.ts` for sidecar URL, proxy token, internal proxy authorization, actor facts, authorization source, and operation kind intent.
+- Added `startLocalWorkspaceGatewaySidecar()` in `src/site/local-workspace-gateway.ts`; it binds a Node HTTP server to `127.0.0.1`, generates a process-scoped proxy token, returns a loopback endpoint, and exposes an async close lifecycle.
+- Refactored `handleLocalWorkspaceGatewayRequest()` into proxy behavior: it keeps same-origin/bootstrap/owner-session/CSRF/admin-bearer authorization, strips browser credentials, forwards only internal proxy authorization plus display-safe actor/intent facts to the sidecar, and preserves the browser response shape including CSRF token handoff.
+- Added `handleLocalWorkspaceGatewaySidecarRequest()` execution ownership for status, operation starts, operation reads, credential setup, deploy plan, and deploy apply; direct sidecar execution requires the internal proxy token or a configured non-browser admin bearer before local workspace execution begins.
+- Updated `src/site/local-workspace-gateway.test.ts` so browser-facing gateway tests exercise runtime proxy to sidecar execution, plus new sidecar coverage for unavailable root, invalid internal token rejection before credential setup, direct admin automation, close lifecycle, operation-state read persistence, and secret redaction.
+- Check evidence: `devstate check` passed at 2026-06-03T02:15:12.432Z with `vp check --fix` green and watch tests green.
 
 ## 3. Worker Gateway Proxy
 
