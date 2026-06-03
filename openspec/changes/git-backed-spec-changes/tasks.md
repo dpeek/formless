@@ -32,10 +32,18 @@ Evidence:
 
 ## 3. Worker Prompts and Implementation Loop
 
-- [ ] 3.1 Replace OpenSpec apply/status prompt context with known parsed change metadata, selected task section, branch diff, and concrete Git-backed helper commands.
-- [ ] 3.2 Update the implementation loop so one session ships one ready task section from commit metadata and updates the branch tip with task and evidence changes.
-- [ ] 3.3 Record blockers, split guidance, check evidence, and browser smoke evidence in structured commit metadata.
-- [ ] 3.4 Update implementation prompt tests and worker session tests to prove workers no longer depend on `proposal.md`, `design.md`, `tasks.md`, or `openspec instructions apply`.
+- [x] 3.1 Replace OpenSpec apply/status prompt context with known parsed change metadata, selected task section, branch diff, and concrete Git-backed helper commands.
+- [x] 3.2 Update the implementation loop so one session ships one ready task section from commit metadata and updates the branch tip with task and evidence changes.
+- [x] 3.3 Record blockers, split guidance, check evidence, and browser smoke evidence in structured commit metadata.
+- [x] 3.4 Update implementation prompt tests and worker session tests to prove workers no longer depend on `proposal.md`, `design.md`, `tasks.md`, or `openspec instructions apply`.
+
+Evidence:
+
+- Changed `doc/agents/local-openspec-implement.md` so rendered implementation prompts use parsed Git-backed change metadata, selected task section, branch diff, and concrete Git-backed helper commands instead of OpenSpec apply/status context or `openspec/changes/*` artifact paths.
+- Changed `scripts/agents.ts` so implementation sessions receive parsed commit metadata, selected task section, and branch diff; implementation mode no longer calls `openspec instructions apply`; and implementation `plan-done` publishes the branch tip without same-pass automatic finalization.
+- Changed `scripts/agents.test.ts` to cover metadata-backed implementation prompts, worker session metadata handoff, no implementation dependency on OpenSpec artifact files or `openspec instructions apply`, and direct completed-branch finalization setup.
+- `devstate check` at 2026-06-03T02:29:04.632Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes agent prompt rendering, supervisor control flow, and tests only.
 
 ## 4. Git-backed Finalization
 

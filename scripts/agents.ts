@@ -239,6 +239,9 @@ export type ApplyInstructions = {
 
 type PromptRenderOptions = {
   applyInstructions?: ApplyInstructions | null;
+  baseRef?: string;
+  branchDiff?: string | null;
+  changeMetadata?: FormlessChangeCommitMetadata | null;
 };
 
 type ApplyInstructionsSummary = {
@@ -249,14 +252,27 @@ type ApplyInstructionsSummary = {
   filePaths: string;
 };
 
+type GitBackedImplementationPromptSummary = {
+  branchDiff: string;
+  helperCommands: string;
+  metadata: string;
+  selectedTaskSection: string;
+  taskState: string;
+};
+
 type WorkerSessionMode = "finalize" | "implement";
 
 type CodexSessionRunner = (input: {
   applyInstructions?: ApplyInstructions | null;
+  baseRef: string;
+  branchDiff?: string | null;
+  changeMetadata?: FormlessChangeCommitMetadata | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
   paths: AgentStatePaths;
+  runCommand: CommandRunner;
+  selectedTaskSection?: FormlessChangeTaskSection | null;
   workerName: string;
   worktreeDir: string;
   now: () => Date;
@@ -1764,19 +1780,164 @@ function summarizeApplyInstructions(
   };
 }
 
+function formlessTaskLabel(task: FormlessChangeTask): string {
+  return task.id ? `${task.id}: ${task.description}` : task.description;
+}
+
+function selectedFormlessTaskSection(
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): FormlessChangeTaskSection | null {
+  return metadata?.taskSections.find((section) => section.tasks.some((task) => !task.done)) ?? null;
+}
+
+function firstUncheckedFormlessTask(
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): string {
+  const task = metadata?.tasks.find((candidate) => !candidate.done);
+  return task ? formlessTaskLabel(task) : "none reported";
+}
+
+function formatFormlessTaskProgress(
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): string {
+  if (!metadata) {
+    return "not supplied by supervisor";
+  }
+
+  const complete = metadata.tasks.filter((task) => task.done).length;
+  const total = metadata.tasks.length;
+  const remaining = total - complete;
+  return `${complete}/${total} complete, ${remaining} remaining`;
+}
+
+function formatFormlessTaskState(
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): string {
+  if (!metadata || metadata.tasks.length === 0) {
+    return "- Task metadata not supplied by supervisor.";
+  }
+
+  return metadata.tasks
+    .map((task) => `- [${task.done ? "x" : " "}] ${formlessTaskLabel(task)}`)
+    .join("\n");
+}
+
+function formatSelectedFormlessTaskSection(
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): string {
+  const section = selectedFormlessTaskSection(metadata);
+  if (!section) {
+    return "No unchecked task section reported by supervisor.";
+  }
+
+  return [
+    `### ${section.heading}`,
+    "",
+    ...section.tasks.map((task) => `- [${task.done ? "x" : " "}] ${formlessTaskLabel(task)}`),
+  ].join("\n");
+}
+
+function compactMultiline(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "-";
+}
+
+function formatKnownFormlessChangeMetadata(
+  changeId: string,
+  metadata: FormlessChangeCommitMetadata | null | undefined,
+): string {
+  if (!metadata) {
+    return [
+      `- Change: ${changeId}`,
+      "- Schema: git-backed",
+      "- Metadata: not supplied by supervisor; inspect the branch tip before continuing.",
+      `- First unchecked task: ${firstUncheckedFormlessTask(metadata)}`,
+    ].join("\n");
+  }
+
+  return [
+    `- Change: ${metadata.trailers.changeId}`,
+    "- Schema: git-backed",
+    `- State: ${metadata.trailers.state}`,
+    `- Metadata version: ${metadata.trailers.version}`,
+    `- Capabilities: ${
+      metadata.trailers.capabilities.length > 0 ? metadata.trailers.capabilities.join(", ") : "none"
+    }`,
+    `- Latest evidence at: ${metadata.trailers.lastEvidenceAt ?? "not recorded"}`,
+    `- Progress: ${formatFormlessTaskProgress(metadata)}`,
+    `- First unchecked task: ${firstUncheckedFormlessTask(metadata)}`,
+    "",
+    "### Proposal",
+    "",
+    compactMultiline(metadata.proposal),
+    "",
+    "### Design",
+    "",
+    compactMultiline(metadata.design),
+    "",
+    "### Existing Evidence",
+    "",
+    compactMultiline(metadata.evidence),
+    "",
+    "### Blockers",
+    "",
+    compactMultiline(metadata.blockers),
+  ].join("\n");
+}
+
+function formatBranchDiffSummary(branchDiff: string | null | undefined, baseRef: string): string {
+  const trimmed = branchDiff?.trim();
+  if (trimmed && trimmed.length > 0) {
+    return trimmed;
+  }
+
+  return [
+    "Branch diff was not supplied by supervisor.",
+    `Inspect it with: git diff --stat --find-renames ${baseRef}..HEAD`,
+    `Then inspect changed paths with: git diff --name-status --find-renames ${baseRef}..HEAD`,
+  ].join("\n");
+}
+
+function formatGitBackedHelperCommands(changeId: string, baseRef: string): string {
+  return [
+    `- Query parsed metadata: \`bun agents change ${changeId} --json\`.`,
+    "- Read authoritative commit metadata: `git log --no-notes -1 --format=%B HEAD`.",
+    `- Inspect branch diff: \`git diff --stat --find-renames ${baseRef}..HEAD\`.`,
+    `- Inspect changed paths: \`git diff --name-status --find-renames ${baseRef}..HEAD\`.`,
+    "- Update task state, evidence, blockers, and trailers in the commit message.",
+    "- Update the branch tip after code and metadata changes: `git add -A` then `git commit --amend`.",
+  ].join("\n");
+}
+
+function summarizeGitBackedImplementationPrompt(
+  changeId: string,
+  options: PromptRenderOptions,
+): GitBackedImplementationPromptSummary {
+  const baseRef = options.baseRef ?? defaultBaseRef;
+  return {
+    branchDiff: formatBranchDiffSummary(options.branchDiff, baseRef),
+    helperCommands: formatGitBackedHelperCommands(changeId, baseRef),
+    metadata: formatKnownFormlessChangeMetadata(changeId, options.changeMetadata),
+    selectedTaskSection: formatSelectedFormlessTaskSection(options.changeMetadata),
+    taskState: formatFormlessTaskState(options.changeMetadata),
+  };
+}
+
 export function buildLocalOpenSpecImplementationPrompt(
   changeId: string,
   workerName: string,
   options: PromptRenderOptions = {},
 ): string {
   const safeChangeId = validateChangeId(changeId);
-  const summary = summarizeApplyInstructions(safeChangeId, options.applyInstructions);
+  const summary = summarizeGitBackedImplementationPrompt(safeChangeId, options);
 
   return renderPrompt(readPromptTemplate("local-openspec-implement"), {
     change_id: safeChangeId,
-    known_file_paths: summary.filePaths,
-    known_openspec_state: summary.state,
+    git_backed_helper_commands: summary.helperCommands,
+    known_branch_diff: summary.branchDiff,
+    known_change_metadata: summary.metadata,
     known_task_state: summary.taskState,
+    selected_task_section: summary.selectedTaskSection,
     worker_name: validateWorkerName(workerName),
   });
 }
@@ -1798,31 +1959,38 @@ export function buildLocalOpenSpecFinalizationPrompt(
   });
 }
 
-function parseJson<T>(stdout: string, context: string): T {
+function readCurrentBranchDiffSummary(
+  cwd: string,
+  baseRef: string,
+  runCommand: CommandRunner,
+): string {
+  const statCommand = ["diff", "--stat", "--find-renames", `${baseRef}..HEAD`];
+  const statusCommand = ["diff", "--name-status", "--find-renames", `${baseRef}..HEAD`];
+
   try {
-    return JSON.parse(stdout) as T;
+    const stat = runCommand(cwd, "git", statCommand);
+    const status = runCommand(cwd, "git", statusCommand);
+    const output: string[] = [
+      `$ git ${statCommand.join(" ")}`,
+      stat.code === 0 ? stat.stdout.trim() || "(no diff stat)" : stat.stderr.trim(),
+      "",
+      `$ git ${statusCommand.join(" ")}`,
+      status.code === 0 ? status.stdout.trim() || "(no changed paths)" : status.stderr.trim(),
+    ];
+    return output.join("\n").trim();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid JSON from ${context}: ${message}`);
+    return `Branch diff unavailable from supervisor: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
   }
 }
 
-function readApplyInstructions(
+function readClaimedChangeMetadata(
   cwd: string,
-  changeId: string,
+  branch: string,
   runCommand: CommandRunner,
-): ApplyInstructions {
-  const stdout = runOrThrow(
-    cwd,
-    "openspec",
-    ["instructions", "apply", "--change", validateChangeId(changeId), "--json"],
-    runCommand,
-  );
-  return parseJson<ApplyInstructions>(stdout, `openspec instructions apply ${changeId}`);
-}
-
-function applyInstructionsNeedFinalization(instructions: ApplyInstructions): boolean {
-  return instructions.state === "all_done" || instructions.progress?.remaining === 0;
+): FormlessChangeMetadataParseResult {
+  return readFormlessChangeBranchMetadata(cwd, branch, runCommand);
 }
 
 function commandText(command: string, args: string[]): string {
@@ -2287,22 +2455,32 @@ function makeRunDir(
 
 async function runCodexSession(input: {
   applyInstructions?: ApplyInstructions | null;
+  baseRef: string;
+  branchDiff?: string | null;
+  changeMetadata?: FormlessChangeCommitMetadata | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
   paths: AgentStatePaths;
+  runCommand: CommandRunner;
+  selectedTaskSection?: FormlessChangeTaskSection | null;
   workerName: string;
   worktreeDir: string;
   now: () => Date;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<"blocked" | "none" | "plan-done" | "task-done"> {
+  const branchDiff =
+    input.branchDiff ??
+    readCurrentBranchDiffSummary(input.worktreeDir, input.baseRef, input.runCommand);
   const prompt =
     input.mode === "finalize"
       ? buildLocalOpenSpecFinalizationPrompt(input.changeId, input.workerName, {
           applyInstructions: input.applyInstructions,
         })
       : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
-          applyInstructions: input.applyInstructions,
+          baseRef: input.baseRef,
+          branchDiff,
+          changeMetadata: input.changeMetadata,
         });
   const runDir = makeRunDir(input.paths, input.workerName, input.changeId, input.now);
   const outputPath = path.join(runDir, `${input.mode}-final.md`);
@@ -2498,6 +2676,8 @@ function parsePositiveInteger(value: string, flag: string): number {
 
 function dryRunCodexCommand(input: {
   applyInstructions?: ApplyInstructions | null;
+  baseRef: string;
+  changeMetadata?: FormlessChangeCommitMetadata | null;
   changeId: string;
   dangerous: boolean;
   mode: WorkerSessionMode;
@@ -2510,7 +2690,8 @@ function dryRunCodexCommand(input: {
           applyInstructions: input.applyInstructions,
         })
       : buildLocalOpenSpecImplementationPrompt(input.changeId, input.workerName, {
-          applyInstructions: input.applyInstructions,
+          baseRef: input.baseRef,
+          changeMetadata: input.changeMetadata,
         });
   return ["codex", ...codexArgs(input.dangerous, "<output>", prompt, input.worktreeDir)]
     .map(shellQuote)
@@ -2547,11 +2728,12 @@ function showDryRunClaim(input: {
     input.stdout,
     `[agents] command ${dryRunCodexCommand({
       applyInstructions: input.change.applyInstructions,
+      baseRef: input.options.baseRef,
+      changeMetadata: input.change.metadata,
       changeId: input.change.changeId,
       dangerous: input.options.dangerous,
       mode:
-        input.change.applyInstructions &&
-        applyInstructionsNeedFinalization(input.change.applyInstructions)
+        input.change.metadata && remainingFormlessChangeTasks(input.change.metadata) === 0
           ? "finalize"
           : "implement",
       workerName: input.options.workerName,
@@ -2571,18 +2753,45 @@ async function runClaimedChange(input: {
   runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
-  const applyInstructions =
-    input.change.applyInstructions ??
-    (input.modeOverride === "finalize"
-      ? null
-      : readApplyInstructions(
-          input.branchPlan.worktreeDir,
-          input.change.changeId,
-          input.runCommand,
-        ));
+  let changeMetadata = input.change.metadata ?? null;
+  if (!changeMetadata && input.modeOverride !== "finalize") {
+    const metadataResult = readClaimedChangeMetadata(
+      input.branchPlan.worktreeDir,
+      input.change.branch,
+      input.runCommand,
+    );
+    if (!metadataResult.ok) {
+      const blockedEvidence: AgentEvidence = {
+        at: nowIso(input.now),
+        message: `invalid change metadata for ${input.change.changeId}: ${metadataResult.errors.join(
+          "; ",
+        )}`,
+      };
+      writeWorkerStatus(
+        input.paths.root,
+        makeWorkerStatus({
+          branch: input.branchPlan.branch,
+          currentChange: input.change.changeId,
+          latestEvidence: blockedEvidence,
+          now: input.now,
+          owner: input.options.workerName,
+          state: "blocked",
+        }),
+      );
+      updateChangeLease(
+        input.paths.root,
+        input.change.changeId,
+        { latestEvidence: blockedEvidence, state: "blocked" },
+        input.now,
+      );
+      return 1;
+    }
+    changeMetadata = metadataResult.metadata;
+  }
+
   const mode =
     input.modeOverride ??
-    (applyInstructions && applyInstructionsNeedFinalization(applyInstructions)
+    (changeMetadata && remainingFormlessChangeTasks(changeMetadata) === 0
       ? "finalize"
       : "implement");
   const state: WorkerState = mode === "finalize" ? "finalizing" : "working";
@@ -2625,12 +2834,21 @@ async function runClaimedChange(input: {
           return outcome.signal;
         })()
       : await input.runSession({
-          applyInstructions,
+          applyInstructions: null,
+          baseRef: input.options.baseRef,
+          branchDiff: readCurrentBranchDiffSummary(
+            input.branchPlan.worktreeDir,
+            input.options.baseRef,
+            input.runCommand,
+          ),
+          changeMetadata,
           changeId: input.change.changeId,
           dangerous: input.options.dangerous,
           mode,
           now: input.now,
           paths: input.paths,
+          runCommand: input.runCommand,
+          selectedTaskSection: selectedFormlessTaskSection(changeMetadata),
           workerName: input.options.workerName,
           worktreeDir: input.branchPlan.worktreeDir,
           stdout: input.stdout,
@@ -2691,16 +2909,32 @@ async function runClaimedChange(input: {
     return 1;
   }
 
-  if (mode === "implement" && signal === "plan-done") {
-    writeLine(input.stdout, `[agents] ${input.change.changeId} starting automatic finalization`);
-    return runClaimedChange({
-      ...input,
-      change: {
-        branch: input.change.branch,
-        changeId: input.change.changeId,
-      },
-      modeOverride: "finalize",
-    });
+  if (mode === "implement") {
+    const implementationEvidence: AgentEvidence = {
+      at: nowIso(input.now),
+      message:
+        signal === "plan-done"
+          ? `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}; ready for finalization pass`
+          : `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}`,
+    };
+    writeWorkerStatus(
+      input.paths.root,
+      makeWorkerStatus({
+        branch: input.branchPlan.branch,
+        currentChange: input.change.changeId,
+        latestEvidence: implementationEvidence,
+        now: input.now,
+        owner: input.options.workerName,
+        state: "working",
+      }),
+    );
+    updateChangeLease(
+      input.paths.root,
+      input.change.changeId,
+      { latestEvidence: implementationEvidence, state: "working" },
+      input.now,
+    );
+    writeLine(input.stdout, `[agents] published ${input.change.changeId} at ${publishedCommit}`);
   }
 
   if (mode === "finalize" && signal === "plan-done") {
