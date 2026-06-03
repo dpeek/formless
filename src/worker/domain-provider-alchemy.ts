@@ -35,7 +35,7 @@ export type AlchemyDomainProviderFactories = {
   RedirectRule: (id: string, props: RedirectRuleProps) => Promise<RedirectRule>;
 };
 
-export type ApplyAlchemyDomainProviderPlanInput = {
+export type RunAlchemyDomainProviderPlanInput = {
   appName?: string;
   factories: AlchemyDomainProviderFactories;
   password?: string;
@@ -53,15 +53,15 @@ export type AlchemyDomainProviderResourceResult = {
   output: unknown;
 };
 
-export type AlchemyDomainProviderApplyResult = {
+export type AlchemyDomainProviderRunResult = {
   appName: string;
   resources: AlchemyDomainProviderResourceResult[];
   stage: string;
 };
 
-export async function applyAlchemyDomainProviderPlan(
-  input: ApplyAlchemyDomainProviderPlanInput,
-): Promise<AlchemyDomainProviderApplyResult> {
+export async function runAlchemyDomainProviderPlan(
+  input: RunAlchemyDomainProviderPlanInput,
+): Promise<AlchemyDomainProviderRunResult> {
   if (input.plan.blockers.length > 0) {
     throw new Error(
       `Domain provider plan has blockers: ${input.plan.blockers

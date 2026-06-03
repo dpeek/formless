@@ -94,23 +94,6 @@ export type FormlessCliCommand =
     }
   | {
       adminToken: string | null;
-      host: string | null;
-      kind: "instanceDomainsApply";
-      policy: CloudflareDomainPreflightPolicy;
-      targetAlias: string | null;
-      workspacePath: string;
-    }
-  | {
-      adminToken: string | null;
-      host: string | null;
-      kind: "instanceDomainsRunApply";
-      policy: CloudflareDomainPreflightPolicy;
-      runnerId: string | null;
-      targetAlias: string | null;
-      workspacePath: string;
-    }
-  | {
-      adminToken: string | null;
       host: string;
       kind: "instanceDomainsRunDelete";
       logicalId: string;
@@ -182,7 +165,7 @@ export function formlessCliUsage(): string {
     "  check [--workspace <path>] [--target <alias>]",
     "                                      Check workspace source and target drift",
     "  deploy [--workspace <path>] [--target <alias>]",
-    "       [--migration-policy <new|existing>]",
+    "       [--migration-policy <new|existing>] Deploy workspace source and desired resources",
     "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
     "  archive export --target <url> --out <dir>",
     "  archive export-app --target <url> --install <id> --out <dir>",
@@ -199,10 +182,10 @@ export function formlessCliUsage(): string {
     "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
     "  instance dev|reset-local [--workspace <path>]",
     "  instance deploy [--workspace <path>] [--target <alias>]",
-    "       [--migration-policy <new|existing>]",
+    "       [--migration-policy <new|existing>] Advanced workspace deploy alias",
     "  instance destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
-    "  instance domains remote-plan|run-apply|run-delete|forget-route|forget-redirect",
-    "       |mark-manually-removed|plan|apply [--workspace <path>] [--target <alias>]",
+    "  instance domains remote-plan|run-delete|forget-route|forget-redirect",
+    "       |mark-manually-removed|plan [--workspace <path>] [--target <alias>]",
     "       [--policy <create-only|adopt|override>] [--host <hostname>]",
     "       [--profile <instance|app|publicSite>] [--kind <provider-kind>]",
     "       [--logical-id <id>] [--from-host <hostname>] [--admin-token <token>]",
@@ -220,10 +203,6 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
   }
 
   switch (command) {
-    case "onboard":
-      throw new Error(
-        "formless onboard has been removed. Run `formless dev` and complete setup in the browser.",
-      );
     case "dev":
       return parseWorkspaceDevArgs(rest);
     case "save":
@@ -748,10 +727,6 @@ function parseInstanceDomainsArgs(args: string[]): FormlessCliCommand {
       return parseInstanceDomainsRemotePlanArgs(rest);
     case "plan":
       return parseInstanceDomainsPlanArgs(rest);
-    case "apply":
-      return parseInstanceDomainsApplyArgs(rest);
-    case "run-apply":
-      return parseInstanceDomainsRunApplyArgs(rest);
     case "run-delete":
       return parseInstanceDomainsRunDeleteArgs(rest);
     case "forget-route":
@@ -762,7 +737,7 @@ function parseInstanceDomainsArgs(args: string[]): FormlessCliCommand {
       return parseInstanceDomainsMarkManuallyRemovedArgs(rest);
     default:
       throw new Error(
-        "Usage: formless instance domains <remote-plan|run-apply|run-delete|forget-route|forget-redirect|mark-manually-removed|plan|apply>",
+        "Usage: formless instance domains <remote-plan|run-delete|forget-route|forget-redirect|mark-manually-removed|plan>",
       );
   }
 }
@@ -840,112 +815,6 @@ function parseInstanceDomainsPlanArgs(args: string[]): FormlessCliCommand {
     host,
     kind: "instanceDomainsPlan",
     policy,
-    targetAlias: options.targetAlias,
-    workspacePath: options.workspacePath,
-  };
-}
-
-function parseInstanceDomainsApplyArgs(args: string[]): FormlessCliCommand {
-  const options = parseInstanceTargetOptions(args, "formless instance domains apply");
-  let adminToken: string | null = null;
-  let host: string | null = null;
-  let policy: CloudflareDomainPreflightPolicy = "create-only";
-
-  for (let index = 0; index < options.rest.length; index += 1) {
-    const arg = options.rest[index];
-
-    if (arg === "--policy") {
-      policy = parseCloudflareDomainPreflightPolicy(
-        readOptionValue(options.rest, index, "--policy"),
-        "formless instance domains apply",
-      );
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--host") {
-      host = readOptionValue(options.rest, index, "--host");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--admin-token") {
-      adminToken = readOptionValue(options.rest, index, "--admin-token");
-      index += 1;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless instance domains apply: ${arg}`);
-  }
-
-  if (policy === "override" && (host === null || host.trim() === "")) {
-    throw new Error(
-      "formless instance domains apply --policy override requires --host <hostname>.",
-    );
-  }
-
-  return {
-    adminToken,
-    host,
-    kind: "instanceDomainsApply",
-    policy,
-    targetAlias: options.targetAlias,
-    workspacePath: options.workspacePath,
-  };
-}
-
-function parseInstanceDomainsRunApplyArgs(args: string[]): FormlessCliCommand {
-  const options = parseInstanceTargetOptions(args, "formless instance domains run-apply");
-  let adminToken: string | null = null;
-  let host: string | null = null;
-  let policy: CloudflareDomainPreflightPolicy = "create-only";
-  let runnerId: string | null = null;
-
-  for (let index = 0; index < options.rest.length; index += 1) {
-    const arg = options.rest[index];
-
-    if (arg === "--policy") {
-      policy = parseCloudflareDomainPreflightPolicy(
-        readOptionValue(options.rest, index, "--policy"),
-        "formless instance domains run-apply",
-      );
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--host") {
-      host = readOptionValue(options.rest, index, "--host");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--admin-token") {
-      adminToken = readOptionValue(options.rest, index, "--admin-token");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--runner-id") {
-      runnerId = readOptionValue(options.rest, index, "--runner-id");
-      index += 1;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless instance domains run-apply: ${arg}`);
-  }
-
-  if (policy === "override" && (host === null || host.trim() === "")) {
-    throw new Error(
-      "formless instance domains run-apply --policy override requires --host <hostname>.",
-    );
-  }
-
-  return {
-    adminToken,
-    host,
-    kind: "instanceDomainsRunApply",
-    policy,
-    runnerId,
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };
@@ -1149,11 +1018,7 @@ function parseInstanceDomainsMarkManuallyRemovedArgs(args: string[]): FormlessCl
 
 function parseCloudflareDomainPreflightPolicy(
   value: string,
-  commandName:
-    | "formless instance domains apply"
-    | "formless instance domains plan"
-    | "formless instance domains run-apply"
-    | "formless instance domains remote-plan",
+  commandName: "formless instance domains plan" | "formless instance domains remote-plan",
 ): CloudflareDomainPreflightPolicy {
   if (value === "create-only" || value === "adopt" || value === "override") {
     return value;

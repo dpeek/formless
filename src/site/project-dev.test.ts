@@ -26,7 +26,6 @@ import {
   siteProjectStorageId,
   type SiteProjectDevDependencies,
 } from "./project-dev.ts";
-import type { SiteProjectSource } from "./project-files.ts";
 
 const tempDirs: string[] = [];
 
@@ -46,11 +45,6 @@ describe("Site project dev loop", () => {
     const logs: string[] = [];
     const requests: CapturedFetchRequest[] = [];
     const spawnCalls: CapturedSpawn[] = [];
-    let brokerClosed = false;
-    const broker = {
-      source: null as (() => string | null) | null,
-    };
-    let configuredProject: SiteProjectSource | null = null;
 
     await writeFileTree(projectRoot, records);
     await mkdir(path.join(projectRoot, "media/media/images"), { recursive: true });
@@ -83,37 +77,13 @@ describe("Site project dev loop", () => {
           command: "npm",
           label: "npm run dev",
         },
-        isPublishConfigured: async (project) => {
-          configuredProject = project;
-          return true;
-        },
-        startLocalPublishBroker: async (input) => {
-          broker.source = input.source;
-
-          return {
-            close: async () => {
-              brokerClosed = true;
-            },
-            endpoint: "http://127.0.0.1:12345/publish",
-            token: "broker-token",
-          };
-        },
       },
     );
 
     await waitUntil(() => logs.includes("Admin: http://localhost:4444/admin"));
-
-    const brokerSource = broker.source;
-
-    if (!brokerSource) {
-      throw new Error("Expected local publish broker source callback.");
-    }
-
-    expect(brokerSource()).toBe("http://localhost:4444");
     child.close(0);
     await run;
 
-    expect(configuredProject).toMatchObject({ projectRoot });
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toMatchObject({
       args: ["run", "dev"],
@@ -126,12 +96,12 @@ describe("Site project dev loop", () => {
       FORMLESS_SITE_PROJECT_ROOT: projectRoot,
       FORMLESS_WRANGLER_PERSIST: path.join(projectRoot, ".formless/wrangler"),
       KEEP: "value",
-      VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN: "broker-token",
-      VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL: "http://127.0.0.1:12345/publish",
       VITE_FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
       VITE_FORMLESS_SITE_PROJECT_ID: projectId,
     });
     expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_ADMIN_TOKEN");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL");
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4444/api/site/bootstrap",
       "PUT http://localhost:4444/api/formless/media/media/images/cover.png",
@@ -171,7 +141,6 @@ describe("Site project dev loop", () => {
       "Public preview: http://localhost:4444/",
       "Admin: http://localhost:4444/admin",
     ]);
-    expect(brokerClosed).toBe(true);
     expect(child.killed).toBe(false);
   });
 });

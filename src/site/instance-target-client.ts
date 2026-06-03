@@ -41,18 +41,12 @@ import {
 } from "../shared/deployment-runtime.ts";
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   type DeleteInstanceDomainProviderRedirectIntentRequest,
   type ForgetInstanceDomainProviderRedirectIntentResponse,
-  type InstanceDomainProviderApplyJobResultRequest,
-  type InstanceDomainProviderApplyJobResponse,
-  type InstanceDomainProviderApplyRequest,
-  type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteJobResultRequest,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteRequest,
@@ -61,7 +55,7 @@ import {
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
-import type { DomainProviderApplyPolicy } from "../shared/domain-provider-protocol.ts";
+import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   listBundledAppPackages,
   packageAppFactsForKey,
@@ -641,7 +635,7 @@ export async function readFormlessInstanceDomainMappings(
 }
 
 export async function readFormlessInstanceDomainProviderPlan(
-  input: { host?: string | null; policy?: DomainProviderApplyPolicy; targetUrl: string },
+  input: { host?: string | null; policy?: DomainProviderPlanPolicy; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderPlanResponse> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -893,68 +887,6 @@ export async function writeFormlessInstanceDeploymentDrift(
       targetUrl: input.targetUrl,
     }),
     INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
-  );
-}
-
-export async function requestFormlessInstanceDomainProviderApply(
-  input: {
-    adminToken?: string | null;
-    request?: InstanceDomainProviderApplyRequest;
-    targetUrl: string;
-  },
-  dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<InstanceDomainProviderApplyResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
-  const applyUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH);
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
-
-  return parseDomainProviderApplyResponse(
-    await postJson(dependencies.fetch, applyUrl, {
-      body: JSON.stringify(input.request ?? {}),
-      headers,
-      method: "POST",
-    }),
-    applyUrl,
-  );
-}
-
-export async function completeFormlessInstanceDomainProviderApplyJob(
-  input: {
-    adminToken?: string | null;
-    jobId: string;
-    result: InstanceDomainProviderApplyJobResultRequest;
-    targetUrl: string;
-  },
-  dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<InstanceDomainProviderApplyJobResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
-  const resultUrl = apiUrl(
-    targetUrl,
-    `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}/result`,
-  );
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
-
-  return parseDomainProviderApplyJobResponse(
-    await postJson(dependencies.fetch, resultUrl, {
-      body: JSON.stringify(input.result),
-      headers,
-      method: "POST",
-    }),
-    resultUrl,
   );
 }
 
@@ -1812,28 +1744,6 @@ function parseDeploymentDriftWritebackResponse(
   }
 
   return value as InstanceDeploymentDriftWritebackResponse;
-}
-
-function parseDomainProviderApplyResponse(
-  value: unknown,
-  context: string,
-): InstanceDomainProviderApplyResponse {
-  if (!isRecord(value) || typeof value.status !== "string") {
-    throw new Error(`${context} failed: domain provider apply response is invalid.`);
-  }
-
-  return value as InstanceDomainProviderApplyResponse;
-}
-
-function parseDomainProviderApplyJobResponse(
-  value: unknown,
-  context: string,
-): InstanceDomainProviderApplyJobResponse {
-  if (!isRecord(value) || !isRecord(value.job)) {
-    throw new Error(`${context} failed: domain provider apply job response is invalid.`);
-  }
-
-  return value as InstanceDomainProviderApplyJobResponse;
 }
 
 function parseDomainProviderDeleteResponse(

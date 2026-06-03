@@ -16,21 +16,20 @@ Create a local Formless workspace:
 ```sh
 mkdir my-workspace
 cd my-workspace
-npx @dpeek/formless onboard
 npx @dpeek/formless dev
 ```
 
 Common commands:
 
-- `formless onboard` creates `formless.json`, empty archive roots, and ignored
-  `.formless/` local state without mutating Cloudflare.
-- `formless dev` runs the local workspace instance selected by `formless.json`.
+- `formless dev` runs the local workspace instance and lets browser setup create
+  reviewable workspace source without mutating Cloudflare.
 - `formless save` writes local Authority-backed instance state to reviewable workspace archives.
 - `formless save --check` fails when reviewable workspace source is stale.
 - `formless check` compares workspace source and configured target drift.
 - `formless deploy` is the explicit Cloudflare boundary: it deploys the
-  instance, stores display-safe target intent in `formless.json`, keeps secrets
-  under `.formless/`, and pushes saved archives.
+  instance from workspace source, applies control-plane desired resources through
+  deployment attempts, keeps secrets under `.formless/`, and pushes saved
+  archives.
 - `formless destroy` is the explicit Cloudflare boundary for tearing down the configured deployment.
 - `formless instance ...` manages advanced instance workspace pull, check,
   push, dev, deploy, and destroy flows.
@@ -55,7 +54,7 @@ The runtime already has:
 - HTTP cursor sync and push sync;
 - generated React UI for schema-declared screens, views, tables, trees, fields, and actions;
 - Site records projected into public trees and SSR documents;
-- local-first workspace CLI for onboard, dev, save, check, and deploy;
+- local-first workspace CLI for dev, save, check, deploy, and destroy;
 - portable app and instance archives;
 - explicit legacy Site project archive import;
 - installed app identity and routes;
@@ -65,7 +64,7 @@ The runtime already has:
 - owner passkey setup, owner sessions, logout, and admin bearer recovery boundaries;
 - public action execution and Site contact subscription records;
 - deployment desired-state versions, attempts, leases, status, and upgrade metadata;
-- custom-domain planning, provider apply/delete, redirects, cleanup, and
+- custom-domain planning, provider delete and cleanup, redirects, and generic
   deployment projection paths.
 
 ## Product Direction

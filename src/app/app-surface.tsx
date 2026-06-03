@@ -14,7 +14,6 @@ import {
 } from "@dpeek/formless-ui/sidebar";
 import { GeneratedCreateDialog } from "./generated/create.tsx";
 import { SchemaAppProvider } from "./generated/schema-app-context.tsx";
-import { LocalSitePublishControl } from "./local-site-publish.tsx";
 import { SourceResetControl } from "./dev-actions.tsx";
 import {
   HomeRouteSelectionProvider,
@@ -23,11 +22,7 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
 } from "./routes/home-selection.tsx";
 import { SyncStatusControl } from "./routes/status-line.tsx";
-import {
-  runtimeScreenRoute,
-  type RuntimeProfile,
-  type RuntimeWorldMount,
-} from "./runtime-profile.ts";
+import { runtimeScreenRoute, type RuntimeWorldMount } from "./runtime-profile.ts";
 import {
   useEntityRecordCountReferencingField,
   useEntityRecordOptionsMatchingQuery,
@@ -46,7 +41,6 @@ export function ActiveAppSurface({
   activeScreenPath,
   children,
   currentPath,
-  localPublish,
   managementHref,
   screenModels,
   world,
@@ -54,7 +48,6 @@ export function ActiveAppSurface({
   activeScreenPath: string | undefined;
   children: ReactNode;
   currentPath: string;
-  localPublish: RuntimeProfile["localPublish"];
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount | undefined;
@@ -79,7 +72,6 @@ export function ActiveAppSurface({
               <ActiveAppNavigation
                 activeScreenPath={activeScreenPath}
                 currentPath={currentPath}
-                localPublish={localPublish}
                 managementHref={managementHref}
                 screenModels={screenModels}
                 world={world}
@@ -142,14 +134,12 @@ function activeAppSidebarTriggerLabel(appLabel: string | undefined) {
 function ActiveAppNavigation({
   activeScreenPath,
   currentPath,
-  localPublish,
   managementHref,
   screenModels,
   world,
 }: {
   activeScreenPath: string | undefined;
   currentPath: string;
-  localPublish: RuntimeProfile["localPublish"];
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount;
@@ -174,11 +164,7 @@ function ActiveAppNavigation({
           />
         ) : null}
         <AppRootRecordNavigation rootNavigation={rootNavigation} />
-        <AppSettingsNavigation
-          currentPath={currentPath}
-          localPublish={localPublish}
-          world={world}
-        />
+        <AppSettingsNavigation currentPath={currentPath} world={world} />
       </>
     );
   }
@@ -187,7 +173,7 @@ function ActiveAppNavigation({
     <>
       {managementHref ? <AppManagementLink href={managementHref} world={world} /> : null}
       <AppScreenLinks activeScreenPath={activeScreenPath} screenLinks={screenLinks} world={world} />
-      <AppSettingsNavigation currentPath={currentPath} localPublish={localPublish} world={world} />
+      <AppSettingsNavigation currentPath={currentPath} world={world} />
     </>
   );
 }
@@ -228,11 +214,9 @@ function AppScreenLinks({
 
 function AppSettingsNavigation({
   currentPath,
-  localPublish,
   world,
 }: {
   currentPath: string;
-  localPublish: RuntimeProfile["localPublish"];
   world: RuntimeWorldMount;
 }) {
   return (
@@ -244,11 +228,6 @@ function AppSettingsNavigation({
         <SidebarItem href={world.schemaRoute} isCurrent={currentPath === world.schemaRoute}>
           <SidebarLabel>Schema</SidebarLabel>
         </SidebarItem>
-      ) : null}
-      {localPublish ? (
-        <div className="col-span-full px-2 py-1">
-          <LocalSitePublishControl broker={localPublish} />
-        </div>
       ) : null}
       <SourceResetControl
         buttonClassName="w-full"

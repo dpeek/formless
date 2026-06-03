@@ -57,12 +57,6 @@ export type CloudflareRedirectRule = {
 };
 
 export type CloudflareDomainClient = {
-  attachWorkerDomain: (input: {
-    accountId: string;
-    hostname: string;
-    service: string;
-    zoneId: string;
-  }) => Promise<CloudflareWorkerDomain>;
   listActiveZonesForName: (input: { accountId: string; name: string }) => Promise<CloudflareZone[]>;
   listDnsRecords: (input: { name: string; zoneId: string }) => Promise<CloudflareDnsRecord[]>;
   listRedirectRules: (input: { zoneId: string }) => Promise<CloudflareRedirectRule[]>;
@@ -104,23 +98,6 @@ export type CloudflareDomainPreflightHostPlan = {
 export type CloudflareDomainPreflightPlan = {
   accountId: string;
   hosts: CloudflareDomainPreflightHostPlan[];
-  policy: CloudflareDomainPreflightPolicy;
-  workerName: string;
-};
-
-export type CloudflareDomainAppliedAction = "adopted" | "created" | "overridden";
-
-export type CloudflareDomainApplyHostResult = {
-  action: CloudflareDomainAppliedAction;
-  domain: CloudflareWorkerDomain;
-  host: string;
-  profile: InstanceDomainMappingProfile;
-  targetInstallId?: string;
-};
-
-export type CloudflareDomainApplyResult = {
-  accountId: string;
-  hosts: CloudflareDomainApplyHostResult[];
   policy: CloudflareDomainPreflightPolicy;
   workerName: string;
 };
@@ -167,20 +144,6 @@ export function createFetchCloudflareDomainClient(
   const baseUrl = input.baseUrl ?? "https://api.cloudflare.com/client/v4";
 
   return {
-    attachWorkerDomain: ({ accountId, hostname, service, zoneId }) =>
-      fetchCloudflareValue(
-        input.fetch,
-        baseUrl,
-        input.apiToken,
-        "PUT",
-        `/accounts/${accountId}/workers/domains`,
-        {},
-        {
-          hostname,
-          service,
-          zone_id: zoneId,
-        },
-      ).then(parseCloudflareWorkerDomain),
     listActiveZonesForName: ({ accountId, name }) =>
       fetchCloudflareList(input.fetch, baseUrl, input.apiToken, "/zones", {
         "account.id": accountId,
@@ -359,73 +322,6 @@ export function workerRoutePatternMatchesHost(pattern: string, host: string): bo
   return matcher.test(normalizedHost);
 }
 
-export async function applyCloudflareWorkerDomainPreflightPlan(input: {
-  client: CloudflareDomainClient;
-  plan: CloudflareDomainPreflightPlan;
-}): Promise<CloudflareDomainApplyResult> {
-  const hosts: CloudflareDomainApplyHostResult[] = [];
-
-  for (const host of input.plan.hosts) {
-    if (host.blockers.length > 0) {
-      throw new Error(
-        `Cloudflare domain apply cannot continue while ${host.host} has blockers: ${host.blockers
-          .map((issue) => issue.code)
-          .join(", ")}.`,
-      );
-    }
-
-    const action = host.actions[0];
-
-    if (!action) {
-      continue;
-    }
-
-    if (action === "adopt-existing-worker-custom-domain") {
-      hosts.push({
-        action: "adopted",
-        domain: requiredSameWorkerDomain(host, input.plan.workerName),
-        host: host.host,
-        profile: host.profile,
-        ...(host.targetInstallId === undefined ? {} : { targetInstallId: host.targetInstallId }),
-      });
-      continue;
-    }
-
-    if (!host.zone) {
-      throw new Error(`Cloudflare domain apply cannot attach ${host.host} without a zone.`);
-    }
-
-    if (
-      action !== "create-worker-custom-domain" &&
-      action !== "override-existing-worker-custom-domain"
-    ) {
-      throw new Error(`Cloudflare domain apply does not support action "${action}".`);
-    }
-
-    const domain = await input.client.attachWorkerDomain({
-      accountId: input.plan.accountId,
-      hostname: host.host,
-      service: input.plan.workerName,
-      zoneId: host.zone.id,
-    });
-
-    hosts.push({
-      action: action === "create-worker-custom-domain" ? "created" : "overridden",
-      domain,
-      host: host.host,
-      profile: host.profile,
-      ...(host.targetInstallId === undefined ? {} : { targetInstallId: host.targetInstallId }),
-    });
-  }
-
-  return {
-    accountId: input.plan.accountId,
-    hosts,
-    policy: input.plan.policy,
-    workerName: input.plan.workerName,
-  };
-}
-
 async function discoverActiveZoneForHost(input: {
   accountId: string;
   client: CloudflareDomainClient;
@@ -570,19 +466,6 @@ function addWorkerDomainPolicy(input: {
   if (sameWorker.length > 0) {
     input.actions.push("adopt-existing-worker-custom-domain");
   }
-}
-
-function requiredSameWorkerDomain(
-  host: CloudflareDomainPreflightHostPlan,
-  workerName: string,
-): CloudflareWorkerDomain {
-  const domain = host.workerDomains.find((candidate) => candidate.service === workerName);
-
-  if (!domain) {
-    throw new Error(`Cloudflare domain apply cannot adopt ${host.host}; no same-worker domain.`);
-  }
-
-  return domain;
 }
 
 function normalizeDomainIntents(

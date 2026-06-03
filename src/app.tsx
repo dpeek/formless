@@ -31,7 +31,6 @@ import {
   runtimeBrowserRoutePatterns,
   runtimeInstalledSitePublicHomeSlug,
   runtimeInstalledSitePublicPath,
-  runtimeLocalPublishForWorld,
   runtimeProfileNeedsInstalledAppRouteInstalls,
   runtimeScreenPathFromRoute,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
@@ -158,7 +157,6 @@ export function App({
   const generatedAppFrame = (
     <ActiveAppSurface
       activeScreenPath={activeScreenPath}
-      localPublish={runtimeLocalPublishForWorld(runtimeProfile, routeWorld)}
       managementHref={runtimeAppManagementHref(runtimeProfile, routeWorld)}
       currentPath={location}
       screenModels={routeAppScreenModels}

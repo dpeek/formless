@@ -1,7 +1,5 @@
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
@@ -12,8 +10,6 @@ import {
   type DeleteInstanceDomainProviderRedirectIntentRequest,
   type DeleteInstanceDomainProviderRedirectIntentResponse,
   type ForgetInstanceDomainProviderRedirectIntentResponse,
-  type InstanceDomainProviderApplyJobResponse,
-  type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteRequest,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteResponse,
@@ -55,45 +51,6 @@ export async function fetchInstanceDomainProviderPlan({
   });
 
   return readJsonResponse<InstanceDomainProviderPlanResponse>(response);
-}
-
-export async function applyInstanceDomainProviderPlan({
-  fetcher = fetch,
-  signal,
-}: {
-  fetcher?: typeof fetch;
-  signal?: AbortSignal;
-} = {}): Promise<InstanceDomainProviderApplyResponse> {
-  const response = await fetcher(INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH, {
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-    method: "POST",
-    signal,
-  });
-
-  return readJsonResponse<InstanceDomainProviderApplyResponse>(response);
-}
-
-export async function fetchInstanceDomainProviderApplyJob(
-  input: { jobId: string },
-  {
-    fetcher = fetch,
-    signal,
-  }: {
-    fetcher?: typeof fetch;
-    signal?: AbortSignal;
-  } = {},
-): Promise<InstanceDomainProviderApplyJobResponse> {
-  const response = await fetcher(
-    `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}`,
-    {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      signal,
-    },
-  );
-
-  return readJsonResponse<InstanceDomainProviderApplyJobResponse>(response);
 }
 
 export async function deleteInstanceDomainProviderResource(

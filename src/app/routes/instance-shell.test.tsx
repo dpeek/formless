@@ -455,24 +455,10 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Route: removed");
   });
 
-  it("renders provider config, plan, blockers, and job status", () => {
+  it("renders provider config, plan, blockers, and delete job status", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
         state={readyState({
-          domainProviderApplyJob: {
-            createdAt: "2026-05-27T00:00:00.000Z",
-            jobId: "apply-job-1",
-            plan: {
-              blockers: [],
-              instanceId: "primary",
-              policy: "create-only",
-              resources: [],
-              workerName: "personal",
-            },
-            result: { evidenceCount: 2 },
-            status: "succeeded",
-            updatedAt: "2026-05-27T00:01:00.000Z",
-          },
           domainProviderDeleteJob: {
             createdAt: "2026-05-27T00:00:00.000Z",
             jobId: "delete-job-1",
@@ -492,14 +478,13 @@ describe("instance shell route view", () => {
             config: {
               accountId: "account-123",
               alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
-              applyReady: true,
               cloudflareApiToken: {
                 configured: true,
                 envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
               },
+              deleteReady: true,
               instanceId: "primary",
               issues: [],
-              jobReady: true,
               planReady: true,
               runnerMutation: {
                 checkedBy: "node-runner",
@@ -579,7 +564,7 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain("Provider");
-    expect(html).toContain("jobs ready");
+    expect(html).toContain("cleanup ready");
     expect(html).toContain("Account account-123");
     expect(html).toContain("Resources 2");
     expect(html).toContain("Blockers none");
@@ -587,10 +572,8 @@ describe("instance shell route view", () => {
     expect(html).toContain("Runner mutation checked by node-runner");
     expect(html).toContain("Deployment Deployed");
     expect(html).toContain("Revision 2 deployed");
-    expect(html).toContain("Apply job: succeeded");
     expect(html).toContain("Delete job: succeeded");
     expect(html).toContain("Refresh plan");
-    expect(html).toContain("Apply provider");
   });
 
   it("keeps runner secret gaps out of provider config blocker copy", () => {
@@ -600,11 +583,11 @@ describe("instance shell route view", () => {
           domainProviderPlan: {
             config: {
               alchemyPassword: { configured: false, envNames: ["ALCHEMY_PASSWORD"] },
-              applyReady: true,
               cloudflareApiToken: {
                 configured: false,
                 envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
               },
+              deleteReady: true,
               issues: [
                 {
                   code: "missing-cloudflare-api-token",
@@ -617,7 +600,6 @@ describe("instance shell route view", () => {
                   message: "Alchemy password is not configured.",
                 },
               ],
-              jobReady: true,
               planReady: true,
               runnerMutation: {
                 checkedBy: "node-runner",
@@ -644,7 +626,7 @@ describe("instance shell route view", () => {
       />,
     );
 
-    expect(html).toContain("jobs ready");
+    expect(html).toContain("cleanup ready");
     expect(html).toContain("Zones example.com");
     expect(html).toContain("Runner mutation checked by node-runner");
     expect(html).not.toContain("Config missing-cloudflare-api-token");

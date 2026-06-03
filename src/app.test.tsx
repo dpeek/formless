@@ -521,11 +521,6 @@ function appInstallFixture({
   };
 }
 
-const localPublishBroker = {
-  endpoint: "http://127.0.0.1:43123/publish",
-  token: "local-broker-token",
-};
-
 function expectRuntimeShell(html: string) {
   const shellHtml = runtimeShellHtml(html);
 
@@ -1625,22 +1620,6 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Publish Site through local CLI"');
   });
 
-  it("renders Site authoring publish only when a local CLI broker is configured", () => {
-    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
-    const html = renderRoute(
-      "/admin",
-      createSiteAuthoringRuntimeProfile({
-        localPublish: localPublishBroker,
-      }),
-    );
-
-    expect(html).toContain('data-frame="generated-app"');
-    expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
-    expect(html).toContain('aria-label="Publish Site through local CLI"');
-    expect(html).toContain(">Publish</span>");
-    expect(html).not.toContain("local-broker-token");
-  });
-
   it('keeps Site authoring schema editing hidden at "/admin/schema" by default', () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/admin/schema", createSiteAuthoringRuntimeProfile());
@@ -1799,42 +1778,6 @@ describe("App smoke routes", () => {
     expect(html).toContain(">tasks</span>");
     expect(html).toContain('aria-label="Schema saved"');
     expect(html).not.toContain('href="/apps/task-workspace/schema"');
-  });
-
-  it("renders app profile Site publish when the profile exposes a local broker", () => {
-    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
-    const html = renderRoute("/", {
-      ...createAppRuntimeProfile("site"),
-      localPublish: localPublishBroker,
-    });
-
-    expect(html).not.toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="generated-app"');
-    expectAppSettings(html, {
-      appLabel: "Site",
-      schemaKey: "site",
-      schemaRoute: "/schema",
-    });
-    expect(html).toContain('aria-label="Publish Site through local CLI"');
-    expect(html).toContain(">Publish</span>");
-    expect(html).not.toContain("local-broker-token");
-  });
-
-  it("keeps local Site publish hidden for non-Site active apps", () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const html = renderRoute("/", {
-      ...createAppRuntimeProfile("estii"),
-      localPublish: localPublishBroker,
-    });
-
-    expect(html).toContain('data-frame="generated-app"');
-    expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
-      schemaRoute: "/schema",
-    });
-    expect(html).not.toContain('aria-label="Publish Site through local CLI"');
-    expect(html).not.toContain(">Publish</span>");
   });
 
   it('renders an app profile schema editor at "/schema" with the selected schema key', () => {

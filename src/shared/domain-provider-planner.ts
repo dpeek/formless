@@ -1,11 +1,11 @@
 import {
   CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-  type DomainProviderApplyPolicy,
   type DomainProviderCustomDomainResource,
   type DomainProviderDnsRecordsResource,
   type DomainProviderPlan,
   type DomainProviderPlanInput,
   type DomainProviderPlanIssue,
+  type DomainProviderPlanPolicy,
   type DomainProviderProfileMappingIntent,
   type DomainProviderRedirectIntent,
   type DomainProviderRedirectRuleResource,
@@ -188,7 +188,7 @@ function redirectBlockers(
 function customDomainResource(input: {
   instanceId: string;
   mapping: DomainProviderProfileMappingIntent;
-  policy: DomainProviderApplyPolicy;
+  policy: DomainProviderPlanPolicy;
   workerName: string;
   zone: DomainProviderZone;
 }): DomainProviderCustomDomainResource {

@@ -1,5 +1,4 @@
 import type {
-  DomainProviderApplyPolicy,
   DomainProviderPlan,
   DomainProviderRedirectStatusCode,
   DomainProviderResourceKind,
@@ -12,8 +11,6 @@ import type {
 
 export const INSTANCE_DOMAIN_PROVIDER_API_PATH = "/api/formless/domain-provider";
 export const INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/plan`;
-export const INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/apply`;
-export const INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/apply-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/manual-cleanup`;
@@ -54,11 +51,10 @@ export type DomainProviderRunnerMutationStatus = {
 export type DomainProviderConfigStatus = {
   accountId?: string;
   alchemyPassword: DomainProviderSecretStatus;
-  applyReady: boolean;
   cloudflareApiToken: DomainProviderSecretStatus;
+  deleteReady: boolean;
   instanceId?: string;
   issues: DomainProviderConfigIssue[];
-  jobReady: boolean;
   planReady: boolean;
   runnerMutation: DomainProviderRunnerMutationStatus;
   workerName?: string;
@@ -110,7 +106,7 @@ export type DeleteInstanceDomainProviderRedirectIntentRequest = {
 };
 
 export type InstanceDomainProviderAppliedResourceAction = InstanceDomainMappingAppliedAction;
-export type InstanceDomainProviderAppliedResourceApplyAction = Exclude<
+export type InstanceDomainProviderActiveResourceAction = Exclude<
   InstanceDomainProviderAppliedResourceAction,
   "deleted" | "manually-removed"
 >;
@@ -159,12 +155,6 @@ export type ForgetInstanceDomainProviderRedirectIntentResponse = {
   redirectIntents: InstanceDomainProviderRedirectIntent[];
 };
 
-export type InstanceDomainProviderApplyRequest = {
-  host?: string;
-  policy?: DomainProviderApplyPolicy;
-  runnerId?: string;
-};
-
 export type InstanceDomainProviderDeleteRequest = {
   host?: string;
   kind?: DomainProviderResourceKind;
@@ -172,124 +162,16 @@ export type InstanceDomainProviderDeleteRequest = {
   runnerId?: string;
 };
 
-export type InstanceDomainProviderApplyBlockedCode =
-  | "domain-provider-apply-not-configured"
-  | "domain-provider-apply-running"
-  | "domain-provider-plan-blocked";
+export type InstanceDomainProviderJobStatus = "failed" | "ready" | "running" | "succeeded";
 
-export type InstanceDomainProviderApplyBlockedResponse = {
-  code: InstanceDomainProviderApplyBlockedCode;
-  config: DomainProviderConfigStatus;
-  error: string;
-  plan: DomainProviderPlan;
-  status: "blocked";
-};
-
-export type InstanceDomainProviderApplyNotImplementedResponse = {
-  code: "domain-provider-apply-executor-missing";
-  config: DomainProviderConfigStatus;
-  error: string;
-  plan: DomainProviderPlan;
-  status: "not-implemented";
-};
-
-export type InstanceDomainProviderApplyJobStatus = "failed" | "ready" | "running" | "succeeded";
-
-export type InstanceDomainProviderApplyJob = {
-  createdAt: string;
-  jobId: string;
-  plan: DomainProviderPlan;
-  result?: InstanceDomainProviderApplyJobResultSummary;
-  runnerId?: string;
-  status: InstanceDomainProviderApplyJobStatus;
-  updatedAt: string;
-};
-
-export type InstanceDomainProviderApplyJobResultSummary = {
+export type InstanceDomainProviderJobResultSummary = {
   error?: string;
   evidenceCount: number;
 };
 
-export type InstanceDomainProviderApplyReadyResponse = {
-  code: "domain-provider-apply-job-ready";
-  config: DomainProviderConfigStatus;
-  job: InstanceDomainProviderApplyJob;
-  plan: DomainProviderPlan;
-  status: "ready";
-};
-
-export type InstanceDomainProviderApplyJobCustomDomainResourceEvidence = {
-  accountId: string;
-  action: InstanceDomainProviderAppliedResourceApplyAction;
-  alchemyResourceId: string;
-  host: string;
-  kind: "cloudflare-worker-custom-domain";
-  logicalId: string;
-  profile: InstanceDomainMappingProfile;
-  targetInstallId?: string;
-  workerDomainId: string;
-  workerName: string;
-  zoneId: string;
-  zoneName: string;
-};
-
-export type InstanceDomainProviderApplyJobRedirectRuleResourceEvidence = {
-  accountId: string;
-  action: InstanceDomainProviderAppliedResourceApplyAction;
-  alchemyResourceId: string;
-  host: string;
-  kind: "cloudflare-redirect-rule";
-  logicalId: string;
-  preserveQueryString: boolean;
-  redirectRuleId: string;
-  redirectRulesetId: string;
-  statusCode: DomainProviderRedirectStatusCode;
-  targetUrl: string;
-  zoneId: string;
-  zoneName: string;
-};
-
-export type InstanceDomainProviderApplyJobDnsRecordsResourceEvidence = {
-  accountId: string;
-  action: InstanceDomainProviderAppliedResourceApplyAction;
-  alchemyResourceId: string;
-  dnsRecordIds: string[];
-  host: string;
-  kind: "cloudflare-dns-records";
-  logicalId: string;
-  zoneId: string;
-  zoneName: string;
-};
-
-export type InstanceDomainProviderApplyJobResourceEvidence =
-  | InstanceDomainProviderApplyJobCustomDomainResourceEvidence
-  | InstanceDomainProviderApplyJobDnsRecordsResourceEvidence
-  | InstanceDomainProviderApplyJobRedirectRuleResourceEvidence;
-
-export type InstanceDomainProviderApplyJobResultRequest =
-  | {
-      error: string;
-      runnerId?: string;
-      status: "failed";
-    }
-  | {
-      resources: InstanceDomainProviderApplyJobResourceEvidence[];
-      runnerId?: string;
-      status: "succeeded";
-    };
-
-export type InstanceDomainProviderApplyJobResponse = {
-  job: InstanceDomainProviderApplyJob;
-};
-
-export type InstanceDomainProviderApplyResponse =
-  | InstanceDomainProviderApplyBlockedResponse
-  | InstanceDomainProviderApplyNotImplementedResponse
-  | InstanceDomainProviderApplyReadyResponse;
-
 export type InstanceDomainProviderDeleteTarget = {
   accountId: string;
-  action: InstanceDomainProviderAppliedResourceApplyAction;
+  action: InstanceDomainProviderActiveResourceAction;
   alchemyResourceId?: string;
   host: string;
   kind: DomainProviderResourceKind;
@@ -330,13 +212,13 @@ export type InstanceDomainProviderDeleteBlockedResponse = {
   targets: InstanceDomainProviderDeleteTarget[];
 };
 
-export type InstanceDomainProviderDeleteJobStatus = InstanceDomainProviderApplyJobStatus;
+export type InstanceDomainProviderDeleteJobStatus = InstanceDomainProviderJobStatus;
 
 export type InstanceDomainProviderDeleteJob = {
   createdAt: string;
   jobId: string;
   plan: DomainProviderPlan;
-  result?: InstanceDomainProviderApplyJobResultSummary;
+  result?: InstanceDomainProviderJobResultSummary;
   runnerId?: string;
   status: InstanceDomainProviderDeleteJobStatus;
   targets: InstanceDomainProviderDeleteTarget[];

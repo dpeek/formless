@@ -52,22 +52,20 @@ describe("Site editing and publish workflow baseline", () => {
     expect(deployScript).toContain("wrangler deploy");
     expect(deployScript).not.toContain("snapshot");
     expect(deployScript).not.toContain("reset");
-    expect(deployScript).not.toContain("site:publish");
     expect(readWranglerConfigText()).toContain('"run_worker_first": [');
     expect(readWranglerConfigText()).toContain('"/*"');
   });
 
   it("exposes the Site source seed promotion command", () => {
     const packageJson = readPackageJson();
+    const pullSeedScript = readSitePullSeedScriptText();
 
     expect(packageJson.scripts?.["site:pull-seed"]).toBe("bun run scripts/site-pull-seed.ts");
-  });
-
-  it("exposes the Site publish command without changing ordinary deploy", () => {
-    const packageJson = readPackageJson();
-
-    expect(packageJson.scripts?.["site:publish"]).toBe("bun run scripts/site-publish.ts");
-    expect(packageJson.scripts?.deploy).toBe("vp build && wrangler deploy");
+    expect(pullSeedScript).toContain("/api/site/snapshot");
+    expect(pullSeedScript).toContain("schema/apps/site/seed-records.json");
+    expect(pullSeedScript).not.toContain("wrangler");
+    expect(pullSeedScript).not.toContain("FORMLESS_ADMIN_TOKEN");
+    expect(pullSeedScript).not.toContain("snapshot/restore");
   });
 });
 
@@ -79,4 +77,8 @@ function readPackageJson(): PackageJson {
 
 function readWranglerConfigText(): string {
   return readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
+}
+
+function readSitePullSeedScriptText(): string {
+  return readFileSync(new URL("../../scripts/site-pull-seed.ts", import.meta.url), "utf8");
 }

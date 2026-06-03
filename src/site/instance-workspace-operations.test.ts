@@ -194,8 +194,10 @@ describe("Formless workspace operations", () => {
             status: "not-run",
           },
           desiredState: {
-            resourceCount: 1,
+            resourceCount: 3,
             resourcesByKind: {
+              "cloudflare-dns-records": 1,
+              "cloudflare-redirect-rule": 1,
               "cloudflare-worker-custom-domain": 1,
             },
             routeTargetCount: 2,
@@ -208,8 +210,13 @@ describe("Formless workspace operations", () => {
             count: 0,
           },
           plan: {
-            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
-            resourceCount: 1,
+            changes: { create: 3, delete: 0, noChange: 0, update: 0 },
+            resourceCount: 3,
+            resourcesByKind: {
+              "cloudflare-dns-records": 1,
+              "cloudflare-redirect-rule": 1,
+              "cloudflare-worker-custom-domain": 1,
+            },
             routeTargetCount: 2,
             targetId: "instance.primary",
           },
@@ -220,7 +227,7 @@ describe("Formless workspace operations", () => {
         summary: {
           fields: {
             cleanupStatus: "not-run",
-            desiredResourceCount: 1,
+            desiredResourceCount: 3,
             drift: "no-drift",
             evidenceCount: 0,
             expectedUrl: "https://personal.dpeek.workers.dev",
@@ -236,7 +243,7 @@ describe("Formless workspace operations", () => {
     expect(
       (state.result?.deployment?.plan as { affectedLogicalIds?: unknown[] } | null | undefined)
         ?.affectedLogicalIds,
-    ).toHaveLength(1);
+    ).toHaveLength(3);
     await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
   });
@@ -324,7 +331,7 @@ describe("Formless workspace operations", () => {
             logicalIds: [],
           },
           plan: {
-            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+            changes: { create: 3, delete: 0, noChange: 0, update: 0 },
             recordedAt: "2026-06-02T00:04:02.000Z",
           },
           writeback: {
@@ -332,7 +339,12 @@ describe("Formless workspace operations", () => {
             desiredState,
             evidenceCount: 0,
             planRecordedAt: "2026-06-02T00:04:02.000Z",
-            resourceCount: 1,
+            resourceCount: 3,
+            resourcesByKind: {
+              "cloudflare-dns-records": 1,
+              "cloudflare-redirect-rule": 1,
+              "cloudflare-worker-custom-domain": 1,
+            },
             runnerId: "local-gateway",
             status: "succeeded",
             successCompletedAt: "2026-06-02T00:04:03.000Z",
@@ -353,7 +365,11 @@ describe("Formless workspace operations", () => {
       },
       status: "succeeded",
     });
-    expect(start).toMatchObject({ desiredState, mode: "apply" });
+    expect(start).toMatchObject({
+      desiredState,
+      idempotencyKey: `local-gateway-deploy:${desiredState.targetId}:${desiredState.versionId}:${desiredState.hash}`,
+      mode: "apply",
+    });
     expect(plan).toMatchObject({ attemptId: "attempt.local-gateway.1", desiredState });
     expect(success).toMatchObject({
       attemptId: "attempt.local-gateway.1",
@@ -771,8 +787,12 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
           ...desiredState,
           createdAt: "2026-06-02T00:04:02.000Z",
           display: {
-            resourceCount: 1,
-            resourcesByKind: { "cloudflare-worker-custom-domain": 1 },
+            resourceCount: 3,
+            resourcesByKind: {
+              "cloudflare-dns-records": 1,
+              "cloudflare-redirect-rule": 1,
+              "cloudflare-worker-custom-domain": 1,
+            },
             title: "Primary instance target",
           },
           resourceGraph: { resources: [], targetId: desiredState.targetId },
@@ -823,7 +843,7 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
           recordedAt: "2026-06-02T00:04:02.000Z",
           summary: {
             blockers: [],
-            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+            changes: { create: 3, delete: 0, noChange: 0, update: 0 },
             warnings: [],
           },
         },
@@ -907,7 +927,7 @@ function deploymentAttempt(input: {
       runnerId: "local-gateway",
     },
     attemptId: "attempt.local-gateway.1",
-    idempotencyKey: "local-gateway-deploy:instance.primary:desired.instance.primary.3",
+    idempotencyKey: `local-gateway-deploy:instance.primary:desired.instance.primary.3:${input.desiredState.hash}`,
     mode: "apply",
     startedAt: "2026-06-02T00:04:02.000Z",
     status: input.status,
@@ -1062,6 +1082,24 @@ function deployControlPlaneRecords(): StoredRecord[] {
         providerConfig: "cloudflare-personal",
         surface: "public-site",
         targetProfile: "public-site",
+        updatedAt: now,
+      },
+    },
+    {
+      createdAt: now,
+      entity: "route",
+      id: "route:redirect:old.example.com",
+      values: {
+        createdAt: now,
+        enabled: true,
+        kind: "redirect",
+        matchHost: "old.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        preservePath: true,
+        preserveQueryString: true,
+        statusCode: "308",
+        toHost: "www.example.com",
         updatedAt: now,
       },
     },

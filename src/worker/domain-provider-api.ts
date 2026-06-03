@@ -1,8 +1,6 @@
 import {
   DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES,
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
@@ -18,14 +16,6 @@ import {
   type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderAppliedResourceState,
   type InstanceDomainProviderAuditEvent,
-  type InstanceDomainProviderApplyBlockedCode,
-  type InstanceDomainProviderApplyJob,
-  type InstanceDomainProviderApplyJobResourceEvidence,
-  type InstanceDomainProviderApplyJobResponse,
-  type InstanceDomainProviderApplyJobResultRequest,
-  type InstanceDomainProviderApplyJobResultSummary,
-  type InstanceDomainProviderApplyRequest,
-  type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteBlockedCode,
   type InstanceDomainProviderDeleteJob,
   type InstanceDomainProviderDeleteJobResourceEvidence,
@@ -34,6 +24,7 @@ import {
   type InstanceDomainProviderDeleteRequest,
   type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderDeleteTarget,
+  type InstanceDomainProviderJobResultSummary,
   type InstanceDomainProviderManualCleanupRequest,
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
@@ -52,14 +43,14 @@ import type {
 } from "../shared/deployment-runtime.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
-  DomainProviderApplyPolicy,
   DomainProviderCustomDomainResource,
   DomainProviderDnsRecordsResource,
   DomainProviderPlan,
+  DomainProviderPlanPolicy,
   DomainProviderRedirectIntent,
   DomainProviderRedirectRuleResource,
-  DomainProviderRedirectStatusCode,
   DomainProviderResource,
+  DomainProviderRedirectStatusCode,
   DomainProviderResourceKind,
   DomainProviderZone,
 } from "../shared/domain-provider-protocol.ts";
@@ -79,7 +70,6 @@ import {
   readInstanceDomainMappingAppliedStates,
   readInstanceDomainMappingDesiredCleanupEvents,
   readInstanceDomainMappings,
-  recordInstanceDomainMappingApplyEvidence,
 } from "./instance-domain-mappings-state.ts";
 import {
   INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
@@ -109,34 +99,16 @@ import {
 
 export { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 
-const APPLY_LOCK_ID = "domain-provider-apply";
+const providerMutationLockId = "domain-provider-mutation";
 const primaryInstanceDeploymentTarget = {
   kind: "instance",
   label: "Primary instance target",
   targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
 } satisfies DeploymentTarget;
-const applyLockTableSql = `
-  CREATE TABLE IF NOT EXISTS instance_domain_provider_apply_lock (
-    lock_id TEXT PRIMARY KEY CHECK (lock_id = '${APPLY_LOCK_ID}'),
+const providerMutationLockTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_provider_mutation_lock (
+    lock_id TEXT PRIMARY KEY CHECK (lock_id = '${providerMutationLockId}'),
     acquired_at TEXT NOT NULL
-  )
-`;
-const applyJobsTableSql = `
-  CREATE TABLE IF NOT EXISTS instance_domain_provider_apply_jobs (
-    job_id TEXT PRIMARY KEY,
-    status TEXT NOT NULL CHECK (status IN ('ready', 'running', 'succeeded', 'failed')),
-    runner_id TEXT,
-    plan_json TEXT NOT NULL,
-    deployment_attempt_id TEXT,
-    deployment_target_id TEXT,
-    deployment_desired_state_version_id TEXT,
-    deployment_desired_state_revision INTEGER,
-    deployment_desired_state_hash TEXT,
-    deployment_lease_token TEXT,
-    result_json TEXT,
-    error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
   )
 `;
 const deleteJobsTableSql = `
@@ -212,9 +184,6 @@ const providerAuditEventsTableSql = `
   )
 `;
 
-const domainProviderApplyJobsSqlMigrationFamily = storageSqlMigrationFamily(
-  "instance-domain-provider-apply-jobs",
-);
 const domainProviderDeleteJobsSqlMigrationFamily = storageSqlMigrationFamily(
   "instance-domain-provider-delete-jobs",
 );
@@ -222,15 +191,6 @@ const domainProviderAppliedResourcesSqlMigrationFamily = storageSqlMigrationFami
   "instance-domain-provider-applied-resources",
 );
 const domainProviderSqlMigrations = createSqlStorageMigrationRegistry([
-  {
-    id: "2026-05-28-domain-provider-apply-job-deployment-columns",
-    owner: "formless",
-    family: domainProviderApplyJobsSqlMigrationFamily,
-    checksum: "sha256:dcc2cc25b39e1b20f656a932203178bc5ea9c90cff20ed143c22e6bcafe9a717",
-    safety: "auto-safe",
-    summary: "Add deployment linkage columns to domain provider apply jobs.",
-    apply: migrateDomainProviderApplyJobDeploymentColumns,
-  },
   {
     id: "2026-05-28-domain-provider-delete-job-deployment-columns",
     owner: "formless",
@@ -269,7 +229,7 @@ type DurableObjectDomainProviderEnv = Omit<InstanceDomainProviderApiEnv, "FORMLE
   FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
 
-type DomainProviderApplyLockResult =
+type DomainProviderMutationLockResult =
   | { acquired: true }
   | {
       acquired: false;
@@ -278,7 +238,7 @@ type DomainProviderApplyLockResult =
 
 type DomainProviderPlanOptions = {
   host?: string;
-  policy?: DomainProviderApplyPolicy;
+  policy?: DomainProviderPlanPolicy;
 };
 
 type DomainProviderDeleteOptions = {
@@ -306,23 +266,6 @@ type DomainProviderDeploymentAttemptStartResult =
       ok: false;
       status: 409;
     };
-
-type DomainProviderApplyJobRow = {
-  deployment_attempt_id: string | null;
-  deployment_desired_state_hash: string | null;
-  deployment_desired_state_revision: number | null;
-  deployment_desired_state_version_id: string | null;
-  deployment_lease_token: string | null;
-  deployment_target_id: string | null;
-  job_id: string;
-  status: InstanceDomainProviderApplyJob["status"];
-  runner_id: string | null;
-  plan_json: string;
-  result_json: string | null;
-  error: string | null;
-  created_at: string;
-  updated_at: string;
-};
 
 type DomainProviderDeleteJobRow = {
   deployment_attempt_id: string | null;
@@ -386,16 +329,7 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     return undefined;
   }
 
-  const applyJobPath = parseApplyJobPath(url.pathname);
   const deleteJobPath = parseDeleteJobPath(url.pathname);
-
-  if (applyJobPath) {
-    if (applyJobPath.result) {
-      return handleApplyJobResultRequest(request, storage, env, applyJobPath.jobId);
-    }
-
-    return handleApplyJobStatusRequest(request, storage, applyJobPath.jobId);
-  }
 
   if (deleteJobPath) {
     if (deleteJobPath.result) {
@@ -432,10 +366,6 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     return handleRedirectIntentsRequest(request, storage, env, url);
   }
 
-  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH) {
-    return handleApplyRequest(request, storage, env);
-  }
-
   if (url.pathname === INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH) {
     return handleDeleteRequest(request, storage, env);
   }
@@ -445,18 +375,6 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
   }
 
   return jsonResponse({ error: "Not found." }, 404);
-}
-
-function handleApplyRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-): Promise<Response> {
-  if (request.method !== "POST") {
-    return Promise.resolve(methodNotAllowedResponse("POST"));
-  }
-
-  return applyWithAuthorization(request, storage, env);
 }
 
 function handleDeleteRequest(
@@ -644,146 +562,6 @@ async function handleForgetRedirectIntentRequest(
   } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
-async function applyWithAuthorization(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-): Promise<Response> {
-  const authorization = await authorizeInstanceWrite(request, env);
-
-  if (!authorization.authorized) {
-    return jsonResponse(
-      { error: authorization.error },
-      authorization.status,
-      authorization.headers,
-    );
-  }
-
-  const applyRequest = await readApplyRequest(request);
-
-  if (!applyRequest.ok) {
-    return jsonResponse({ error: applyRequest.error }, 400);
-  }
-
-  const response = await domainProviderPlanResponse(
-    storage,
-    env,
-    applyRequest.options,
-    request.url,
-  );
-
-  if (!response.config.jobReady) {
-    return applyBlockedResponse(
-      "domain-provider-apply-not-configured",
-      "Domain provider apply is not configured. Review config issues before applying.",
-      response,
-      409,
-    );
-  }
-
-  if (response.plan.blockers.length > 0) {
-    return applyBlockedResponse(
-      "domain-provider-plan-blocked",
-      "Domain provider apply cannot run while the plan has blockers.",
-      response,
-      409,
-    );
-  }
-
-  const now = nowIsoString();
-  const lock = acquireDomainProviderApplyLock(storage, now);
-
-  if (!lock.acquired) {
-    return applyBlockedResponse(
-      "domain-provider-apply-running",
-      `Domain provider apply is already running since ${lock.acquiredAt}.`,
-      response,
-      409,
-    );
-  }
-
-  const jobId = `domain-provider-apply-${crypto.randomUUID()}`;
-  const deploymentAttempt = await startDomainProviderApplyDeploymentAttempt(storage, {
-    env,
-    jobId,
-    now,
-    requestUrl: request.url,
-    runnerId: applyRequest.request.runnerId,
-  });
-
-  if (!deploymentAttempt.ok) {
-    releaseDomainProviderApplyLock(storage);
-    return applyBlockedResponse(
-      "domain-provider-apply-running",
-      deploymentAttempt.error,
-      response,
-      deploymentAttempt.status,
-    );
-  }
-
-  let job: InstanceDomainProviderApplyJob;
-
-  try {
-    job = writeApplyJob(storage, {
-      deployment: {
-        attemptId: deploymentAttempt.attempt.attemptId,
-        desiredState: deploymentAttempt.desiredState,
-        leaseToken: deploymentAttempt.leaseToken,
-      },
-      jobId,
-      now,
-      plan: response.plan,
-      runnerId: applyRequest.request.runnerId,
-    });
-  } catch (error) {
-    releaseDomainProviderApplyLock(storage);
-    await failDomainProviderDeploymentAttempt(storage, {
-      actor: deploymentAttempt.actor,
-      attemptId: deploymentAttempt.attempt.attemptId,
-      code: "domain-provider-apply-job-write-failed",
-      desiredState: deploymentAttempt.desiredState,
-      displayMessage: "Domain provider apply job could not be recorded.",
-      env,
-      leaseToken: deploymentAttempt.leaseToken,
-      now,
-      requestUrl: request.url,
-      runnerId: applyRequest.request.runnerId,
-    });
-    throw error;
-  }
-
-  return jsonResponse(
-    {
-      code: "domain-provider-apply-job-ready",
-      config: response.config,
-      job,
-      plan: response.plan,
-      status: "ready",
-    } satisfies InstanceDomainProviderApplyResponse,
-    202,
-  );
-}
-
-async function startDomainProviderApplyDeploymentAttempt(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    jobId: string;
-    now: string;
-    requestUrl: string;
-    runnerId?: string;
-  },
-): Promise<DomainProviderDeploymentAttemptStartResult> {
-  return startDomainProviderDeploymentAttempt(storage, {
-    actor: domainProviderApplyDeploymentActor(input.runnerId),
-    env: input.env,
-    idempotencyKey: `domain-provider-apply:${input.jobId}`,
-    mode: "apply",
-    now: input.now,
-    requestUrl: input.requestUrl,
-  });
-}
-
 async function startDomainProviderDeleteDeploymentAttempt(
   storage: DurableObjectStorage,
   input: {
@@ -868,15 +646,6 @@ async function startDomainProviderDeploymentAttempt(
   };
 }
 
-function domainProviderApplyDeploymentActor(runnerId: string | undefined): DeploymentActor {
-  return {
-    actorId: "domain-provider.apply",
-    displayName: "Domain provider apply",
-    kind: "runner",
-    ...(runnerId === undefined ? {} : { runnerId }),
-  };
-}
-
 function domainProviderDeleteDeploymentActor(runnerId: string | undefined): DeploymentActor {
   return {
     actorId: "domain-provider.delete",
@@ -939,7 +708,7 @@ async function deleteWithAuthorization(
   const config = domainProviderConfigStatus(env);
   const deletePlan = domainProviderDeletePlan(storage, config, deleteRequest.options);
 
-  if (!config.jobReady) {
+  if (!config.deleteReady) {
     return deleteBlockedResponse(
       "domain-provider-delete-not-configured",
       "Domain provider delete is not configured. Review config issues before deleting provider resources.",
@@ -960,7 +729,7 @@ async function deleteWithAuthorization(
   }
 
   const now = nowIsoString();
-  const lock = acquireDomainProviderApplyLock(storage, now);
+  const lock = acquireDomainProviderMutationLock(storage, now);
 
   if (!lock.acquired) {
     return deleteBlockedResponse(
@@ -982,7 +751,7 @@ async function deleteWithAuthorization(
   });
 
   if (!deploymentAttempt.ok) {
-    releaseDomainProviderApplyLock(storage);
+    releaseDomainProviderMutationLock(storage);
     return deleteBlockedResponse(
       "domain-provider-delete-running",
       deploymentAttempt.error,
@@ -1008,7 +777,7 @@ async function deleteWithAuthorization(
       targets: deletePlan.targets,
     });
   } catch (error) {
-    releaseDomainProviderApplyLock(storage);
+    releaseDomainProviderMutationLock(storage);
     await failDomainProviderDeploymentAttempt(storage, {
       actor: deploymentAttempt.actor,
       attemptId: deploymentAttempt.attempt.attemptId,
@@ -1074,65 +843,6 @@ async function manualCleanupWithAuthorization(
     status: "cleaned",
     target: result.target,
   } satisfies InstanceDomainProviderManualCleanupResponse);
-}
-
-function handleApplyJobStatusRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  jobId: string,
-): Response {
-  if (request.method !== "GET") {
-    return methodNotAllowedResponse("GET");
-  }
-
-  const job = readApplyJob(storage, jobId);
-
-  if (!job) {
-    return jsonResponse({ error: "Domain provider apply job was not found." }, 404);
-  }
-
-  return jsonResponse({ job } satisfies InstanceDomainProviderApplyJobResponse);
-}
-
-async function handleApplyJobResultRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  jobId: string,
-): Promise<Response> {
-  if (request.method !== "POST") {
-    return methodNotAllowedResponse("POST");
-  }
-
-  const authorization = await authorizeInstanceWrite(request, env);
-
-  if (!authorization.authorized) {
-    return jsonResponse(
-      { error: authorization.error },
-      authorization.status,
-      authorization.headers,
-    );
-  }
-
-  const result = await readApplyJobResultRequest(request);
-
-  if (!result.ok) {
-    return jsonResponse({ error: result.error }, 400);
-  }
-
-  const completed = await completeApplyJob(storage, {
-    env,
-    jobId,
-    now: nowIsoString(),
-    requestUrl: request.url,
-    result: result.request,
-  });
-
-  if (!completed.ok) {
-    return jsonResponse({ error: completed.error }, completed.status);
-  }
-
-  return jsonResponse({ job: completed.job } satisfies InstanceDomainProviderApplyJobResponse);
 }
 
 function handleDeleteJobStatusRequest(
@@ -1473,11 +1183,10 @@ function domainProviderConfigStatus(
     );
   }
 
-  const jobReady = Boolean(
+  const deleteReady = Boolean(
     instanceId && workerName && accountId && zoneResult.ok && zoneResult.zones.length > 0,
   );
-  const planReady = jobReady;
-  const applyReady = jobReady;
+  const planReady = deleteReady;
 
   return {
     ...(accountId === undefined ? {} : { accountId }),
@@ -1485,14 +1194,13 @@ function domainProviderConfigStatus(
       configured: Boolean(alchemyPassword),
       envNames: ["ALCHEMY_PASSWORD"],
     },
-    applyReady,
     cloudflareApiToken: {
       configured: Boolean(cloudflareApiToken),
       envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
     },
+    deleteReady,
     ...(instanceId === undefined ? {} : { instanceId }),
     issues,
-    jobReady,
     planReady,
     runnerMutation: {
       checkedBy: "node-runner",
@@ -2097,61 +1805,6 @@ function redirectIntentForPlan(
   };
 }
 
-function writeApplyJob(
-  storage: DurableObjectStorage,
-  input: {
-    deployment: DomainProviderDeploymentJobLink;
-    jobId: string;
-    now: string;
-    plan: DomainProviderPlan;
-    runnerId?: string;
-  },
-): InstanceDomainProviderApplyJob {
-  ensureDomainProviderApplyJobsTable(storage);
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_apply_jobs (
-        job_id,
-        status,
-        runner_id,
-        plan_json,
-        deployment_attempt_id,
-        deployment_target_id,
-        deployment_desired_state_version_id,
-        deployment_desired_state_revision,
-        deployment_desired_state_hash,
-        deployment_lease_token,
-        result_json,
-        error,
-        created_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
-    `,
-    input.jobId,
-    "ready",
-    input.runnerId ?? null,
-    JSON.stringify(input.plan),
-    input.deployment.attemptId,
-    input.deployment.desiredState.targetId,
-    input.deployment.desiredState.versionId,
-    input.deployment.desiredState.revision,
-    input.deployment.desiredState.hash,
-    input.deployment.leaseToken,
-    input.now,
-    input.now,
-  );
-
-  const job = readApplyJob(storage, input.jobId);
-
-  if (!job) {
-    throw new Error("Domain provider apply job was not written.");
-  }
-
-  return job;
-}
-
 function writeDeleteJob(
   storage: DurableObjectStorage,
   input: {
@@ -2208,129 +1861,6 @@ function writeDeleteJob(
   }
 
   return job;
-}
-
-async function completeApplyJob(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    jobId: string;
-    now: string;
-    requestUrl: string;
-    result: InstanceDomainProviderApplyJobResultRequest;
-  },
-): Promise<
-  { ok: true; job: InstanceDomainProviderApplyJob } | { ok: false; error: string; status: number }
-> {
-  const job = readApplyJob(storage, input.jobId);
-
-  if (!job) {
-    return { ok: false, error: "Domain provider apply job was not found.", status: 404 };
-  }
-
-  if (job.status === "succeeded" || job.status === "failed") {
-    return { ok: false, error: "Domain provider apply job is already complete.", status: 409 };
-  }
-
-  if (
-    job.runnerId !== undefined &&
-    input.result.runnerId !== undefined &&
-    job.runnerId !== input.result.runnerId
-  ) {
-    return { ok: false, error: "Domain provider apply job runner id does not match.", status: 409 };
-  }
-
-  if (input.result.status === "failed") {
-    const deploymentWriteback = await writeDomainProviderApplyDeploymentFailure(storage, {
-      env: input.env,
-      error: input.result.error,
-      job,
-      now: input.now,
-      requestUrl: input.requestUrl,
-      runnerId: input.result.runnerId,
-    });
-
-    if (!deploymentWriteback.ok) {
-      return deploymentWriteback;
-    }
-
-    return finishApplyJob(storage, {
-      error: input.result.error,
-      job,
-      now: input.now,
-      result: { error: input.result.error, evidenceCount: 0 },
-      runnerId: input.result.runnerId,
-      status: "failed",
-    });
-  }
-
-  const validated = validateApplyEvidence(job.plan, input.result.resources);
-
-  if (!validated.ok) {
-    return { ok: false, error: validated.error, status: 400 };
-  }
-
-  const currentIntent = await readControlPlaneSyncedDomainProviderIntent(
-    storage,
-    input.env,
-    input.requestUrl,
-  );
-
-  for (const evidence of input.result.resources) {
-    if (evidence.kind === "cloudflare-worker-custom-domain") {
-      const recorded = recordInstanceDomainMappingApplyEvidence(storage, {
-        action: evidence.action,
-        alchemyResourceId: evidence.alchemyResourceId,
-        existingMappings: currentIntent.mappings,
-        host: evidence.host,
-        now: input.now,
-        profile: evidence.profile,
-        provider: "cloudflare-worker-custom-domain",
-        runnerId: input.result.runnerId ?? job.runnerId,
-        ...(evidence.targetInstallId === undefined
-          ? {}
-          : { targetInstallId: evidence.targetInstallId }),
-        accountId: evidence.accountId,
-        workerDomainId: evidence.workerDomainId,
-        workerName: evidence.workerName,
-        zoneId: evidence.zoneId,
-        zoneName: evidence.zoneName,
-      });
-
-      if (!recorded.ok) {
-        return { ok: false, error: recorded.error.message, status: 400 };
-      }
-
-      continue;
-    }
-
-    recordDomainProviderResourceEvidence(storage, {
-      evidence,
-      now: input.now,
-      runnerId: input.result.runnerId ?? job.runnerId,
-    });
-  }
-
-  const deploymentWriteback = await writeDomainProviderApplyDeploymentSuccess(storage, {
-    env: input.env,
-    job,
-    now: input.now,
-    requestUrl: input.requestUrl,
-    resources: input.result.resources,
-    runnerId: input.result.runnerId,
-  });
-
-  if (!deploymentWriteback.ok) {
-    return deploymentWriteback;
-  }
-
-  return finishApplyJob(storage, {
-    job,
-    now: input.now,
-    result: { evidenceCount: input.result.resources.length },
-    runnerId: input.result.runnerId,
-    status: "succeeded",
-  });
 }
 
 async function completeDeleteJob(
@@ -2448,71 +1978,6 @@ async function completeDeleteJob(
   });
 }
 
-async function writeDomainProviderApplyDeploymentFailure(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    error: string;
-    job: InstanceDomainProviderApplyJob;
-    now: string;
-    requestUrl: string;
-    runnerId?: string;
-  },
-): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const deployment = readApplyJobDeploymentLink(storage, input.job.jobId);
-
-  if (!deployment) {
-    return { ok: true };
-  }
-
-  const result = writeDeploymentAttemptFailure(storage, {
-    actor: domainProviderApplyDeploymentActor(input.runnerId ?? input.job.runnerId),
-    attemptId: deployment.attemptId,
-    desiredState: deployment.desiredState,
-    leaseToken: deployment.leaseToken,
-    now: input.now,
-    runnerId: input.runnerId ?? input.job.runnerId,
-    summary: {
-      code: "domain-provider-apply-failed",
-      displayMessage: input.error,
-    },
-  });
-
-  return deploymentWritebackResult(result);
-}
-
-async function writeDomainProviderApplyDeploymentSuccess(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    job: InstanceDomainProviderApplyJob;
-    now: string;
-    requestUrl: string;
-    resources: readonly InstanceDomainProviderApplyJobResourceEvidence[];
-    runnerId?: string;
-  },
-): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const deployment = readApplyJobDeploymentLink(storage, input.job.jobId);
-
-  if (!deployment) {
-    return { ok: true };
-  }
-
-  const result = writeDeploymentAttemptSuccess(storage, {
-    alchemy: domainProviderDeploymentAlchemyPointer(input.job.plan),
-    attemptId: deployment.attemptId,
-    desiredState: deployment.desiredState,
-    evidence: input.resources.map((resource) =>
-      deploymentEvidenceSummaryFromApplyEvidence(resource, deployment.desiredState.targetId),
-    ),
-    leaseToken: deployment.leaseToken,
-    now: input.now,
-    runnerId: input.runnerId ?? input.job.runnerId,
-  });
-
-  return deploymentWritebackResult(result);
-}
-
 async function writeDomainProviderDeleteDeploymentFailure(
   storage: DurableObjectStorage,
   input: {
@@ -2617,22 +2082,6 @@ function domainProviderDeploymentAlchemyPointer(
   };
 }
 
-function deploymentEvidenceSummaryFromApplyEvidence(
-  evidence: InstanceDomainProviderApplyJobResourceEvidence,
-  targetId: DeploymentDesiredStateVersionRef["targetId"],
-): DeploymentResourceEvidenceSummary {
-  return {
-    action: deploymentEvidenceActionFromApplyAction(evidence.action),
-    alchemyResourceId: evidence.alchemyResourceId,
-    displayName: evidence.host,
-    kind: evidence.kind,
-    logicalId: evidence.logicalId,
-    providerFamily: "cloudflare",
-    providerResourceIds: providerResourceIdsFromApplyEvidence(evidence),
-    targetId,
-  };
-}
-
 function deploymentEvidenceSummaryFromDeleteTarget(
   target: InstanceDomainProviderDeleteTarget,
   targetId: DeploymentDesiredStateVersionRef["targetId"],
@@ -2651,25 +2100,6 @@ function deploymentEvidenceSummaryFromDeleteTarget(
   };
 }
 
-function deploymentEvidenceActionFromApplyAction(
-  action: InstanceDomainProviderApplyJobResourceEvidence["action"],
-): DeploymentResourceEvidenceSummary["action"] {
-  return action === "overridden" ? "updated" : action;
-}
-
-function providerResourceIdsFromApplyEvidence(
-  evidence: InstanceDomainProviderApplyJobResourceEvidence,
-): string[] {
-  switch (evidence.kind) {
-    case "cloudflare-worker-custom-domain":
-      return [evidence.workerDomainId];
-    case "cloudflare-redirect-rule":
-      return [evidence.redirectRulesetId, evidence.redirectRuleId];
-    case "cloudflare-dns-records":
-      return evidence.dnsRecordIds;
-  }
-}
-
 function providerResourceIdsFromDeleteTarget(target: InstanceDomainProviderDeleteTarget): string[] {
   if (target.kind === "cloudflare-dns-records") {
     return target.resourceId.split(",").filter((resourceId) => resourceId.length > 0);
@@ -2678,54 +2108,13 @@ function providerResourceIdsFromDeleteTarget(target: InstanceDomainProviderDelet
   return [target.resourceId];
 }
 
-function finishApplyJob(
-  storage: DurableObjectStorage,
-  input: {
-    error?: string;
-    job: InstanceDomainProviderApplyJob;
-    now: string;
-    result: InstanceDomainProviderApplyJobResultSummary;
-    runnerId?: string;
-    status: "failed" | "succeeded";
-  },
-): { ok: true; job: InstanceDomainProviderApplyJob } {
-  ensureDomainProviderApplyJobsTable(storage);
-
-  storage.sql.exec(
-    `
-      UPDATE instance_domain_provider_apply_jobs
-      SET status = ?,
-          runner_id = ?,
-          result_json = ?,
-          error = ?,
-          updated_at = ?
-      WHERE job_id = ?
-    `,
-    input.status,
-    input.runnerId ?? input.job.runnerId ?? null,
-    JSON.stringify(input.result),
-    input.error ?? null,
-    input.now,
-    input.job.jobId,
-  );
-  releaseDomainProviderApplyLock(storage);
-
-  const job = readApplyJob(storage, input.job.jobId);
-
-  if (!job) {
-    throw new Error("Domain provider apply job disappeared after completion.");
-  }
-
-  return { ok: true, job };
-}
-
 function finishDeleteJob(
   storage: DurableObjectStorage,
   input: {
     error?: string;
     job: InstanceDomainProviderDeleteJob;
     now: string;
-    result: InstanceDomainProviderApplyJobResultSummary;
+    result: InstanceDomainProviderJobResultSummary;
     runnerId?: string;
     status: "failed" | "succeeded";
   },
@@ -2749,7 +2138,7 @@ function finishDeleteJob(
     input.now,
     input.job.jobId,
   );
-  releaseDomainProviderApplyLock(storage);
+  releaseDomainProviderMutationLock(storage);
 
   const job = readDeleteJob(storage, input.job.jobId);
 
@@ -2799,189 +2188,6 @@ function validateDeleteEvidence(
   }
 
   return { ok: true };
-}
-
-function validateApplyEvidence(
-  plan: DomainProviderPlan,
-  resources: readonly InstanceDomainProviderApplyJobResourceEvidence[],
-): { ok: true } | { ok: false; error: string } {
-  const plannedResources = new Map(
-    plan.resources.map((resource) => [resource.logicalId, resource]),
-  );
-
-  for (const evidence of resources) {
-    const resource = plannedResources.get(evidence.logicalId);
-
-    if (!resource) {
-      return {
-        ok: false,
-        error: `Domain provider apply evidence resource "${evidence.logicalId}" was not in the job plan.`,
-      };
-    }
-
-    const valid = validateResourceEvidence(resource, evidence);
-
-    if (!valid.ok) {
-      return valid;
-    }
-  }
-
-  return { ok: true };
-}
-
-function validateResourceEvidence(
-  resource: DomainProviderResource,
-  evidence: InstanceDomainProviderApplyJobResourceEvidence,
-): { ok: true } | { ok: false; error: string } {
-  switch (resource.kind) {
-    case "cloudflare-worker-custom-domain":
-      if (
-        evidence.kind !== resource.kind ||
-        evidence.host !== resource.host ||
-        evidence.profile !== resource.profile ||
-        evidence.targetInstallId !== resource.targetInstallId ||
-        evidence.workerName !== resource.props.workerName ||
-        evidence.zoneId !== resource.zone.id ||
-        evidence.zoneName !== resource.zone.name
-      ) {
-        return {
-          ok: false,
-          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
-        };
-      }
-
-      return { ok: true };
-    case "cloudflare-redirect-rule":
-      if (
-        evidence.kind !== resource.kind ||
-        evidence.host !== resource.fromHost ||
-        evidence.targetUrl !== resource.targetUrl ||
-        evidence.statusCode !== resource.props.statusCode ||
-        evidence.preserveQueryString !== resource.props.preserveQueryString ||
-        evidence.zoneId !== resource.zone.id ||
-        evidence.zoneName !== resource.zone.name
-      ) {
-        return {
-          ok: false,
-          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
-        };
-      }
-
-      return { ok: true };
-    case "cloudflare-dns-records":
-      if (
-        evidence.kind !== resource.kind ||
-        evidence.host !== resource.fromHost ||
-        evidence.zoneId !== resource.zone.id ||
-        evidence.zoneName !== resource.zone.name
-      ) {
-        return {
-          ok: false,
-          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
-        };
-      }
-
-      return { ok: true };
-  }
-}
-
-function recordDomainProviderResourceEvidence(
-  storage: DurableObjectStorage,
-  input: {
-    evidence: Exclude<
-      InstanceDomainProviderApplyJobResourceEvidence,
-      { kind: "cloudflare-worker-custom-domain" }
-    >;
-    now: string;
-    runnerId?: string;
-  },
-) {
-  ensureDomainProviderAppliedResourcesTables(storage);
-  const state = providerAppliedResourceFromEvidence(input.evidence, {
-    now: input.now,
-    runnerId: input.runnerId,
-  });
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_applied_resources (
-        logical_id,
-        kind,
-        host,
-        account_id,
-        alchemy_resource_id,
-        runner_id,
-        zone_id,
-        zone_name,
-        resource_id,
-        resource_json,
-        action,
-        applied_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(logical_id) DO UPDATE SET
-        kind = excluded.kind,
-        host = excluded.host,
-        account_id = excluded.account_id,
-        alchemy_resource_id = excluded.alchemy_resource_id,
-        runner_id = excluded.runner_id,
-        zone_id = excluded.zone_id,
-        zone_name = excluded.zone_name,
-        resource_id = excluded.resource_id,
-        resource_json = excluded.resource_json,
-        action = excluded.action,
-        applied_at = excluded.applied_at,
-        updated_at = excluded.updated_at
-    `,
-    state.logicalId,
-    state.kind,
-    state.host,
-    state.accountId,
-    state.alchemyResourceId,
-    state.runnerId ?? null,
-    state.zoneId,
-    state.zoneName,
-    state.resourceId,
-    state.resourceJson,
-    state.action,
-    state.appliedAt,
-    state.updatedAt,
-  );
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_audit_events (
-        logical_id,
-        kind,
-        host,
-        account_id,
-        alchemy_resource_id,
-        runner_id,
-        zone_id,
-        zone_name,
-        resource_id,
-        resource_json,
-        action,
-        applied_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    state.logicalId,
-    state.kind,
-    state.host,
-    state.accountId,
-    state.alchemyResourceId,
-    state.runnerId ?? null,
-    state.zoneId,
-    state.zoneName,
-    state.resourceId,
-    state.resourceJson,
-    state.action,
-    state.appliedAt,
-    state.updatedAt,
-  );
 }
 
 function deleteDomainProviderAppliedResource(
@@ -3145,33 +2351,6 @@ function customDomainAppliedStateFromDeleteTarget(
   };
 }
 
-function providerAppliedResourceFromEvidence(
-  evidence: Exclude<
-    InstanceDomainProviderApplyJobResourceEvidence,
-    { kind: "cloudflare-worker-custom-domain" }
-  >,
-  input: { now: string; runnerId?: string },
-): InstanceDomainProviderAppliedResourceState {
-  return {
-    accountId: evidence.accountId,
-    action: evidence.action,
-    alchemyResourceId: evidence.alchemyResourceId,
-    appliedAt: input.now,
-    host: evidence.host,
-    kind: evidence.kind,
-    logicalId: evidence.logicalId,
-    resourceId:
-      evidence.kind === "cloudflare-redirect-rule"
-        ? evidence.redirectRuleId
-        : evidence.dnsRecordIds.join(","),
-    resourceJson: JSON.stringify(evidence),
-    ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
-    updatedAt: input.now,
-    zoneId: evidence.zoneId,
-    zoneName: evidence.zoneName,
-  };
-}
-
 function readAppliedProviderResources(
   storage: DurableObjectStorage,
 ): InstanceDomainProviderAppliedResourceState[] {
@@ -3260,41 +2439,6 @@ function providerAppliedResourceFromRow(
   };
 }
 
-function readApplyJob(
-  storage: DurableObjectStorage,
-  jobId: string,
-): InstanceDomainProviderApplyJob | undefined {
-  ensureDomainProviderApplyJobsTable(storage);
-
-  for (const row of storage.sql.exec<DomainProviderApplyJobRow>(
-    `
-      SELECT
-        job_id,
-        status,
-        runner_id,
-        plan_json,
-        deployment_attempt_id,
-        deployment_target_id,
-        deployment_desired_state_version_id,
-        deployment_desired_state_revision,
-        deployment_desired_state_hash,
-        deployment_lease_token,
-        result_json,
-        error,
-        created_at,
-        updated_at
-      FROM instance_domain_provider_apply_jobs
-      WHERE job_id = ?
-      LIMIT 1
-    `,
-    jobId,
-  )) {
-    return applyJobFromRow(row);
-  }
-
-  return undefined;
-}
-
 function readDeleteJob(
   storage: DurableObjectStorage,
   jobId: string,
@@ -3326,41 +2470,6 @@ function readDeleteJob(
     jobId,
   )) {
     return deleteJobFromRow(row);
-  }
-
-  return undefined;
-}
-
-function readApplyJobDeploymentLink(
-  storage: DurableObjectStorage,
-  jobId: string,
-): DomainProviderDeploymentJobLink | undefined {
-  ensureDomainProviderApplyJobsTable(storage);
-
-  for (const row of storage.sql.exec<DomainProviderApplyJobRow>(
-    `
-      SELECT
-        job_id,
-        status,
-        runner_id,
-        plan_json,
-        deployment_attempt_id,
-        deployment_target_id,
-        deployment_desired_state_version_id,
-        deployment_desired_state_revision,
-        deployment_desired_state_hash,
-        deployment_lease_token,
-        result_json,
-        error,
-        created_at,
-        updated_at
-      FROM instance_domain_provider_apply_jobs
-      WHERE job_id = ?
-      LIMIT 1
-    `,
-    jobId,
-  )) {
-    return deploymentJobLinkFromRow(row);
   }
 
   return undefined;
@@ -3404,7 +2513,7 @@ function readDeleteJobDeploymentLink(
 
 function deploymentJobLinkFromRow(
   row: Pick<
-    DomainProviderApplyJobRow,
+    DomainProviderDeleteJobRow,
     | "deployment_attempt_id"
     | "deployment_desired_state_hash"
     | "deployment_desired_state_revision"
@@ -3436,28 +2545,11 @@ function deploymentJobLinkFromRow(
   };
 }
 
-function applyJobFromRow(row: DomainProviderApplyJobRow): InstanceDomainProviderApplyJob {
-  const result =
-    row.result_json === null
-      ? undefined
-      : (JSON.parse(row.result_json) as InstanceDomainProviderApplyJobResultSummary);
-
-  return {
-    createdAt: row.created_at,
-    jobId: row.job_id,
-    plan: JSON.parse(row.plan_json) as DomainProviderPlan,
-    ...(result === undefined ? {} : { result }),
-    ...(row.runner_id === null ? {} : { runnerId: row.runner_id }),
-    status: row.status,
-    updatedAt: row.updated_at,
-  };
-}
-
 function deleteJobFromRow(row: DomainProviderDeleteJobRow): InstanceDomainProviderDeleteJob {
   const result =
     row.result_json === null
       ? undefined
-      : (JSON.parse(row.result_json) as InstanceDomainProviderApplyJobResultSummary);
+      : (JSON.parse(row.result_json) as InstanceDomainProviderJobResultSummary);
 
   return {
     createdAt: row.created_at,
@@ -3471,14 +2563,14 @@ function deleteJobFromRow(row: DomainProviderDeleteJobRow): InstanceDomainProvid
   };
 }
 
-function acquireDomainProviderApplyLock(
+function acquireDomainProviderMutationLock(
   storage: DurableObjectStorage,
   acquiredAt: string,
-): DomainProviderApplyLockResult {
-  ensureDomainProviderApplyLockTable(storage);
+): DomainProviderMutationLockResult {
+  ensureDomainProviderMutationLockTable(storage);
 
   return storage.transactionSync(() => {
-    const existing = readDomainProviderApplyLock(storage);
+    const existing = readDomainProviderMutationLock(storage);
 
     if (existing) {
       return {
@@ -3489,10 +2581,10 @@ function acquireDomainProviderApplyLock(
 
     storage.sql.exec(
       `
-        INSERT INTO instance_domain_provider_apply_lock (lock_id, acquired_at)
+        INSERT INTO instance_domain_provider_mutation_lock (lock_id, acquired_at)
         VALUES (?, ?)
       `,
-      APPLY_LOCK_ID,
+      providerMutationLockId,
       acquiredAt,
     );
 
@@ -3500,28 +2592,28 @@ function acquireDomainProviderApplyLock(
   });
 }
 
-function releaseDomainProviderApplyLock(storage: DurableObjectStorage) {
-  ensureDomainProviderApplyLockTable(storage);
+function releaseDomainProviderMutationLock(storage: DurableObjectStorage) {
+  ensureDomainProviderMutationLockTable(storage);
   storage.sql.exec(
     `
-      DELETE FROM instance_domain_provider_apply_lock
+      DELETE FROM instance_domain_provider_mutation_lock
       WHERE lock_id = ?
     `,
-    APPLY_LOCK_ID,
+    providerMutationLockId,
   );
 }
 
-function readDomainProviderApplyLock(
+function readDomainProviderMutationLock(
   storage: DurableObjectStorage,
 ): { acquiredAt: string } | undefined {
   for (const row of storage.sql.exec<{ acquired_at: string }>(
     `
       SELECT acquired_at
-      FROM instance_domain_provider_apply_lock
+      FROM instance_domain_provider_mutation_lock
       WHERE lock_id = ?
       LIMIT 1
     `,
-    APPLY_LOCK_ID,
+    providerMutationLockId,
   )) {
     return { acquiredAt: row.acquired_at };
   }
@@ -3529,16 +2621,8 @@ function readDomainProviderApplyLock(
   return undefined;
 }
 
-function ensureDomainProviderApplyLockTable(storage: DurableObjectStorage) {
-  storage.sql.exec(applyLockTableSql);
-}
-
-function ensureDomainProviderApplyJobsTable(storage: DurableObjectStorage) {
-  storage.sql.exec(applyJobsTableSql);
-  runSqlStorageMigrations(storage, {
-    family: domainProviderApplyJobsSqlMigrationFamily,
-    migrations: domainProviderSqlMigrations,
-  });
+function ensureDomainProviderMutationLockTable(storage: DurableObjectStorage) {
+  storage.sql.exec(providerMutationLockTableSql);
 }
 
 function ensureDomainProviderDeleteJobsTable(storage: DurableObjectStorage) {
@@ -3577,17 +2661,13 @@ function migrateDomainProviderAppliedActionChecks(storage: DurableObjectStorage)
   }
 }
 
-function migrateDomainProviderApplyJobDeploymentColumns(storage: DurableObjectStorage) {
-  migrateDomainProviderJobDeploymentColumns(storage, "instance_domain_provider_apply_jobs");
-}
-
 function migrateDomainProviderDeleteJobDeploymentColumns(storage: DurableObjectStorage) {
   migrateDomainProviderJobDeploymentColumns(storage, "instance_domain_provider_delete_jobs");
 }
 
 function migrateDomainProviderJobDeploymentColumns(
   storage: DurableObjectStorage,
-  table: "instance_domain_provider_apply_jobs" | "instance_domain_provider_delete_jobs",
+  table: "instance_domain_provider_delete_jobs",
 ) {
   const columns = [
     ["deployment_attempt_id", "TEXT"],
@@ -3679,24 +2759,6 @@ function providerTableHasColumn(
     .some((row) => row.name === columnName);
 }
 
-function applyBlockedResponse(
-  code: InstanceDomainProviderApplyBlockedCode,
-  error: string,
-  response: InstanceDomainProviderPlanResponse,
-  status: number,
-): Response {
-  return jsonResponse(
-    {
-      code,
-      config: response.config,
-      error,
-      plan: response.plan,
-      status: "blocked",
-    } satisfies InstanceDomainProviderApplyResponse,
-    status,
-  );
-}
-
 function deleteBlockedResponse(
   code: InstanceDomainProviderDeleteBlockedCode,
   error: string,
@@ -3715,56 +2777,6 @@ function deleteBlockedResponse(
     } satisfies InstanceDomainProviderDeleteResponse,
     status,
   );
-}
-
-async function readApplyRequest(
-  request: Request,
-): Promise<
-  | { ok: true; options: DomainProviderPlanOptions; request: InstanceDomainProviderApplyRequest }
-  | { ok: false; error: string }
-> {
-  const parsed = await readOptionalJsonObject(request, "Domain provider apply request");
-
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  const value = parsed.value;
-  const policy = parsePolicy(value.policy, "Domain provider apply policy");
-  const host = parseOptionalHost(value.host, "Domain provider apply host");
-  const runnerId = parseOptionalString(value.runnerId, "Domain provider apply runner id");
-
-  if (!policy.ok) {
-    return policy;
-  }
-
-  if (!host.ok) {
-    return host;
-  }
-
-  if (!runnerId.ok) {
-    return runnerId;
-  }
-
-  if (policy.value === "override" && host.value === undefined) {
-    return {
-      ok: false,
-      error: "Domain provider apply policy override requires one explicit host.",
-    };
-  }
-
-  return {
-    ok: true,
-    options: {
-      ...(host.value === undefined ? {} : { host: host.value }),
-      ...(policy.value === undefined ? {} : { policy: policy.value }),
-    },
-    request: {
-      ...(host.value === undefined ? {} : { host: host.value }),
-      ...(policy.value === undefined ? {} : { policy: policy.value }),
-      ...(runnerId.value === undefined ? {} : { runnerId: runnerId.value }),
-    },
-  };
 }
 
 async function readDeleteRequest(
@@ -3853,81 +2865,6 @@ async function readManualCleanupRequest(request: Request): Promise<
       host: host.value,
       kind: kind.value,
       logicalId: logicalId.value,
-    },
-  };
-}
-
-async function readApplyJobResultRequest(
-  request: Request,
-): Promise<
-  { ok: true; request: InstanceDomainProviderApplyJobResultRequest } | { ok: false; error: string }
-> {
-  const parsed = await readRequiredJsonObject(request, "Domain provider apply job result request");
-
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  const value = parsed.value;
-
-  if (value.status === "failed") {
-    const error = parseOptionalString(value.error, "Domain provider apply job error");
-
-    if (!error.ok || error.value === undefined) {
-      return { ok: false, error: "Domain provider apply job error must be a non-empty string." };
-    }
-
-    const runnerId = parseOptionalString(value.runnerId, "Domain provider apply job runner id");
-
-    if (!runnerId.ok) {
-      return runnerId;
-    }
-
-    return {
-      ok: true,
-      request: {
-        error: error.value,
-        ...(runnerId.value === undefined ? {} : { runnerId: runnerId.value }),
-        status: "failed",
-      },
-    };
-  }
-
-  if (value.status !== "succeeded") {
-    return {
-      ok: false,
-      error: 'Domain provider apply job result status must be "succeeded" or "failed".',
-    };
-  }
-
-  if (!Array.isArray(value.resources)) {
-    return { ok: false, error: "Domain provider apply job result resources must be an array." };
-  }
-
-  const resources: InstanceDomainProviderApplyJobResourceEvidence[] = [];
-
-  for (const resource of value.resources) {
-    const parsedResource = parseApplyJobResourceEvidence(resource);
-
-    if (!parsedResource.ok) {
-      return parsedResource;
-    }
-
-    resources.push(parsedResource.resource);
-  }
-
-  const runnerId = parseOptionalString(value.runnerId, "Domain provider apply job runner id");
-
-  if (!runnerId.ok) {
-    return runnerId;
-  }
-
-  return {
-    ok: true,
-    request: {
-      resources,
-      ...(runnerId.value === undefined ? {} : { runnerId: runnerId.value }),
-      status: "succeeded",
     },
   };
 }
@@ -4090,158 +3027,6 @@ function parseDeleteRedirectIntentRequest(
   return { ok: true, request: { fromHost: fromHost.value } };
 }
 
-function parseApplyJobResourceEvidence(
-  value: unknown,
-):
-  | { ok: true; resource: InstanceDomainProviderApplyJobResourceEvidence }
-  | { ok: false; error: string } {
-  if (!isRecord(value)) {
-    return { ok: false, error: "Domain provider apply evidence resource must be an object." };
-  }
-
-  const accountId = parseRequiredString(value.accountId, "Domain provider apply account id");
-  const action = parseRequiredString(value.action, "Domain provider apply action");
-  const alchemyResourceId = parseRequiredString(
-    value.alchemyResourceId,
-    "Domain provider apply Alchemy resource id",
-  );
-  const host = parseRequiredHost(value.host, "Domain provider apply host");
-  const kind = parseRequiredString(value.kind, "Domain provider apply resource kind");
-  const logicalId = parseRequiredString(value.logicalId, "Domain provider apply logical id");
-  const zoneId = parseRequiredString(value.zoneId, "Domain provider apply zone id");
-  const zoneName = parseRequiredString(value.zoneName, "Domain provider apply zone name");
-
-  if (!accountId.ok) return accountId;
-  if (!action.ok) return action;
-  if (!alchemyResourceId.ok) return alchemyResourceId;
-  if (!host.ok) return host;
-  if (!kind.ok) return kind;
-  if (!logicalId.ok) return logicalId;
-  if (!zoneId.ok) return zoneId;
-  if (!zoneName.ok) return zoneName;
-
-  if (action.value !== "adopted" && action.value !== "created" && action.value !== "overridden") {
-    return {
-      ok: false,
-      error: 'Domain provider apply action must be "adopted", "created", or "overridden".',
-    };
-  }
-
-  const actionValue = action.value as InstanceDomainProviderApplyJobResourceEvidence["action"];
-  const common = {
-    accountId: accountId.value,
-    action: actionValue,
-    alchemyResourceId: alchemyResourceId.value,
-    host: host.value,
-    logicalId: logicalId.value,
-    zoneId: zoneId.value,
-    zoneName: zoneName.value,
-  };
-
-  if (kind.value === "cloudflare-worker-custom-domain") {
-    const profile = parseRequiredString(value.profile, "Domain provider apply profile");
-    const targetInstallId = parseOptionalString(
-      value.targetInstallId,
-      "Domain provider apply target install id",
-    );
-    const workerDomainId = parseRequiredString(
-      value.workerDomainId,
-      "Domain provider apply Worker Custom Domain id",
-    );
-    const workerName = parseRequiredString(value.workerName, "Domain provider apply Worker name");
-
-    if (!profile.ok) return profile;
-    if (!targetInstallId.ok) return targetInstallId;
-    if (!workerDomainId.ok) return workerDomainId;
-    if (!workerName.ok) return workerName;
-
-    if (profile.value !== "instance" && profile.value !== "app" && profile.value !== "publicSite") {
-      return {
-        ok: false,
-        error: 'Domain provider apply profile must be "instance", "app", or "publicSite".',
-      };
-    }
-
-    return {
-      ok: true,
-      resource: {
-        ...common,
-        kind: kind.value,
-        profile: profile.value,
-        ...(targetInstallId.value === undefined ? {} : { targetInstallId: targetInstallId.value }),
-        workerDomainId: workerDomainId.value,
-        workerName: workerName.value,
-      },
-    };
-  }
-
-  if (kind.value === "cloudflare-redirect-rule") {
-    const preserveQueryString = parseRequiredBoolean(
-      value.preserveQueryString,
-      "Domain provider apply redirect preserve query string",
-    );
-    const redirectRuleId = parseRequiredString(
-      value.redirectRuleId,
-      "Domain provider apply redirect rule id",
-    );
-    const redirectRulesetId = parseRequiredString(
-      value.redirectRulesetId,
-      "Domain provider apply redirect ruleset id",
-    );
-    const statusCode = parseRedirectStatusCode(
-      value.statusCode,
-      "Domain provider apply redirect status code",
-    );
-    const targetUrl = parseRequiredString(
-      value.targetUrl,
-      "Domain provider apply redirect target URL",
-    );
-
-    if (!preserveQueryString.ok) return preserveQueryString;
-    if (!redirectRuleId.ok) return redirectRuleId;
-    if (!redirectRulesetId.ok) return redirectRulesetId;
-    if (!statusCode.ok) return statusCode;
-    if (!targetUrl.ok) return targetUrl;
-
-    return {
-      ok: true,
-      resource: {
-        ...common,
-        kind: kind.value,
-        preserveQueryString: preserveQueryString.value,
-        redirectRuleId: redirectRuleId.value,
-        redirectRulesetId: redirectRulesetId.value,
-        statusCode: statusCode.value,
-        targetUrl: targetUrl.value,
-      },
-    };
-  }
-
-  if (kind.value === "cloudflare-dns-records") {
-    const dnsRecordIds = parseRequiredStringArray(
-      value.dnsRecordIds,
-      "Domain provider apply DNS record ids",
-    );
-
-    if (!dnsRecordIds.ok) return dnsRecordIds;
-
-    return {
-      ok: true,
-      resource: {
-        ...common,
-        dnsRecordIds: dnsRecordIds.value,
-        kind: kind.value,
-      },
-    };
-  }
-
-  return {
-    ok: false,
-    error:
-      'Domain provider apply resource kind must be "cloudflare-worker-custom-domain", "cloudflare-redirect-rule", or "cloudflare-dns-records".',
-  };
-}
-
 function parseDeleteJobResourceEvidence(
   value: unknown,
 ):
@@ -4345,7 +3130,7 @@ function parsePlanOptions(
 function parsePolicy(
   value: unknown,
   context: string,
-): { ok: true; value?: DomainProviderApplyPolicy } | { ok: false; error: string } {
+): { ok: true; value?: DomainProviderPlanPolicy } | { ok: false; error: string } {
   if (value === undefined) {
     return { ok: true };
   }
@@ -4439,23 +3224,6 @@ function parseOptionalBoolean(
   return { ok: true, value };
 }
 
-function parseRequiredBoolean(
-  value: unknown,
-  context: string,
-): { ok: true; value: boolean } | { ok: false; error: string } {
-  const parsed = parseOptionalBoolean(value, context);
-
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  if (parsed.value === undefined) {
-    return { ok: false, error: `${context} must be a boolean.` };
-  }
-
-  return { ok: true, value: parsed.value };
-}
-
 function parseOptionalString(
   value: unknown,
   context: string,
@@ -4476,33 +3244,6 @@ function parseRequiredString(
   }
 
   return { ok: true, value: value.trim() };
-}
-
-function parseRequiredStringArray(
-  value: unknown,
-  context: string,
-): { ok: true; value: string[] } | { ok: false; error: string } {
-  if (!Array.isArray(value)) {
-    return { ok: false, error: `${context} must be an array.` };
-  }
-
-  const values: string[] = [];
-
-  for (const item of value) {
-    const parsed = parseRequiredString(item, context);
-
-    if (!parsed.ok) {
-      return parsed;
-    }
-
-    values.push(parsed.value);
-  }
-
-  if (values.length === 0) {
-    return { ok: false, error: `${context} must include at least one id.` };
-  }
-
-  return { ok: true, value: values };
 }
 
 function parseOptionalHttpsUrl(
@@ -4624,9 +3365,9 @@ function configIssueMessage(code: DomainProviderConfigIssue["code"], envNames: s
     case "missing-account-id":
       return `Domain provider planning requires Cloudflare account id in ${envNames.join(" or ")}.`;
     case "missing-alchemy-password":
-      return `Domain provider apply requires Alchemy state password secret ${envNames.join(" or ")}.`;
+      return `Domain provider cleanup requires Alchemy state password secret ${envNames.join(" or ")}.`;
     case "missing-cloudflare-api-token":
-      return `Domain provider apply requires Cloudflare API token secret ${envNames.join(" or ")}.`;
+      return `Domain provider cleanup requires Cloudflare API token secret ${envNames.join(" or ")}.`;
     case "missing-instance-id":
       return `Domain provider planning requires instance id in ${envNames.join(" or ")}.`;
     case "missing-worker-name":
@@ -4634,27 +3375,6 @@ function configIssueMessage(code: DomainProviderConfigIssue["code"], envNames: s
     case "missing-zone-config":
       return `Domain provider planning requires Cloudflare zone config in ${envNames.join(" or ")}.`;
   }
-}
-
-function parseApplyJobPath(pathname: string): { jobId: string; result: boolean } | undefined {
-  const prefix = `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/`;
-
-  if (!pathname.startsWith(prefix)) {
-    return undefined;
-  }
-
-  const rest = pathname.slice(prefix.length);
-  const resultSuffix = "/result";
-  const encodedJobId = rest.endsWith(resultSuffix) ? rest.slice(0, -resultSuffix.length) : rest;
-
-  if (encodedJobId === "" || encodedJobId.includes("/")) {
-    return undefined;
-  }
-
-  return {
-    jobId: decodeURIComponent(encodedJobId),
-    result: rest.endsWith(resultSuffix),
-  };
 }
 
 function parseDeleteJobPath(pathname: string): { jobId: string; result: boolean } | undefined {

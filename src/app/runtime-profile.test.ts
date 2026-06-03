@@ -17,7 +17,6 @@ import {
   runtimeAppManagementHref,
   runtimeBrowserRoutePatterns,
   runtimeInstalledSitePublicPath,
-  runtimeLocalPublishForWorld,
   runtimeProfileNeedsInstalledAppRouteInstalls,
   readRuntimeProfileDocumentHint,
   readRuntimeProfileDocumentHints,
@@ -487,29 +486,6 @@ describe("runtime profile resolver", () => {
     const profile = createSiteAuthoringRuntimeProfile({ exposeSchemaRoute: true });
 
     expect(profile.worlds[0]?.schemaRoute).toBe("/admin/schema");
-  });
-
-  it("carries a local publish broker only when configured explicitly", () => {
-    expect(createSiteAuthoringRuntimeProfile().localPublish).toBeUndefined();
-
-    const profile = createSiteAuthoringRuntimeProfile({
-      localPublish: {
-        endpoint: "http://127.0.0.1:43123/publish",
-        token: "local-broker-token",
-      },
-    });
-    const siteWorld = profile.worlds[0];
-    const estiiWorld = createAppRuntimeProfile("estii").worlds[0];
-
-    expect(profile.localPublish).toEqual({
-      endpoint: "http://127.0.0.1:43123/publish",
-      token: "local-broker-token",
-    });
-    expect(runtimeLocalPublishForWorld(profile, siteWorld)).toEqual({
-      endpoint: "http://127.0.0.1:43123/publish",
-      token: "local-broker-token",
-    });
-    expect(runtimeLocalPublishForWorld(profile, estiiWorld)).toBeUndefined();
   });
 
   it("resolves the published Site profile without generated admin routes", () => {

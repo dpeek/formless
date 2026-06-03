@@ -22,10 +22,8 @@ import {
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
 import { fetchInstanceDomainMappings } from "../../client/domain-mappings.ts";
 import {
-  applyInstanceDomainProviderPlan,
   deleteInstanceDomainProviderResource,
   DomainProviderApiError,
-  fetchInstanceDomainProviderApplyJob,
   fetchInstanceDomainProviderDeleteJob,
   fetchInstanceDomainProviderPlan,
   fetchInstanceDomainProviderRedirects,
@@ -63,7 +61,6 @@ import {
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../../shared/instance-control-plane.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
-  InstanceDomainProviderApplyJob,
   InstanceDomainProviderDeleteJob,
   InstanceDomainProviderDeleteTarget,
   InstanceDomainProviderPlanResponse,
@@ -96,12 +93,9 @@ export type InstanceShellRouteState =
   | {
       domainAppliedStates: InstanceDomainMappingAppliedState[];
       domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
-      domainProviderApplying?: boolean;
-      domainProviderApplyError?: string;
       domainProviderCleanupError?: string;
       domainProviderCleanupKey?: string;
       domainProviderCleanupMessage?: string;
-      domainProviderApplyJob?: InstanceDomainProviderApplyJob;
       domainProviderDeleteJob?: InstanceDomainProviderDeleteJob;
       domainProviderDeleteError?: string;
       domainProviderDeleteMessage?: string;
@@ -202,7 +196,6 @@ export function InstanceShellRoute() {
         setState({
           domainAppliedStates: domainResponse.appliedStates,
           domainProviderAppliedResources: redirectResponse.appliedResources,
-          domainProviderApplying: false,
           domainProviderDeletingKey: undefined,
           domainProviderPlan: providerPlanResponse,
           domainProviderPlanLoading: false,
@@ -298,9 +291,6 @@ export function InstanceShellRoute() {
       setState({
         domainAppliedStates: state.domainAppliedStates,
         domainProviderAppliedResources: state.domainProviderAppliedResources,
-        domainProviderApplying: state.domainProviderApplying,
-        domainProviderApplyError: state.domainProviderApplyError,
-        domainProviderApplyJob: state.domainProviderApplyJob,
         domainProviderCleanupError: state.domainProviderCleanupError,
         domainProviderCleanupKey: state.domainProviderCleanupKey,
         domainProviderCleanupMessage: state.domainProviderCleanupMessage,
@@ -537,78 +527,6 @@ export function InstanceShellRoute() {
     }
   }
 
-  async function submitApplyDomainProviderPlan() {
-    if (state.status !== "ready" || state.domainProviderApplying) {
-      return;
-    }
-
-    if (!window.confirm("Apply domain provider plan?")) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainProviderApplyError: undefined,
-      domainProviderApplying: true,
-    });
-
-    try {
-      const response = await applyInstanceDomainProviderPlan();
-
-      setState({
-        ...state,
-        domainProviderApplying: false,
-        domainProviderApplyError: response.status === "ready" ? undefined : response.error,
-        domainProviderApplyJob:
-          response.status === "ready" ? response.job : state.domainProviderApplyJob,
-        domainProviderPlan: {
-          config: response.config,
-          plan: response.plan,
-          redirectIntents: state.domainProviderPlan?.redirectIntents ?? [],
-        },
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Provider apply failed.";
-
-      setState({
-        ...state,
-        domainProviderApplying: false,
-        domainProviderApplyError: message,
-      });
-    }
-  }
-
-  async function refreshDomainProviderApplyJob() {
-    if (state.status !== "ready" || !state.domainProviderApplyJob) {
-      return;
-    }
-
-    try {
-      const response = await fetchInstanceDomainProviderApplyJob({
-        jobId: state.domainProviderApplyJob.jobId,
-      });
-
-      setState({
-        ...state,
-        domainProviderApplyError: undefined,
-        domainProviderApplyJob: response.job,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Provider apply job refresh failed.";
-
-      setState({
-        ...state,
-        domainProviderApplyError: message,
-      });
-    }
-  }
-
   async function refreshDomainProviderDeleteJob() {
     if (state.status !== "ready" || !state.domainProviderDeleteJob) {
       return;
@@ -642,10 +560,8 @@ export function InstanceShellRoute() {
       installDrafts={installDrafts}
       onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
       onMarkDomainProviderResourceManuallyRemoved={submitMarkDomainProviderResourceManuallyRemoved}
-      onRefreshDomainProviderApplyJob={refreshDomainProviderApplyJob}
       onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
       onRefreshDomainProviderPlan={refreshDomainProviderPlan}
-      onSubmitDomainProviderApply={submitApplyDomainProviderPlan}
       onPollWorkspaceOperation={pollWorkspaceOperation}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
@@ -781,10 +697,8 @@ export function InstanceShellRouteView({
   onDeleteDomainProviderResource,
   onMarkDomainProviderResourceManuallyRemoved,
   onPollWorkspaceOperation,
-  onRefreshDomainProviderApplyJob,
   onRefreshDomainProviderDeleteJob,
   onRefreshDomainProviderPlan,
-  onSubmitDomainProviderApply,
   onInstallDraftChange,
   onSubmitInstall,
   onStartWorkspaceOperation,
@@ -798,10 +712,8 @@ export function InstanceShellRouteView({
     operationId: string,
     operationKind?: LocalWorkspaceGatewayOperationKind,
   ) => void;
-  onRefreshDomainProviderApplyJob?: () => void;
   onRefreshDomainProviderDeleteJob?: () => void;
   onRefreshDomainProviderPlan?: () => void;
-  onSubmitDomainProviderApply?: () => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
   onStartWorkspaceOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
@@ -848,10 +760,8 @@ export function InstanceShellRouteView({
       <RouteProviderOperationsSection
         onDeleteProvider={onDeleteDomainProviderResource}
         onManualCleanup={onMarkDomainProviderResourceManuallyRemoved}
-        onRefreshApplyJob={onRefreshDomainProviderApplyJob}
         onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
         onRefreshPlan={onRefreshDomainProviderPlan}
-        onSubmitProviderApply={onSubmitDomainProviderApply}
         state={state}
       />
       <GeneratedDeploymentManagementSection deploymentStatus={state.deploymentStatus} />
@@ -1513,29 +1423,18 @@ function GeneratedInstanceRoutesSection() {
 function RouteProviderOperationsSection({
   onDeleteProvider,
   onManualCleanup,
-  onRefreshApplyJob,
   onRefreshDeleteJob,
   onRefreshPlan,
-  onSubmitProviderApply,
   state,
 }: {
   onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
   onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  onRefreshApplyJob?: () => void;
   onRefreshDeleteJob?: () => void;
   onRefreshPlan?: () => void;
-  onSubmitProviderApply?: () => void;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
 }) {
   const providerAppliedResources = state.domainProviderAppliedResources ?? [];
   const providerPlanLoading = state.domainProviderPlanLoading ?? false;
-  const providerApplying = state.domainProviderApplying ?? false;
-  const providerApplyDisabled =
-    providerPlanLoading ||
-    providerApplying ||
-    state.domainProviderPlan === undefined ||
-    !state.domainProviderPlan.config.jobReady ||
-    state.domainProviderPlan.plan.blockers.length > 0;
   const evidenceCount = state.domainAppliedStates.length + providerAppliedResources.length;
 
   return (
@@ -1549,19 +1448,13 @@ function RouteProviderOperationsSection({
         </div>
       </div>
       <DomainProviderControlPanel
-        applyDisabled={providerApplyDisabled}
-        applying={providerApplying}
         deleteJob={state.domainProviderDeleteJob}
         deploymentStatus={state.deploymentStatus}
-        onApply={onSubmitProviderApply}
-        onRefreshApplyJob={onRefreshApplyJob}
         onRefreshDeleteJob={onRefreshDeleteJob}
         onRefreshPlan={onRefreshPlan}
         plan={state.domainProviderPlan}
         planLoading={providerPlanLoading}
         refreshError={state.domainProviderPlanError}
-        applyError={state.domainProviderApplyError}
-        applyJob={state.domainProviderApplyJob}
       />
       <div className="grid gap-3 rounded-md border border-border bg-overlay p-4">
         {state.domainProviderDeleteError ? (
@@ -1618,28 +1511,16 @@ function RouteProviderOperationsSection({
 }
 
 function DomainProviderControlPanel({
-  applyDisabled,
-  applying,
-  applyError,
-  applyJob,
   deleteJob,
   deploymentStatus,
-  onApply,
-  onRefreshApplyJob,
   onRefreshDeleteJob,
   onRefreshPlan,
   plan,
   planLoading,
   refreshError,
 }: {
-  applyDisabled: boolean;
-  applying: boolean;
-  applyError?: string;
-  applyJob?: InstanceDomainProviderApplyJob;
   deleteJob?: InstanceDomainProviderDeleteJob;
   deploymentStatus?: InstanceDeploymentStatusResponse;
-  onApply?: () => void;
-  onRefreshApplyJob?: () => void;
   onRefreshDeleteJob?: () => void;
   onRefreshPlan?: () => void;
   plan?: InstanceDomainProviderPlanResponse;
@@ -1676,15 +1557,6 @@ function DomainProviderControlPanel({
         ) : (
           <p className="text-xs text-muted-fg">Provider plan unavailable.</p>
         )}
-        {applyJob ? (
-          <DomainProviderJobStatus
-            jobId={applyJob.jobId}
-            kind="Apply"
-            onRefresh={onRefreshApplyJob}
-            result={applyJob.result}
-            status={applyJob.status}
-          />
-        ) : null}
         {deleteJob ? (
           <DomainProviderJobStatus
             jobId={deleteJob.jobId}
@@ -1699,11 +1571,6 @@ function DomainProviderControlPanel({
             {refreshError}
           </p>
         ) : null}
-        {applyError ? (
-          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-            {applyError}
-          </p>
-        ) : null}
       </div>
       <div className="flex flex-wrap items-start justify-end gap-2">
         <Button
@@ -1714,9 +1581,6 @@ function DomainProviderControlPanel({
           type="button"
         >
           {planLoading ? "Planning..." : "Refresh plan"}
-        </Button>
-        <Button isDisabled={applyDisabled || !onApply} onPress={onApply} size="sm" type="button">
-          {applying ? "Applying..." : "Apply provider"}
         </Button>
       </div>
     </div>
@@ -1734,7 +1598,7 @@ function DomainProviderJobStatus({
   kind: "Apply" | "Delete";
   onRefresh?: () => void;
   result?: { error?: string; evidenceCount: number };
-  status: InstanceDomainProviderApplyJob["status"];
+  status: InstanceDomainProviderDeleteJob["status"];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-fg">
@@ -2155,8 +2019,8 @@ function appliedRouteTargetLabel(appliedState: InstanceDomainMappingAppliedState
 }
 
 function domainProviderConfigLabel(plan: InstanceDomainProviderPlanResponse): string {
-  if (plan.config.jobReady) {
-    return "jobs ready";
+  if (plan.config.deleteReady) {
+    return "cleanup ready";
   }
 
   return plan.config.planReady ? "plan ready" : "setup needed";

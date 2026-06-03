@@ -1,6 +1,6 @@
 import type { InstanceDomainMappingProfile } from "./instance-domain-mappings.ts";
 
-export type DomainProviderApplyPolicy = "adopt" | "create-only" | "override";
+export type DomainProviderPlanPolicy = "adopt" | "create-only" | "override";
 
 export type DomainProviderZone = {
   id: string;
@@ -22,7 +22,7 @@ export type DomainProviderRedirectIntent = {
 export type DomainProviderPlanInput = {
   instanceId: string;
   mappings: readonly DomainProviderProfileMappingIntent[];
-  policy?: DomainProviderApplyPolicy;
+  policy?: DomainProviderPlanPolicy;
   redirectIntents?: readonly DomainProviderRedirectIntent[];
   workerName: string;
   zones: readonly DomainProviderZone[];
@@ -112,7 +112,7 @@ export type DomainProviderResource =
 export type DomainProviderPlan = {
   blockers: DomainProviderPlanIssue[];
   instanceId: string;
-  policy: DomainProviderApplyPolicy;
+  policy: DomainProviderPlanPolicy;
   resources: DomainProviderResource[];
   workerName: string;
 };

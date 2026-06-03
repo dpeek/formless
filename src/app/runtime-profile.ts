@@ -73,11 +73,6 @@ export type RuntimePublishedSiteRoutes = {
   homeSlug: "home";
 };
 
-export type RuntimeLocalPublishBroker = {
-  endpoint: string;
-  token: string;
-};
-
 export type RuntimeProfile = {
   kind: RuntimeProfileKind;
   shell: RuntimeShellKind;
@@ -86,7 +81,6 @@ export type RuntimeProfile = {
   instanceShell?: boolean;
   installedAppRoutes?: RuntimeInstalledAppRoutes;
   installedSitePublicRoutes?: RuntimeInstalledSitePublicRoutes;
-  localPublish?: RuntimeLocalPublishBroker;
   publicSitePreview?: RuntimePublicSitePreview;
   publishedSite?: RuntimePublishedSiteRoutes;
 };
@@ -125,7 +119,6 @@ export type AppRuntimeProfileOptions = {
 
 export type SiteAuthoringRuntimeProfileOptions = {
   exposeSchemaRoute?: boolean;
-  localPublish?: RuntimeLocalPublishBroker;
 };
 
 export {
@@ -161,9 +154,7 @@ export function resolveRuntimeProfile(
         }) ?? createAppRuntimeProfile(schemaKey)
       );
     case "siteAuthoring":
-      return createSiteAuthoringRuntimeProfile({
-        localPublish: browserLocalPublishBrokerConfig(),
-      });
+      return createSiteAuthoringRuntimeProfile();
     case "publishedSite":
       return createPublishedSiteRuntimeProfile();
     case "dev":
@@ -305,17 +296,6 @@ export function runtimeAppManagementHref(
     : undefined;
 }
 
-export function runtimeLocalPublishForWorld(
-  profile: RuntimeProfile,
-  routeWorld: RuntimeWorldMount | undefined,
-): RuntimeProfile["localPublish"] {
-  if (routeWorld?.app.key !== runtimeTopologyRoutes.publicSitePackageAppKey) {
-    return undefined;
-  }
-
-  return profile.localPublish;
-}
-
 export function runtimeInstalledSitePublicHomeSlug(profile: RuntimeProfile): string | undefined {
   return runtimeInstalledSitePublicRoutesForProfile(profile)?.homeSlug;
 }
@@ -399,7 +379,6 @@ export function createSiteAuthoringRuntimeProfile(
           : undefined,
       },
     ],
-    localPublish: options.localPublish,
     publicSitePreview: {
       rootRoute: runtimeTopologyRoutes.instanceRootRoute,
       routePattern: "/*",
@@ -756,23 +735,6 @@ function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
     schemaKey: stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
-}
-
-function browserLocalPublishBrokerConfig(): RuntimeLocalPublishBroker | undefined {
-  const endpoint = stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL);
-  const token = stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN);
-
-  if (!endpoint || !token) {
-    return undefined;
-  }
-
-  try {
-    new URL(endpoint);
-  } catch {
-    return undefined;
-  }
-
-  return { endpoint, token };
 }
 
 export function readRuntimeProfileDocumentHint(

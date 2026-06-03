@@ -92,34 +92,27 @@ facts, and applied provider state.
 - **THEN** Cloudflare API credentials and Alchemy secret values are not
   included
 
-### Requirement: Brokered Provider Jobs
+### Requirement: Provider Cleanup Jobs
 
-The system SHALL mutate provider resources through reviewed apply and delete
-jobs guarded by owner or admin writes.
+The system SHALL mutate recorded provider cleanup targets through reviewed
+delete jobs guarded by owner or admin writes.
 
-#### Scenario: Apply job
+#### Scenario: Delete job targets recorded evidence
 
-- GIVEN an authorized request starts provider apply
-- WHEN the job is created
-- THEN the reviewed plan, status, result summary, and runner id are stored
-- AND one instance apply lock serializes provider mutation
-
-#### Scenario: Delete job
-
-- GIVEN an authorized request starts provider delete
-- WHEN recorded applied resources exist
-- THEN the delete job targets recorded applied resources only
-- AND successful delete removes current applied provider rows and appends
+- **GIVEN** an authorized request starts provider delete
+- **WHEN** recorded applied resources exist
+- **THEN** the delete job targets recorded applied resources only
+- **AND** successful delete removes current applied provider rows and appends
   `deleted` audit events
 
 ### Requirement: Redirect Intent
 
 The system SHALL model provider redirects as desired route state.
 
-#### Scenario: Redirect apply
+#### Scenario: Redirect deployment projection
 
 - **GIVEN** a redirect route is enabled
-- **WHEN** provider apply runs
+- **WHEN** deployment desired state is built for a target
 - **THEN** the provider plan can create a redirect rule plus a proxied
   originless placeholder DNS record
 - **AND** redirect routes do not require an app install target
@@ -154,32 +147,14 @@ semantics.
   redirect DNS graph resources
 - **AND** disabled redirect routes do not create desired provider resources
 
-### Requirement: Domain Provider Deployment Bridge
+### Requirement: Provider Cleanup Deployment Bridge
 
-The system SHALL keep existing domain provider jobs compatible while recording
-generic deployment attempt history.
-
-#### Scenario: Apply job records deployment attempt
-
-- **GIVEN** an authorized request starts an existing domain provider apply job
-- **WHEN** the job is created
-- **THEN** the runtime associates the job with a deployment attempt for the
-  current desired-state version
-- **AND** existing apply job responses continue to include the reviewed
-  route-derived provider plan and job status
-
-#### Scenario: Apply result records deployment evidence
-
-- **GIVEN** an existing domain provider apply job has a deployment attempt link
-- **WHEN** the job writes a successful result
-- **THEN** custom-domain applied provider evidence and generic deployment
-  resource evidence summaries are recorded
-- **AND** current route behavior remains unchanged
+The system SHALL record explicit provider cleanup in generic deployment attempt
+history when a cleanup job removes recorded provider resources.
 
 #### Scenario: Delete job remains explicit cleanup
 
-- **GIVEN** an existing domain provider delete job removes recorded provider
-  resources
+- **GIVEN** a provider delete job removes recorded provider resources
 - **WHEN** the job is created and completed
 - **THEN** cleanup remains explicit and limited to selected recorded resources
 - **AND** generic deployment attempt history records the cleanup result without
@@ -206,22 +181,39 @@ The system SHALL make route cleanup and provider cleanup explicit.
 
 ### Requirement: Domain CLI Workflows
 
-The Site CLI SHALL expose remote-runner domain workflows and a direct
-Cloudflare fallback.
+The system SHALL expose domain inspection and explicit provider cleanup
+workflows while provider mutation for domain, DNS, and redirect desired
+resources runs through generic deployment attempts.
 
-#### Scenario: Remote runner apply
+#### Scenario: Domain resources deploy through workspace deploy
 
-- GIVEN a claimed instance workspace has domain intent
-- WHEN `formless instance domains run-apply` runs
-- THEN the CLI creates a reviewed Worker-side apply job
-- AND the Node runner mutates provider resources with runner-held credentials
+- **GIVEN** a claimed instance workspace has enabled route records that project
+  DNS, custom-domain, or redirect desired resources
+- **WHEN** `formless deploy` runs
+- **THEN** the CLI or trusted deployer applies those resources through the
+  generic deployment path
+- **AND** deployment attempts, evidence, and status identify the applied
+  resources
+- **AND** route records remain desired intent rather than provider truth
 
-#### Scenario: Direct fallback
+#### Scenario: Explicit cleanup remains
 
-- GIVEN direct Cloudflare credentials are available to the CLI
-- WHEN `formless instance domains plan` or `apply` runs
-- THEN the command is labeled fallback
-- AND provider mutation requires an explicit apply command and preflight checks
+- **GIVEN** recorded provider evidence exists for a domain, DNS, or redirect
+  resource
+- **WHEN** an authorized explicit cleanup or delete workflow selects that
+  recorded resource
+- **THEN** cleanup is limited to the selected recorded provider resource or
+  selected evidence row
+- **AND** cleanup does not delete route intent or mutate app data
+
+#### Scenario: Pure planning helper reuse
+
+- **GIVEN** generic deployment, destroy, inspection, or explicit cleanup needs
+  route-derived provider resource planning
+- **WHEN** implementation reuses domain-provider planning helpers
+- **THEN** those helpers remain pure projection or inspection code
+- **AND** they do not mutate provider resources or define public mutation
+  behavior
 
 ### Requirement: Domain Intent As Control-Plane Records
 

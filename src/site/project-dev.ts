@@ -10,7 +10,6 @@ import {
   resolveSiteProjectRoot,
   type SiteProjectSource,
 } from "./project-files.ts";
-import type { SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 import {
   prepareSiteProjectStateDirectory,
   siteProjectStatePath,
@@ -22,8 +21,6 @@ export type SiteProjectDevCommand = {
   command: string;
   label: string;
 };
-
-export type { SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 
 export type SiteProjectDevDependencies = {
   cwd: string;
@@ -37,11 +34,6 @@ export type SiteProjectDevDependencies = {
 
 export type SiteProjectDevOptions = {
   devCommand: SiteProjectDevCommand;
-  isPublishConfigured: (project: SiteProjectSource) => Promise<boolean>;
-  startLocalPublishBroker: (input: {
-    projectPath: string;
-    source: () => string | null;
-  }) => Promise<SiteProjectLocalPublishBroker>;
 };
 
 type ProjectDevState = {
@@ -57,8 +49,6 @@ export const SITE_PROJECT_DEFAULT_LOCAL_SOURCE = "http://localhost:5173";
 const projectDevStateFile = `${SITE_PROJECT_STATE_DIRECTORY}/dev.json`;
 const projectWranglerStateDirectory = `${SITE_PROJECT_STATE_DIRECTORY}/wrangler`;
 const wranglerPersistEnvName = "FORMLESS_WRANGLER_PERSIST";
-const localPublishBrokerUrlEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL";
-const localPublishBrokerTokenEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN";
 const devServerReadyTimeoutMs = 30_000;
 const devServerPollIntervalMs = 250;
 
@@ -69,22 +59,10 @@ export async function runSiteProjectDev(
 ) {
   const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
   const projectId = siteProjectStorageId(project.projectRoot);
-  let localSource: string | null = null;
   await prepareSiteProjectStateDirectory(project.projectRoot);
-  const publishBroker = (await options.isPublishConfigured(project))
-    ? await options.startLocalPublishBroker({
-        projectPath: project.projectRoot,
-        source: () => localSource,
-      })
-    : null;
   const child = dependencies.spawn(options.devCommand.command, options.devCommand.args, {
     cwd: dependencies.packageRoot,
-    env: siteProjectDevEnv(
-      dependencies.env,
-      project.projectRoot,
-      projectId,
-      publishBroker ?? undefined,
-    ),
+    env: siteProjectDevEnv(dependencies.env, project.projectRoot, projectId),
     stdio: "pipe",
   });
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
@@ -94,15 +72,12 @@ export async function runSiteProjectDev(
   try {
     const source = await waitForDevServer(child, dependencies.fetch, candidateOrigins);
     await restoreSiteProjectToLocalAuthority(project, source, dependencies, projectId);
-    localSource = source;
     dependencies.log(`Public preview: ${source}/`);
     dependencies.log(`Admin: ${source}/admin`);
     await waitForChildExit(child);
   } catch (error) {
     child.kill();
     throw error;
-  } finally {
-    await publishBroker?.close();
   }
 }
 
@@ -118,7 +93,6 @@ export function siteProjectDevEnv(
   env: NodeJS.ProcessEnv,
   projectRoot: string,
   projectId: string,
-  publishBroker?: Pick<SiteProjectLocalPublishBroker, "endpoint" | "token">,
 ): NodeJS.ProcessEnv {
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
@@ -131,13 +105,6 @@ export function siteProjectDevEnv(
   };
 
   delete nextEnv.FORMLESS_ADMIN_TOKEN;
-  delete nextEnv[localPublishBrokerUrlEnvName];
-  delete nextEnv[localPublishBrokerTokenEnvName];
-
-  if (publishBroker) {
-    nextEnv[localPublishBrokerUrlEnvName] = publishBroker.endpoint;
-    nextEnv[localPublishBrokerTokenEnvName] = publishBroker.token;
-  }
 
   return nextEnv;
 }

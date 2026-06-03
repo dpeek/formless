@@ -19,7 +19,6 @@ import {
 import {
   cloudflareDomainClientFromEnv,
   type CloudflareDnsRecord,
-  type CloudflareDomainApplyHostResult,
   type CloudflareDomainClient,
   type CloudflareDomainIntent,
   type CloudflareDomainPreflightHostPlan,
@@ -36,10 +35,8 @@ import type {
 import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import {
   nodeAlchemyDomainProviderRuntime,
-  runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
   runFormlessInstanceDomainProviderDelete as runFormlessInstanceDomainProviderDeleteCommand,
-  type RunFormlessInstanceDomainProviderApplyDependencies,
-  type RunFormlessInstanceDomainProviderApplyResult,
+  type RunFormlessInstanceDomainProviderDeleteDependencies,
   type RunFormlessInstanceDomainProviderDeleteInput,
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
@@ -52,7 +49,6 @@ import {
 } from "./instance-workspace-secrets.ts";
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
-  applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   destroyLocalFormlessWorkspace as destroyLocalFormlessWorkspaceCommand,
   destroyFormlessInstanceWorkspace as destroyFormlessInstanceWorkspaceCommand,
@@ -70,8 +66,6 @@ import {
   pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
-  type ApplyFormlessInstanceWorkspaceDomainsInput,
-  type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
   type DestroyLocalFormlessWorkspaceInput,
   type DestroyFormlessInstanceWorkspaceInput,
@@ -139,7 +133,6 @@ export {
   planCloudflareWorkerDomainPreflight,
   workerRoutePatternMatchesHost,
   type CloudflareDnsRecord,
-  type CloudflareDomainApplyHostResult,
   type CloudflareDomainClient,
   type CloudflareDomainIntent,
   type CloudflareDomainPreflightHostPlan,
@@ -153,11 +146,8 @@ export {
 export {
   ALCHEMY_STATE_TOKEN_ENV_NAME,
   nodeAlchemyDomainProviderRuntime,
-  runFormlessInstanceDomainProviderApply,
   runFormlessInstanceDomainProviderDelete,
   type DomainProviderAlchemyRuntime,
-  type RunFormlessInstanceDomainProviderApplyInput,
-  type RunFormlessInstanceDomainProviderApplyResult,
   type RunFormlessInstanceDomainProviderDeleteInput,
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
@@ -214,9 +204,6 @@ export {
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
-  type ApplyFormlessInstanceWorkspaceDomainsDependencies,
-  type ApplyFormlessInstanceWorkspaceDomainsInput,
-  type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceDependencies,
   type CheckFormlessInstanceWorkspaceInput,
   type CheckFormlessInstanceWorkspaceResult,
@@ -365,7 +352,7 @@ export type FormlessCliDependencies = {
   cloudflareDomainClient: () => CloudflareDomainClient;
   cwd: string;
   deploymentAdapter: FormlessInstanceDeploymentAdapter;
-  domainProviderApplyRuntime?: RunFormlessInstanceDomainProviderApplyDependencies["runtime"];
+  domainProviderDeleteRuntime?: RunFormlessInstanceDomainProviderDeleteDependencies["runtime"];
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
@@ -650,19 +637,6 @@ export async function runFormlessCli(
     case "instanceDomainsPlan": {
       const result = await planFormlessInstanceWorkspaceDomains(command, dependencies);
       dependencies.log(formatInstanceWorkspaceDomainPlanResult(result, dependencies.cwd));
-      return;
-    }
-    case "instanceDomainsApply": {
-      const result = await applyFormlessInstanceWorkspaceDomains(command, dependencies);
-      dependencies.log(formatInstanceWorkspaceDomainApplyResult(result, dependencies.cwd));
-      return;
-    }
-    case "instanceDomainsRunApply": {
-      const result = await runFormlessInstanceDomainProviderApplyFromWorkspace(
-        command,
-        dependencies,
-      );
-      dependencies.log(formatInstanceDomainProviderRunApplyResult(result));
       return;
     }
     case "instanceDomainsRunDelete": {
@@ -1023,7 +997,7 @@ export type MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult = {
 export async function planFormlessInstanceDomainProviderFromWorkspace(
   input: {
     host?: string | null;
-    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
+    policy?: PlanFormlessInstanceWorkspaceDomainsInput["policy"];
     targetAlias?: string | null;
     workspacePath?: string;
   },
@@ -1081,103 +1055,6 @@ export async function planFormlessInstanceWorkspaceDomains(
   });
 }
 
-export async function applyFormlessInstanceWorkspaceDomains(
-  input: {
-    adminToken?: string | null;
-    host?: string | null;
-    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
-    targetAlias?: string | null;
-    workspacePath?: string;
-  },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    "cloudflareDomainClient" | "cwd" | "env" | "fetch" | "now"
-  > = nodeFormlessCliDependencies(),
-): Promise<ApplyFormlessInstanceWorkspaceDomainsResult> {
-  return applyFormlessInstanceWorkspaceDomainsCommand(input, {
-    cloudflareDomainClient: dependencies.cloudflareDomainClient(),
-    cwd: dependencies.cwd,
-    env: dependencies.env,
-    fetch: dependencies.fetch,
-    now: dependencies.now,
-  });
-}
-
-export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
-  input: {
-    adminToken?: string | null;
-    host?: string | null;
-    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
-    runnerId?: string | null;
-    targetAlias?: string | null;
-    workspacePath?: string;
-  },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    "cwd" | "domainProviderApplyRuntime" | "env" | "fetch" | "randomToken"
-  > = nodeFormlessCliDependencies(),
-): Promise<RunFormlessInstanceDomainProviderApplyResult> {
-  const status = await getFormlessInstanceWorkspaceStatus(
-    {
-      targetAlias: input.targetAlias,
-      workspacePath: input.workspacePath,
-    },
-    {
-      cwd: dependencies.cwd,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-    },
-  );
-
-  if (!status.selectedTarget) {
-    throw new Error("Formless instance domains run-apply requires a selected target.");
-  }
-
-  const secretState = await readFormlessInstanceWorkspaceSecretState(status.workspaceRoot);
-  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
-    env: dependencies.env,
-    explicitAdminToken: input.adminToken,
-    secretState,
-  });
-
-  if (!adminToken) {
-    throw new Error(
-      "Formless instance domains run-apply requires an admin token; run `formless instance token adopt` or pass --admin-token.",
-    );
-  }
-
-  const providerContext = await resolveFormlessInstanceWorkspaceProviderContext(
-    {
-      commandName: "domains run",
-      targetAlias: input.targetAlias,
-      workspacePath: status.workspaceRoot,
-    },
-    {
-      cwd: dependencies.cwd,
-      env: dependencies.env,
-      packageVersion: packageJson.version,
-    },
-  );
-
-  return runFormlessInstanceDomainProviderApplyCommand(
-    {
-      adminToken,
-      host: input.host,
-      policy: input.policy,
-      runnerId: input.runnerId,
-      targetUrl: status.selectedTarget.url,
-    },
-    {
-      createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-      ...(dependencies.domainProviderApplyRuntime === undefined
-        ? { runtime: workspaceDomainProviderAlchemyRuntime(providerContext) }
-        : { runtime: dependencies.domainProviderApplyRuntime }),
-    },
-  );
-}
-
 export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
   input: {
     adminToken?: string | null;
@@ -1190,7 +1067,7 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "domainProviderApplyRuntime" | "env" | "fetch" | "randomToken"
+    "cwd" | "domainProviderDeleteRuntime" | "env" | "fetch" | "randomToken"
   > = nodeFormlessCliDependencies(),
 ): Promise<RunFormlessInstanceDomainProviderDeleteResult> {
   const status = await getFormlessInstanceWorkspaceStatus(
@@ -1243,9 +1120,9 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
       createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
       env: dependencies.env,
       fetch: dependencies.fetch,
-      ...(dependencies.domainProviderApplyRuntime === undefined
+      ...(dependencies.domainProviderDeleteRuntime === undefined
         ? { runtime: workspaceDomainProviderAlchemyRuntime(providerContext) }
-        : { runtime: dependencies.domainProviderApplyRuntime }),
+        : { runtime: dependencies.domainProviderDeleteRuntime }),
     },
   );
 }
@@ -1253,7 +1130,7 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
 export function workspaceDomainProviderAlchemyRuntime(
   context: FormlessInstanceWorkspaceProviderContext,
   createRuntime: typeof nodeAlchemyDomainProviderRuntime = nodeAlchemyDomainProviderRuntime,
-): RunFormlessInstanceDomainProviderApplyDependencies["runtime"] {
+): RunFormlessInstanceDomainProviderDeleteDependencies["runtime"] {
   return ({ accountId, env }) =>
     createRuntime({
       accountId,
@@ -1758,8 +1635,8 @@ function formatInstanceDomainProviderPlanResult(
     "Instance domain remote provider plan.",
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Provider config: plan ${plan.config.planReady ? "ready" : "blocked"}, apply ${
-      plan.config.applyReady ? "ready" : "blocked"
+    `Provider config: plan ${plan.config.planReady ? "ready" : "blocked"}, cleanup ${
+      plan.config.deleteReady ? "ready" : "blocked"
     }.`,
     `Account: ${plan.config.accountId ?? "missing"}.`,
     `Worker: ${plan.config.workerName ?? plan.plan.workerName}.`,
@@ -1777,7 +1654,7 @@ function formatInstanceWorkspaceDomainPlanResult(
   cwd: string,
 ): string {
   return [
-    "Instance domain direct Cloudflare fallback plan dry run.",
+    "Instance domain Cloudflare inspection plan.",
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
     `Account: ${result.accountId}.`,
@@ -1788,61 +1665,6 @@ function formatInstanceWorkspaceDomainPlanResult(
     `Domains: ${formatList(result.preflight.hosts.map((host) => host.host))}.`,
     ...result.preflight.hosts.map(formatDomainHostPlan),
   ].join("\n");
-}
-
-function formatInstanceWorkspaceDomainApplyResult(
-  result: ApplyFormlessInstanceWorkspaceDomainsResult,
-  cwd: string,
-): string {
-  return [
-    "Instance domain direct Cloudflare fallback apply complete.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Account: ${result.accountId}.`,
-    `Worker: ${result.workerName}.`,
-    `Policy: ${result.preflight.policy}.`,
-    `Domains: ${formatList(result.applied.hosts.map((host) => host.host))}.`,
-    `Evidence writes: ${result.evidenceCount}.`,
-    ...result.applied.hosts.map(formatDomainAppliedHost),
-  ].join("\n");
-}
-
-function formatInstanceDomainProviderRunApplyResult(
-  result: RunFormlessInstanceDomainProviderApplyResult,
-): string {
-  return [
-    "Instance domain Alchemy apply complete.",
-    `Target: ${result.targetUrl}.`,
-    `Job: ${result.apply.job.jobId}.`,
-    ...(result.deployment === undefined
-      ? []
-      : [
-          `Desired-state version: ${result.deployment.desiredState.versionId} (revision ${result.deployment.desiredState.revision}).`,
-          `Deployment attempt: ${result.deployment.attemptId}.`,
-          `Deployment target: ${result.deployment.targetId}.`,
-          `Deployment resources: ${formatDeploymentResourceCounts(result.deployment)}.`,
-          `Deployment writeback: ${result.deployment.writebackStatus}.`,
-        ]),
-    `Job status: ${result.completion.job.status}.`,
-    `Runner: ${result.runnerId}.`,
-    `Policy: ${result.apply.plan.policy}.`,
-    `Resources: ${result.alchemy.resources.length}.`,
-    `Evidence writes: ${result.evidenceCount}.`,
-  ].join("\n");
-}
-
-function formatDeploymentResourceCounts(
-  deployment: RunFormlessInstanceDomainProviderApplyResult["deployment"],
-): string {
-  if (deployment === undefined) {
-    return "none";
-  }
-
-  return `${deployment.resourceCount} (custom domains ${
-    deployment.resourcesByKind["cloudflare-worker-custom-domain"] ?? 0
-  }, redirect rules ${
-    deployment.resourcesByKind["cloudflare-redirect-rule"] ?? 0
-  }, DNS records ${deployment.resourcesByKind["cloudflare-dns-records"] ?? 0})`;
 }
 
 function formatInstanceDomainProviderRunDeleteResult(
@@ -1989,16 +1811,6 @@ function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
     `dns ${formatDnsRecords(host.dnsRecords)}`,
     `actions ${formatList(host.actions)}`,
     `issues ${formatDomainIssues(issues)}`,
-  ].join("; ");
-}
-
-function formatDomainAppliedHost(host: CloudflareDomainApplyHostResult): string {
-  return [
-    `${host.host}: ${host.action}`,
-    `profile ${formatDomainIntentTarget(host)}`,
-    `custom domain ${host.domain.id}`,
-    `worker ${host.domain.service}`,
-    `zone ${host.domain.zoneName} (${host.domain.zoneId})`,
   ].join("; ");
 }
 

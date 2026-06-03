@@ -51,9 +51,19 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 
 - **GIVEN** app settings are opened for the active app
 - **WHEN** settings render
-- **THEN** sync status, a profile-exposed Schema link, source seed reset, and configured local Site publish controls are available
+- **THEN** sync status, a profile-exposed Schema link, and source seed reset are
+  available where supported
 - **AND** legacy store snapshot Export or Restore controls are not shown
 - **AND** portable archive backup, restore, or import controls are not shown
+
+#### Scenario: Instance management provider actions
+
+- **GIVEN** the product instance shell renders domain, route, deployment, drift,
+  or provider evidence state
+- **WHEN** the user reviews provider resources
+- **THEN** supported explicit provider delete, manual cleanup, or evidence repair
+  controls may remain available for selected recorded evidence
+- **AND** provider mutation guidance points to workspace deploy
 
 ### Requirement: Screen Workspaces
 

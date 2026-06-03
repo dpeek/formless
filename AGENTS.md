@@ -52,7 +52,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## Repo Map
 
 - `src/shared/`: schema, protocol, read models, field behavior, app identities.
-- `src/client/`: browser replica, projections, local publish, generated view models.
+- `src/client/`: browser replica, projections, generated view models.
 - `src/app/`: React routes, generated UI, Site renderer.
 - `src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
 - `src/site/`: standalone Site CLI, project files, publish, archives, domains.

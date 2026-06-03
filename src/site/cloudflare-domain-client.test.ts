@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  applyCloudflareWorkerDomainPreflightPlan,
   createFetchCloudflareDomainClient,
   planCloudflareDomainProviderResourcePreflight,
   planCloudflareWorkerDomainPreflight,
@@ -126,60 +125,6 @@ describe("Cloudflare domain API client", () => {
     ]);
   });
 
-  it("attaches Worker Custom Domains through the Cloudflare Worker Domains API", async () => {
-    const requests: CapturedCloudflareRequest[] = [];
-    const fetcher: typeof fetch = async (url, init) => {
-      const requestUrl =
-        typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
-      requests.push({
-        headers: normalizeHeaders(init?.headers),
-        method: init?.method ?? "GET",
-        url: requestUrl,
-      });
-
-      return cloudflareResponse({
-        hostname: "www.dpeek.com",
-        id: "domain-1",
-        service: "personal",
-        zone_id: "zone-1",
-        zone_name: "dpeek.com",
-      });
-    };
-    const client = createFetchCloudflareDomainClient({
-      apiToken: "token-123",
-      baseUrl: "https://api.cloudflare.test/client/v4",
-      fetch: fetcher,
-    });
-
-    await expect(
-      client.attachWorkerDomain({
-        accountId: "account-123",
-        hostname: "www.dpeek.com",
-        service: "personal",
-        zoneId: "zone-1",
-      }),
-    ).resolves.toEqual({
-      hostname: "www.dpeek.com",
-      id: "domain-1",
-      service: "personal",
-      zoneId: "zone-1",
-      zoneName: "dpeek.com",
-    });
-
-    expect(requests).toEqual([
-      {
-        headers: {
-          accept: "application/json",
-          authorization: "Bearer token-123",
-          "content-type": "application/json",
-        },
-        method: "PUT",
-        url: "https://api.cloudflare.test/client/v4/accounts/account-123/workers/domains",
-      },
-    ]);
-  });
-
   it("builds a dry-run preflight plan with domain, route, DNS, and apex findings", async () => {
     const plan = await planCloudflareWorkerDomainPreflight({
       accountId: "account-123",
@@ -263,67 +208,7 @@ describe("Cloudflare domain API client", () => {
     expect(plan.hosts[0]?.warnings.map((issue) => issue.code)).toEqual(["apex-domain"]);
   });
 
-  it("applies create and adopt host actions from a clean preflight plan", async () => {
-    const plan = await planCloudflareWorkerDomainPreflight({
-      accountId: "account-123",
-      client: {
-        ...fakeCloudflareDomainClient(),
-        listDnsRecords: async () => [],
-        listWorkerRoutes: async () => [],
-      },
-      intents: [
-        { host: "blog.dpeek.com", profile: "publicSite", targetInstallId: "david" },
-        { host: "www.dpeek.com", profile: "publicSite", targetInstallId: "david" },
-      ],
-      policy: "adopt",
-      workerName: "personal",
-    });
-
-    const result = await applyCloudflareWorkerDomainPreflightPlan({
-      client: {
-        ...fakeCloudflareDomainClient(),
-        attachWorkerDomain: async (input) => ({
-          hostname: input.hostname,
-          id: "created-domain",
-          service: input.service,
-          zoneId: input.zoneId,
-          zoneName: "dpeek.com",
-        }),
-      },
-      plan,
-    });
-
-    expect(result.hosts).toEqual([
-      {
-        action: "created",
-        domain: {
-          hostname: "blog.dpeek.com",
-          id: "created-domain",
-          service: "personal",
-          zoneId: "zone-1",
-          zoneName: "dpeek.com",
-        },
-        host: "blog.dpeek.com",
-        profile: "publicSite",
-        targetInstallId: "david",
-      },
-      {
-        action: "adopted",
-        domain: {
-          hostname: "www.dpeek.com",
-          id: "domain-1",
-          service: "personal",
-          zoneId: "zone-1",
-          zoneName: "dpeek.com",
-        },
-        host: "www.dpeek.com",
-        profile: "publicSite",
-        targetInstallId: "david",
-      },
-    ]);
-  });
-
-  it("applies explicit override host actions through attach", async () => {
+  it("plans explicit override host actions without mutating Cloudflare", async () => {
     const plan = await planCloudflareWorkerDomainPreflight({
       accountId: "account-123",
       client: {
@@ -350,32 +235,9 @@ describe("Cloudflare domain API client", () => {
       status: "warning",
       warnings: [{ code: "override-worker-domain" }],
     });
-
-    await expect(
-      applyCloudflareWorkerDomainPreflightPlan({
-        client: {
-          ...fakeCloudflareDomainClient(),
-          attachWorkerDomain: async (input) => ({
-            hostname: input.hostname,
-            id: "domain-overridden",
-            service: input.service,
-            zoneId: input.zoneId,
-            zoneName: "dpeek.com",
-          }),
-        },
-        plan,
-      }),
-    ).resolves.toMatchObject({
-      hosts: [
-        {
-          action: "overridden",
-          domain: { hostname: "old.dpeek.com", id: "domain-overridden", service: "personal" },
-        },
-      ],
-    });
   });
 
-  it("blocks create-only redirect apply when DNS records or redirect rules conflict", async () => {
+  it("blocks create-only redirect plans when DNS records or redirect rules conflict", async () => {
     const plan = planDomainProviderResources({
       instanceId: "primary",
       mappings: [],
@@ -464,13 +326,6 @@ describe("Cloudflare domain API client", () => {
 
 function fakeCloudflareDomainClient(): CloudflareDomainClient {
   return {
-    attachWorkerDomain: async ({ hostname, service, zoneId }) => ({
-      hostname,
-      id: "domain-attached",
-      service,
-      zoneId,
-      zoneName: "dpeek.com",
-    }),
     listActiveZonesForName: async ({ name }) =>
       name === "dpeek.com" ? [{ id: "zone-1", name: "dpeek.com", status: "active" }] : [],
     listDnsRecords: async ({ name }) =>

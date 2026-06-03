@@ -3,13 +3,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import {
-  applyAlchemyDomainProviderPlan,
   type AlchemyDomainProviderFactories,
   type AlchemyDomainProviderRunner,
+  runAlchemyDomainProviderPlan,
 } from "./domain-provider-alchemy.ts";
 
 describe("Alchemy domain provider adapter", () => {
-  it("applies planned resources through injected Alchemy factories and state store", async () => {
+  it("runs planned resources through injected Alchemy factories and state store", async () => {
     const calls: Array<{ id: string; kind: string; props: unknown }> = [];
     const runnerCalls: Array<{ appName: string; options: unknown }> = [];
     const stateStore = () => {
@@ -67,7 +67,7 @@ describe("Alchemy domain provider adapter", () => {
       zones: [{ id: "zone-example", name: "example.com" }],
     });
 
-    const result = await applyAlchemyDomainProviderPlan({
+    const result = await runAlchemyDomainProviderPlan({
       factories,
       plan,
       runner,
@@ -115,7 +115,7 @@ describe("Alchemy domain provider adapter", () => {
     });
 
     await expect(
-      applyAlchemyDomainProviderPlan({
+      runAlchemyDomainProviderPlan({
         factories,
         plan,
         runner,
@@ -131,11 +131,11 @@ describe("Alchemy domain provider adapter", () => {
         platform: "browser",
         stdin: {
           contents: `
-            import { applyAlchemyDomainProviderPlan } from "./src/worker/domain-provider-alchemy.ts";
+            import { runAlchemyDomainProviderPlan } from "./src/worker/domain-provider-alchemy.ts";
 
             export default {
               async fetch() {
-                return new Response(typeof applyAlchemyDomainProviderPlan);
+                return new Response(typeof runAlchemyDomainProviderPlan);
               },
             };
           `,
