@@ -36,15 +36,6 @@ function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "formless-agents-"));
 }
 
-function readyChangeFiles(changeId = "add-thing"): string {
-  return [
-    `openspec/changes/${changeId}/proposal.md`,
-    `openspec/changes/${changeId}/design.md`,
-    `openspec/changes/${changeId}/tasks.md`,
-    `openspec/changes/${changeId}/specs/local-agent-workers/spec.md`,
-  ].join("\n");
-}
-
 function readyApplyInstructions(changeId = "add-thing"): ApplyInstructions {
   return {
     changeDir: `/repo/openspec/changes/${changeId}`,
@@ -105,6 +96,38 @@ function validChangeCommitMessage(changeId = "add-thing"): string {
     "Formless-Last-Evidence-At: 2026-05-28T00:00:00.000Z",
     "",
   ].join("\n");
+}
+
+function changeBranchMetadataCommand(
+  command: string,
+  args: string[],
+  changeIds: string[],
+  messages: Record<string, string> = {},
+): ReturnType<CommandRunner> | null {
+  if (
+    command === "git" &&
+    args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+  ) {
+    return {
+      code: 0,
+      stderr: "",
+      stdout: changeIds.map((changeId) => `changes/${changeId}`).join("\n"),
+    };
+  }
+
+  if (command === "git" && args[0] === "log" && args[1] === "--no-notes") {
+    const branch = args[args.length - 1] ?? "";
+    const changeId = branch.replace(/^changes\//, "");
+    if (changeIds.includes(changeId)) {
+      return {
+        code: 0,
+        stderr: "",
+        stdout: messages[changeId] ?? validChangeCommitMessage(changeId),
+      };
+    }
+  }
+
+  return null;
 }
 
 function writeImplementationEvidence(worktreeDir: string, changeId = "add-thing"): void {
@@ -554,19 +577,23 @@ describe("local agent worker state", () => {
 });
 
 describe("local agent worker discovery", () => {
-  it("discovers claimable changes from committed main files only", () => {
+  it("discovers claimable changes from valid local change branch metadata", () => {
+    const commands: string[] = [];
     const runCommand: CommandRunner = (_cwd, command, args) => {
-      if (command === "git") {
-        expect(args).toEqual(["ls-tree", "-r", "--name-only", "main", "--", "openspec/changes"]);
-        return {
-          code: 0,
-          stderr: "",
-          stdout: [
-            readyChangeFiles("add-thing"),
-            "openspec/changes/incomplete/proposal.md",
-            "openspec/changes/incomplete/tasks.md",
-          ].join("\n"),
-        };
+      commands.push([command, ...args].join(" "));
+      const metadataResult = changeBranchMetadataCommand(
+        command,
+        args,
+        ["add-thing", "bad-thing"],
+        {
+          "bad-thing": validChangeCommitMessage("bad-thing").replace(
+            "Formless-Change-State: ready\n",
+            "",
+          ),
+        },
+      );
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -583,41 +610,30 @@ describe("local agent worker discovery", () => {
       throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
     };
 
-    expect(discoverClaimableOpenSpecChanges("/repo", { runCommand })).toEqual([
-      {
-        artifactPaths: readyChangeFiles("add-thing").split("\n").sort(),
-        applyInstructions: readyApplyInstructions(),
-        branch: "changes/add-thing",
-        changeId: "add-thing",
+    const changes = discoverClaimableOpenSpecChanges("/repo", { runCommand });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      applyInstructions: readyApplyInstructions(),
+      branch: "changes/add-thing",
+      changeId: "add-thing",
+      metadata: {
+        trailers: {
+          changeId: "add-thing",
+          state: "ready",
+        },
       },
-    ]);
+    });
+    expect(commands).not.toContain("git ls-tree -r --name-only main -- openspec/changes");
   });
 
   it("orders claimable changes by existing unmerged review branch before change id", () => {
     const runCommand: CommandRunner = (_cwd, command, args) => {
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return {
-          code: 0,
-          stderr: "",
-          stdout: [readyChangeFiles("alpha-new"), readyChangeFiles("zeta-started")].join("\n"),
-        };
-      }
-
-      if (
-        command === "git" &&
-        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/alpha-new"
-      ) {
-        return { code: 0, stderr: "", stdout: "" };
-      }
-
-      if (
-        command === "git" &&
-        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/zeta-started"
-      ) {
-        return { code: 0, stderr: "", stdout: "" };
+      const metadataResult = changeBranchMetadataCommand(command, args, [
+        "alpha-new",
+        "zeta-started",
+      ]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -665,11 +681,14 @@ describe("local agent worker discovery", () => {
     const root = tempDir();
     const paths = agentStatePaths(root);
     ensureAgentStateDirs(paths);
-    const runCommand: CommandRunner = () => ({
-      code: 0,
-      stderr: "",
-      stdout: readyChangeFiles("add-thing"),
-    });
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
 
     try {
       createChangeLease(paths.root, { changeId: "add-thing", owner: "igor" });
@@ -708,11 +727,9 @@ describe("local agent worker discovery", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -830,13 +847,6 @@ describe("local agent worker discovery", () => {
 
       if (
         command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
-      }
-
-      if (
-        command === "git" &&
         args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
       ) {
         return { code: 0, stderr: "", stdout: "" };
@@ -886,11 +896,9 @@ describe("local agent worker discovery", () => {
 
   it("omits already-complete changes from claimable work even without a lease", () => {
     const runCommand: CommandRunner = (_cwd, command, args) => {
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1052,11 +1060,9 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1299,11 +1305,9 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1470,11 +1474,9 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1610,11 +1612,9 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1682,18 +1682,9 @@ describe("local agent worker review branches", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: "" };
-      }
-
-      if (
-        command === "git" &&
-        args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: "changes/archived-thing\n" };
+      const metadataResult = changeBranchMetadataCommand(command, args, ["archived-thing"]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (
@@ -1959,9 +1950,9 @@ describe("local agent worker review branches", () => {
 
         if (
           command === "git" &&
-          args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+          args.join(" ") === "log --no-notes -1 --format=%B changes/add-thing"
         ) {
-          return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+          return { code: 0, stderr: "", stdout: validChangeCommitMessage("add-thing") };
         }
 
         if (
@@ -2028,11 +2019,11 @@ describe("local agent worker dry-run", () => {
         return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
       }
 
-      if (
-        command === "git" &&
-        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
-      ) {
-        return { code: 0, stderr: "", stdout: readyChangeFiles("local-agent-pull-workers") };
+      const metadataResult = changeBranchMetadataCommand(command, args, [
+        "local-agent-pull-workers",
+      ]);
+      if (metadataResult) {
+        return metadataResult;
       }
 
       if (

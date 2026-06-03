@@ -157,9 +157,9 @@ export type AgentStatePaths = {
 
 export type CommittedOpenSpecChange = {
   applyInstructions?: ApplyInstructions;
-  artifactPaths: string[];
   branch: string;
   changeId: string;
+  metadata?: FormlessChangeCommitMetadata;
 };
 
 export type BranchPlan = {
@@ -1192,58 +1192,24 @@ export function makeWorkerStatus(input: {
   };
 }
 
-function committedFileSuffix(filePath: string, changeId: string): string | null {
-  const prefix = `openspec/changes/${changeId}/`;
-  return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : null;
-}
-
-export function discoverCommittedOpenSpecChanges(
+export function discoverLocalFormlessChangeBranches(
   cwd: string,
-  baseRef = defaultBaseRef,
   runCommand = defaultCommandRunner,
 ): CommittedOpenSpecChange[] {
-  const stdout = runOrThrow(
-    cwd,
-    "git",
-    ["ls-tree", "-r", "--name-only", baseRef, "--", "openspec/changes"],
-    runCommand,
-  );
-  const byChange = new Map<string, string[]>();
-
-  for (const filePath of stdout.split(/\r?\n/)) {
-    const match = filePath.match(/^openspec\/changes\/([^/]+)\//);
-    if (!match) {
-      continue;
-    }
-
-    const changeId = validateChangeId(match[1] ?? "");
-    const paths = byChange.get(changeId) ?? [];
-    paths.push(filePath);
-    byChange.set(changeId, paths);
-  }
-
-  return [...byChange.entries()]
-    .map(([changeId, artifactPaths]) => ({
-      artifactPaths: artifactPaths.sort(),
-      branch: branchNameForChange(changeId),
-      changeId,
-    }))
+  return listLocalChangeBranches(cwd, runCommand)
+    .flatMap((branch) => {
+      const result = readFormlessChangeBranchMetadata(cwd, branch, runCommand);
+      return result.ok
+        ? [
+            {
+              branch,
+              changeId: result.metadata.trailers.changeId,
+              metadata: result.metadata,
+            },
+          ]
+        : [];
+    })
     .sort((left, right) => left.changeId.localeCompare(right.changeId));
-}
-
-export function hasRequiredApplyArtifacts(change: CommittedOpenSpecChange): boolean {
-  const suffixes = new Set(
-    change.artifactPaths
-      .map((filePath) => committedFileSuffix(filePath, change.changeId))
-      .filter((suffix): suffix is string => suffix !== null),
-  );
-
-  return (
-    suffixes.has("proposal.md") &&
-    suffixes.has("design.md") &&
-    suffixes.has("tasks.md") &&
-    [...suffixes].some((suffix) => /^specs\/.+\.md$/.test(suffix))
-  );
 }
 
 export function discoverClaimableOpenSpecChanges(
@@ -1255,22 +1221,22 @@ export function discoverClaimableOpenSpecChanges(
   } = {},
 ): CommittedOpenSpecChange[] {
   const baseRef = options.baseRef ?? defaultBaseRef;
-  const changes = discoverCommittedOpenSpecChanges(
-    cwd,
-    baseRef,
-    options.runCommand ?? defaultCommandRunner,
-  ).filter(hasRequiredApplyArtifacts);
   const runCommand = options.runCommand ?? defaultCommandRunner;
+  const changes = discoverLocalFormlessChangeBranches(cwd, runCommand);
 
   const unleasedChanges = options.stateRoot
     ? changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId))
     : changes;
 
   const claimableChanges = unleasedChanges.flatMap((change) => {
-    const applyInstructions = readApplyInstructions(cwd, change.changeId, runCommand);
-    return applyInstructionsNeedFinalization(applyInstructions)
-      ? []
-      : [{ ...change, applyInstructions }];
+    try {
+      const applyInstructions = readApplyInstructions(cwd, change.changeId, runCommand);
+      return applyInstructionsNeedFinalization(applyInstructions)
+        ? []
+        : [{ ...change, applyInstructions }];
+    } catch {
+      return [];
+    }
   });
 
   if (claimableChanges.length < 2) {
@@ -1284,11 +1250,7 @@ export function discoverClaimableOpenSpecChanges(
       return existing;
     }
 
-    const priority = branchExists(cwd, change.branch, runCommand)
-      ? branchMergedIntoBase(cwd, change.branch, baseRef, runCommand)
-        ? 1
-        : 2
-      : 0;
+    const priority = branchMergedIntoBase(cwd, change.branch, baseRef, runCommand) ? 1 : 2;
     branchPriorityByChange.set(change.changeId, priority);
     return priority;
   };
@@ -2801,7 +2763,6 @@ async function runReadyForReviewMaintenance(input: {
   return runClaimedChange({
     branchPlan,
     change: {
-      artifactPaths: [],
       branch: lease.branch,
       changeId: lease.changeId,
     },
@@ -3000,7 +2961,6 @@ async function runWatchOnce(input: {
       return runClaimedChange({
         branchPlan,
         change: {
-          artifactPaths: [],
           branch: ownedLease.branch,
           changeId: ownedLease.changeId,
         },

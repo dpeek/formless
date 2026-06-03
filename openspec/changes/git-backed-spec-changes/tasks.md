@@ -13,10 +13,17 @@ Evidence:
 
 ## 2. Branch Queue Discovery
 
-- [ ] 2.1 Replace committed `openspec/changes/*` discovery with local `changes/*` branch discovery backed by parsed change metadata.
+- [x] 2.1 Replace committed `openspec/changes/*` discovery with local `changes/*` branch discovery backed by parsed change metadata.
 - [ ] 2.2 Update claimability rules for remaining task work, completed branches needing finalization, blocked branches, invalid metadata, and active or ready-for-review leases.
 - [ ] 2.3 Preserve deterministic ordering, worker branch reset behavior, and one active writer per change.
 - [ ] 2.4 Update supervisor, status, dry-run, and discovery tests to cover Git-backed branch queue behavior.
+
+Evidence:
+
+- Changed `scripts/agents.ts` so claimable discovery scans local `changes/*` branches, parses tip commit messages with Formless change metadata, ignores invalid metadata branches, and no longer discovers queue items from committed `openspec/changes/*` files. Kept the legacy OpenSpec apply lookup as transitional downstream compatibility for prompt/finalization tasks.
+- Changed `scripts/agents.test.ts` discovery and supervisor fixtures to provide `changes/*` refs plus `git log --no-notes` commit metadata instead of `git ls-tree main -- openspec/changes`.
+- `devstate check` at 2026-06-03T02:08:04.602Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes agent queue discovery and tests only.
 
 ## 3. Worker Prompts and Implementation Loop
 
