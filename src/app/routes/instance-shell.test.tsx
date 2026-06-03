@@ -195,6 +195,8 @@ describe("instance shell route view", () => {
     expect(html).toContain(
       'data-formless-onboarding-generated-record-controls="routes deployments"',
     );
+    expect(html).not.toContain("Owner setup");
+    expect(html).not.toContain("passkey");
   });
 
   it("renders display-safe operation progress without raw paths or credentials", () => {

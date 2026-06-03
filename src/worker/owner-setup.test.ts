@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type {
   AppInstallsResponse,
+  BootstrapResponse,
   CreateAppInstallResponse,
   OwnerSetupCompleteResponse,
   OwnerSetupStatusResponse,
@@ -10,6 +11,7 @@ import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+type HarnessFetchInit = NonNullable<Parameters<Harness["fetch"]>[1]>;
 
 type OwnerSetupCapabilityResponse =
   | {
@@ -113,6 +115,21 @@ describe("owner setup API routes", () => {
     });
     const status = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
     const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const setupCookie = cookiePair(completed.response.headers.get("Set-Cookie"));
+    const created = await postJson<CreateAppInstallResponse>(
+      "/api/formless/app-installs",
+      {
+        packageAppKey: "site",
+        installId: "site",
+        label: "Site",
+      },
+      { headers: { Cookie: setupCookie } },
+    );
+    const appInstallsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const controlPlaneAfter = await getJson<BootstrapResponse>(
+      "/api/formless/control-plane/bootstrap",
+    );
 
     expect(completed.body).toEqual({
       setupComplete: true,
@@ -127,7 +144,18 @@ describe("owner setup API routes", () => {
     expect(completed.response.headers.get("Set-Cookie")).toContain("HttpOnly");
     expect(completed.response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
     expect(status.body).toEqual(completed.body);
-    expect(appInstalls.body.installs).toEqual([
+    expect(appInstalls.body.installs).toEqual([]);
+    expect(controlPlane.body.records.filter((record) => record.entity === "app-install")).toEqual(
+      [],
+    );
+    expect(controlPlane.body.records.filter((record) => record.entity === "route")).toEqual([]);
+    expect(created.response.status).toBe(201);
+    expect(created.body.install).toMatchObject({
+      installId: "site",
+      label: "Site",
+      packageAppKey: "site",
+    });
+    expect(appInstallsAfter.body.installs).toEqual([
       expect.objectContaining({
         adminRoute: "/apps/site",
         installId: "site",
@@ -137,9 +165,18 @@ describe("owner setup API routes", () => {
         status: "installed",
       }),
     ]);
+    expect(
+      controlPlaneAfter.body.records
+        .filter((record) => record.entity === "route")
+        .map((record) => [record.values.matchPath, record.values.surface]),
+    ).toEqual([
+      ["/apps/site", "admin"],
+      ["/apps/site/schema", "schema"],
+      ["/sites/site", "public-site"],
+    ]);
   });
 
-  it("does not duplicate an existing default Site install during owner setup", async () => {
+  it("preserves an existing Site install during owner setup", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",
       installId: "site",
@@ -162,7 +199,7 @@ describe("owner setup API routes", () => {
     ]);
   });
 
-  it("does not add starter Site when setup completes against preseeded workspace installs", async () => {
+  it("preserves preseeded workspace installs during owner setup", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",
       installId: "david",
@@ -402,10 +439,15 @@ async function getJson<T>(path: string) {
   };
 }
 
-async function postJson<T>(path: string, body: unknown) {
+async function postJson<T>(path: string, body: unknown, init: HarnessFetchInit = {}) {
+  const headers = {
+    ...(init.headers as Record<string, string> | undefined),
+    "Content-Type": "application/json",
+  };
   const response = await harness.fetch(path, {
+    ...init,
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers,
     method: "POST",
   });
 

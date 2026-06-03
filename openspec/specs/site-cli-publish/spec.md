@@ -38,7 +38,7 @@ archive, advanced instance, domain, token, and destroy command families from the
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
 before any Cloudflare account or deployment mutation, while browser onboarding
-owns workspace initialization and first app install.
+owns workspace initialization, local session bootstrap, and first app install.
 
 #### Scenario: Start local workspace runtime
 
@@ -47,12 +47,23 @@ owns workspace initialization and first app install.
 - **AND** first-run local runtime state starts from workspace control-plane
   record source and app archives
 - **AND** the browser can complete onboarding before any Cloudflare deploy
-- **AND** before owner setup is complete, the browser can use only the local
-  bootstrap capability needed to read workspace status and initialize the
-  resolved workspace root
+- **AND** before a local owner session is established, the browser can use only
+  local bootstrap capabilities needed to read workspace status, initialize the
+  resolved workspace root, and exchange a CLI-minted local session bootstrap
+  token for an owner session
 - **AND** workspace initialization, first app install, save, check, credential
   setup, and deploy entry points are available through browser-owned local
-  gateway operations
+  gateway operations after local session bootstrap
+
+#### Scenario: Open authenticated local session
+
+- **WHEN** a user runs `formless dev --open`
+- **THEN** the CLI opens a same-origin local session bootstrap URL for the
+  running local workspace runtime
+- **AND** successful bootstrap issues an owner session cookie and redirects the
+  browser to the instance shell
+- **AND** the instance shell can install the first package app through the
+  normal app install flow without passkey setup
 
 #### Scenario: Onboard command removed
 

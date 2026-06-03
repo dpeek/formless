@@ -17,7 +17,6 @@ import {
 } from "../shared/instance-auth.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
-import { ensureDefaultAppInstallsInCurrentTransaction } from "./default-app-installs.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   completeFirstOwnerSetupInCurrentTransaction,
@@ -273,11 +272,6 @@ export async function completeOwnerPasskeyRegistration(
       if (!credential.ok) {
         throw new DuplicatePasskeyCredentialError();
       }
-
-      ensureDefaultAppInstallsInCurrentTransaction(storage, {
-        now: completedAt,
-        policy: "starter-site-if-empty",
-      });
 
       return ownerSetup;
     });

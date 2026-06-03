@@ -45,7 +45,8 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 
 The system SHALL protect local workspace gateway routes with local route policy,
 same-origin browser authorization, CSRF protection, internal sidecar proxy
-authorization, and operation-scoped input validation.
+authorization, operation-scoped input validation, and a separate local session
+bootstrap boundary.
 
 #### Scenario: Pre-owner bootstrap operation
 
@@ -64,6 +65,22 @@ authorization, and operation-scoped input validation.
   authorization
 - **AND** the capability expires when the local runtime process exits or owner
   setup completes
+
+#### Scenario: Local session bootstrap
+
+- **WHEN** `formless dev` starts a local workspace runtime with a CLI-minted
+  local session bootstrap token
+- **THEN** the same-origin browser can exchange that token only through the
+  local session bootstrap endpoint
+- **AND** the endpoint issues an owner session cookie for the local runtime and
+  redirects to the instance shell
+- **AND** the token cannot authorize gateway operations, control-plane writes,
+  app installs, arbitrary filesystem access, Cloudflare mutation, Alchemy
+  mutation, or provider mutation
+- **AND** the token expires when the local runtime process exits or after a
+  successful exchange
+- **AND** the local session bootstrap endpoint is unavailable outside local
+  workspace runtime profiles
 
 #### Scenario: Browser starts mutating operation
 

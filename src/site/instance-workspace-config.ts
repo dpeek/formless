@@ -17,10 +17,7 @@ export const DEFAULT_FORMLESS_INSTANCE_WORKSPACE_MEDIA_ROOT = "media";
 export const DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT = ".formless/local";
 export const DEFAULT_FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_ROOT = ".formless";
 
-export type FormlessInstanceWorkspaceDefaultAppPolicy =
-  | "declared-installs"
-  | "none"
-  | "starter-site";
+export type FormlessInstanceWorkspaceDefaultAppPolicy = "declared-installs" | "none";
 
 export type FormlessInstanceWorkspaceMigrationPolicy = "existing" | "new";
 

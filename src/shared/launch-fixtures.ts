@@ -6,7 +6,7 @@ import {
 } from "./app-installs.ts";
 import type { SchemaKey } from "./schema-apps.ts";
 
-export type LaunchFixtureName = "empty" | "default-site" | "multi-site" | "mixed-apps" | "crm";
+export type LaunchFixtureName = "empty" | "multi-site" | "mixed-apps" | "crm";
 
 export type LaunchFixtureSeedChoice = {
   kind: "source";
@@ -50,19 +50,6 @@ const launchFixtureDefinitions = {
     description: "Product instance with no installed apps.",
     label: "Empty instance",
     name: "empty",
-  },
-  "default-site": {
-    appInstalls: [
-      {
-        installId: "site",
-        label: "Site",
-        packageAppKey: "site",
-        seed: { kind: "source", seedRecordsKey: "site" },
-      },
-    ],
-    description: "Product instance with the default installed Site.",
-    label: "Default Site",
-    name: "default-site",
   },
   "multi-site": {
     appInstalls: [

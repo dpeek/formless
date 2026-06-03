@@ -127,34 +127,10 @@ The system MUST initialize a created package app install from that package's sou
 - **THEN** the bootstrap response contains the bundled CRM source schema and source seed records
 - **AND** the install metadata keeps label and route identity scoped to `crm`
 
-### Requirement: Default Product Site Install
-
-The system SHALL create the default product Site install during blank owner
-setup when no installed app metadata exists.
-
-#### Scenario: Blank owner setup
-
-- **GIVEN** owner setup completes for a product instance with no installed app
-  metadata
-- **WHEN** the starter app bootstrap policy runs
-- **THEN** a Site app install with install id `site`, label `Site`, package app
-  key `site`, and status `installed` exists
-- **AND** route records exist for `/apps/site`, `/apps/site/schema`, and
-  `/sites/site`
-- **AND** the owner session is established independently from the app install
-  metadata and route records
-
-#### Scenario: Existing installs suppress starter Site
-
-- **GIVEN** installed app metadata already exists in the Formless instance
-- **WHEN** owner setup completes
-- **THEN** the starter `site` install is not added
-- **AND** existing app installs keep their labels, install ids, and route
-  records
-
 ### Requirement: Launch Fixtures
 
-The system SHALL allow launch fixtures to select deterministic initial installed app state without changing route shape.
+The system SHALL allow supported launch fixtures to select deterministic initial
+installed app state without changing route shape.
 
 #### Scenario: Empty fixture
 
@@ -162,11 +138,12 @@ The system SHALL allow launch fixtures to select deterministic initial installed
 - **WHEN** fixture initialization runs
 - **THEN** the product instance starts with no app installs
 
-#### Scenario: Default Site fixture
+#### Scenario: Default Site fixture removed
 
 - **GIVEN** `FORMLESS_LAUNCH_FIXTURE` selects `default-site`
 - **WHEN** fixture initialization runs
-- **THEN** the initial app install plan contains only the default Site install seeded from Site source records
+- **THEN** fixture initialization is rejected
+- **AND** no default Site install is created
 
 #### Scenario: Multi-site fixture
 
@@ -321,3 +298,17 @@ same install records used by CLI and archive workflows.
   source schema and source seed records
 - **AND** the next workspace save writes the install records and app archive to
   reviewable workspace source
+
+### Requirement: Blank Instances Stay App-Less
+
+The system SHALL keep blank instances app-less until an authorized package app
+install request succeeds.
+
+#### Scenario: Blank local dev bootstrap
+
+- **GIVEN** a local workspace runtime has no installed app metadata
+- **WHEN** local dev owner session bootstrap succeeds
+- **THEN** no app install metadata is created
+- **AND** no route records are created
+- **AND** the authenticated browser can create the first app through the normal
+  package app install flow

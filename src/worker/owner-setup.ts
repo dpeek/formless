@@ -21,7 +21,6 @@ import {
   validateOwnerSessionCookie,
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { ensureDefaultAppInstalls } from "./default-app-installs.ts";
 import { readInstanceAuthConfig } from "./instance-auth-state.ts";
 import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
 
@@ -248,15 +247,6 @@ async function handleOwnerSetupCompleteRequest(
     now: completedAt,
     owner: body.owner,
   });
-
-  if (result.ok) {
-    await ensureDefaultAppInstalls(storage, {
-      env,
-      now: completedAt,
-      policy: "starter-site-if-empty",
-      requestUrl: request.url,
-    });
-  }
 
   return await ownerSetupCompleteResponse(request, env, result);
 }

@@ -75,6 +75,66 @@ describe("client app install API helpers", () => {
       status: 409,
     } satisfies Partial<AppInstallApiError>);
   });
+
+  it("uses same-origin browser credentials without admin bearer headers", async () => {
+    const calls: Array<{
+      authorization: string | null;
+      credentials: RequestCredentials | undefined;
+      input: string;
+      method: string;
+    }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      calls.push({
+        authorization: new Headers(init?.headers).get("Authorization"),
+        credentials: init?.credentials,
+        input: requestUrl(input),
+        method: init?.method ?? "GET",
+      });
+
+      if (init?.method === "POST") {
+        return Response.json(
+          {
+            initialization: {
+              installId: "site",
+              packageAppKey: "site",
+              seedRecordsKey: "site",
+              sourceSchemaKey: "site",
+            },
+            install: { installId: "site" },
+            installs: [{ installId: "site" }],
+          },
+          { status: 201 },
+        );
+      }
+
+      return Response.json({ packages: [], installs: [] });
+    };
+
+    await fetchInstanceAppInstalls({ fetcher });
+    await createInstanceAppInstall(
+      {
+        packageAppKey: "site",
+        installId: "site",
+        label: "Site",
+      },
+      { fetcher },
+    );
+
+    expect(calls).toEqual([
+      {
+        authorization: null,
+        credentials: "same-origin",
+        input: INSTANCE_APP_INSTALLS_API_PATH,
+        method: "GET",
+      },
+      {
+        authorization: null,
+        credentials: "same-origin",
+        input: INSTANCE_APP_INSTALLS_API_PATH,
+        method: "POST",
+      },
+    ]);
+  });
 });
 
 function jsonFetcher(

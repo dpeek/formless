@@ -430,6 +430,7 @@ export async function runFormlessCli(
       const workspacePath = await resolveTopLevelFormlessWorkspaceDevPath(command, dependencies);
       await runFormlessInstanceWorkspaceDev(
         {
+          open: command.open,
           workspacePath,
         },
         dependencies,
@@ -864,6 +865,7 @@ export async function pushFormlessInstanceWorkspace(
 
 export async function runFormlessInstanceWorkspaceDev(
   input: {
+    open?: boolean;
     workspacePath?: string;
   },
   dependencies: Pick<
@@ -877,6 +879,7 @@ export async function runFormlessInstanceWorkspaceDev(
     | "localSecretEnv"
     | "log"
     | "now"
+    | "openBrowser"
     | "packageRoot"
     | "randomToken"
     | "setupCapability"

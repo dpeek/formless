@@ -34,6 +34,13 @@ export type LaunchFixtureStartupEnv = {
   FORMLESS_LAUNCH_FIXTURE?: string;
 };
 
+export class LaunchFixtureConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LaunchFixtureConfigurationError";
+  }
+}
+
 export function initializeInstanceAppInstallsFromLaunchFixture(
   storage: DurableObjectStorage,
   plan: LaunchFixtureInitializationPlan,
@@ -170,10 +177,16 @@ function configuredLaunchFixtureInitializationPlan(
     return undefined;
   }
 
+  if (fixtureName === "default-site") {
+    throw new LaunchFixtureConfigurationError(
+      'Launch fixture "default-site" has been removed. Use "empty" and install Site through /api/formless/app-installs.',
+    );
+  }
+
   const plan = createLaunchFixtureInitializationPlan(fixtureName, { now: nowIsoString() });
 
   if (!plan) {
-    throw new Error(
+    throw new LaunchFixtureConfigurationError(
       `Unknown launch fixture "${fixtureName}". Available fixtures: ${listLaunchFixtureNames().join(
         ", ",
       )}.`,

@@ -269,13 +269,13 @@ describe("owner passkey API routes", () => {
     const statusWithCookie = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
       headers: { Cookie: sessionCookie },
     });
-    const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const appInstallsBefore = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const ownerWrite = await postJson<CreateAppInstallResponse>(
       "/api/formless/app-installs",
       {
-        packageAppKey: "tasks",
-        installId: "tasks-owner",
-        label: "Tasks Owner",
+        packageAppKey: "site",
+        installId: "site",
+        label: "Site",
       },
       { headers: { Cookie: sessionCookie } },
     );
@@ -297,6 +297,7 @@ describe("owner passkey API routes", () => {
       {},
       { headers: { Cookie: sessionCookie } },
     );
+    const appInstallsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const statusAfterLogout = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
 
     expect(statusWithCookie.body).toEqual({
@@ -305,26 +306,24 @@ describe("owner passkey API routes", () => {
       session: registered.body.session,
       setupComplete: true,
     });
-    expect(appInstalls.body.installs).toEqual([
-      expect.objectContaining({
-        adminRoute: "/apps/site",
-        installId: "site",
-        label: "Site",
-        packageAppKey: "site",
-        publicRoute: "/sites/site",
-        status: "installed",
-      }),
-    ]);
+    expect(appInstallsBefore.body.installs).toEqual([]);
     expect(ownerWrite.response.status).toBe(201);
     expect(ownerWrite.body.install).toMatchObject({
-      installId: "tasks-owner",
-      packageAppKey: "tasks",
+      adminRoute: "/apps/site",
+      installId: "site",
+      label: "Site",
+      packageAppKey: "site",
+      publicRoute: "/sites/site",
     });
     expect(adminWrite.response.status).toBe(201);
     expect(adminWrite.body.install).toMatchObject({
       installId: "estii-admin",
       packageAppKey: "estii",
     });
+    expect(appInstallsAfter.body.installs.map((install) => install.installId)).toEqual([
+      "site",
+      "estii-admin",
+    ]);
     expect(tokenOnlyLogin.status).toBe(401);
     expect(tokenOnlyLogin.headers.get("Set-Cookie")).toBeNull();
     expect(await tokenOnlyLogin.json()).toEqual({

@@ -146,14 +146,16 @@ describe("worker launch fixture startup", () => {
     expect(installs.installs).toEqual([]);
   });
 
-  it("keeps default Site fixture startup idempotent", async () => {
+  it("rejects the removed default Site startup fixture", async () => {
     harness = await createFixtureHarness("default-site");
 
-    const first = await getJson<AppInstallsResponse>("/api/formless/app-installs");
-    const second = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const response = await harness.fetch("/api/formless/app-installs");
 
-    expect(first.installs.map((install) => install.installId)).toEqual(["site"]);
-    expect(second.installs).toEqual(first.installs);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error:
+        'Launch fixture "default-site" has been removed. Use "empty" and install Site through /api/formless/app-installs.',
+    });
   });
 });
 

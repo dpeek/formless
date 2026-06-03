@@ -10,13 +10,7 @@ const now = "2026-05-23T00:00:00.000Z";
 
 describe("launch fixture registry", () => {
   it("lists and resolves named product instance fixtures", () => {
-    expect(listLaunchFixtureNames()).toEqual([
-      "empty",
-      "default-site",
-      "multi-site",
-      "mixed-apps",
-      "crm",
-    ]);
+    expect(listLaunchFixtureNames()).toEqual(["empty", "multi-site", "mixed-apps", "crm"]);
     expect(resolveLaunchFixture("empty")).toEqual({
       appInstalls: [],
       description: "Product instance with no installed apps.",
@@ -34,37 +28,9 @@ describe("launch fixture registry", () => {
     });
   });
 
-  it("creates a default Site initialization plan with explicit source seed choice", () => {
-    expect(createLaunchFixtureInitializationPlan("default-site", { now })).toEqual({
-      appInstalls: [
-        {
-          fixtureName: "default-site",
-          initialization: {
-            installId: "site",
-            packageAppKey: "site",
-            seedRecordsKey: "site",
-            sourceSchemaKey: "site",
-          },
-          install: {
-            adminRoute: "/apps/site",
-            createdAt: now,
-            installId: "site",
-            label: "Site",
-            packageAppKey: "site",
-            packageRevision: 1,
-            publicRoute: "/sites/site",
-            publicRoutePrefix: "/sites/site/",
-            schemaRoute: "/apps/site/schema",
-            sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
-            status: "installed",
-            updatedAt: now,
-          },
-          seed: { kind: "source", seedRecordsKey: "site" },
-        },
-      ],
-      fixtureName: "default-site",
-      label: "Default Site",
-    });
+  it("rejects the removed default Site fixture", () => {
+    expect(resolveLaunchFixture("default-site")).toBeUndefined();
+    expect(createLaunchFixtureInitializationPlan("default-site", { now })).toBeUndefined();
   });
 
   it("creates deterministic multi-Site initialization plans without changing routes", () => {

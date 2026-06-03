@@ -30,6 +30,10 @@ import {
 import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 import { handleInstanceUpgradeStatusApiRequest } from "./upgrade-status-api.ts";
+import {
+  handleLocalSessionBootstrapApiRequest,
+  isLocalSessionBootstrapApiPath,
+} from "./local-session-bootstrap.ts";
 import { handleWorkerWorkspaceGatewayProxyRequest } from "./workspace-gateway-proxy.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 
@@ -54,6 +58,7 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID?: string;
   FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME?: string;
   FORMLESS_LAUNCH_FIXTURE?: string;
+  FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN?: string;
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
@@ -152,6 +157,12 @@ export default {
 
     if (isMappedAuthBlockedProfileHost && isOwnerAuthRoute(requestTopology.pathname)) {
       return notFoundResponse(requestTopology.apiPath);
+    }
+
+    const localSessionBootstrapResponse = await handleLocalSessionBootstrapApiRequest(request, env);
+
+    if (localSessionBootstrapResponse) {
+      return localSessionBootstrapResponse;
     }
 
     const ownerSetupResponse = await handleOwnerSetupApiRequest(request, env);
@@ -266,6 +277,7 @@ function isOwnerAuthRoute(pathname: string): boolean {
   return (
     pathname === "/setup" ||
     pathname === "/login" ||
+    isLocalSessionBootstrapApiPath(pathname) ||
     pathname === "/api/formless/setup" ||
     pathname.startsWith("/api/formless/setup/") ||
     pathname === "/api/formless/session" ||

@@ -27,6 +27,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
 import {
+  LaunchFixtureConfigurationError,
   initializeInstanceAppInstallsFromConfiguredLaunchFixture,
   launchFixtureStorageSourceForAuthorityName,
   launchFixtureStorageSourceForIdentity,
@@ -37,6 +38,7 @@ import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provi
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
+import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
   executePublicActionRequest,
   PublicActionError,
@@ -60,8 +62,27 @@ export class FormlessAuthority extends DurableObject<Env> {
     const url = new URL(request.url);
 
     if (this.ctx.id.name === FORMLESS_INSTANCE_AUTHORITY_NAME) {
-      initializeInstanceAppInstallsFromConfiguredLaunchFixture(this.ctx.storage, this.bindings);
+      try {
+        initializeInstanceAppInstallsFromConfiguredLaunchFixture(this.ctx.storage, this.bindings);
+      } catch (error) {
+        if (error instanceof LaunchFixtureConfigurationError) {
+          return jsonResponse({ error: error.message }, 400);
+        }
+
+        throw error;
+      }
+
       ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.bindings);
+    }
+
+    const localSessionBootstrapResponse = await handleLocalSessionBootstrapDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (localSessionBootstrapResponse) {
+      return localSessionBootstrapResponse;
     }
 
     const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(
@@ -261,6 +282,10 @@ export class FormlessAuthority extends DurableObject<Env> {
       }
 
       if (error instanceof BadRequestError) {
+        return jsonResponse({ error: error.message }, 400);
+      }
+
+      if (error instanceof LaunchFixtureConfigurationError) {
         return jsonResponse({ error: error.message }, 400);
       }
 

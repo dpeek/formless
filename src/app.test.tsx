@@ -769,6 +769,23 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Runtime apps"');
   });
 
+  it("keeps deployed owner auth routes available outside default instance onboarding", () => {
+    const instanceProfile = createInstanceRuntimeProfile();
+    const shellHtml = renderRoute("/", instanceProfile);
+    const setupHtml = renderRoute("/setup", instanceProfile);
+    const loginHtml = renderRoute("/login", instanceProfile);
+
+    expect(shellHtml).toContain("Loading installed apps...");
+    expect(shellHtml).not.toContain("Owner setup");
+    expect(shellHtml).not.toContain("Owner sign in");
+    expect(setupHtml).toContain("Checking setup link");
+    expect(setupHtml).toContain("Loading setup status.");
+    expect(loginHtml).toContain("Checking owner session");
+    expect(loginHtml).toContain("Loading sign-in state.");
+    expect(setupHtml).not.toContain('data-frame="generated-app"');
+    expect(loginHtml).not.toContain('data-frame="generated-app"');
+  });
+
   it("renders product instance routes outside the dev workbench route vocabulary", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];

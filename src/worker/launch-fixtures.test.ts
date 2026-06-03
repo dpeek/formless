@@ -192,6 +192,15 @@ describe("worker launch fixture initialization", () => {
       installs: [],
     });
   });
+
+  it("rejects the removed default Site fixture", async () => {
+    const response = await harness.fetch("/instance?fixture=default-site", {
+      headers: { "x-launch-fixture-harness-name": "instance-default-site" },
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Unknown fixture." });
+  });
 });
 
 async function getJson<T>(path: string, storageName: string) {
@@ -232,7 +241,7 @@ async function writeLaunchFixtureHarness() {
       export class LaunchFixtureHarness extends DurableObject {
         async fetch(request) {
           const url = new URL(request.url);
-          const fixtureName = url.searchParams.get("fixture") ?? "default-site";
+          const fixtureName = url.searchParams.get("fixture") ?? "empty";
           const plan = createLaunchFixtureInitializationPlan(fixtureName, { now });
 
           if (!plan) {

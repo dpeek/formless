@@ -68,6 +68,17 @@ export type CompleteFirstOwnerSetupResult =
         | "wrong-instance";
     };
 
+export type EnsureLocalDevOwnerInput = {
+  now?: string;
+  owner?: OwnerIdentityInput;
+  ownerId?: string;
+};
+
+export type EnsureLocalDevOwnerResult = {
+  created: boolean;
+  owner: OwnerIdentity;
+};
+
 export function ensureInstanceSetupTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS owner_setup_capability (
@@ -215,6 +226,45 @@ export function completeFirstOwnerSetupInCurrentTransaction(
     ok: true,
     owner,
     setupComplete: true,
+  };
+}
+
+export function ensureLocalDevOwnerInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: EnsureLocalDevOwnerInput = {},
+): EnsureLocalDevOwnerResult {
+  ensureInstanceSetupTables(storage);
+
+  const existingOwner = readInstanceOwner(storage);
+
+  if (existingOwner) {
+    return {
+      created: false,
+      owner: existingOwner,
+    };
+  }
+
+  const now = input.now ?? nowIsoString();
+  const owner = normalizeOwner(input.owner ?? { name: "Local Dev Owner" }, {
+    createdAt: now,
+    ownerId: input.ownerId ?? "local-dev-owner",
+  });
+
+  storage.sql.exec(
+    `
+        INSERT INTO instance_owners (id, name, email, created_at)
+        VALUES (?, ?, ?, ?)
+      `,
+    owner.id,
+    owner.name,
+    owner.email ?? null,
+    owner.createdAt,
+  );
+  storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
+
+  return {
+    created: true,
+    owner,
   };
 }
 

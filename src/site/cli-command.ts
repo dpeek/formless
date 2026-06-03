@@ -169,7 +169,7 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string | null;
     }
-  | { kind: "workspaceDev"; workspacePath: string | null }
+  | { kind: "workspaceDev"; open: boolean; workspacePath: string | null }
   | { check: boolean; kind: "workspaceSave"; workspacePath: string | null };
 
 export function formlessCliUsage(): string {
@@ -177,7 +177,7 @@ export function formlessCliUsage(): string {
     "Usage: formless <command>",
     "",
     "Commands:",
-    "  dev [--workspace <path>]            Run local workspace and browser setup",
+    "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
     "  save [--workspace <path>] [--check] Save Authority state to record source and app archives",
     "  check [--workspace <path>] [--target <alias>]",
     "                                      Check workspace source and target drift",
@@ -256,13 +256,19 @@ export function normalizeSourceUrl(value: string): string {
 }
 
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
-  const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>]");
+  const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>] [--open]");
+  let open = false;
 
-  if (options.rest.length > 0) {
-    throw new Error(`Unknown option for formless dev: ${options.rest[0]}`);
+  for (const arg of options.rest) {
+    if (arg === "--open") {
+      open = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless dev: ${arg}`);
   }
 
-  return { kind: "workspaceDev", workspacePath: options.workspacePath };
+  return { kind: "workspaceDev", open, workspacePath: options.workspacePath };
 }
 
 function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {

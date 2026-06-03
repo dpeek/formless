@@ -5,6 +5,7 @@ import {
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
+import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "../shared/workspace-gateway-protocol.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -211,6 +212,9 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
+    const localSessionBootstrap = await fetchMappedHost(
+      `${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=local-session-token`,
+    );
     const session = await fetchMappedHost("/api/formless/session");
     const schemaKeyApi = await fetchMappedHost("/api/site/bootstrap");
     const homeHtml = await home.text();
@@ -219,6 +223,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(homeHtml).toContain(`<meta name="formless-runtime-profile" content="publishedSite" />`);
     expect(login.status).toBe(404);
     expect(passkeyOptions.status).toBe(404);
+    expect(localSessionBootstrap.status).toBe(404);
     expect(session.status).toBe(404);
     expect(schemaKeyApi.status).toBe(404);
   });
@@ -269,6 +274,10 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
+    const localSessionBootstrap = await fetchHost(
+      mappedAppHost,
+      `${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=local-session-token`,
+    );
     const setupCapability = await fetchHost(mappedAppHost, "/api/formless/setup/capability", {
       body: JSON.stringify({ setupToken }),
       headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -299,6 +308,7 @@ describe("installed Site custom-domain Worker routing", () => {
     );
     expect(login.status).toBe(404);
     expect(passkeyOptions.status).toBe(404);
+    expect(localSessionBootstrap.status).toBe(404);
     expect(setupCapability.status).toBe(404);
     expect(schemaKeyApi.status).toBe(404);
     expect(installApi.status).toBe(200);

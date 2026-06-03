@@ -92,14 +92,17 @@ import {
   writeFormlessInstanceControlPlaneRecordSource,
 } from "./instance-workspace-record-source.ts";
 import {
+  ensureFormlessInstanceWorkspaceLocalDevSecretState,
   FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
+  FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
   ensureFormlessInstanceWorkspaceSecretStateIgnored,
   formatFormlessInstanceWorkspaceSecretState,
   formlessInstanceWorkspaceSecretStatePath,
   readFormlessInstanceWorkspaceSecretState,
   resolveFormlessInstanceWorkspaceAdminToken,
   writeFormlessInstanceWorkspaceSecretState,
+  type FormlessInstanceWorkspaceLocalDevSecretState,
   type FormlessInstanceWorkspaceSecretState,
 } from "./instance-workspace-secrets.ts";
 import {
@@ -153,6 +156,8 @@ import {
 import { packageExecCommand } from "./package-commands.ts";
 import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import {
+  LOCAL_SESSION_BOOTSTRAP_API_PATH,
+  LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
   LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "../shared/workspace-gateway-protocol.ts";
@@ -381,6 +386,7 @@ export type FormlessInstanceWorkspaceDevCommand = {
 };
 
 export type DevFormlessInstanceWorkspaceInput = {
+  open?: boolean;
   workspacePath?: string;
 };
 
@@ -391,6 +397,7 @@ export type DevFormlessInstanceWorkspaceDependencies = {
   fetch: typeof fetch;
   log: (message: string) => void;
   now: () => string;
+  openBrowser?: (url: string) => Promise<void>;
   packageRoot: string;
   spawn: typeof nodeSpawn;
   startWorkspaceGatewaySidecar?: (
@@ -1244,6 +1251,12 @@ export async function runFormlessInstanceWorkspaceDev(
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
 
   await prepareWorkspaceDirectories(workspaceRoot, manifest, { appArchiveRoot: false });
+  const localDevSecrets = await ensureFormlessInstanceWorkspaceLocalDevSecretState(
+    workspaceRoot,
+    localStateRoot,
+    () => requiredGeneratedToken(createLocalDevSecret(dependencies)),
+  );
+  const localSessionBootstrapToken = requiredGeneratedToken(createLocalDevSecret(dependencies));
 
   const sidecar = await startWorkspaceGatewaySidecar(
     {
@@ -1262,6 +1275,10 @@ export async function runFormlessInstanceWorkspaceDev(
         workspaceRoot,
         manifest,
         sidecar,
+        {
+          localDevSecrets: localDevSecrets.state,
+          localSessionBootstrapToken,
+        },
       ),
       stdio: "pipe",
     });
@@ -1284,6 +1301,14 @@ export async function runFormlessInstanceWorkspaceDev(
       startedAt: dependencies.now(),
       workspaceRoot,
     });
+
+    if (input.open) {
+      if (!dependencies.openBrowser) {
+        throw new Error("Formless instance dev --open requires a browser opener.");
+      }
+
+      await dependencies.openBrowser(localSessionBootstrapUrl(source, localSessionBootstrapToken));
+    }
 
     dependencies.log(`Instance shell: ${source}/`);
     dependencies.log("Local bootstrap entry: complete workspace setup in the browser.");
@@ -2135,16 +2160,30 @@ export function formlessInstanceWorkspaceDevEnv(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
   sidecar?: Pick<LocalWorkspaceGatewaySidecar, "endpoint" | "proxyToken"> | null,
+  options: {
+    localDevSecrets?: FormlessInstanceWorkspaceLocalDevSecretState;
+    localSessionBootstrapToken?: string;
+  } = {},
 ): NodeJS.ProcessEnv {
   const bootstrapToken = randomWorkspaceGatewayToken();
   const csrfToken = randomWorkspaceGatewayToken();
-  const nextEnv: NodeJS.ProcessEnv = {
-    ...env,
-    FORMLESS_LAUNCH_FIXTURE: "empty",
-    FORMLESS_OWNER_SESSION_SECRET:
+  const localDevSecrets = options.localDevSecrets ?? {
+    adminToken:
+      env.FORMLESS_ADMIN_TOKEN && env.FORMLESS_ADMIN_TOKEN.trim() !== ""
+        ? env.FORMLESS_ADMIN_TOKEN
+        : randomWorkspaceGatewayToken(),
+    ownerSessionSecret:
       env.FORMLESS_OWNER_SESSION_SECRET && env.FORMLESS_OWNER_SESSION_SECRET.trim() !== ""
         ? env.FORMLESS_OWNER_SESSION_SECRET
         : randomWorkspaceGatewayToken(),
+  };
+  const nextEnv: NodeJS.ProcessEnv = {
+    ...env,
+    [FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME]: localDevSecrets.adminToken,
+    FORMLESS_LAUNCH_FIXTURE: "empty",
+    [FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME]: localDevSecrets.ownerSessionSecret,
+    [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]:
+      options.localSessionBootstrapToken ?? randomWorkspaceGatewayToken(),
     FORMLESS_RUNTIME_PROFILE: "instance",
     FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
     FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
@@ -2165,7 +2204,6 @@ export function formlessInstanceWorkspaceDevEnv(
     delete nextEnv[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
   }
 
-  delete nextEnv.FORMLESS_ADMIN_TOKEN;
   delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;
   delete nextEnv.FORMLESS_SITE_PROJECT_ID;
   delete nextEnv.FORMLESS_SITE_PROJECT_ROOT;
@@ -2181,6 +2219,18 @@ export function formlessInstanceWorkspaceDevEnv(
 
 function randomWorkspaceGatewayToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+function localSessionBootstrapUrl(source: string, token: string): string {
+  const url = new URL(LOCAL_SESSION_BOOTSTRAP_API_PATH, `${source}/`);
+
+  url.searchParams.set("token", token);
+
+  return url.toString();
+}
+
+function createLocalDevSecret(dependencies: DevFormlessInstanceWorkspaceDependencies): string {
+  return dependencies.randomToken?.() ?? randomWorkspaceGatewayToken();
 }
 
 async function startWorkspaceGatewaySidecar(
