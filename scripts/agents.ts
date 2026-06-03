@@ -1216,27 +1216,46 @@ export function discoverClaimableOpenSpecChanges(
   cwd: string,
   options: {
     baseRef?: string;
+    now?: () => Date;
     runCommand?: CommandRunner;
     stateRoot?: string | null;
   } = {},
 ): CommittedOpenSpecChange[] {
   const baseRef = options.baseRef ?? defaultBaseRef;
+  const now = options.now ?? (() => new Date());
   const runCommand = options.runCommand ?? defaultCommandRunner;
   const changes = discoverLocalFormlessChangeBranches(cwd, runCommand);
 
-  const unleasedChanges = options.stateRoot
-    ? changes.filter((change) => !readChangeLease(options.stateRoot ?? "", change.changeId))
-    : changes;
-
-  const claimableChanges = unleasedChanges.flatMap((change) => {
-    try {
-      const applyInstructions = readApplyInstructions(cwd, change.changeId, runCommand);
-      return applyInstructionsNeedFinalization(applyInstructions)
-        ? []
-        : [{ ...change, applyInstructions }];
-    } catch {
+  const claimableChanges = changes.flatMap((change) => {
+    if (!change.metadata || !formlessChangeMetadataAllowsClaim(change.metadata)) {
       return [];
     }
+
+    if (options.stateRoot) {
+      const classification = classifyChangeLease(
+        readChangeLease(options.stateRoot, change.changeId),
+        {
+          now,
+        },
+      );
+      if (
+        classification.kind === "blocked" ||
+        classification.kind === "ready-for-review" ||
+        classification.kind === "valid-active"
+      ) {
+        return [];
+      }
+    }
+
+    return [
+      {
+        ...change,
+        applyInstructions: applyInstructionsFromFormlessChangeMetadata(
+          change.changeId,
+          change.metadata,
+        ),
+      },
+    ];
   });
 
   if (claimableChanges.length < 2) {
@@ -1415,15 +1434,55 @@ function metadataQueryEntry(
   branch: string,
   metadata: FormlessChangeCommitMetadata,
 ): FormlessChangeQueryEntry {
+  const remainingTasks = remainingFormlessChangeTasks(metadata);
   return {
     blockerSummary: blockerSummary(metadata.blockers),
     branch,
     capabilities: metadata.trailers.capabilities,
     changeId: metadata.trailers.changeId,
     latestEvidenceAt: metadata.trailers.lastEvidenceAt,
-    remainingTasks: metadata.tasks.filter((task) => !task.done).length,
+    remainingTasks,
     state: metadata.trailers.state,
     valid: true,
+  };
+}
+
+function remainingFormlessChangeTasks(metadata: FormlessChangeCommitMetadata): number {
+  return metadata.tasks.filter((task) => !task.done).length;
+}
+
+function formlessChangeStateAllowsClaim(state: FormlessChangeState): boolean {
+  return state === "ready" || state === "working";
+}
+
+function formlessChangeMetadataAllowsClaim(metadata: FormlessChangeCommitMetadata): boolean {
+  return formlessChangeStateAllowsClaim(metadata.trailers.state);
+}
+
+function applyInstructionsFromFormlessChangeMetadata(
+  changeId: string,
+  metadata: FormlessChangeCommitMetadata,
+): ApplyInstructions {
+  const complete = metadata.tasks.filter((task) => task.done).length;
+  const remaining = metadata.tasks.length - complete;
+  return {
+    changeName: changeId,
+    instruction:
+      remaining === 0
+        ? "All change metadata tasks are complete; run finalization."
+        : "Read parsed change metadata, select the next ready task section, and ship one section.",
+    progress: {
+      complete,
+      remaining,
+      total: metadata.tasks.length,
+    },
+    schemaName: "git-backed",
+    state: remaining === 0 ? "all_done" : metadata.trailers.state,
+    tasks: metadata.tasks.map((task) => ({
+      description: task.description,
+      done: task.done,
+      id: task.id,
+    })),
   };
 }
 
@@ -1764,19 +1823,6 @@ function readApplyInstructions(
 
 function applyInstructionsNeedFinalization(instructions: ApplyInstructions): boolean {
   return instructions.state === "all_done" || instructions.progress?.remaining === 0;
-}
-
-function changeNeedsFinalization(
-  cwd: string,
-  changeId: string,
-  runCommand: CommandRunner,
-): boolean {
-  const instructions = readApplyInstructions(cwd, changeId, runCommand);
-  return applyInstructionsNeedFinalization(instructions);
-}
-
-function changeHasRemainingWork(cwd: string, changeId: string, runCommand: CommandRunner): boolean {
-  return !changeNeedsFinalization(cwd, changeId, runCommand);
 }
 
 function commandText(command: string, args: string[]): string {
@@ -2143,18 +2189,6 @@ function runAutomaticFinalization(input: {
   };
 }
 
-function tryChangeHasRemainingWork(
-  cwd: string,
-  changeId: string,
-  runCommand: CommandRunner,
-): boolean | null {
-  try {
-    return changeHasRemainingWork(cwd, changeId, runCommand);
-  } catch {
-    return null;
-  }
-}
-
 function signalFromFinalMessage(message: string): "blocked" | "none" | "plan-done" | "task-done" {
   if (message.includes("<blocked/>")) {
     return "blocked";
@@ -2515,7 +2549,11 @@ function showDryRunClaim(input: {
       applyInstructions: input.change.applyInstructions,
       changeId: input.change.changeId,
       dangerous: input.options.dangerous,
-      mode: "implement",
+      mode:
+        input.change.applyInstructions &&
+        applyInstructionsNeedFinalization(input.change.applyInstructions)
+          ? "finalize"
+          : "implement",
       workerName: input.options.workerName,
       worktreeDir: input.branchPlan.worktreeDir,
     })}`,
@@ -2534,13 +2572,14 @@ async function runClaimedChange(input: {
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
   const applyInstructions =
-    input.modeOverride === "finalize"
-      ? (input.change.applyInstructions ?? null)
+    input.change.applyInstructions ??
+    (input.modeOverride === "finalize"
+      ? null
       : readApplyInstructions(
           input.branchPlan.worktreeDir,
           input.change.changeId,
           input.runCommand,
-        );
+        ));
   const mode =
     input.modeOverride ??
     (applyInstructions && applyInstructionsNeedFinalization(applyInstructions)
@@ -2654,7 +2693,14 @@ async function runClaimedChange(input: {
 
   if (mode === "implement" && signal === "plan-done") {
     writeLine(input.stdout, `[agents] ${input.change.changeId} starting automatic finalization`);
-    return runClaimedChange(input);
+    return runClaimedChange({
+      ...input,
+      change: {
+        branch: input.change.branch,
+        changeId: input.change.changeId,
+      },
+      modeOverride: "finalize",
+    });
   }
 
   if (mode === "finalize" && signal === "plan-done") {
@@ -2809,108 +2855,36 @@ async function runIdleMaintenance(input: {
   }
 
   let completeBranchCount = 0;
+  let invalidBranchCount = 0;
+  let leasedBranchCount = 0;
   for (const branch of branches) {
     const changeId = changeIdFromBranch(branch);
-    if (!changeId || readChangeLease(input.paths.root, changeId)) {
+    if (!changeId) {
       continue;
     }
 
-    const remainingWork = tryChangeHasRemainingWork(input.cwd, changeId, input.runCommand);
-    if (remainingWork === false) {
-      completeBranchCount += 1;
+    if (readChangeLease(input.paths.root, changeId)) {
+      leasedBranchCount += 1;
       continue;
     }
+
+    const metadataResult = readFormlessChangeBranchMetadata(input.cwd, branch, input.runCommand);
+    if (!metadataResult.ok) {
+      invalidBranchCount += 1;
+      continue;
+    }
+
     if (
-      remainingWork === null &&
-      branchMergedIntoBase(input.cwd, branch, input.options.baseRef, input.runCommand)
+      metadataResult.metadata.trailers.state === "ready-for-review" ||
+      remainingFormlessChangeTasks(metadataResult.metadata) === 0
     ) {
       completeBranchCount += 1;
       continue;
     }
 
-    const branchPlan = ensureChangeBranch(input.cwd, changeId, {
-      baseRef: input.options.baseRef,
-      runCommand: input.runCommand,
-      workerName: input.options.workerName,
-      worktreeDir: input.options.worktreeDir,
-    });
-    if (
-      remainingWork === null &&
-      !changeHasRemainingWork(branchPlan.worktreeDir, changeId, input.runCommand)
-    ) {
-      completeBranchCount += 1;
+    if (!formlessChangeMetadataAllowsClaim(metadataResult.metadata)) {
       continue;
     }
-
-    const result = input.runCommand(branchPlan.worktreeDir, "git", [
-      "rebase",
-      input.options.baseRef,
-    ]);
-    if (result.code === 0) {
-      let publishedCommit: string;
-      try {
-        publishedCommit = publishWorkerBranchToChangeBranch(branchPlan, input.runCommand);
-      } catch (error) {
-        const evidence: AgentEvidence = {
-          at: nowIso(input.now),
-          command: `git branch -f ${branchPlan.branch} HEAD`,
-          message: `idle rebase publish failed for ${branch}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        };
-        writeWorkerStatus(
-          input.paths.root,
-          makeWorkerStatus({
-            branch,
-            currentChange: changeId,
-            latestEvidence: evidence,
-            now: input.now,
-            owner: input.options.workerName,
-            state: "blocked",
-          }),
-        );
-        writeLine(input.stdout, `[agents] idle rebase publish blocked ${branch}`);
-        return 1;
-      }
-      const evidence: AgentEvidence = {
-        at: nowIso(input.now),
-        command: `git rebase ${input.options.baseRef}`,
-        message: `rebased ${branch} at ${publishedCommit}`,
-      };
-      writeWorkerStatus(
-        input.paths.root,
-        makeWorkerStatus({
-          branch,
-          currentChange: changeId,
-          latestEvidence: evidence,
-          now: input.now,
-          owner: input.options.workerName,
-          state: "idle",
-        }),
-      );
-      writeLine(input.stdout, `[agents] idle rebase ok ${branch}`);
-      return 0;
-    }
-
-    input.runCommand(branchPlan.worktreeDir, "git", ["rebase", "--abort"]);
-    const evidence: AgentEvidence = {
-      at: nowIso(input.now),
-      command: `git rebase ${input.options.baseRef}`,
-      message: `idle rebase conflict on ${branch}: ${result.stderr.trim()}`,
-    };
-    writeWorkerStatus(
-      input.paths.root,
-      makeWorkerStatus({
-        branch,
-        currentChange: changeId,
-        latestEvidence: evidence,
-        now: input.now,
-        owner: input.options.workerName,
-        state: "blocked",
-      }),
-    );
-    writeLine(input.stdout, `[agents] idle rebase blocked ${branch}`);
-    return 1;
   }
 
   if (completeBranchCount > 0) {
@@ -2923,7 +2897,13 @@ async function runIdleMaintenance(input: {
     stateRoot: input.paths.root,
     stdout: input.stdout,
   });
-  writeLine(input.stdout, "[agents] idle: change branches are leased");
+  if (leasedBranchCount > 0) {
+    writeLine(input.stdout, "[agents] idle: change branches are leased");
+  } else if (invalidBranchCount > 0) {
+    writeLine(input.stdout, "[agents] idle: change branches have invalid metadata");
+  } else {
+    writeLine(input.stdout, "[agents] idle: no claimable work");
+  }
   return 0;
 }
 
@@ -2989,6 +2969,7 @@ async function runWatchOnce(input: {
 
   const changes = discoverClaimableOpenSpecChanges(input.cwd, {
     baseRef: input.options.baseRef,
+    now: input.now,
     runCommand: input.runCommand,
     stateRoot: input.options.dryRun ? null : paths.root,
   });

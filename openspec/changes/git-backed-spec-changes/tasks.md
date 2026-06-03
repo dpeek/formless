@@ -14,15 +14,20 @@ Evidence:
 ## 2. Branch Queue Discovery
 
 - [x] 2.1 Replace committed `openspec/changes/*` discovery with local `changes/*` branch discovery backed by parsed change metadata.
-- [ ] 2.2 Update claimability rules for remaining task work, completed branches needing finalization, blocked branches, invalid metadata, and active or ready-for-review leases.
-- [ ] 2.3 Preserve deterministic ordering, worker branch reset behavior, and one active writer per change.
-- [ ] 2.4 Update supervisor, status, dry-run, and discovery tests to cover Git-backed branch queue behavior.
+- [x] 2.2 Update claimability rules for remaining task work, completed branches needing finalization, blocked branches, invalid metadata, and active or ready-for-review leases.
+- [x] 2.3 Preserve deterministic ordering, worker branch reset behavior, and one active writer per change.
+- [x] 2.4 Update supervisor, status, dry-run, and discovery tests to cover Git-backed branch queue behavior.
 
 Evidence:
 
 - Changed `scripts/agents.ts` so claimable discovery scans local `changes/*` branches, parses tip commit messages with Formless change metadata, ignores invalid metadata branches, and no longer discovers queue items from committed `openspec/changes/*` files. Kept the legacy OpenSpec apply lookup as transitional downstream compatibility for prompt/finalization tasks.
 - Changed `scripts/agents.test.ts` discovery and supervisor fixtures to provide `changes/*` refs plus `git log --no-notes` commit metadata instead of `git ls-tree main -- openspec/changes`.
 - `devstate check` at 2026-06-03T02:08:04.602Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes agent queue discovery and tests only.
+- Changed `scripts/agents.ts` so claimability is driven by parsed branch metadata: `ready` and `working` changes are claimable, completed changes produce finalization apply state, `draft` / `blocked` / `ready-for-review` metadata is skipped, invalid metadata is skipped, and lease classification blocks active, blocked, and ready-for-review leases while allowing stale or released leases through the recovery path.
+- Changed `scripts/agents.ts` dry-run and claimed-change handoff to use metadata-derived task summaries and to switch explicitly from implementation to finalization after a `plan-done` implementation signal.
+- Changed `scripts/agents.test.ts` to cover completed metadata finalization claims, non-claimable metadata states, active/blocked/review-ready/stale/released lease filtering, deterministic branch ordering, worker status output, dry-run metadata prompts, stale lease recovery, and completed-branch supervisor finalization.
+- `devstate check` at 2026-06-03T02:18:36.558Z: checks ok; services running; web ready; test watcher pass.
 - Browser smoke not run; this section changes agent queue discovery and tests only.
 
 ## 3. Worker Prompts and Implementation Loop
