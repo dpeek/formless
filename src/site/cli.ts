@@ -425,17 +425,10 @@ export async function runFormlessCli(
       dependencies.log(formlessCliUsage());
       return;
     case "workspaceDev": {
-      await runCliWorkspaceOperation(
-        {
-          includeDeploymentStatus: false,
-          kind: "status",
-          workspacePath: command.workspacePath,
-        },
-        dependencies,
-      );
+      const workspacePath = await resolveTopLevelFormlessWorkspaceDevPath(command, dependencies);
       await runFormlessInstanceWorkspaceDev(
         {
-          workspacePath: await resolveTopLevelFormlessWorkspaceDevPath(command, dependencies),
+          workspacePath,
         },
         dependencies,
         {

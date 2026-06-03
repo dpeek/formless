@@ -213,7 +213,7 @@ describe("portable archive protocol", () => {
     });
 
     expect(() => parseInstanceArchive(archive)).toThrow(
-      'Instance archive controlPlane records record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
+      'Instance archive controlPlane records[5] record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
     );
   });
 

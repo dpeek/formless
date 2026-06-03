@@ -165,7 +165,7 @@ describe("portable archive normalizers", () => {
         }),
       ),
     ).toThrow(
-      'Instance archive controlPlane records[0] entity must be a qualified entity name in "<schema-key>:<entity-key>" format with kebab-case schema and entity keys.',
+      'Instance archive controlPlane records[0] record "personal" entity must be a qualified entity name in "<schema-key>:<entity-key>" format with kebab-case schema and entity keys.',
     );
   });
 

@@ -46,7 +46,7 @@ export function parseInstanceControlPlaneBoundaryEntityName(
   }
 
   if (!isInstanceControlPlaneEntityName(qualifiedName.entityKey)) {
-    throw new Error(`${context} entity "${value}" is not an instance control-plane entity.`);
+    throw new Error(`${context} "${value}" is not an instance control-plane entity.`);
   }
 
   return qualifiedName.entityKey;
