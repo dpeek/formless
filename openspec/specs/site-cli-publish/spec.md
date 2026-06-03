@@ -5,7 +5,9 @@
 Site CLI publish behavior lets a local Formless workspace initialize, run,
 save, deploy, move data through portable archives, and manage instance and
 custom-domain intent.
+
 ## Requirements
+
 ### Requirement: CLI Command Families
 
 The package SHALL expose local workspace onboarding, workspace operation,
@@ -243,6 +245,8 @@ intent lives in schema-owned record source.
   written into workspace source
 - **AND** check reports archive and control-plane record drift against the
   selected target
+- **AND** status, pull, check, and push select the remote HTTP origin from an
+  enabled `deploy-target.targetUrl` record rather than `formless.json`
 
 #### Scenario: Push apply
 
@@ -265,6 +269,8 @@ records for deploy and domain intent.
 - **AND** deploy metadata is verified after upload
 - **AND** display-safe target and deploy intent are written to schema-owned
   control-plane record source, not `formless.json`
+- **AND** first-deploy behavior is used only when no enabled deploy target
+  exists in workspace record source
 - **AND** display-safe Cloudflare target facts are copied to ignored
   `.formless/` deploy state when needed
 - **AND** Cloudflare API tokens, Alchemy secrets, automation admin tokens, and

@@ -106,6 +106,7 @@ export type InstanceControlPlaneDeployTargetKind = "instance";
 export type InstanceControlPlaneDeployTargetValues = {
   targetId: string;
   targetKind: InstanceControlPlaneDeployTargetKind;
+  targetUrl: string;
   label: string;
   enabled: boolean;
   createdAt: string;
@@ -281,6 +282,7 @@ export const instanceControlPlaneSchema = {
       fields: {
         targetId: textField("Target id"),
         targetKind: enumField("Kind", { instance: "Instance" }),
+        targetUrl: textField("Target URL", "href"),
         label: textField("Label"),
         enabled: booleanField("Enabled", true),
         createdAt: textField("Created at"),
@@ -384,7 +386,7 @@ export const instanceControlPlaneSchema = {
   itemViews: {
     appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
     routeItem: itemView("route", ["matchHost", "matchPath", "kind", "enabled"]),
-    deployTargetItem: itemView("deploy-target", ["label", "targetId", "enabled"]),
+    deployTargetItem: itemView("deploy-target", ["label", "targetId", "targetUrl", "enabled"]),
     providerConfigRefItem: itemView("provider-config-ref", [
       "label",
       "providerFamily",
@@ -436,7 +438,13 @@ export const instanceControlPlaneSchema = {
         actionLabel: "Route actions",
       },
     ),
-    deployTargetTable: tableView("deploy-target", ["label", "targetId", "targetKind", "enabled"]),
+    deployTargetTable: tableView("deploy-target", [
+      "label",
+      "targetId",
+      "targetKind",
+      "targetUrl",
+      "enabled",
+    ]),
     providerConfigRefTable: tableView("provider-config-ref", [
       "label",
       "providerFamily",
@@ -554,6 +562,7 @@ export const instanceControlPlaneSchema = {
     deployTargetCreate: createView("deploy-target", [
       "targetId",
       "targetKind",
+      "targetUrl",
       "label",
       "enabled",
       "createdAt",

@@ -437,6 +437,7 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
+        targetUrl: "https://personal.dpeek.workers.dev",
         label: "instance.primary",
         enabled: true,
         createdAt: now,

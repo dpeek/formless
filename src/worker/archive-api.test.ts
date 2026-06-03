@@ -534,6 +534,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
+        targetUrl: "https://personal.dpeek.workers.dev",
         label: "Primary instance target",
         enabled: true,
         createdAt: now,

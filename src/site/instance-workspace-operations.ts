@@ -655,9 +655,8 @@ function summarizeStatusResult(
 
   return {
     details: {
-      defaultTarget: result.manifest.defaultTarget ?? null,
       selectedTarget: result.selectedTarget?.alias ?? null,
-      targetCount: result.manifest.targets.length,
+      targetUrl: result.selectedTarget?.url ?? null,
     },
     summary: {
       fields: {

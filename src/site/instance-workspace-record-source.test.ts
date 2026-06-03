@@ -210,6 +210,7 @@ function controlPlaneSourceRecords(
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
+        targetUrl: "https://personal.dpeek.workers.dev",
         label: "Primary",
         enabled: true,
         createdAt: now,

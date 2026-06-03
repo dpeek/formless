@@ -116,7 +116,8 @@ const sourceKeys = new Set(["records"]);
 const archivesKeys = new Set(["apps"]);
 const mediaKeys = new Set(["root"]);
 const localKeys = new Set(["secretStateRoot", "stateRoot"]);
-const targetAliasPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const resourceSlugPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const targetAliasPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const forbiddenSecretKeys = new Set([
   "admintoken",
   "alchemy",
@@ -271,7 +272,7 @@ export function parseFormlessInstanceWorkspaceTargetAlias(context: string, value
 
   if (!targetAliasPattern.test(alias)) {
     throw new Error(
-      `${context} must start with a lowercase letter and use lowercase letters, numbers, and single hyphens.`,
+      `${context} must start with a lowercase letter and use lowercase letters, numbers, dots, and single hyphens.`,
     );
   }
 
@@ -364,7 +365,7 @@ function parseWorkspaceName(context: string, value: unknown): string {
 function parseResourceSlug(context: string, value: unknown): string {
   const slug = parseRequiredString(context, value);
 
-  if (!targetAliasPattern.test(slug)) {
+  if (!resourceSlugPattern.test(slug)) {
     throw new Error(
       `${context} must start with a lowercase letter and use lowercase letters, numbers, and single hyphens.`,
     );

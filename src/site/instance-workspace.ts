@@ -49,6 +49,7 @@ import type {
 } from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   formatInstanceControlPlaneBoundaryEntityName,
   isInstanceControlPlaneEntityName,
 } from "../shared/instance-control-plane.ts";
@@ -73,7 +74,6 @@ import { formatDotEnv, parseDotEnv } from "./dotenv.ts";
 import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
   defaultFormlessInstanceWorkspaceManifest,
@@ -789,7 +789,13 @@ export async function getFormlessInstanceWorkspaceStatus(
 ): Promise<FormlessInstanceWorkspaceStatusResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+  const selectedTarget = await resolveWorkspaceTarget({
+    commandName: "status",
+    manifest,
+    required: false,
+    targetAlias: input.targetAlias,
+    workspaceRoot,
+  });
   const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
   const remoteStatus = selectedTarget
     ? await readFormlessInstanceTargetStatus(
@@ -817,7 +823,12 @@ export async function pullFormlessInstanceWorkspace(
 ): Promise<PullFormlessInstanceWorkspaceResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "pull");
+  const selectedTarget = await requireWorkspaceTarget({
+    commandName: "pull",
+    manifest,
+    targetAlias: input.targetAlias,
+    workspaceRoot,
+  });
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "pull");
 
   try {
@@ -883,7 +894,12 @@ export async function checkFormlessInstanceWorkspace(
 ): Promise<CheckFormlessInstanceWorkspaceResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "check");
+  const selectedTarget = await requireWorkspaceTarget({
+    commandName: "check",
+    manifest,
+    targetAlias: input.targetAlias,
+    workspaceRoot,
+  });
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "check");
 
   try {
@@ -941,7 +957,13 @@ export async function checkLocalFormlessWorkspace(
     workspacePath: input.workspacePath,
   });
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+  const selectedTarget = await resolveWorkspaceTarget({
+    commandName: "check",
+    manifest,
+    required: false,
+    targetAlias: input.targetAlias,
+    workspaceRoot,
+  });
 
   if (!selectedTarget) {
     return {
@@ -1047,7 +1069,13 @@ export async function pushFormlessInstanceWorkspace(
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
   const selectedTarget =
-    input.targetOverride ?? requireWorkspaceTarget(manifest, input.targetAlias, "push");
+    input.targetOverride ??
+    (await requireWorkspaceTarget({
+      commandName: "push",
+      manifest,
+      targetAlias: input.targetAlias,
+      workspaceRoot,
+    }));
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
 
@@ -1317,6 +1345,13 @@ export async function deployLocalFormlessWorkspace(
   const healthCheck = await dependencies.healthCheck.check({
     expectedVersion: planned.plan.packageVersion,
     url: deploymentUrl,
+  });
+
+  await writeLocalWorkspaceDeployTargetSource({
+    manifest: planned.manifest,
+    now: dependencies.now(),
+    selectedTarget: planned.selectedTarget,
+    workspaceRoot,
   });
 
   const ownerSetup =
@@ -1628,12 +1663,15 @@ export async function planDeployLocalFormlessWorkspace(
     workspacePath: input.workspacePath,
   });
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const existingSelectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
   const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const existingSelectedTarget =
+    deploymentSource.deployTarget === undefined
+      ? undefined
+      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "deploy");
   const preflight = existingSelectedTarget
     ? await checkFormlessInstanceWorkspace(
         {
@@ -1747,11 +1785,24 @@ export async function planDeployFormlessInstanceWorkspace(
 ): Promise<PlanDeployFormlessInstanceWorkspaceResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "deploy");
-  const plan = formlessInstanceWorkspaceDeploymentPlan({
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
     manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const selectedTarget =
+    deploymentSource.deployTarget === undefined
+      ? undefined
+      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "deploy");
+
+  if (selectedTarget === undefined) {
+    throw new Error("Formless instance deploy requires an enabled instance deploy-target record.");
+  }
+
+  const plan = formlessInstanceWorkspaceDeploymentPlan({
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
+    providerConfig: deploymentSource.providerConfig,
     selectedTarget,
   });
 
@@ -1849,11 +1900,26 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
 ): Promise<FormlessInstanceWorkspaceProviderContext> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, input.commandName);
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const selectedTarget =
+    deploymentSource.deployTarget === undefined
+      ? undefined
+      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, input.commandName);
+
+  if (selectedTarget === undefined) {
+    throw new Error(
+      `Formless instance ${input.commandName} requires an enabled instance deploy-target record.`,
+    );
+  }
+
   const plan = formlessInstanceWorkspaceDeploymentPlan({
     commandName: input.commandName,
-    manifest,
     packageVersion: dependencies.packageVersion,
+    providerConfig: deploymentSource.providerConfig,
     selectedTarget,
   });
   const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, plan);
@@ -1885,9 +1951,24 @@ export async function planFormlessInstanceWorkspaceDomains(
 ): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "domains plan");
-  const accountId = requireWorkspaceDeployAccountId(manifest);
-  const workerName = selectWorkspaceWorkerName(manifest, selectedTarget, "domains plan");
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const selectedTarget =
+    deploymentSource.deployTarget === undefined
+      ? undefined
+      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "domains plan");
+
+  if (selectedTarget === undefined) {
+    throw new Error(
+      "Formless instance domains plan requires an enabled instance deploy-target record.",
+    );
+  }
+
+  const accountId = requireWorkspaceDeployAccountId(deploymentSource.providerConfig);
+  const workerName = selectWorkspaceWorkerName(deploymentSource.providerConfig, selectedTarget);
   const workspaceDomains = manifest.domains ?? [];
   const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
@@ -2055,7 +2136,13 @@ export async function adoptFormlessInstanceWorkspaceAdminToken(
 ): Promise<AdoptFormlessInstanceWorkspaceAdminTokenResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
+  const selectedTarget = await resolveWorkspaceTarget({
+    commandName: "token adopt",
+    manifest,
+    required: false,
+    targetAlias: input.targetAlias,
+    workspaceRoot,
+  });
   const existingSecretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
   const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
     env: dependencies.env,
@@ -2084,8 +2171,16 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
 ): Promise<RotateFormlessInstanceWorkspaceAdminTokenResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
-  const workerName = selectWorkspaceWorkerName(manifest, selectedTarget);
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const selectedTarget =
+    deploymentSource.deployTarget === undefined
+      ? undefined
+      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "token rotate");
+  const workerName = selectWorkspaceWorkerName(deploymentSource.providerConfig, selectedTarget);
   const adminToken =
     resolveFormlessInstanceWorkspaceAdminToken({
       env: dependencies.env,
@@ -2111,7 +2206,7 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
 
     await dependencies.runCommand(command.command, command.args, {
       cwd: dependencies.packageRoot,
-      env: rotateCommandEnv(dependencies.env, manifest),
+      env: rotateCommandEnv(dependencies.env, deploymentSource.providerConfig),
     });
     await writeFormlessInstanceWorkspaceSecretState(workspaceRoot, { adminToken });
     await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
@@ -3337,27 +3432,59 @@ type WorkspaceTargetCommandName =
   | "domains plan"
   | "domains run"
   | "pull"
-  | "push";
+  | "push"
+  | "status"
+  | "token adopt"
+  | "token rotate";
 
-function requireWorkspaceTarget(
-  manifest: FormlessInstanceWorkspaceManifest,
-  targetAlias: string | null | undefined,
-  commandName: WorkspaceTargetCommandName,
-): FormlessInstanceWorkspaceTarget {
-  const target = selectWorkspaceTarget(manifest, targetAlias);
+async function requireWorkspaceTarget(input: {
+  commandName: WorkspaceTargetCommandName;
+  manifest: FormlessInstanceWorkspaceManifest;
+  targetAlias: string | null | undefined;
+  workspaceRoot: string;
+}): Promise<FormlessInstanceWorkspaceTarget> {
+  const target = await resolveWorkspaceTarget({
+    ...input,
+    required: true,
+  });
 
   if (!target) {
-    throw new Error(`Formless instance ${commandName} requires a workspace target.`);
+    throw new Error(`Formless instance ${input.commandName} requires a workspace target.`);
   }
 
   return target;
 }
 
-function requireWorkspaceDeployAccountId(manifest: FormlessInstanceWorkspaceManifest): string {
-  const accountId = manifest.deploy?.accountId?.trim();
+async function resolveWorkspaceTarget(input: {
+  commandName: WorkspaceTargetCommandName;
+  manifest: FormlessInstanceWorkspaceManifest;
+  required: boolean;
+  targetAlias: string | null | undefined;
+  workspaceRoot: string;
+}): Promise<FormlessInstanceWorkspaceTarget | undefined> {
+  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    manifest: input.manifest,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const deployTarget = selectLocalWorkspaceDeployTarget(
+    controlPlane?.records.filter((record) => !record.deletedAt) ?? [],
+    input.targetAlias,
+    {
+      commandName: input.commandName,
+      required: input.required,
+    },
+  );
+
+  return deployTarget === undefined
+    ? undefined
+    : workspaceTargetFromDeployTargetRecord(deployTarget, input.commandName);
+}
+
+function requireWorkspaceDeployAccountId(providerConfig: StoredRecord | undefined): string {
+  const accountId = stringRecordValue(providerConfig, "accountId")?.trim();
 
   if (!accountId) {
-    throw new Error("Formless instance domains plan requires deploy.accountId.");
+    throw new Error("Formless instance domains plan requires provider-config-ref.accountId.");
   }
 
   return accountId;
@@ -3368,13 +3495,18 @@ function selectLocalWorkspaceDeploymentSource(
   targetAlias: string | null | undefined,
 ): LocalWorkspaceDeploymentSource {
   if (!controlPlane) {
-    throw new Error(
-      "Formless deploy plan requires schema-owned control-plane record source with a deploy target.",
-    );
+    if (targetAlias?.trim()) {
+      throw new Error(`Formless deploy plan target "${targetAlias.trim()}" was not found.`);
+    }
+
+    return {};
   }
 
   const records = controlPlane.records.filter((record) => !record.deletedAt);
-  const deployTarget = selectLocalWorkspaceDeployTarget(records, targetAlias);
+  const deployTarget = selectLocalWorkspaceDeployTarget(records, targetAlias, {
+    commandName: "deploy",
+    required: false,
+  });
   const providerConfig = selectLocalWorkspaceProviderConfig(records);
 
   return {
@@ -3386,7 +3518,8 @@ function selectLocalWorkspaceDeploymentSource(
 function selectLocalWorkspaceDeployTarget(
   records: readonly StoredRecord[],
   targetAlias: string | null | undefined,
-): StoredRecord {
+  options: { commandName: WorkspaceTargetCommandName; required: boolean },
+): StoredRecord | undefined {
   const targets = records.filter(
     (record) =>
       record.entity === "deploy-target" &&
@@ -3403,7 +3536,9 @@ function selectLocalWorkspaceDeployTarget(
     );
 
     if (!target) {
-      throw new Error(`Formless deploy plan target "${requestedTargetId}" was not found.`);
+      throw new Error(
+        `Formless instance ${options.commandName} target "${requestedTargetId}" was not found.`,
+      );
     }
 
     return target;
@@ -3422,12 +3557,37 @@ function selectLocalWorkspaceDeployTarget(
   }
 
   if (targets.length === 0) {
-    throw new Error("Formless deploy plan requires an enabled instance deploy-target record.");
+    if (options.required) {
+      throw new Error(
+        `Formless instance ${options.commandName} requires an enabled instance deploy-target record.`,
+      );
+    }
+
+    return undefined;
   }
 
   throw new Error(
-    "Formless deploy plan targetAlias is required when multiple deploy targets exist.",
+    `Formless instance ${options.commandName} targetAlias is required when multiple deploy targets exist.`,
   );
+}
+
+function workspaceTargetFromDeployTargetRecord(
+  record: StoredRecord,
+  commandName: WorkspaceTargetCommandName,
+): FormlessInstanceWorkspaceTarget {
+  const targetId = stringRecordValue(record, "targetId") ?? record.id;
+  const targetUrl = stringRecordValue(record, "targetUrl");
+
+  if (targetUrl === undefined) {
+    throw new Error(
+      `Formless instance ${commandName} deploy-target "${targetId}" requires targetUrl.`,
+    );
+  }
+
+  return {
+    alias: targetId,
+    url: normalizeFormlessInstanceWorkspaceTargetUrl(targetUrl),
+  };
 }
 
 function selectLocalWorkspaceProviderConfig(
@@ -3485,7 +3645,7 @@ type LocalWorkspaceDeploymentDesiredState = {
 };
 
 type LocalWorkspaceDeploymentSource = {
-  deployTarget: StoredRecord;
+  deployTarget?: StoredRecord;
   providerConfig?: StoredRecord;
 };
 
@@ -3536,11 +3696,21 @@ function planLocalWorkspaceDeployment(input: {
     input.targetAlias ??
     stringRecordValue(input.deployTarget, "targetId") ??
     input.deployTarget?.id ??
-    DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
+    workspaceDeployTargetId();
+  const targetUrl = stringRecordValue(input.deployTarget, "targetUrl");
   const selectedTarget = {
     alias: targetAlias,
-    url: plan.expectedUrl.url,
+    url:
+      targetUrl === undefined
+        ? plan.expectedUrl.url
+        : normalizeFormlessInstanceWorkspaceTargetUrl(targetUrl),
   };
+
+  if (selectedTarget.url !== plan.expectedUrl.url) {
+    throw new Error(
+      `Formless deploy target "${targetAlias}" targetUrl ${selectedTarget.url} does not match planned URL ${plan.expectedUrl.url}.`,
+    );
+  }
 
   return {
     manifest: input.manifest,
@@ -3711,42 +3881,24 @@ function compareDeployResources(left: DeployResource, right: DeployResource): nu
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
   commandName?: "deploy" | "destroy" | "domains run";
-  manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
+  providerConfig?: StoredRecord;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 }): FormlessInstanceDeploymentPlan {
-  const deploy = input.manifest.deploy;
   const commandName = input.commandName ?? "deploy";
-
-  if (!deploy) {
-    throw new Error(`Formless instance ${commandName} requires manifest deploy config.`);
-  }
-
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(
-    deploy.workersDevUrl ?? input.selectedTarget.url,
+  const targetUrl = input.selectedTarget.url;
+  const facts = workersDevTargetFacts(
+    targetUrl,
+    stringRecordValue(input.providerConfig, "workerName"),
   );
-
-  if (targetUrl !== input.selectedTarget.url) {
-    throw new Error(
-      `Formless instance ${commandName} target ${input.selectedTarget.url} does not match deploy.workersDevUrl ${targetUrl}.`,
-    );
-  }
-
-  const facts = workersDevTargetFacts(targetUrl, deploy.workerName);
-  const accountId = deploy.accountId?.trim();
+  const accountId = stringRecordValue(input.providerConfig, "accountId")?.trim();
 
   if (!accountId) {
-    throw new Error(`Formless instance ${commandName} requires deploy.accountId.`);
+    throw new Error(`Formless instance ${commandName} requires provider-config-ref.accountId.`);
   }
 
-  const migrationPolicy = input.migrationPolicy ?? deploy.migrationPolicy;
-
-  if (migrationPolicy === "existing" && !deploy.mediaBucket) {
-    throw new Error(
-      `Formless instance ${commandName} requires deploy.mediaBucket when migrationPolicy is existing.`,
-    );
-  }
+  const migrationPolicy = input.migrationPolicy ?? ("existing" as const);
 
   return planFormlessInstanceDeployment({
     account: {
@@ -3754,7 +3906,6 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
       workersDevSubdomain: facts.workersDevSubdomain,
     },
     instanceName: facts.workerName,
-    mediaBucketName: deploy.mediaBucket,
     migrationPolicy,
     packageVersion: input.packageVersion,
   });
@@ -4051,39 +4202,16 @@ function workspaceAppArchivePath(
   );
 }
 
-function selectWorkspaceTarget(
-  manifest: FormlessInstanceWorkspaceManifest,
-  targetAlias: string | null | undefined,
-): FormlessInstanceWorkspaceTarget | undefined {
-  const alias = targetAlias ?? manifest.defaultTarget;
-
-  if (!alias) {
-    if (manifest.targets.length === 0) {
-      return undefined;
-    }
-
-    throw new Error("Formless instance workspace target alias is required.");
-  }
-
-  const target = manifest.targets.find((candidate) => candidate.alias === alias);
-
-  if (!target) {
-    throw new Error(`Formless instance workspace target "${alias}" was not found.`);
-  }
-
-  return target;
-}
-
 function selectWorkspaceWorkerName(
-  manifest: FormlessInstanceWorkspaceManifest,
+  providerConfig: StoredRecord | undefined,
   target: FormlessInstanceWorkspaceTarget | undefined,
-  commandName: "domains plan" | "token rotate" = "token rotate",
 ): string {
-  const workerName = manifest.deploy?.workerName ?? workerNameFromWorkersDevUrl(target?.url);
+  const workerName =
+    stringRecordValue(providerConfig, "workerName") ?? workerNameFromWorkersDevUrl(target?.url);
 
   if (!workerName) {
     throw new Error(
-      `Formless instance ${commandName} requires deploy.workerName or a workers.dev target URL.`,
+      "Formless instance command requires provider-config-ref.workerName or a workers.dev target URL.",
     );
   }
 
@@ -4217,13 +4345,13 @@ function workspaceSecretStateLabel(
 
 function rotateCommandEnv(
   env: NodeJS.ProcessEnv | undefined,
-  manifest: FormlessInstanceWorkspaceManifest,
+  providerConfig: StoredRecord | undefined,
 ): NodeJS.ProcessEnv {
+  const accountId = stringRecordValue(providerConfig, "accountId");
+
   return {
     ...env,
-    ...(manifest.deploy?.accountId === undefined
-      ? {}
-      : { CLOUDFLARE_ACCOUNT_ID: manifest.deploy.accountId }),
+    ...(accountId === undefined ? {} : { CLOUDFLARE_ACCOUNT_ID: accountId }),
   };
 }
 
@@ -4655,6 +4783,59 @@ async function writeLocalWorkspaceDeploymentState(input: {
   );
 
   return statePath;
+}
+
+async function writeLocalWorkspaceDeployTargetSource(input: {
+  manifest: FormlessInstanceWorkspaceManifest;
+  now: string;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+}) {
+  const current = await readFormlessInstanceControlPlaneRecordSource({
+    manifest: input.manifest,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const targetId = input.selectedTarget.alias;
+  const existing = current?.records.find(
+    (record) =>
+      record.entity === "deploy-target" &&
+      (record.id === targetId || stringRecordValue(record, "targetId") === targetId),
+  );
+  const deployTargetRecord: StoredRecord = {
+    id: targetId,
+    entity: "deploy-target",
+    values: {
+      ...existing?.values,
+      targetId,
+      targetKind: "instance",
+      targetUrl: input.selectedTarget.url,
+      label: stringRecordValue(existing, "label") ?? targetId,
+      enabled: true,
+      createdAt: stringRecordValue(existing, "createdAt") ?? input.now,
+      updatedAt: input.now,
+    },
+    createdAt: existing?.createdAt ?? input.now,
+  };
+  const records = [
+    ...(current?.records.filter(
+      (record) =>
+        !(
+          record.entity === "deploy-target" &&
+          (record.id === targetId || stringRecordValue(record, "targetId") === targetId)
+        ),
+    ) ?? []),
+    deployTargetRecord,
+  ];
+
+  await writeFormlessInstanceControlPlaneRecordSource({
+    controlPlane: {
+      schemaKey: current?.schemaKey ?? INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      schemaUpdatedAt: input.now,
+      records,
+    },
+    manifest: input.manifest,
+    workspaceRoot: input.workspaceRoot,
+  });
 }
 
 async function createLocalWorkspaceOwnerSetup(input: {

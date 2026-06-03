@@ -1,8 +1,11 @@
 # local-workspace-gateway Specification
 
 ## Purpose
+
 TBD - created by archiving change browser-workspace-control-plane. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Local Workspace Gateway
 
 The system SHALL expose browser-safe workspace operations from local workspace
@@ -237,6 +240,8 @@ responses and reviewable source.
 - **WHEN** a browser starts a deploy plan or deploy apply operation
 - **THEN** the gateway resolves provider credentials from environment or ignored
   workspace secret state
+- **AND** existing deployed instance targets are resolved from enabled
+  `deploy-target.targetUrl` workspace record source
 - **AND** the browser receives only display-safe plan, attempt, health check,
   restore, and writeback summaries
 - **AND** deployment attempts, evidence summaries, drift reports, and cleanup
@@ -250,4 +255,3 @@ responses and reviewable source.
   owner setup tokens, or automation admin tokens
 - **THEN** the gateway rejects or redacts the secret values before writing
   reviewable source or returning browser-visible data
-

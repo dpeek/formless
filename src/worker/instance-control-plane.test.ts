@@ -418,6 +418,7 @@ describe("instance control-plane API routes", () => {
       values: {
         targetId: "instance",
         targetKind: "instance",
+        targetUrl: "https://instance.example.workers.dev",
         label: "Instance",
         enabled: true,
         createdAt: now,
@@ -678,6 +679,7 @@ function legacyDeployTargetRecord(now: string): StoredRecord {
     values: {
       targetId: "instance.primary",
       targetKind: "instance",
+      targetUrl: "https://personal.dpeek.workers.dev",
       label: "Primary",
       enabled: true,
       createdAt: now,

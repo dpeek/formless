@@ -17,7 +17,10 @@ import {
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
 import { assertExactKeys, isRecord } from "../shared/schema-parse-helpers.ts";
-import type { FormlessInstanceWorkspaceManifest } from "./instance-workspace-config.ts";
+import {
+  normalizeFormlessInstanceWorkspaceTargetUrl,
+  type FormlessInstanceWorkspaceManifest,
+} from "./instance-workspace-config.ts";
 
 export const FORMLESS_INSTANCE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND =
   "formless.instanceControlPlaneRecordSource";
@@ -461,10 +464,17 @@ function assertSourceRecordImmutableIdentity(record: StoredRecord) {
 
   if (record.entity === "deploy-target") {
     const targetId = requiredStringValue(record, "targetId");
+    const targetUrl = requiredStringValue(record, "targetUrl");
 
     if (record.id !== targetId) {
       throw new Error(
         `Workspace control-plane record source record "${record.id}" field "instance:deploy-target.targetId" must match record id.`,
+      );
+    }
+
+    if (targetUrl !== normalizeFormlessInstanceWorkspaceTargetUrl(targetUrl)) {
+      throw new Error(
+        `Workspace control-plane record source record "${record.id}" field "instance:deploy-target.targetUrl" must be a normalized HTTP origin.`,
       );
     }
   }

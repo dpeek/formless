@@ -7,7 +7,9 @@ schema records. It keeps app installs, app routes, domain intent, deployment
 intent, and display-safe deployment history in flat Authority records while
 installed app data, provider secrets, raw lease tokens, and provider resource
 truth stay outside those records.
+
 ## Requirements
+
 ### Requirement: Schema-Owned Instance Control Plane
 
 The system SHALL model owner-authored instance management intent as
@@ -22,6 +24,8 @@ outside control-plane source records.
   `instance:control-plane`, and API prefix `/api/formless/control-plane`
 - **AND** it defines flat records for app installs, unified routes, deploy
   targets, provider config references, and desired resources
+- **AND** each deploy target stores display-safe `targetUrl` origin facts for
+  commands that need to contact the deployed instance
 - **AND** it does not define `deploy-attempt`, `deploy-evidence-summary`, or
   `deploy-drift-report` as schema-owned control-plane record entities
 - **AND** deployment attempts, evidence summaries, drift reports, cleanup audit
@@ -159,6 +163,8 @@ canonical source for workspace-authored instance intent.
 - **WHEN** local Authority control-plane state is saved to workspace source
 - **THEN** `app-install`, `route`, `deploy-target`, `provider-config-ref`, and
   `deploy-desired-resource` records are written as schema-owned record source
+- **AND** enabled `deploy-target` source records include the display-safe
+  deployed HTTP origin in `targetUrl`
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:app-install` and
   `instance:route`

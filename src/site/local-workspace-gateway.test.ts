@@ -1041,6 +1041,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
             label: "Primary instance",
             targetId: "instance.primary",
             targetKind: "instance",
+            targetUrl: "https://personal.dpeek.workers.dev",
             updatedAt: now,
           },
         },

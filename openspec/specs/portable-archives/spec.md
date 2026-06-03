@@ -5,7 +5,9 @@
 Portable archives move Formless app and instance data through reviewable export,
 restore, import, and workspace workflows. They are backup, restore, import, and
 ejection plumbing, not bidirectional instance sync.
+
 ## Requirements
+
 ### Requirement: Archive Kinds And Capabilities
 
 The system SHALL encode app and instance archives with explicit kind, version,
@@ -209,6 +211,8 @@ in the manifest.
   `provider-config-ref`, and `deploy-desired-resource` intent, remote target
   facts, deployment execution history, and default app policy are not stored in
   `formless.json`
+- **AND** deployed remote target origin facts are stored on `deploy-target`
+  records as display-safe `targetUrl` values
 - **AND** secret-looking fields are rejected
 
 #### Scenario: Workspace push apply
@@ -233,6 +237,8 @@ workspace source.
 - **AND** `app-install`, unified `route`, `deploy-target`,
   `provider-config-ref`, `deploy-desired-resource`, app record, and media drift
   are reported without deriving intent from `formless.json`
+- **AND** remote drift checks select the deployed instance origin from enabled
+  `deploy-target.targetUrl` record source
 - **AND** deployment attempt, evidence, drift, cleanup, and status summaries are
   treated as runtime execution state rather than source drift
 
