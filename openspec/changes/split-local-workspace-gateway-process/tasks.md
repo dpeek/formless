@@ -47,6 +47,7 @@ Evidence 2026-06-03 gorp:
 - Added `handleLocalWorkspaceGatewaySidecarRequest()` execution ownership for status, operation starts, operation reads, credential setup, deploy plan, and deploy apply; direct sidecar execution requires the internal proxy token or a configured non-browser admin bearer before local workspace execution begins.
 - Updated `src/site/local-workspace-gateway.test.ts` so browser-facing gateway tests exercise runtime proxy to sidecar execution, plus new sidecar coverage for unavailable root, invalid internal token rejection before credential setup, direct admin automation, close lifecycle, operation-state read persistence, and secret redaction.
 - Check evidence: `devstate check` passed at 2026-06-03T02:15:12.432Z with `vp check --fix` green and watch tests green.
+- Browser smoke evidence: `bun browser --ignore-https-errors open https://gorp.formless.local` and `bun browser snapshot -i --compact --depth 2` succeeded; the snapshot rendered the Instance shell with app, route, provider, and deployment regions.
 
 ## 3. Worker Gateway Proxy
 
