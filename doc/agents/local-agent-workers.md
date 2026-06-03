@@ -1,20 +1,27 @@
 # Local Agent Workers
 
-Local agent workers pull ready OpenSpec changes from local Git state.
+Local agent workers pull Git-backed Formless changes from local Git state.
 
-## Command
+## Commands
 
 - Start one worker: `bun agents watch <worker-name>`.
 - Dry-run one pass: `bun agents watch <worker-name> --once --dry-run`.
-- Worker names determine the checked-out `agents/<worker-name>` branch. Review output still lands on `changes/<change-id>`.
+- List local change metadata: `bun agents changes --json`.
+- Inspect one change: `bun agents change <change-id> --json`.
+- Inspect worker state: `bun agents status [worker-name]`.
+- Release a lease: `bun agents release <change-id> [--owner <worker-name>]`.
+- Worker names determine the checked-out `agents/<worker-name>` branch. Review output lands on `changes/<change-id>`.
 
 ## Queue
 
-- Queue source: committed `openspec/changes/<change-id>/` directories on local `main`.
-- Claimable changes must have committed apply artifacts: `proposal.md`, `design.md`, `tasks.md`, and at least one `specs/**/*.md`.
-- Claimable changes must have remaining OpenSpec work; `all_done` changes are skipped unless they already have an active worker lease.
-- When multiple unleased changes are claimable, workers prefer existing unmerged review branches, then existing review branches, then deterministic change id order.
-- Uncommitted OpenSpec files in any worktree are ignored.
+- Queue source: local `changes/<change-id>` branches.
+- A claimable branch tip must contain valid Formless change metadata.
+- Metadata sections are `Proposal`, `Design`, `Tasks`, `Evidence`, and `Blockers`.
+- Required trailers are `Formless-Change-Id`, `Formless-Change-Version`, `Formless-Change-State`, `Formless-Capabilities`, and `Formless-Last-Evidence-At`.
+- Supported states are `draft`, `ready`, `working`, `blocked`, and `ready-for-review`.
+- Worker implementation claims `ready` or `working` branches. Branches with no remaining tasks move to finalization when no active or ready-for-review lease blocks them.
+- Invalid metadata, non-claimable states, Git notes, and untracked files are not authoritative queue state.
+- When multiple unleased branches are claimable, workers prefer branches with unmerged implementation, then deterministic change id order.
 - External systems are not the queue, lock, or status store for local workers.
 
 ## State
@@ -39,41 +46,57 @@ The state root is shared by worktrees from the same clone and is not tracked.
 ## Leases
 
 - A worker claims a change by atomically creating `leases/<change-id>/`.
-- The lease record stores change id, owner, branch, state, heartbeat time, and latest evidence.
+- The lease record stores change id, owner, branch, state, heartbeat time, process identity, and latest evidence.
 - Only the active lease owner publishes to `changes/<change-id>`.
 - Branch existence is not ownership.
-- A review-ready branch keeps a `ready-for-review` lease so workers do not reclaim the committed change from local `main`.
-- An idle worker may adopt a `ready-for-review` lease only to refresh a branch that no longer contains local `main`; use `bun agents release <change-id>` only when intentionally reopening implementation ownership.
+- Active `claiming`, `working`, and `finalizing` leases block other workers until stale or released.
+- A `blocked` lease exposes blocker evidence and requires explicit release or recovery.
+- A `ready-for-review` lease is retained while `changes/<change-id>` exists as an unmerged local branch.
+- A `ready-for-review` lease can be released after branch merge, branch deletion, or explicit release.
 
 ## Branches
 
 - Default worker worktree: `./tmp/worktree/<worker-name>`.
-- Review branch: `changes/<change-id>`.
+- Review branch and queue item: `changes/<change-id>`.
 - Checked-out worker branch: `agents/<worker-name>`.
-- If the review branch does not exist, the supervisor creates it from local `main`.
-- The supervisor checks out `agents/<worker-name>` in the worker worktree and resets it to `changes/<change-id>` before a new claim or maintenance pass.
-- A worker reuses its named worktree across changes by resetting its `agents/<worker-name>` branch to the active review branch.
+- The supervisor checks out `agents/<worker-name>` in the worker worktree and resets it to `changes/<change-id>` before a claim or maintenance pass.
+- A worker reuses its named worktree across changes by resetting `agents/<worker-name>` to the active review branch.
 - After a successful implementation or finalization session, the supervisor publishes the worker branch tip back to `changes/<change-id>`.
 - A handoff keeps the same review branch and changes only lease/status owner metadata.
 
-## Work Loop
+## Workflow Instructions
 
-- The worker runs a local OpenSpec prompt.
-- One implementation session ships one ready `##` section from `openspec/changes/<change-id>/tasks.md`.
-- The section includes that `##` heading and its task checkboxes until the next `##` heading or end of file.
-- A section session does not cross into another `##` section.
-- Rendered implementation prompts include known OpenSpec state, concrete commands, task state, and relevant file paths.
-- Implementation prompts select the active `##` section before broad context reads and then load only section-relevant artifacts, specs, docs, and code.
-- Prompt source docs are templates and human reference, not required per-session context after `bun agents` injects a rendered prompt.
-- If the selected section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, the worker records blocker evidence and split guidance.
-- The section session runs `devstate check`, commits the section, and records evidence from current devstate output or `.devstate/status.md` when exact status-file evidence is needed.
-- Implementation section commits do not rebase by default.
-- If a worker resumes a worktree already mid-rebase, it follows the rebase conflict policy before selecting more work.
-- When all required tasks are shipped or closed, the worker runs finalization before review.
-- Finalization rebases the worker branch on local `main`, reconciles changed OpenSpec artifacts from `main`, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits archive output, publishes the worker branch tip to the review branch, and marks the branch ready for review.
-- Finalization reuses latest implementation `devstate check` evidence when rebase, archive, and artifact reconciliation do not invalidate it.
-- Finalization reruns `devstate check` when rebase changes code, conflicts are resolved, code or generated output is edited, or evidence validity is unclear.
-- Review-ready means the branch is a clean merge candidate with code changes, completed task evidence, canonical specs, and archived change files included.
+- Repo-owned skills are the authored workflow source for Git-backed changes.
+- Implementation prompt template: `.agents/skills/formless-git-change-apply/templates/local-implement.md`.
+- Finalization prompt template: `.agents/skills/formless-git-change-finalize/templates/local-finalize.md`.
+- `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` are legacy stable pointers only.
+- Rendered worker prompts are self-contained for the session and include known metadata, task state, branch diff, concrete commands, and relevant paths.
+- Worker sessions still read `AGENTS.md`; prompt source docs are reference and not required per-session reads.
+
+## Implementation Loop
+
+- One implementation session ships one ready task section from the change commit metadata.
+- The selected section includes the heading and task checkboxes until the next task section or end of metadata.
+- A section session does not cross into another task section.
+- Workers select the active section before broad context reads and then load only section-relevant metadata, canonical specs, docs, and code.
+- The branch diff from local `main` is the implementation and review delta.
+- Shipped spec facts are direct edits to canonical `openspec/specs/*/spec.md` files on the branch.
+- The section session runs `devstate check` and records evidence from current devstate output or `.devstate/status.md` when exact status-file evidence is needed.
+- App behavior changes require configured browser smoke evidence.
+- Task state, evidence, blockers, and trailers are recorded in the branch tip commit message.
+- Git-backed implementation updates the branch tip, usually with `git add -A` and `git commit --amend`.
+- Implementation does not perform automatic finalization, archive, spec promotion, or ready-for-review work.
+
+## Finalization
+
+- Finalization runs after all required metadata tasks are shipped or intentionally closed.
+- The finalizer rebases `agents/<worker-name>` on local `main`.
+- It validates structured commit metadata from the rebased tip.
+- It runs `openspec validate --specs --strict --no-interactive`.
+- It does not run `openspec archive` and does not commit archived change files.
+- It reuses latest implementation `devstate check` evidence when rebase, conflict resolution, code edits, generated output edits, and evidence ambiguity do not invalidate it.
+- It reruns `devstate check` when finalization invalidates prior evidence or cannot prove coverage.
+- Review-ready means the branch is a clean merge candidate with code changes, completed task evidence, canonical specs, and structured commit metadata.
 - Review-ready `changes/<change-id>` branches must not remain checked out by worker worktrees.
 - Review-ready branches retain their lease until branch merge, branch deletion, or explicit release.
 - Workers do not merge review-ready branches into `main`.
@@ -89,8 +112,8 @@ The state root is shared by worktrees from the same clone and is not tracked.
 
 ## Feedback Loop
 
-- Humans may provide implementation feedback by editing the committed change artifacts on local `main`.
-- The worker rebases `agents/<worker-name>` on local `main`, reads the updated change artifacts, updates implementation, task evidence, OpenSpec artifacts, and any archive output to match, then publishes to `changes/<change-id>`.
+- Humans provide implementation feedback by updating structured change metadata on `changes/<change-id>`.
+- The worker refreshes or rebases `agents/<worker-name>` from `changes/<change-id>`, reads the updated metadata, and updates implementation, task evidence, and canonical specs to match.
 - If feedback has semantic conflicts with shipped behavior, the worker records blocker evidence instead of guessing.
 
 ## Idle Maintenance
@@ -98,7 +121,7 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - Each watch pass first scans `ready-for-review` leases.
 - If a review-ready branch does not contain local `main`, the worker adopts the lease, runs finalization maintenance on `agents/<worker-name>`, rebases on local `main`, runs checks only when evidence is invalidated or unclear, publishes to `changes/<change-id>`, and marks the branch ready again.
 - If no change can be claimed or refreshed, the worker scans unleased local `changes/*` branches.
-- Eligible unleased branches with remaining OpenSpec work are rebased through `agents/<worker-name>` and published back to `changes/<change-id>`.
+- Eligible unleased branches are rebased through `agents/<worker-name>` and published back to `changes/<change-id>`.
 - Semantic rebase conflicts are recorded as blocked status with evidence.
 
 ## Human Boundary

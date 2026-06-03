@@ -2356,9 +2356,19 @@ describe("local agent worker instruction docs", () => {
     const agents = readFileSync("AGENTS.md", "utf8");
 
     expect(agents).toContain(
-      "Task loop: rendered prompt injected by `bun agents`; source prompt docs are reference, not required per-session reads.",
+      "Task loop: rendered prompt injected by `bun agents`; source skill templates are reference, not required per-session reads.",
     );
-    expect(agents).toContain("OpenSpec archive output plus canonical specs on the review branch.");
+    expect(agents).toContain("Workstreams live in local `changes/<change-id>` branches.");
+    expect(agents).toContain(
+      "The branch tip commit message stores proposal, design, task state, evidence, blockers, and trailers.",
+    );
+    expect(agents).toContain(
+      "Shipped spec facts are direct edits to canonical `openspec/specs/*/spec.md` files on the branch.",
+    );
+    expect(agents).toContain("Future worker changes do not produce OpenSpec archive output.");
+    expect(agents).toContain(
+      "Do not run `openspec archive` or commit archived change files for Git-backed Formless changes.",
+    );
     expect(agents).toContain(
       "Reuse latest implementation `devstate check` evidence unless rebase, conflict resolution, code changes, generated output edits, or unclear coverage invalidate it.",
     );
@@ -2368,38 +2378,48 @@ describe("local agent worker instruction docs", () => {
     expect(agents).toContain(
       "Keep the worker worktree on `agents/<worker-name>` and leave `changes/<change-id>` free for review after marking ready.",
     );
+    expect(agents).not.toContain(
+      "OpenSpec archive output plus canonical specs on the review branch.",
+    );
     expect(agents).not.toContain("promote shipped facts");
-    expect(agents).not.toContain("Do not archive the OpenSpec change");
     expect(agents).not.toContain("Archiving is a separate process after review and merge");
   });
 
   it("documents CLI-owned finalization and context-efficient worker prompts", () => {
     const workerDoc = readFileSync("doc/agents/local-agent-workers.md", "utf8");
 
+    expect(workerDoc).toContain("Queue source: local `changes/<change-id>` branches.");
     expect(workerDoc).toContain(
-      "Rendered implementation prompts include known OpenSpec state, concrete commands, task state, and relevant file paths.",
+      "Metadata sections are `Proposal`, `Design`, `Tasks`, `Evidence`, and `Blockers`.",
     );
     expect(workerDoc).toContain(
-      "Implementation prompts select the active `##` section before broad context reads",
+      "Required trailers are `Formless-Change-Id`, `Formless-Change-Version`, `Formless-Change-State`, `Formless-Capabilities`, and `Formless-Last-Evidence-At`.",
     );
     expect(workerDoc).toContain(
-      "runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`",
+      "Rendered worker prompts are self-contained for the session and include known metadata, task state, branch diff, concrete commands, and relevant paths.",
+    );
+    expect(workerDoc).toContain("Workers select the active section before broad context reads");
+    expect(workerDoc).toContain("It runs `openspec validate --specs --strict --no-interactive`.");
+    expect(workerDoc).toContain(
+      "It does not run `openspec archive` and does not commit archived change files.",
     );
     expect(workerDoc).toContain("Checked-out worker branch: `agents/<worker-name>`.");
     expect(workerDoc).toContain("publishes the worker branch tip back to `changes/<change-id>`");
+    expect(workerDoc).toContain("It reuses latest implementation `devstate check` evidence");
     expect(workerDoc).toContain(
-      "Finalization reuses latest implementation `devstate check` evidence",
+      "It reruns `devstate check` when finalization invalidates prior evidence",
     );
-    expect(workerDoc).toContain("Finalization reruns `devstate check` when rebase changes code");
     expect(workerDoc).toContain(
-      "code changes, completed task evidence, canonical specs, and archived change files",
+      "code changes, completed task evidence, canonical specs, and structured commit metadata",
     );
     expect(workerDoc).toContain(
       "Review-ready branches retain their lease until branch merge, branch deletion, or explicit release.",
     );
+    expect(workerDoc).toContain(
+      "Implementation does not perform automatic finalization, archive, spec promotion, or ready-for-review work.",
+    );
     expect(workerDoc).not.toContain("promotes shipped facts");
     expect(workerDoc).not.toContain("promoted specs");
-    expect(workerDoc).not.toContain("Workers do not archive OpenSpec changes");
     expect(workerDoc).not.toContain("Archiving is a separate process after review and merge");
   });
 });

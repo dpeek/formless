@@ -2470,7 +2470,7 @@ function usage(): string {
     "       bun agents status [worker-name]",
     "       bun agents release <change-id> [--owner <worker-name>]",
     "",
-    "Runs a local OpenSpec pull worker.",
+    "Runs a local Git-backed Formless pull worker.",
     "",
     "Options:",
     "  --once                 Run one supervisor pass.",
@@ -3030,7 +3030,7 @@ async function runIdleMaintenance(input: {
   if (branches.length === 0) {
     const evidence: AgentEvidence = {
       at: nowIso(input.now),
-      message: "no claimable OpenSpec changes or change branches",
+      message: "no claimable Git-backed change branches",
     };
     writeWorkerStatus(
       input.paths.root,
@@ -3174,7 +3174,7 @@ async function runWatchOnce(input: {
   if (!change) {
     if (input.options.dryRun) {
       writeLine(input.stdout, `[agents] worker ${input.options.workerName}`);
-      writeLine(input.stdout, "[agents] dry-run idle: no claimable OpenSpec changes");
+      writeLine(input.stdout, "[agents] dry-run idle: no claimable Git-backed change branches");
       return 0;
     }
 

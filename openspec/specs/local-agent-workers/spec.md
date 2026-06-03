@@ -2,30 +2,109 @@
 
 ## Purpose
 
-Define local pull-based OpenSpec worker coordination, branch lifecycle, leases, status, idle maintenance, and finalization rules.
+Define local pull-based Git-backed worker coordination, branch lifecycle, leases, status, idle maintenance, and finalization rules.
 
 ## Requirements
 
-### Requirement: Local main work queue
+### Requirement: Git-backed change branch queue
 
-The system SHALL discover worker-claimable work from committed `openspec/changes/<change-id>/` directories on local `main`.
+The system SHALL discover worker-claimable work from local `changes/<change-id>` branches whose tip commit contains valid Formless change metadata.
 
-#### Scenario: Worker finds a ready change
+#### Scenario: Worker finds a ready change branch
 
-- **WHEN** local `main` contains a committed `openspec/changes/add-thing/` directory with required apply artifacts complete
+- **WHEN** local branch `changes/add-thing` exists from local `main`
+- **AND** its tip commit contains valid Formless change metadata for `add-thing`
+- **AND** its task metadata has remaining work
 - **THEN** the worker supervisor lists `add-thing` as claimable work
 
-#### Scenario: Worker prioritizes existing review branches
+#### Scenario: Worker ignores branches without valid metadata
 
-- **WHEN** multiple unleased changes on local `main` are claimable
-- **THEN** the worker supervisor orders changes with existing unmerged review branches first
-- **AND** orders remaining changes with existing review branches before changes without review branches
-- **AND** uses deterministic change id order as the final tie-breaker
-
-#### Scenario: Worker ignores uncommitted change files
-
-- **WHEN** a human worktree has uncommitted files under `openspec/changes/draft-thing/`
+- **WHEN** local branch `changes/draft-thing` exists
+- **AND** its tip commit is missing required Formless change metadata
 - **THEN** the worker supervisor does not list `draft-thing` as claimable work
+
+#### Scenario: Worker prioritizes change branches
+
+- **WHEN** multiple unleased change branches are claimable
+- **THEN** the worker supervisor orders branches with existing unmerged implementation first
+- **AND** orders remaining branches by deterministic change id order
+
+#### Scenario: Worker skips completed branch work
+
+- **WHEN** local branch `changes/add-thing` has valid metadata with no remaining task work
+- **THEN** the worker supervisor does not start a fresh implementation session for `add-thing`
+- **AND** it starts finalization when no active or ready-for-review lease already covers the branch
+
+### Requirement: Structured change commit metadata
+
+The system SHALL store proposal, design, task state, evidence, blocker, and machine-readable status data in the `changes/<change-id>` branch tip commit message.
+
+#### Scenario: Metadata includes human-readable change memory
+
+- **WHEN** a worker reads change `add-thing`
+- **THEN** the tip commit message exposes proposal, design, tasks, evidence, and blocker sections
+- **AND** the worker can use those sections as the change-scoped working memory
+
+#### Scenario: Metadata includes machine-readable trailers
+
+- **WHEN** the worker supervisor parses change `add-thing`
+- **THEN** the tip commit message contains trailers for change id, metadata version, state, affected capabilities, and latest evidence time
+- **AND** the parsed change id matches branch `changes/add-thing`
+
+#### Scenario: Commit message is authoritative state
+
+- **WHEN** Git notes or untracked files contain additional change information
+- **THEN** the worker supervisor does not treat that information as authoritative proposal, design, task, evidence, blocker, or status state
+
+#### Scenario: Branch diff is the review delta
+
+- **WHEN** a human reviews `changes/add-thing`
+- **THEN** the implementation delta is the Git diff from local `main` to the branch tip
+- **AND** shipped spec facts appear as direct edits to canonical `openspec/specs/*/spec.md` files on the branch
+
+### Requirement: Change metadata query API
+
+The system SHALL expose Bun agent commands or exported helpers that parse, validate, list, and update structured change commit metadata without requiring ad hoc message parsing by worker prompts.
+
+#### Scenario: Query lists local changes
+
+- **WHEN** a human or supervisor requests local change status as JSON
+- **THEN** the query API returns one entry per valid `changes/<change-id>` branch
+- **AND** each entry includes change id, branch, state, remaining task count, latest evidence, and blocker summary when present
+
+#### Scenario: Query reports invalid change metadata
+
+- **WHEN** `changes/add-thing` exists but its tip commit metadata is invalid
+- **THEN** the query API reports the validation failure
+- **AND** the worker supervisor does not claim the branch as implementation work
+
+#### Scenario: Helper updates evidence
+
+- **WHEN** a worker records new check evidence for `add-thing`
+- **THEN** the helper updates the evidence section and machine-readable latest evidence trailer in the tip commit message
+- **AND** preserves proposal, design, task, and blocker content that it did not modify
+
+### Requirement: Repo-owned workflow skills
+
+The system SHALL define the Git-backed change workflow in repo-owned agent skills instead of split prompt docs under `doc/agents/local-openspec-*`.
+
+#### Scenario: Agent selects Git-backed skill for new work
+
+- **WHEN** a user asks an agent to propose, implement, continue, or finalize a new Formless change
+- **THEN** the available repo-owned skills direct the agent to the Git-backed change workflow
+- **AND** they do not direct the agent to create or archive an OpenSpec change directory
+
+#### Scenario: Skill owns implementation prompt rules
+
+- **WHEN** the worker supervisor renders an implementation or finalization prompt
+- **THEN** the rendered prompt is generated from Git-backed workflow instructions owned by the repo skill definitions or skill-local templates
+- **AND** equivalent operational rules are not maintained separately in `doc/agents/local-openspec-implement.md` or `doc/agents/local-openspec-finalize.md`
+
+#### Scenario: Legacy OpenSpec skills are clearly bounded
+
+- **WHEN** repo `.agents/skills/openspec-*` skills remain during migration
+- **THEN** their descriptions and bodies identify them as legacy OpenSpec-directory workflows
+- **AND** they instruct agents to use the Git-backed Formless change skills for new work
 
 ### Requirement: Shared local coordination state
 
@@ -43,7 +122,7 @@ The system SHALL store worker runtime state under Git's common directory so all 
 
 ### Requirement: Atomic change leases
 
-The system SHALL use an atomic local lease to claim one OpenSpec change for one active worker, while allowing stale active leases to be recovered and preserving valid review-ready leases.
+The system SHALL use an atomic local lease to claim one Git-backed change for one active worker, while allowing stale active leases to be recovered and preserving valid review-ready leases.
 
 #### Scenario: Worker claims unowned change
 
@@ -69,7 +148,7 @@ The system SHALL use an atomic local lease to claim one OpenSpec change for one 
 
 - **WHEN** `add-thing` has a `ready-for-review` lease and `changes/add-thing` still exists as an unmerged local branch
 - **THEN** the worker supervisor does not auto-release the lease
-- **AND** the worker supervisor does not reclaim `add-thing` from local `main` as fresh implementation work
+- **AND** the worker supervisor does not reclaim `add-thing` as fresh implementation work
 
 #### Scenario: Review-ready lease can be released after branch completion
 
@@ -84,12 +163,7 @@ The system SHALL use an atomic local lease to claim one OpenSpec change for one 
 
 ### Requirement: Stable review branches
 
-The system SHALL use `changes/<change-id>` as the review branch for a claimed OpenSpec change.
-
-#### Scenario: Worker creates review branch
-
-- **WHEN** `igor` claims `add-thing` and no `changes/add-thing` branch exists
-- **THEN** the supervisor creates `changes/add-thing` from local `main`
+The system SHALL use `changes/<change-id>` as the stable review branch and queue identity for a Git-backed Formless change.
 
 #### Scenario: Worker resumes review branch
 
@@ -143,50 +217,58 @@ The system SHALL allow only one active worker lease to publish to a change revie
 - **WHEN** a change contains multiple ready tasks
 - **THEN** only the lease owner can publish to `changes/<change-id>` for that change
 
-### Requirement: Local OpenSpec implementation loop
+### Requirement: Git-backed implementation loop
 
-The system SHALL run each claimed change through a local OpenSpec loop that ships one ready `##` task section at a time and preserves existing implementation quality gates.
+The system SHALL run each claimed change through a local Git-backed loop that ships one ready task section from the change commit message at a time and preserves existing implementation quality gates.
 
 #### Scenario: Worker ships one task section
 
-- **WHEN** a claimed change has a ready task
-- **THEN** the worker implements the `##` section containing the first unchecked task, runs `devstate check`, commits the section, and updates the change artifacts with evidence from current devstate output or `.devstate/status.md` when the file is needed
+- **WHEN** a claimed change branch has a ready task section in its tip commit message
+- **THEN** the worker implements that task section, runs `devstate check`, updates task and evidence metadata in the commit message, and updates the branch tip
 
 #### Scenario: Worker stays inside task section
 
-- **WHEN** the selected `##` section is being implemented
-- **THEN** the worker does not implement tasks from another `##` section
+- **WHEN** the selected task section is being implemented
+- **THEN** the worker does not implement tasks from another task section
 
 #### Scenario: Worker selects section before broad context
 
 - **WHEN** an implementation session starts for a claimed change
-- **THEN** the worker selects the next ready `##` section from `openspec/changes/<change-id>/tasks.md` before reading all change context
-- **AND** after selecting the section, the worker reads only the change artifacts, specs, docs, and code needed for that section
+- **THEN** the worker selects the next ready task section from the parsed change commit metadata before broad context reads
+- **AND** after selecting the section, the worker reads only the commit metadata, canonical specs, docs, and code needed for that section
 
-#### Scenario: Worker blocks on oversized section
+#### Scenario: Worker records blocker in commit metadata
 
-- **WHEN** the selected `##` section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary
-- **THEN** the worker records blocker evidence and split guidance
+- **WHEN** the selected task section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary
+- **THEN** the worker records blocker evidence and split guidance in the change commit metadata
 
 #### Scenario: Worker smokes app behavior
 
 - **WHEN** a task section changes app behavior
-- **THEN** the worker runs the configured browser smoke command and records the evidence
+- **THEN** the worker runs the configured browser smoke command and records the evidence in the change commit metadata
 
 #### Scenario: Task plan excludes automatic finalization
 
-- **WHEN** `tasks.md` is prepared for local OpenSpec worker implementation
-- **THEN** its `##` sections describe implementation work and section evidence
-- **AND** it does not require a final `##` section for automatic rebase, validation, archive, spec promotion, or ready-for-review marking
+- **WHEN** change commit metadata is prepared for local worker implementation
+- **THEN** its task sections describe implementation work and section evidence
+- **AND** it does not require a final task section for automatic rebase, metadata validation, spec validation, or ready-for-review marking
 
 ### Requirement: Finalization before review
 
-The system SHALL finalize a completed worker branch through OpenSpec CLI validation and archive before publishing the review branch for human review.
+The system SHALL finalize a completed Git-backed change branch through metadata validation, canonical spec validation, rebase maintenance, and check evidence before publishing the review branch for human review.
 
 #### Scenario: Worker finalizes completed change
 
 - **WHEN** all required tasks are shipped or intentionally closed
-- **THEN** the worker rebases `agents/<worker-name>` on local `main`, reconciles updated change artifacts, runs `openspec validate <change-id> --strict --no-interactive`, runs `openspec archive <change-id> --yes`, commits resulting changes, publishes the worker branch tip to `changes/<change-id>`, and marks the branch ready for review
+- **THEN** the worker rebases `agents/<worker-name>` on local `main`, validates structured change metadata, validates canonical specs, publishes the worker branch tip to `changes/<change-id>`, and marks the branch ready for review
+- **AND** the worker does not run `openspec archive <change-id> --yes`
+- **AND** the worker does not commit archived change files
+
+#### Scenario: Finalization validates canonical specs
+
+- **WHEN** finalization validates `changes/add-thing`
+- **THEN** it runs strict validation for canonical specs
+- **AND** it blocks with command evidence when canonical spec validation fails
 
 #### Scenario: Finalization reuses valid implementation check
 
@@ -209,15 +291,11 @@ The system SHALL finalize a completed worker branch through OpenSpec CLI validat
 - **WHEN** a finalization rebase requires choosing between incompatible behavior, storage order, auth/security boundaries, public API shape, deletion versus edit, or another unstated product decision
 - **THEN** the worker records blocker evidence and leaves the branch unmerged for human review
 
-#### Scenario: Worker delegates spec promotion to archive
-
-- **WHEN** the completed change has OpenSpec spec deltas that `openspec archive` can apply
-- **THEN** the worker does not manually author equivalent `openspec/specs/*/spec.md` promotion edits outside the archive command
-
 #### Scenario: Review-ready branch is self-contained
 
 - **WHEN** a worker marks `changes/add-thing` ready for review
-- **THEN** the branch includes code changes, completed task evidence, updated canonical specs, and the archived change directory produced by OpenSpec archive
+- **THEN** the branch includes code changes, completed task evidence, updated canonical specs, and structured change commit metadata
+- **AND** the branch does not include a newly archived change directory
 
 #### Scenario: Review-ready branch is not checked out by worker
 
@@ -231,15 +309,9 @@ The system SHALL rebase existing local change review branches on local `main` th
 
 #### Scenario: Worker has no claimable work
 
-- **WHEN** no OpenSpec change can be claimed
+- **WHEN** no Git-backed change branch can be claimed for implementation
 - **THEN** the worker scans existing `changes/*` branches and attempts to rebase eligible branches on local `main` through `agents/<worker-name>`
 - **AND** publishes successful rebases back to `changes/<change-id>`
-
-#### Scenario: Merged review branches are skipped
-
-- **WHEN** no OpenSpec change can be claimed
-- **AND** a local `changes/<change-id>` branch is already merged into local `main`
-- **THEN** idle maintenance ignores that branch instead of resetting `agents/<worker-name>` to it
 
 #### Scenario: Idle rebase structural conflict is resolved
 
@@ -260,36 +332,35 @@ The system SHALL leave review-ready change branches for a human to inspect and m
 - **WHEN** a worker marks `changes/add-thing` ready for review
 - **THEN** the worker does not merge `changes/add-thing` into `main`
 
-### Requirement: Main-authored feedback
+### Requirement: Change-branch feedback
 
-The system SHALL use rebases on local `main` to carry human-authored change feedback into active worker branches.
+The system SHALL use rebases and structured change commit metadata to carry human-authored feedback into active change branches.
 
-#### Scenario: Worker receives changed docs from main
+#### Scenario: Worker receives changed metadata
 
-- **WHEN** local `main` changes the OpenSpec artifacts for a claimed change before archive
-- **THEN** the worker rebases `agents/<worker-name>`, reads the updated artifacts, updates implementation, task evidence, and spec deltas to match
-- **AND** publishes matching output to `changes/<change-id>`
+- **WHEN** a human updates the structured commit metadata for a claimed change branch
+- **THEN** the worker rebases or refreshes `agents/<worker-name>` from `changes/<change-id>`, reads the updated metadata, and updates implementation, task evidence, and canonical specs to match
 
 #### Scenario: Worker cannot reconcile feedback
 
-- **WHEN** updated change artifacts conflict semantically with shipped behavior
-- **THEN** the worker records blocker evidence and leaves the branch unmerged
+- **WHEN** updated change metadata conflicts semantically with shipped behavior
+- **THEN** the worker records blocker evidence in the change commit metadata and leaves the branch unmerged
 
 ### Requirement: Context-efficient worker prompts
 
-The system SHALL render concise worker prompt packets that are self-contained for the concrete change id and mode and avoid duplicate context loading.
+The system SHALL render concise worker prompt packets from the repo-owned Git-backed workflow skills that are self-contained for the concrete change id and mode and avoid duplicate context loading.
 
-#### Scenario: Prompt uses concrete OpenSpec CLI commands
+#### Scenario: Prompt uses concrete Git-backed change commands
 
 - **WHEN** `bun agents` renders an implementation or finalization prompt for `add-thing`
-- **THEN** the prompt uses concrete OpenSpec CLI commands and file paths for `add-thing`
+- **THEN** the prompt uses concrete Git-backed change metadata commands and file paths for `add-thing`
 - **AND** the prompt does not tell the worker to use a generic OpenSpec apply skill instead of the concrete commands
 
 #### Scenario: Prompt source docs are not reread by worker session
 
 - **WHEN** `bun agents` injects a rendered implementation or finalization prompt
 - **THEN** the worker prompt is operationally self-contained for that session
-- **AND** the worker is not required to reread `doc/agents/local-openspec-implement.md` or `doc/agents/local-openspec-finalize.md`
+- **AND** the worker is not required to reread the skill or prompt source docs
 
 #### Scenario: Human worker doc is not per-session context
 
@@ -297,9 +368,9 @@ The system SHALL render concise worker prompt packets that are self-contained fo
 - **THEN** `doc/agents/local-agent-workers.md` is not required reading for that session
 - **AND** the document remains available as human and supervisor reference
 
-#### Scenario: Supervisor passes known OpenSpec state
+#### Scenario: Supervisor passes known change metadata state
 
-- **WHEN** `scripts/agents.ts` has already run OpenSpec status or instructions commands to choose implementation versus finalization
+- **WHEN** `scripts/agents.ts` has already parsed change metadata to choose implementation versus finalization
 - **THEN** the rendered prompt includes the already-known task state, change state, and relevant file paths needed by the worker
 - **AND** the worker is not required to rerun those commands only to rediscover the same state
 
@@ -307,11 +378,11 @@ The system SHALL render concise worker prompt packets that are self-contained fo
 
 - **WHEN** `devstate start` or `devstate check` prints current green status for the session
 - **THEN** the worker can use that output as check evidence
-- **AND** the worker reads `.devstate/status.md` after failures, stale output, conflict resolution, or when exact status text must be copied into change artifacts
+- **AND** the worker reads `.devstate/status.md` after failures, stale output, conflict resolution, or when exact status text must be copied into change metadata
 
 #### Scenario: Instructions remain layered
 
 - **WHEN** worker instructions are maintained
 - **THEN** non-negotiable repository rules remain in `AGENTS.md`
-- **AND** concrete workflow mechanics live in supervisor code or the rendered worker prompt
-- **AND** duplicated operational instructions across `AGENTS.md`, `doc/agents/local-agent-workers.md`, and rendered prompts are removed where possible
+- **AND** concrete workflow mechanics live in repo-owned skills, supervisor code, or the rendered worker prompt
+- **AND** duplicated operational instructions across `AGENTS.md`, `doc/agents/local-agent-workers.md`, skill files, and rendered prompts are removed where possible

@@ -13,8 +13,8 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## Read Levels
 
 - Always: this file.
-- Workstream: assigned committed OpenSpec change under `openspec/changes/<change-id>/`.
-- Task loop: rendered prompt injected by `bun agents`; source prompt docs are reference, not required per-session reads.
+- Workstream: assigned Git-backed change branch `changes/<change-id>` and parsed tip commit metadata.
+- Task loop: rendered prompt injected by `bun agents`; source skill templates are reference, not required per-session reads.
 - Package scope: nearest package `AGENTS.md`, for example `lib/ui/AGENTS.md`.
 - Capability scope: relevant `openspec/specs/*/spec.md`.
 - Skill config: relevant file in `doc/agents/`.
@@ -22,9 +22,9 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 ## Agent Docs
 
-- `doc/agents/local-agent-workers.md`: local OpenSpec pull worker human and supervisor reference.
-- `doc/agents/local-openspec-implement.md`: one-section implementation rendered prompt template.
-- `doc/agents/local-openspec-finalize.md`: automatic finalization rendered prompt template.
+- `doc/agents/local-agent-workers.md`: local Git-backed pull worker human and supervisor reference.
+- `doc/agents/local-openspec-implement.md`: legacy stable pointer to the Git-backed implementation skill template.
+- `doc/agents/local-openspec-finalize.md`: legacy stable pointer to the Git-backed finalization skill template.
 
 ## Capability Specs
 
@@ -123,36 +123,41 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 1. Run `devstate start`.
 2. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
-3. Select the ready `##` section before broad context reads when doing implementation work.
-4. Read assigned OpenSpec change artifacts needed for the selected section or finalization prompt.
+3. Select the ready task section from parsed change commit metadata before broad context reads when doing implementation work.
+4. Read assigned change metadata, canonical specs, docs, and code needed for the selected section or finalization prompt.
 5. Read nearest package `AGENTS.md` only when editing inside that package.
 6. Read relevant `openspec/specs/*/spec.md`.
-7. Ship exactly one ready `##` section from `openspec/changes/<change-id>/tasks.md` unless user explicitly asks for docs/planning only.
-8. Update only owning OpenSpec change artifacts with status, decisions, blockers, evidence, promotion notes.
+7. Ship exactly one ready task section from change commit metadata unless user explicitly asks for docs/planning only.
+8. Update the branch tip with task status, decisions, blockers, evidence, and machine-readable trailers.
 9. Run `devstate check`.
 10. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
 11. If app behavior changed, smoke with `bun browser ...`.
-12. End with changed files, checks, OpenSpec change status.
+12. End with changed files, checks, and change metadata status.
 
 ## Workstream
 
-- Workstreams live in committed OpenSpec changes under `openspec/changes/<change-id>/`.
+- Workstreams live in local `changes/<change-id>` branches.
 - Do not use external systems as queue, lock, or status store.
 - Do not create alternate planning docs.
-- Task statuses are task checkboxes plus recorded evidence in the owning change artifacts.
-- Mark or ship one `##` section at a time for a workstream.
-- Local OpenSpec implementation unit is one ready `##` section in `openspec/changes/<change-id>/tasks.md`.
-- Local OpenSpec workers auto-finalize before review and include OpenSpec archive output plus canonical specs on the review branch.
+- The branch tip commit message stores proposal, design, task state, evidence, blockers, and trailers.
+- The branch diff against local `main` is the review delta.
+- Shipped spec facts are direct edits to canonical `openspec/specs/*/spec.md` files on the branch.
+- Task statuses are task checkboxes plus recorded evidence in structured commit metadata.
+- Mark or ship one task section at a time for a workstream.
+- Local Git-backed implementation unit is one ready task section in change commit metadata.
+- Local Git-backed workers auto-finalize before review and leave code changes, completed evidence, canonical specs, and structured metadata on the review branch.
+- Future worker changes do not produce OpenSpec archive output.
 
-## Local OpenSpec Finalization
+## Local Git-backed Finalization
 
 For `bun agents watch <worker-name>`:
 
 - Finalization is supervisor and rendered-prompt owned after required tasks are shipped or intentionally closed.
-- Rebase on local `main`, run strict OpenSpec validation, run OpenSpec archive on the worker branch, publish to the review branch, and commit archive output.
+- Rebase on local `main`, validate structured commit metadata, run `openspec validate --specs --strict --no-interactive`, publish to the review branch, and mark metadata ready for review.
+- Do not run `openspec archive` or commit archived change files for Git-backed Formless changes.
 - Reuse latest implementation `devstate check` evidence unless rebase, conflict resolution, code changes, generated output edits, or unclear coverage invalidate it.
 - Resolve clear structural rebase conflicts; block only on semantic conflicts that require product, storage, security, public API, or user-intent decisions.
-- Leave a clean review-ready `changes/<change-id>` branch with code changes, completed evidence, canonical specs, and archived change files.
+- Leave a clean review-ready `changes/<change-id>` branch with code changes, completed evidence, canonical specs, and structured commit metadata.
 - Keep review-ready branches rebased on local `main`; workers rerun finalization when `main` advances.
 - Keep the worker worktree on `agents/<worker-name>` and leave `changes/<change-id>` free for review after marking ready.
 - Do not merge unless user asks.

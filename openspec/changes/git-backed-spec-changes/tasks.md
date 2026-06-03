@@ -79,7 +79,17 @@ Evidence:
 
 ## 6. Documentation and Specs
 
-- [ ] 6.1 Update `AGENTS.md` to describe Git-backed workstreams, branch metadata, direct canonical spec edits, and the removal of OpenSpec archive output from future worker changes.
-- [ ] 6.2 Update `doc/agents/local-agent-workers.md` with the branch queue, metadata schema, helper commands, leases, implementation loop, finalization, feedback behavior, and pointer to the skill-owned workflow instructions.
-- [ ] 6.3 Remove obsolete standalone prompt docs when their content is represented in repo-owned skills, or replace them with minimal generated-reference pointers if supervisor code still needs stable paths during migration.
-- [ ] 6.4 Update `openspec/specs/local-agent-workers/spec.md` through this change's spec delta and record implementation evidence in this task file.
+- [x] 6.1 Update `AGENTS.md` to describe Git-backed workstreams, branch metadata, direct canonical spec edits, and the removal of OpenSpec archive output from future worker changes.
+- [x] 6.2 Update `doc/agents/local-agent-workers.md` with the branch queue, metadata schema, helper commands, leases, implementation loop, finalization, feedback behavior, and pointer to the skill-owned workflow instructions.
+- [x] 6.3 Remove obsolete standalone prompt docs when their content is represented in repo-owned skills, or replace them with minimal generated-reference pointers if supervisor code still needs stable paths during migration.
+- [x] 6.4 Update `openspec/specs/local-agent-workers/spec.md` through this change's spec delta and record implementation evidence in this task file.
+
+Evidence:
+
+- Changed `AGENTS.md` so repository worker rules describe Git-backed `changes/<change-id>` workstreams, structured commit metadata, direct canonical spec edits, Git-backed finalization, and no future OpenSpec archive output.
+- Rewrote `doc/agents/local-agent-workers.md` around the branch queue, metadata sections and trailers, helper commands, lease states, branch/worktree lifecycle, implementation loop, finalization, feedback, idle maintenance, and skill-owned prompt template pointers.
+- Kept `doc/agents/local-openspec-implement.md` and `doc/agents/local-openspec-finalize.md` as minimal stable-path pointers to the Git-backed skill templates; no duplicate workflow rules remain there.
+- Updated `openspec/specs/local-agent-workers/spec.md` with the change's Git-backed queue, metadata, direct canonical spec, finalization, feedback, and context-efficient prompt requirements.
+- Changed `scripts/agents.test.ts` documentation assertions and `scripts/agents.ts` CLI idle/help text to match the Git-backed worker language.
+- `devstate check` at 2026-06-03T02:51:06.046Z: checks ok; services running; web ready; test watcher pass.
+- Browser smoke not run; this section changes worker docs, canonical specs, tests, and CLI text only.
