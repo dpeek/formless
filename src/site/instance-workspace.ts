@@ -1044,6 +1044,14 @@ export async function saveLocalFormlessWorkspace(
       dependencies,
     );
     const nextManifest = workspaceManifestFromSavedAuthoritySource(manifest, exported.archive);
+    const currentControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+      manifest: nextManifest,
+      workspaceRoot,
+    });
+    const sourceControlPlane = savedAuthorityControlPlaneForWorkspaceSource({
+      current: currentControlPlane,
+      exported: exported.archive.controlPlane,
+    });
     const recordSourcePath = path.join(workspaceRoot, nextManifest.source.records);
     const appArchives = savedWorkspaceAppArchiveSummaries(workspaceRoot, nextManifest, exported);
     const result: SaveLocalFormlessWorkspaceResult = {
@@ -1055,7 +1063,7 @@ export async function saveLocalFormlessWorkspace(
           (count, app) => count + app.media.objects.length,
           0,
         ),
-        recordCount: exported.archive.controlPlane?.records.length ?? 0,
+        recordCount: sourceControlPlane?.records.length ?? 0,
       },
       manifest: nextManifest,
       manifestPath,
@@ -1070,6 +1078,7 @@ export async function saveLocalFormlessWorkspace(
         manifest,
         manifestPath,
         nextManifest,
+        sourceControlPlane,
         workspaceRoot,
       });
 
@@ -1086,6 +1095,7 @@ export async function saveLocalFormlessWorkspace(
       exported,
       manifestPath,
       nextManifest,
+      sourceControlPlane,
       workspaceRoot,
     });
 
@@ -1417,6 +1427,7 @@ export async function deployLocalFormlessWorkspace(
   await writeLocalWorkspaceDeployTargetSource({
     manifest: planned.manifest,
     now: dependencies.now(),
+    plan: planned.plan,
     selectedTarget: planned.selectedTarget,
     workspaceRoot,
   });
@@ -2789,11 +2800,48 @@ function savedWorkspaceAppArchiveSummaries(
   }));
 }
 
+function savedAuthorityControlPlaneForWorkspaceSource(input: {
+  current: InstanceArchiveControlPlane | undefined;
+  exported: InstanceArchiveControlPlane | undefined;
+}): InstanceArchiveControlPlane | undefined {
+  if (input.exported === undefined || input.current === undefined) {
+    return input.exported;
+  }
+
+  const records = [...input.exported.records];
+
+  for (const entity of sourceOnlyDeploymentIntentEntities) {
+    const exportedHasEntity = records.some((record) => controlPlaneRecordEntity(record) === entity);
+
+    if (exportedHasEntity) {
+      continue;
+    }
+
+    records.push(
+      ...input.current.records.filter((record) => controlPlaneRecordEntity(record) === entity),
+    );
+  }
+
+  return {
+    ...input.exported,
+    records,
+  };
+}
+
+function controlPlaneRecordEntity(record: StoredRecord): string | undefined {
+  const entity = record.entity.startsWith("instance:")
+    ? record.entity.slice("instance:".length)
+    : record.entity;
+
+  return isInstanceControlPlaneEntityName(entity) ? entity : undefined;
+}
+
 async function staleSavedWorkspaceSourcePaths(input: {
   exported: WorkspaceInstanceArchiveDirectory;
   manifest: FormlessInstanceWorkspaceManifest;
   manifestPath: string;
   nextManifest: FormlessInstanceWorkspaceManifest;
+  sourceControlPlane: InstanceArchiveControlPlane | undefined;
   workspaceRoot: string;
 }): Promise<string[]> {
   const stalePaths = new Set<string>();
@@ -2811,7 +2859,7 @@ async function staleSavedWorkspaceSourcePaths(input: {
 
   if (
     comparableControlPlaneIntentRecordsJson(localControlPlane) !==
-    comparableControlPlaneIntentRecordsJson(input.exported.archive.controlPlane)
+    comparableControlPlaneIntentRecordsJson(input.sourceControlPlane)
   ) {
     stalePaths.add(input.nextManifest.source.records);
   }
@@ -2835,11 +2883,12 @@ async function writeSavedWorkspaceSource(input: {
   exported: WorkspaceInstanceArchiveDirectory;
   manifestPath: string;
   nextManifest: FormlessInstanceWorkspaceManifest;
+  sourceControlPlane: InstanceArchiveControlPlane | undefined;
   workspaceRoot: string;
 }) {
   await prepareWorkspaceDirectories(input.workspaceRoot, input.nextManifest);
   await writeFormlessInstanceControlPlaneRecordSource({
-    controlPlane: input.exported.archive.controlPlane,
+    controlPlane: input.sourceControlPlane,
     manifest: input.nextManifest,
     workspaceRoot: input.workspaceRoot,
   });
@@ -3584,9 +3633,18 @@ const controlPlaneIntentEntities = new Set([
   "provider-config-ref",
   "deploy-desired-resource",
 ]);
+const sourceOnlyDeploymentIntentEntities = new Set([
+  "deploy-target",
+  "provider-config-ref",
+  "deploy-desired-resource",
+]);
 
 function workspaceDeployTargetId() {
   return "instance.primary";
+}
+
+function workspaceProviderConfigRefId() {
+  return "provider-config:cloudflare:primary";
 }
 
 type WorkspaceTargetCommandName =
@@ -4952,6 +5010,7 @@ async function writeLocalWorkspaceDeploymentState(input: {
 async function writeLocalWorkspaceDeployTargetSource(input: {
   manifest: FormlessInstanceWorkspaceManifest;
   now: string;
+  plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 }) {
@@ -4965,6 +5024,13 @@ async function writeLocalWorkspaceDeployTargetSource(input: {
       record.entity === "deploy-target" &&
       (record.id === targetId || stringRecordValue(record, "targetId") === targetId),
   );
+  const providerConfig = selectLocalWorkspaceProviderConfig(
+    current?.records.filter((record) => !record.deletedAt) ?? [],
+  );
+  const providerConfigId =
+    stringRecordValue(providerConfig, "configRef") ??
+    providerConfig?.id ??
+    workspaceProviderConfigRefId();
   const deployTargetRecord: StoredRecord = {
     id: targetId,
     entity: "deploy-target",
@@ -4980,15 +5046,36 @@ async function writeLocalWorkspaceDeployTargetSource(input: {
     },
     createdAt: existing?.createdAt ?? input.now,
   };
+  const providerConfigRecord: StoredRecord = {
+    id: providerConfigId,
+    entity: "provider-config-ref",
+    values: {
+      ...providerConfig?.values,
+      providerFamily: "cloudflare",
+      configRef: providerConfigId,
+      label: stringRecordValue(providerConfig, "label") ?? "Primary Cloudflare",
+      accountId: input.plan.account.id,
+      workerName: input.plan.resources.worker.name,
+      createdAt: stringRecordValue(providerConfig, "createdAt") ?? input.now,
+      updatedAt: input.now,
+    },
+    createdAt: providerConfig?.createdAt ?? input.now,
+  };
   const records = [
     ...(current?.records.filter(
       (record) =>
         !(
           record.entity === "deploy-target" &&
           (record.id === targetId || stringRecordValue(record, "targetId") === targetId)
+        ) &&
+        !(
+          record.entity === "provider-config-ref" &&
+          (record.id === providerConfigId ||
+            stringRecordValue(record, "configRef") === providerConfigId)
         ),
     ) ?? []),
     deployTargetRecord,
+    providerConfigRecord,
   ];
 
   await writeFormlessInstanceControlPlaneRecordSource({

@@ -3904,6 +3904,50 @@ describe("Formless Site CLI", () => {
     );
   });
 
+  it("preserves source-only deploy records during local Authority save", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const localControlPlaneRecords = controlPlaneRecords().filter(
+      (record) =>
+        record.entity !== "deploy-target" &&
+        record.entity !== "provider-config-ref" &&
+        record.entity !== "deploy-desired-resource",
+    );
+    const fetcher = archiveFetch(
+      [],
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [],
+      [],
+      localControlPlaneRecords,
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, controlPlaneRecords());
+
+    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+    const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+      manifest,
+      workspaceRoot,
+    });
+
+    expect(controlPlane?.records.map((record) => `${record.entity}:${record.id}`)).toContain(
+      "deploy-target:instance.primary",
+    );
+    expect(controlPlane?.records.map((record) => `${record.entity}:${record.id}`)).toContain(
+      "provider-config-ref:provider-config:cloudflare:personal",
+    );
+    expect(controlPlane?.records.map((record) => `${record.entity}:${record.id}`)).toContain(
+      "deploy-desired-resource:deploy-resource:instance.primary:custom-domain:dpeek.com",
+    );
+  });
+
   it("checks local workspace source staleness without rewriting reviewable files", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -4510,6 +4554,7 @@ describe("Formless Site CLI", () => {
       controlPlaneRecords().filter(
         (record) =>
           record.entity !== "deploy-target" &&
+          record.entity !== "provider-config-ref" &&
           record.entity !== "deploy-desired-resource" &&
           record.id !== "route:host:publicSite:dpeek.com",
       ),
@@ -4618,6 +4663,14 @@ describe("Formless Site CLI", () => {
     expect(
       controlPlane?.records.find((record) => record.entity === "deploy-target")?.values.targetUrl,
     ).toBe("https://personal.dpeek.workers.dev");
+    expect(
+      controlPlane?.records.find((record) => record.entity === "provider-config-ref")?.values,
+    ).toMatchObject({
+      accountId: "account-123",
+      configRef: "provider-config:cloudflare:primary",
+      providerFamily: "cloudflare",
+      workerName: "personal",
+    });
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
