@@ -27,7 +27,10 @@ Read this when editing `lib/workspace/*`.
 - `package.json`: public exports for `.` and `./node`.
 - `tsconfig.json`: package-local TypeScript project extending the repo config.
 - `src/types.ts`: import-free versioned public contract declarations.
-- `src/index.ts`: runtime-neutral root entrypoint and pure helpers.
+- `src/manifest.ts`: runtime-neutral manifest defaults, parse, format, path, and target URL helpers.
+- `src/operation-state.ts`: runtime-neutral operation kind, display, state, and redaction helpers.
+- `src/record-source.ts`: runtime-neutral control-plane record-source parse, format, and validation helpers.
+- `src/index.ts`: runtime-neutral root export entrypoint.
 - `src/node.ts`: local Node filesystem and ignored-state adapter entrypoint; no React import.
 - `src/*.test.ts`: package-local contract and adapter coverage.
 
@@ -35,7 +38,7 @@ Read this when editing `lib/workspace/*`.
 
 1. Read this file.
 2. Read `src/types.ts` for public contract facts.
-3. Read only the relevant entrypoint for the task: `src/index.ts` or `src/node.ts`.
+3. Read only the relevant helper or adapter file for the task: `src/manifest.ts`, `src/operation-state.ts`, `src/record-source.ts`, or `src/node.ts`.
 4. Read matching package-local tests when changing behavior.
 
 ## Rules

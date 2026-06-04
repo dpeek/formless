@@ -5,8 +5,8 @@ import {
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND,
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_VERSION,
   INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY,
-  normalizeInstanceWorkspaceTargetUrl,
 } from "./types.ts";
+import { normalizeInstanceWorkspaceTargetUrl } from "./manifest.ts";
 import type {
   InstanceWorkspaceControlPlaneRecordSourceControlPlane,
   InstanceWorkspaceControlPlaneRecordSourceEntity,
