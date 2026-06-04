@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AppSchema, CollectionViewSchema } from "../shared/schema.ts";
+import type { AppSchema, CollectionViewSchema } from "@dpeek/formless-schema";
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { selectHomeResultModel } from "./collection-result-model.ts";
 import { selectListResultModel } from "./list-result-model.ts";

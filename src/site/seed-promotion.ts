@@ -1,6 +1,9 @@
-import { validateAuthorityFieldValue } from "../shared/field-types.ts";
 import { parseStoreSnapshot, type StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema, EntitySchema } from "../shared/schema.ts";
+import {
+  validateAuthorityFieldValue,
+  type AppSchema,
+  type EntitySchema,
+} from "@dpeek/formless-schema";
 
 export function buildSiteSeedRecordsFromSnapshot(
   snapshotInput: unknown,

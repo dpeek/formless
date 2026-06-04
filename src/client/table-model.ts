@@ -1,4 +1,4 @@
-import { getFieldTypeBehavior } from "../shared/field-types.ts";
+import { getFieldTypeBehavior } from "@dpeek/formless-schema";
 import type {
   AppSchema,
   CollectionTableFooterSlotSchema,
@@ -8,7 +8,7 @@ import type {
   FieldSchema,
   ItemViewSchema,
   TableViewSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import type {
   EditRecordTableActionConfig,
   EditViewConfig,

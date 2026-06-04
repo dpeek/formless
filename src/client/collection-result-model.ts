@@ -1,4 +1,4 @@
-import type { AppSchema, CollectionViewSchema, EntitySchema } from "../shared/schema.ts";
+import type { AppSchema, CollectionViewSchema, EntitySchema } from "@dpeek/formless-schema";
 import { selectListResultModel, selectRecordResultModel } from "./list-result-model.ts";
 import { selectTableFooterSlots, selectTableResultModel } from "./table-model.ts";
 import { selectTreeResultModel } from "./tree-result-model.ts";

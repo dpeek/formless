@@ -40,7 +40,7 @@ import {
   type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
-import type { EnumValueSchema, FieldSchema, TextFieldFormat } from "../../shared/schema.ts";
+import type { EnumValueSchema, FieldSchema, TextFieldFormat } from "@dpeek/formless-schema";
 import {
   applySchemaRouteBuilderIntent,
   commitSchemaRouteDraftState,

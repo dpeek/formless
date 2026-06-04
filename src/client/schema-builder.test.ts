@@ -5,7 +5,7 @@ import {
   sourceLikeSiteSchema,
   sourceLikeTaskSchema,
 } from "../test/schema-builders.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import {
   applySchemaBuilderIntent,
   createSchemaBuilderDraft,

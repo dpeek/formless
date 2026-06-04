@@ -14,8 +14,8 @@ import type {
   AppSchema,
   EntityActionSchema,
   PublicActionInputFieldSchema,
-} from "../shared/schema.ts";
-import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
+} from "@dpeek/formless-schema";
+import { getEntityActionKindCapabilities } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
 import { turnstileSecretKeyFromEnv, type TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { executePublicEntityActionOutcome, type PublicEntityActionRequest } from "./actions.ts";

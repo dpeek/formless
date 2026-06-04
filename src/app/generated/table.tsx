@@ -38,9 +38,11 @@ import type {
   TableFooterSlotConfig,
 } from "../../client/views.ts";
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
-import type { QueryEvaluationContext } from "../../shared/query.ts";
-import type { EntitySchema } from "../../shared/schema.ts";
-import { evaluateNumericExpression } from "../../shared/read-model.ts";
+import {
+  evaluateNumericExpression,
+  type EntitySchema,
+  type QueryEvaluationContext,
+} from "@dpeek/formless-schema";
 import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./format.ts";
 import {
   ORDERING_DND_TYPE,

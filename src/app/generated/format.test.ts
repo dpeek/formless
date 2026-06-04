@@ -4,7 +4,7 @@ import type {
   FieldEditor,
   FieldSchema,
   TableColumnFormat,
-} from "../../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import type {
   ComputedTableColumnConfig,
   FieldTableColumnConfig,

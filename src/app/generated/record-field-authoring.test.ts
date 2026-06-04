@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
+import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
 import {
   fieldValueToRecordFieldEditorInputValue,
   imageMediaAssetOptionFromUpload,

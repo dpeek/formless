@@ -24,7 +24,7 @@ import type {
   TableColumnFormat,
   TableColumnWidth,
   ViewSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import type {
   HomeActionConfig,

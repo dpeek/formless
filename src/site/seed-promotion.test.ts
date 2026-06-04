@@ -6,7 +6,7 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { buildSiteSeedRecordsFromSnapshot, formatSiteSeedRecords } from "./seed-promotion.ts";
 

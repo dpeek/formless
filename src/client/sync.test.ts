@@ -51,7 +51,7 @@ import type {
   SyncSocketServerMessage,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import {
   rateSourceSchema as rateCardSchema,
   taskSourceSchema as appSchema,

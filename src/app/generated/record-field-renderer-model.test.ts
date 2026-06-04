@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { FieldEditor, FieldPresentationSchema, FieldSchema } from "../../shared/schema.ts";
+import type { FieldEditor, FieldPresentationSchema, FieldSchema } from "@dpeek/formless-schema";
 import { selectGeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldRendererKind } from "./record-field-renderer-model.ts";
 

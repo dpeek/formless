@@ -9,8 +9,8 @@ import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type CreateFieldConfig } from "../../client/views.ts";
-import type { FieldVisibilityValue } from "../../shared/schema.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldVisibilityValue } from "@dpeek/formless-schema";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import {
   GeneratedColorFieldControl,
   GeneratedIconPickerFieldControl,

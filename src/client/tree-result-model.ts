@@ -9,7 +9,7 @@ import type {
   ToManyRelationshipSchema,
   TreeBranchChildVariantSchema,
   TreeBranchVariantPolicySchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import { selectRecordFields, selectToManyRelationship } from "./collection-shell-model.ts";
 import type { ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";

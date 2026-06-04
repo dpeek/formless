@@ -12,7 +12,7 @@ import {
   type UpgradeMigrationSafetyClass,
 } from "../shared/upgrade-migrations.ts";
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 
 export type PackageAppMigrationContext = {
   currentSchema: AppSchema;

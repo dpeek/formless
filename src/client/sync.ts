@@ -40,7 +40,7 @@ import {
   type SyncSocketClientMessage,
   type SyncSocketServerMessage,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 500;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5000;

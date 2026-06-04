@@ -14,9 +14,9 @@ import {
   normalizePortableArchive,
 } from "./archive-normalizers.ts";
 import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
-import { isValidStoredFieldValue } from "./field-types.ts";
+import { isValidStoredFieldValue } from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "./protocol.ts";
-import type { AppSchema, FieldSchema } from "./schema.ts";
+import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
 import type { SchemaKey } from "./schema-apps.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,

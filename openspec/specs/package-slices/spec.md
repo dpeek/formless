@@ -263,3 +263,65 @@ owner session storage, runtime topology, provider execution, or app records.
 - AND actual save, check, pull, push, deploy, credential setup, owner session,
   runtime topology, Authority, provider credential, and filesystem operation
   implementations remain outside the package contract
+
+### Requirement: Schema Package Slice
+
+The system SHALL provide a Schema package slice under `lib/schema/` for
+runtime-neutral App schema language contracts, parsers, and pure helpers.
+
+#### Scenario: Schema package scaffold
+
+- GIVEN the Schema package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and runtime-neutral helpers
+- AND the package is published as `@dpeek/formless-schema` with a root public
+  subpath
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, Node, or sidecar subpaths
+
+#### Scenario: Schema package exports
+
+- GIVEN generated UI models, schema authoring state, Authority validation,
+  browser replicas, archives, upgrade migrations, tests, or package slices need
+  App schema contracts, parser behavior, field behavior, query helpers, read
+  model helpers, schema-local entity key helpers, or qualified entity name
+  helpers
+- WHEN they import schema language behavior
+- THEN they import from `@dpeek/formless-schema`
+- AND they do not deep-import schema package internals or old package-owned
+  `src/shared/schema*`, `src/shared/field-types`, `src/shared/fields`,
+  `src/shared/query`, or `src/shared/read-model` modules
+- AND old package-owned shared schema modules are not retained as
+  compatibility re-export shims
+
+### Requirement: Schema Package Non-Ownership
+
+The Schema package SHALL own reusable App schema language contracts and pure
+helpers without owning bundled app packages, runtime storage, generated React
+surfaces, archive execution, or workspace source.
+
+#### Scenario: Package owns schema language contracts
+
+- GIVEN App schema types, schema parsing, schema formatting, schema-local entity
+  key parsing, qualified entity name parsing, field type behavior, field value
+  validation helpers, query expression helpers, read model numeric and aggregate
+  helpers, create-default parsing helpers, runtime schema metadata helpers,
+  action capability helpers, or schema section parsers are needed
+- WHEN runtime-neutral code consumes schema capability behavior
+- THEN they come from `lib/schema`
+- AND callers consume the package root rather than knowing the internal parser
+  file layout
+
+#### Scenario: Package does not own runtime surfaces
+
+- GIVEN bundled source app package metadata, source schema JSON loading, source
+  seed records, schema Builder UI state, generated React rendering, Authority
+  table mutation, Durable Object storage, browser replica persistence, archive
+  restore execution, Workspace record source, instance control-plane schema
+  construction, package app migrations, or provider execution is needed
+- WHEN those behaviors are implemented
+- THEN they remain owned by their existing app, client, Worker, archive,
+  Workspace, Deploy, migration, or runtime modules
+- AND the Schema package supplies only runtime-neutral schema contracts, pure
+  parser/formatter behavior, and package-local deterministic tests

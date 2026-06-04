@@ -13,7 +13,7 @@ import type {
   StoreSnapshot,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import type {
   AppliedPackageAppMigration,
   ApplyPackageAppMigrationsResponse,
@@ -1041,7 +1041,7 @@ async function writeStorageHarness() {
     `
       import { DurableObject } from "cloudflare:workers";
       import rawSeedSchema from "${process.cwd()}/schema/apps/tasks/schema.json";
-      import { parseAppSchema } from "${process.cwd()}/src/shared/schema.ts";
+      import { parseAppSchema } from "@dpeek/formless-schema";
       import {
         createStoredRecord,
         createStoredRecordOutcome,

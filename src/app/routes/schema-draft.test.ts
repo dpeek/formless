@@ -8,7 +8,7 @@ import {
   serializeSchemaRouteDraftForSave,
   updateSchemaRouteSourceText,
 } from "./schema-draft.ts";
-import { stringifySchema, type AppSchema } from "../../shared/schema.ts";
+import { stringifySchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema as appSchema } from "../../test/schema-apps.ts";
 
 describe("schema route draft state", () => {

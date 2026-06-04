@@ -1,5 +1,4 @@
 import { validateAppInstallId } from "./app-installs.ts";
-import { isValidStoredFieldValue } from "./field-types.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   formatInstanceControlPlaneBoundaryEntityName,
@@ -14,8 +13,13 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "./protocol.ts";
-import { parseAppSchema, type AppSchema, type FieldSchema } from "./schema.ts";
-import { isRuntimeControlPlaneSecretReferenceField } from "./schema-runtime.ts";
+import {
+  isRuntimeControlPlaneSecretReferenceField,
+  isValidStoredFieldValue,
+  parseAppSchema,
+  type AppSchema,
+  type FieldSchema,
+} from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,

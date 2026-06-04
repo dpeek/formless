@@ -27,7 +27,7 @@ import {
   type MediaWriteResponse,
 } from "@dpeek/formless-media/worker";
 import type { BootstrapResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import {
   readInstanceAppInstalls,

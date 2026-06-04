@@ -12,7 +12,7 @@ import { useRecord } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitDeleteMutation } from "../../client/sync.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
 export type RecordLabelFieldConfig = {

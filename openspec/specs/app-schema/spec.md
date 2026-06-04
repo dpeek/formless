@@ -72,6 +72,40 @@ The system MUST parse app schemas into validated runtime models before use.
 - THEN parsing fails
 - AND the screen is not made available for app navigation
 
+### Requirement: Schema Package Boundary
+
+The system SHALL expose reusable App schema language contracts, parsers, and
+pure helpers through the Schema package slice.
+
+#### Scenario: Package owns app schema interface
+
+- **WHEN** generated UI models, schema authoring state, Authority validation,
+  browser replicas, archive planning, archive normalization, upgrade
+  migrations, tests, or other package slices need App schema types, parse
+  behavior, stringify behavior, schema-local entity key helpers, qualified
+  entity name helpers, field behavior, query helpers, read model helpers,
+  create-default helpers, runtime metadata helpers, or action capability facts
+- **THEN** they import those contracts and helpers from
+  `@dpeek/formless-schema`
+- **AND** they do not import package-owned schema behavior from old
+  `src/shared/schema*`, `src/shared/field-types`, `src/shared/fields`,
+  `src/shared/query`, `src/shared/read-model`, or unexported package internals
+- **AND** old package-owned shared schema modules are not retained as
+  compatibility re-export shims
+
+#### Scenario: Package does not own runtime app records
+
+- **WHEN** App schema behavior is used to load bundled source schemas, load
+  source seed records, render generated React surfaces, edit Builder drafts,
+  validate Authority writes, store active schemas, sync browser replicas, plan
+  or apply archives, compose Workspace record source, build instance
+  control-plane records, or apply package app migrations
+- **THEN** those runtime behaviors remain owned by app, client, Worker,
+  archive, Workspace, instance control-plane, migration, or generated UI modules
+- **AND** the Schema package only owns runtime-neutral schema language
+  contracts, parser/formatter behavior, field/query/read-model helpers, and
+  package-local deterministic tests
+
 ### Requirement: Entity Key Grammar
 
 The system SHALL validate schema-local entity keys as singular kebab-case data

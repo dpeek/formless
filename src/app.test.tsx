@@ -72,8 +72,9 @@ import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts"
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
-import { parseAppSchema, type AppSchema, type EntitySchema } from "./shared/schema.ts";
-import type { NumericExpression } from "./shared/read-model.ts";
+import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
+import { parseAppSchema } from "@dpeek/formless-schema";
+import type { NumericExpression } from "@dpeek/formless-schema";
 import {
   crmSeedRecords,
   crmSourceSchema,

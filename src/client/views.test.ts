@@ -20,8 +20,7 @@ import {
   type HomeViewModel,
   type TableColumnConfig,
 } from "./views.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
-import type { NumericExpression } from "../shared/read-model.ts";
+import { parseAppSchema, type AppSchema, type NumericExpression } from "@dpeek/formless-schema";
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {

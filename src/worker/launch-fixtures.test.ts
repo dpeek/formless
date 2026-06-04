@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import type { AppInstall } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import {
   rateSeedRecords,
   rateSourceSchema,

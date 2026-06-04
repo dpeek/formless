@@ -18,8 +18,8 @@ import {
   type HomeActionConfig,
 } from "../../client/views.ts";
 import type { RecordValues } from "../../shared/protocol.ts";
-import type { QueryEvaluationContext } from "../../shared/query.ts";
-import type { EntitySchema } from "../../shared/schema.ts";
+import type { QueryEvaluationContext } from "@dpeek/formless-schema";
+import type { EntitySchema } from "@dpeek/formless-schema";
 import {
   initialGeneratedCreateFieldAuthoringState,
   nextGeneratedCreateFieldAuthoringState,

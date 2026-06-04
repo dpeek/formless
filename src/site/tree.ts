@@ -11,8 +11,11 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import type { AppSchema, EntityActionSchema } from "../shared/schema.ts";
-import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
+import {
+  getEntityActionKindCapabilities,
+  type AppSchema,
+  type EntityActionSchema,
+} from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
   resolveSiteRoute,

@@ -1,5 +1,5 @@
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
+import type { FieldEditor, FieldSchema } from "@dpeek/formless-schema";
 import {
   selectGeneratedFieldControl,
   type GeneratedFieldControl,

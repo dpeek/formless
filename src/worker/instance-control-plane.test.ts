@@ -13,7 +13,7 @@ import type {
   StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema, EntityMutationPolicy } from "../shared/schema.ts";
+import type { AppSchema, EntityMutationPolicy } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";

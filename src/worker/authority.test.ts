@@ -20,7 +20,7 @@ import {
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import { packageAppFactsForKey } from "../shared/app-installs.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,

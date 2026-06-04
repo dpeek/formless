@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { resetClientStore } from "../../client/store.ts";
 import type { TableColumnConfig, TableOrderingConfig } from "../../client/views.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
-import type { AppSchema } from "../../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
 import { renderRecordTableHtml, renderTableViewHtml } from "../../test/generated-table.tsx";
 import { testSiteSeedRecords } from "../../test/site-records.ts";

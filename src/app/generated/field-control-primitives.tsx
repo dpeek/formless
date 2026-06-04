@@ -30,7 +30,7 @@ import {
   type IconCatalogEntry,
   type IconCatalogGroup,
 } from "../../shared/icon-catalog.ts";
-import type { TableColumnFormat } from "../../shared/schema.ts";
+import type { TableColumnFormat } from "@dpeek/formless-schema";
 import { GeneratedColorInput } from "./color-field-control.tsx";
 import { decodeNumberEditorInputValue, encodeNumberEditorInputValue } from "./format.ts";
 

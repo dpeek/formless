@@ -1,5 +1,5 @@
 import { createRecordId } from "../shared/ids.ts";
-import { validateAuthorityFieldValue } from "../shared/field-types.ts";
+import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
 import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
@@ -13,14 +13,13 @@ import type {
   StoredRecord,
   StoreSnapshot,
 } from "../shared/protocol.ts";
-import {
-  parseAppSchema,
-  stringifySchema,
-  type AppSchema,
-  type EntitySchema,
-  type FieldSchema,
-  type UniqueConstraintSchema,
-} from "../shared/schema.ts";
+import type {
+  AppSchema,
+  EntitySchema,
+  FieldSchema,
+  UniqueConstraintSchema,
+} from "@dpeek/formless-schema";
+import { parseAppSchema, stringifySchema } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
 import type { PackageAppKey } from "../shared/app-installs.ts";
 import type {

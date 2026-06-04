@@ -7,7 +7,7 @@ import type {
   ReferenceFieldTableColumnConfig,
 } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import { expandHexColor, isHexColor } from "./color-utils.ts";
 import {
   enumValuePresentation,

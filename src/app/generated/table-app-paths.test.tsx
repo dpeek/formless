@@ -8,7 +8,7 @@ import {
   type HomeViewModel,
 } from "../../client/views.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
-import type { AppSchema } from "../../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import type { SchemaKey } from "../../shared/schema-apps.ts";
 import {
   rateSeedRecords,

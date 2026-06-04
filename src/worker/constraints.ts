@@ -1,5 +1,5 @@
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema, EntitySchema, UniqueConstraintSchema } from "../shared/schema.ts";
+import type { AppSchema, EntitySchema, UniqueConstraintSchema } from "@dpeek/formless-schema";
 import { BadRequestError } from "./errors.ts";
 import { getActiveRecordsByEntity } from "./storage.ts";
 

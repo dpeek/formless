@@ -12,12 +12,12 @@ import {
   isInstanceControlPlaneRouteSafePath,
   parseInstanceControlPlaneBoundaryEntityName,
 } from "./instance-control-plane.ts";
-import { parseAppSchema } from "./schema.ts";
+import { parseAppSchema } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneSecretReferenceField,
-} from "./schema-runtime.ts";
+} from "@dpeek/formless-schema";
 
 describe("instance control-plane schema contracts", () => {
   it("defines the runtime-owned flat record schema", () => {

@@ -11,8 +11,6 @@ import type {
   RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { fieldCreateDefaultValue } from "../shared/field-types.ts";
-import { matchesQuery } from "../shared/query.ts";
 import type {
   AfterCreateHookSchema,
   AppSchema,
@@ -24,11 +22,13 @@ import type {
   ManyToManyRelationshipSchema,
   SchemaActionActorKind,
   ToManyRelationshipSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import {
+  fieldCreateDefaultValue,
   getEntityActionKindCapabilities,
   isEntityActionExposedToActor,
-} from "../shared/schema-actions.ts";
+  matchesQuery,
+} from "@dpeek/formless-schema";
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";

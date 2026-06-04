@@ -9,10 +9,10 @@ import {
   resolveCreateValues as resolveCreateDefaultValues,
   selectCreateFieldsForDiscriminator,
   selectCreateFieldsForInputValues,
-} from "../../shared/create-defaults.ts";
+} from "@dpeek/formless-schema";
 import type { RecordValues } from "../../shared/protocol.ts";
-import type { QueryEvaluationContext } from "../../shared/query.ts";
-import type { FieldVisibilityValue } from "../../shared/schema.ts";
+import type { QueryEvaluationContext } from "@dpeek/formless-schema";
+import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 
 export type GeneratedCreateFieldAuthoringState = {
   discriminatorValue: string | undefined;

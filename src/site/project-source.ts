@@ -1,6 +1,6 @@
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import type { RecordValues, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import {
   CORE_IMAGE_KEY_PREFIX,
   coreMediaHrefForKey,

@@ -9,7 +9,7 @@ import type {
   FieldSchema,
   ItemViewSchema,
   ItemViewVariantPresentationSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import type {
   CreateFallbackPresentationConfig,
   CreateUnionPresentationConfig,

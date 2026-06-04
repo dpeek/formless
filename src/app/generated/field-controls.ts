@@ -7,8 +7,8 @@ import {
   fieldValueToInputValue,
   type FieldEditorControl,
   type FieldInputAttributes,
-} from "../../shared/field-types.ts";
-import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
+} from "@dpeek/formless-schema";
+import type { FieldEditor, FieldSchema } from "@dpeek/formless-schema";
 
 export type TextFieldEditor = Extract<
   FieldEditor,

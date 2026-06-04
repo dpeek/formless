@@ -1,4 +1,4 @@
-import type { FieldSchema } from "../shared/schema.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 
 export function fieldLabel(fieldName: string, field: FieldSchema) {
   return field.label ?? humanizeFieldName(fieldName);

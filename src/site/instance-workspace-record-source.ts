@@ -16,7 +16,7 @@ import {
 } from "../shared/instance-control-plane.ts";
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
-import { assertExactKeys, isRecord } from "../shared/schema-parse-helpers.ts";
+import { assertExactKeys, isRecord } from "@dpeek/formless-schema";
 import {
   normalizeFormlessInstanceWorkspaceTargetUrl,
   type FormlessInstanceWorkspaceManifest,

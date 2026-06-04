@@ -6,8 +6,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
 import type { EntityActionTargetCountConfig } from "../../client/action-ui.ts";
 import type { HomeActionConfig } from "../../client/views.ts";
-import type { QueryEvaluationContext } from "../../shared/query.ts";
-import { createDefaultsAreResolved } from "../../shared/create-defaults.ts";
+import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateDialog } from "./create.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 

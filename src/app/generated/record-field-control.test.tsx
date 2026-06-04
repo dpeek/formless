@@ -5,7 +5,7 @@ import type { ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";

@@ -1,12 +1,10 @@
-import {
-  parseAppSchema,
-  stringifySchema,
-  type AppSchema,
-  type EnumValueSchema,
-  type FieldSchema,
-  type TextFieldFormat,
-} from "../shared/schema.ts";
-import { isSchemaLocalEntityKey } from "../shared/schema-entity-names.ts";
+import type {
+  AppSchema,
+  EnumValueSchema,
+  FieldSchema,
+  TextFieldFormat,
+} from "@dpeek/formless-schema";
+import { isSchemaLocalEntityKey, parseAppSchema, stringifySchema } from "@dpeek/formless-schema";
 
 export type SchemaBuilderDraft = {
   savedSchema: AppSchema;

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
 import { instanceControlPlaneSchema } from "../shared/instance-control-plane.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema } from "../test/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {

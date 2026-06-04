@@ -8,7 +8,7 @@ import {
 } from "../shared/archive.ts";
 import { packageAppFactsForKey, validateAppInstallId } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import type { ArchiveRestoreMediaFile } from "../shared/archive-restore-plan.ts";
 import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "@dpeek/formless-media";
 import {

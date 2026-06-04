@@ -1,4 +1,3 @@
-import type { QueryExpression } from "../shared/query.ts";
 import type {
   AggregateSchema,
   AppSchema,
@@ -16,13 +15,13 @@ import type {
   TableColumnFormat,
   ToManyRelationshipSchema,
   ViewSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
+import { isEntityActionVisibleToBrowser, type QueryExpression } from "@dpeek/formless-schema";
 import {
   selectEntityActionUi,
   type EntityActionTargetCountConfig,
   type EntityActionUiConfig,
 } from "./action-ui.ts";
-import { isEntityActionVisibleToBrowser } from "../shared/schema-actions.ts";
 import {
   selectCreateUnionPresentation,
   selectRecordUnionPresentation,

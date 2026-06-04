@@ -20,7 +20,7 @@ import type {
 } from "../shared/app-storage-identity.ts";
 import { findBundledAppPackage, type PackageAppKey } from "../shared/app-installs.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import type { AppSchema, SchemaActionActorKind } from "../shared/schema.ts";
+import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,

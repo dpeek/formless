@@ -1,4 +1,4 @@
-import type { QueryEvaluationContext } from "../shared/query.ts";
+import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type {
   HomeContextConfig,
   HomeContextNavigationConfig,

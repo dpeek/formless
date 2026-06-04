@@ -8,7 +8,7 @@ import {
   type SchemaBuilderDraft,
   type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
-import { parseAppSchema, stringifySchema, type AppSchema } from "../../shared/schema.ts";
+import { parseAppSchema, stringifySchema, type AppSchema } from "@dpeek/formless-schema";
 
 export type SchemaRouteDraftState = {
   draft: SchemaBuilderDraft;

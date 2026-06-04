@@ -1,5 +1,5 @@
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 
 export const TEST_SCHEMA_UPDATED_AT = "2026-05-06T00:00:00.000Z";
 

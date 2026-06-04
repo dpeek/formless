@@ -1,4 +1,4 @@
-import type { AppSchema, CollectionViewSchema, EntitySchema } from "../shared/schema.ts";
+import type { AppSchema, CollectionViewSchema, EntitySchema } from "@dpeek/formless-schema";
 import { selectRecordFields } from "./collection-shell-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";

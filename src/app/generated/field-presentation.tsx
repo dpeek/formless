@@ -1,6 +1,6 @@
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
-import type { EnumValueSchema } from "../../shared/schema.ts";
+import type { EnumValueSchema } from "@dpeek/formless-schema";
 
 export type ResolvedFieldPresentationIcon = {
   kind: "svg";

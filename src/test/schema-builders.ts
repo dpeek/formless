@@ -1,4 +1,4 @@
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "./schema-apps.ts";
 
 export function cloneTestValue<T>(value: T): T {

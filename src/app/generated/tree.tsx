@@ -19,7 +19,7 @@ import type {
   TreeAllowedChildVariantConfig,
   TreeResultModel,
 } from "../../client/tree-result-model.ts";
-import type { QueryEvaluationContext } from "../../shared/query.ts";
+import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type {
   ActionResponse,
   FieldValue,
@@ -27,7 +27,7 @@ import type {
   StoredRecord,
 } from "../../shared/protocol.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
-import type { EntitySchema } from "../../shared/schema.ts";
+import type { EntitySchema } from "@dpeek/formless-schema";
 import { GeneratedCreateDialogForm, type CreateHomeActionConfig } from "./create.tsx";
 import {
   ORDERING_DND_TYPE,

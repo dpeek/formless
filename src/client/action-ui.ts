@@ -1,11 +1,11 @@
-import type { QueryExpression } from "../shared/query.ts";
+import type { QueryExpression } from "@dpeek/formless-schema";
 import type {
   AppSchema,
   CountDisplaySchema,
   EntityActionKind,
   EntityActionSchema,
   EntityActionSchemaForKind,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 
 export type EntityActionTargetCountConfig = {
   display: CountDisplaySchema;

@@ -1,4 +1,4 @@
-import { parseAppSchema, type AppSchema } from "./schema.ts";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import type {
   AppInstall,
   AppInstallInitializationPlan,

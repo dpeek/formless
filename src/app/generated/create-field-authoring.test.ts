@@ -4,7 +4,7 @@ import type {
   CreateFieldConfig,
   CreateUnionPresentationConfig,
 } from "../../client/views.ts";
-import type { EntityUnionVariantSchema, FieldSchema } from "../../shared/schema.ts";
+import type { EntityUnionVariantSchema, FieldSchema } from "@dpeek/formless-schema";
 import {
   initialGeneratedCreateFieldAuthoringState,
   nextGeneratedCreateFieldAuthoringState,

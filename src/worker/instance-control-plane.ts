@@ -42,7 +42,7 @@ import {
   type RecordValues,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import { parseAppSchema, type SchemaActionActorKind } from "../shared/schema.ts";
+import { parseAppSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,

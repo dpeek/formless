@@ -1,11 +1,12 @@
 import type { StoredRecord } from "../shared/protocol.ts";
-import { evaluateAggregate } from "../shared/read-model.ts";
 import {
+  evaluateAggregate,
   matchesQuery,
+  type AggregateSchema,
+  type ComputedValueSchema,
   type QueryEvaluationContext,
   type QueryExpression,
-} from "../shared/query.ts";
-import type { AggregateSchema, ComputedValueSchema } from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import { getRecordReadinessWarnings, type RecordReadinessWarning } from "./readiness.ts";
 
 export type BrowserReplicaProjectionSnapshot = {

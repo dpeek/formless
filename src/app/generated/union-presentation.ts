@@ -4,7 +4,7 @@ import type {
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
 import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
-import type { FieldVisibilityValue } from "../../shared/schema.ts";
+import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 
 type ActiveRecordUnionPresentation =
   | RecordUnionPresentationConfig["variants"][number]

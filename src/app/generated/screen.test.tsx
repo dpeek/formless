@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import { selectScreenModelByPath } from "../../client/views.ts";
 import { instanceControlPlaneSchema } from "../../shared/instance-control-plane.ts";
-import { parseAppSchema } from "../../shared/schema.ts";
+import { parseAppSchema } from "@dpeek/formless-schema";
 import { HomeScreen } from "./screen.tsx";
 
 describe("generated home screen", () => {

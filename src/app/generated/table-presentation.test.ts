@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { TableColumnConfig, TableFooterSlotConfig } from "../../client/views.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import { ORDERING_DND_TYPE } from "./ordering-ui.ts";
 import { selectGeneratedTablePresentation } from "./table-presentation.ts";
 

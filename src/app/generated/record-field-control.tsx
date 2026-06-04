@@ -27,7 +27,7 @@ import type {
   FieldPresentationSchema,
   FieldSchema,
   TableColumnFormat,
-} from "../../shared/schema.ts";
+} from "@dpeek/formless-schema";
 import {
   GeneratedColorFieldControl,
   GeneratedIconPickerFieldControl,

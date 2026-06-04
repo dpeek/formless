@@ -11,7 +11,7 @@ import {
 } from "./store.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(() => {

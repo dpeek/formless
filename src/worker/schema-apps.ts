@@ -6,7 +6,6 @@ import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
 import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
-import { validateAuthorityFieldValue } from "../shared/field-types.ts";
 import {
   findSchemaAppDefinition,
   schemaAppDefinitions,
@@ -14,7 +13,11 @@ import {
   type SchemaAppDefinition,
   type SchemaKey,
 } from "../shared/schema-apps.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import {
+  parseAppSchema,
+  validateAuthorityFieldValue,
+  type AppSchema,
+} from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
 
 export type WorkerSchemaAppDefinition = Omit<SchemaAppDefinition, "key"> & {

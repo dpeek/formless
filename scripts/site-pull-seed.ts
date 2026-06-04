@@ -12,7 +12,7 @@ import {
   siteSourceMediaAssetsFromRecords,
   type SiteSourceMediaAsset,
 } from "../src/site/source-media.ts";
-import { parseAppSchema } from "../src/shared/schema.ts";
+import { parseAppSchema } from "@dpeek/formless-schema";
 
 type CliOptions = {
   check: boolean;

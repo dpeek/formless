@@ -5,7 +5,6 @@ import type {
   ReferenceFieldTableColumnConfig,
 } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
-import type { FieldSchema, TableColumnFormat } from "../../shared/schema.ts";
 import {
   createInputValueToFieldValue as createInputValueToFieldValuePrimitive,
   fieldInputAttributes,
@@ -15,7 +14,9 @@ import {
   inputValueToFieldValue as inputValueToFieldValuePrimitive,
   numberInputValueToFieldValue as numberInputValueToFieldValuePrimitive,
   parseNumberInputValue,
-} from "../../shared/field-types.ts";
+  type FieldSchema,
+  type TableColumnFormat,
+} from "@dpeek/formless-schema";
 
 const readModelNumberField = {
   type: "number",

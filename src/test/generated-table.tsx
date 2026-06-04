@@ -12,7 +12,7 @@ import {
 import { RecordTable } from "../app/generated/table.tsx";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import type { AppSchema, EntitySchema } from "../shared/schema.ts";
+import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
 import { bootstrapResponse } from "./protocol-builders.ts";
 
 export function requiredCollectionModel(schema: AppSchema, viewName: string): HomeViewModel {

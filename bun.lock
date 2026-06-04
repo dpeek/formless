@@ -11,6 +11,7 @@
         "@dpeek/formless-deploy": "^0.1.0",
         "@dpeek/formless-gateway": "^0.1.0",
         "@dpeek/formless-media": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
         "@dpeek/formless-ui": "^0.1.3",
         "@internationalized/date": "^3.12.1",
         "@simplewebauthn/browser": "^13.3.0",
@@ -48,6 +49,10 @@
     },
     "lib/media": {
       "name": "@dpeek/formless-media",
+      "version": "0.1.0",
+    },
+    "lib/schema": {
+      "name": "@dpeek/formless-schema",
       "version": "0.1.0",
     },
     "lib/ui": {
@@ -186,6 +191,8 @@
     "@dpeek/formless-gateway": ["@dpeek/formless-gateway@workspace:lib/gateway"],
 
     "@dpeek/formless-media": ["@dpeek/formless-media@workspace:lib/media"],
+
+    "@dpeek/formless-schema": ["@dpeek/formless-schema@workspace:lib/schema"],
 
     "@dpeek/formless-ui": ["@dpeek/formless-ui@workspace:lib/ui"],
 

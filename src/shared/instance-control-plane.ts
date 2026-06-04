@@ -1,6 +1,11 @@
 import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
-import { formatQualifiedEntityName, parseQualifiedEntityName } from "./schema-entity-names.ts";
-import type { AppSchema, EntityMutationPolicy, FieldEditor, FieldSchema } from "./schema.ts";
+import { formatQualifiedEntityName, parseQualifiedEntityName } from "@dpeek/formless-schema";
+import type {
+  AppSchema,
+  EntityMutationPolicy,
+  FieldEditor,
+  FieldSchema,
+} from "@dpeek/formless-schema";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";

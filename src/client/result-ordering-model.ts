@@ -3,7 +3,7 @@ import type {
   FieldSchema,
   ResultOrderingPresentation,
   ResultOrderingSchema,
-} from "../shared/schema.ts";
+} from "@dpeek/formless-schema";
 
 export type ResultOrderingScopeConfig = {
   kind: "field";
