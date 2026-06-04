@@ -1382,6 +1382,7 @@ export async function deployLocalFormlessWorkspace(
   });
   const deployment = await dependencies.deploymentAdapter.deploy({
     credentialProfile: null,
+    deploymentResourceGraph: planned.desiredState.resourceGraph,
     packageRoot: dependencies.packageRoot,
     plan: planned.plan,
     secrets: {
@@ -1438,6 +1439,7 @@ export async function deployLocalFormlessWorkspace(
       adminToken,
       desiredState: planned.desiredState,
       plan: planned.plan,
+      resourceEvidence: deployment.resourceEvidence ?? [],
       targetUrl: deploymentUrl,
     },
     dependencies,
@@ -1467,6 +1469,7 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
     adminToken: string;
     desiredState: LocalWorkspaceDeploymentDesiredState;
     plan: FormlessInstanceDeploymentPlan;
+    resourceEvidence: DeploymentResourceEvidenceSummary[];
     targetUrl: string;
   },
   dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "fetch" | "now">,
@@ -1532,7 +1535,7 @@ async function writeLocalWorkspaceDeploymentApplyWriteback(
           },
           attemptId: started.attempt.attemptId,
           desiredState,
-          evidence: [],
+          evidence: input.resourceEvidence,
           leaseToken: started.lease.token,
           runnerId,
         },

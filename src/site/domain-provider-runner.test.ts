@@ -141,7 +141,7 @@ describe("domain provider Alchemy runner", () => {
     expect(result.evidenceCount).toBe(1);
     expect(runnerCalls).toEqual([
       expect.objectContaining({
-        options: expect.objectContaining({ phase: "destroy" }),
+        options: expect.objectContaining({ noTrack: true, phase: "destroy" }),
       }),
     ]);
     expect(requests[0]?.body).toEqual({

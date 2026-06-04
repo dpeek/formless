@@ -9,8 +9,14 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
+import {
+  applyAlchemyDeployResourceGraph,
+  type AlchemyDeployResourceZoneResolver,
+  type AlchemyDomainProviderFactories,
+} from "../worker/domain-provider-alchemy.ts";
 import { appendDotEnvValue, parseDotEnv } from "./dotenv.ts";
 
 export const ALCHEMY_PASSWORD_ENV_NAME = "ALCHEMY_PASSWORD";
@@ -52,13 +58,21 @@ export type FormlessInstanceAccountDiscoveryAdapter = {
   ) => Promise<FormlessInstanceDeploymentAccount[]>;
 };
 
+type AlchemyCloudflareApiOptions = {
+  accountId?: string;
+  apiToken?: unknown;
+  profile?: string;
+};
+
 type AlchemyCloudflareApiClient = {
   accountId?: string;
   get: (path: string, init?: RequestInit) => Promise<Response>;
 };
 
 export type AlchemyFormlessInstanceAccountDiscoveryDependencies = {
-  createCloudflareApi: (options: { profile?: string }) => Promise<AlchemyCloudflareApiClient>;
+  createCloudflareApi: (
+    options: AlchemyCloudflareApiOptions,
+  ) => Promise<AlchemyCloudflareApiClient>;
 };
 
 export type PlanFormlessInstanceDeploymentInput = {
@@ -128,6 +142,7 @@ export type FormlessInstanceDeploymentSecrets = {
 
 export type DeployFormlessInstanceInput = {
   credentialProfile: string | null;
+  deploymentResourceGraph?: DeployResourceGraph;
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
   secrets: FormlessInstanceDeploymentSecrets;
@@ -135,6 +150,7 @@ export type DeployFormlessInstanceInput = {
 };
 
 export type DeployFormlessInstanceResult = {
+  resourceEvidence?: DeploymentResourceEvidenceSummary[];
   url: string;
 };
 
@@ -276,6 +292,10 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
   ) => Promise<{
     finalize: () => Promise<void>;
   }>;
+  createCloudflareApi?: (
+    options: AlchemyCloudflareApiOptions,
+  ) => Promise<AlchemyCloudflareApiClient>;
+  createCustomDomain?: AlchemyDomainProviderFactories["CustomDomain"];
   createDurableObjectNamespace: (
     id: "authority",
     props: {
@@ -283,6 +303,7 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
       sqlite: true;
     },
   ) => unknown;
+  createDnsRecords?: AlchemyDomainProviderFactories["DnsRecords"];
   createR2Bucket: (
     id: "media",
     props: {
@@ -292,6 +313,7 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
       profile?: string;
     },
   ) => Promise<unknown>;
+  createRedirectRule?: AlchemyDomainProviderFactories["RedirectRule"];
   createSecret: (value: string) => unknown;
   deployViteWorker: (
     id: "worker",
@@ -811,10 +833,37 @@ export async function deployFormlessInstanceWithAlchemy(
     ...profileOptions,
     url: plan.resources.worker.workersDevEnabled,
   });
+  let resourceEvidence: DeploymentResourceEvidenceSummary[] | undefined;
+
+  if (
+    input.deploymentResourceGraph !== undefined &&
+    input.deploymentResourceGraph.resources.length > 0
+  ) {
+    const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
+      accountId: plan.account.id,
+      apiToken:
+        cloudflareApiToken === undefined
+          ? undefined
+          : resolvedDependencies.createSecret(cloudflareApiToken),
+      credentialProfile,
+    });
+
+    resourceEvidence = (
+      await applyAlchemyDeployResourceGraph({
+        factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
+        resolveZoneIdForHost: deploymentResourceZoneResolver(
+          resolvedDependencies,
+          cloudflareResourceOptions,
+        ),
+        resourceGraph: input.deploymentResourceGraph,
+      })
+    ).evidence;
+  }
 
   await app.finalize();
 
   return parseDeployFormlessInstanceResult({
+    ...(resourceEvidence === undefined ? {} : { resourceEvidence }),
     url: worker.url ?? plan.expectedUrl.url,
   });
 }
@@ -837,6 +886,18 @@ export async function destroyFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
+  let cloudflareApiTokenSecret: unknown | undefined;
+  const secretCloudflareApiToken = (): unknown | undefined => {
+    if (cloudflareApiToken === undefined) {
+      return undefined;
+    }
+
+    if (cloudflareApiTokenSecret === undefined) {
+      cloudflareApiTokenSecret = resolvedDependencies.createSecret(cloudflareApiToken);
+    }
+
+    return cloudflareApiTokenSecret;
+  };
 
   try {
     const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
@@ -867,7 +928,7 @@ export async function destroyFormlessInstanceWithAlchemy(
         ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
         ...(cloudflareApiToken === undefined
           ? {}
-          : { CLOUDFLARE_API_TOKEN: resolvedDependencies.createSecret(cloudflareApiToken) }),
+          : { CLOUDFLARE_API_TOKEN: secretCloudflareApiToken() }),
         FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret("destroy-placeholder"),
         FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
         FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
@@ -889,6 +950,26 @@ export async function destroyFormlessInstanceWithAlchemy(
       ...profileOptions,
       url: plan.resources.worker.workersDevEnabled,
     });
+
+    if (
+      input.domainProviderResources !== undefined &&
+      input.domainProviderResources.resources.length > 0
+    ) {
+      const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
+        accountId: plan.account.id,
+        apiToken: secretCloudflareApiToken(),
+        credentialProfile,
+      });
+
+      await applyAlchemyDeployResourceGraph({
+        factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
+        resolveZoneIdForHost: deploymentResourceZoneResolver(
+          resolvedDependencies,
+          cloudflareResourceOptions,
+        ),
+        resourceGraph: input.domainProviderResources,
+      });
+    }
 
     await app.finalize();
 
@@ -979,6 +1060,158 @@ function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorke
   };
 }
 
+function cloudflareAlchemyResourceOptions(input: {
+  accountId: string;
+  apiToken?: unknown;
+  credentialProfile: string | null;
+}): AlchemyCloudflareApiOptions {
+  return {
+    accountId: input.accountId,
+    ...(input.apiToken === undefined
+      ? input.credentialProfile === null
+        ? {}
+        : { profile: input.credentialProfile }
+      : { apiToken: input.apiToken }),
+  };
+}
+
+function deploymentResourceFactories(
+  dependencies: AlchemyFormlessInstanceDeploymentDependencies,
+  cloudflareOptions: AlchemyCloudflareApiOptions,
+): AlchemyDomainProviderFactories {
+  const createCustomDomain = dependencies.createCustomDomain;
+  const createDnsRecords = dependencies.createDnsRecords;
+  const createRedirectRule = dependencies.createRedirectRule;
+
+  if (
+    createCustomDomain === undefined ||
+    createDnsRecords === undefined ||
+    createRedirectRule === undefined
+  ) {
+    throw new Error("Formless instance deploy requires Alchemy route resource factories.");
+  }
+
+  return {
+    CustomDomain: (id, props) =>
+      createCustomDomain(id, {
+        ...props,
+        ...cloudflareOptions,
+      } as Parameters<AlchemyDomainProviderFactories["CustomDomain"]>[1]),
+    DnsRecords: (id, props) =>
+      createDnsRecords(id, {
+        ...props,
+        ...cloudflareOptions,
+      } as Parameters<AlchemyDomainProviderFactories["DnsRecords"]>[1]),
+    RedirectRule: (id, props) =>
+      createRedirectRule(id, {
+        ...props,
+        ...cloudflareOptions,
+      } as Parameters<AlchemyDomainProviderFactories["RedirectRule"]>[1]),
+  };
+}
+
+function deploymentResourceZoneResolver(
+  dependencies: AlchemyFormlessInstanceDeploymentDependencies,
+  cloudflareOptions: AlchemyCloudflareApiOptions,
+): AlchemyDeployResourceZoneResolver | undefined {
+  const createCloudflareApi = dependencies.createCloudflareApi;
+
+  if (createCloudflareApi === undefined) {
+    return undefined;
+  }
+
+  const cache = new Map<string, Promise<string | undefined>>();
+
+  return ({ host }) => {
+    const normalizedHost = normalizeCloudflareHost(host);
+    const cached = cache.get(normalizedHost);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const resolved = resolveCloudflareZoneIdForHost({
+      cloudflareOptions,
+      createCloudflareApi,
+      host: normalizedHost,
+    });
+
+    cache.set(normalizedHost, resolved);
+
+    return resolved;
+  };
+}
+
+async function resolveCloudflareZoneIdForHost(input: {
+  cloudflareOptions: AlchemyCloudflareApiOptions;
+  createCloudflareApi: (
+    options: AlchemyCloudflareApiOptions,
+  ) => Promise<AlchemyCloudflareApiClient>;
+  host: string;
+}): Promise<string | undefined> {
+  const api = await input.createCloudflareApi(input.cloudflareOptions);
+  const accountFilter =
+    input.cloudflareOptions.accountId === undefined
+      ? ""
+      : `&account.id=${encodeURIComponent(input.cloudflareOptions.accountId)}`;
+
+  for (const candidate of cloudflareZoneNameCandidates(input.host)) {
+    const response = await api.get(
+      `/zones?name=${encodeURIComponent(candidate)}&status=active${accountFilter}`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Cloudflare zone lookup for ${input.host} failed: HTTP ${response.status}.`);
+    }
+
+    const body = (await response.json()) as unknown;
+    const zoneId = activeZoneIdFromCloudflareList(body, candidate);
+
+    if (zoneId !== undefined) {
+      return zoneId;
+    }
+  }
+
+  return undefined;
+}
+
+function activeZoneIdFromCloudflareList(value: unknown, zoneName: string): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.result)) {
+    return undefined;
+  }
+
+  for (const entry of value.result) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const id = parseOptionalString("Cloudflare zone id", entry.id);
+    const name = parseOptionalString("Cloudflare zone name", entry.name);
+    const status = parseOptionalString("Cloudflare zone status", entry.status);
+
+    if (id !== undefined && name === zoneName && (status === undefined || status === "active")) {
+      return id;
+    }
+  }
+
+  return undefined;
+}
+
+function cloudflareZoneNameCandidates(host: string): string[] {
+  const parts = normalizeCloudflareHost(host).split(".").filter(Boolean);
+  const candidates: string[] = [];
+
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    candidates.push(parts.slice(index).join("."));
+  }
+
+  return candidates;
+}
+
+function normalizeCloudflareHost(value: string): string {
+  return value.trim().toLowerCase().replace(/^\*\./, "").replace(/\.+$/, "");
+}
+
 function destroyResourceSummary(
   status: DestroyFormlessInstanceResourceStatus,
   input: Pick<DestroyFormlessInstanceInput, "domainProviderPlan" | "domainProviderResources">,
@@ -1024,8 +1257,12 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
 
   return {
     createApp: (name, options) => alchemy(name, options),
+    createCloudflareApi: (options) => cloudflare.createCloudflareApi(options as never),
+    createCustomDomain: (id, props) => cloudflare.CustomDomain(id, props),
     createDurableObjectNamespace: (id, props) => cloudflare.DurableObjectNamespace(id, props),
+    createDnsRecords: (id, props) => cloudflare.DnsRecords(id, props),
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
+    createRedirectRule: (id, props) => cloudflare.RedirectRule(id, props),
     createSecret: (value) => alchemy.secret(value),
     deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),
   };
@@ -1035,7 +1272,7 @@ async function nodeAlchemyFormlessInstanceAccountDiscoveryDependencies(): Promis
   const cloudflare = await import("alchemy/cloudflare");
 
   return {
-    createCloudflareApi: (options) => cloudflare.createCloudflareApi(options),
+    createCloudflareApi: (options) => cloudflare.createCloudflareApi(options as never),
   };
 }
 
@@ -1294,7 +1531,12 @@ function parseDeployFormlessInstanceResult(result: unknown): DeployFormlessInsta
     throw new Error("Formless deployment adapter result must be an object.");
   }
 
+  const resourceEvidence = Array.isArray(result.resourceEvidence)
+    ? (result.resourceEvidence as DeploymentResourceEvidenceSummary[])
+    : undefined;
+
   return {
+    ...(resourceEvidence === undefined ? {} : { resourceEvidence }),
     url: parseWorkersDevUrl("Formless deployment adapter URL", result.url),
   };
 }

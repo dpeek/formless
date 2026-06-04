@@ -3,8 +3,8 @@
 ## Purpose
 
 Custom domains bind exact hosts to Formless runtime profiles and manage provider
-state through reviewable desired mappings, redirect intent, apply/delete jobs,
-and cleanup evidence.
+state through reviewable desired routes, deployment reconciliation, provider
+evidence, and repair cleanup evidence.
 
 ## Requirements
 
@@ -41,7 +41,8 @@ route records before ordinary host profile behavior.
 - **GIVEN** desired mapping routes exist
 - **WHEN** mapping reads or enabled-host lookup runs
 - **THEN** reads are public
-- **AND** disabled desired routes do not create mapped hosts
+- **AND** disabled desired routes do not create mapped hosts or desired
+  provider resources
 
 #### Scenario: Profile-specific target
 
@@ -50,15 +51,15 @@ route records before ordinary host profile behavior.
 - **THEN** the target installed Site serves top-level public routes
 - **AND** generated app and admin shell routes are blocked for that host
 
-### Requirement: Applied Provider State
+### Requirement: Provider Evidence
 
-The system SHALL keep desired route state separate from current provider
+The system SHALL keep desired route state separate from deployment provider
 evidence.
 
-#### Scenario: Apply evidence
+#### Scenario: Deployment evidence
 
 - **GIVEN** provider resources have been applied for a host/profile target
-- **WHEN** apply evidence is recorded
+- **WHEN** deployment evidence is recorded
 - **THEN** current provider state is keyed by host, profile, optional target
   install id, and route-derived logical resource ids
 - **AND** audit events are append-only
@@ -67,10 +68,11 @@ evidence.
 
 - **GIVEN** a desired route has applied provider evidence
 - **WHEN** the desired route is disabled or deleted
-- **THEN** provider resources and audit events are not deleted by that route
-  write
-- **AND** explicit cleanup, delete, or destroy workflows remain responsible for
-  provider mutation
+- **THEN** the route write removes the route-derived resources from deployment
+  desired state without directly mutating providers
+- **AND** the next deploy reconciliation removes tracked provider resources
+  from Alchemy or provider state
+- **AND** audit events remain append-only
 
 ### Requirement: Provider Plan
 
@@ -95,11 +97,14 @@ facts, and applied provider state.
 ### Requirement: Provider Cleanup Jobs
 
 The system SHALL mutate recorded provider cleanup targets through reviewed
-delete jobs guarded by owner or admin writes.
+repair delete jobs guarded by owner or admin writes.
 
 #### Scenario: Delete job targets recorded evidence
 
-- **GIVEN** an authorized request starts provider delete
+- **GIVEN** normal deploy reconciliation cannot remove a provider resource
+  because tracked Alchemy state is missing, stale, manually changed, or
+  out-of-band repair is required
+- **AND** an authorized request starts provider delete
 - **WHEN** recorded applied resources exist
 - **THEN** the delete job targets recorded applied resources only
 - **AND** successful delete removes current applied provider rows and appends
@@ -121,9 +126,12 @@ The system SHALL model provider redirects as desired route state.
 
 - **GIVEN** a redirect route has applied provider evidence
 - **WHEN** the redirect route is disabled
-- **THEN** provider resources are not deleted by disablement
-- **AND** the disabled redirect remains visible until cleanup when evidence
-  still exists
+- **THEN** redirect and redirect DNS resources are removed from deployment
+  desired state
+- **AND** the next deploy reconciliation removes tracked redirect provider
+  resources from Alchemy or provider state
+- **AND** repair cleanup remains available for recorded evidence that cannot be
+  reconciled from tracked state
 
 ### Requirement: Deployment Projection
 
@@ -147,22 +155,32 @@ semantics.
   redirect DNS graph resources
 - **AND** disabled redirect routes do not create desired provider resources
 
+#### Scenario: Removed routes disappear from desired resources
+
+- **GIVEN** a custom-domain or redirect route was previously deployed
+- **WHEN** that route is disabled or deleted
+- **THEN** the next deployment desired state omits the route-derived provider
+  resources
+- **AND** normal deploy reconciliation, not the route write, removes the tracked
+  provider resources
+
 ### Requirement: Provider Cleanup Deployment Bridge
 
-The system SHALL record explicit provider cleanup in generic deployment attempt
-history when a cleanup job removes recorded provider resources.
+The system SHALL record explicit provider repair cleanup in generic deployment
+attempt history when a cleanup job removes recorded provider resources.
 
 #### Scenario: Delete job remains explicit cleanup
 
-- **GIVEN** a provider delete job removes recorded provider resources
+- **GIVEN** a provider repair delete job removes recorded provider resources
 - **WHEN** the job is created and completed
-- **THEN** cleanup remains explicit and limited to selected recorded resources
+- **THEN** cleanup remains explicit, repair-scoped, and limited to selected
+  recorded resources
 - **AND** generic deployment attempt history records the cleanup result without
   deleting desired route intent
 
 ### Requirement: Cleanup And Forget
 
-The system SHALL make route cleanup and provider cleanup explicit.
+The system SHALL make route forgetting and provider repair cleanup explicit.
 
 #### Scenario: Forget unapplied desired state
 
@@ -181,7 +199,7 @@ The system SHALL make route cleanup and provider cleanup explicit.
 
 ### Requirement: Domain CLI Workflows
 
-The system SHALL expose domain inspection and explicit provider cleanup
+The system SHALL expose domain inspection and explicit provider repair cleanup
 workflows while provider mutation for domain, DNS, and redirect desired
 resources runs through generic deployment attempts.
 
@@ -190,16 +208,27 @@ resources runs through generic deployment attempts.
 - **GIVEN** a claimed instance workspace has enabled route records that project
   DNS, custom-domain, or redirect desired resources
 - **WHEN** `formless deploy` runs
-- **THEN** the CLI or trusted deployer applies those resources through the
-  generic deployment path
+- **THEN** the CLI or trusted deployer declares those resources in tracked
+  Alchemy desired state through the generic deployment path
 - **AND** deployment attempts, evidence, and status identify the applied
   resources
 - **AND** route records remain desired intent rather than provider truth
 
-#### Scenario: Explicit cleanup remains
+#### Scenario: Route removal deploys deletion
+
+- **GIVEN** tracked provider resources exist for a domain, DNS, or redirect
+  route
+- **AND** the route is disabled or deleted
+- **WHEN** `formless deploy` runs
+- **THEN** the CLI or trusted deployer omits those resources from tracked
+  Alchemy desired state
+- **AND** Alchemy removes the omitted tracked provider resources
+- **AND** deployment evidence identifies the deleted resources
+
+#### Scenario: Explicit cleanup remains for repair
 
 - **GIVEN** recorded provider evidence exists for a domain, DNS, or redirect
-  resource
+  resource that cannot be reconciled through tracked Alchemy state
 - **WHEN** an authorized explicit cleanup or delete workflow selects that
   recorded resource
 - **THEN** cleanup is limited to the selected recorded provider resource or

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { DeployResourceGraph } from "@dpeek/formless-deploy";
 
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
@@ -983,6 +984,216 @@ describe("Alchemy Formless instance deployment", () => {
     expect(finalized).toBe(1);
   });
 
+  it("declares route-derived DNS, redirect, and custom-domain resources during deploy", async () => {
+    const events: string[] = [];
+    const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
+    const secrets: string[] = [];
+    let finalized = 0;
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async () => {
+        events.push("app");
+
+        return {
+          finalize: async () => {
+            events.push("finalize");
+            finalized += 1;
+          },
+        };
+      },
+      createCustomDomain: async (id, props) => {
+        events.push("custom-domain");
+        routeResourceCalls.push({ id, kind: "CustomDomain", props });
+
+        return {
+          ...props,
+          createdAt: 1,
+          environment: "production",
+          id: "custom-domain-output",
+          updatedAt: 2,
+        } as Awaited<
+          ReturnType<
+            NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createCustomDomain"]>
+          >
+        >;
+      },
+      createDurableObjectNamespace: () => {
+        events.push("durable-object");
+
+        return { type: "durable-object-namespace" };
+      },
+      createDnsRecords: async (id, props) => {
+        events.push("dns-records");
+        routeResourceCalls.push({ id, kind: "DnsRecords", props });
+
+        return {
+          records: props.records.map((record, index) => ({
+            ...record,
+            id: `dns-record-${index}`,
+          })),
+          zoneId: props.zoneId,
+        } as Awaited<
+          ReturnType<NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createDnsRecords"]>>
+        >;
+      },
+      createR2Bucket: async () => {
+        events.push("r2");
+
+        return { type: "r2-bucket" };
+      },
+      createRedirectRule: async (id, props) => {
+        events.push("redirect-rule");
+        routeResourceCalls.push({ id, kind: "RedirectRule", props });
+
+        return {
+          description: props.description ?? "redirect",
+          enabled: true,
+          lastUpdated: "2026-06-04T00:00:00.000Z",
+          preserveQueryString: props.preserveQueryString ?? true,
+          ruleId: "redirect-rule-output",
+          rulesetId: "redirect-ruleset-output",
+          statusCode: props.statusCode ?? 301,
+          targetUrl: props.targetUrl,
+          zoneId: typeof props.zone === "string" ? props.zone : props.zone.id,
+        } as Awaited<
+          ReturnType<
+            NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createRedirectRule"]>
+          >
+        >;
+      },
+      createSecret: (value) => {
+        secrets.push(value);
+
+        return { index: secrets.length, type: "secret" };
+      },
+      deployViteWorker: async () => {
+        events.push("worker");
+
+        return { url: "https://brother-instance.dpeek.workers.dev" };
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      packageVersion: "0.1.8",
+    });
+    const deploymentResourceGraph: DeployResourceGraph = {
+      targetId: "instance.brother-instance",
+      resources: [
+        {
+          dependencies: [],
+          inputs: {
+            fromHost: "old.example.com",
+            records: [
+              {
+                content: "100::",
+                name: "old.example.com",
+                proxied: true,
+                ttl: 1,
+                type: "AAAA",
+              },
+            ],
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-dns-records",
+          logicalId: "brother-instance-redirect-dns-old-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+        {
+          dependencies: [{ logicalId: "brother-instance-redirect-dns-old-example-com" }],
+          inputs: {
+            fromHost: "old.example.com",
+            requestUrl: "https://old.example.com/*",
+            statusCode: 308,
+            targetUrl: "https://app.example.com/${1}",
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-redirect-rule",
+          logicalId: "brother-instance-redirect-rule-old-example-com-app-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+        {
+          dependencies: [],
+          inputs: {
+            host: "app.example.com",
+            name: "app.example.com",
+            workerName: plan.resources.worker.name,
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "brother-instance-custom-domain-app-example-com-instance",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+      ],
+    };
+
+    const result = await deployFormlessInstanceWithAlchemy(
+      {
+        credentialProfile: "personal",
+        deploymentResourceGraph,
+        packageRoot: "/package",
+        plan,
+        secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+          CLOUDFLARE_API_TOKEN: "cf-token",
+          FORMLESS_ADMIN_TOKEN: "admin-secret",
+        },
+        stateRoot: "/workspace/.formless/deploy/brother-instance",
+      },
+      dependencies,
+    );
+
+    expect(routeResourceCalls.map((call) => [call.kind, call.id])).toEqual([
+      ["DnsRecords", "brother-instance-redirect-dns-old-example-com"],
+      ["RedirectRule", "brother-instance-redirect-rule-old-example-com-app-example-com"],
+      ["CustomDomain", "brother-instance-custom-domain-app-example-com-instance"],
+    ]);
+    expect(routeResourceCalls[0]?.props).toMatchObject({
+      apiToken: { index: 4, type: "secret" },
+      zoneId: "zone-1",
+    });
+    expect(routeResourceCalls[1]?.props).toMatchObject({
+      apiToken: { index: 4, type: "secret" },
+      statusCode: 308,
+      zone: "zone-1",
+    });
+    expect(routeResourceCalls[2]?.props).toMatchObject({
+      apiToken: { index: 4, type: "secret" },
+      name: "app.example.com",
+      workerName: "brother-instance",
+      zoneId: "zone-1",
+    });
+    expect(result.resourceEvidence?.map((entry) => [entry.kind, entry.logicalId])).toEqual([
+      ["cloudflare-dns-records", "brother-instance-redirect-dns-old-example-com"],
+      [
+        "cloudflare-redirect-rule",
+        "brother-instance-redirect-rule-old-example-com-app-example-com",
+      ],
+      [
+        "cloudflare-worker-custom-domain",
+        "brother-instance-custom-domain-app-example-com-instance",
+      ],
+    ]);
+    expect(result.resourceEvidence).toHaveLength(3);
+    expect(JSON.stringify(routeResourceCalls)).not.toContain("cf-token");
+    expect(events).toEqual([
+      "app",
+      "r2",
+      "durable-object",
+      "worker",
+      "dns-records",
+      "redirect-rule",
+      "custom-domain",
+      "finalize",
+    ]);
+    expect(finalized).toBe(1);
+  });
+
   it("marks Worker and media resources for adoption when deploying an existing instance", async () => {
     const buckets: Array<{ props: unknown }> = [];
     const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
@@ -1052,29 +1263,85 @@ describe("Alchemy Formless instance deployment", () => {
       options: AlchemyFormlessInstanceDeploymentAppOptions;
     }> = [];
     const buckets: Array<{ props: unknown }> = [];
+    const events: string[] = [];
     const namespaces: Array<{ props: unknown }> = [];
+    const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
     const secrets: string[] = [];
     const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
     let finalized = 0;
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async (name, options) => {
+        events.push("app");
         apps.push({ name, options });
 
         return {
           finalize: async () => {
+            events.push("finalize");
             finalized += 1;
           },
         };
       },
+      createCustomDomain: async (id, props) => {
+        events.push("custom-domain");
+        routeResourceCalls.push({ id, kind: "CustomDomain", props });
+
+        return {
+          ...props,
+          createdAt: 1,
+          environment: "production",
+          id: "custom-domain-output",
+          updatedAt: 2,
+        } as Awaited<
+          ReturnType<
+            NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createCustomDomain"]>
+          >
+        >;
+      },
       createDurableObjectNamespace: (_id, props) => {
+        events.push("durable-object");
         namespaces.push({ props });
 
         return { type: "durable-object-namespace" };
       },
+      createDnsRecords: async (id, props) => {
+        events.push("dns-records");
+        routeResourceCalls.push({ id, kind: "DnsRecords", props });
+
+        return {
+          records: props.records.map((record, index) => ({
+            ...record,
+            id: `dns-record-${index}`,
+          })),
+          zoneId: props.zoneId,
+        } as Awaited<
+          ReturnType<NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createDnsRecords"]>>
+        >;
+      },
       createR2Bucket: async (_id, props) => {
+        events.push("r2");
         buckets.push({ props });
 
         return { type: "r2-bucket" };
+      },
+      createRedirectRule: async (id, props) => {
+        events.push("redirect-rule");
+        routeResourceCalls.push({ id, kind: "RedirectRule", props });
+
+        return {
+          description: props.description ?? "redirect",
+          enabled: true,
+          lastUpdated: "2026-06-04T00:00:00.000Z",
+          preserveQueryString: props.preserveQueryString ?? true,
+          ruleId: "redirect-rule-output",
+          rulesetId: "redirect-ruleset-output",
+          statusCode: props.statusCode ?? 301,
+          targetUrl: props.targetUrl,
+          zoneId: typeof props.zone === "string" ? props.zone : props.zone.id,
+        } as Awaited<
+          ReturnType<
+            NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createRedirectRule"]>
+          >
+        >;
       },
       createSecret: (value) => {
         secrets.push(value);
@@ -1082,6 +1349,7 @@ describe("Alchemy Formless instance deployment", () => {
         return { type: "secret", index: secrets.length };
       },
       deployViteWorker: async (_id, props) => {
+        events.push("worker");
         workers.push({ props });
 
         return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
@@ -1095,6 +1363,58 @@ describe("Alchemy Formless instance deployment", () => {
       instanceName: "brother-instance",
       packageVersion: "0.1.8",
     });
+    const domainProviderResources: DeployResourceGraph = {
+      targetId: "instance.brother-instance",
+      resources: [
+        {
+          dependencies: [],
+          inputs: {
+            fromHost: "old.example.com",
+            records: [
+              {
+                content: "100::",
+                name: "old.example.com",
+                proxied: true,
+                ttl: 1,
+                type: "AAAA",
+              },
+            ],
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-dns-records",
+          logicalId: "brother-instance-redirect-dns-old-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+        {
+          dependencies: [{ logicalId: "brother-instance-redirect-dns-old-example-com" }],
+          inputs: {
+            fromHost: "old.example.com",
+            requestUrl: "https://old.example.com/*",
+            statusCode: 308,
+            targetUrl: "https://app.example.com/${1}",
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-redirect-rule",
+          logicalId: "brother-instance-redirect-rule-old-example-com-app-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+        {
+          dependencies: [],
+          inputs: {
+            host: "app.example.com",
+            name: "app.example.com",
+            workerName: plan.resources.worker.name,
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "brother-instance-custom-domain-app-example-com-instance",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+      ],
+    };
     const input: DestroyFormlessInstanceInput = {
       credentialProfile: "personal",
       domainProviderPlan: planDomainProviderResources({
@@ -1116,6 +1436,7 @@ describe("Alchemy Formless instance deployment", () => {
         workerName: plan.resources.worker.name,
         zones: [{ id: "zone-1", name: "example.com" }],
       }),
+      domainProviderResources,
       packageRoot: "/package",
       plan,
       secrets: {
@@ -1168,6 +1489,36 @@ describe("Alchemy Formless instance deployment", () => {
     expect(workers[0]?.props.build.env).toEqual(plan.runtimeVars);
     expect(JSON.stringify(workers[0]?.props)).not.toContain("cf-token");
     expect(JSON.stringify(workers[0]?.props)).not.toContain("alchemy-password");
+    expect(routeResourceCalls.map((call) => [call.kind, call.id])).toEqual([
+      ["DnsRecords", "brother-instance-redirect-dns-old-example-com"],
+      ["RedirectRule", "brother-instance-redirect-rule-old-example-com-app-example-com"],
+      ["CustomDomain", "brother-instance-custom-domain-app-example-com-instance"],
+    ]);
+    expect(routeResourceCalls[0]?.props).toMatchObject({
+      apiToken: { index: 2, type: "secret" },
+      zoneId: "zone-1",
+    });
+    expect(routeResourceCalls[1]?.props).toMatchObject({
+      apiToken: { index: 2, type: "secret" },
+      zone: "zone-1",
+    });
+    expect(routeResourceCalls[2]?.props).toMatchObject({
+      apiToken: { index: 2, type: "secret" },
+      name: "app.example.com",
+      workerName: "brother-instance",
+      zoneId: "zone-1",
+    });
+    expect(JSON.stringify(routeResourceCalls)).not.toContain("cf-token");
+    expect(events).toEqual([
+      "app",
+      "r2",
+      "durable-object",
+      "worker",
+      "dns-records",
+      "redirect-rule",
+      "custom-domain",
+      "finalize",
+    ]);
     expect(secrets).toEqual(["alchemy-password", "cf-token", "destroy-placeholder"]);
     expect(finalized).toBe(1);
   });

@@ -268,7 +268,7 @@ intent lives in schema-owned record source.
 
 ### Requirement: Domain And Deploy Commands
 
-The system SHALL keep deployment, destroy, and explicit provider cleanup
+The system SHALL keep deployment, destroy, and explicit provider repair cleanup
 credential-scoped while making generic deployment attempts the only normal
 provider mutation path for workspace-controlled deploy intent.
 
@@ -287,7 +287,19 @@ provider mutation path for workspace-controlled deploy intent.
 - **AND** workspace source is restored or pushed through runtime APIs before
   remote data mutation is considered complete
 - **AND** Worker, Durable Object, R2, DNS, custom-domain, and redirect resources
-  are applied through the generic deployment path
+  are reconciled through tracked Alchemy desired state in the generic deployment
+  path
+
+#### Scenario: Route removal deploys provider deletion
+
+- **GIVEN** workspace source no longer contains an enabled route that previously
+  projected custom-domain, DNS, or redirect provider resources
+- **WHEN** `formless deploy` runs with required provider credentials and ignored
+  deploy state available
+- **THEN** the CLI or trusted local deployer omits those resources from tracked
+  Alchemy desired state
+- **AND** Alchemy removes the omitted tracked provider resources
+- **AND** deploy writes exact-version deletion evidence to the runtime
 
 #### Scenario: Workspace destroy
 
@@ -297,7 +309,7 @@ provider mutation path for workspace-controlled deploy intent.
 - **THEN** the selected target's Worker, Durable Object namespace, R2 media
   bucket, Worker assets, Worker secrets, custom-domain provider resources, DNS
   provider resources, redirect provider resources, and Alchemy deploy state are
-  destroyed through selected deploy state
+  destroyed through tracked selected deploy state
 - **AND** `formless.json`, instance archives, and app archives remain in place
 - **AND** ignored deploy state for the selected target is removed or marked
   destroyed only after provider destroy succeeds
@@ -320,19 +332,21 @@ provider mutation path for workspace-controlled deploy intent.
 
 ### Requirement: Provider Cleanup CLI
 
-The Site CLI SHALL keep explicit provider cleanup available for recorded
-evidence while route-derived provider resources deploy through workspace
+The Site CLI SHALL keep explicit provider repair cleanup available for recorded
+evidence while route-derived provider resources reconcile through workspace
 deployment attempts.
 
-#### Scenario: Domain cleanup remains explicit
+#### Scenario: Domain cleanup remains repair-only
 
 - **GIVEN** recorded provider evidence exists for a host, resource kind, and
-  logical id
+  logical id that cannot be reconciled through tracked Alchemy state
 - **WHEN** a supported explicit provider delete or manual cleanup command runs
 - **THEN** the command mutates only the selected provider evidence or selected
   recorded provider resource
 - **AND** cleanup output includes the deployment or provider evidence ids needed
   for audit when available
+- **AND** route removal during normal operation is handled by `formless deploy`
+  reconciliation, not by explicit cleanup commands
 
 ### Requirement: Schema Control-Plane Protocol
 
@@ -382,10 +396,10 @@ available where they expose behavior not replaced by workspace deploy.
   attempt, evidence, and drift record ids
 - **AND** the command does not mutate provider resources
 
-#### Scenario: Removed direct fallback output
+#### Scenario: Removed direct fallback commands are unsupported
 
 - **GIVEN** users run a removed direct fallback or domain apply command
 - **WHEN** the command executes
-- **THEN** output identifies the command as retired
-- **AND** output points to `formless deploy` for provider mutation or explicit
-  cleanup commands for selected recorded evidence
+- **THEN** the command is handled by ordinary unsupported-command behavior
+- **AND** provider, Authority, filesystem, deploy adapter, command, and state
+  mutation code is not run for the removed command name

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import type { DeployResourceGraph } from "@dpeek/formless-deploy";
 
 import packageJson from "../../package.json";
 import {
@@ -15,6 +16,7 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
+import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
 import { packageAppFactsForKey, listBundledAppPackages } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
@@ -30,6 +32,10 @@ import {
 import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  type DeployFormlessInstanceInput,
+  type DeployFormlessInstanceResult,
+} from "./instance-onboarding.ts";
 import {
   createFormlessWorkspaceOperationState,
   formlessWorkspaceOperationStatePath,
@@ -251,6 +257,8 @@ describe("Formless workspace operations", () => {
   it("applies deploy with exact desired-state runtime writeback", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const deploymentEvidence: DeploymentResourceEvidenceSummary[] = [];
     const requests: CapturedRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
@@ -272,7 +280,16 @@ describe("Formless workspace operations", () => {
           ],
         },
         deploymentAdapter: {
-          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+          deploy: async (input) => {
+            const resourceEvidence = deploymentResourceEvidenceFromGraph(
+              input.deploymentResourceGraph,
+            );
+
+            deployInputs.push(input);
+            deploymentEvidence.push(...resourceEvidence);
+
+            return { resourceEvidence, url: input.plan.expectedUrl.url };
+          },
         },
         fetch: deployApplyFetch(requests),
         operationIds: ["op_deploy_apply_00000001"],
@@ -303,6 +320,7 @@ describe("Formless workspace operations", () => {
     const success = capturedRequestJson<{
       attemptId: string;
       desiredState: typeof desiredState;
+      evidence: DeploymentResourceEvidenceSummary[];
       leaseToken: string;
     }>(requestByPath(requests, "/api/formless/deployments/attempts/success"));
 
@@ -327,8 +345,8 @@ describe("Formless workspace operations", () => {
             status: "no-drift",
           },
           evidence: {
-            count: 0,
-            logicalIds: [],
+            count: 3,
+            logicalIds: deploymentEvidence.map((entry) => entry.logicalId),
           },
           plan: {
             changes: { create: 3, delete: 0, noChange: 0, update: 0 },
@@ -337,7 +355,7 @@ describe("Formless workspace operations", () => {
           writeback: {
             attemptId: "attempt.local-gateway.1",
             desiredState,
-            evidenceCount: 0,
+            evidenceCount: 3,
             planRecordedAt: "2026-06-02T00:04:02.000Z",
             resourceCount: 3,
             resourcesByKind: {
@@ -357,7 +375,7 @@ describe("Formless workspace operations", () => {
             cleanupStatus: "not-run",
             desiredStateVersion: desiredState.versionId,
             drift: "no-drift",
-            evidenceCount: 0,
+            evidenceCount: 3,
             writebackStatus: "succeeded",
           },
           title: "Deploy applied",
@@ -374,8 +392,18 @@ describe("Formless workspace operations", () => {
     expect(success).toMatchObject({
       attemptId: "attempt.local-gateway.1",
       desiredState,
+      evidence: deploymentEvidence,
       leaseToken: "lease:local-gateway",
     });
+    expect(deployInputs).toHaveLength(1);
+    expect(
+      deployInputs[0]?.deploymentResourceGraph?.resources.map((resource) => resource.kind),
+    ).toEqual([
+      "cloudflare-dns-records",
+      "cloudflare-redirect-rule",
+      "cloudflare-worker-custom-domain",
+    ]);
+    expect(deploymentEvidence).toHaveLength(3);
     await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("generated-admin-token");
     expect(JSON.stringify(state)).not.toContain("alchemy-password");
@@ -521,7 +549,7 @@ function operationDeps(
       listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
     };
     deploymentAdapter?: {
-      deploy: (input: { plan: { expectedUrl: { url: string } } }) => Promise<{ url: string }>;
+      deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
     };
     env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
@@ -852,6 +880,7 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
 
     if (parsedUrl.pathname === "/api/formless/deployments/attempts/success") {
       const desiredState = deploymentDesiredStateRef();
+      const body = parseCapturedBody<{ evidence?: DeploymentResourceEvidenceSummary[] }>(init);
 
       return Response.json({
         attempt: deploymentAttempt({
@@ -872,7 +901,7 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
           alchemy: { app: "formless-instance", scope: "instance.primary", stage: "personal" },
           attemptId: "attempt.local-gateway.1",
           completedAt: "2026-06-02T00:04:03.000Z",
-          evidence: [],
+          evidence: body.evidence ?? [],
           kind: "success",
           runnerId: "local-gateway",
         },
@@ -910,6 +939,23 @@ function deploymentDesiredStateRef() {
     targetId: "instance.primary",
     versionId: "desired.instance.primary.3",
   };
+}
+
+function deploymentResourceEvidenceFromGraph(
+  resourceGraph: DeployResourceGraph | undefined,
+): DeploymentResourceEvidenceSummary[] {
+  return (
+    resourceGraph?.resources.map((resource, index) => ({
+      action: "updated",
+      alchemyResourceId: resource.logicalId,
+      displayName: resource.logicalId,
+      kind: resource.kind,
+      logicalId: resource.logicalId,
+      providerFamily: resource.providerFamily,
+      providerResourceIds: [`provider-resource-${index}`],
+      targetId: resource.targetId,
+    })) ?? []
+  );
 }
 
 function deploymentAttempt(input: {

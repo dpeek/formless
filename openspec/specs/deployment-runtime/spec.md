@@ -4,8 +4,8 @@
 
 Deployment runtime versions Formless deployment intent for supported instance
 targets, coordinates exact-version deployment attempts, and stores audit/status
-summaries while deployers and Alchemy own provider mutation and provider
-resource state.
+summaries while deployers declare tracked Alchemy desired state and Alchemy owns
+provider reconciliation and provider resource state.
 
 ## Requirements
 
@@ -20,8 +20,8 @@ mutation path for control-plane desired resources.
   applies control-plane desired resources
 - **THEN** it starts or reuses a deployment attempt for the exact desired-state
   version and target
-- **AND** provider mutation is performed through the deployer for the desired
-  resource graph
+- **AND** provider mutation is performed by declaring the desired resource graph
+  in tracked Alchemy state or an equivalent provider reconciler
 - **AND** successful or failed results are written back to the deployment
   runtime for that exact desired-state version
 
@@ -33,13 +33,27 @@ mutation path for control-plane desired resources.
 - **AND** deployment attempts, leases, evidence, drift, and status remain the
   shared provider mutation record
 
-#### Scenario: Cleanup can remain explicit
+#### Scenario: Removed route resources reconcile through deploy
 
-- **GIVEN** provider evidence exists for a resource that requires manual cleanup,
-  explicit deletion, or out-of-band repair
+- **GIVEN** a previous successful deploy tracked route-derived DNS,
+  custom-domain, or redirect resources in Alchemy state
+- **WHEN** the next desired-state version omits those resources because a route
+  was disabled or deleted
+- **THEN** the deployer declares the new desired resource graph in the same
+  tracked Alchemy app, stage, and state scope
+- **AND** Alchemy destroys the omitted tracked provider resources during deploy
+  reconciliation
+- **AND** deployment writeback records non-secret delete evidence for the exact
+  desired-state version
+
+#### Scenario: Repair cleanup can remain explicit
+
+- **GIVEN** provider evidence exists for a resource that cannot be reconciled
+  from tracked Alchemy state because state is missing, stale, manually changed,
+  or out-of-band repair is required
 - **WHEN** an authorized cleanup workflow selects that evidence
 - **THEN** cleanup may mutate the selected provider resource or evidence outside
-  normal deploy apply
+  normal deploy reconciliation
 - **AND** cleanup does not change control-plane desired resources unless a
   separate authorized intent write is submitted
 
@@ -209,6 +223,8 @@ errors without duplicating Alchemy's resource-state store.
   summaries, provider ids needed for audit or cleanup, runner id, and completion
   time
 - AND Alchemy remains the owner of canonical provider resource state
+- AND evidence can include created, updated, no-change, adopted, or deleted
+  resource summaries from the tracked provider reconciliation
 
 #### Scenario: Failure writeback
 
@@ -280,18 +296,25 @@ canonical provider truth.
 ### Requirement: Deployer Protocol Boundary
 
 The system SHALL keep deployer execution outside the runtime while making
-provider mutation, writeback, cleanup, and audit behavior exact.
+provider mutation, writeback, repair cleanup, and audit behavior exact.
 
 #### Scenario: External deployer apply
 
 - **WHEN** a CLI, browser workspace gateway, CI job, or trusted deploy node
   applies desired state
 - **THEN** it fetches the desired-state version, resolves provider context and
-  secrets outside the runtime desired-state response, plans and applies through
-  Alchemy or another provider adapter, and writes back the result for the exact
-  desired-state version
+  secrets outside the runtime desired-state response, declares the exact desired
+  graph in tracked Alchemy state or another provider reconciler, and writes back
+  the result for the exact desired-state version
 - **AND** Worker, R2, DNS, custom-domain, redirect, and other control-plane
   desired resources use the same deployer protocol boundary
+
+#### Scenario: Route deletion is not provider mutation
+
+- **WHEN** route intent is disabled or deleted
+- **THEN** the route write changes desired deployment state only
+- **AND** provider resources are created, updated, or deleted only when a
+  deployer reconciles an exact desired-state version
 
 #### Scenario: Runtime does not expose mutation secrets
 
@@ -300,13 +323,14 @@ provider mutation, writeback, cleanup, and audit behavior exact.
 - **THEN** provider API tokens, Alchemy passwords, and Alchemy state tokens are
   not returned
 
-#### Scenario: Explicit cleanup stays selected
+#### Scenario: Repair cleanup stays selected
 
-- **GIVEN** recorded provider evidence requires cleanup outside normal deploy
-  apply
+- **GIVEN** recorded provider evidence requires repair cleanup outside normal
+  deploy reconciliation
 - **WHEN** a cleanup workflow writes result evidence
 - **THEN** the writeback identifies the selected resource or evidence row
-- **AND** the runtime does not infer cleanup from route intent deletion alone
+- **AND** the runtime does not treat repair cleanup as the normal route-removal
+  path
 
 ### Requirement: Deployment Runtime API
 
