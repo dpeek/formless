@@ -1271,7 +1271,7 @@ export async function runFormlessInstanceWorkspaceDev(
 ): Promise<void> {
   const devBootstrap = await ensureFormlessInstanceWorkspaceDevBootstrap(input, dependencies);
   const { localStateRoot, manifest, workspaceRoot } = devBootstrap;
-  const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
+  const candidateOrigins = new Set<string>();
 
   const localSessionBootstrapToken = requiredGeneratedToken(createLocalDevSecret(dependencies));
 
@@ -5181,12 +5181,6 @@ function workerNameFromWorkersDevUrl(targetUrl: string | undefined): string | un
   const [workerName] = withoutSuffix.split(".");
 
   return workerName || undefined;
-}
-
-function defaultDevSourceCandidates(env: NodeJS.ProcessEnv | undefined): string[] {
-  const port = env?.PORT && /^\d+$/.test(env.PORT) ? env.PORT : "5173";
-
-  return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 }
 
 function forwardDevOutput(

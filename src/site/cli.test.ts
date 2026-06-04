@@ -2477,6 +2477,7 @@ describe("Formless Site CLI", () => {
             cwd: options.cwd,
             env: options.env,
           });
+          announceFakeCliDevServer(child, options.env);
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
@@ -2544,7 +2545,7 @@ describe("Formless Site CLI", () => {
     ).resolves.toBe(
       `FORMLESS_ADMIN_TOKEN=generated-token\nFORMLESS_OWNER_SESSION_SECRET=${setupToken}\n`,
     );
-    expect(logs).toEqual([
+    expect(withoutFakeCliDevLogs(logs)).toEqual([
       "Instance shell: http://localhost:4443/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
@@ -2585,6 +2586,7 @@ describe("Formless Site CLI", () => {
             cwd: options.cwd,
             env: options.env,
           });
+          announceFakeCliDevServer(child, options.env);
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
@@ -2606,6 +2608,47 @@ describe("Formless Site CLI", () => {
     expect(spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN).toBe("generated-token");
     expect(spawnCalls[0]?.env?.[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).toBe("local-session-token");
     expect(openedUrls[0]).not.toContain("generated-token");
+  });
+
+  it("opens the local session bootstrap URL on the child-advertised dev origin", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "open-workspace");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+
+    const run = runFormlessCli(
+      ["dev", "--workspace", workspaceRoot, "--open"],
+      cliDeps(tempDir, {
+        env: { PORT: "5173" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        openedUrls,
+        packageRoot: "/package",
+        spawn: ((_command: string, _args: string[], _options: CapturedSpawnOptions) => {
+          child.announceReady("http://localhost:5174");
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+    );
+    child.close(0);
+    await run;
+
+    const openedUrl = new URL(openedUrls[0] ?? "");
+
+    expect(openedUrl.origin).toBe("http://localhost:5174");
+    expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
+    expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:5174/api/formless/app-installs",
+      "GET http://localhost:5174/api/formless/app-installs",
+    ]);
   });
 
   it("keeps workspace dev browser gateway config same-origin without sidecar proxy config", async () => {
@@ -2663,15 +2706,18 @@ describe("Formless Site CLI", () => {
             cwd: options.cwd,
             env: options.env,
           });
+          announceFakeCliDevServer(child, options.env);
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
       }),
     );
 
-    await expect(
-      Promise.race([run, waitUntil(() => spawnCalls.length > 0).then(() => "spawned")]),
-    ).resolves.toBe("spawned");
+    await waitUntil(() =>
+      logs.some(
+        (line) => line === "Workspace archive restore skipped: no workspace archives declared.",
+      ),
+    );
     child.close(0);
     await run;
 
@@ -2820,6 +2866,7 @@ describe("Formless Site CLI", () => {
             cwd: options.cwd,
             env: options.env,
           });
+          announceFakeCliDevServer(child, options.env);
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
@@ -2889,7 +2936,7 @@ describe("Formless Site CLI", () => {
       "media/images/cover.png",
     );
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
-    expect(logs).toEqual([
+    expect(withoutFakeCliDevLogs(logs)).toEqual([
       "Instance shell: http://localhost:4444/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
@@ -2913,7 +2960,11 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4447" },
           fetch: localInstanceDevFetch(requests, []),
-          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+            announceFakeCliDevServer(child, options.env);
+
+            return child as unknown as ReturnType<typeof spawn>;
+          }) as typeof spawn,
         }),
       ),
     ).rejects.toThrow(
@@ -2945,7 +2996,11 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4448" },
           fetch: localInstanceDevFetch([], []),
-          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+            announceFakeCliDevServer(child, options.env);
+
+            return child as unknown as ReturnType<typeof spawn>;
+          }) as typeof spawn,
         }),
       ),
     ).rejects.toThrow(
@@ -2964,7 +3019,11 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4449" },
           fetch: localInstanceDevFetch([], []),
-          spawn: (() => factsChild as unknown as ReturnType<typeof spawn>) as typeof spawn,
+          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+            announceFakeCliDevServer(factsChild, options.env);
+
+            return factsChild as unknown as ReturnType<typeof spawn>;
+          }) as typeof spawn,
         }),
       ),
     ).rejects.toThrow(
@@ -2991,7 +3050,11 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4450" },
           fetch: localInstanceDevFetch([], []),
-          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+            announceFakeCliDevServer(child, options.env);
+
+            return child as unknown as ReturnType<typeof spawn>;
+          }) as typeof spawn,
         }),
       ),
     ).rejects.toThrow(
@@ -3041,7 +3104,11 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4451" },
           fetch: localInstanceDevFetch([], []),
-          spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+            announceFakeCliDevServer(child, options.env);
+
+            return child as unknown as ReturnType<typeof spawn>;
+          }) as typeof spawn,
         }),
       ),
     ).rejects.toThrow("cannot store control-plane secret values");
@@ -3073,6 +3140,7 @@ describe("Formless Site CLI", () => {
             cwd: options.cwd,
             env: options.env,
           });
+          announceFakeCliDevServer(child, options.env);
 
           return child as unknown as ReturnType<typeof spawn>;
         }) as typeof spawn,
@@ -3098,7 +3166,7 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4446/api/formless/app-installs",
       "GET http://localhost:4446/api/formless/app-installs",
     ]);
-    expect(logs).toEqual([
+    expect(withoutFakeCliDevLogs(logs)).toEqual([
       "Instance shell: http://localhost:4446/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(nestedRoot, path.join(workspaceRoot, ".formless/local"))}.`,
@@ -3121,7 +3189,11 @@ describe("Formless Site CLI", () => {
         env: { PORT: "4445" },
         fetch: localInstanceDevFetch(requests, [installedSite("david", "David Peek")]),
         logs,
-        spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+          announceFakeCliDevServer(child, options.env);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
       }),
     );
 
@@ -3414,7 +3486,11 @@ describe("Formless Site CLI", () => {
         env: { PORT: "4450" },
         fetch: localInstanceDevFetch(requests, []),
         logs,
-        spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+        spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+          announceFakeCliDevServer(child, options.env);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
       }),
     );
 
@@ -5101,6 +5177,12 @@ class FakeCliDevChild extends EventEmitter {
   stderr = new EventEmitter();
   stdout = new EventEmitter();
 
+  announceReady(origin: string) {
+    queueMicrotask(() => {
+      this.stdout.emit("data", Buffer.from(`${fakeCliDevReadyLog(origin)}\n`));
+    });
+  }
+
   kill() {
     this.killed = true;
     return true;
@@ -5110,6 +5192,24 @@ class FakeCliDevChild extends EventEmitter {
     this.exitCode = code;
     this.emit("close", code, signal);
   }
+}
+
+function announceFakeCliDevServer(child: FakeCliDevChild, env: NodeJS.ProcessEnv | undefined) {
+  child.announceReady(fakeCliDevOriginFromEnv(env));
+}
+
+function fakeCliDevOriginFromEnv(env: NodeJS.ProcessEnv | undefined): string {
+  const port = env?.PORT && /^\d+$/.test(env.PORT) ? env.PORT : "5173";
+
+  return `http://localhost:${port}`;
+}
+
+function fakeCliDevReadyLog(origin: string): string {
+  return `Fake Vite ready: ${origin}/`;
+}
+
+function withoutFakeCliDevLogs(logs: string[]): string[] {
+  return logs.filter((line) => !line.startsWith("Fake Vite ready: "));
 }
 
 async function writeFileTree(
