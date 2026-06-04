@@ -3,16 +3,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import type { InstanceArchiveControlPlane } from "../shared/archive.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
-import { defaultFormlessInstanceWorkspaceManifest } from "./instance-workspace-config.ts";
 import {
-  formlessInstanceControlPlaneRecordSourceEntities,
-  formlessInstanceControlPlaneRecordSourcePath,
-  formlessInstanceControlPlaneRecordSourceRelativePath,
-  readFormlessInstanceControlPlaneRecordSource,
-  writeFormlessInstanceControlPlaneRecordSource,
-} from "./instance-workspace-record-source.ts";
+  INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES,
+  defaultInstanceWorkspaceManifest,
+  instanceWorkspaceControlPlaneRecordSourceRelativePath,
+  type InstanceWorkspaceControlPlaneRecordSourceControlPlane,
+  type InstanceWorkspaceStoredRecord,
+} from "./index.ts";
+import {
+  instanceWorkspaceControlPlaneRecordSourcePath,
+  readInstanceWorkspaceControlPlaneRecordSource,
+  writeInstanceWorkspaceControlPlaneRecordSource,
+} from "./node.ts";
 
 const now = "2026-06-02T00:00:00.000Z";
 const tempDirs: string[] = [];
@@ -26,17 +28,17 @@ afterEach(async () => {
 describe("instance workspace control-plane record source", () => {
   it("writes deterministic entity files and round-trips supported control-plane records", async () => {
     const workspaceRoot = await makeTempDir();
-    const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal" });
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal" });
 
-    await writeFormlessInstanceControlPlaneRecordSource({
+    await writeInstanceWorkspaceControlPlaneRecordSource({
       controlPlane: controlPlaneSourceRecords(),
       manifest,
       workspaceRoot,
     });
 
     expect(
-      formlessInstanceControlPlaneRecordSourceEntities.map((entity) =>
-        formlessInstanceControlPlaneRecordSourceRelativePath(manifest, entity),
+      INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES.map((entity) =>
+        instanceWorkspaceControlPlaneRecordSourceRelativePath(manifest, entity),
       ),
     ).toEqual([
       "records/instance-control-plane/app-install.json",
@@ -48,12 +50,12 @@ describe("instance workspace control-plane record source", () => {
 
     const appInstallFile = JSON.parse(
       await readFile(
-        formlessInstanceControlPlaneRecordSourcePath(workspaceRoot, manifest, "app-install"),
+        instanceWorkspaceControlPlaneRecordSourcePath(workspaceRoot, manifest, "app-install"),
         "utf8",
       ),
     ) as {
       entity: string;
-      records: StoredRecord[];
+      records: InstanceWorkspaceStoredRecord[];
     };
 
     expect(appInstallFile.entity).toBe("instance:app-install");
@@ -61,7 +63,7 @@ describe("instance workspace control-plane record source", () => {
       "instance:app-install:site",
     ]);
 
-    const read = await readFormlessInstanceControlPlaneRecordSource({ manifest, workspaceRoot });
+    const read = await readInstanceWorkspaceControlPlaneRecordSource({ manifest, workspaceRoot });
 
     expect(read?.schemaKey).toBe("instance-control-plane");
     expect(read?.schemaUpdatedAt).toBe(now);
@@ -76,20 +78,20 @@ describe("instance workspace control-plane record source", () => {
 
   it("rejects unsupported files, secret-looking values, identity drift, and route conflicts", async () => {
     const workspaceRoot = await makeTempDir();
-    const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal" });
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal" });
 
     await mkdir(path.join(workspaceRoot, manifest.source.records), { recursive: true });
     await writeFile(path.join(workspaceRoot, manifest.source.records, "deploy-attempt.json"), "{}");
 
     await expect(
-      readFormlessInstanceControlPlaneRecordSource({ manifest, workspaceRoot }),
+      readInstanceWorkspaceControlPlaneRecordSource({ manifest, workspaceRoot }),
     ).rejects.toThrow(
       'Workspace control-plane record source records/instance-control-plane has unsupported file "deploy-attempt.json".',
     );
 
     await rm(path.join(workspaceRoot, manifest.source.records), { force: true, recursive: true });
     await expect(
-      writeFormlessInstanceControlPlaneRecordSource({
+      writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
           inputsJson: JSON.stringify({ apiToken: "CF_API_TOKEN" }),
         }),
@@ -99,7 +101,7 @@ describe("instance workspace control-plane record source", () => {
     ).rejects.toThrow("cannot store control-plane secret values");
 
     await expect(
-      writeFormlessInstanceControlPlaneRecordSource({
+      writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
           inputsJson: JSON.stringify({ providerState: { rawLeaseToken: "lease-token" } }),
         }),
@@ -109,7 +111,7 @@ describe("instance workspace control-plane record source", () => {
     ).rejects.toThrow("cannot store control-plane secret values");
 
     await expect(
-      writeFormlessInstanceControlPlaneRecordSource({
+      writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
           appInstallValues: { installId: "renamed" },
         }),
@@ -121,7 +123,7 @@ describe("instance workspace control-plane record source", () => {
     );
 
     await expect(
-      writeFormlessInstanceControlPlaneRecordSource({
+      writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
           extraRecords: [
             {
@@ -141,9 +143,9 @@ describe("instance workspace control-plane record source", () => {
 
   it("omits deployment execution history from record source files", async () => {
     const workspaceRoot = await makeTempDir();
-    const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal" });
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal" });
 
-    await writeFormlessInstanceControlPlaneRecordSource({
+    await writeInstanceWorkspaceControlPlaneRecordSource({
       controlPlane: controlPlaneSourceRecords({
         extraRecords: [
           executionHistoryRecord("deploy-attempt", "attempt.1"),
@@ -155,11 +157,11 @@ describe("instance workspace control-plane record source", () => {
       workspaceRoot,
     });
 
-    const read = await readFormlessInstanceControlPlaneRecordSource({ manifest, workspaceRoot });
+    const read = await readInstanceWorkspaceControlPlaneRecordSource({ manifest, workspaceRoot });
     const sourceContents = await Promise.all(
-      formlessInstanceControlPlaneRecordSourceEntities.map((entity) =>
+      INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES.map((entity) =>
         readFile(
-          formlessInstanceControlPlaneRecordSourcePath(workspaceRoot, manifest, entity),
+          instanceWorkspaceControlPlaneRecordSourcePath(workspaceRoot, manifest, entity),
           "utf8",
         ),
       ),
@@ -174,12 +176,12 @@ describe("instance workspace control-plane record source", () => {
 
 function controlPlaneSourceRecords(
   options: {
-    appInstallValues?: Partial<StoredRecord["values"]>;
-    extraRecords?: StoredRecord[];
+    appInstallValues?: Partial<InstanceWorkspaceStoredRecord["values"]>;
+    extraRecords?: InstanceWorkspaceStoredRecord[];
     inputsJson?: string;
   } = {},
-): InstanceArchiveControlPlane {
-  const records: StoredRecord[] = [
+): InstanceWorkspaceControlPlaneRecordSourceControlPlane {
+  const records: InstanceWorkspaceStoredRecord[] = [
     {
       id: "site",
       entity: "app-install",
@@ -259,7 +261,10 @@ function controlPlaneSourceRecords(
   };
 }
 
-function routeRecord(id: string, values: Partial<StoredRecord["values"]>): StoredRecord {
+function routeRecord(
+  id: string,
+  values: Partial<InstanceWorkspaceStoredRecord["values"]>,
+): InstanceWorkspaceStoredRecord {
   return {
     id,
     entity: "route",
@@ -278,7 +283,7 @@ function routeRecord(id: string, values: Partial<StoredRecord["values"]>): Store
   };
 }
 
-function executionHistoryRecord(entity: string, id: string): StoredRecord {
+function executionHistoryRecord(entity: string, id: string): InstanceWorkspaceStoredRecord {
   return {
     id,
     entity,

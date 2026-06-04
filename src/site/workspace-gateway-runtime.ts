@@ -13,21 +13,26 @@ import type {
   WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway";
 import { isWorkspaceGatewayOperationKind } from "@dpeek/formless-gateway";
+import {
+  workspaceOperationInputDisplay,
+  type RunnableWorkspaceOperationInput,
+  type WorkspaceOperationEvent,
+  type WorkspaceOperationResult,
+  type WorkspaceOperationState,
+  type WorkspaceOperationStatus,
+} from "@dpeek/formless-workspace";
+import {
+  createWorkspaceOperationState,
+  readWorkspaceOperationState,
+  updateWorkspaceOperationState,
+} from "@dpeek/formless-workspace/node";
 
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
 import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
 import { setupCloudflareCredentialsWithAlchemyProfile } from "./instance-workspace-credential-setup.ts";
 import {
-  createFormlessWorkspaceOperationState,
-  readFormlessWorkspaceOperationState,
   runFormlessWorkspaceOperation,
-  updateFormlessWorkspaceOperationState,
-  type FormlessWorkspaceOperationEvent,
-  type FormlessWorkspaceOperationInput,
-  type FormlessWorkspaceOperationResult,
-  type FormlessWorkspaceOperationState,
-  type FormlessWorkspaceOperationStatus,
   type RunFormlessWorkspaceOperationDependencies,
 } from "./instance-workspace-operations.ts";
 
@@ -45,9 +50,9 @@ export type WorkspaceGatewayCredentialSetupAdapterInput = {
 
 export type WorkspaceGatewayCredentialSetupAdapterResult = {
   continue?: () => Promise<WorkspaceGatewayCredentialSetupAdapterResult>;
-  events?: readonly Omit<FormlessWorkspaceOperationEvent, "id">[];
-  result?: FormlessWorkspaceOperationResult;
-  status?: FormlessWorkspaceOperationStatus;
+  events?: readonly Omit<WorkspaceOperationEvent, "id">[];
+  result?: WorkspaceOperationResult;
+  status?: WorkspaceOperationStatus;
 };
 
 export type WorkspaceGatewayRuntimeDependencies = RunFormlessWorkspaceOperationDependencies & {
@@ -72,7 +77,7 @@ export function createWorkspaceGatewayOperationHandlers(
   return {
     readOperation: async ({ operationId, workspaceRoot }) => {
       try {
-        const operation = await readFormlessWorkspaceOperationState({
+        const operation = await readWorkspaceOperationState({
           operationId,
           workspaceRoot,
         });
@@ -179,20 +184,16 @@ async function runCredentialSetupGatewayOperation(
   workspaceRoot: string,
   actor: WorkspaceGatewayActor,
 ) {
-  let operation = await createFormlessWorkspaceOperationState({
+  let operation = await createWorkspaceOperationState({
     actor,
     id: dependencies.createOperationId?.(),
-    input: {
-      provider: input.provider,
-      ...(input.accountId ? { accountId: input.accountId } : {}),
-      ...(input.profileLabel ? { profileLabel: input.profileLabel } : {}),
-    },
-    kind: "credentialSetup",
+    input: workspaceOperationInputDisplay(input),
     now: dependencies.now,
+    operation: "credentialSetup",
     workspaceRoot,
   });
 
-  operation = await updateFormlessWorkspaceOperationState(operation.id, {
+  operation = await updateWorkspaceOperationState(operation.id, {
     logs: [{ at: dependencies.now(), level: "info", message: "credentialSetup started." }],
     status: "running",
     workspaceRoot,
@@ -213,7 +214,7 @@ async function runCredentialSetupGatewayOperation(
       title: "Credential setup started",
     };
     const status = result.status ?? "succeeded";
-    const completed = await updateFormlessWorkspaceOperationState(operation.id, {
+    const completed = await updateWorkspaceOperationState(operation.id, {
       events: result.events,
       logs: [
         {
@@ -244,7 +245,7 @@ async function runCredentialSetupGatewayOperation(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    return await updateFormlessWorkspaceOperationState(operation.id, {
+    return await updateWorkspaceOperationState(operation.id, {
       errors: [{ message }],
       logs: [{ at: dependencies.now(), level: "error", message }],
       status: "failed",
@@ -270,7 +271,7 @@ async function completeCredentialSetupGatewayOperation(input: {
       title: "Credential setup completed",
     };
     const status = result.status ?? "succeeded";
-    const completed = await updateFormlessWorkspaceOperationState(input.operationId, {
+    const completed = await updateWorkspaceOperationState(input.operationId, {
       events: result.events,
       logs: [
         {
@@ -301,7 +302,7 @@ async function completeCredentialSetupGatewayOperation(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    return updateFormlessWorkspaceOperationState(input.operationId, {
+    return updateWorkspaceOperationState(input.operationId, {
       errors: [{ message }],
       logs: [{ at: input.dependencies.now(), level: "error", message }],
       status: "failed",
@@ -368,15 +369,15 @@ function operationDependencies(
 function withWorkspaceRoot(
   input: Exclude<WorkspaceGatewayStartInput, WorkspaceGatewayCredentialSetupStartInput>,
   workspaceRoot: string,
-): FormlessWorkspaceOperationInput {
+): RunnableWorkspaceOperationInput {
   return {
     ...input,
     workspacePath: workspaceRoot,
-  } as FormlessWorkspaceOperationInput;
+  } as RunnableWorkspaceOperationInput;
 }
 
 function workspaceGatewayOperationFromState(
-  operation: FormlessWorkspaceOperationState,
+  operation: WorkspaceOperationState,
 ): WorkspaceGatewayOperation | undefined {
   if (!isWorkspaceGatewayOperationKind(operation.operation)) {
     return undefined;
@@ -386,7 +387,7 @@ function workspaceGatewayOperationFromState(
 }
 
 function requireWorkspaceGatewayOperation(
-  operation: FormlessWorkspaceOperationState,
+  operation: WorkspaceOperationState,
 ): WorkspaceGatewayOperation {
   const gatewayOperation = workspaceGatewayOperationFromState(operation);
 

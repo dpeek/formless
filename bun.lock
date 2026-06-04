@@ -13,6 +13,7 @@
         "@dpeek/formless-media": "^0.1.0",
         "@dpeek/formless-schema": "^0.1.0",
         "@dpeek/formless-ui": "^0.1.3",
+        "@dpeek/formless-workspace": "^0.1.0",
         "@internationalized/date": "^3.12.1",
         "@simplewebauthn/browser": "^13.3.0",
         "@simplewebauthn/server": "^13.3.1",
@@ -46,6 +47,9 @@
     "lib/gateway": {
       "name": "@dpeek/formless-gateway",
       "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-workspace": "^0.1.0",
+      },
     },
     "lib/media": {
       "name": "@dpeek/formless-media",
@@ -93,6 +97,10 @@
         "oxfmt": "^0.42.0",
         "oxlint": "^1.57.0",
       },
+    },
+    "lib/workspace": {
+      "name": "@dpeek/formless-workspace",
+      "version": "0.1.0",
     },
   },
   "overrides": {
@@ -195,6 +203,8 @@
     "@dpeek/formless-schema": ["@dpeek/formless-schema@workspace:lib/schema"],
 
     "@dpeek/formless-ui": ["@dpeek/formless-ui@workspace:lib/ui"],
+
+    "@dpeek/formless-workspace": ["@dpeek/formless-workspace@workspace:lib/workspace"],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.10.0", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA=="],
 

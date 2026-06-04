@@ -13,5 +13,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dpeek/formless-workspace": "^0.1.0"
   }
 }

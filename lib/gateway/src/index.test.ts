@@ -15,7 +15,7 @@ import {
 } from "./index.ts";
 
 describe("Gateway runtime-neutral contracts", () => {
-  it("owns the semantic operation allowlist", () => {
+  it("uses the Workspace semantic operation allowlist", () => {
     expect(WORKSPACE_GATEWAY_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",

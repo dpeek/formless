@@ -48,6 +48,12 @@ import {
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
 import {
+  INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
+  formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
+} from "@dpeek/formless-workspace";
+import {
   rateSeedRecords,
   rateSourceSchema,
   siteSourceSchema,
@@ -58,20 +64,16 @@ import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cl
 import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";
 import { formatSiteProjectRecords } from "./project-source.ts";
 import {
-  formlessInstanceControlPlaneRecordSourcePath,
-  readFormlessInstanceControlPlaneRecordSource,
-  writeFormlessInstanceControlPlaneRecordSource,
-} from "./instance-workspace-record-source.ts";
+  instanceWorkspaceControlPlaneRecordSourcePath,
+  readInstanceWorkspaceControlPlaneRecordSource,
+  writeInstanceWorkspaceControlPlaneRecordSource,
+} from "@dpeek/formless-workspace/node";
 import {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_ALCHEMY_APP_NAME,
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  defaultFormlessInstanceWorkspaceManifest,
   discoverFormlessInstanceWorkspaceRoot,
   formlessInstanceWorkspaceDevEnv,
-  formatFormlessInstanceWorkspaceManifest,
   planFormlessInstanceDeployment,
-  parseFormlessInstanceWorkspaceManifestJson,
   resolveFormlessInstanceWorkspaceRoot,
   runFormlessCli,
   workspaceDomainProviderAlchemyRuntime,
@@ -932,7 +934,7 @@ describe("Formless Site CLI", () => {
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
-    const pulledControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const pulledControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
@@ -3077,7 +3079,7 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(manifestPath, "utf8"),
     );
-    const deployDesiredResourceSourcePath = formlessInstanceControlPlaneRecordSourcePath(
+    const deployDesiredResourceSourcePath = instanceWorkspaceControlPlaneRecordSourcePath(
       workspaceRoot,
       manifest,
       "deploy-desired-resource",
@@ -3235,7 +3237,7 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
@@ -3313,7 +3315,7 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
@@ -3982,7 +3984,7 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
@@ -5260,7 +5262,7 @@ async function writeWorkspaceControlPlaneRecordSource(
     await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
   );
 
-  await writeFormlessInstanceControlPlaneRecordSource({
+  await writeInstanceWorkspaceControlPlaneRecordSource({
     controlPlane: {
       schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
       schemaUpdatedAt: "2026-05-26T00:00:00.000Z",

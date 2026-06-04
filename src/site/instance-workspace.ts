@@ -68,41 +68,40 @@ import {
   type CloudflareDomainPreflightPlan,
   type CloudflareDomainPreflightPolicy,
 } from "./cloudflare-domain-client.ts";
-import { formatDotEnv, parseDotEnv } from "./dotenv.ts";
 import {
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
-  defaultFormlessInstanceWorkspaceManifest,
-  formatFormlessInstanceWorkspaceManifest,
-  normalizeFormlessInstanceWorkspaceTargetUrl,
-  parseFormlessInstanceWorkspaceManifestJson,
-  type FormlessInstanceWorkspaceApp,
-  type FormlessInstanceWorkspaceDefaultAppPolicy,
-  type FormlessInstanceWorkspaceDomainIntent,
-  type FormlessInstanceWorkspaceManifest,
-  type FormlessInstanceWorkspaceMigrationPolicy,
-  type FormlessInstanceWorkspaceTarget,
-} from "./instance-workspace-config.ts";
+  DEFAULT_INSTANCE_WORKSPACE_ARCHIVE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
+  DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
+  INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES as LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
+  defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
+  formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  normalizeInstanceWorkspaceTargetUrl as normalizeFormlessInstanceWorkspaceTargetUrl,
+  parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
+  type InstanceWorkspaceApp as FormlessInstanceWorkspaceApp,
+  type InstanceWorkspaceDefaultAppPolicy as FormlessInstanceWorkspaceDefaultAppPolicy,
+  type InstanceWorkspaceDomainIntent as FormlessInstanceWorkspaceDomainIntent,
+  type InstanceWorkspaceManifest as FormlessInstanceWorkspaceManifest,
+  type InstanceWorkspaceMigrationPolicy as FormlessInstanceWorkspaceMigrationPolicy,
+  type InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget,
+} from "@dpeek/formless-workspace";
 import {
-  readFormlessInstanceControlPlaneRecordSource,
-  writeFormlessInstanceControlPlaneRecordSource,
-} from "./instance-workspace-record-source.ts";
-import {
-  ensureFormlessInstanceWorkspaceLocalDevSecretState,
-  FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
-  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
-  FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
-  ensureFormlessInstanceWorkspaceSecretStateIgnored,
-  formatFormlessInstanceWorkspaceSecretState,
-  formlessInstanceWorkspaceSecretStatePath,
-  readFormlessInstanceWorkspaceSecretState,
-  resolveFormlessInstanceWorkspaceAdminToken,
-  writeFormlessInstanceWorkspaceSecretState,
-  type FormlessInstanceWorkspaceLocalDevSecretState,
-  type FormlessInstanceWorkspaceSecretState,
-} from "./instance-workspace-secrets.ts";
+  INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
+  INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
+  INSTANCE_WORKSPACE_SECRET_STATE_FILE as FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
+  ensureInstanceWorkspaceLocalDevSecretState as ensureFormlessInstanceWorkspaceLocalDevSecretState,
+  ensureInstanceWorkspaceSecretStateIgnored as ensureFormlessInstanceWorkspaceSecretStateIgnored,
+  formatInstanceWorkspaceSecretState as formatFormlessInstanceWorkspaceSecretState,
+  formatWorkspaceDotEnv as formatDotEnv,
+  instanceWorkspaceSecretStatePath as formlessInstanceWorkspaceSecretStatePath,
+  parseWorkspaceDotEnv as parseDotEnv,
+  readInstanceWorkspaceControlPlaneRecordSource,
+  readInstanceWorkspaceSecretState as readFormlessInstanceWorkspaceSecretState,
+  resolveInstanceWorkspaceAdminToken as resolveFormlessInstanceWorkspaceAdminToken,
+  writeInstanceWorkspaceSecretState as writeFormlessInstanceWorkspaceSecretState,
+  writeInstanceWorkspaceControlPlaneRecordSource,
+  type InstanceWorkspaceLocalDevSecretState as FormlessInstanceWorkspaceLocalDevSecretState,
+  type InstanceWorkspaceSecretState as FormlessInstanceWorkspaceSecretState,
+} from "@dpeek/formless-workspace/node";
 import {
   deployDesiredStateVersionRef,
   type DeployDesiredStateVersionLike,
@@ -895,7 +894,7 @@ export async function pullFormlessInstanceWorkspace(
       throw new Error("Formless instance pull did not write an instance archive.");
     }
 
-    await writeFormlessInstanceControlPlaneRecordSource({
+    await writeInstanceWorkspaceControlPlaneRecordSource({
       controlPlane: pulledInstanceArchive.archive.controlPlane,
       manifest,
       workspaceRoot,
@@ -967,7 +966,7 @@ export async function checkFormlessInstanceWorkspace(
     }
 
     const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
-    const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const localControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
@@ -1058,7 +1057,7 @@ export async function saveLocalFormlessWorkspace(
       dependencies,
     );
     const nextManifest = workspaceManifestFromSavedAuthoritySource(manifest, exported.archive);
-    const currentControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const currentControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest: nextManifest,
       workspaceRoot,
     });
@@ -1168,7 +1167,7 @@ export async function pushFormlessInstanceWorkspace(
 
     const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
     const exportedAt = dependencies.now();
-    const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+    const localControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
@@ -1811,7 +1810,7 @@ export async function planDeployLocalFormlessWorkspace(
     workspacePath: input.workspacePath,
   });
   const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
@@ -1933,7 +1932,7 @@ export async function planDeployFormlessInstanceWorkspace(
 ): Promise<PlanDeployFormlessInstanceWorkspaceResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
@@ -2049,7 +2048,7 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
 ): Promise<FormlessInstanceWorkspaceProviderContext> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
@@ -2101,7 +2100,7 @@ export async function planFormlessInstanceWorkspaceDomains(
 ): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
@@ -2339,7 +2338,7 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
 ): Promise<RotateFormlessInstanceWorkspaceAdminTokenResult> {
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
@@ -2511,7 +2510,7 @@ async function workspaceLocalRestoreArchiveSource(input: {
   tempRoot: string;
   workspaceRoot: string;
 }): Promise<WorkspaceLocalRestoreArchiveSource | undefined> {
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });
@@ -2851,7 +2850,7 @@ async function staleSavedWorkspaceSourcePaths(input: {
     stalePaths.add(path.basename(input.manifestPath));
   }
 
-  const localControlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const localControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest: input.nextManifest,
     workspaceRoot: input.workspaceRoot,
   });
@@ -2886,7 +2885,7 @@ async function writeSavedWorkspaceSource(input: {
   workspaceRoot: string;
 }) {
   await prepareWorkspaceDirectories(input.workspaceRoot, input.nextManifest);
-  await writeFormlessInstanceControlPlaneRecordSource({
+  await writeInstanceWorkspaceControlPlaneRecordSource({
     controlPlane: input.sourceControlPlane,
     manifest: input.nextManifest,
     workspaceRoot: input.workspaceRoot,
@@ -3656,7 +3655,7 @@ async function resolveWorkspaceTarget(input: {
   targetAlias: string | null | undefined;
   workspaceRoot: string;
 }): Promise<FormlessInstanceWorkspaceTarget | undefined> {
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });
@@ -4762,7 +4761,7 @@ async function readDestroyRouteProjectionSource(
   routes: ControlPlaneRouteProjectionRecord[];
   source: DestroyFormlessInstanceWorkspaceRouteProviderResources["source"];
 }> {
-  const controlPlane = await readFormlessInstanceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest: context.manifest,
     workspaceRoot: context.workspaceRoot,
   });
@@ -5000,7 +4999,7 @@ async function writeLocalWorkspaceDeployTargetSource(input: {
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 }) {
-  const current = await readFormlessInstanceControlPlaneRecordSource({
+  const current = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });
@@ -5064,7 +5063,7 @@ async function writeLocalWorkspaceDeployTargetSource(input: {
     providerConfigRecord,
   ];
 
-  await writeFormlessInstanceControlPlaneRecordSource({
+  await writeInstanceWorkspaceControlPlaneRecordSource({
     controlPlane: {
       schemaKey: current?.schemaKey ?? INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
       schemaUpdatedAt: input.now,

@@ -213,6 +213,40 @@ of truth for local-first Formless workspaces.
 - **AND** the user can install the first app through local Authority-backed
   browser actions
 
+### Requirement: Workspace Package Boundary
+
+The system SHALL expose reusable Formless workspace source, local state, and
+semantic operation contracts through the Workspace package slice.
+
+#### Scenario: Package owns workspace source contracts
+
+- **WHEN** CLI, Site runtime, Gateway runtime adapters, archive workflows,
+  tests, or local agent workflows need `formless.json` manifest parsing,
+  workspace path defaults, workspace target URL normalization, reviewable
+  control-plane record-source file contracts, ignored local state contracts,
+  ignored secret state contracts, semantic workspace operation input shapes,
+  display-safe operation state, operation result shapes, operation redaction,
+  or deterministic local filesystem workspace IO
+- **THEN** they import that behavior from `@dpeek/formless-workspace` or
+  `@dpeek/formless-workspace/node`
+- **AND** they do not import package-owned workspace behavior from old
+  `src/site` workspace modules or unexported package internals
+
+#### Scenario: Package does not own runtime mutation
+
+- **WHEN** workspace save, check, pull, push, deploy, credential setup, export,
+  restore, app install, control-plane mutation, Authority reads, provider
+  mutation, Gateway authorization, or runtime topology selection is needed
+- **THEN** those behaviors remain owned by CLI, Site runtime, Archive
+  workflows, Deploy runtime, Worker runtime, Gateway runtime adapters, or
+  provider adapters
+- **AND** the Workspace package supplies source/state contracts, pure helpers,
+  display-safe state handling, and local filesystem adapters rather than
+  owning app records, deployed runtime records, provider credentials, or
+  Cloudflare and Alchemy execution
+- **AND** display-safe operation state persists under ignored local workspace
+  state, not reviewable record source, app archives, or media payloads
+
 ### Requirement: Instance Workspaces
 
 The system SHALL let a local Formless workspace review, save, pull, check,

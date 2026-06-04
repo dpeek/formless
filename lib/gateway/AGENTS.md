@@ -8,6 +8,7 @@ Read this when editing `lib/gateway/*`.
 
 - Public workspace gateway contract declarations and constants in `src/types.ts`.
 - Runtime-neutral route, intent, parsing, and wire-safety helpers exported from the package root.
+- Transport-facing aliases for Workspace operation request and response shapes.
 - Browser/client workspace gateway fetch, retry, response parsing, and client error behavior.
 - Worker/runtime workspace gateway proxy mechanics, request checks, and display-safe response forwarding.
 - Local Node sidecar HTTP routing helpers and sidecar request/response adapters.
@@ -17,6 +18,7 @@ Read this when editing `lib/gateway/*`.
 - Owner session cookies or owner setup state.
 - Runtime topology selection or route eligibility policy.
 - Workspace save, check, pull, push, deploy, cleanup, or credential setup execution.
+- Semantic workspace operation input, result, event, log, summary, redaction, or persistence contracts.
 - Site runtime adapter modules that inject operation execution, owner session, and route eligibility dependencies.
 - Operation persistence implementation.
 - Filesystem source writes or ignored workspace state storage.
@@ -27,7 +29,7 @@ Read this when editing `lib/gateway/*`.
 
 - `package.json`: public exports for `.`, `./client`, `./worker`, and `./sidecar`.
 - `tsconfig.json`: package-local TypeScript project extending the repo config.
-- `src/types.ts`: import-free versioned public contract declarations.
+- `src/types.ts`: versioned public gateway contract declarations; imports Workspace semantic operation contracts instead of redefining them.
 - `src/index.ts`: runtime-neutral root entrypoint and pure helpers.
 - `src/client.ts`: browser/client HTTP adapter entrypoint; no React import.
 - `src/worker.ts`: Worker/runtime proxy adapter entrypoint; no React import.

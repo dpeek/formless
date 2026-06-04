@@ -4,6 +4,11 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { DeployResourceGraph } from "@dpeek/formless-deploy";
+import {
+  INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
+  formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+} from "@dpeek/formless-workspace";
 
 import packageJson from "../../package.json";
 import {
@@ -25,11 +30,13 @@ import {
   type StoredRecord,
 } from "../shared/protocol.ts";
 import {
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  defaultFormlessInstanceWorkspaceManifest,
-  formatFormlessInstanceWorkspaceManifest,
-} from "./instance-workspace-config.ts";
-import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
+  createWorkspaceOperationState,
+  listWorkspaceOperationStates,
+  readWorkspaceOperationState,
+  updateWorkspaceOperationState,
+  workspaceOperationStatePath,
+  writeInstanceWorkspaceControlPlaneRecordSource,
+} from "@dpeek/formless-workspace/node";
 import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
@@ -37,13 +44,8 @@ import {
   type DeployFormlessInstanceResult,
 } from "./instance-onboarding.ts";
 import {
-  createFormlessWorkspaceOperationState,
-  formlessWorkspaceOperationStatePath,
-  listFormlessWorkspaceOperationStates,
-  readFormlessWorkspaceOperationState,
   runFormlessWorkspaceOperation,
   type RunFormlessWorkspaceOperationDependencies,
-  updateFormlessWorkspaceOperationState,
 } from "./instance-workspace-operations.ts";
 
 const tempDirs: string[] = [];
@@ -109,12 +111,12 @@ describe("Formless workspace operations", () => {
       code: "ENOENT",
     });
 
-    const persisted = await readFormlessWorkspaceOperationState({
+    const persisted = await readWorkspaceOperationState({
       operationId: "op_status_00000001",
       workspaceRoot,
     });
     const persistedText = await readFile(
-      formlessWorkspaceOperationStatePath(workspaceRoot, "op_status_00000001"),
+      workspaceOperationStatePath(workspaceRoot, "op_status_00000001"),
       "utf8",
     );
 
@@ -478,15 +480,15 @@ describe("Formless workspace operations", () => {
 
   it("persists display-safe deployment and cleanup summaries with secret redaction", async () => {
     const workspaceRoot = await makeTempDir();
-    const state = await createFormlessWorkspaceOperationState({
+    const state = await createWorkspaceOperationState({
       id: "op_deploy_00000001",
       input: { targetAlias: "remote" },
-      kind: "deployApply",
       now: timestampSequence("2026-06-02T00:02:00.000Z"),
+      operation: "deployApply",
       workspaceRoot,
     });
 
-    await updateFormlessWorkspaceOperationState(state.id, {
+    await updateWorkspaceOperationState(state.id, {
       logs: [
         {
           at: "2026-06-02T00:02:01.000Z",
@@ -559,10 +561,10 @@ describe("Formless workspace operations", () => {
     });
 
     const persistedText = await readFile(
-      formlessWorkspaceOperationStatePath(workspaceRoot, state.id),
+      workspaceOperationStatePath(workspaceRoot, state.id),
       "utf8",
     );
-    const persisted = await readFormlessWorkspaceOperationState({
+    const persisted = await readWorkspaceOperationState({
       operationId: state.id,
       workspaceRoot,
     });
@@ -592,7 +594,7 @@ describe("Formless workspace operations", () => {
     expect(persistedText).not.toContain("secret-token");
     expect(persistedText).not.toContain("lease:raw-token");
     expect(persistedText).not.toContain(workspaceRoot);
-    expect(await listFormlessWorkspaceOperationStates(workspaceRoot)).toHaveLength(1);
+    expect(await listWorkspaceOperationStates(workspaceRoot)).toHaveLength(1);
   });
 });
 
@@ -707,7 +709,7 @@ async function writeDeployRecordSource(
   const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
   const now = "2026-05-26T00:00:00.000Z";
 
-  await writeFormlessInstanceControlPlaneRecordSource({
+  await writeInstanceWorkspaceControlPlaneRecordSource({
     controlPlane: {
       schemaKey: "instance-control-plane",
       schemaUpdatedAt: now,

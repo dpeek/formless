@@ -85,7 +85,7 @@ import {
   type UpgradePackageAppMigrationAppliedState,
 } from "../shared/upgrade-status.ts";
 import type { PortableArchiveInputStatus } from "./archive-input-status.ts";
-import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
+import { normalizeInstanceWorkspaceTargetUrl } from "@dpeek/formless-workspace";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
@@ -243,7 +243,7 @@ export async function readFormlessInstanceTargetStatus(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetStatus> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const [deployMetadataResult, ownerSetup, appRegistryResult, deployment] = await Promise.all([
     readFormlessInstanceDeployMetadataResult({ targetUrl }, dependencies),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
@@ -498,7 +498,7 @@ async function readFormlessInstanceDeployMetadataResult(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceDeployMetadataReadResult> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const metadataUrl = apiUrl(targetUrl, FORMLESS_DEPLOY_METADATA_PATH);
   const response = await dependencies.fetch(metadataUrl, {
     headers: { accept: "application/json" },
@@ -525,7 +525,7 @@ export async function readFormlessInstanceOwnerSetupStatus(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<OwnerSetupStatusResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const statusUrl = apiUrl(targetUrl, OWNER_SETUP_STATUS_API_PATH);
 
   return parseOwnerSetupStatus(
@@ -548,7 +548,7 @@ export async function applyFormlessInstanceAutoSafeSqlMigrations(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceUpgradeApplyResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const applyUrl = apiUrl(targetUrl, INSTANCE_UPGRADE_APPLY_API_PATH);
 
   return parseInstanceUpgradeStatusResponse(
@@ -568,7 +568,7 @@ export async function readFormlessInstanceUpgradeStatus(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceUpgradeStatusResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const statusUrl = apiUrl(targetUrl, INSTANCE_UPGRADE_STATUS_API_PATH);
 
   return parseInstanceUpgradeStatusResponse(
@@ -588,7 +588,7 @@ export async function applyFormlessInstalledAppAutoSafePackageMigrations(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstancePackageMigrationApplyResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const applyUrl = apiUrl(
     targetUrl,
     `${APP_INSTALLS_API_PATH}/${input.packageAppKey}/${input.installId}${PACKAGE_MIGRATIONS_APPLY_PATH_SUFFIX}`,
@@ -608,7 +608,7 @@ async function readFormlessInstanceAppRegistryResult(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceAppRegistryReadResult> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const registryUrl = apiUrl(targetUrl, APP_INSTALLS_API_PATH);
   const value = await fetchJson(dependencies.fetch, registryUrl, {
     headers: { accept: "application/json" },
@@ -625,7 +625,7 @@ export async function readFormlessInstanceDomainMappings(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainMappingsResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const mappingsUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_API_PATH);
 
   return parseDomainMappings(
@@ -638,7 +638,7 @@ export async function readFormlessInstanceDomainProviderPlan(
   input: { host?: string | null; policy?: DomainProviderPlanPolicy; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderPlanResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const providerUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_API_PATH));
 
   if (input.host && input.host.trim() !== "") {
@@ -661,7 +661,7 @@ export async function readFormlessInstanceDeploymentDesiredState(
   input: { targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentDesiredStateResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const desiredStateUrl = deploymentReadUrl(
     targetUrl,
     INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
@@ -680,7 +680,7 @@ export async function readFormlessInstanceDeploymentStatus(
   input: { targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentStatusResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const statusUrl = deploymentReadUrl(
     targetUrl,
     INSTANCE_DEPLOYMENT_STATUS_API_PATH,
@@ -703,7 +703,7 @@ export async function readFormlessInstanceControlPlaneRecords(
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceControlPlaneRecords> {
   const actorKind = input.actorKind ?? "cliDeployer";
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const controlPlaneUrl = apiUrl(targetUrl, deployControlPlaneBootstrapPath(actorKind));
   const bootstrap = parseControlPlaneBootstrapResponse(
     await fetchJson(dependencies.fetch, controlPlaneUrl, {
@@ -898,7 +898,7 @@ export async function requestFormlessInstanceDomainProviderDelete(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderDeleteResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const deleteUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH);
   const headers: Record<string, string> = {
     accept: "application/json",
@@ -927,7 +927,7 @@ export async function markFormlessInstanceDomainProviderResourceManuallyRemoved(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderManualCleanupResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const cleanupUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH);
   const headers: Record<string, string> = {
     accept: "application/json",
@@ -957,7 +957,7 @@ export async function completeFormlessInstanceDomainProviderDeleteJob(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderDeleteJobResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const resultUrl = apiUrl(
     targetUrl,
     `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}/result`,
@@ -989,7 +989,7 @@ export async function forgetFormlessInstanceDomainMapping(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<ForgetInstanceDomainMappingResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const forgetUrl = new URL(apiUrl(targetUrl, DOMAIN_MAPPINGS_FORGET_API_PATH));
   const headers: Record<string, string> = { accept: "application/json" };
 
@@ -1024,7 +1024,7 @@ export async function forgetFormlessInstanceDomainProviderRedirect(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<ForgetInstanceDomainProviderRedirectIntentResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const forgetUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH));
   const headers: Record<string, string> = { accept: "application/json" };
 
@@ -1051,7 +1051,7 @@ export async function recordFormlessInstanceDomainMappingApplyEvidence(
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<RecordInstanceDomainMappingApplyEvidenceResponse> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const evidenceUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH);
   const headers: Record<string, string> = {
     accept: "application/json",
@@ -1853,7 +1853,7 @@ async function postDeploymentJson(
     targetUrl: string;
   },
 ): Promise<unknown> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const url = apiUrl(targetUrl, input.path);
   const headers: Record<string, string> = {
     accept: "application/json",

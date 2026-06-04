@@ -1,9 +1,12 @@
 import {
   WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
-  WORKSPACE_GATEWAY_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
 } from "./types.ts";
+import {
+  isWorkspaceBrowserOperationKind,
+  parseWorkspaceOperationId,
+} from "@dpeek/formless-workspace";
 import type {
   WorkspaceGatewayOperationIdParseResult,
   WorkspaceGatewayOperationIntent,
@@ -65,11 +68,9 @@ export type {
   WorkspaceGatewayStatusStartInput,
 } from "./types.ts";
 
-const workspaceGatewayOperationKindSet = new Set<string>(WORKSPACE_GATEWAY_OPERATION_KINDS);
 const workspaceGatewayBootstrapOperationKindSet = new Set<string>(
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
 );
-const operationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
 
 export function isWorkspaceGatewayPath(pathname: string): boolean {
   return (
@@ -122,17 +123,13 @@ export function workspaceGatewayOperationPath(
 export function parseWorkspaceGatewayOperationId(
   value: unknown,
 ): WorkspaceGatewayOperationIdParseResult {
-  if (typeof value !== "string" || !operationIdPattern.test(value)) {
-    return { error: "Workspace operation id is invalid.", ok: false };
-  }
-
-  return { ok: true, operationId: value };
+  return parseWorkspaceOperationId(value);
 }
 
 export function isWorkspaceGatewayOperationKind(
   value: unknown,
 ): value is WorkspaceGatewayOperationKind {
-  return typeof value === "string" && workspaceGatewayOperationKindSet.has(value);
+  return isWorkspaceBrowserOperationKind(value);
 }
 
 export function isWorkspaceGatewayBootstrapOperationKind(

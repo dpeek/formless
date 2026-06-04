@@ -41,13 +41,24 @@ import {
   type RunFormlessInstanceDomainProviderDeleteInput,
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
-import { type FormlessInstanceWorkspaceTarget } from "./instance-workspace-config.ts";
+import type { InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget } from "@dpeek/formless-workspace";
 import type { ArchiveNormalizationEvidence } from "../shared/archive-normalizers.ts";
 import {
-  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
-  readFormlessInstanceWorkspaceSecretState,
-  resolveFormlessInstanceWorkspaceAdminToken,
-} from "./instance-workspace-secrets.ts";
+  INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
+  INSTANCE_WORKSPACE_GITIGNORE_ENTRY as FORMLESS_INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
+  INSTANCE_WORKSPACE_SECRET_STATE_DIRECTORY as FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_DIRECTORY,
+  INSTANCE_WORKSPACE_SECRET_STATE_FILE as FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
+  INSTANCE_WORKSPACE_SECRET_STATE_PATH as FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  ensureInstanceWorkspaceSecretStateIgnored as ensureFormlessInstanceWorkspaceSecretStateIgnored,
+  formatInstanceWorkspaceSecretState as formatFormlessInstanceWorkspaceSecretState,
+  instanceWorkspaceSecretStatePath as formlessInstanceWorkspaceSecretStatePath,
+  parseInstanceWorkspaceSecretState as parseFormlessInstanceWorkspaceSecretState,
+  readInstanceWorkspaceSecretState as readFormlessInstanceWorkspaceSecretState,
+  resolveInstanceWorkspaceAdminToken as resolveFormlessInstanceWorkspaceAdminToken,
+  writeInstanceWorkspaceSecretState as writeFormlessInstanceWorkspaceSecretState,
+  type InstanceWorkspaceSecretState as FormlessInstanceWorkspaceSecretState,
+  type WriteInstanceWorkspaceSecretStateResult as WriteFormlessInstanceWorkspaceSecretStateResult,
+} from "@dpeek/formless-workspace/node";
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
@@ -89,13 +100,13 @@ import {
   type SaveLocalFormlessWorkspaceInput,
   type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
-import {
-  runFormlessWorkspaceOperation,
-  type FormlessWorkspaceOperationDisplayObject,
-  type FormlessWorkspaceOperationDisplayValue,
-  type FormlessWorkspaceOperationInput,
-  type FormlessWorkspaceOperationState,
-} from "./instance-workspace-operations.ts";
+import { runFormlessWorkspaceOperation } from "./instance-workspace-operations.ts";
+import type {
+  RunnableWorkspaceOperationInput,
+  WorkspaceOperationDisplayObject,
+  WorkspaceOperationDisplayValue,
+  WorkspaceOperationState,
+} from "@dpeek/formless-workspace";
 import {
   forgetFormlessInstanceDomainMapping,
   forgetFormlessInstanceDomainProviderRedirect,
@@ -154,31 +165,6 @@ export {
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
 export {
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
-  FORMLESS_INSTANCE_WORKSPACE_KIND,
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  FORMLESS_INSTANCE_WORKSPACE_VERSION,
-  defaultFormlessInstanceWorkspaceManifest,
-  formatFormlessInstanceWorkspaceManifest,
-  normalizeFormlessInstanceWorkspaceTargetUrl,
-  parseFormlessInstanceWorkspaceManifest,
-  parseFormlessInstanceWorkspaceManifestJson,
-  parseFormlessInstanceWorkspaceTargetAlias,
-  type FormlessInstanceWorkspaceApp,
-  type FormlessInstanceWorkspaceAppRoutes,
-  type FormlessInstanceWorkspaceArchives,
-  type FormlessInstanceWorkspaceDefaultAppPolicy,
-  type FormlessInstanceWorkspaceDomainIntent,
-  type FormlessInstanceWorkspaceLocalState,
-  type FormlessInstanceWorkspaceManifest,
-  type FormlessInstanceWorkspaceMigrationPolicy,
-  type FormlessInstanceWorkspaceTarget,
-} from "./instance-workspace-config.ts";
-export {
   FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   FORMLESS_INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_DIRECTORY,
@@ -193,7 +179,7 @@ export {
   writeFormlessInstanceWorkspaceSecretState,
   type FormlessInstanceWorkspaceSecretState,
   type WriteFormlessInstanceWorkspaceSecretStateResult,
-} from "./instance-workspace-secrets.ts";
+};
 export {
   checkLocalFormlessWorkspace,
   discoverFormlessInstanceWorkspaceRoot,
@@ -674,9 +660,9 @@ export async function runFormlessCli(
 }
 
 async function runCliWorkspaceOperation(
-  input: FormlessWorkspaceOperationInput,
+  input: RunnableWorkspaceOperationInput,
   dependencies: FormlessCliDependencies,
-): Promise<FormlessWorkspaceOperationState> {
+): Promise<WorkspaceOperationState> {
   const state = await runFormlessWorkspaceOperation(
     input,
     {
@@ -1477,7 +1463,7 @@ function formatArchiveNormalizationEvidence(
     .join("; ")}.`;
 }
 
-function formatCliWorkspaceOperationResult(state: FormlessWorkspaceOperationState): string {
+function formatCliWorkspaceOperationResult(state: WorkspaceOperationState): string {
   return [
     `Workspace operation: ${formatWorkspaceOperationLabel(state.operation)} (${state.status}).`,
     "Workspace source: layout-only manifest, control-plane record source, app archives.",
@@ -1492,7 +1478,7 @@ function formatCliWorkspaceOperationResult(state: FormlessWorkspaceOperationStat
   ].join("\n");
 }
 
-function formatWorkspaceOperationLabel(operation: FormlessWorkspaceOperationState["operation"]) {
+function formatWorkspaceOperationLabel(operation: WorkspaceOperationState["operation"]) {
   switch (operation) {
     case "credentialSetup":
       return "credential setup";
@@ -1505,13 +1491,13 @@ function formatWorkspaceOperationLabel(operation: FormlessWorkspaceOperationStat
   }
 }
 
-function formatCliDisplayFields(fields: FormlessWorkspaceOperationDisplayObject): string[] {
+function formatCliDisplayFields(fields: WorkspaceOperationDisplayObject): string[] {
   return Object.entries(fields)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}: ${formatCliDisplayValue(value)}.`);
 }
 
-function formatCliDisplayValue(value: FormlessWorkspaceOperationDisplayValue): string {
+function formatCliDisplayValue(value: WorkspaceOperationDisplayValue): string {
   if (value === null) {
     return "none";
   }

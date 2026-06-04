@@ -1,11 +1,32 @@
 /**
  * Versioned public workspace gateway wire contract.
  *
- * This file is intentionally import-free. Keep route strings, environment
- * variable names, header names, operation inputs, and display-safe operation
- * response shapes here so browser, Worker, and sidecar adapters consume the
- * same public contract declarations.
+ * Keep route strings, environment variable names, header names, gateway
+ * authorization facts, and transport response wrappers here. Semantic
+ * operation contracts come from the Workspace package.
  */
+import { WORKSPACE_BROWSER_OPERATION_KINDS } from "@dpeek/formless-workspace";
+import type {
+  WorkspaceBrowserOperationKind,
+  WorkspaceOperationCheckOrPullStartInput,
+  WorkspaceOperationCredentialSetupStartInput,
+  WorkspaceOperationDeployStartInput,
+  WorkspaceOperationDisplayObject,
+  WorkspaceOperationDisplayValue,
+  WorkspaceOperationError,
+  WorkspaceOperationEvent,
+  WorkspaceOperationExternalAuthorizationEvent,
+  WorkspaceOperationIdParseResult,
+  WorkspaceOperationLog,
+  WorkspaceOperationPushStartInput,
+  WorkspaceOperationResult,
+  WorkspaceOperationSaveStartInput,
+  WorkspaceOperationStartInput,
+  WorkspaceOperationState,
+  WorkspaceOperationStatus,
+  WorkspaceOperationSummary,
+  WorkspaceOperationStatusStartInput,
+} from "@dpeek/formless-workspace";
 
 export const WORKSPACE_GATEWAY_API_ROUTE_PREFIX = "/api/formless/workspace";
 export const WORKSPACE_GATEWAY_STATUS_API_PATH = `${WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/status`;
@@ -29,27 +50,19 @@ export const WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER = "x-formless-workspace-
 export const WORKSPACE_GATEWAY_OPERATION_KIND_HEADER = "x-formless-workspace-operation-kind";
 
 /**
- * Browser-safe semantic operation allowlist. The values are wire strings.
+ * Browser-safe operation allowlist from the Workspace package. Gateway uses
+ * these wire strings for transport intent classification only.
  */
-export const WORKSPACE_GATEWAY_OPERATION_KINDS = [
-  "check",
-  "credentialSetup",
-  "deployApply",
-  "deployPlan",
-  "pull",
-  "push",
-  "save",
-  "status",
-] as const;
+export const WORKSPACE_GATEWAY_OPERATION_KINDS = WORKSPACE_BROWSER_OPERATION_KINDS;
 
 /**
  * Operations allowed before owner setup through the local bootstrap capability.
  */
 export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = ["status"] as const;
 
-export type WorkspaceGatewayOperationKind = (typeof WORKSPACE_GATEWAY_OPERATION_KINDS)[number];
+export type WorkspaceGatewayOperationKind = WorkspaceBrowserOperationKind;
 
-export type WorkspaceGatewayOperationStatus = "failed" | "queued" | "running" | "succeeded";
+export type WorkspaceGatewayOperationStatus = WorkspaceOperationStatus;
 
 export type WorkspaceGatewayActor = "automation" | "browser" | "cli" | "system";
 
@@ -60,125 +73,43 @@ export type WorkspaceGatewayActorFacts = {
   via: WorkspaceGatewayAuthorizationVia;
 };
 
-export type WorkspaceGatewayDisplayValue =
-  | boolean
-  | null
-  | number
-  | string
-  | WorkspaceGatewayDisplayValue[]
-  | { [key: string]: WorkspaceGatewayDisplayValue };
+export type WorkspaceGatewayDisplayValue = WorkspaceOperationDisplayValue;
 
-export type WorkspaceGatewayDisplayObject = {
-  [key: string]: WorkspaceGatewayDisplayValue;
-};
+export type WorkspaceGatewayDisplayObject = WorkspaceOperationDisplayObject;
 
-export type WorkspaceGatewayOperationSummary = {
-  fields: WorkspaceGatewayDisplayObject;
-  title: string;
-};
+export type WorkspaceGatewayOperationSummary = WorkspaceOperationSummary;
 
-export type WorkspaceGatewayOperationLog = {
-  at: string;
-  id: string;
-  level: "error" | "info" | "warning";
-  message: string;
-};
+export type WorkspaceGatewayOperationLog = WorkspaceOperationLog;
 
-export type WorkspaceGatewayOperationError = {
-  at: string;
-  message: string;
-};
+export type WorkspaceGatewayOperationError = WorkspaceOperationError;
 
-export type WorkspaceGatewayExternalAuthorizationEvent = {
-  at: string;
-  id: string;
-  profileLabel: string;
-  provider: "alchemy" | "cloudflare";
-  status: "waiting";
-  type: "externalAuthorizationUrl";
-  url: string;
-};
+export type WorkspaceGatewayExternalAuthorizationEvent =
+  WorkspaceOperationExternalAuthorizationEvent;
 
-export type WorkspaceGatewayOperationEvent = WorkspaceGatewayExternalAuthorizationEvent;
+export type WorkspaceGatewayOperationEvent = WorkspaceOperationEvent;
 
-export type WorkspaceGatewayOperationResult = {
-  deployment?: WorkspaceGatewayDisplayObject;
-  details?: WorkspaceGatewayDisplayObject;
-  summary: WorkspaceGatewayOperationSummary;
-};
+export type WorkspaceGatewayOperationResult = WorkspaceOperationResult;
 
 /**
- * Display-safe operation state returned by browser-facing gateway responses.
- * Raw filesystem paths, secret values, provider state, and adapter output do
- * not belong in this shape.
+ * Gateway transport alias for Workspace-owned display-safe operation state.
  */
-export type WorkspaceGatewayOperation = {
-  actor: WorkspaceGatewayActor;
-  completedAt?: string;
-  createdAt: string;
-  errors: WorkspaceGatewayOperationError[];
-  events: WorkspaceGatewayOperationEvent[];
-  id: string;
-  input: WorkspaceGatewayDisplayObject;
-  kind: "formless.workspaceOperation";
-  logs: WorkspaceGatewayOperationLog[];
+export type WorkspaceGatewayOperation = Omit<WorkspaceOperationState, "operation"> & {
   operation: WorkspaceGatewayOperationKind;
-  result?: WorkspaceGatewayOperationResult;
-  startedAt?: string;
-  status: WorkspaceGatewayOperationStatus;
-  summary: WorkspaceGatewayOperationSummary;
-  updatedAt: string;
-  version: 1;
-  workspace: {
-    label: string;
-  };
 };
 
-export type WorkspaceGatewaySaveStartInput = {
-  check?: boolean;
-  kind: "save";
-};
+export type WorkspaceGatewaySaveStartInput = WorkspaceOperationSaveStartInput;
 
-export type WorkspaceGatewayStatusStartInput = {
-  includeDeploymentStatus?: boolean;
-  kind: "status";
-  targetAlias?: string | null;
-};
+export type WorkspaceGatewayStatusStartInput = WorkspaceOperationStatusStartInput;
 
-export type WorkspaceGatewayCheckOrPullStartInput = {
-  kind: "check" | "pull";
-  targetAlias?: string | null;
-};
+export type WorkspaceGatewayCheckOrPullStartInput = WorkspaceOperationCheckOrPullStartInput;
 
-export type WorkspaceGatewayPushStartInput = {
-  allowStale?: boolean;
-  apply?: boolean;
-  kind: "push";
-  replace?: boolean;
-  replaceInstallSet?: boolean;
-  targetAlias?: string | null;
-};
+export type WorkspaceGatewayPushStartInput = WorkspaceOperationPushStartInput;
 
-export type WorkspaceGatewayCredentialSetupStartInput = {
-  accountId?: string | null;
-  kind: "credentialSetup";
-  profileLabel?: string | null;
-  provider: "cloudflare";
-};
+export type WorkspaceGatewayCredentialSetupStartInput = WorkspaceOperationCredentialSetupStartInput;
 
-export type WorkspaceGatewayDeployStartInput = {
-  kind: "deployApply" | "deployPlan";
-  migrationPolicy?: "existing" | "new" | null;
-  targetAlias?: string | null;
-};
+export type WorkspaceGatewayDeployStartInput = WorkspaceOperationDeployStartInput;
 
-export type WorkspaceGatewayStartInput =
-  | WorkspaceGatewayCheckOrPullStartInput
-  | WorkspaceGatewayCredentialSetupStartInput
-  | WorkspaceGatewayDeployStartInput
-  | WorkspaceGatewayPushStartInput
-  | WorkspaceGatewaySaveStartInput
-  | WorkspaceGatewayStatusStartInput;
+export type WorkspaceGatewayStartInput = WorkspaceOperationStartInput;
 
 export type WorkspaceGatewayResponse = {
   csrfToken?: string;
@@ -200,9 +131,7 @@ export type WorkspaceGatewayOperationPath = {
   progress: boolean;
 };
 
-export type WorkspaceGatewayOperationIdParseResult =
-  | { ok: true; operationId: string }
-  | { error: string; ok: false };
+export type WorkspaceGatewayOperationIdParseResult = WorkspaceOperationIdParseResult;
 
 export type WorkspaceGatewayStartInputParseResult =
   | { input: WorkspaceGatewayStartInput; ok: true }

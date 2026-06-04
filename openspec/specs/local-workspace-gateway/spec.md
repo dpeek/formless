@@ -54,9 +54,9 @@ through the Gateway package slice.
 #### Scenario: Package owns gateway interface
 
 - **WHEN** runtime-neutral, browser, Worker, sidecar, CLI, Site runtime, or
-  tests need workspace gateway route constants, operation input contracts,
-  operation intent helpers, display-safe operation state, browser fetch
-  behavior, Worker proxy behavior, or sidecar HTTP routing helpers
+  tests need workspace gateway route constants, gateway proxy header
+  contracts, operation intent helpers, browser fetch behavior, Worker proxy
+  behavior, or sidecar HTTP routing helpers
 - **THEN** they import those contracts and adapters from
   `@dpeek/formless-gateway`, `@dpeek/formless-gateway/client`,
   `@dpeek/formless-gateway/worker`, or `@dpeek/formless-gateway/sidecar`
@@ -64,8 +64,20 @@ through the Gateway package slice.
   `src/shared`, `src/client`, `src/worker`, or `src/site` gateway modules or
   from unexported package internals
 - **AND** Site runtime adapter modules may supply non-package-owned operation
-  execution, operation persistence, owner session, and runtime topology
-  dependencies to the package sidecar adapter
+  execution, Workspace package operation state, owner session, and runtime
+  topology dependencies to the package sidecar adapter
+
+#### Scenario: Workspace package owns semantic operation contracts
+
+- **WHEN** Gateway browser, Worker, sidecar, Site runtime, or tests need
+  semantic workspace operation input shapes, display-safe operation state,
+  operation result shapes, operation state redaction, or operation persistence
+- **THEN** those contracts and local state adapters come from
+  `@dpeek/formless-workspace` or `@dpeek/formless-workspace/node`
+- **AND** Gateway adapters treat those shapes as injected workspace operation
+  contracts rather than Gateway-owned contracts
+- **AND** Gateway response types may alias those Workspace contracts for
+  transport callers without redefining compatible local operation shapes
 
 #### Scenario: Package does not own runtime operations
 
@@ -73,10 +85,12 @@ through the Gateway package slice.
   eligibility, owner setup status, workspace save, workspace check, workspace
   pull, workspace push, deploy plan, deploy apply, credential setup, operation
   persistence, filesystem access, or provider mutation
-- **THEN** those behaviors are supplied through Formless runtime adapters
+- **THEN** those behaviors are supplied through Formless runtime adapters or
+  Workspace package local state adapters
 - **AND** the Gateway package does not own app records, Authority storage,
   owner session cookies, runtime topology records, provider credentials,
-  Alchemy state, Cloudflare mutation, or workspace source records
+  Alchemy state, Cloudflare mutation, workspace source records, semantic
+  operation contracts, or operation state storage
 
 ### Requirement: Workspace Gateway Security Baseline
 
@@ -169,6 +183,17 @@ bootstrap boundary.
 
 The system SHALL track local workspace operations with display-safe progress.
 
+#### Scenario: Operation state package boundary
+
+- **WHEN** a local workspace operation starts, updates, completes, fails, or is
+  read through Gateway
+- **THEN** semantic operation input, result, event, log, error, summary, and
+  display-safe state contracts are owned by the Workspace package
+- **AND** Gateway transports those operation states without redefining
+  compatible local response shapes
+- **AND** operation persistence stays under ignored Workspace package local
+  state adapters, not Gateway storage
+
 #### Scenario: Start operation
 
 - **WHEN** a browser starts a long-running workspace operation
@@ -199,8 +224,8 @@ The system SHALL track local workspace operations with display-safe progress.
 #### Scenario: Persist operation progress
 
 - **WHEN** a workspace operation starts, updates, or completes
-- **THEN** the gateway persists display-safe operation state under ignored
-  workspace state
+- **THEN** Workspace package local state adapters persist display-safe operation
+  state under ignored workspace state
 - **AND** browser refreshes can recover active or recently completed operation
   status
 - **AND** secret material, raw adapter or tool output, and provider state payloads
@@ -329,8 +354,10 @@ responses and reviewable source.
 - **WHEN** workspace source, operation input, or operation output includes
   provider API tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens,
   owner setup tokens, or automation admin tokens
-- **THEN** the gateway rejects or redacts the secret values before writing
-  reviewable source or returning browser-visible data
+- **THEN** Workspace package local state adapters or runtime operation adapters
+  reject or redact the secret values before writing reviewable source
+- **AND** Gateway rejects or redacts the secret values before returning
+  browser-visible data
 
 ### Requirement: Worker Gateway Implementation Boundary
 

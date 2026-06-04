@@ -142,6 +142,14 @@ Worker/runtime responsibilities.
 - AND it does not import React
 - AND it does not enter browser or Worker bundles
 
+#### Scenario: Node adapter
+
+- GIVEN a package exposes `src/node.ts`
+- WHEN the Node adapter is imported
+- THEN that entrypoint owns local Node filesystem or process adapters
+- AND it does not import React
+- AND it does not enter browser or Worker bundles
+
 ### Requirement: Public Import Boundary
 
 External package consumers SHALL import only package roots or documented package
@@ -224,8 +232,8 @@ provider secrets or canonical provider state.
 ### Requirement: Gateway Package Slice
 
 The system SHALL provide a Gateway package slice under `lib/gateway/` for local
-workspace gateway contracts, browser adapters, Worker proxy adapters, and local
-sidecar adapters.
+workspace gateway transport contracts, browser adapters, Worker proxy adapters,
+and local sidecar HTTP adapters.
 
 #### Scenario: Gateway package scaffold
 
@@ -254,15 +262,20 @@ owner session storage, runtime topology, provider execution, or app records.
 
 #### Scenario: Package owns gateway contracts and adapters
 
-- GIVEN workspace gateway route constants, operation input shapes, display-safe
-  operation state, operation intent helpers, browser fetch behavior, Worker
-  proxy behavior, or sidecar HTTP routing helpers are needed
+- GIVEN workspace gateway route constants, proxy header contracts, operation
+  intent helpers, browser fetch behavior, Worker proxy behavior, or sidecar
+  HTTP routing helpers are needed
 - WHEN runtime-neutral, browser, Worker, or sidecar code consumes gateway
   capability behavior
 - THEN they come from `lib/gateway`
-- AND actual save, check, pull, push, deploy, credential setup, owner session,
-  runtime topology, Authority, provider credential, and filesystem operation
-  implementations remain outside the package contract
+- AND semantic workspace operation input shapes, display-safe operation state,
+  operation result contracts, operation storage, actual save, check, pull,
+  push, deploy, credential setup, owner session, runtime topology, Authority,
+  provider credential, and filesystem operation implementations remain outside
+  the package contract
+- AND Gateway may expose transport-facing aliases or response wrappers for
+  Workspace operation states, but canonical operation declarations remain in
+  the Workspace package
 
 ### Requirement: Schema Package Slice
 
@@ -325,3 +338,64 @@ surfaces, archive execution, or workspace source.
   Workspace, Deploy, migration, or runtime modules
 - AND the Schema package supplies only runtime-neutral schema contracts, pure
   parser/formatter behavior, and package-local deterministic tests
+
+### Requirement: Workspace Package Slice
+
+The system SHALL provide a Workspace package slice under `lib/workspace/` for
+Formless workspace source contracts, ignored local state contracts, semantic
+workspace operation contracts, and local Node filesystem adapters.
+
+#### Scenario: Workspace package scaffold
+
+- GIVEN the Workspace package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and supported adapters
+- AND the package is published as `@dpeek/formless-workspace` with root and
+  `./node` public subpaths
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, or sidecar subpaths
+
+#### Scenario: Workspace package exports
+
+- GIVEN CLI, Site runtime, Gateway runtime adapters, archive workflows, tests,
+  or local agent workflows need workspace source, local state, operation, or
+  record-source behavior
+- WHEN they import the package
+- THEN they import from `@dpeek/formless-workspace` or
+  `@dpeek/formless-workspace/node`
+- AND they do not deep-import workspace package internals
+
+### Requirement: Workspace Package Non-Ownership
+
+The Workspace package SHALL own reusable Formless workspace source, state, and
+operation contracts without owning CLI command policy, gateway transport,
+runtime storage, provider execution, or app records.
+
+#### Scenario: Package owns workspace contracts and local adapters
+
+- GIVEN `formless.json` manifest parsing, workspace path defaults, target URL
+  normalization, reviewable control-plane record-source file contracts, ignored
+  local or secret state file contracts, semantic workspace operation inputs,
+  display-safe operation state, operation result shapes, operation redaction, or
+  deterministic local filesystem workspace IO are needed
+- WHEN runtime-neutral or local Node code consumes workspace capability
+  behavior
+- THEN they come from `lib/workspace`
+- AND Gateway imports or is supplied those semantic operation contracts instead
+  of defining Gateway-owned operation shapes
+- AND package consumers import Workspace behavior only from
+  `@dpeek/formless-workspace` or `@dpeek/formless-workspace/node`, never from
+  old `src/site` workspace modules or package internals
+
+#### Scenario: Package does not own runtime execution
+
+- GIVEN workspace operations save, check, pull, push, deploy, credential setup,
+  restore, export, import, mutate provider state, read Authority storage, or
+  select runtime topology
+- WHEN those behaviors are implemented
+- THEN CLI, Site runtime, Gateway runtime adapters, Archive workflows, Deploy
+  runtime, Worker runtime, or provider adapters own the execution
+- AND the Workspace package only supplies contracts, pure helpers, display-safe
+  state handling, and local filesystem adapters for workspace source or ignored
+  local state

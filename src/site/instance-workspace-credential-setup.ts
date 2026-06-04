@@ -10,10 +10,10 @@ import {
   type FormlessInstanceDeploymentAccount,
 } from "./instance-onboarding.ts";
 import type {
-  FormlessWorkspaceOperationEvent,
-  FormlessWorkspaceOperationResult,
-  FormlessWorkspaceOperationStatus,
-} from "./instance-workspace-operations.ts";
+  WorkspaceOperationEvent,
+  WorkspaceOperationResult,
+  WorkspaceOperationStatus,
+} from "@dpeek/formless-workspace";
 
 export const FORMLESS_ALCHEMY_CLOUDFLARE_PROVIDER = "cloudflare";
 export const FORMLESS_ALCHEMY_DEFAULT_PROFILE = "default";
@@ -29,9 +29,9 @@ export type AlchemyCloudflareCredentialSetupInput = {
 
 export type AlchemyCloudflareCredentialSetupResult = {
   continue?: () => Promise<AlchemyCloudflareCredentialSetupResult>;
-  events?: readonly Omit<FormlessWorkspaceOperationEvent, "id">[];
-  result?: FormlessWorkspaceOperationResult;
-  status?: FormlessWorkspaceOperationStatus;
+  events?: readonly Omit<WorkspaceOperationEvent, "id">[];
+  result?: WorkspaceOperationResult;
+  status?: WorkspaceOperationStatus;
 };
 
 export type AlchemyCloudflareOAuthCredentials = {
@@ -263,7 +263,7 @@ function credentialSetupReadyResult(input: {
   accountCount: number;
   profile: string;
   source: "existing-profile" | "oauth-profile";
-}): FormlessWorkspaceOperationResult {
+}): WorkspaceOperationResult {
   return {
     details: {
       account: displaySafeAccount(input.account),
@@ -287,7 +287,7 @@ function credentialSetupReadyResult(input: {
 function credentialSetupAccountSelectionResult(input: {
   accounts: readonly FormlessInstanceDeploymentAccount[];
   profile: string;
-}): FormlessWorkspaceOperationResult {
+}): WorkspaceOperationResult {
   return {
     details: {
       accounts: input.accounts.map(displaySafeAccount),

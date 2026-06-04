@@ -6,13 +6,19 @@ import { describe, expect, it } from "vite-plus/test";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
-describe("workspace gateway import boundary", () => {
-  it("keeps gateway consumers on public package subpaths", async () => {
+describe("workspace package import boundaries", () => {
+  it("keeps Gateway and Workspace consumers on public package subpaths", async () => {
     const failures: string[] = [];
 
     for (const path of forbiddenLegacyGatewayFiles) {
       if (await fileExists(resolve(repoRoot, path))) {
         failures.push(`${path}: legacy gateway module still exists`);
+      }
+    }
+
+    for (const path of forbiddenLegacyWorkspaceFiles) {
+      if (await fileExists(resolve(repoRoot, path))) {
+        failures.push(`${path}: legacy workspace module still exists`);
       }
     }
 
@@ -28,6 +34,14 @@ describe("workspace gateway import boundary", () => {
         if (forbiddenGatewayPackageImport(specifier)) {
           failures.push(`${path}: deep-imports gateway package ${specifier}`);
         }
+
+        if (forbiddenLegacyWorkspaceImport(specifier)) {
+          failures.push(`${path}: imports legacy workspace module ${specifier}`);
+        }
+
+        if (forbiddenWorkspacePackageImport(specifier)) {
+          failures.push(`${path}: deep-imports workspace package ${specifier}`);
+        }
       }
     }
 
@@ -42,6 +56,11 @@ const allowedGatewayPackageImports = new Set([
   "@dpeek/formless-gateway/worker",
 ]);
 
+const allowedWorkspacePackageImports = new Set([
+  "@dpeek/formless-workspace",
+  "@dpeek/formless-workspace/node",
+]);
+
 const forbiddenLegacyGatewayFiles = [
   "src/shared/workspace-gateway-protocol.ts",
   "src/shared/workspace-gateway-protocol.test.ts",
@@ -53,11 +72,26 @@ const forbiddenLegacyGatewayFiles = [
   "src/site/local-workspace-gateway.test.ts",
 ];
 
+const forbiddenLegacyWorkspaceFiles = [
+  "src/site/instance-workspace-config.ts",
+  "src/site/instance-workspace-config.test.ts",
+  "src/site/instance-workspace-record-source.ts",
+  "src/site/instance-workspace-record-source.test.ts",
+  "src/site/instance-workspace-secrets.ts",
+  "src/site/instance-workspace-secrets.test.ts",
+];
+
 const legacyGatewayImportPatterns = [
   /(^|\/)workspace-gateway-protocol(\.ts)?$/,
   /(^|\/)workspace-gateway(\.test)?(\.ts)?$/,
   /(^|\/)workspace-gateway-proxy(\.test)?(\.ts)?$/,
   /(^|\/)local-workspace-gateway(\.test)?(\.ts)?$/,
+];
+
+const legacyWorkspaceImportPatterns = [
+  /(^|\/)instance-workspace-config(\.test)?(\.ts)?$/,
+  /(^|\/)instance-workspace-record-source(\.test)?(\.ts)?$/,
+  /(^|\/)instance-workspace-secrets(\.test)?(\.ts)?$/,
 ];
 
 async function boundarySourceFiles(): Promise<string[]> {
@@ -118,7 +152,20 @@ function forbiddenLegacyGatewayImport(specifier: string): boolean {
 
 function forbiddenGatewayPackageImport(specifier: string): boolean {
   return (
-    specifier.startsWith("@dpeek/formless-gateway") && !allowedGatewayPackageImports.has(specifier)
+    (specifier === "@dpeek/formless-gateway" || specifier.startsWith("@dpeek/formless-gateway/")) &&
+    !allowedGatewayPackageImports.has(specifier)
+  );
+}
+
+function forbiddenLegacyWorkspaceImport(specifier: string): boolean {
+  return legacyWorkspaceImportPatterns.some((pattern) => pattern.test(specifier));
+}
+
+function forbiddenWorkspacePackageImport(specifier: string): boolean {
+  return (
+    (specifier === "@dpeek/formless-workspace" ||
+      specifier.startsWith("@dpeek/formless-workspace/")) &&
+    !allowedWorkspacePackageImports.has(specifier)
   );
 }
 

@@ -1,8 +1,8 @@
 import {
-  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
-  normalizeFormlessInstanceWorkspaceTargetUrl,
-  parseFormlessInstanceWorkspaceTargetAlias,
-} from "./instance-workspace-config.ts";
+  DEFAULT_INSTANCE_WORKSPACE_TARGET_ALIAS,
+  normalizeInstanceWorkspaceTargetUrl,
+  parseInstanceWorkspaceTargetAlias,
+} from "@dpeek/formless-workspace";
 import type { CloudflareDomainPreflightPolicy } from "./cloudflare-domain-client.ts";
 import type { DomainProviderResourceKind } from "../shared/domain-provider-protocol.ts";
 import type { InstanceDomainMappingProfile } from "../shared/instance-domain-mappings.ts";
@@ -536,7 +536,7 @@ function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
   let fromArchive: string | null = null;
   let fromRemote = false;
   let name: string | null = null;
-  let targetAlias = DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
+  let targetAlias = DEFAULT_INSTANCE_WORKSPACE_TARGET_ALIAS;
   let targetUrl: string | null = null;
 
   for (let index = 0; index < options.rest.length; index += 1) {
@@ -549,7 +549,7 @@ function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
     }
 
     if (arg === "--target-url") {
-      targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(
+      targetUrl = normalizeInstanceWorkspaceTargetUrl(
         readOptionValue(options.rest, index, "--target-url"),
       );
       index += 1;
@@ -1227,10 +1227,7 @@ function parseInstanceWorkspaceOptions(
 }
 
 function parseCliTargetAlias(value: string): string {
-  return parseFormlessInstanceWorkspaceTargetAlias(
-    "Formless instance workspace target alias",
-    value,
-  );
+  return parseInstanceWorkspaceTargetAlias("Formless instance workspace target alias", value);
 }
 
 function parseArchiveTargetOutOptions(

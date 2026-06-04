@@ -39,15 +39,15 @@ import {
   startWorkspaceGatewaySidecar,
   type WorkspaceGatewaySidecar,
 } from "@dpeek/formless-gateway/sidecar";
+import {
+  INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
+  formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+} from "@dpeek/formless-workspace";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
-import {
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  defaultFormlessInstanceWorkspaceManifest,
-  formatFormlessInstanceWorkspaceManifest,
-} from "./instance-workspace-config.ts";
-import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
+import { writeInstanceWorkspaceControlPlaneRecordSource } from "@dpeek/formless-workspace/node";
 import {
   createWorkspaceGatewayOperationHandlers,
   createWorkspaceGatewayProxyDependencies,
@@ -1362,7 +1362,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
   const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
   const now = "2026-05-26T00:00:00.000Z";
 
-  await writeFormlessInstanceControlPlaneRecordSource({
+  await writeInstanceWorkspaceControlPlaneRecordSource({
     controlPlane: {
       schemaKey: "instance-control-plane",
       schemaUpdatedAt: now,

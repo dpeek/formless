@@ -14,7 +14,7 @@ import {
   type AlchemyDomainProviderRunner,
   runAlchemyDomainProviderPlan,
 } from "../worker/domain-provider-alchemy.ts";
-import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
+import { normalizeInstanceWorkspaceTargetUrl } from "@dpeek/formless-workspace";
 import {
   completeFormlessInstanceDomainProviderDeleteJob,
   requestFormlessInstanceDomainProviderDelete,
@@ -65,7 +65,7 @@ export async function runFormlessInstanceDomainProviderDelete(
   input: RunFormlessInstanceDomainProviderDeleteInput,
   dependencies: RunFormlessInstanceDomainProviderDeleteDependencies,
 ): Promise<RunFormlessInstanceDomainProviderDeleteResult> {
-  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const runnerId = normalizeRunnerId(input.runnerId ?? dependencies.createRunnerId());
   const deleteJob = await requestFormlessInstanceDomainProviderDelete(
     {
