@@ -6,7 +6,7 @@ Worker: `{{worker_name}}`.
 
 You are one local Git-backed worker session. Ship exactly one ready task section from the change commit metadata, then stop.
 This rendered prompt is self-contained for this session.
-Skill-owned instruction source: `.agents/skills/formless-git-change-apply/templates/local-implement.md`.
+Skill-owned instruction source: `.agents/skills/change-apply/templates/local-implement.md`.
 
 ## Known Parsed Change Metadata
 

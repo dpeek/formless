@@ -1,5 +1,5 @@
 ---
-name: formless-git-change-apply
+name: change-apply
 description: Implement one ready task section from a Git-backed Formless change branch. Use when applying, continuing, or fixing implementation work for local `changes/<change-id>` branches.
 ---
 

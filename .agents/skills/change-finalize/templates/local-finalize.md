@@ -6,7 +6,7 @@ Worker: `{{worker_name}}`.
 
 You are a local Git-backed finalization session. Finalize before marking the branch ready for review.
 This rendered prompt is self-contained for this session.
-Skill-owned instruction source: `.agents/skills/formless-git-change-finalize/templates/local-finalize.md`.
+Skill-owned instruction source: `.agents/skills/change-finalize/templates/local-finalize.md`.
 
 ## Known Parsed Change Metadata
 

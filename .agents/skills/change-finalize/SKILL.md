@@ -1,5 +1,5 @@
 ---
-name: formless-git-change-finalize
+name: change-finalize
 description: Finalize a completed Git-backed Formless change branch without OpenSpec archive output. Use when all change metadata tasks are complete and the branch needs rebase, metadata validation, spec validation, checks, and ready-for-review state.
 ---
 

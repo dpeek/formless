@@ -1,5 +1,5 @@
 ---
-name: formless-git-change-explore
+name: change-explore
 description: Explore Formless Git-backed change ideas and branch metadata without implementing. Use when brainstorming, investigating, clarifying requirements, or reviewing a `changes/<change-id>` branch before propose/apply/finalize work.
 ---
 
@@ -21,6 +21,6 @@ Explore before implementation. Read code, specs, branch metadata, and diffs as n
 - Do not create `openspec/changes/<change-id>/` directories for new Formless work.
 - Do not run `openspec archive`.
 - Treat Git notes and untracked files as non-authoritative.
-- When work is ready to formalize, use `formless-git-change-propose`.
-- When implementation starts, use `formless-git-change-apply`.
-- When all tasks are complete, use `formless-git-change-finalize`.
+- When work is ready to formalize, use `change-propose`.
+- When implementation starts, use `change-apply`.
+- When all tasks are complete, use `change-finalize`.

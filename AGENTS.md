@@ -17,14 +17,14 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Task loop: rendered prompt injected by `bun agents`; source skill templates are reference, not required per-session reads.
 - Package scope: nearest package `AGENTS.md`, for example `lib/ui/AGENTS.md`.
 - Capability scope: relevant `openspec/specs/*/spec.md`.
-- Skill config: relevant file in `doc/agents/`.
 - Do not read every doc. Read only path needed for task.
 
-## Agent Docs
+## Agent Skills
 
-- `doc/agents/local-agent-workers.md`: local Git-backed pull worker human and supervisor reference.
-- `doc/agents/local-openspec-implement.md`: legacy stable pointer to the Git-backed implementation skill template.
-- `doc/agents/local-openspec-finalize.md`: legacy stable pointer to the Git-backed finalization skill template.
+- `.agents/skills/change-propose/SKILL.md`: create Git-backed change branches.
+- `.agents/skills/change-apply/SKILL.md`: implement one ready task section.
+- `.agents/skills/change-finalize/SKILL.md`: finalize completed branches for review.
+- `.agents/skills/change-explore/SKILL.md`: inspect Git-backed changes without implementation.
 
 ## Capability Specs
 
@@ -64,7 +64,6 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `lib/deploy/`: reusable deployment contracts and adapters package.
 - `scripts/`: repo scripts, local agents, package build, seed pull.
 - `openspec/specs/`: shipped capability specs.
-- `doc/agents/`: local agent workflow config and prompt bodies.
 
 ## Core Terms
 
@@ -141,6 +140,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Do not create alternate planning docs.
 - The branch tip commit message stores proposal, design, task state, evidence, blockers, and trailers.
 - The branch diff against local `main` is the review delta.
+- Proposal branches start with a first-pass spec patch in canonical `openspec/specs/*/spec.md` files plus structured commit metadata.
 - Shipped spec facts are direct edits to canonical `openspec/specs/*/spec.md` files on the branch.
 - Task statuses are task checkboxes plus recorded evidence in structured commit metadata.
 - Mark or ship one task section at a time for a workstream.

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -2211,7 +2211,7 @@ describe("local OpenSpec implementation prompt", () => {
     expect(prompt).toContain("record blocker evidence plus split guidance in commit metadata");
     expect(prompt).toContain("This rendered prompt is self-contained for this session.");
     expect(prompt).toContain(
-      "Skill-owned instruction source: `.agents/skills/formless-git-change-apply/templates/local-implement.md`.",
+      "Skill-owned instruction source: `.agents/skills/change-apply/templates/local-implement.md`.",
     );
     expect(prompt).toContain(
       "Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.",
@@ -2258,7 +2258,7 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).toContain("Reuse latest implementation `devstate check` evidence");
     expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
     expect(prompt).toContain(
-      "Skill-owned instruction source: `.agents/skills/formless-git-change-finalize/templates/local-finalize.md`.",
+      "Skill-owned instruction source: `.agents/skills/change-finalize/templates/local-finalize.md`.",
     );
     expect(prompt).toContain(
       "Leave `changes/add-thing` as the review branch and do not check it out in the worker worktree.",
@@ -2278,12 +2278,7 @@ describe("local OpenSpec finalization prompt", () => {
 
 describe("repo-owned Git-backed change skills", () => {
   it("defines Git-backed propose, apply, finalize, and exploration skills", () => {
-    const skillNames = [
-      "formless-git-change-propose",
-      "formless-git-change-apply",
-      "formless-git-change-finalize",
-      "formless-git-change-explore",
-    ];
+    const skillNames = ["change-propose", "change-apply", "change-finalize", "change-explore"];
 
     for (const skillName of skillNames) {
       const skill = readFileSync(`.agents/skills/${skillName}/SKILL.md`, "utf8");
@@ -2294,22 +2289,31 @@ describe("repo-owned Git-backed change skills", () => {
       expect(skill).toContain("bun agents");
     }
 
-    const propose = readFileSync(".agents/skills/formless-git-change-propose/SKILL.md", "utf8");
+    const propose = readFileSync(".agents/skills/change-propose/SKILL.md", "utf8");
     expect(propose).toContain("git checkout -b changes/<change-id> main");
+    expect(propose).toContain("## First-Pass Spec Patch");
+    expect(propose).toContain(
+      "reviewers can inspect the intended behavior as `git diff main..changes/<change-id>`",
+    );
+    expect(propose).toContain("git add openspec/specs/<capability>/spec.md");
     expect(propose).toContain("Formless-Change-State: ready");
+    expect(propose).toContain(
+      "A ready proposal branch includes both structured commit metadata and a first-pass canonical spec patch.",
+    );
     expect(propose).toContain("Do not run `openspec new change`");
+    expect(propose).not.toContain("git commit --allow-empty -F <message-file>");
 
-    const apply = readFileSync(".agents/skills/formless-git-change-apply/SKILL.md", "utf8");
+    const apply = readFileSync(".agents/skills/change-apply/SKILL.md", "utf8");
     expect(apply).toContain("templates/local-implement.md");
     expect(apply).toContain("git log --no-notes -1 --format=%B HEAD");
     expect(apply).toContain("Do not cross into another task section.");
 
-    const finalize = readFileSync(".agents/skills/formless-git-change-finalize/SKILL.md", "utf8");
+    const finalize = readFileSync(".agents/skills/change-finalize/SKILL.md", "utf8");
     expect(finalize).toContain("templates/local-finalize.md");
     expect(finalize).toContain("openspec validate --specs --strict --no-interactive");
     expect(finalize).toContain("Do not run `openspec archive`");
 
-    const explore = readFileSync(".agents/skills/formless-git-change-explore/SKILL.md", "utf8");
+    const explore = readFileSync(".agents/skills/change-explore/SKILL.md", "utf8");
     expect(explore).toContain("Exploration is not implementation.");
     expect(explore).toContain("git diff --stat --find-renames main..changes/<change-id>");
   });
@@ -2318,49 +2322,70 @@ describe("repo-owned Git-backed change skills", () => {
     const source = readFileSync("scripts/agents.ts", "utf8");
 
     expect(source).toContain(".agents");
-    expect(source).toContain("formless-git-change-apply");
-    expect(source).toContain("formless-git-change-finalize");
+    expect(source).toContain("change-apply");
+    expect(source).toContain("change-finalize");
     expect(source).toContain("local-implement.md");
     expect(source).toContain("local-finalize.md");
     expect(source).not.toContain('doc", "agents');
     expect(source).not.toContain("local-openspec-implement");
     expect(source).not.toContain("local-openspec-finalize");
-
-    const implementDoc = readFileSync("doc/agents/local-openspec-implement.md", "utf8");
-    const finalizeDoc = readFileSync("doc/agents/local-openspec-finalize.md", "utf8");
-    expect(implementDoc).toContain("formless-git-change-apply/templates/local-implement.md");
-    expect(finalizeDoc).toContain("formless-git-change-finalize/templates/local-finalize.md");
-    expect(implementDoc).not.toContain("## Workflow");
-    expect(finalizeDoc).not.toContain("## Workflow");
   });
 
-  it("bounds legacy OpenSpec-directory skills and routes new work to Git-backed skills", () => {
-    const legacySkills = [
-      ["openspec-propose", "formless-git-change-propose"],
-      ["openspec-apply-change", "formless-git-change-apply"],
-      ["openspec-archive-change", "formless-git-change-finalize"],
-      ["openspec-explore", "formless-git-change-explore"],
+  it("uses shortened Git-backed skill entrypoints", () => {
+    const activeSkillNames = [
+      "change-propose",
+      "change-apply",
+      "change-finalize",
+      "change-explore",
     ];
 
-    for (const [legacySkill, gitBackedSkill] of legacySkills) {
-      const skill = readFileSync(`.agents/skills/${legacySkill}/SKILL.md`, "utf8");
-      expect(skill).toContain("Legacy OpenSpec-directory workflow.");
-      expect(skill).toContain(gitBackedSkill);
-      expect(skill).toContain("committed `openspec/changes/<change-id>/` directories");
+    for (const skillName of activeSkillNames) {
+      expect(existsSync(`.agents/skills/${skillName}/SKILL.md`)).toBe(true);
+    }
+
+    const retiredSkillNames = [
+      "formless-git-change-propose",
+      "formless-git-change-apply",
+      "formless-git-change-finalize",
+      "formless-git-change-explore",
+      "openspec-propose",
+      "openspec-apply-change",
+      "openspec-archive-change",
+      "openspec-explore",
+    ];
+
+    for (const skillName of retiredSkillNames) {
+      expect(existsSync(`.agents/skills/${skillName}/SKILL.md`)).toBe(false);
     }
   });
 });
 
-describe("local agent worker instruction docs", () => {
+describe("local agent worker instructions", () => {
   it("keeps root agent instructions layered around rendered prompts", () => {
     const agents = readFileSync("AGENTS.md", "utf8");
 
     expect(agents).toContain(
       "Task loop: rendered prompt injected by `bun agents`; source skill templates are reference, not required per-session reads.",
     );
+    expect(agents).toContain(
+      ".agents/skills/change-propose/SKILL.md`: create Git-backed change branches.",
+    );
+    expect(agents).toContain(
+      ".agents/skills/change-apply/SKILL.md`: implement one ready task section.",
+    );
+    expect(agents).toContain(
+      ".agents/skills/change-finalize/SKILL.md`: finalize completed branches for review.",
+    );
+    expect(agents).toContain(
+      ".agents/skills/change-explore/SKILL.md`: inspect Git-backed changes without implementation.",
+    );
+    expect(agents).not.toContain("doc/agents/");
     expect(agents).toContain("Workstreams live in local `changes/<change-id>` branches.");
     expect(agents).toContain(
       "The branch tip commit message stores proposal, design, task state, evidence, blockers, and trailers.",
+    );
+    expect(agents).toContain(
+      "Proposal branches start with a first-pass spec patch in canonical `openspec/specs/*/spec.md` files plus structured commit metadata.",
     );
     expect(agents).toContain(
       "Shipped spec facts are direct edits to canonical `openspec/specs/*/spec.md` files on the branch.",
@@ -2385,41 +2410,36 @@ describe("local agent worker instruction docs", () => {
     expect(agents).not.toContain("Archiving is a separate process after review and merge");
   });
 
-  it("documents CLI-owned finalization and context-efficient worker prompts", () => {
-    const workerDoc = readFileSync("doc/agents/local-agent-workers.md", "utf8");
+  it("keeps workflow details in repo-owned skills and templates", () => {
+    const propose = readFileSync(".agents/skills/change-propose/SKILL.md", "utf8");
+    const apply = readFileSync(".agents/skills/change-apply/templates/local-implement.md", "utf8");
+    const finalize = readFileSync(
+      ".agents/skills/change-finalize/templates/local-finalize.md",
+      "utf8",
+    );
 
-    expect(workerDoc).toContain("Queue source: local `changes/<change-id>` branches.");
-    expect(workerDoc).toContain(
-      "Metadata sections are `Proposal`, `Design`, `Tasks`, `Evidence`, and `Blockers`.",
+    expect(propose).toContain("Use local `changes/<change-id>` branches as the queue.");
+    expect(propose).toContain(
+      "A ready proposal branch includes both structured commit metadata and a first-pass canonical spec patch.",
     );
-    expect(workerDoc).toContain(
-      "Required trailers are `Formless-Change-Id`, `Formless-Change-Version`, `Formless-Change-State`, `Formless-Capabilities`, and `Formless-Last-Evidence-At`.",
+    expect(apply).toContain("This rendered prompt is self-contained for this session.");
+    expect(apply).toContain(
+      "Skill-owned instruction source: `.agents/skills/change-apply/templates/local-implement.md`.",
     );
-    expect(workerDoc).toContain(
-      "Rendered worker prompts are self-contained for the session and include known metadata, task state, branch diff, concrete commands, and relevant paths.",
+    expect(apply).toContain("Use the selected task section above before broad context reads.");
+    expect(apply).toContain("Do not cross into another task section.");
+    expect(apply).toContain(
+      "Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.",
     );
-    expect(workerDoc).toContain("Workers select the active section before broad context reads");
-    expect(workerDoc).toContain("It runs `openspec validate --specs --strict --no-interactive`.");
-    expect(workerDoc).toContain(
-      "It does not run `openspec archive` and does not commit archived change files.",
+    expect(finalize).toContain("openspec validate --specs --strict --no-interactive");
+    expect(finalize).toContain(
+      "Do not run `openspec archive` and do not commit archived change files.",
     );
-    expect(workerDoc).toContain("Checked-out worker branch: `agents/<worker-name>`.");
-    expect(workerDoc).toContain("publishes the worker branch tip back to `changes/<change-id>`");
-    expect(workerDoc).toContain("It reuses latest implementation `devstate check` evidence");
-    expect(workerDoc).toContain(
-      "It reruns `devstate check` when finalization invalidates prior evidence",
+    expect(finalize).toContain(
+      "Reuse latest implementation `devstate check` evidence when finalization did not change code",
     );
-    expect(workerDoc).toContain(
-      "code changes, completed task evidence, canonical specs, and structured commit metadata",
+    expect(finalize).toContain(
+      "Leave `changes/{{change_id}}` as the review branch and do not check it out in the worker worktree.",
     );
-    expect(workerDoc).toContain(
-      "Review-ready branches retain their lease until branch merge, branch deletion, or explicit release.",
-    );
-    expect(workerDoc).toContain(
-      "Implementation does not perform automatic finalization, archive, spec promotion, or ready-for-review work.",
-    );
-    expect(workerDoc).not.toContain("promotes shipped facts");
-    expect(workerDoc).not.toContain("promoted specs");
-    expect(workerDoc).not.toContain("Archiving is a separate process after review and merge");
   });
 });
