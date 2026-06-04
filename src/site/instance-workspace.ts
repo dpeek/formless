@@ -5199,23 +5199,32 @@ function httpOriginsFromText(text: string): string[] {
 }
 
 function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<void> {
+  const signalCode = child.signalCode ?? null;
+
+  if (child.exitCode !== null || signalCode !== null) {
+    return settleChildExit(child.exitCode, signalCode);
+  }
+
   return new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("close", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new Error(
-          signal
-            ? `Formless instance dev server exited with signal ${signal}.`
-            : `Formless instance dev server exited with code ${code ?? "unknown"}.`,
-        ),
-      );
+      settleChildExit(code, signal).then(resolve, reject);
     });
   });
+}
+
+function settleChildExit(code: number | null, signal: NodeJS.Signals | null): Promise<void> {
+  if (code === 0) {
+    return Promise.resolve();
+  }
+
+  return Promise.reject(
+    new Error(
+      signal
+        ? `Formless instance dev server exited with signal ${signal}.`
+        : `Formless instance dev server exited with code ${code ?? "unknown"}.`,
+    ),
+  );
 }
 
 async function fetchWorkspaceJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
