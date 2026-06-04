@@ -1,9 +1,9 @@
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "../shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 import { nowIsoString } from "../shared/clock.ts";
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -22,8 +22,8 @@ export type LocalSessionBootstrapEnv = OwnerSessionEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
   FORMLESS_RUNTIME_PROFILE?: string;
   [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]?: string;
-  [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]?: string;
-  [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]?: string;
+  [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]?: string;
+  [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]?: string;
 };
 
 type BootstrapValidation =
@@ -137,8 +137,8 @@ function isLocalWorkspaceRuntime(request: Request, env: LocalSessionBootstrapEnv
   return (
     (profileKind === "instance" || profileKind === "dev") &&
     normalizedSecret(env[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]) !== undefined &&
-    normalizedSecret(env[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]) !== undefined &&
-    normalizedSecret(env[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]) !== undefined &&
+    normalizedSecret(env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]) !== undefined &&
+    normalizedSecret(env[WORKSPACE_GATEWAY_SIDECAR_URL_ENV]) !== undefined &&
     ownerSessionSigningSecret(env) !== undefined
   );
 }

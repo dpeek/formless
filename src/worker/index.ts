@@ -1,4 +1,5 @@
 import { FormlessAuthority } from "./authority.ts";
+import { handleWorkspaceGatewayProxyRequest } from "@dpeek/formless-gateway/worker";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { authorizeInstanceWrite } from "./authority-admin-guard.ts";
@@ -34,7 +35,8 @@ import {
   handleLocalSessionBootstrapApiRequest,
   isLocalSessionBootstrapApiPath,
 } from "./local-session-bootstrap.ts";
-import { handleWorkerWorkspaceGatewayProxyRequest } from "./workspace-gateway-proxy.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -103,9 +105,12 @@ export default {
           : env.FORMLESS_RUNTIME_PROFILE,
     );
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
-    const workspaceGatewayResponse = await handleWorkerWorkspaceGatewayProxyRequest(request, env, {
-      mappedHost: runtimeRoute?.kind === "mount" && runtimeRoute.matchHost !== undefined,
-      runtimeTopology: requestTopology,
+    const workspaceGatewayResponse = await handleWorkspaceGatewayProxyRequest(request, env, {
+      readOwnerSetupStatus: (setupRequest) => readOwnerSetupStatus(setupRequest, env),
+      routeAvailable:
+        requestTopology.routePolicy.workspaceGatewayApiRoutes &&
+        !(runtimeRoute?.kind === "mount" && runtimeRoute.matchHost !== undefined),
+      validateOwnerSession: (sessionRequest) => validateOwnerSessionCookie(sessionRequest, env),
     });
 
     if (workspaceGatewayResponse) {
@@ -291,4 +296,25 @@ function notFoundResponse(json: boolean): Response {
   return json
     ? Response.json({ error: "Not found." }, { status: 404 })
     : new Response(null, { status: 404 });
+}
+
+async function readOwnerSetupStatus(
+  request: Request,
+  env: Env,
+): Promise<{ setupComplete: boolean }> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL("/api/formless/setup", request.url), {
+      headers: { accept: "application/json" },
+      method: "GET",
+    }),
+  );
+
+  if (!response.ok) {
+    return { setupComplete: false };
+  }
+
+  const body = (await response.json()) as Partial<{ setupComplete: boolean }>;
+
+  return { setupComplete: body.setupComplete === true };
 }

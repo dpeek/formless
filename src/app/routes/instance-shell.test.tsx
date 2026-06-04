@@ -11,7 +11,7 @@ import {
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
-import type { LocalWorkspaceGatewayOperation } from "../../client/workspace-gateway.ts";
+import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
 
 describe("instance shell route view", () => {
   it("renders generated control-plane app, route, and deployment surfaces", () => {
@@ -667,8 +667,8 @@ function workspaceGatewayState(
 }
 
 function workspaceOperation(
-  overrides: Partial<LocalWorkspaceGatewayOperation> = {},
-): LocalWorkspaceGatewayOperation {
+  overrides: Partial<WorkspaceGatewayOperation> = {},
+): WorkspaceGatewayOperation {
   return {
     actor: "browser",
     createdAt: "2026-06-02T00:00:00.000Z",

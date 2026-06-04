@@ -155,13 +155,17 @@ import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-c
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "../shared/workspace-gateway-protocol.ts";
-import type {
-  LocalWorkspaceGatewaySidecar,
-  StartLocalWorkspaceGatewaySidecarDependencies,
-} from "./local-workspace-gateway.ts";
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
+import {
+  startWorkspaceGatewaySidecar as startPackageWorkspaceGatewaySidecar,
+  type WorkspaceGatewaySidecar,
+} from "@dpeek/formless-gateway/sidecar";
+import {
+  createWorkspaceGatewayOperationHandlers,
+  type StartWorkspaceGatewaySidecarDependencies,
+} from "./workspace-gateway-runtime.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
   defaultAppPolicy?: FormlessInstanceWorkspaceDefaultAppPolicy;
@@ -402,11 +406,11 @@ export type DevFormlessInstanceWorkspaceDependencies = {
       env?: NodeJS.ProcessEnv;
       workspaceRoot: string;
     },
-    dependencies: StartLocalWorkspaceGatewaySidecarDependencies,
-  ) => Promise<LocalWorkspaceGatewaySidecar>;
+    dependencies: StartWorkspaceGatewaySidecarDependencies,
+  ) => Promise<WorkspaceGatewaySidecar>;
 } & Partial<
   Pick<
-    StartLocalWorkspaceGatewaySidecarDependencies,
+    StartWorkspaceGatewaySidecarDependencies,
     | "accountDiscovery"
     | "deploymentAdapter"
     | "healthCheck"
@@ -2084,7 +2088,7 @@ export function formlessInstanceWorkspaceDevEnv(
   env: NodeJS.ProcessEnv,
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
-  sidecar?: Pick<LocalWorkspaceGatewaySidecar, "endpoint" | "proxyToken"> | null,
+  sidecar?: Pick<WorkspaceGatewaySidecar, "endpoint" | "proxyToken"> | null,
   options: {
     localDevSecrets?: FormlessInstanceWorkspaceLocalDevSecretState;
     localSessionBootstrapToken?: string;
@@ -2122,11 +2126,11 @@ export function formlessInstanceWorkspaceDevEnv(
   };
 
   if (sidecar) {
-    nextEnv[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV] = sidecar.endpoint;
-    nextEnv[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV] = sidecar.proxyToken;
+    nextEnv[WORKSPACE_GATEWAY_SIDECAR_URL_ENV] = sidecar.endpoint;
+    nextEnv[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV] = sidecar.proxyToken;
   } else {
-    delete nextEnv[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
-    delete nextEnv[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
+    delete nextEnv[WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
+    delete nextEnv[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
   }
 
   delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;
@@ -2164,29 +2168,25 @@ async function startWorkspaceGatewaySidecar(
     workspaceRoot: string;
   },
   dependencies: DevFormlessInstanceWorkspaceDependencies,
-): Promise<LocalWorkspaceGatewaySidecar> {
+): Promise<WorkspaceGatewaySidecar> {
+  const sidecarDependencies = {
+    ...workspaceGatewaySidecarDependencies(dependencies),
+    createProxyToken: () => createLocalDevSecret(dependencies),
+  };
+
   if (dependencies.startWorkspaceGatewaySidecar) {
-    return dependencies.startWorkspaceGatewaySidecar(input, {
-      ...workspaceGatewaySidecarDependencies(dependencies),
-      ...(dependencies.randomToken === undefined
-        ? {}
-        : { createProxyToken: dependencies.randomToken }),
-    });
+    return dependencies.startWorkspaceGatewaySidecar(input, sidecarDependencies);
   }
 
-  const { startLocalWorkspaceGatewaySidecar } = await import("./local-workspace-gateway.ts");
-
-  return startLocalWorkspaceGatewaySidecar(input, {
-    ...workspaceGatewaySidecarDependencies(dependencies),
-    ...(dependencies.randomToken === undefined
-      ? {}
-      : { createProxyToken: dependencies.randomToken }),
+  return startPackageWorkspaceGatewaySidecar(input, {
+    createProxyToken: sidecarDependencies.createProxyToken,
+    operations: createWorkspaceGatewayOperationHandlers(sidecarDependencies),
   });
 }
 
 function workspaceGatewaySidecarDependencies(
   dependencies: DevFormlessInstanceWorkspaceDependencies,
-): StartLocalWorkspaceGatewaySidecarDependencies {
+): StartWorkspaceGatewaySidecarDependencies {
   return {
     ...(dependencies.accountDiscovery === undefined
       ? {}

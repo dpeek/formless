@@ -40,20 +40,20 @@ import {
   type PackageAppKey,
 } from "../../shared/app-installs.ts";
 import {
-  LocalWorkspaceGatewayApiError,
-  fetchLocalWorkspaceGatewayOperation,
-  fetchLocalWorkspaceGatewayStatus,
-  localWorkspaceGatewayBrowserConfig,
-  startLocalWorkspaceGatewayOperation,
-  type LocalWorkspaceGatewayConfig,
-  type LocalWorkspaceGatewayDisplayObject,
-  type LocalWorkspaceGatewayDisplayValue,
-  type LocalWorkspaceGatewayOperation,
-  type LocalWorkspaceGatewayOperationKind,
-  type LocalWorkspaceGatewayOperationLog,
-  type LocalWorkspaceGatewayResponse,
-  type LocalWorkspaceGatewayStartInput,
-} from "../../client/workspace-gateway.ts";
+  WorkspaceGatewayApiError,
+  fetchWorkspaceGatewayOperation,
+  fetchWorkspaceGatewayStatus,
+  workspaceGatewayBrowserConfig,
+  startWorkspaceGatewayOperation,
+  type WorkspaceGatewayConfig,
+  type WorkspaceGatewayDisplayObject,
+  type WorkspaceGatewayDisplayValue,
+  type WorkspaceGatewayOperation,
+  type WorkspaceGatewayOperationKind,
+  type WorkspaceGatewayOperationLog,
+  type WorkspaceGatewayResponse,
+  type WorkspaceGatewayStartInput,
+} from "@dpeek/formless-gateway/client";
 import {
   deploymentStatusDisplaySummary,
   type InstanceDeploymentStatusResponse,
@@ -119,17 +119,17 @@ export type WorkspaceGatewayRouteState =
   | {
       activeOperationId?: string;
       csrfToken?: string;
-      currentOperation?: LocalWorkspaceGatewayOperation;
+      currentOperation?: WorkspaceGatewayOperation;
       error?: string;
       status: "ready";
-      statusOperation?: LocalWorkspaceGatewayOperation;
+      statusOperation?: WorkspaceGatewayOperation;
     };
 
 export function InstanceShellRoute() {
   const [, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
-  const workspaceGatewayConfig = useMemo(() => localWorkspaceGatewayBrowserConfig(), []);
+  const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
   const [workspaceGatewayState, setWorkspaceGatewayState] = useState<WorkspaceGatewayRouteState>(
     () => (workspaceGatewayConfig ? { status: "loading" } : { status: "unavailable" }),
   );
@@ -334,7 +334,7 @@ export function InstanceShellRoute() {
     }
   }
 
-  async function startWorkspaceOperation(input: LocalWorkspaceGatewayStartInput) {
+  async function startWorkspaceOperation(input: WorkspaceGatewayStartInput) {
     if (workspaceGatewayState.status !== "ready" || !workspaceGatewayConfig) {
       return;
     }
@@ -345,7 +345,7 @@ export function InstanceShellRoute() {
     });
 
     try {
-      const response = await startLocalWorkspaceGatewayOperation(input, {
+      const response = await startWorkspaceGatewayOperation(input, {
         config: workspaceGatewayConfig,
         csrfToken: workspaceGatewayState.csrfToken,
       });
@@ -363,7 +363,7 @@ export function InstanceShellRoute() {
       );
     } catch (error) {
       const message =
-        error instanceof LocalWorkspaceGatewayApiError || error instanceof Error
+        error instanceof WorkspaceGatewayApiError || error instanceof Error
           ? error.message
           : "Workspace operation failed.";
 
@@ -376,7 +376,7 @@ export function InstanceShellRoute() {
 
   async function pollWorkspaceOperation(
     operationId: string,
-    operationKind?: LocalWorkspaceGatewayOperationKind,
+    operationKind?: WorkspaceGatewayOperationKind,
   ) {
     await refreshWorkspaceGatewayOperation({
       config: workspaceGatewayConfig,
@@ -581,17 +581,17 @@ async function loadInitialWorkspaceGatewayStatus({
   config,
   signal,
 }: {
-  config?: LocalWorkspaceGatewayConfig;
+  config?: WorkspaceGatewayConfig;
   signal: AbortSignal;
-}): Promise<LocalWorkspaceGatewayResponse | undefined> {
+}): Promise<WorkspaceGatewayResponse | undefined> {
   if (!config) {
     return undefined;
   }
 
   try {
-    return await fetchLocalWorkspaceGatewayStatus({ config, signal });
+    return await fetchWorkspaceGatewayStatus({ config, signal });
   } catch (error) {
-    if (error instanceof LocalWorkspaceGatewayApiError && error.status === 404) {
+    if (error instanceof WorkspaceGatewayApiError && error.status === 404) {
       return undefined;
     }
 
@@ -605,9 +605,9 @@ async function refreshWorkspaceGatewayOperation({
   operationKind,
   setWorkspaceGatewayState,
 }: {
-  config?: LocalWorkspaceGatewayConfig;
+  config?: WorkspaceGatewayConfig;
   operationId: string;
-  operationKind?: LocalWorkspaceGatewayOperationKind;
+  operationKind?: WorkspaceGatewayOperationKind;
   setWorkspaceGatewayState: Dispatch<SetStateAction<WorkspaceGatewayRouteState>>;
 }) {
   if (!config) {
@@ -615,7 +615,7 @@ async function refreshWorkspaceGatewayOperation({
   }
 
   try {
-    const response = await fetchLocalWorkspaceGatewayOperation(
+    const response = await fetchWorkspaceGatewayOperation(
       { operationId, operationKind },
       { config },
     );
@@ -632,7 +632,7 @@ async function refreshWorkspaceGatewayOperation({
     );
   } catch (error) {
     const message =
-      error instanceof LocalWorkspaceGatewayApiError || error instanceof Error
+      error instanceof WorkspaceGatewayApiError || error instanceof Error
         ? error.message
         : "Workspace operation refresh failed.";
 
@@ -648,7 +648,7 @@ async function refreshWorkspaceGatewayOperation({
 }
 
 function workspaceGatewayReadyStateFromResponse(
-  response: LocalWorkspaceGatewayResponse,
+  response: WorkspaceGatewayResponse,
   current: WorkspaceGatewayRouteState,
   overrides: Partial<Extract<WorkspaceGatewayRouteState, { status: "ready" }>> = {},
 ): Extract<WorkspaceGatewayRouteState, { status: "ready" }> {
@@ -667,14 +667,14 @@ function workspaceGatewayReadyStateFromResponse(
   };
 }
 
-function workspaceInitialized(operation?: LocalWorkspaceGatewayOperation): boolean | undefined {
+function workspaceInitialized(operation?: WorkspaceGatewayOperation): boolean | undefined {
   const initialized =
     operation?.result?.summary.fields.initialized ?? operation?.summary.fields.initialized;
 
   return typeof initialized === "boolean" ? initialized : undefined;
 }
 
-export function operationPollsAutomatically(operation: LocalWorkspaceGatewayOperation): boolean {
+export function operationPollsAutomatically(operation: WorkspaceGatewayOperation): boolean {
   return operation.status === "queued" || operation.status === "running";
 }
 
@@ -710,13 +710,13 @@ export function InstanceShellRouteView({
   onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
   onPollWorkspaceOperation?: (
     operationId: string,
-    operationKind?: LocalWorkspaceGatewayOperationKind,
+    operationKind?: WorkspaceGatewayOperationKind,
   ) => void;
   onRefreshDomainProviderDeleteJob?: () => void;
   onRefreshDomainProviderPlan?: () => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
-  onStartWorkspaceOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: InstanceShellRouteState;
   workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
@@ -786,11 +786,8 @@ function WorkspaceGatewayManagementSection({
 }: {
   installCount: number;
   onInstallFirstApp: () => void;
-  onPollOperation?: (
-    operationId: string,
-    operationKind?: LocalWorkspaceGatewayOperationKind,
-  ) => void;
-  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
+  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: WorkspaceGatewayRouteState;
 }) {
   if (state.status === "unavailable") {
@@ -854,7 +851,7 @@ function WorkspaceGatewayOperationControls({
   state,
 }: {
   initialized?: boolean;
-  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: WorkspaceGatewayRouteState;
 }) {
   const busy =
@@ -956,7 +953,7 @@ function WorkspaceOnboardingFlowSection({
   initialized?: boolean;
   installCount: number;
   onInstallFirstApp: () => void;
-  onStartOperation?: (input: LocalWorkspaceGatewayStartInput) => void;
+  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: WorkspaceGatewayRouteState;
 }) {
   if (initialized !== false && installCount > 0) {
@@ -1014,11 +1011,8 @@ export function WorkspaceOperationProgress({
   operation,
 }: {
   error?: string;
-  onPollOperation?: (
-    operationId: string,
-    operationKind?: LocalWorkspaceGatewayOperationKind,
-  ) => void;
-  operation?: LocalWorkspaceGatewayOperation;
+  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
+  operation?: WorkspaceGatewayOperation;
 }) {
   if (!operation && !error) {
     return null;
@@ -1072,7 +1066,7 @@ function DisplaySafeObject({
   fields,
   heading,
 }: {
-  fields: LocalWorkspaceGatewayDisplayObject;
+  fields: WorkspaceGatewayDisplayObject;
   heading?: string;
 }) {
   const entries = displaySafeEntries(fields);
@@ -1101,7 +1095,7 @@ function WorkspaceOperationEvents({
   onPollOperation,
   operationId,
 }: {
-  events: LocalWorkspaceGatewayOperation["events"];
+  events: WorkspaceGatewayOperation["events"];
   onPollOperation: (operationId: string) => void;
   operationId: string;
 }) {
@@ -1148,7 +1142,7 @@ function WorkspaceOperationEvents({
   );
 }
 
-function WorkspaceOperationLogs({ logs }: { logs: LocalWorkspaceGatewayOperation["logs"] }) {
+function WorkspaceOperationLogs({ logs }: { logs: WorkspaceGatewayOperation["logs"] }) {
   if (logs.length === 0) {
     return null;
   }
@@ -1164,11 +1158,7 @@ function WorkspaceOperationLogs({ logs }: { logs: LocalWorkspaceGatewayOperation
   );
 }
 
-function WorkspaceOperationErrors({
-  errors,
-}: {
-  errors: LocalWorkspaceGatewayOperation["errors"];
-}) {
+function WorkspaceOperationErrors({ errors }: { errors: WorkspaceGatewayOperation["errors"] }) {
   if (errors.length === 0) {
     return null;
   }
@@ -1189,7 +1179,7 @@ function WorkspaceOperationErrors({
   );
 }
 
-export function displaySafeEntries(fields: LocalWorkspaceGatewayDisplayObject): Array<{
+export function displaySafeEntries(fields: WorkspaceGatewayDisplayObject): Array<{
   key: string;
   label: string;
   value: string;
@@ -1201,7 +1191,7 @@ export function displaySafeEntries(fields: LocalWorkspaceGatewayDisplayObject): 
   }));
 }
 
-function displaySafeValue(key: string, value: LocalWorkspaceGatewayDisplayValue): string {
+function displaySafeValue(key: string, value: WorkspaceGatewayDisplayValue): string {
   if (isForbiddenDisplayKey(key)) {
     return "[redacted]";
   }
@@ -1303,7 +1293,7 @@ function fieldKeyLabel(key: string): string {
     .replace(/^\w/, (match) => match.toUpperCase());
 }
 
-function workspaceOperationKindLabel(kind: LocalWorkspaceGatewayOperationKind): string {
+function workspaceOperationKindLabel(kind: WorkspaceGatewayOperationKind): string {
   switch (kind) {
     case "credentialSetup":
       return "Credential setup";
@@ -1316,13 +1306,11 @@ function workspaceOperationKindLabel(kind: LocalWorkspaceGatewayOperationKind): 
   }
 }
 
-function workspaceOperationStatusLabel(status: LocalWorkspaceGatewayOperation["status"]): string {
+function workspaceOperationStatusLabel(status: WorkspaceGatewayOperation["status"]): string {
   return fieldKeyLabel(status);
 }
 
-function workspaceOperationLogLevelLabel(
-  level: LocalWorkspaceGatewayOperationLog["level"],
-): string {
+function workspaceOperationLogLevelLabel(level: WorkspaceGatewayOperationLog["level"]): string {
   return fieldKeyLabel(level);
 }
 

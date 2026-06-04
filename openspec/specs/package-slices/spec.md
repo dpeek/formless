@@ -134,6 +134,14 @@ Worker/runtime responsibilities.
 - THEN that entrypoint owns Worker/runtime adapters
 - AND it does not import React
 
+#### Scenario: Sidecar adapter
+
+- GIVEN a package exposes `src/sidecar.ts`
+- WHEN the sidecar adapter is imported
+- THEN that entrypoint owns local Node sidecar adapters
+- AND it does not import React
+- AND it does not enter browser or Worker bundles
+
 ### Requirement: Public Import Boundary
 
 External package consumers SHALL import only package roots or documented package
@@ -212,3 +220,46 @@ provider secrets or canonical provider state.
   runtime-neutral contract
 - AND app install and app route identity contracts are consumed from the
   instance control-plane model instead of being redefined as deploy-only shapes
+
+### Requirement: Gateway Package Slice
+
+The system SHALL provide a Gateway package slice under `lib/gateway/` for local
+workspace gateway contracts, browser adapters, Worker proxy adapters, and local
+sidecar adapters.
+
+#### Scenario: Gateway package scaffold
+
+- GIVEN the Gateway package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and supported adapters
+- AND the package is published as `@dpeek/formless-gateway` with root,
+  `./client`, `./worker`, and `./sidecar` public subpaths
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose a React subpath
+
+#### Scenario: Gateway package exports
+
+- GIVEN app, client, Worker, CLI, Site runtime, or tests need workspace gateway
+  behavior
+- WHEN they import the package
+- THEN they import from the package root or documented subpaths
+- AND they do not deep-import gateway package internals
+
+### Requirement: Gateway Package Non-Ownership
+
+The Gateway package SHALL own reusable local workspace gateway contracts,
+wire-safety helpers, and adapters without owning Formless workspace operations,
+owner session storage, runtime topology, provider execution, or app records.
+
+#### Scenario: Package owns gateway contracts and adapters
+
+- GIVEN workspace gateway route constants, operation input shapes, display-safe
+  operation state, operation intent helpers, browser fetch behavior, Worker
+  proxy behavior, or sidecar HTTP routing helpers are needed
+- WHEN runtime-neutral, browser, Worker, or sidecar code consumes gateway
+  capability behavior
+- THEN they come from `lib/gateway`
+- AND actual save, check, pull, push, deploy, credential setup, owner session,
+  runtime topology, Authority, provider credential, and filesystem operation
+  implementations remain outside the package contract

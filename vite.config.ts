@@ -17,11 +17,11 @@ import {
 } from "./src/shared/turnstile-config.ts";
 import {
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "./src/shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
+  WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
@@ -106,21 +106,12 @@ function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
       env[FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME],
     ),
     ...optionalWorkerVar(
-      LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
-      env[LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV],
+      WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
+      env[WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV],
     ),
-    ...optionalWorkerVar(
-      LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
-      env[LOCAL_WORKSPACE_GATEWAY_CSRF_TOKEN_ENV],
-    ),
-    ...optionalWorkerVar(
-      LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-      env[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV],
-    ),
-    ...optionalWorkerVar(
-      LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-      env[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
-    ),
+    ...optionalWorkerVar(WORKSPACE_GATEWAY_CSRF_TOKEN_ENV, env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]),
+    ...optionalWorkerVar(WORKSPACE_GATEWAY_SIDECAR_URL_ENV, env[WORKSPACE_GATEWAY_SIDECAR_URL_ENV]),
+    ...optionalWorkerVar(WORKSPACE_GATEWAY_PROXY_TOKEN_ENV, env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]),
   };
 }
 

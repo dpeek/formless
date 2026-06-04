@@ -5,7 +5,7 @@ import {
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
-import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "../shared/workspace-gateway-protocol.ts";
+import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 

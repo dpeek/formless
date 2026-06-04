@@ -1,21 +1,22 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  fetchLocalWorkspaceGatewayOperation,
-  fetchLocalWorkspaceGatewayStatus,
-  localWorkspaceGatewayBrowserConfig,
-  startLocalWorkspaceGatewayOperation,
-  type LocalWorkspaceGatewayOperation,
-} from "./workspace-gateway.ts";
+  WorkspaceGatewayApiError,
+  fetchWorkspaceGatewayOperation,
+  fetchWorkspaceGatewayStatus,
+  startWorkspaceGatewayOperation,
+  workspaceGatewayBrowserConfig,
+  type WorkspaceGatewayOperation,
+} from "./client.ts";
 
 const config = {
   apiBasePath: "/api/formless/workspace",
   bootstrapToken: "bootstrap-token",
 };
 
-describe("client workspace gateway helpers", () => {
+describe("gateway package client helpers", () => {
   it("resolves browser config only when the local gateway API is present", () => {
     expect(
-      localWorkspaceGatewayBrowserConfig({
+      workspaceGatewayBrowserConfig({
         FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "sidecar-proxy-token",
         FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:7777",
         VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
@@ -23,7 +24,7 @@ describe("client workspace gateway helpers", () => {
       }),
     ).toEqual(config);
 
-    expect(localWorkspaceGatewayBrowserConfig({})).toBeUndefined();
+    expect(workspaceGatewayBrowserConfig({})).toBeUndefined();
     expect(JSON.stringify(config)).not.toContain("sidecar-proxy-token");
     expect(JSON.stringify(config)).not.toContain("127.0.0.1");
   });
@@ -34,7 +35,7 @@ describe("client workspace gateway helpers", () => {
       headers: Headers;
       path: string;
     }> = [];
-    const response = await fetchLocalWorkspaceGatewayStatus({
+    const response = await fetchWorkspaceGatewayStatus({
       config,
       fetcher: async (input, init) => {
         calls.push({
@@ -68,7 +69,7 @@ describe("client workspace gateway helpers", () => {
   });
 
   it("starts owner-session operations with CSRF and without bootstrap", async () => {
-    const response = await startLocalWorkspaceGatewayOperation(
+    const response = await startWorkspaceGatewayOperation(
       { check: true, kind: "save" },
       {
         config,
@@ -93,7 +94,7 @@ describe("client workspace gateway helpers", () => {
   });
 
   it("uses bootstrap only for init or status operation progress reads", async () => {
-    const initRead = await fetchLocalWorkspaceGatewayOperation(
+    const initRead = await fetchWorkspaceGatewayOperation(
       { operationId: "op_init_00000001", operationKind: "init" },
       {
         config,
@@ -112,7 +113,7 @@ describe("client workspace gateway helpers", () => {
       },
     );
 
-    const saveRead = await fetchLocalWorkspaceGatewayOperation(
+    const saveRead = await fetchWorkspaceGatewayOperation(
       { operationId: "op_save_00000001", operationKind: "save" },
       {
         config,
@@ -131,11 +132,49 @@ describe("client workspace gateway helpers", () => {
     expect(initRead?.operation.operation).toBe("init");
     expect(saveRead?.operation.operation).toBe("save");
   });
+
+  it("throws client errors with parsed or fallback response bodies", async () => {
+    const jsonError = await captureError(() =>
+      fetchWorkspaceGatewayStatus({
+        config,
+        fetcher: async () => Response.json({ error: "Owner session required." }, { status: 403 }),
+      }),
+    );
+    const fallbackError = await captureError(() =>
+      fetchWorkspaceGatewayStatus({
+        config,
+        fetcher: async () => new Response("not json", { status: 500 }),
+      }),
+    );
+
+    expect(jsonError).toBeInstanceOf(WorkspaceGatewayApiError);
+    expect(fallbackError).toBeInstanceOf(WorkspaceGatewayApiError);
+
+    if (
+      !(jsonError instanceof WorkspaceGatewayApiError) ||
+      !(fallbackError instanceof WorkspaceGatewayApiError)
+    ) {
+      throw new Error("Expected workspace gateway client errors.");
+    }
+
+    expect(jsonError.status).toBe(403);
+    expect(jsonError.body).toEqual({ error: "Owner session required." });
+    expect(fallbackError.status).toBe(500);
+    expect(fallbackError.body).toEqual({ error: "Workspace gateway request failed." });
+  });
 });
 
-function operation(
-  overrides: Partial<LocalWorkspaceGatewayOperation> = {},
-): LocalWorkspaceGatewayOperation {
+async function captureError(fn: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await fn();
+  } catch (error) {
+    return error;
+  }
+
+  return undefined;
+}
+
+function operation(overrides: Partial<WorkspaceGatewayOperation> = {}): WorkspaceGatewayOperation {
   return {
     actor: "browser",
     createdAt: "2026-06-02T00:00:00.000Z",

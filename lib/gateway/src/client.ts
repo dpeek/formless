@@ -1,62 +1,56 @@
 import {
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
-  localWorkspaceGatewayOperationApiPath,
-  localWorkspaceGatewayOperationsApiPath,
-  localWorkspaceGatewayReadOperationIntent,
-  localWorkspaceGatewayStartOperationIntent,
-  localWorkspaceGatewayStatusApiPath,
-  type LocalWorkspaceGatewayApiErrorBody,
-  type LocalWorkspaceGatewayOperationKind,
-  type LocalWorkspaceGatewayResponse,
-  type LocalWorkspaceGatewayStartInput,
-} from "../shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  WORKSPACE_GATEWAY_CSRF_HEADER,
+  WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
+  workspaceGatewayOperationApiPath,
+  workspaceGatewayOperationsApiPath,
+  workspaceGatewayReadOperationIntent,
+  workspaceGatewayStartOperationIntent,
+  workspaceGatewayStatusApiPath,
+  type WorkspaceGatewayApiErrorBody,
+  type WorkspaceGatewayOperationKind,
+  type WorkspaceGatewayResponse,
+  type WorkspaceGatewayStartInput,
+} from "./index.ts";
 
-export {
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
-} from "../shared/workspace-gateway-protocol.ts";
+export { WORKSPACE_GATEWAY_BOOTSTRAP_HEADER, WORKSPACE_GATEWAY_CSRF_HEADER } from "./index.ts";
 export type {
-  LocalWorkspaceGatewayApiErrorBody,
-  LocalWorkspaceGatewayDisplayObject,
-  LocalWorkspaceGatewayDisplayValue,
-  LocalWorkspaceGatewayExternalAuthorizationEvent,
-  LocalWorkspaceGatewayOperation,
-  LocalWorkspaceGatewayOperationError,
-  LocalWorkspaceGatewayOperationEvent,
-  LocalWorkspaceGatewayOperationKind,
-  LocalWorkspaceGatewayOperationLog,
-  LocalWorkspaceGatewayOperationResult,
-  LocalWorkspaceGatewayOperationStatus,
-  LocalWorkspaceGatewayOperationSummary,
-  LocalWorkspaceGatewayResponse,
-  LocalWorkspaceGatewayStartInput,
-} from "../shared/workspace-gateway-protocol.ts";
+  WorkspaceGatewayApiErrorBody,
+  WorkspaceGatewayDisplayObject,
+  WorkspaceGatewayDisplayValue,
+  WorkspaceGatewayExternalAuthorizationEvent,
+  WorkspaceGatewayOperation,
+  WorkspaceGatewayOperationError,
+  WorkspaceGatewayOperationEvent,
+  WorkspaceGatewayOperationKind,
+  WorkspaceGatewayOperationLog,
+  WorkspaceGatewayOperationResult,
+  WorkspaceGatewayOperationStatus,
+  WorkspaceGatewayOperationSummary,
+  WorkspaceGatewayResponse,
+  WorkspaceGatewayStartInput,
+} from "./index.ts";
 
-export type LocalWorkspaceGatewayConfig = {
+export type WorkspaceGatewayConfig = {
   apiBasePath: string;
   bootstrapToken?: string;
 };
 
-export class LocalWorkspaceGatewayApiError extends Error {
-  readonly body: LocalWorkspaceGatewayApiErrorBody;
+export class WorkspaceGatewayApiError extends Error {
+  readonly body: WorkspaceGatewayApiErrorBody;
   readonly status: number;
 
-  constructor(
-    message: string,
-    options: { body: LocalWorkspaceGatewayApiErrorBody; status: number },
-  ) {
+  constructor(message: string, options: { body: WorkspaceGatewayApiErrorBody; status: number }) {
     super(message);
-    this.name = "LocalWorkspaceGatewayApiError";
+    this.name = "WorkspaceGatewayApiError";
     this.body = options.body;
     this.status = options.status;
   }
 }
 
-export function localWorkspaceGatewayBrowserConfig(
+export function workspaceGatewayBrowserConfig(
   env: Record<string, unknown> = import.meta.env,
-): LocalWorkspaceGatewayConfig | undefined {
+): WorkspaceGatewayConfig | undefined {
   const apiBasePath = stringConfigValue(env.VITE_FORMLESS_WORKSPACE_GATEWAY_API);
 
   if (!apiBasePath) {
@@ -71,28 +65,28 @@ export function localWorkspaceGatewayBrowserConfig(
   };
 }
 
-export async function fetchLocalWorkspaceGatewayStatus({
-  config = localWorkspaceGatewayBrowserConfig(),
+export async function fetchWorkspaceGatewayStatus({
+  config = workspaceGatewayBrowserConfig(),
   fetcher = fetch,
   signal,
 }: {
-  config?: LocalWorkspaceGatewayConfig;
+  config?: WorkspaceGatewayConfig;
   fetcher?: typeof fetch;
   signal?: AbortSignal;
-} = {}): Promise<LocalWorkspaceGatewayResponse | undefined> {
+} = {}): Promise<WorkspaceGatewayResponse | undefined> {
   if (!config) {
     return undefined;
   }
 
   return gatewayRequestWithBootstrapRetry(
     () =>
-      fetcher(localWorkspaceGatewayStatusApiPath(config.apiBasePath), {
+      fetcher(workspaceGatewayStatusApiPath(config.apiBasePath), {
         credentials: "same-origin",
         headers: gatewayHeaders(config, { allowBootstrap: true }),
         signal,
       }),
     () =>
-      fetcher(localWorkspaceGatewayStatusApiPath(config.apiBasePath), {
+      fetcher(workspaceGatewayStatusApiPath(config.apiBasePath), {
         credentials: "same-origin",
         headers: gatewayHeaders(config, { allowBootstrap: false }),
         signal,
@@ -100,29 +94,29 @@ export async function fetchLocalWorkspaceGatewayStatus({
   );
 }
 
-export async function startLocalWorkspaceGatewayOperation(
-  input: LocalWorkspaceGatewayStartInput,
+export async function startWorkspaceGatewayOperation(
+  input: WorkspaceGatewayStartInput,
   {
-    config = localWorkspaceGatewayBrowserConfig(),
+    config = workspaceGatewayBrowserConfig(),
     csrfToken,
     fetcher = fetch,
     signal,
   }: {
-    config?: LocalWorkspaceGatewayConfig;
+    config?: WorkspaceGatewayConfig;
     csrfToken?: string;
     fetcher?: typeof fetch;
     signal?: AbortSignal;
   } = {},
-): Promise<LocalWorkspaceGatewayResponse | undefined> {
+): Promise<WorkspaceGatewayResponse | undefined> {
   if (!config) {
     return undefined;
   }
 
-  const { bootstrapAllowed } = localWorkspaceGatewayStartOperationIntent(input);
+  const { bootstrapAllowed } = workspaceGatewayStartOperationIntent(input);
 
   return gatewayRequestWithBootstrapRetry(
     () =>
-      fetcher(localWorkspaceGatewayOperationsApiPath(config.apiBasePath), {
+      fetcher(workspaceGatewayOperationsApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
         credentials: "same-origin",
         headers: gatewayHeaders(config, {
@@ -134,7 +128,7 @@ export async function startLocalWorkspaceGatewayOperation(
         signal,
       }),
     () =>
-      fetcher(localWorkspaceGatewayOperationsApiPath(config.apiBasePath), {
+      fetcher(workspaceGatewayOperationsApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
         credentials: "same-origin",
         headers: gatewayHeaders(config, {
@@ -148,29 +142,26 @@ export async function startLocalWorkspaceGatewayOperation(
   );
 }
 
-export async function fetchLocalWorkspaceGatewayOperation(
-  input: { operationId: string; operationKind?: LocalWorkspaceGatewayOperationKind },
+export async function fetchWorkspaceGatewayOperation(
+  input: { operationId: string; operationKind?: WorkspaceGatewayOperationKind },
   {
-    config = localWorkspaceGatewayBrowserConfig(),
+    config = workspaceGatewayBrowserConfig(),
     fetcher = fetch,
     signal,
   }: {
-    config?: LocalWorkspaceGatewayConfig;
+    config?: WorkspaceGatewayConfig;
     fetcher?: typeof fetch;
     signal?: AbortSignal;
   } = {},
-): Promise<LocalWorkspaceGatewayResponse | undefined> {
+): Promise<WorkspaceGatewayResponse | undefined> {
   if (!config) {
     return undefined;
   }
 
   const allowBootstrap = input.operationKind
-    ? localWorkspaceGatewayReadOperationIntent(input.operationKind).bootstrapAllowed
+    ? workspaceGatewayReadOperationIntent(input.operationKind).bootstrapAllowed
     : false;
-  const operationPath = localWorkspaceGatewayOperationApiPath(
-    input.operationId,
-    config.apiBasePath,
-  );
+  const operationPath = workspaceGatewayOperationApiPath(input.operationId, config.apiBasePath);
 
   return gatewayRequestWithBootstrapRetry(
     () =>
@@ -194,7 +185,7 @@ export async function fetchLocalWorkspaceGatewayOperation(
 async function gatewayRequestWithBootstrapRetry(
   request: () => Promise<Response>,
   retryWithoutBootstrap: () => Promise<Response>,
-): Promise<LocalWorkspaceGatewayResponse> {
+): Promise<WorkspaceGatewayResponse> {
   const first = await request();
 
   if (first.status !== 403) {
@@ -204,7 +195,7 @@ async function gatewayRequestWithBootstrapRetry(
   const firstBody = await readResponseBody(first);
 
   if (!bootstrapExpired(firstBody)) {
-    throw new LocalWorkspaceGatewayApiError(firstBody.error, {
+    throw new WorkspaceGatewayApiError(firstBody.error, {
       body: firstBody,
       status: first.status,
     });
@@ -214,12 +205,12 @@ async function gatewayRequestWithBootstrapRetry(
 }
 
 function gatewayHeaders(
-  config: LocalWorkspaceGatewayConfig,
+  config: WorkspaceGatewayConfig,
   options: {
     allowBootstrap: boolean;
     csrfToken?: string;
     includeJsonContentType?: boolean;
-    operationKind?: LocalWorkspaceGatewayOperationKind;
+    operationKind?: WorkspaceGatewayOperationKind;
   },
 ): Headers {
   const headers = new Headers({ Accept: "application/json" });
@@ -229,34 +220,34 @@ function gatewayHeaders(
   }
 
   if (options.allowBootstrap && config.bootstrapToken) {
-    headers.set(LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER, config.bootstrapToken);
+    headers.set(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER, config.bootstrapToken);
   }
 
   if (options.csrfToken) {
-    headers.set(LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER, options.csrfToken);
+    headers.set(WORKSPACE_GATEWAY_CSRF_HEADER, options.csrfToken);
   }
 
   if (options.operationKind) {
-    headers.set(LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER, options.operationKind);
+    headers.set(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER, options.operationKind);
   }
 
   return headers;
 }
 
-async function readJsonResponse(response: Response): Promise<LocalWorkspaceGatewayResponse> {
+async function readJsonResponse(response: Response): Promise<WorkspaceGatewayResponse> {
   const body = await readResponseBody(response);
 
   if (!response.ok) {
-    throw new LocalWorkspaceGatewayApiError(body.error, {
+    throw new WorkspaceGatewayApiError(body.error, {
       body,
       status: response.status,
     });
   }
 
-  return body as unknown as LocalWorkspaceGatewayResponse;
+  return body as unknown as WorkspaceGatewayResponse;
 }
 
-async function readResponseBody(response: Response): Promise<LocalWorkspaceGatewayApiErrorBody> {
+async function readResponseBody(response: Response): Promise<WorkspaceGatewayApiErrorBody> {
   let body: unknown;
 
   try {
@@ -269,13 +260,13 @@ async function readResponseBody(response: Response): Promise<LocalWorkspaceGatew
     return {
       ...body,
       error: typeof body.error === "string" ? body.error : "Workspace gateway request failed.",
-    } as LocalWorkspaceGatewayApiErrorBody;
+    } as WorkspaceGatewayApiErrorBody;
   }
 
   return { error: "Workspace gateway request failed." };
 }
 
-function bootstrapExpired(body: LocalWorkspaceGatewayApiErrorBody): boolean {
+function bootstrapExpired(body: WorkspaceGatewayApiErrorBody): boolean {
   return body.error.toLowerCase().includes("bootstrap authorization has expired");
 }
 

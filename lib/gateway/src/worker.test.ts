@@ -1,66 +1,53 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type {
-  LocalWorkspaceGatewayOperation,
-  LocalWorkspaceGatewayOperationKind,
-} from "../shared/workspace-gateway-protocol.ts";
 import {
-  LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
-} from "../shared/workspace-gateway-protocol.ts";
-import type { OwnerIdentity } from "../shared/protocol.ts";
-import { createOwnerSessionCookie } from "./owner-session.ts";
-import {
-  handleWorkerWorkspaceGatewayProxyRequest,
-  workerWorkspaceGatewayProxyConfigFromEnv,
-  type WorkerWorkspaceGatewayProxyEnv,
-} from "./workspace-gateway-proxy.ts";
+  WORKSPACE_GATEWAY_ACTOR_HEADER,
+  WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
+  WORKSPACE_GATEWAY_CSRF_HEADER,
+  WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
+  WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
+  handleWorkspaceGatewayProxyRequest,
+  workspaceGatewayProxyConfigFromEnv,
+  type WorkspaceGatewayOperation,
+  type WorkspaceGatewayOperationKind,
+  type WorkspaceGatewayWorkerProxyEnv,
+} from "./worker.ts";
 
-const ownerSessionSecret = "owner-session-secret";
+const ownerSessionCookie = "formless_owner_session=valid";
 const csrfToken = "csrf-token";
 const bootstrapToken = "bootstrap-token";
 const adminToken = "admin-token";
 const proxyToken = "sidecar-proxy-token";
 const sidecarEndpoint = "http://127.0.0.1:9876";
-const baseEnv: WorkerWorkspaceGatewayProxyEnv = {
+const baseEnv: WorkspaceGatewayWorkerProxyEnv = {
   FORMLESS_ADMIN_TOKEN: adminToken,
-  FORMLESS_OWNER_SESSION_SECRET: ownerSessionSecret,
-  FORMLESS_RUNTIME_PROFILE: "instance",
   FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
   FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
   FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken,
   FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: sidecarEndpoint,
 };
-const owner: OwnerIdentity = {
-  createdAt: "2026-06-03T00:00:00.000Z",
-  id: "owner-1",
-  name: "Owner",
-};
 
 describe("Worker workspace gateway proxy", () => {
   it("parses only loopback sidecar proxy config from Worker-visible env", () => {
     expect(
-      workerWorkspaceGatewayProxyConfigFromEnv({
+      workspaceGatewayProxyConfigFromEnv({
         ...baseEnv,
         FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "https://example.com/gateway",
       }),
     ).toBeUndefined();
     expect(
-      workerWorkspaceGatewayProxyConfigFromEnv({
+      workspaceGatewayProxyConfigFromEnv({
         ...baseEnv,
         FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "",
       }),
     ).toBeUndefined();
     expect(
-      workerWorkspaceGatewayProxyConfigFromEnv({
+      workspaceGatewayProxyConfigFromEnv({
         ...baseEnv,
         FORMLESS_WORKSPACE_GATEWAY_ROOT: "/tmp/workspace",
-      } as WorkerWorkspaceGatewayProxyEnv & { FORMLESS_WORKSPACE_GATEWAY_ROOT: string }),
+      } as WorkspaceGatewayWorkerProxyEnv & { FORMLESS_WORKSPACE_GATEWAY_ROOT: string }),
     ).toEqual({
       endpoint: sidecarEndpoint,
       proxyToken,
@@ -69,20 +56,20 @@ describe("Worker workspace gateway proxy", () => {
 
   it("fails before forwarding for non-local, mapped-host, missing sidecar, cross-origin, unauthenticated, and invalid-id requests", async () => {
     const cases: Array<{
-      env?: WorkerWorkspaceGatewayProxyEnv;
+      env?: WorkspaceGatewayWorkerProxyEnv;
       expectedStatus: number;
-      mappedHost?: boolean;
       request: Request;
+      routeAvailable?: boolean;
     }> = [
       {
-        env: { ...baseEnv, FORMLESS_RUNTIME_PROFILE: "publishedSite" },
         expectedStatus: 404,
         request: new Request("https://example.com/api/formless/workspace/status"),
+        routeAvailable: false,
       },
       {
         expectedStatus: 404,
-        mappedHost: true,
         request: new Request("https://example.com/api/formless/workspace/status"),
+        routeAvailable: false,
       },
       {
         env: {
@@ -115,7 +102,7 @@ describe("Worker workspace gateway proxy", () => {
 
     for (const testCase of cases) {
       let forwarded = false;
-      const response = await handleWorkerWorkspaceGatewayProxyRequest(
+      const response = await handleWorkspaceGatewayProxyRequest(
         testCase.request,
         testCase.env ?? baseEnv,
         {
@@ -123,7 +110,7 @@ describe("Worker workspace gateway proxy", () => {
             forwarded = true;
             return Response.json({ operation: operation("status") });
           },
-          mappedHost: testCase.mappedHost,
+          routeAvailable: testCase.routeAvailable,
         },
       );
 
@@ -134,15 +121,15 @@ describe("Worker workspace gateway proxy", () => {
 
   it("proxies owner-session browser mutations with internal authorization and display-safe actor facts", async () => {
     const calls: ProxyCall[] = [];
-    const response = await handleWorkerWorkspaceGatewayProxyRequest(
+    const response = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations", {
         body: JSON.stringify({ check: true, kind: "save" }),
         headers: {
           Authorization: "Bearer browser-value",
-          Cookie: `${await ownerSessionCookie()}; ${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-          [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-          [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "deployApply",
-          [LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
+          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "deployApply",
+          [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
           "Content-Type": "application/json",
           Origin: "https://example.com",
         },
@@ -151,6 +138,7 @@ describe("Worker workspace gateway proxy", () => {
       baseEnv,
       {
         fetch: captureProxyCalls(calls, operation("save")),
+        validateOwnerSession,
       },
     );
 
@@ -158,7 +146,7 @@ describe("Worker workspace gateway proxy", () => {
 
     expect(response?.status).toBe(200);
     expect(response?.headers.get("Set-Cookie")).toContain(
-      `${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
     );
     expect(body.csrfToken).toBe(csrfToken);
     expect(calls).toHaveLength(1);
@@ -167,40 +155,35 @@ describe("Worker workspace gateway proxy", () => {
       method: "POST",
       url: `${sidecarEndpoint}/api/formless/workspace/operations`,
     });
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER)).toBe(
-      proxyToken,
-    );
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("browser");
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe(
-      "owner-session",
-    );
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("save");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER)).toBe(proxyToken);
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("browser");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("owner-session");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("save");
     expect(calls[0]?.headers.get("Authorization")).toBeNull();
     expect(calls[0]?.headers.get("Cookie")).toBeNull();
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER)).toBeNull();
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER)).toBeNull();
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER)).toBeNull();
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_CSRF_HEADER)).toBeNull();
   });
 
   it("requires matching CSRF cookie and header before forwarding browser mutations", async () => {
-    const ownerCookie = await ownerSessionCookie();
     const cases: Array<{ headers: Record<string, string>; label: string }> = [
       {
         headers: {
-          Cookie: ownerCookie,
-          [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+          Cookie: ownerSessionCookie,
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
         },
         label: "header without cookie",
       },
       {
         headers: {
-          Cookie: `${ownerCookie}; ${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
         },
         label: "cookie without header",
       },
       {
         headers: {
-          Cookie: `${ownerCookie}; ${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=wrong-token`,
-          [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=wrong-token`,
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
         },
         label: "mismatched cookie",
       },
@@ -208,7 +191,7 @@ describe("Worker workspace gateway proxy", () => {
 
     for (const testCase of cases) {
       let forwarded = false;
-      const response = await handleWorkerWorkspaceGatewayProxyRequest(
+      const response = await handleWorkspaceGatewayProxyRequest(
         new Request("https://example.com/api/formless/workspace/operations", {
           body: JSON.stringify({ kind: "deployApply" }),
           headers: {
@@ -224,6 +207,7 @@ describe("Worker workspace gateway proxy", () => {
             forwarded = true;
             return Response.json({ operation: operation("deployApply") });
           },
+          validateOwnerSession,
         },
       );
       const body = await jsonBody(response);
@@ -238,11 +222,11 @@ describe("Worker workspace gateway proxy", () => {
 
   it("limits bootstrap authorization to bootstrap-safe operation intents before forwarding", async () => {
     const initCalls: ProxyCall[] = [];
-    const init = await handleWorkerWorkspaceGatewayProxyRequest(
+    const init = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations", {
         body: JSON.stringify({ kind: "init", name: "Local" }),
         headers: {
-          [LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           "Content-Type": "application/json",
           Origin: "https://example.com",
         },
@@ -255,11 +239,11 @@ describe("Worker workspace gateway proxy", () => {
       },
     );
     let saveForwarded = false;
-    const save = await handleWorkerWorkspaceGatewayProxyRequest(
+    const save = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations", {
         body: JSON.stringify({ kind: "save" }),
         headers: {
-          [LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           "Content-Type": "application/json",
           Origin: "https://example.com",
         },
@@ -276,21 +260,43 @@ describe("Worker workspace gateway proxy", () => {
     );
 
     expect(init?.status).toBe(200);
-    expect(initCalls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe(
-      "bootstrap",
-    );
-    expect(initCalls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("init");
+    expect(initCalls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("bootstrap");
+    expect(initCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("init");
     expect(save?.status).toBe(403);
     expect(saveForwarded).toBe(false);
   });
 
+  it("expires bootstrap authorization through injected owner setup status", async () => {
+    let forwarded = false;
+    const response = await handleWorkspaceGatewayProxyRequest(
+      new Request("https://example.com/api/formless/workspace/status", {
+        headers: {
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+        },
+      }),
+      baseEnv,
+      {
+        fetch: async () => {
+          forwarded = true;
+          return Response.json({ operation: operation("status") });
+        },
+        readOwnerSetupStatus: async () => ({ setupComplete: true }),
+      },
+    );
+    const body = await jsonBody(response);
+
+    expect(response?.status).toBe(403);
+    expect(body.error).toBe("Workspace bootstrap authorization has expired.");
+    expect(forwarded).toBe(false);
+  });
+
   it("checks operation read ids and read intents before bootstrap forwarding", async () => {
     const initReadCalls: ProxyCall[] = [];
-    const initRead = await handleWorkerWorkspaceGatewayProxyRequest(
+    const initRead = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations/op_init_00000001", {
         headers: {
-          [LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-          [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "init",
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "init",
         },
       }),
       baseEnv,
@@ -300,11 +306,11 @@ describe("Worker workspace gateway proxy", () => {
       },
     );
     let saveReadForwarded = false;
-    const saveRead = await handleWorkerWorkspaceGatewayProxyRequest(
+    const saveRead = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations/op_save_00000001", {
         headers: {
-          [LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-          [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "save",
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "save",
         },
       }),
       baseEnv,
@@ -318,16 +324,14 @@ describe("Worker workspace gateway proxy", () => {
     );
 
     expect(initRead?.status).toBe(200);
-    expect(initReadCalls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe(
-      "init",
-    );
+    expect(initReadCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("init");
     expect(saveRead?.status).toBe(403);
     expect(saveReadForwarded).toBe(false);
   });
 
   it("proxies non-browser admin bearer automation without CSRF browser state", async () => {
     const calls: ProxyCall[] = [];
-    const response = await handleWorkerWorkspaceGatewayProxyRequest(
+    const response = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations", {
         body: JSON.stringify({ kind: "deployPlan" }),
         headers: {
@@ -346,10 +350,8 @@ describe("Worker workspace gateway proxy", () => {
     expect(response?.status).toBe(200);
     expect(response?.headers.get("Set-Cookie")).toBeNull();
     expect(body.csrfToken).toBeUndefined();
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("automation");
-    expect(calls[0]?.headers.get(LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe(
-      "admin-bearer",
-    );
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("automation");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("admin-bearer");
     expect(calls[0]?.headers.get("Authorization")).toBeNull();
   });
 });
@@ -363,7 +365,7 @@ type ProxyCall = {
 
 function captureProxyCalls(
   calls: ProxyCall[],
-  operationResponse: LocalWorkspaceGatewayOperation,
+  operationResponse: WorkspaceGatewayOperation,
 ): typeof fetch {
   return async (input, init) => {
     calls.push({
@@ -377,22 +379,16 @@ function captureProxyCalls(
   };
 }
 
-async function ownerSessionCookie() {
-  const created = await createOwnerSessionCookie({
-    env: { FORMLESS_OWNER_SESSION_SECRET: ownerSessionSecret },
-    maxAgeSeconds: 60,
-    now: "2999-01-01T00:00:00.000Z",
-    owner,
-    request: new Request("https://example.com/"),
-  });
-
-  return created.cookie.split(";")[0] ?? created.cookie;
-}
-
 async function jsonBody(response: Response | undefined): Promise<Record<string, unknown>> {
   expect(response).toBeDefined();
 
   return (await response!.json()) as Record<string, unknown>;
+}
+
+function validateOwnerSession(request: Request) {
+  return request.headers.get("Cookie")?.includes(ownerSessionCookie)
+    ? { ok: true as const }
+    : { ok: false as const, reason: "missing-cookie" };
 }
 
 async function requestBodyText(body: BodyInit): Promise<string> {
@@ -419,9 +415,7 @@ function requestUrl(input: Parameters<typeof fetch>[0]) {
   return input instanceof URL ? input.href : input.url;
 }
 
-function operation(
-  operationKind: LocalWorkspaceGatewayOperationKind,
-): LocalWorkspaceGatewayOperation {
+function operation(operationKind: WorkspaceGatewayOperationKind): WorkspaceGatewayOperation {
   return {
     actor: "browser",
     createdAt: "2026-06-03T00:00:00.000Z",

@@ -10,9 +10,9 @@ import type { OwnerSessionStatusResponse } from "../shared/instance-auth.ts";
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "../shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 
@@ -191,8 +191,8 @@ function createLocalBootstrapHarness(bindings: Record<string, string> = {}) {
         FORMLESS_OWNER_SESSION_SECRET: ownerSessionSecret,
         FORMLESS_RUNTIME_PROFILE: "instance",
         [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: localSessionBootstrapToken,
-        [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "local-gateway-proxy-token",
-        [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1",
+        [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "local-gateway-proxy-token",
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1",
         ...bindings,
       },
     },

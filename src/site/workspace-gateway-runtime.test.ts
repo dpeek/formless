@@ -23,18 +23,22 @@ import {
   type StoredRecord,
 } from "../shared/protocol.ts";
 import {
-  LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
-  LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-  LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH,
-} from "../shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_ACTOR_HEADER,
+  WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
+  WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
+  WORKSPACE_GATEWAY_CSRF_HEADER,
+  WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
+  WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
+  WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+  WORKSPACE_GATEWAY_STATUS_API_PATH,
+  handleWorkspaceGatewayLocalProxyRequest,
+  handleWorkspaceGatewaySidecarRequest,
+  startWorkspaceGatewaySidecar,
+  type WorkspaceGatewaySidecar,
+} from "@dpeek/formless-gateway/sidecar";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
@@ -45,16 +49,14 @@ import {
 } from "./instance-workspace-config.ts";
 import { writeFormlessInstanceControlPlaneRecordSource } from "./instance-workspace-record-source.ts";
 import {
-  handleLocalWorkspaceGatewayRequest,
-  handleLocalWorkspaceGatewaySidecarRequest,
-  startLocalWorkspaceGatewaySidecar,
-  type LocalWorkspaceGatewayDependencies,
-  type LocalWorkspaceGatewayEnv,
-  type LocalWorkspaceGatewaySidecar,
-} from "./local-workspace-gateway.ts";
+  createWorkspaceGatewayOperationHandlers,
+  createWorkspaceGatewayProxyDependencies,
+  type WorkspaceGatewayRuntimeDependencies,
+  type WorkspaceGatewayRuntimeEnv,
+} from "./workspace-gateway-runtime.ts";
 
 const tempDirs: string[] = [];
-const sidecars: LocalWorkspaceGatewaySidecar[] = [];
+const sidecars: WorkspaceGatewaySidecar[] = [];
 const bootstrapToken = "bootstrap-local-token";
 const csrfToken = "csrf-local-token";
 const ownerSecret = "owner-session-secret";
@@ -72,18 +74,20 @@ afterEach(async () => {
 describe("local workspace gateway", () => {
   it("is available only for local workspace runtime env and not Worker runtime profiles", async () => {
     const workspaceRoot = await makeTempDir();
+    const env = gatewayEnv(workspaceRoot);
+    const deps = gatewayDeps(workspaceRoot);
 
     await expect(
-      handleLocalWorkspaceGatewayRequest(
+      handleWorkspaceGatewayLocalProxyRequest(
         new Request("http://local.test/api/formless/app-installs"),
-        gatewayEnv(workspaceRoot),
-        gatewayDeps(workspaceRoot),
+        env,
+        createWorkspaceGatewayProxyDependencies(env, deps),
       ),
     ).resolves.toBeUndefined();
 
     await expect(
       gatewayJson(
-        new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+        new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
           headers: bootstrapHeaders(),
         }),
         { env: { FORMLESS_RUNTIME_PROFILE: "instance" } },
@@ -92,7 +96,7 @@ describe("local workspace gateway", () => {
 
     for (const profile of ["app", "siteAuthoring", "publishedSite"]) {
       const blocked = await gatewayJson(
-        new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+        new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
           headers: bootstrapHeaders(),
         }),
         {
@@ -119,7 +123,7 @@ describe("local workspace gateway", () => {
     expect(endpoint.protocol).toBe("http:");
     expect(sidecar.proxyToken).toBe(proxyToken);
 
-    const status = await fetch(sidecarPath(sidecar, LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH), {
+    const status = await fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_STATUS_API_PATH), {
       headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
     });
 
@@ -134,7 +138,7 @@ describe("local workspace gateway", () => {
 
     await sidecar.close();
     await expect(
-      fetch(sidecarPath(sidecar, LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH), {
+      fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_STATUS_API_PATH), {
         headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
       }),
     ).rejects.toThrow();
@@ -143,20 +147,20 @@ describe("local workspace gateway", () => {
   it("rejects unavailable root and invalid internal proxy token before sidecar execution", async () => {
     const workspaceRoot = await makeTempDir();
     let credentialSetupCalls = 0;
-    const unavailableRoot = await handleLocalWorkspaceGatewaySidecarRequest(
-      new Request(`http://127.0.0.1${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+    const unavailableRoot = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
         headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
       }),
       {
         FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
         FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken,
       },
-      gatewayDeps(workspaceRoot),
+      createWorkspaceGatewayOperationHandlers(gatewayDeps(workspaceRoot)),
     );
 
     expect(unavailableRoot?.status).toBe(404);
 
-    const rejected = await handleLocalWorkspaceGatewaySidecarRequest(
+    const rejected = await handleWorkspaceGatewaySidecarRequest(
       operationRequest(
         { kind: "credentialSetup", provider: "cloudflare" },
         sidecarProxyHeaders({
@@ -166,12 +170,14 @@ describe("local workspace gateway", () => {
         }),
       ),
       gatewayEnv(workspaceRoot, { FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken }),
-      gatewayDeps(workspaceRoot, {
-        credentialSetup: async () => {
-          credentialSetupCalls += 1;
-          throw new Error("Unexpected credential setup.");
-        },
-      }),
+      createWorkspaceGatewayOperationHandlers(
+        gatewayDeps(workspaceRoot, {
+          credentialSetup: async () => {
+            credentialSetupCalls += 1;
+            throw new Error("Unexpected credential setup.");
+          },
+        }),
+      ),
     );
 
     expect(rejected?.status).toBe(401);
@@ -190,17 +196,14 @@ describe("local workspace gateway", () => {
         operationIds: ["op_sidecar_admin_00000001"],
       }),
     );
-    const response = await fetch(
-      sidecarPath(sidecar, LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH),
-      {
-        body: JSON.stringify({ kind: "credentialSetup", provider: "cloudflare" }),
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
+    const response = await fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_OPERATIONS_API_PATH), {
+      body: JSON.stringify({ kind: "credentialSetup", provider: "cloudflare" }),
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
       },
-    );
+      method: "POST",
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -236,7 +239,7 @@ describe("local workspace gateway", () => {
         operationIds: ["op_sidecar_progress_00000001"],
       }),
     );
-    const started = await fetch(sidecarPath(sidecar, LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH), {
+    const started = await fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_OPERATIONS_API_PATH), {
       body: JSON.stringify({ kind: "credentialSetup", provider: "cloudflare" }),
       headers: {
         "Content-Type": "application/json",
@@ -255,10 +258,7 @@ describe("local workspace gateway", () => {
     expect(serializedStarted).not.toContain("raw adapter");
 
     const read = await fetch(
-      sidecarPath(
-        sidecar,
-        `${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_sidecar_progress_00000001`,
-      ),
+      sidecarPath(sidecar, `${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_sidecar_progress_00000001`),
       {
         headers: sidecarProxyHeaders({ via: "owner-session" }),
       },
@@ -281,7 +281,7 @@ describe("local workspace gateway", () => {
   it("allows the process-scoped bootstrap capability to read status and initialize only", async () => {
     const workspaceRoot = await makeTempDir();
     const status = await gatewayJson(
-      new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+      new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
         headers: bootstrapHeaders(),
       }),
       { deps: gatewayDeps(workspaceRoot, { operationIds: ["op_status_00000001"] }) },
@@ -328,7 +328,7 @@ describe("local workspace gateway", () => {
     ).resolves.toMatchObject({});
 
     const expired = await gatewayJson(
-      new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+      new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
         headers: bootstrapHeaders(),
       }),
       { deps: gatewayDeps(workspaceRoot, { setupComplete: true }) },
@@ -806,7 +806,7 @@ describe("local workspace gateway", () => {
     const requestCountAfterApply = requests.length;
     const read = await gatewayJson(
       new Request(
-        `http://local.test${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_deploy_apply_00000001`,
+        `http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_deploy_apply_00000001`,
         {
           headers: browserHeaders({ cookie }),
         },
@@ -845,7 +845,7 @@ describe("local workspace gateway", () => {
     const workspaceRoot = await makeTempDir();
     const otherWorkspaceRoot = await makeTempDir();
     const started = await gatewayJson(
-      new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+      new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
         headers: bootstrapHeaders(),
       }),
       { deps: gatewayDeps(workspaceRoot, { operationIds: ["op_status_scoped"] }) },
@@ -854,12 +854,12 @@ describe("local workspace gateway", () => {
     expect(started.response.status).toBe(200);
 
     const otherRead = await gatewayJson(
-      new Request(
-        `http://local.test${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_status_scoped`,
-        {
-          headers: bootstrapHeaders(),
+      new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_status_scoped`, {
+        headers: {
+          ...bootstrapHeaders(),
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "status",
         },
-      ),
+      }),
       {
         deps: gatewayDeps(otherWorkspaceRoot),
         env: gatewayEnv(otherWorkspaceRoot),
@@ -869,7 +869,7 @@ describe("local workspace gateway", () => {
     expect(otherRead.response.status).toBe(404);
 
     const invalid = await gatewayJson(
-      new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/..%2Fsecret`, {
+      new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/..%2Fsecret`, {
         headers: bootstrapHeaders(),
       }),
       { deps: gatewayDeps(workspaceRoot) },
@@ -910,8 +910,8 @@ describe("local workspace gateway", () => {
 async function gatewayJson(
   request: Request,
   options: {
-    deps?: LocalWorkspaceGatewayDependencies;
-    env?: LocalWorkspaceGatewayEnv;
+    deps?: WorkspaceGatewayRuntimeDependencies;
+    env?: WorkspaceGatewayRuntimeEnv;
   } = {},
 ) {
   const workspaceRoot = options.deps?.cwd ?? (await makeTempDir());
@@ -921,10 +921,12 @@ async function gatewayJson(
     deps,
     gatewayEnv(workspaceRoot, options.env),
   );
-  const response = await handleLocalWorkspaceGatewayRequest(
+  const proxyEnv = proxyGatewayEnv(options.env ?? gatewayEnv(workspaceRoot), sidecar);
+  const proxyDeps = { ...deps, proxyFetch: fetch };
+  const response = await handleWorkspaceGatewayLocalProxyRequest(
     request,
-    proxyGatewayEnv(options.env ?? gatewayEnv(workspaceRoot), sidecar),
-    { ...deps, proxyFetch: fetch },
+    proxyEnv,
+    createWorkspaceGatewayProxyDependencies(proxyEnv, proxyDeps),
   );
 
   if (!response) {
@@ -940,17 +942,17 @@ async function gatewayJson(
 
 async function startGatewaySidecar(
   workspaceRoot: string,
-  deps: LocalWorkspaceGatewayDependencies,
-  env: LocalWorkspaceGatewayEnv = gatewayEnv(workspaceRoot),
-): Promise<LocalWorkspaceGatewaySidecar> {
-  const sidecar = await startLocalWorkspaceGatewaySidecar(
+  deps: WorkspaceGatewayRuntimeDependencies,
+  env: WorkspaceGatewayRuntimeEnv = gatewayEnv(workspaceRoot),
+): Promise<WorkspaceGatewaySidecar> {
+  const sidecar = await startWorkspaceGatewaySidecar(
     {
       env,
       workspaceRoot,
     },
     {
-      ...deps,
       createProxyToken: () => proxyToken,
+      operations: createWorkspaceGatewayOperationHandlers(deps),
     },
   );
 
@@ -959,17 +961,17 @@ async function startGatewaySidecar(
 }
 
 function proxyGatewayEnv(
-  env: LocalWorkspaceGatewayEnv,
-  sidecar: LocalWorkspaceGatewaySidecar,
-): LocalWorkspaceGatewayEnv {
+  env: WorkspaceGatewayRuntimeEnv,
+  sidecar: WorkspaceGatewaySidecar,
+): WorkspaceGatewayRuntimeEnv {
   return {
     ...env,
-    [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: sidecar.proxyToken,
-    [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: sidecar.endpoint,
+    [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: sidecar.proxyToken,
+    [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: sidecar.endpoint,
   };
 }
 
-function sidecarPath(sidecar: LocalWorkspaceGatewaySidecar, pathname: string): string {
+function sidecarPath(sidecar: WorkspaceGatewaySidecar, pathname: string): string {
   return new URL(pathname, sidecar.endpoint).toString();
 }
 
@@ -979,17 +981,17 @@ function sidecarProxyHeaders(input: {
   via: "admin-bearer" | "bootstrap" | "owner-session";
 }): Record<string, string> {
   return {
-    [LOCAL_WORKSPACE_GATEWAY_ACTOR_HEADER]: input.via === "admin-bearer" ? "automation" : "browser",
-    [LOCAL_WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]: input.via,
+    [WORKSPACE_GATEWAY_ACTOR_HEADER]: input.via === "admin-bearer" ? "automation" : "browser",
+    [WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]: input.via,
     ...(input.operation === undefined
       ? {}
-      : { [LOCAL_WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: input.operation }),
-    [LOCAL_WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: input.token ?? proxyToken,
+      : { [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: input.operation }),
+    [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: input.token ?? proxyToken,
   };
 }
 
 function operationRequest(body: unknown, headers: Record<string, string> = {}): Request {
-  return new Request(`http://local.test${LOCAL_WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`, {
+  return new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`, {
     body: JSON.stringify(body),
     headers: {
       "Content-Type": "application/json",
@@ -1001,8 +1003,8 @@ function operationRequest(body: unknown, headers: Record<string, string> = {}): 
 
 function gatewayEnv(
   workspaceRoot: string,
-  overrides: Partial<LocalWorkspaceGatewayEnv> = {},
-): LocalWorkspaceGatewayEnv {
+  overrides: Partial<WorkspaceGatewayRuntimeEnv> = {},
+): WorkspaceGatewayRuntimeEnv {
   return {
     FORMLESS_ADMIN_TOKEN: adminToken,
     FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
@@ -1021,7 +1023,7 @@ function gatewayDeps(
     accountDiscovery?: {
       listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
     };
-    credentialSetup?: LocalWorkspaceGatewayDependencies["credentialSetup"];
+    credentialSetup?: WorkspaceGatewayRuntimeDependencies["credentialSetup"];
     credentialSetupUrl?: string;
     deploymentAdapter?: {
       deploy: (input: { plan: { expectedUrl: { url: string } } }) => Promise<{ url: string }>;
@@ -1034,7 +1036,7 @@ function gatewayDeps(
     setupComplete?: boolean;
     timestamps?: string[];
   } = {},
-): LocalWorkspaceGatewayDependencies {
+): WorkspaceGatewayRuntimeDependencies {
   const operationIds = [...(options.operationIds ?? [])];
   const randomTokens = [...(options.randomTokens ?? [])];
 
@@ -1115,7 +1117,7 @@ function gatewayDeps(
 
 function bootstrapHeaders(): Record<string, string> {
   return {
-    [LOCAL_WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+    [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
     Origin: "http://local.test",
   };
 }
@@ -1128,9 +1130,9 @@ function browserHeaders(input: {
   return {
     Cookie: [
       input.cookie,
-      ...(input.csrf ? [`${LOCAL_WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`] : []),
+      ...(input.csrf ? [`${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`] : []),
     ].join("; "),
-    ...(input.csrf ? { [LOCAL_WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken } : {}),
+    ...(input.csrf ? { [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken } : {}),
     Origin: input.origin ?? "http://local.test",
   };
 }

@@ -44,9 +44,9 @@ import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-pl
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "../shared/workspace-gateway-protocol.ts";
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 import {
   rateSeedRecords,
   rateSourceSchema,
@@ -2501,10 +2501,8 @@ describe("Formless Site CLI", () => {
       FORMLESS_LAUNCH_FIXTURE: "empty",
       FORMLESS_OWNER_SESSION_SECRET: setupToken,
       [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "local-session-token",
-      [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: expect.any(String),
-      [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: expect.stringMatching(
-        /^http:\/\/127\.0\.0\.1:\d+\/?$/,
-      ),
+      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: expect.any(String),
+      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/),
       FORMLESS_RUNTIME_PROFILE: "instance",
       FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
       PORT: "4443",
@@ -2544,8 +2542,8 @@ describe("Formless Site CLI", () => {
     expect(sidecars).toMatchObject([
       {
         closed: true,
-        endpoint: spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV],
-        proxyToken: spawnCalls[0]?.env?.[LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
+        endpoint: spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_SIDECAR_URL_ENV],
+        proxyToken: spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
         workspaceRoot,
       },
     ]);
@@ -2604,8 +2602,8 @@ describe("Formless Site CLI", () => {
       {
         FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
         [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "old-session-bootstrap-token",
-        [LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "old-proxy-token",
-        [LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1/",
+        [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "old-proxy-token",
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1/",
         FORMLESS_WORKSPACE_GATEWAY_ROOT: "/old/root",
         VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "browser-proxy-token",
         VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:1/",
@@ -2624,8 +2622,8 @@ describe("Formless Site CLI", () => {
       VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
     });
     expect(env[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).not.toBe("old-session-bootstrap-token");
-    expect(env).not.toHaveProperty(LOCAL_WORKSPACE_GATEWAY_PROXY_TOKEN_ENV);
-    expect(env).not.toHaveProperty(LOCAL_WORKSPACE_GATEWAY_SIDECAR_URL_ENV);
+    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_PROXY_TOKEN_ENV);
+    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_SIDECAR_URL_ENV);
     expect(env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
     expect(env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
     expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");

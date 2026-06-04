@@ -1,0 +1,17 @@
+{
+  "name": "@dpeek/formless-gateway",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./worker": "./src/worker.ts",
+    "./sidecar": "./src/sidecar.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

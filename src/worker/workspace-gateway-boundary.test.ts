@@ -27,9 +27,9 @@ describe("Worker workspace gateway dependency boundary", () => {
 
 const forbiddenWorkerGatewayDependencyRules = [
   {
-    label: "imports local workspace gateway or workspace filesystem sidecar modules",
+    label: "imports Site workspace gateway runtime or workspace filesystem sidecar modules",
     pattern:
-      /\b(?:from\s+|import\s*\(\s*)["'][^"']*(?:local-workspace-gateway|instance-workspace(?:-[^"']*)?)\.ts["']/,
+      /\b(?:from\s+|import\s*\(\s*)["'][^"']*(?:workspace-gateway-runtime|local-workspace-gateway|instance-workspace(?:-[^"']*)?)\.ts["']/,
   },
   {
     label: "imports Node filesystem, path, or process APIs",

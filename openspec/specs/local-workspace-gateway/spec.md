@@ -2,7 +2,12 @@
 
 ## Purpose
 
-TBD - created by archiving change browser-workspace-control-plane. Update Purpose after archive.
+Local workspace gateway exposes browser-safe workspace operation requests from
+local runtime profiles through a same-origin proxy and a filesystem-capable
+loopback sidecar. It keeps browser, Worker, and sidecar wire behavior
+display-safe while local workspace operations, owner sessions, runtime
+topology, provider credentials, and app records stay owned by their existing
+runtime modules.
 
 ## Requirements
 
@@ -40,6 +45,38 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 - **AND** Worker runtime code only performs route policy, browser
   authorization, operation intent validation, display-safe response forwarding,
   and HTTP proxying
+
+### Requirement: Gateway Package Boundary
+
+The system SHALL expose reusable local workspace gateway contracts and adapters
+through the Gateway package slice.
+
+#### Scenario: Package owns gateway interface
+
+- **WHEN** runtime-neutral, browser, Worker, sidecar, CLI, Site runtime, or
+  tests need workspace gateway route constants, operation input contracts,
+  operation intent helpers, display-safe operation state, browser fetch
+  behavior, Worker proxy behavior, or sidecar HTTP routing helpers
+- **THEN** they import those contracts and adapters from
+  `@dpeek/formless-gateway`, `@dpeek/formless-gateway/client`,
+  `@dpeek/formless-gateway/worker`, or `@dpeek/formless-gateway/sidecar`
+- **AND** they do not import package-owned gateway behavior from old
+  `src/shared`, `src/client`, `src/worker`, or `src/site` gateway modules or
+  from unexported package internals
+- **AND** Site runtime adapter modules may supply non-package-owned operation
+  execution, operation persistence, owner session, and runtime topology
+  dependencies to the package sidecar adapter
+
+#### Scenario: Package does not own runtime operations
+
+- **WHEN** a gateway adapter needs owner session validation, runtime topology
+  eligibility, owner setup status, workspace save, workspace check, workspace
+  pull, workspace push, deploy plan, deploy apply, credential setup, operation
+  persistence, filesystem access, or provider mutation
+- **THEN** those behaviors are supplied through Formless runtime adapters
+- **AND** the Gateway package does not own app records, Authority storage,
+  owner session cookies, runtime topology records, provider credentials,
+  Alchemy state, Cloudflare mutation, or workspace source records
 
 ### Requirement: Workspace Gateway Security Baseline
 
