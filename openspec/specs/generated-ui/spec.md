@@ -415,7 +415,7 @@ workspace gateway proxy is available through the local runtime.
 
 - **WHEN** the product instance shell renders in a local workspace runtime with
   gateway proxy status available
-- **THEN** the UI can start workspace init, save, check, pull, push, deploy
+- **THEN** the UI can start workspace save, check, pull, push, deploy
   credential setup, deploy plan, and deploy apply operations through the
   same-origin gateway API family
 - **AND** the UI does not expose arbitrary filesystem path inputs or raw file
@@ -448,18 +448,18 @@ workspace gateway proxy is available through the local runtime.
 - **AND** it does not offer controls that would imply workspace filesystem,
   credential setup, deploy plan, or deploy apply execution is available
 
-### Requirement: Browser-First Onboarding UI
+### Requirement: Local Workspace Onboarding UI
 
-Generated instance management UI SHALL support onboarding a local workspace from
-the browser.
+Generated instance management UI SHALL support onboarding a CLI-bootstrapped
+local workspace from the browser.
 
 #### Scenario: Empty workspace onboarding
 
-- **WHEN** the browser opens a local runtime before workspace source has been
-  initialized
-- **THEN** the UI can invoke workspace initialization through the gateway
-- **AND** after initialization the UI can create package app installs through
-  Authority-backed app install actions
+- **WHEN** the browser opens a fresh local workspace runtime after CLI-owned
+  workspace bootstrap
+- **THEN** the UI can create package app installs through Authority-backed app
+  install actions
+- **AND** the UI does not invoke workspace initialization through the gateway
 
 #### Scenario: Save after browser edits
 
@@ -488,12 +488,15 @@ behavior for onboarding steps that write schema records.
 
 #### Scenario: Gateway operation step
 
-- **WHEN** an onboarding step initializes a workspace, starts credential setup,
-  runs save/check, or starts deploy plan/apply
+- **WHEN** an onboarding step starts credential setup, runs save/check, or
+  starts deploy plan/apply
 - **THEN** the step invokes the workspace gateway operation model and renders
   operation progress
 - **AND** schema field controls are used only for schema-record inputs, not for
   arbitrary filesystem paths, credentials, raw provider state, or shell output
+- **AND** local dev browser onboarding does not present a workspace
+  initialization action because fresh workspace bootstrap is completed by the
+  CLI before the runtime starts
 
 #### Scenario: Future schema-defined setup flows
 

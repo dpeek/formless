@@ -56,18 +56,19 @@ afterEach(async () => {
 });
 
 describe("Formless workspace operations", () => {
-  it("persists init progress under ignored operation state before manifest creation", async () => {
+  it("persists status progress for a CLI-bootstrapped layout workspace without source writes", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
 
+    await writeWorkspaceManifest(workspaceRoot);
+
     const state = await runFormlessWorkspaceOperation(
       {
-        kind: "init",
-        name: "personal-sites",
+        kind: "status",
         workspacePath: workspaceRoot,
       },
       operationDeps(tempDir, {
-        operationIds: ["op_init_00000001"],
+        operationIds: ["op_status_00000001"],
         timestamps: [
           "2026-06-02T00:00:00.000Z",
           "2026-06-02T00:00:01.000Z",
@@ -79,15 +80,16 @@ describe("Formless workspace operations", () => {
 
     expect(state).toMatchObject({
       actor: "browser",
-      id: "op_init_00000001",
-      operation: "init",
+      id: "op_status_00000001",
+      operation: "status",
       status: "succeeded",
       summary: {
         fields: {
+          automationToken: "[redacted]",
           initialized: true,
-          workspace: "personal-sites",
+          remoteStatus: "skipped",
         },
-        title: "Workspace initialized",
+        title: "Workspace status",
       },
       workspace: { label: "personal-sites" },
     });
@@ -97,13 +99,22 @@ describe("Formless workspace operations", () => {
     await expect(readFile(path.join(workspaceRoot, ".gitignore"), "utf8")).resolves.toBe(
       ".formless/\n",
     );
+    await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "records"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "media"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 
     const persisted = await readFormlessWorkspaceOperationState({
-      operationId: "op_init_00000001",
+      operationId: "op_status_00000001",
       workspaceRoot,
     });
     const persistedText = await readFile(
-      formlessWorkspaceOperationStatePath(workspaceRoot, "op_init_00000001"),
+      formlessWorkspaceOperationStatePath(workspaceRoot, "op_status_00000001"),
       "utf8",
     );
 
@@ -252,6 +263,61 @@ describe("Formless workspace operations", () => {
     ).toHaveLength(3);
     await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
+  });
+
+  it("plans deploy from the manifest name when provider config has no worker name", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const controlPlaneRecords = deployControlPlaneRecords({
+      targetUrl: "https://personal-sites.dpeek.workers.dev",
+      workerName: null,
+    });
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot, {
+      targetUrl: "https://personal-sites.dpeek.workers.dev",
+      workerName: null,
+    });
+    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "deployPlan",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        fetch: authorityExportFetch(
+          [installedSite("david", "David Peek")],
+          { david: { records: [] } },
+          { controlPlaneRecords },
+        ),
+        packageVersion: packageJson.version,
+        timestamps: ["2026-06-02T00:03:00.000Z"],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(state).toMatchObject({
+      result: {
+        summary: {
+          fields: {
+            expectedUrl: "https://personal-sites.dpeek.workers.dev",
+            workerName: "personal-sites",
+          },
+          title: "Deploy planned",
+        },
+      },
+      status: "succeeded",
+    });
+    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
   });
 
   it("applies deploy with exact desired-state runtime writeback", async () => {
@@ -631,7 +697,13 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
   );
 }
 
-async function writeDeployRecordSource(workspaceRoot: string) {
+async function writeDeployRecordSource(
+  workspaceRoot: string,
+  options: {
+    targetUrl?: string;
+    workerName?: string | null;
+  } = {},
+) {
   const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
   const now = "2026-05-26T00:00:00.000Z";
 
@@ -639,7 +711,7 @@ async function writeDeployRecordSource(workspaceRoot: string) {
     controlPlane: {
       schemaKey: "instance-control-plane",
       schemaUpdatedAt: now,
-      records: deployControlPlaneRecords(),
+      records: deployControlPlaneRecords(options),
     },
     manifest,
     workspaceRoot,
@@ -1092,8 +1164,14 @@ function controlPlaneRecords(): StoredRecord[] {
   ];
 }
 
-function deployControlPlaneRecords(): StoredRecord[] {
+function deployControlPlaneRecords(
+  options: {
+    targetUrl?: string;
+    workerName?: string | null;
+  } = {},
+): StoredRecord[] {
   const now = "2026-05-26T00:00:00.000Z";
+  const workerName = options.workerName === undefined ? "personal" : options.workerName;
 
   return [
     ...controlPlaneRecords(),
@@ -1159,7 +1237,7 @@ function deployControlPlaneRecords(): StoredRecord[] {
         label: "Primary instance",
         targetId: "instance.primary",
         targetKind: "instance",
-        targetUrl: "https://personal.dpeek.workers.dev",
+        targetUrl: options.targetUrl ?? "https://personal.dpeek.workers.dev",
         updatedAt: now,
       },
     },
@@ -1174,7 +1252,7 @@ function deployControlPlaneRecords(): StoredRecord[] {
         label: "Cloudflare personal",
         providerFamily: "cloudflare",
         updatedAt: now,
-        workerName: "personal",
+        ...(workerName === null ? {} : { workerName }),
       },
     },
   ];

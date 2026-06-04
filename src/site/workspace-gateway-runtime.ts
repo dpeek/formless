@@ -9,8 +9,10 @@ import {
 import type {
   WorkspaceGatewayActor,
   WorkspaceGatewayCredentialSetupStartInput,
+  WorkspaceGatewayOperation,
   WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway";
+import { isWorkspaceGatewayOperationKind } from "@dpeek/formless-gateway";
 
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
@@ -24,6 +26,7 @@ import {
   type FormlessWorkspaceOperationEvent,
   type FormlessWorkspaceOperationInput,
   type FormlessWorkspaceOperationResult,
+  type FormlessWorkspaceOperationState,
   type FormlessWorkspaceOperationStatus,
   type RunFormlessWorkspaceOperationDependencies,
 } from "./instance-workspace-operations.ts";
@@ -69,10 +72,12 @@ export function createWorkspaceGatewayOperationHandlers(
   return {
     readOperation: async ({ operationId, workspaceRoot }) => {
       try {
-        return await readFormlessWorkspaceOperationState({
+        const operation = await readFormlessWorkspaceOperationState({
           operationId,
           workspaceRoot,
         });
+
+        return workspaceGatewayOperationFromState(operation);
       } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {
           return undefined;
@@ -82,27 +87,31 @@ export function createWorkspaceGatewayOperationHandlers(
       }
     },
     startOperation: async ({ authorization, operationInput, workspaceRoot }) =>
-      operationInput.kind === "credentialSetup"
-        ? await runCredentialSetupGatewayOperation(
-            operationInput,
-            dependencies,
-            workspaceRoot,
-            authorization.actor,
-          )
-        : await runFormlessWorkspaceOperation(
-            withWorkspaceRoot(operationInput, workspaceRoot),
-            operationDependencies(dependencies, workspaceRoot),
-            { actor: authorization.actor },
-          ),
+      requireWorkspaceGatewayOperation(
+        operationInput.kind === "credentialSetup"
+          ? await runCredentialSetupGatewayOperation(
+              operationInput,
+              dependencies,
+              workspaceRoot,
+              authorization.actor,
+            )
+          : await runFormlessWorkspaceOperation(
+              withWorkspaceRoot(operationInput, workspaceRoot),
+              operationDependencies(dependencies, workspaceRoot),
+              { actor: authorization.actor },
+            ),
+      ),
     status: async ({ authorization, workspaceRoot }) =>
-      await runFormlessWorkspaceOperation(
-        {
-          includeDeploymentStatus: false,
-          kind: "status",
-          workspacePath: workspaceRoot,
-        },
-        operationDependencies(dependencies, workspaceRoot),
-        { actor: authorization.actor },
+      requireWorkspaceGatewayOperation(
+        await runFormlessWorkspaceOperation(
+          {
+            includeDeploymentStatus: false,
+            kind: "status",
+            workspacePath: workspaceRoot,
+          },
+          operationDependencies(dependencies, workspaceRoot),
+          { actor: authorization.actor },
+        ),
       ),
   };
 }
@@ -364,6 +373,28 @@ function withWorkspaceRoot(
     ...input,
     workspacePath: workspaceRoot,
   } as FormlessWorkspaceOperationInput;
+}
+
+function workspaceGatewayOperationFromState(
+  operation: FormlessWorkspaceOperationState,
+): WorkspaceGatewayOperation | undefined {
+  if (!isWorkspaceGatewayOperationKind(operation.operation)) {
+    return undefined;
+  }
+
+  return operation as WorkspaceGatewayOperation;
+}
+
+function requireWorkspaceGatewayOperation(
+  operation: FormlessWorkspaceOperationState,
+): WorkspaceGatewayOperation {
+  const gatewayOperation = workspaceGatewayOperationFromState(operation);
+
+  if (!gatewayOperation) {
+    throw new Error(`Workspace gateway operation "${operation.operation}" is not supported.`);
+  }
+
+  return gatewayOperation;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

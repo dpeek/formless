@@ -74,12 +74,17 @@ describe("local session bootstrap API routes", () => {
     expect(JSON.stringify(session.body)).not.toContain(adminToken);
     expect(JSON.stringify(session.body)).not.toContain(localSessionBootstrapToken);
     expect(installsBefore.body.installs).toEqual([]);
-    expect(
-      controlPlaneBefore.body.records.filter((record) => record.entity === "app-install"),
-    ).toEqual([]);
-    expect(controlPlaneBefore.body.records.filter((record) => record.entity === "route")).toEqual(
-      [],
-    );
+    for (const entity of [
+      "app-install",
+      "route",
+      "deploy-target",
+      "provider-config-ref",
+      "deploy-desired-resource",
+    ]) {
+      expect(controlPlaneBefore.body.records.filter((record) => record.entity === entity)).toEqual(
+        [],
+      );
+    }
     expect(created.status).toBe(201);
     expect((await created.json()) as CreateAppInstallResponse).toMatchObject({
       install: {

@@ -1660,12 +1660,6 @@ describe("Formless Site CLI", () => {
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
-        deploy: {
-          accountId: "account-123",
-          mediaBucket: "personal-media",
-          migrationPolicy: "existing",
-          workerName: "personal",
-        },
       },
       plan: planFormlessInstanceDeployment({
         account: {
@@ -2452,11 +2446,12 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
   });
 
-  it("starts instance workspace dev from an empty workspace for browser onboarding", async () => {
+  it("starts instance workspace dev from an empty workspace after selecting a workspace name", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "empty-workspace");
     const child = new FakeCliDevChild();
     const logs: string[] = [];
+    const nameSelections: Array<{ defaultName: string; workspaceRoot: string }> = [];
     const openedUrls: string[] = [];
     const requests: CapturedFetchRequest[] = [];
     const sidecars: CapturedWorkspaceGatewaySidecar[] = [];
@@ -2470,6 +2465,11 @@ describe("Formless Site CLI", () => {
         logs,
         openedUrls,
         packageRoot: "/package",
+        selectWorkspaceName: async (input) => {
+          nameSelections.push(input);
+
+          return "confirmed-workspace";
+        },
         spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
           spawnCalls.push({
             args,
@@ -2520,10 +2520,22 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4443/api/formless/app-installs",
     ]);
     expect(openedUrls).toEqual([]);
-    await expect(
-      stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(
+      parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+    ).toEqual(layoutWorkspaceManifest("confirmed-workspace"));
+    expect(nameSelections).toEqual([{ defaultName: "empty-workspace", workspaceRoot }]);
+    await expect(readFile(path.join(workspaceRoot, ".gitignore"), "utf8")).resolves.toBe(
+      ".formless/\n",
+    );
     await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "records"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "media"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect((await stat(path.join(workspaceRoot, ".formless/local"))).isDirectory()).toBe(true);
@@ -2671,11 +2683,98 @@ describe("Formless Site CLI", () => {
       PORT: "4443",
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     });
+    expect(
+      parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+    ).toEqual(layoutWorkspaceManifest(expectedWorkspaceName(workspaceRoot)));
+    await expect(readFile(path.join(workspaceRoot, ".gitignore"), "utf8")).resolves.toBe(
+      ".formless/\n",
+    );
+    await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "records"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "media"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await expect(
-      stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+      readFile(path.join(workspaceRoot, ".formless/local/dev.env"), "utf8"),
+    ).resolves.toBe(
+      `FORMLESS_ADMIN_TOKEN=generated-token\nFORMLESS_OWNER_SESSION_SECRET=${setupToken}\n`,
+    );
     expect(logs).toContain("Local bootstrap entry: complete workspace setup in the browser.");
     expect(child.killed).toBe(false);
+  });
+
+  it("rejects fresh workspace dev bootstrap when local onboarding source conflicts exist", async () => {
+    const conflicts: Array<{
+      expected: string;
+      path: string;
+      write: "dir" | "file";
+    }> = [
+      {
+        expected: "Legacy Formless workspace manifest found",
+        path: "formless-workspace.json",
+        write: "file",
+      },
+      {
+        expected: "standalone Site project file exists",
+        path: "formless.config.json",
+        write: "file",
+      },
+      {
+        expected: "portable archive source exists",
+        path: PORTABLE_ARCHIVE_MANIFEST_FILE,
+        write: "file",
+      },
+      {
+        expected: "reviewable archive root exists",
+        path: "archives",
+        write: "dir",
+      },
+      {
+        expected: "ignored .formless state exists",
+        path: ".formless/deploy",
+        write: "dir",
+      },
+    ];
+
+    for (const conflict of conflicts) {
+      const tempDir = await makeTempDir();
+      const workspaceRoot = path.join(tempDir, "conflict-workspace");
+      const conflictPath = path.join(workspaceRoot, conflict.path);
+      const spawnCalls: CapturedSpawn[] = [];
+
+      await mkdir(path.dirname(conflictPath), { recursive: true });
+
+      if (conflict.write === "dir") {
+        await mkdir(conflictPath, { recursive: true });
+      } else {
+        await writeFile(conflictPath, "{}\n");
+      }
+
+      await expect(
+        runFormlessCli(
+          ["dev", "--workspace", workspaceRoot],
+          cliDeps(tempDir, {
+            spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+              spawnCalls.push({
+                args,
+                command,
+                cwd: options.cwd,
+                env: options.env,
+              });
+
+              return new FakeCliDevChild() as unknown as ReturnType<typeof spawn>;
+            }) as typeof spawn,
+          }),
+        ),
+      ).rejects.toThrow(conflict.expected);
+      expect(spawnCalls).toEqual([]);
+    }
   });
 
   it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from record source", async () => {
@@ -3627,12 +3726,6 @@ describe("Formless Site CLI", () => {
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
-        deploy: {
-          accountId: "account-123",
-          mediaBucket: "personal-media",
-          migrationPolicy: "existing",
-          workerName: "personal",
-        },
       }),
     );
 
@@ -5054,12 +5147,6 @@ async function writeWorkspaceManifest(
       local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
       defaultAppPolicy: "declared-installs",
       apps: options.apps ?? [workspaceApp("david", "David Peek")],
-      deploy: {
-        accountId: "account-123",
-        mediaBucket: "personal-media",
-        workerName: "personal",
-        migrationPolicy: "existing",
-      },
       ...(options.domains === undefined ? {} : { domains: options.domains }),
     }),
   );
@@ -5163,6 +5250,16 @@ function layoutWorkspaceManifest(name: string) {
     defaultAppPolicy: "none",
     apps: [],
   };
+}
+
+function expectedWorkspaceName(workspaceRoot: string): string {
+  const basename = path.basename(workspaceRoot);
+  const normalized = basename
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "formless-instance";
 }
 
 function installedSite(installId: string, label: string) {
@@ -6089,6 +6186,7 @@ function cliDeps(
     logs?: string[];
     openedUrls?: string[];
     packageRoot?: string;
+    selectWorkspaceName?: FormlessCliDependencies["selectWorkspaceName"];
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
     spawn?: typeof spawn;
     startWorkspaceGatewaySidecar?: FormlessCliDependencies["startWorkspaceGatewaySidecar"];
@@ -6186,6 +6284,9 @@ function cliDeps(
         env: commandOptions.env,
       });
     },
+    ...(options.selectWorkspaceName === undefined
+      ? {}
+      : { selectWorkspaceName: options.selectWorkspaceName }),
     spawn: options.spawn ?? spawn,
     startWorkspaceGatewaySidecar:
       options.startWorkspaceGatewaySidecar ?? fakeWorkspaceGatewaySidecar(),

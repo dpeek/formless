@@ -188,6 +188,17 @@ without requiring passkey registration.
   install, route record, Cloudflare resource, Alchemy resource, or provider
   resource is created
 
+#### Scenario: Fresh local workspace does not require passkey setup
+
+- **GIVEN** `formless dev` starts a fresh local workspace after CLI-owned
+  workspace bootstrap
+- **WHEN** browser onboarding needs an owner session for app install or local
+  workspace gateway mutations
+- **THEN** local session bootstrap is the owner-session setup path
+- **AND** first-owner passkey setup is not required for local dev onboarding
+- **AND** deployed or remote instance owner setup still uses the passkey-backed
+  first-owner setup flow
+
 #### Scenario: Reject local bootstrap outside local dev
 
 - **WHEN** a deployed instance, mapped host, app profile, site-authoring

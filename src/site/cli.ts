@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
+import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -75,6 +76,7 @@ import {
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceDevCommand,
+  type FormlessInstanceWorkspaceDevNameSelectionInput,
   type FormlessInstanceWorkspaceStatusResult,
   type FormlessInstanceWorkspaceProviderContext,
   type InitFormlessInstanceWorkspaceResult,
@@ -170,7 +172,6 @@ export {
   type FormlessInstanceWorkspaceAppRoutes,
   type FormlessInstanceWorkspaceArchives,
   type FormlessInstanceWorkspaceDefaultAppPolicy,
-  type FormlessInstanceWorkspaceDeploy,
   type FormlessInstanceWorkspaceDomainIntent,
   type FormlessInstanceWorkspaceLocalState,
   type FormlessInstanceWorkspaceManifest,
@@ -224,6 +225,7 @@ export {
   type FormlessInstanceWorkspaceStatusResult,
   type FormlessInstanceWorkspaceProviderContext,
   type FormlessInstanceWorkspaceDevCommand,
+  type FormlessInstanceWorkspaceDevNameSelectionInput,
   type FormlessInstanceWorkspaceDiscoveryResult,
   type FormlessInstanceWorkspaceDriftSummary,
   type FormlessInstanceWorkspacePackageMismatch,
@@ -367,6 +369,9 @@ export type FormlessCliDependencies = {
     args: string[],
     options: FormlessCliRunCommandOptions,
   ) => Promise<void>;
+  selectWorkspaceName?: (
+    input: FormlessInstanceWorkspaceDevNameSelectionInput,
+  ) => Promise<string | null | undefined>;
   spawn: typeof nodeSpawn;
   startWorkspaceGatewaySidecar?: DevFormlessInstanceWorkspaceDependencies["startWorkspaceGatewaySidecar"];
   stateRoot: string;
@@ -856,6 +861,7 @@ export async function runFormlessInstanceWorkspaceDev(
     | "openBrowser"
     | "packageRoot"
     | "randomToken"
+    | "selectWorkspaceName"
     | "setupCapability"
     | "spawn"
     | "startWorkspaceGatewaySidecar"
@@ -1976,6 +1982,7 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     packageRoot: resolvePackageRoot(path.dirname(fileURLToPath(import.meta.url))),
     randomToken: () => randomBytes(32).toString("base64url"),
     runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
+    selectWorkspaceName: selectInteractiveWorkspaceName,
     spawn,
     stateRoot: path.join(homedir(), FORMLESS_HOME_DIRECTORY),
     stateWriter: {
@@ -1983,6 +1990,28 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     },
     setupCapability: fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   };
+}
+
+async function selectInteractiveWorkspaceName(
+  input: FormlessInstanceWorkspaceDevNameSelectionInput,
+): Promise<string | null> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return null;
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answer = await readline.question(`Workspace name [${input.defaultName}]: `);
+    const trimmed = answer.trim();
+
+    return trimmed === "" ? input.defaultName : trimmed;
+  } finally {
+    readline.close();
+  }
 }
 
 function resolvePackageRoot(startDirectory: string): string {

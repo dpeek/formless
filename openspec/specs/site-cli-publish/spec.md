@@ -46,23 +46,39 @@ while keeping top-level workspace commands as the normal product path.
 ### Requirement: Local First Onboarding
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
-before any Cloudflare account or deployment mutation, while browser onboarding
-owns workspace initialization, local session bootstrap, and first app install.
+before any Cloudflare account or deployment mutation, while the CLI owns fresh
+workspace bootstrap and browser onboarding owns local session bootstrap, first
+app install, credential setup, and deploy operations.
 
 #### Scenario: Start local workspace runtime
 
-- **WHEN** `formless dev` runs for an empty or layout-only workspace
+- **WHEN** `formless dev` runs for an empty workspace root
+- **THEN** the CLI writes a layout-only `formless.json`, prepares ignored
+  `.formless/local` state, persists local dev secrets, and mints process-scoped
+  local session, gateway proxy, gateway CSRF, and sidecar tokens before the
+  product instance runtime starts
+- **AND** the CLI does not create empty app archive, control-plane record
+  source, or media directories
+- **AND** no app install, route, deploy target, provider config, desired
+  resource, Cloudflare resource, Alchemy resource, provider credential, or
+  remote instance is created
+- **AND** the workspace name defaults from the selected directory unless
+  interactive confirmation supplies another valid name
+
+#### Scenario: Start existing local workspace runtime
+
+- **WHEN** `formless dev` runs for a layout-only workspace or workspace source
+  with records and archives
 - **THEN** the product instance runtime starts with workspace-local persistence
 - **AND** first-run local runtime state starts from workspace control-plane
-  record source and app archives
+  record source and app archives when present
 - **AND** the browser can complete onboarding before any Cloudflare deploy
-- **AND** before a local owner session is established, the browser can use only
-  local bootstrap capabilities needed to read workspace status, initialize the
-  resolved workspace root, and exchange a CLI-minted local session bootstrap
-  token for an owner session
-- **AND** workspace initialization, first app install, save, check, credential
-  setup, and deploy entry points are available through browser-owned local
-  gateway operations after local session bootstrap
+- **AND** before a local owner session is established, the browser can only read
+  gateway status through bootstrap authorization and exchange a CLI-minted local
+  session bootstrap token for an owner session
+- **AND** first app install, save, check, credential setup, deploy plan, and
+  deploy apply entry points are available through browser-owned local runtime
+  flows after local session bootstrap
 
 #### Scenario: Open authenticated local session
 

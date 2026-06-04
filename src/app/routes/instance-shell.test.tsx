@@ -61,13 +61,13 @@ describe("instance shell route view", () => {
             operation: "status",
             result: {
               summary: {
-                fields: { initialized: false },
-                title: "Workspace not initialized",
+                fields: { initialized: true },
+                title: "Workspace status",
               },
             },
             summary: {
-              fields: { initialized: false },
-              title: "Workspace not initialized",
+              fields: { initialized: true },
+              title: "Workspace status",
             },
           }),
         })}
@@ -76,7 +76,6 @@ describe("instance shell route view", () => {
 
     expect(html).toContain('data-formless-workspace-gateway="local"');
     expect(html).toContain('data-formless-workspace-operation-controls="true"');
-    expect(html).toContain("Initialize");
     expect(html).toContain("Save");
     expect(html).toContain("Check");
     expect(html).toContain("Pull");
@@ -88,7 +87,10 @@ describe("instance shell route view", () => {
     expect(html).toContain(
       'data-formless-onboarding-generated-record-controls="routes deployments"',
     );
-    expect(html).toContain("Workspace source has not been created.");
+    expect(html).toContain("No package apps are installed.");
+    expect(html).toContain("Install first app");
+    expect(html).not.toContain("Workspace source has not been created.");
+    expect(html).not.toContain("Initialize workspace");
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain("workspacePath");
     expect(html).not.toContain("/Users/");
@@ -197,6 +199,7 @@ describe("instance shell route view", () => {
     );
     expect(html).not.toContain("Owner setup");
     expect(html).not.toContain("passkey");
+    expect(html).not.toContain("Initialize workspace");
   });
 
   it("renders display-safe operation progress without raw paths or credentials", () => {

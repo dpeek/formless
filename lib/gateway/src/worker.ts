@@ -202,7 +202,7 @@ async function authorizeGatewayRequest(
   if (matchesBootstrapCapability(request, env)) {
     if (!intent.bootstrapAllowed) {
       return {
-        error: "Workspace bootstrap authorization is limited to status and init operations.",
+        error: "Workspace bootstrap authorization is limited to status operations.",
         status: 403,
       };
     }
@@ -261,7 +261,7 @@ async function authorizeGatewayReadOperationRequest(
 
     if (!intent.bootstrapAllowed) {
       return {
-        error: "Workspace bootstrap authorization is limited to status and init operations.",
+        error: "Workspace bootstrap authorization is limited to status operations.",
         status: 403,
       };
     }

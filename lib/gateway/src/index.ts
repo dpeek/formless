@@ -46,7 +46,6 @@ export type {
   WorkspaceGatewayDisplayObject,
   WorkspaceGatewayDisplayValue,
   WorkspaceGatewayExternalAuthorizationEvent,
-  WorkspaceGatewayInitStartInput,
   WorkspaceGatewayOperation,
   WorkspaceGatewayOperationError,
   WorkspaceGatewayOperationEvent,
@@ -199,8 +198,6 @@ export function parseWorkspaceGatewayStartInput(
 
   try {
     switch (kind) {
-      case "init":
-        return { input: { kind, name: optionalString(body.name) }, ok: true };
       case "status":
         return {
           input: {

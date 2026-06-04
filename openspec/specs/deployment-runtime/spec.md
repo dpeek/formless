@@ -420,6 +420,14 @@ reviewable source.
   `deploy-drift-report`, cleanup audit summaries, raw leases, and provider
   state payloads are not written as workspace source
 
+#### Scenario: Worker name source
+
+- **WHEN** local workspace deploy planning resolves the provider worker name
+- **THEN** a schema-owned provider config worker-name value is used when present
+- **AND** otherwise the deployment plan may default the worker name from the
+  layout manifest workspace name
+- **AND** `formless.json` does not store a separate worker-name override
+
 #### Scenario: Exclude execution secrets
 
 - **WHEN** browser clients, workspace manifests, record source, portable

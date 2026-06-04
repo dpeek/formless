@@ -31,8 +31,8 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 #### Scenario: Gateway operation surface
 
 - **WHEN** a browser calls the workspace gateway through the local runtime
-- **THEN** it can request semantic operations for workspace init, status, save,
-  check, pull, push, credential setup, deploy plan, and deploy apply
+- **THEN** it can request semantic operations for workspace status, save, check,
+  pull, push, credential setup, deploy plan, and deploy apply
 - **AND** it cannot request arbitrary filesystem reads, arbitrary filesystem
   writes, shell commands, or path traversal
 
@@ -91,12 +91,12 @@ bootstrap boundary.
   complete
 - **THEN** the runtime may issue a process-scoped, unguessable bootstrap
   capability to the same-origin browser shell
-- **AND** that capability can authorize gateway status reads and workspace
-  initialization only for the resolved workspace root
+- **AND** that capability can authorize gateway status reads only for the
+  resolved workspace root
 - **AND** that capability cannot authorize save, pull, push, credential setup,
-  deploy plan, deploy apply, cleanup, arbitrary control-plane writes,
-  arbitrary filesystem access, Cloudflare mutation, Alchemy mutation, or
-  provider mutation
+  deploy plan, deploy apply, cleanup, workspace initialization, arbitrary
+  control-plane writes, arbitrary filesystem access, Cloudflare mutation,
+  Alchemy mutation, or provider mutation
 - **AND** proxied bootstrap requests sent to the sidecar include only
   display-safe actor and operation intent facts plus internal proxy
   authorization
@@ -287,20 +287,20 @@ provider authorization URLs from trusted local credential adapters.
 ### Requirement: Browser Workspace Onboarding
 
 The system SHALL allow a browser to complete local workspace onboarding through
-the local gateway and Authority-backed control-plane writes.
+the local gateway and Authority-backed control-plane writes after CLI-owned
+workspace bootstrap.
 
-#### Scenario: Initialize from browser
+#### Scenario: Start from CLI-initialized workspace
 
-- **WHEN** a browser initializes an empty local workspace
-- **THEN** the gateway writes a layout-only `formless.json`, creates configured
-  source and ignored state directories, and starts local Authority state
-- **AND** no Cloudflare resource, remote instance, or provider credential is
-  created by initialization
+- **WHEN** a browser opens a fresh local workspace runtime started by
+  `formless dev`
+- **THEN** the workspace already has layout source and ignored local state
+  prepared by the CLI before the runtime starts
+- **AND** the browser is not offered a workspace initialization action
 
 #### Scenario: Install first app from browser
 
-- **WHEN** a browser installs the first package app after workspace
-  initialization
+- **WHEN** a browser installs the first package app in a fresh local workspace
 - **THEN** the runtime creates schema-owned `app-install` and `route` records
   through Authority validation
 - **AND** installed app data is initialized in the install-scoped app storage

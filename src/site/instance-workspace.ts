@@ -387,8 +387,37 @@ export type FormlessInstanceWorkspaceDevCommand = {
 };
 
 export type DevFormlessInstanceWorkspaceInput = {
+  name?: string | null;
   open?: boolean;
   workspacePath?: string;
+};
+
+export type EnsureFormlessInstanceWorkspaceDevBootstrapInput = {
+  name?: string | null;
+  workspacePath?: string;
+};
+
+export type EnsureFormlessInstanceWorkspaceDevBootstrapDependencies = {
+  cwd: string;
+  randomToken?: () => string;
+  selectWorkspaceName?: (
+    input: FormlessInstanceWorkspaceDevNameSelectionInput,
+  ) => Promise<string | null | undefined>;
+};
+
+export type EnsureFormlessInstanceWorkspaceDevBootstrapResult = {
+  gitignorePath: string;
+  localDevSecretStatePath: string;
+  localDevSecrets: FormlessInstanceWorkspaceLocalDevSecretState;
+  localStateRoot: string;
+  manifest: FormlessInstanceWorkspaceManifest;
+  manifestPath: string;
+  workspaceRoot: string;
+};
+
+export type FormlessInstanceWorkspaceDevNameSelectionInput = {
+  defaultName: string;
+  workspaceRoot: string;
 };
 
 export type DevFormlessInstanceWorkspaceDependencies = {
@@ -400,6 +429,7 @@ export type DevFormlessInstanceWorkspaceDependencies = {
   now: () => string;
   openBrowser?: (url: string) => Promise<void>;
   packageRoot: string;
+  selectWorkspaceName?: EnsureFormlessInstanceWorkspaceDevBootstrapDependencies["selectWorkspaceName"];
   spawn: typeof nodeSpawn;
   startWorkspaceGatewaySidecar?: (
     input: {
@@ -1239,17 +1269,10 @@ export async function runFormlessInstanceWorkspaceDev(
   input: DevFormlessInstanceWorkspaceInput,
   dependencies: DevFormlessInstanceWorkspaceDependencies,
 ): Promise<void> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const manifest = await readWorkspaceManifestForDev(workspaceRoot);
-  const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
+  const devBootstrap = await ensureFormlessInstanceWorkspaceDevBootstrap(input, dependencies);
+  const { localStateRoot, manifest, workspaceRoot } = devBootstrap;
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
 
-  await prepareWorkspaceDirectories(workspaceRoot, manifest, { appArchiveRoot: false });
-  const localDevSecrets = await ensureFormlessInstanceWorkspaceLocalDevSecretState(
-    workspaceRoot,
-    localStateRoot,
-    () => requiredGeneratedToken(createLocalDevSecret(dependencies)),
-  );
   const localSessionBootstrapToken = requiredGeneratedToken(createLocalDevSecret(dependencies));
 
   const sidecar = await startWorkspaceGatewaySidecar(
@@ -1270,7 +1293,7 @@ export async function runFormlessInstanceWorkspaceDev(
         manifest,
         sidecar,
         {
-          localDevSecrets: localDevSecrets.state,
+          localDevSecrets: devBootstrap.localDevSecrets,
           localSessionBootstrapToken,
         },
       ),
@@ -1327,6 +1350,66 @@ export async function runFormlessInstanceWorkspaceDev(
   } finally {
     await sidecar.close();
   }
+}
+
+export async function ensureFormlessInstanceWorkspaceDevBootstrap(
+  input: EnsureFormlessInstanceWorkspaceDevBootstrapInput,
+  dependencies: EnsureFormlessInstanceWorkspaceDevBootstrapDependencies,
+): Promise<EnsureFormlessInstanceWorkspaceDevBootstrapResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const manifestPath = workspaceManifestPath(workspaceRoot);
+  let manifest: FormlessInstanceWorkspaceManifest;
+
+  await assertNoLegacyWorkspaceManifest(workspaceRoot);
+
+  if (await pathExists(manifestPath)) {
+    manifest = parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8"));
+  } else {
+    await assertLocalOnboardingWorkspaceReady(workspaceRoot);
+    await mkdir(workspaceRoot, { recursive: true });
+
+    const defaultName = input.name ?? defaultWorkspaceName(workspaceRoot);
+    manifest = defaultFormlessInstanceWorkspaceManifest({
+      name:
+        input.name ??
+        (await selectFormlessInstanceWorkspaceDevName(
+          { defaultName, workspaceRoot },
+          dependencies,
+        )),
+    });
+    await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(manifest));
+  }
+
+  const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
+  const localDevSecrets = await ensureFormlessInstanceWorkspaceLocalDevSecretState(
+    workspaceRoot,
+    localStateRoot,
+    () => requiredGeneratedToken(dependencies.randomToken?.() ?? randomWorkspaceGatewayToken()),
+  );
+  const gitignorePath = await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+
+  return {
+    gitignorePath,
+    localDevSecretStatePath: localDevSecrets.path,
+    localDevSecrets: localDevSecrets.state,
+    localStateRoot,
+    manifest,
+    manifestPath,
+    workspaceRoot,
+  };
+}
+
+async function selectFormlessInstanceWorkspaceDevName(
+  input: FormlessInstanceWorkspaceDevNameSelectionInput,
+  dependencies: Pick<
+    EnsureFormlessInstanceWorkspaceDevBootstrapDependencies,
+    "selectWorkspaceName"
+  >,
+): Promise<string> {
+  const selected = await dependencies.selectWorkspaceName?.(input);
+  const trimmed = selected?.trim();
+
+  return trimmed ? trimmed : input.defaultName;
 }
 
 export async function resetFormlessInstanceWorkspaceLocalState(
@@ -1865,6 +1948,7 @@ export async function planDeployFormlessInstanceWorkspace(
   }
 
   const plan = formlessInstanceWorkspaceDeploymentPlan({
+    manifest,
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
     providerConfig: deploymentSource.providerConfig,
@@ -1983,6 +2067,7 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
 
   const plan = formlessInstanceWorkspaceDeploymentPlan({
     commandName: input.commandName,
+    manifest,
     packageVersion: dependencies.packageVersion,
     providerConfig: deploymentSource.providerConfig,
     selectedTarget,
@@ -3272,13 +3357,6 @@ function withRemoteStatus(
     ...manifest,
     apps: appDeclarations,
     defaultAppPolicy: appDeclarations.length === 0 ? "none" : "declared-installs",
-    deploy: {
-      ...(workerNameFromWorkersDevUrl(status.targetUrl) === undefined
-        ? {}
-        : { workerName: workerNameFromWorkersDevUrl(status.targetUrl) }),
-      migrationPolicy: "existing",
-      workersDevUrl: status.targetUrl,
-    },
   };
 }
 
@@ -3362,26 +3440,6 @@ async function readWorkspaceManifest(workspaceRoot: string): Promise<{
     manifest: parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
     manifestPath,
   };
-}
-
-async function readWorkspaceManifestForDev(
-  workspaceRoot: string,
-): Promise<FormlessInstanceWorkspaceManifest> {
-  const manifestPath = workspaceManifestPath(workspaceRoot);
-
-  await assertNoLegacyWorkspaceManifest(workspaceRoot);
-
-  try {
-    return parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8"));
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return defaultFormlessInstanceWorkspaceManifest({
-        name: defaultWorkspaceName(workspaceRoot),
-      });
-    }
-
-    throw error;
-  }
 }
 
 async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
@@ -3820,10 +3878,13 @@ function planLocalWorkspaceDeployment(input: {
   providerConfig?: StoredRecord;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
-  const configuredWorkerName = stringRecordValue(input.providerConfig, "workerName");
+  const workerName = deploymentWorkerNameFromProviderConfigOrManifest({
+    manifest: input.manifest,
+    providerConfig: input.providerConfig,
+  });
   const plan = planFormlessInstanceDeployment({
     account: input.account,
-    instanceName: configuredWorkerName ?? input.manifest.name,
+    instanceName: workerName,
     migrationPolicy: input.migrationPolicy ?? ("new" as const),
     packageVersion: input.packageVersion,
   });
@@ -4017,6 +4078,7 @@ function compareDeployResources(left: DeployResource, right: DeployResource): nu
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
   commandName?: "deploy" | "destroy" | "domains run";
+  manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
   providerConfig?: StoredRecord;
@@ -4024,10 +4086,11 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
 }): FormlessInstanceDeploymentPlan {
   const commandName = input.commandName ?? "deploy";
   const targetUrl = input.selectedTarget.url;
-  const facts = workersDevTargetFacts(
-    targetUrl,
-    stringRecordValue(input.providerConfig, "workerName"),
-  );
+  const workerName = deploymentWorkerNameFromProviderConfigOrManifest({
+    manifest: input.manifest,
+    providerConfig: input.providerConfig,
+  });
+  const facts = workersDevTargetFacts(targetUrl, workerName);
   const accountId = stringRecordValue(input.providerConfig, "accountId")?.trim();
 
   if (!accountId) {
@@ -4045,6 +4108,15 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
     migrationPolicy,
     packageVersion: input.packageVersion,
   });
+}
+
+function deploymentWorkerNameFromProviderConfigOrManifest(input: {
+  manifest: FormlessInstanceWorkspaceManifest;
+  providerConfig?: StoredRecord;
+}): string {
+  const workerName = stringRecordValue(input.providerConfig, "workerName")?.trim();
+
+  return workerName === undefined || workerName === "" ? input.manifest.name : workerName;
 }
 
 function formlessInstanceWorkspaceDeployStateRoot(
@@ -4079,7 +4151,7 @@ function workersDevTargetFacts(
 
   if (expectedWorkerName !== undefined && expectedWorkerName !== workerName) {
     throw new Error(
-      `Formless instance deploy target worker "${workerName}" does not match deploy.workerName "${expectedWorkerName}".`,
+      `Formless instance deploy target worker "${workerName}" does not match provider-config-ref.workerName or manifest name "${expectedWorkerName}".`,
     );
   }
 

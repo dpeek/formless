@@ -349,10 +349,11 @@ export async function handleWorkspaceGatewaySidecarRequest(
 
     if (
       authorization.via === "bootstrap" &&
-      !workspaceGatewayReadOperationIntent(operation.operation).bootstrapAllowed
+      (!isWorkspaceGatewayOperationKind(operation.operation) ||
+        !workspaceGatewayReadOperationIntent(operation.operation).bootstrapAllowed)
     ) {
       return displaySafeJson(
-        { error: "Workspace bootstrap authorization is limited to status and init operations." },
+        { error: "Workspace bootstrap authorization is limited to status operations." },
         403,
       );
     }
@@ -526,7 +527,7 @@ function authorizeSidecarProxyRequest(
 
   if (actorFacts.via === "bootstrap" && intent && !intent.bootstrapAllowed) {
     return {
-      error: "Workspace bootstrap authorization is limited to status and init operations.",
+      error: "Workspace bootstrap authorization is limited to status operations.",
       status: 403,
     };
   }
@@ -603,7 +604,7 @@ async function authorizeGatewayRequest(
   if (matchesBootstrapCapability(request, env)) {
     if (!intent.bootstrapAllowed) {
       return {
-        error: "Workspace bootstrap authorization is limited to status and init operations.",
+        error: "Workspace bootstrap authorization is limited to status operations.",
         status: 403,
       };
     }
@@ -662,7 +663,7 @@ async function authorizeGatewayReadOperationRequest(
 
     if (!intent.bootstrapAllowed) {
       return {
-        error: "Workspace bootstrap authorization is limited to status and init operations.",
+        error: "Workspace bootstrap authorization is limited to status operations.",
         status: 403,
       };
     }

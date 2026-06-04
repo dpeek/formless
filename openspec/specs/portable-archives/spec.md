@@ -170,6 +170,23 @@ The system SHALL treat layout-only `formless.json`, workspace control-plane
 record source, app archives, and media payloads as the reviewable local source
 of truth for local-first Formless workspaces.
 
+#### Scenario: Fresh local workspace bootstrap
+
+- **WHEN** `formless dev` starts for a selected workspace root without
+  `formless.json`
+- **THEN** the CLI writes a layout-only manifest with the workspace name
+  defaulted from the selected directory or confirmed interactive input
+- **AND** the CLI prepares ignored local state and `.gitignore` coverage for
+  `.formless/`
+- **AND** local admin tokens, owner session signing secrets, local session
+  bootstrap tokens, gateway proxy tokens, and CSRF tokens are kept under ignored
+  local state or process environment
+- **AND** the CLI does not create empty app archive, control-plane record
+  source, or media directories
+- **AND** no app install, route, deploy target, provider config, desired
+  resource, Cloudflare resource, Alchemy resource, provider credential, or
+  remote instance is created by fresh local workspace bootstrap
+
 #### Scenario: Save from local Authority
 
 - **WHEN** workspace save runs against local Authority state containing active
@@ -189,8 +206,9 @@ of truth for local-first Formless workspaces.
 
 #### Scenario: Empty workspace runtime state
 
-- **WHEN** workspace-local dev starts with a layout-only manifest, no
-  control-plane `app-install` records, and no app archives
+- **WHEN** workspace-local dev starts after fresh CLI bootstrap with a
+  layout-only manifest, no control-plane `app-install` records, and no app
+  archives
 - **THEN** the local product instance starts with no installed apps
 - **AND** the user can install the first app through local Authority-backed
   browser actions
@@ -211,6 +229,8 @@ in the manifest.
   `provider-config-ref`, and `deploy-desired-resource` intent, remote target
   facts, deployment execution history, and default app policy are not stored in
   `formless.json`
+- **AND** provider worker-name overrides are deployment intent stored in
+  schema-owned provider configuration records, not in `formless.json`
 - **AND** deployed remote target origin facts are stored on `deploy-target`
   records as display-safe `targetUrl` values
 - **AND** secret-looking fields are rejected

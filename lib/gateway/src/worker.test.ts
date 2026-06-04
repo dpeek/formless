@@ -220,21 +220,18 @@ describe("Worker workspace gateway proxy", () => {
     }
   });
 
-  it("limits bootstrap authorization to bootstrap-safe operation intents before forwarding", async () => {
-    const initCalls: ProxyCall[] = [];
-    const init = await handleWorkspaceGatewayProxyRequest(
-      new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ kind: "init", name: "Local" }),
+  it("limits bootstrap authorization to status operation intents before forwarding", async () => {
+    const statusCalls: ProxyCall[] = [];
+    const status = await handleWorkspaceGatewayProxyRequest(
+      new Request("https://example.com/api/formless/workspace/status", {
         headers: {
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-          "Content-Type": "application/json",
           Origin: "https://example.com",
         },
-        method: "POST",
       }),
       baseEnv,
       {
-        fetch: captureProxyCalls(initCalls, operation("init")),
+        fetch: captureProxyCalls(statusCalls, operation("status")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       },
     );
@@ -259,9 +256,11 @@ describe("Worker workspace gateway proxy", () => {
       },
     );
 
-    expect(init?.status).toBe(200);
-    expect(initCalls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("bootstrap");
-    expect(initCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("init");
+    expect(status?.status).toBe(200);
+    expect(statusCalls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe(
+      "bootstrap",
+    );
+    expect(statusCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("status");
     expect(save?.status).toBe(403);
     expect(saveForwarded).toBe(false);
   });
@@ -291,17 +290,17 @@ describe("Worker workspace gateway proxy", () => {
   });
 
   it("checks operation read ids and read intents before bootstrap forwarding", async () => {
-    const initReadCalls: ProxyCall[] = [];
-    const initRead = await handleWorkspaceGatewayProxyRequest(
-      new Request("https://example.com/api/formless/workspace/operations/op_init_00000001", {
+    const statusReadCalls: ProxyCall[] = [];
+    const statusRead = await handleWorkspaceGatewayProxyRequest(
+      new Request("https://example.com/api/formless/workspace/operations/op_status_00000001", {
         headers: {
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "init",
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "status",
         },
       }),
       baseEnv,
       {
-        fetch: captureProxyCalls(initReadCalls, operation("init")),
+        fetch: captureProxyCalls(statusReadCalls, operation("status")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       },
     );
@@ -323,8 +322,8 @@ describe("Worker workspace gateway proxy", () => {
       },
     );
 
-    expect(initRead?.status).toBe(200);
-    expect(initReadCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("init");
+    expect(statusRead?.status).toBe(200);
+    expect(statusReadCalls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("status");
     expect(saveRead?.status).toBe(403);
     expect(saveReadForwarded).toBe(false);
   });

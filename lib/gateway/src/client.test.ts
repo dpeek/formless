@@ -93,22 +93,22 @@ describe("gateway package client helpers", () => {
     expect(response?.operation.operation).toBe("save");
   });
 
-  it("uses bootstrap only for init or status operation progress reads", async () => {
-    const initRead = await fetchWorkspaceGatewayOperation(
-      { operationId: "op_init_00000001", operationKind: "init" },
+  it("uses bootstrap only for status operation progress reads", async () => {
+    const statusRead = await fetchWorkspaceGatewayOperation(
+      { operationId: "op_status_00000001", operationKind: "status" },
       {
         config,
         fetcher: async (input, init) => {
-          expect(requestUrl(input)).toBe("/api/formless/workspace/operations/op_init_00000001");
+          expect(requestUrl(input)).toBe("/api/formless/workspace/operations/op_status_00000001");
           expect(init?.credentials).toBe("same-origin");
           expect(new Headers(init?.headers).get("x-formless-workspace-bootstrap")).toBe(
             "bootstrap-token",
           );
           expect(new Headers(init?.headers).get("x-formless-workspace-operation-kind")).toBe(
-            "init",
+            "status",
           );
 
-          return Response.json({ operation: operation({ operation: "init" }) });
+          return Response.json({ operation: operation({ operation: "status" }) });
         },
       },
     );
@@ -129,7 +129,7 @@ describe("gateway package client helpers", () => {
       },
     );
 
-    expect(initRead?.operation.operation).toBe("init");
+    expect(statusRead?.operation.operation).toBe("status");
     expect(saveRead?.operation.operation).toBe("save");
   });
 

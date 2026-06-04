@@ -33,7 +33,6 @@ export type FormlessInstanceWorkspaceManifest = {
   local: FormlessInstanceWorkspaceLocalState;
   defaultAppPolicy: FormlessInstanceWorkspaceDefaultAppPolicy;
   apps: FormlessInstanceWorkspaceApp[];
-  deploy?: FormlessInstanceWorkspaceDeploy;
   domains?: FormlessInstanceWorkspaceDomainIntent[];
 };
 
@@ -69,14 +68,6 @@ export type FormlessInstanceWorkspaceMedia = {
 export type FormlessInstanceWorkspaceLocalState = {
   stateRoot: string;
   secretStateRoot: string;
-};
-
-export type FormlessInstanceWorkspaceDeploy = {
-  accountId?: string;
-  mediaBucket?: string;
-  migrationPolicy: FormlessInstanceWorkspaceMigrationPolicy;
-  workerName?: string;
-  workersDevUrl?: string;
 };
 
 export type FormlessInstanceWorkspaceApp = {

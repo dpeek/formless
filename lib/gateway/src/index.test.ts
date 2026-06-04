@@ -21,14 +21,14 @@ describe("Gateway runtime-neutral contracts", () => {
       "credentialSetup",
       "deployApply",
       "deployPlan",
-      "init",
       "pull",
       "push",
       "save",
       "status",
     ]);
-    expect(WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS).toEqual(["init", "status"]);
+    expect(WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceGatewayOperationKind("deployApply")).toBe(true);
+    expect(isWorkspaceGatewayOperationKind("init")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("cleanup")).toBe(false);
   });
 
@@ -64,6 +64,10 @@ describe("Gateway runtime-neutral contracts", () => {
     });
     expect(parseWorkspaceGatewayStartInput({ kind: "status", name: "TOKEN=secret" })).toEqual({
       error: "Workspace gateway request.name includes secret-looking text.",
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "init", name: "workspace" })).toEqual({
+      error: 'Workspace gateway operation "init" is not supported.',
       ok: false,
     });
     expect(parseWorkspaceGatewayStartInput({ kind: "cleanup" })).toEqual({
@@ -108,7 +112,6 @@ describe("Gateway runtime-neutral contracts", () => {
   });
 
   it("classifies bootstrap-limited and mutating operation intent", () => {
-    expect(isWorkspaceGatewayBootstrapOperationKind("init")).toBe(true);
     expect(isWorkspaceGatewayBootstrapOperationKind("status")).toBe(true);
     expect(isWorkspaceGatewayBootstrapOperationKind("save")).toBe(false);
 
@@ -117,11 +120,6 @@ describe("Gateway runtime-neutral contracts", () => {
       expect(isWorkspaceGatewayMutatingStartOperationKind(operation)).toBe(true);
     }
 
-    expect(workspaceGatewayStartOperationIntent({ kind: "init" })).toEqual({
-      bootstrapAllowed: true,
-      mutating: true,
-      operation: "init",
-    });
     expect(workspaceGatewayStartOperationIntent({ kind: "status" })).toEqual({
       bootstrapAllowed: true,
       mutating: false,
@@ -132,10 +130,10 @@ describe("Gateway runtime-neutral contracts", () => {
       mutating: true,
       operation: "save",
     });
-    expect(workspaceGatewayReadOperationIntent("init")).toEqual({
+    expect(workspaceGatewayReadOperationIntent("status")).toEqual({
       bootstrapAllowed: true,
       mutating: false,
-      operation: "init",
+      operation: "status",
     });
   });
 });

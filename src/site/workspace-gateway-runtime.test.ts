@@ -278,8 +278,11 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(readBody)).not.toContain("raw adapter");
   });
 
-  it("allows the process-scoped bootstrap capability to read status and initialize only", async () => {
+  it("allows the process-scoped bootstrap capability to read status only", async () => {
     const workspaceRoot = await makeTempDir();
+
+    await writeWorkspaceManifest(workspaceRoot);
+
     const status = await gatewayJson(
       new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
         headers: bootstrapHeaders(),
@@ -294,38 +297,23 @@ describe("local workspace gateway", () => {
       operation: "status",
       status: "succeeded",
       summary: {
-        fields: { initialized: false },
-        title: "Workspace not initialized",
+        fields: { initialized: true },
+        title: "Workspace status",
       },
     });
 
-    await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
-    await writeFile(path.join(workspaceRoot, ".formless/local/dev.json"), "{}\n");
-
-    const init = await gatewayJson(
-      operationRequest({ kind: "init", name: "personal-sites" }, bootstrapHeaders()),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          operationIds: ["op_init_00000001"],
-          timestamps: [
-            "2026-06-02T01:00:00.000Z",
-            "2026-06-02T01:00:01.000Z",
-            "2026-06-02T01:00:02.000Z",
-          ],
-        }),
-      },
-    );
-
-    expect(init.response.status).toBe(200);
-    expect(init.body.operation).toMatchObject({
-      actor: "browser",
-      id: "op_init_00000001",
-      operation: "init",
-      status: "succeeded",
-    });
     await expect(
       stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
     ).resolves.toMatchObject({});
+    await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "records"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(path.join(workspaceRoot, "media"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 
     const expired = await gatewayJson(
       new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
@@ -355,9 +343,19 @@ describe("local workspace gateway", () => {
 
       expect(rejected.response.status).toBe(403);
       expect(rejected.body.error).toBe(
-        "Workspace bootstrap authorization is limited to status and init operations.",
+        "Workspace bootstrap authorization is limited to status operations.",
       );
     }
+
+    const init = await gatewayJson(
+      operationRequest({ kind: "init", name: "personal-sites" }, bootstrapHeaders()),
+      {
+        deps: gatewayDeps(workspaceRoot),
+      },
+    );
+
+    expect(init.response.status).toBe(400);
+    expect(init.body.error).toBe('Workspace gateway operation "init" is not supported.');
 
     for (const body of [
       { kind: "status", workspacePath: "../outside" },

@@ -140,6 +140,17 @@ describe("Formless instance workspace manifest", () => {
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
         ...layoutManifestSource(),
+        deploy: {
+          workerName: "personal",
+        },
+      }),
+    ).toThrow(
+      'formless.json key "deploy" was removed from manifest version 1; store instance intent in workspace record source instead.',
+    );
+
+    expect(() =>
+      parseFormlessInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
         local: {
           stateRoot: ".formless/local",
           secretStateRoot: ".formless",

@@ -822,17 +822,10 @@ function WorkspaceGatewayManagementSection({
           </p>
         </div>
       </div>
-      <WorkspaceGatewayOperationControls
-        initialized={initialized}
-        onStartOperation={onStartOperation}
-        state={state}
-      />
+      <WorkspaceGatewayOperationControls onStartOperation={onStartOperation} state={state} />
       <WorkspaceOnboardingFlowSection
-        initialized={initialized}
         installCount={installCount}
         onInstallFirstApp={onInstallFirstApp}
-        onStartOperation={onStartOperation}
-        state={state}
       />
       {state.status === "ready" ? (
         <WorkspaceOperationProgress
@@ -846,11 +839,9 @@ function WorkspaceGatewayManagementSection({
 }
 
 function WorkspaceGatewayOperationControls({
-  initialized,
   onStartOperation,
   state,
 }: {
-  initialized?: boolean;
   onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: WorkspaceGatewayRouteState;
 }) {
@@ -861,22 +852,12 @@ function WorkspaceGatewayOperationControls({
       operationPollsAutomatically(state.currentOperation));
   const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
   const canRunPostBootstrapOperation = canStart && Boolean(state.csrfToken);
-  const initDisabled = !canStart || initialized === true;
 
   return (
     <div
       className="flex flex-wrap items-center gap-2"
       data-formless-workspace-operation-controls="true"
     >
-      <Button
-        intent="outline"
-        isDisabled={initDisabled}
-        onPress={() => onStartOperation?.({ kind: "init" })}
-        size="sm"
-        type="button"
-      >
-        Initialize
-      </Button>
       <Button
         intent="outline"
         isDisabled={!canRunPostBootstrapOperation}
@@ -944,24 +925,15 @@ function WorkspaceGatewayOperationControls({
 }
 
 function WorkspaceOnboardingFlowSection({
-  initialized,
   installCount,
   onInstallFirstApp,
-  onStartOperation,
-  state,
 }: {
-  initialized?: boolean;
   installCount: number;
   onInstallFirstApp: () => void;
-  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
-  state: WorkspaceGatewayRouteState;
 }) {
-  if (initialized !== false && installCount > 0) {
+  if (installCount > 0) {
     return null;
   }
-
-  const canInit =
-    state.status === "ready" && initialized === false && onStartOperation !== undefined;
 
   return (
     <div
@@ -970,28 +942,12 @@ function WorkspaceOnboardingFlowSection({
     >
       <div className="min-w-0 space-y-2">
         <h3 className="text-sm font-semibold">Local onboarding</h3>
-        <p className="text-xs text-muted-fg">
-          {initialized === false
-            ? "Workspace source has not been created."
-            : "No package apps are installed."}
-        </p>
+        <p className="text-xs text-muted-fg">No package apps are installed.</p>
         <div className="flex flex-wrap gap-2">
-          {initialized === false ? (
-            <Button
-              isDisabled={!canInit}
-              onPress={() => onStartOperation?.({ kind: "init" })}
-              size="sm"
-              type="button"
-            >
-              Initialize workspace
-            </Button>
-          ) : null}
-          {initialized !== false && installCount === 0 ? (
-            <Button onPress={onInstallFirstApp} size="sm" type="button">
-              <AddIcon />
-              Install first app
-            </Button>
-          ) : null}
+          <Button onPress={onInstallFirstApp} size="sm" type="button">
+            <AddIcon />
+            Install first app
+          </Button>
         </div>
       </div>
       <div

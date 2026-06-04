@@ -36,7 +36,6 @@ export const WORKSPACE_GATEWAY_OPERATION_KINDS = [
   "credentialSetup",
   "deployApply",
   "deployPlan",
-  "init",
   "pull",
   "push",
   "save",
@@ -46,7 +45,7 @@ export const WORKSPACE_GATEWAY_OPERATION_KINDS = [
 /**
  * Operations allowed before owner setup through the local bootstrap capability.
  */
-export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = ["init", "status"] as const;
+export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = ["status"] as const;
 
 export type WorkspaceGatewayOperationKind = (typeof WORKSPACE_GATEWAY_OPERATION_KINDS)[number];
 
@@ -173,16 +172,10 @@ export type WorkspaceGatewayDeployStartInput = {
   targetAlias?: string | null;
 };
 
-export type WorkspaceGatewayInitStartInput = {
-  kind: "init";
-  name?: string | null;
-};
-
 export type WorkspaceGatewayStartInput =
   | WorkspaceGatewayCheckOrPullStartInput
   | WorkspaceGatewayCredentialSetupStartInput
   | WorkspaceGatewayDeployStartInput
-  | WorkspaceGatewayInitStartInput
   | WorkspaceGatewayPushStartInput
   | WorkspaceGatewaySaveStartInput
   | WorkspaceGatewayStatusStartInput;
