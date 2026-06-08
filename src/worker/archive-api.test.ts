@@ -6,7 +6,7 @@ import {
   INSTANCE_ARCHIVE_KIND,
   type AppArchive,
   type InstanceArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import type { AppInstall } from "../shared/app-installs.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,

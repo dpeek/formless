@@ -190,6 +190,65 @@ Package tests SHALL be fast, deterministic, and local.
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
 
+### Requirement: Archive Package Slice
+
+The system SHALL provide an Archive package slice under `lib/archive/` for
+portable archive contracts, parsers, normalizers, restore planning, and local
+archive filesystem adapters.
+
+#### Scenario: Archive package scaffold
+
+- GIVEN the Archive package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and supported adapters
+- AND the package is published as `@dpeek/formless-archive` with root and
+  `./node` public subpaths
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, or sidecar subpaths
+
+#### Scenario: Archive package exports
+
+- GIVEN CLI, Site runtime, Worker restore APIs, Workspace operations, upgrade
+  planning, or tests need portable archive behavior
+- WHEN they import archive contracts, parsers, normalizers, restore planning,
+  or local archive file adapters
+- THEN they import from `@dpeek/formless-archive` or
+  `@dpeek/formless-archive/node`
+- AND they do not deep-import archive package internals or old package-owned
+  `src/shared/archive*` modules
+
+### Requirement: Archive Package Non-Ownership
+
+The Archive package SHALL own reusable portable archive contracts and pure
+helpers without owning runtime storage, app records, media storage, provider
+execution, workspace operation execution, or CLI command policy.
+
+#### Scenario: Package owns archive contracts
+
+- GIVEN archive envelope types, archive kind constants, archive version
+  constants, archive capability parsing, archive formatting, compatibility
+  normalizers, restore dry-run planning, media manifest validation, or local
+  archive directory IO are needed
+- WHEN runtime-neutral or local Node code consumes portable archive behavior
+- THEN they come from `lib/archive`
+- AND app schema language behavior comes from the Schema package
+- AND core media contracts come from the Media package
+- AND local workspace source/state behavior comes from the Workspace package
+
+#### Scenario: Package does not own archive execution
+
+- GIVEN archive export, archive restore apply, app install mutation, Authority
+  reads or writes, Durable Object storage, browser replica state, media object
+  mutation, provider mutation, workspace save/check/pull/push/deploy, or CLI
+  command policy is needed
+- WHEN those behaviors are implemented
+- THEN CLI, Site runtime, Archive workflows, Workspace runtime, Worker runtime,
+  Authority, Media runtime, Deploy runtime, or provider adapters own the
+  execution
+- AND the Archive package only supplies contracts, parser/formatter behavior,
+  compatibility normalization, deterministic planning, and package-local tests
+
 ### Requirement: Deploy Package Slice
 
 The system SHALL provide a Deploy package slice under `lib/deploy/` for

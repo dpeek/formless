@@ -1,25 +1,23 @@
 import {
   INSTANCE_ARCHIVE_KIND,
+  normalizePortableArchive,
+  planPortableArchiveRestore,
   type AppArchive,
   type AppArchiveData,
   type AppArchiveMediaObject,
+  type ArchiveRestoreMediaFile,
+  type ArchiveRestorePlan,
+  type ArchiveRestorePlanError,
+  type ArchiveRestorePlanStep,
   type InstanceArchiveControlPlane,
   type PortableArchive,
   type SourceArchiveRecord,
-} from "../shared/archive.ts";
-import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
+} from "@dpeek/formless-archive";
 import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import {
-  planPortableArchiveRestore,
-  type ArchiveRestoreMediaFile,
-  type ArchiveRestorePlan,
-  type ArchiveRestorePlanError,
-  type ArchiveRestorePlanStep,
-} from "../shared/archive-restore-plan.ts";
 import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "@dpeek/formless-media";
 import {
   restoreImageMedia,

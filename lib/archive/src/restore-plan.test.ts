@@ -6,9 +6,9 @@ import {
   type AppArchive,
   type AppArchiveMediaObject,
   type InstanceArchive,
-} from "./archive.ts";
-import { listBundledAppPackages, type AppInstall } from "./app-installs.ts";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
+} from "./index.ts";
+import { listBundledAppPackages, type AppInstall } from "../../../src/shared/app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
 import {
   planAppArchiveRestore,
   planInstanceArchiveRestore,
@@ -17,21 +17,21 @@ import {
   type ArchiveRestorePlan,
   type ArchiveRestorePlanError,
   type ArchiveRestorePlanResult,
-} from "./archive-restore-plan.ts";
+} from "./index.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
   type StoreSnapshot,
   type StoredRecord,
-} from "./protocol.ts";
-import { cloneTestValue } from "../test/schema-builders.ts";
+} from "../../../src/shared/protocol.ts";
+import { cloneTestValue } from "../../../src/test/schema-builders.ts";
 import {
   rateSeedRecords,
   rateSourceSchema,
   siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema,
-} from "../test/schema-apps.ts";
+} from "../../../src/test/schema-apps.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
 

@@ -1,4 +1,7 @@
-import { validateAppInstallId } from "./app-installs.ts";
+/**
+ * Versioned public archive contract declarations, parsers, and formatters.
+ */
+import { validateAppInstallId } from "../../../src/shared/app-installs.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   formatInstanceControlPlaneBoundaryEntityName,
@@ -6,13 +9,13 @@ import {
   isInstanceControlPlaneEntityName,
   instanceControlPlaneSchema,
   parseInstanceControlPlaneBoundaryEntityName,
-} from "./instance-control-plane.ts";
+} from "../../../src/shared/instance-control-plane.ts";
 import {
   parseStoreSnapshot,
   type RecordValues,
   type StoreSnapshot,
   type StoredRecord,
-} from "./protocol.ts";
+} from "../../../src/shared/protocol.ts";
 import {
   isRuntimeControlPlaneSecretReferenceField,
   isValidStoredFieldValue,
@@ -24,7 +27,7 @@ import {
   isSourceSchemaHash,
   type PackageAppRevision,
   type SourceSchemaHash,
-} from "./upgrade-migrations.ts";
+} from "../../../src/shared/upgrade-migrations.ts";
 import type { MediaAsset } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";

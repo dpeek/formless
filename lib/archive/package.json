@@ -1,0 +1,15 @@
+{
+  "name": "@dpeek/formless-archive",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

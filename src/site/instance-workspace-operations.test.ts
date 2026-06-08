@@ -16,7 +16,7 @@ import {
   ARCHIVE_VERSION,
   formatAppArchive,
   type AppArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,

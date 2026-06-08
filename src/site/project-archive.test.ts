@@ -4,8 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { formatAppArchive, parseAppArchive } from "../shared/archive.ts";
-import { planAppArchiveRestore } from "../shared/archive-restore-plan.ts";
+import { formatAppArchive, parseAppArchive, planAppArchiveRestore } from "@dpeek/formless-archive";
 import type { StoredRecord } from "../shared/protocol.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";

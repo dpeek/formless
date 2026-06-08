@@ -1,4 +1,3 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import packageJson from "../../package.json";
@@ -6,21 +5,23 @@ import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
-  formatAppArchive,
-  formatInstanceArchive,
+  formatPortableArchive,
   parseAppArchive,
   parsePortableArchive,
   type AppArchive,
   type AppArchiveMediaObject,
+  type ArchiveNormalizationEvidence,
   type ArchiveRestorePolicy,
   type InstanceArchive,
   type InstanceArchiveControlPlane,
   type PortableArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import {
-  normalizePortableArchive,
-  type ArchiveNormalizationEvidence,
-} from "../shared/archive-normalizers.ts";
+  readPortableArchiveDirectory,
+  writePortableArchiveDirectory,
+  type ArchiveDiskMediaFile,
+  type ArchiveDiskWriteResult,
+} from "@dpeek/formless-archive/node";
 import {
   findAppInstall,
   findBundledAppPackage,
@@ -47,10 +48,8 @@ import type { DeployControlPlaneRecord } from "@dpeek/formless-deploy/client";
 import {
   readSiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveEntry,
-  type SiteProjectAppArchiveMediaFile,
 } from "./project-archive.ts";
 import {
-  PORTABLE_ARCHIVE_MANIFEST_FILE,
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
@@ -70,6 +69,7 @@ export {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
+export type { ArchiveDiskMediaFile, ArchiveDiskWriteResult } from "@dpeek/formless-archive/node";
 
 const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
 
@@ -78,20 +78,6 @@ export type ArchiveWorkflowDependencies = {
   env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   now: () => string;
-};
-
-export type ArchiveDiskMediaFile = {
-  archivePath: string;
-  byteSize: number;
-  bytes: Uint8Array;
-  contentType: string;
-};
-
-export type ArchiveDiskWriteResult = {
-  appCount: number;
-  archivePath: string;
-  mediaCount: number;
-  recordCount: number;
 };
 
 export type ArchiveRestoreRemoteResult = {
@@ -726,75 +712,6 @@ function archiveRestoreRequestMediaFile(file: ArchiveDiskMediaFile) {
   };
 }
 
-async function writePortableArchiveDirectory(
-  input: {
-    archive: PortableArchive;
-    mediaFiles: readonly (ArchiveDiskMediaFile | SiteProjectAppArchiveMediaFile)[];
-    outDir: string;
-  },
-  dependencies: Pick<ArchiveWorkflowDependencies, "cwd">,
-): Promise<ArchiveDiskWriteResult> {
-  const archiveDir = path.resolve(dependencies.cwd, input.outDir);
-  const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
-
-  await mkdir(archiveDir, { recursive: true });
-  await writeFile(archivePath, formatPortableArchive(input.archive));
-
-  for (const file of input.mediaFiles) {
-    const filePath = path.join(archiveDir, assertArchiveRelativePath(file.archivePath));
-
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, file.bytes);
-  }
-
-  return {
-    appCount: archiveApps(input.archive).length,
-    archivePath,
-    mediaCount: input.mediaFiles.length,
-    recordCount: archiveRecordCount(input.archive),
-  };
-}
-
-async function readPortableArchiveDirectory(
-  archiveDirInput: string,
-  dependencies: Pick<ArchiveWorkflowDependencies, "cwd">,
-): Promise<{
-  archive: PortableArchive;
-  archivePath: string;
-  mediaFiles: ArchiveDiskMediaFile[];
-  normalizationEvidence: ArchiveNormalizationEvidence[];
-}> {
-  const archiveDir = path.resolve(dependencies.cwd, archiveDirInput);
-  const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
-  const normalized = normalizePortableArchive(
-    JSON.parse(await readFile(archivePath, "utf8")) as unknown,
-  );
-  const archive = normalized.archive;
-  const mediaFiles = await Promise.all(
-    archiveApps(archive).flatMap((app) =>
-      app.media.objects.map(async (object) => {
-        const bytes = new Uint8Array(
-          await readFile(path.join(archiveDir, assertArchiveRelativePath(object.archivePath))),
-        );
-
-        return {
-          archivePath: object.archivePath,
-          byteSize: bytes.byteLength,
-          bytes,
-          contentType: object.contentType,
-        };
-      }),
-    ),
-  );
-
-  return {
-    archive,
-    archivePath,
-    mediaFiles,
-    normalizationEvidence: normalized.evidence,
-  };
-}
-
 function retargetAppArchive(archive: AppArchive, installId: string): AppArchive {
   const nextArchive = parseAppArchive(jsonClone(archive));
 
@@ -834,26 +751,6 @@ function withRestorePolicy(
   return nextArchive;
 }
 
-function formatPortableArchive(archive: PortableArchive): string {
-  return archive.kind === INSTANCE_ARCHIVE_KIND
-    ? formatInstanceArchive(archive)
-    : formatAppArchive(archive);
-}
-
-function archiveApps(archive: PortableArchive): AppArchive[] {
-  return archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive];
-}
-
-function archiveRecordCount(archive: PortableArchive): number {
-  return archiveApps(archive).reduce((count, app) => count + appRecordCount(app), 0);
-}
-
-function appRecordCount(app: AppArchive): number {
-  return app.data.kind === "storeSnapshot"
-    ? app.data.snapshot.records.length
-    : app.data.records.length;
-}
-
 function appApiPath(install: AppInstall, suffix: `/${string}`): string {
   return `/api/app-installs/${install.packageAppKey}/${install.installId}${suffix}`;
 }
@@ -889,21 +786,6 @@ async function fetchJson<T>(fetcher: typeof fetch, url: string, init?: RequestIn
   } catch {
     throw new Error(`Failed ${init?.method ?? "GET"} ${url}: response was not JSON.`);
   }
-}
-
-function assertArchiveRelativePath(value: string): string {
-  const segments = value.split("/");
-
-  if (
-    value.trim() === "" ||
-    value !== value.trim() ||
-    value.startsWith("/") ||
-    segments.some((segment) => segment === "" || segment === "." || segment === "..")
-  ) {
-    throw new Error(`Archive path is not safe: ${value}`);
-  }
-
-  return value;
 }
 
 function jsonClone<T>(value: T): T {

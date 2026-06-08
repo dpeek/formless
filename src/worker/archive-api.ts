@@ -1,9 +1,9 @@
 import {
+  normalizePortableArchive,
   parseAppArchiveData,
   type AppArchiveData,
   type InstanceArchiveControlPlane,
-} from "../shared/archive.ts";
-import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
+} from "@dpeek/formless-archive";
 import type {
   AppStorageIdentity,
   InstalledAppStorageIdentity,

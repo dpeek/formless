@@ -6,7 +6,7 @@ import {
   type AppArchive,
   type AppArchiveMediaObject,
   type InstanceArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import type { AppInstall } from "../shared/app-installs.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";

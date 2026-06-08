@@ -42,7 +42,7 @@ import {
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
 import type { InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget } from "@dpeek/formless-workspace";
-import type { ArchiveNormalizationEvidence } from "../shared/archive-normalizers.ts";
+import type { ArchiveNormalizationEvidence } from "@dpeek/formless-archive";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   INSTANCE_WORKSPACE_GITIGNORE_ENTRY as FORMLESS_INSTANCE_WORKSPACE_GITIGNORE_ENTRY,

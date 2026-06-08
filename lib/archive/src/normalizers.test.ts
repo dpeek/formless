@@ -6,22 +6,22 @@ import {
   INSTANCE_ARCHIVE_KIND,
   type AppArchive,
   type InstanceArchive,
-} from "./archive.ts";
+} from "./index.ts";
 import {
   findArchiveNormalizer,
   listArchiveNormalizers,
   normalizePortableArchive,
-} from "./archive-normalizers.ts";
-import { planPortableArchiveRestore } from "./archive-restore-plan.ts";
+} from "./index.ts";
+import { planPortableArchiveRestore } from "./index.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
   type StoreSnapshot,
   type StoredRecord,
-} from "./protocol.ts";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
-import { testSiteSeedRecords } from "../test/site-records.ts";
+} from "../../../src/shared/protocol.ts";
+import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
+import { siteSourceSchema } from "../../../src/test/schema-apps.ts";
+import { testSiteSeedRecords } from "../../../src/test/site-records.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
 

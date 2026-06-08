@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-export const PORTABLE_ARCHIVE_MANIFEST_FILE = "archive.json";
+import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "@dpeek/formless-archive";
+
+export { PORTABLE_ARCHIVE_MANIFEST_FILE };
 
 export type PortableArchiveInputStatus =
   | {

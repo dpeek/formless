@@ -7,17 +7,21 @@ import {
   type ArchivedAppInstall,
   type InstanceArchive,
   type PortableArchive,
-} from "./archive.ts";
+} from "./types.ts";
 import {
   normalizeAppArchive,
   normalizeInstanceArchive,
   normalizePortableArchive,
-} from "./archive-normalizers.ts";
-import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
+} from "./normalizers.ts";
+import {
+  listBundledAppPackages,
+  type AppInstall,
+  type BundledAppPackage,
+} from "../../../src/shared/app-installs.ts";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
-import type { RecordValues, StoredRecord } from "./protocol.ts";
+import type { RecordValues, StoredRecord } from "../../../src/shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
-import type { SchemaKey } from "./schema-apps.ts";
+import type { SchemaKey } from "../../../src/shared/schema-apps.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,

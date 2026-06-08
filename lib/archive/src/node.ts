@@ -1,0 +1,117 @@
+/**
+ * Local Node Archive package adapter entrypoint.
+ */
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+import {
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  archiveApps,
+  archiveRecordCount,
+  formatPortableArchive,
+  normalizePortableArchive,
+  type ArchiveNormalizationEvidence,
+  type PortableArchive,
+} from "./index.ts";
+
+export * from "./index.ts";
+
+export type ArchiveDiskMediaFile = {
+  archivePath: string;
+  byteSize: number;
+  bytes: Uint8Array;
+  contentType: string;
+};
+
+export type ArchiveDiskWriteResult = {
+  appCount: number;
+  archivePath: string;
+  mediaCount: number;
+  recordCount: number;
+};
+
+export type ReadPortableArchiveDirectoryResult = {
+  archive: PortableArchive;
+  archivePath: string;
+  mediaFiles: ArchiveDiskMediaFile[];
+  normalizationEvidence: ArchiveNormalizationEvidence[];
+};
+
+export async function writePortableArchiveDirectory(
+  input: {
+    archive: PortableArchive;
+    mediaFiles: readonly ArchiveDiskMediaFile[];
+    outDir: string;
+  },
+  dependencies: { cwd: string },
+): Promise<ArchiveDiskWriteResult> {
+  const archiveDir = path.resolve(dependencies.cwd, input.outDir);
+  const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
+
+  await mkdir(archiveDir, { recursive: true });
+  await writeFile(archivePath, formatPortableArchive(input.archive));
+
+  for (const file of input.mediaFiles) {
+    const filePath = path.join(archiveDir, assertArchiveRelativePath(file.archivePath));
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, file.bytes);
+  }
+
+  return {
+    appCount: archiveApps(input.archive).length,
+    archivePath,
+    mediaCount: input.mediaFiles.length,
+    recordCount: archiveRecordCount(input.archive),
+  };
+}
+
+export async function readPortableArchiveDirectory(
+  archiveDirInput: string,
+  dependencies: { cwd: string },
+): Promise<ReadPortableArchiveDirectoryResult> {
+  const archiveDir = path.resolve(dependencies.cwd, archiveDirInput);
+  const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
+  const normalized = normalizePortableArchive(
+    JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+  );
+  const archive = normalized.archive;
+  const mediaFiles = await Promise.all(
+    archiveApps(archive).flatMap((app) =>
+      app.media.objects.map(async (object) => {
+        const bytes = new Uint8Array(
+          await readFile(path.join(archiveDir, assertArchiveRelativePath(object.archivePath))),
+        );
+
+        return {
+          archivePath: object.archivePath,
+          byteSize: bytes.byteLength,
+          bytes,
+          contentType: object.contentType,
+        };
+      }),
+    ),
+  );
+
+  return {
+    archive,
+    archivePath,
+    mediaFiles,
+    normalizationEvidence: normalized.evidence,
+  };
+}
+
+function assertArchiveRelativePath(value: string): string {
+  const segments = value.split("/");
+
+  if (
+    value.trim() === "" ||
+    value !== value.trim() ||
+    value.startsWith("/") ||
+    segments.some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    throw new Error(`Archive path is not safe: ${value}`);
+  }
+
+  return value;
+}

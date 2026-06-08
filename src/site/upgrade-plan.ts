@@ -1,6 +1,10 @@
 import type { PackageAppKey } from "../shared/app-installs.ts";
-import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, INSTANCE_ARCHIVE_KIND } from "../shared/archive.ts";
-import { findArchiveNormalizer } from "../shared/archive-normalizers.ts";
+import {
+  APP_ARCHIVE_KIND,
+  ARCHIVE_VERSION,
+  INSTANCE_ARCHIVE_KIND,
+  findArchiveNormalizer,
+} from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,

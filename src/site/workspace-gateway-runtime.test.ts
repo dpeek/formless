@@ -8,9 +8,10 @@ import packageJson from "../../package.json";
 import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
   formatAppArchive,
   type AppArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -46,7 +47,6 @@ import {
 } from "@dpeek/formless-workspace";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
-import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
 import { writeInstanceWorkspaceControlPlaneRecordSource } from "@dpeek/formless-workspace/node";
 import {
   createWorkspaceGatewayOperationHandlers,

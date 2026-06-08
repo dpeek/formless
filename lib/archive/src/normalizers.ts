@@ -6,13 +6,13 @@ import {
   type AppArchive,
   type InstanceArchive,
   type PortableArchive,
-} from "./archive.ts";
-import { packageAppFactsForKey } from "./app-installs.ts";
+} from "./types.ts";
+import { packageAppFactsForKey } from "../../../src/shared/app-installs.ts";
 import {
   formatInstanceControlPlaneBoundaryEntityName,
   isInstanceControlPlaneEntityName,
   type InstanceControlPlaneEntityName,
-} from "./instance-control-plane.ts";
+} from "../../../src/shared/instance-control-plane.ts";
 
 export type ArchiveNormalizerArchiveKind = typeof APP_ARCHIVE_KIND | typeof INSTANCE_ARCHIVE_KIND;
 

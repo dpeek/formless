@@ -18,17 +18,23 @@ import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  archiveApps,
+  archiveRecordCount,
   formatAppArchive,
   formatInstanceArchive,
+  normalizePortableArchive,
+  type ArchiveNormalizationEvidence,
   type AppArchive,
   type InstanceArchive,
   type InstanceArchiveControlPlane,
   type PortableArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
 import {
-  normalizePortableArchive,
-  type ArchiveNormalizationEvidence,
-} from "../shared/archive-normalizers.ts";
+  writePortableArchiveDirectory,
+  type ArchiveDiskMediaFile,
+  type ArchiveDiskWriteResult,
+} from "@dpeek/formless-archive/node";
 import {
   findBundledAppPackage,
   packageAppFactsForKey,
@@ -119,10 +125,7 @@ import {
 import {
   exportAppArchive,
   exportInstanceArchive,
-  PORTABLE_ARCHIVE_MANIFEST_FILE,
   restorePortableArchive,
-  type ArchiveDiskMediaFile,
-  type ArchiveDiskWriteResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import {
@@ -2794,7 +2797,7 @@ function savedWorkspaceAppArchiveSummaries(
     ),
     installId: app.app.installId,
     mediaCount: app.media.objects.length,
-    recordCount: appRecordCount(app),
+    recordCount: archiveRecordCount(app),
   }));
 }
 
@@ -2915,20 +2918,14 @@ async function writeWorkspaceArchiveDirectory(input: {
   mediaFiles: readonly ArchiveDiskMediaFile[];
 }): Promise<void> {
   await rm(input.archiveRoot, { force: true, recursive: true });
-  await mkdir(input.archiveRoot, { recursive: true });
-  await writeFile(
-    path.join(input.archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
-    input.archive.kind === INSTANCE_ARCHIVE_KIND
-      ? formatInstanceArchive(input.archive)
-      : formatAppArchive(input.archive),
+  await writePortableArchiveDirectory(
+    {
+      archive: input.archive,
+      mediaFiles: input.mediaFiles,
+      outDir: input.archiveRoot,
+    },
+    { cwd: "/" },
   );
-
-  for (const file of input.mediaFiles) {
-    const filePath = path.join(input.archiveRoot, file.archivePath);
-
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, file.bytes);
-  }
 }
 
 function workspaceAppArchiveDirectoryFromInstanceExport(
@@ -3087,7 +3084,7 @@ function compareWorkspaceArchives(input: {
     localAppCount: localApps.length,
     localControlPlaneRecordCount: input.localControlPlane?.records.length ?? 0,
     localMediaCount: localArchives.reduce((count, app) => count + app.media.objects.length, 0),
-    localRecordCount: localArchives.reduce((count, app) => count + appRecordCount(app), 0),
+    localRecordCount: localArchives.reduce((count, app) => count + archiveRecordCount(app), 0),
     missingInstalls,
     packageMismatches: packageMismatches.sort((left, right) =>
       left.installId.localeCompare(right.installId),
@@ -3096,7 +3093,7 @@ function compareWorkspaceArchives(input: {
     remoteAppCount: remoteApps.length,
     remoteControlPlaneRecordCount: remoteControlPlane?.records.length ?? 0,
     remoteMediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
-    remoteRecordCount: remoteApps.reduce((count, app) => count + appRecordCount(app), 0),
+    remoteRecordCount: remoteApps.reduce((count, app) => count + archiveRecordCount(app), 0),
     status: hasDrift ? "drift" : "no-drift",
   };
 }
@@ -3364,7 +3361,7 @@ function withArchiveSource(
   archive: PortableArchive,
   archiveSourcePath: string,
 ): FormlessInstanceWorkspaceManifest {
-  const apps = archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive];
+  const apps = archiveApps(archive);
 
   return {
     ...manifest,
@@ -3585,16 +3582,6 @@ async function prepareWorkspaceDirectories(
       : []),
     mkdir(path.join(workspaceRoot, manifest.local.stateRoot), { recursive: true }),
   ]);
-}
-
-function archiveApps(archive: PortableArchive): AppArchive[] {
-  return archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive];
-}
-
-function appRecordCount(app: AppArchive): number {
-  return app.data.kind === "storeSnapshot"
-    ? app.data.snapshot.records.length
-    : app.data.records.length;
 }
 
 const controlPlaneIntentEntities = new Set([
@@ -4361,26 +4348,14 @@ async function writeComposedWorkspacePushArchive(input: {
     ...(input.controlPlane === undefined ? {} : { controlPlane: input.controlPlane }),
     apps: appArchives,
   };
-  const archivePath = path.join(input.archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE);
-
-  await mkdir(input.archiveRoot, { recursive: true });
-  await writeFile(archivePath, formatInstanceArchive(instanceArchive));
-
-  for (const directory of input.archives) {
-    for (const file of directory.mediaFiles) {
-      const filePath = path.join(input.archiveRoot, file.archivePath);
-
-      await mkdir(path.dirname(filePath), { recursive: true });
-      await writeFile(filePath, file.bytes);
-    }
-  }
-
-  return {
-    appCount: appArchives.length,
-    archivePath,
-    mediaCount: appArchives.reduce((count, app) => count + app.media.objects.length, 0),
-    recordCount: appArchives.reduce((count, app) => count + appRecordCount(app), 0),
-  };
+  return writePortableArchiveDirectory(
+    {
+      archive: instanceArchive,
+      mediaFiles: input.archives.flatMap((archive) => archive.mediaFiles),
+      outDir: input.archiveRoot,
+    },
+    { cwd: "/" },
+  );
 }
 
 function workspacePushBackupPath(workspaceRoot: string, timestamp: string): string {

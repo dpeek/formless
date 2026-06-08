@@ -1,12 +1,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { extname, relative, resolve } from "node:path";
+import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
-describe("schema package import boundary", () => {
+describe("package slice import boundaries", () => {
   it("keeps schema consumers on the public package root", async () => {
     const failures: string[] = [];
 
@@ -33,9 +33,45 @@ describe("schema package import boundary", () => {
 
     expect(failures).toEqual([]);
   });
+
+  it("keeps archive consumers on public package subpaths", async () => {
+    const failures: string[] = [];
+
+    for (const path of forbiddenLegacyArchiveFiles) {
+      if (await fileExists(resolve(repoRoot, path))) {
+        failures.push(`${path}: legacy archive module still exists`);
+      }
+    }
+
+    for (const filePath of await boundarySourceFiles()) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenLegacyArchiveImport(specifier)) {
+          failures.push(`${path}: imports legacy archive module ${specifier}`);
+        }
+
+        if (forbiddenArchivePackageImport(specifier)) {
+          failures.push(`${path}: deep-imports archive package ${specifier}`);
+        }
+
+        if (forbiddenArchivePackageInternalImport(filePath, specifier)) {
+          failures.push(`${path}: imports archive package internal ${specifier}`);
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedSchemaPackageImports = new Set(["@dpeek/formless-schema"]);
+
+const allowedArchivePackageImports = new Set([
+  "@dpeek/formless-archive",
+  "@dpeek/formless-archive/node",
+]);
 
 const forbiddenLegacySchemaFiles = [
   "src/shared/create-defaults.ts",
@@ -73,6 +109,15 @@ const forbiddenLegacySchemaFiles = [
   "src/shared/schema-views.ts",
 ];
 
+const forbiddenLegacyArchiveFiles = [
+  "src/shared/archive.ts",
+  "src/shared/archive.test.ts",
+  "src/shared/archive-normalizers.ts",
+  "src/shared/archive-normalizers.test.ts",
+  "src/shared/archive-restore-plan.ts",
+  "src/shared/archive-restore-plan.test.ts",
+];
+
 const legacySchemaImportPatterns = [
   /(^|\/)create-defaults(\.test)?(\.ts)?$/,
   /(^|\/)field-types(\.test)?(\.ts)?$/,
@@ -101,6 +146,12 @@ const legacySchemaImportPatterns = [
   /(^|\/)schema-view-field-parser(\.ts)?$/,
   /(^|\/)schema-view-fields(\.ts)?$/,
   /(^|\/)schema-views(\.ts)?$/,
+];
+
+const legacyArchiveImportPatterns = [
+  /(^|\/)archive(\.test)?(\.ts)?$/,
+  /(^|\/)archive-normalizers(\.test)?(\.ts)?$/,
+  /(^|\/)archive-restore-plan(\.test)?(\.ts)?$/,
 ];
 
 async function boundarySourceFiles(): Promise<string[]> {
@@ -173,6 +224,38 @@ function forbiddenSchemaPackageImport(specifier: string): boolean {
   return (
     specifier.startsWith("@dpeek/formless-schema/") && !allowedSchemaPackageImports.has(specifier)
   );
+}
+
+function forbiddenLegacyArchiveImport(specifier: string): boolean {
+  return legacyArchiveImportPatterns.some((pattern) => pattern.test(specifier));
+}
+
+function forbiddenArchivePackageImport(specifier: string): boolean {
+  return (
+    (specifier === "@dpeek/formless-archive" || specifier.startsWith("@dpeek/formless-archive/")) &&
+    !allowedArchivePackageImports.has(specifier)
+  );
+}
+
+function forbiddenArchivePackageInternalImport(importerPath: string, specifier: string): boolean {
+  const importerRelativePath = relative(repoRoot, importerPath);
+
+  if (importerRelativePath.startsWith("lib/archive/")) {
+    return false;
+  }
+
+  if (specifier.includes("lib/archive/src/")) {
+    return true;
+  }
+
+  if (!specifier.startsWith(".")) {
+    return false;
+  }
+
+  const resolvedSpecifier = resolve(dirname(importerPath), specifier);
+  const resolvedRelativePath = relative(repoRoot, resolvedSpecifier);
+
+  return resolvedRelativePath.startsWith("lib/archive/src/");
 }
 
 async function fileExists(path: string): Promise<boolean> {

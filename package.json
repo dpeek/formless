@@ -43,6 +43,7 @@
     "@cf-wasm/resvg": "0.3.4",
     "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
+    "@dpeek/formless-archive": "^0.1.0",
     "@dpeek/formless-deploy": "^0.1.0",
     "@dpeek/formless-gateway": "^0.1.0",
     "@dpeek/formless-media": "^0.1.0",

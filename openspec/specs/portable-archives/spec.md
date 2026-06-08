@@ -164,6 +164,39 @@ The system SHALL import standalone Site projects as installed Site app archives.
 - THEN external URLs are preserved as authored values
 - AND no provider media object is created for those URLs
 
+### Requirement: Archive Package Boundary
+
+The system SHALL expose reusable portable archive contracts, parsing,
+normalization, restore planning, and local archive file adapters through the
+Archive package slice.
+
+#### Scenario: Package owns portable archive contracts
+
+- **WHEN** CLI, Site runtime, Worker restore APIs, Workspace operations,
+  upgrade planning, tests, or package slices need archive envelope kinds,
+  archive version constants, archive capability parsing, archive formatting,
+  compatibility normalizers, restore dry-run planning, media manifest
+  validation, or deterministic local archive directory IO
+- **THEN** they import that behavior from `@dpeek/formless-archive` or
+  `@dpeek/formless-archive/node`
+- **AND** they do not import package-owned archive behavior from old
+  `src/shared/archive*` modules or unexported package internals
+
+#### Scenario: Package does not own archive execution
+
+- **WHEN** archive export, archive restore apply, app install mutation,
+  Authority reads or writes, Durable Object storage, browser replica state,
+  media object mutation, provider mutation, workspace save/check/pull/push,
+  deploy, or CLI command policy is needed
+- **THEN** those behaviors remain owned by CLI, Site runtime, Archive workflows,
+  Workspace runtime, Worker runtime, Authority, Media runtime, Deploy runtime,
+  or provider adapters
+- **AND** the Archive package supplies contracts, parser/formatter behavior,
+  compatibility normalization, deterministic planning, and local archive
+  filesystem adapters rather than owning app records, runtime storage, media
+  storage, deployed runtime records, provider credentials, Cloudflare
+  resources, or Alchemy resources
+
 ### Requirement: Workspace Source Of Truth
 
 The system SHALL treat layout-only `formless.json`, workspace control-plane

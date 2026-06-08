@@ -11,12 +11,16 @@ import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
-  formatAppArchive,
-  formatInstanceArchive,
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  archiveApps,
   parsePortableArchive,
   type AppArchive,
   type InstanceArchive,
-} from "../shared/archive.ts";
+} from "@dpeek/formless-archive";
+import {
+  writePortableArchiveDirectory,
+  type ArchiveDiskMediaFile,
+} from "@dpeek/formless-archive/node";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
   CloudflareDnsRecord,
@@ -69,7 +73,6 @@ import {
   writeInstanceWorkspaceControlPlaneRecordSource,
 } from "@dpeek/formless-workspace/node";
 import {
-  PORTABLE_ARCHIVE_MANIFEST_FILE,
   FORMLESS_ALCHEMY_APP_NAME,
   discoverFormlessInstanceWorkspaceRoot,
   formlessInstanceWorkspaceDevEnv,
@@ -5514,15 +5517,9 @@ async function writeArchiveDirectory(
   archive: InstanceArchive | AppArchive,
   mediaByInstall: Record<string, Uint8Array> = {},
 ) {
-  await mkdir(archiveRoot, { recursive: true });
-  await writeFile(
-    path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
-    archive.kind === INSTANCE_ARCHIVE_KIND
-      ? formatInstanceArchive(archive)
-      : formatAppArchive(archive),
-  );
+  const mediaFiles: ArchiveDiskMediaFile[] = [];
 
-  for (const app of archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive]) {
+  for (const app of archiveApps(archive)) {
     const bytes = mediaByInstall[app.app.installId];
 
     if (!bytes) {
@@ -5535,11 +5532,22 @@ async function writeArchiveDirectory(
       throw new Error(`Expected media object for ${app.app.installId}.`);
     }
 
-    const mediaPath = path.join(archiveRoot, object.archivePath);
-
-    await mkdir(path.dirname(mediaPath), { recursive: true });
-    await writeFile(mediaPath, Buffer.from(bytes));
+    mediaFiles.push({
+      archivePath: object.archivePath,
+      byteSize: bytes.byteLength,
+      bytes,
+      contentType: object.contentType,
+    });
   }
+
+  await writePortableArchiveDirectory(
+    {
+      archive,
+      mediaFiles,
+      outDir: archiveRoot,
+    },
+    { cwd: "/" },
+  );
 }
 
 function archiveFetch(
