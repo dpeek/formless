@@ -164,6 +164,18 @@ login.
 - WHEN a protected write request supplies the valid admin bearer token
 - THEN the request is authorized without requiring a passkey owner session
 
+#### Scenario: Admin bearer mints owner setup capability
+
+- GIVEN owner setup is incomplete and an admin bearer token is configured
+- WHEN a trusted CLI or automation request creates an owner setup capability
+  with a setup token and the valid admin bearer token
+- THEN the runtime stores a hashed setup capability scoped to the requested
+  instance and reports that setup remains incomplete
+- AND the raw setup token and admin bearer token are not returned in the
+  response
+- AND if owner setup is already complete, the request reports the existing owner
+  state and does not replace the existing owner or store a new setup capability
+
 #### Scenario: Browser login does not accept admin token
 
 - GIVEN owner setup is complete and passkey login is available

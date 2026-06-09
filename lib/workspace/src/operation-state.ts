@@ -240,7 +240,9 @@ export function redactWorkspaceOperationSummary(
   workspaceRoot: string,
 ): WorkspaceOperationSummary {
   return {
-    fields: redactWorkspaceOperationDisplayObject(summary.fields, workspaceRoot),
+    fields: redactWorkspaceOperationDisplayObject(summary.fields, workspaceRoot, {
+      allowOwnerSetupUrl: true,
+    }),
     title: redactWorkspaceOperationDisplayText(summary.title, workspaceRoot),
   };
 }
@@ -267,18 +269,26 @@ export function redactWorkspaceOperationEvent(
 export function redactWorkspaceOperationDisplayObject(
   value: WorkspaceOperationDisplayObject,
   workspaceRoot: string,
+  options: WorkspaceOperationRedactionOptions = {},
 ): WorkspaceOperationDisplayObject {
   return redactWorkspaceOperationDisplayValue(
     value,
     workspaceRoot,
+    options,
   ) as WorkspaceOperationDisplayObject;
 }
 
 export function redactWorkspaceOperationDisplayValue(
   value: WorkspaceOperationDisplayValue,
   workspaceRoot: string,
+  options: WorkspaceOperationRedactionOptions = {},
+  key?: string,
 ): WorkspaceOperationDisplayValue {
   if (typeof value === "string") {
+    if (key && options.allowOwnerSetupUrl && isAllowlistedOwnerSetupUrlDisplayValue(key, value)) {
+      return value;
+    }
+
     return redactWorkspaceOperationDisplayText(value, workspaceRoot);
   }
 
@@ -287,7 +297,7 @@ export function redactWorkspaceOperationDisplayValue(
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactWorkspaceOperationDisplayValue(item, workspaceRoot));
+    return value.map((item) => redactWorkspaceOperationDisplayValue(item, workspaceRoot, options));
   }
 
   return Object.fromEntries(
@@ -295,10 +305,14 @@ export function redactWorkspaceOperationDisplayValue(
       key,
       isForbiddenDisplayKey(key)
         ? "[redacted]"
-        : redactWorkspaceOperationDisplayValue(child, workspaceRoot),
+        : redactWorkspaceOperationDisplayValue(child, workspaceRoot, options, key),
     ]),
   ) as WorkspaceOperationDisplayObject;
 }
+
+type WorkspaceOperationRedactionOptions = {
+  allowOwnerSetupUrl?: boolean;
+};
 
 export function redactWorkspaceOperationDisplayText(value: string, workspaceRoot: string): string {
   return value
@@ -376,6 +390,34 @@ function isForbiddenDisplayKey(key: string): boolean {
     normalized.includes("providerstate") ||
     normalized.startsWith("raw")
   );
+}
+
+function isAllowlistedOwnerSetupUrlDisplayValue(key: string, value: string): boolean {
+  const normalizedKey = key.toLowerCase().replaceAll(/[-_]/g, "");
+
+  if (normalizedKey !== "ownersetupurl") {
+    return false;
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.pathname !== "/setup" ||
+    !parsed.hostname.toLowerCase().endsWith(".workers.dev")
+  ) {
+    return false;
+  }
+
+  const keys = [...parsed.searchParams.keys()];
+
+  return keys.length === 1 && keys[0] === "token" && Boolean(parsed.searchParams.get("token"));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -11,8 +11,9 @@ custom-domain intent.
 ### Requirement: CLI Command Families
 
 The package SHALL expose local workspace runtime, workspace operation, archive,
-explicit cleanup, token, and destroy command families from the `formless` CLI
-while keeping top-level workspace commands as the normal product path.
+explicit cleanup, owner setup, token, and destroy command families from the
+`formless` CLI while keeping top-level workspace commands as the normal product
+path.
 
 #### Scenario: Local workspace commands
 
@@ -42,6 +43,24 @@ while keeping top-level workspace commands as the normal product path.
 - **THEN** the command targets recorded provider evidence only
 - **AND** route intent, workspace source, and app data are not mutated by the
   cleanup command
+
+#### Scenario: Owner setup command
+
+- **GIVEN** the package CLI is installed and a Formless instance workspace has a
+  selected deployed target
+- **WHEN** a user runs `formless instance owner setup ... [--open]`
+- **THEN** the CLI reads the selected target owner setup status before minting a
+  setup capability
+- **AND** if owner setup is incomplete, the CLI uses the selected admin token
+  source to create one owner setup capability and displays the intended
+  `/setup?token=...` URL
+- **AND** if `--open` is present, the CLI opens only that intended setup URL
+  after capability creation succeeds
+- **AND** if owner setup is already complete, the CLI reports the existing owner
+  state without minting a setup token, creating a capability, or opening a
+  browser
+- **AND** the admin token is not displayed and the setup token is displayed only
+  as part of the intended setup URL
 
 ### Requirement: Local First Onboarding
 
@@ -300,6 +319,8 @@ provider mutation path for workspace-controlled deploy intent.
   state
 - **AND** provider credentials, Alchemy secrets, automation admin tokens, and
   owner setup tokens are stored only under ignored secret state
+- **AND** when the deploy creates an owner setup capability, CLI output displays
+  the intended owner setup URL for passkey-backed first-owner setup
 - **AND** workspace source is restored or pushed through runtime APIs before
   remote data mutation is considered complete
 - **AND** Worker, Durable Object, R2, DNS, custom-domain, and redirect resources

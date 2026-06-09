@@ -34,6 +34,7 @@ import type {
   InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
+import { parseOwnerSetupToken, type OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import {
   nodeAlchemyDomainProviderRuntime,
   runFormlessInstanceDomainProviderDelete as runFormlessInstanceDomainProviderDeleteCommand,
@@ -120,6 +121,7 @@ import {
   alchemyFormlessInstanceDeploymentAdapter,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
   fetchFormlessInstanceOwnerSetupCapabilityAdapter,
+  formatFormlessOwnerSetupUrl,
   ensureFormlessInstanceLocalSecretEnv,
   FORMLESS_HOME_DIRECTORY,
   FORMLESS_ALCHEMY_APP_NAME,
@@ -602,6 +604,11 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
       return;
     }
+    case "instanceOwnerSetup": {
+      const result = await setupFormlessInstanceOwner(command, dependencies);
+      dependencies.log(formatInstanceOwnerSetupResult(result, dependencies.cwd));
+      return;
+    }
     case "instanceDeploy": {
       const result = await runCliWorkspaceOperation(
         {
@@ -985,6 +992,92 @@ export type MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult = {
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
+
+export type SetupFormlessInstanceOwnerResult = {
+  opened: boolean;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  setupStatus: OwnerSetupStatusResponse;
+  setupUrl?: string;
+  workspaceRoot: string;
+};
+
+export async function setupFormlessInstanceOwner(
+  input: {
+    adminToken?: string | null;
+    open?: boolean;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "openBrowser" | "randomToken" | "setupCapability"
+  > = nodeFormlessCliDependencies(),
+): Promise<SetupFormlessInstanceOwnerResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget || !status.remoteStatus) {
+    throw new Error("Formless instance owner setup requires a selected target.");
+  }
+
+  const setupStatus = status.remoteStatus.ownerSetup;
+
+  if (setupStatus.setupComplete) {
+    return {
+      opened: false,
+      selectedTarget: status.selectedTarget,
+      setupStatus,
+      workspaceRoot: status.workspaceRoot,
+    };
+  }
+
+  const secretState = await readFormlessInstanceWorkspaceSecretState(status.workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    explicitAdminToken: input.adminToken,
+    secretState,
+  });
+
+  if (!adminToken) {
+    throw new Error(
+      "Formless instance owner setup requires an admin token; run `formless instance token adopt` or pass --admin-token.",
+    );
+  }
+
+  const setupToken = generatedCliOwnerSetupToken(dependencies.randomToken);
+
+  await dependencies.setupCapability.create({
+    adminToken,
+    deploymentUrl: status.selectedTarget.url,
+    setupToken,
+  });
+
+  const setupUrl = formatFormlessOwnerSetupUrl({
+    deploymentUrl: status.selectedTarget.url,
+    setupToken,
+  });
+
+  if (input.open) {
+    await dependencies.openBrowser(setupUrl);
+  }
+
+  return {
+    opened: input.open === true,
+    selectedTarget: status.selectedTarget,
+    setupStatus,
+    setupUrl,
+    workspaceRoot: status.workspaceRoot,
+  };
+}
 
 export async function planFormlessInstanceDomainProviderFromWorkspace(
   input: {
@@ -1580,6 +1673,24 @@ function formatInstanceWorkspaceTokenRotateResult(
   ].join("\n");
 }
 
+function formatInstanceOwnerSetupResult(
+  result: SetupFormlessInstanceOwnerResult,
+  cwd: string,
+): string {
+  return [
+    result.setupUrl
+      ? "Instance owner setup URL created."
+      : "Instance owner setup already complete.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Owner setup: ${formatOwnerSetup(result.setupStatus)}.`,
+    result.setupUrl ? `Setup URL: ${result.setupUrl}.` : null,
+    result.setupUrl ? `Browser opened: ${result.opened ? "yes" : "no"}.` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
 function formatInstanceWorkspaceDestroyResult(
   result: DestroyFormlessInstanceWorkspaceResult,
   cwd: string,
@@ -1887,6 +1998,20 @@ function formatOwnerSetup(status: {
   }
 
   return owner.email ? `complete (${owner.name} <${owner.email}>)` : `complete (${owner.name})`;
+}
+
+function generatedCliOwnerSetupToken(randomToken: () => string): string {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return parseOwnerSetupToken(randomToken());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 function formatCliPath(cwd: string, filePath: string): string {

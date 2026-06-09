@@ -345,6 +345,7 @@ describe("workspace operation contracts", () => {
 
   it("redacts display state before format or update", () => {
     const workspaceRoot = "/tmp/personal-sites";
+    const ownerSetupUrl = "https://personal.dpeek.workers.dev/setup?token=owner-setup-secret";
     const state = initialWorkspaceOperationState({
       id: "op_redact_00000001",
       input: {
@@ -378,11 +379,13 @@ describe("workspace operation contracts", () => {
       result: {
         deployment: {
           leaseToken: "lease:local-gateway",
+          ownerSetupUrl,
           rawAdapterOutput: "TOKEN=secret",
         },
         summary: {
           fields: {
             attemptId: "attempt.deploy.1",
+            ownerSetupUrl,
             providerStatePayload: "raw",
           },
           title: "Deploy applied",
@@ -391,7 +394,9 @@ describe("workspace operation contracts", () => {
       status: "running",
       summary: {
         fields: {
+          ownerSetupUrl,
           providerStatePayload: "raw",
+          setupUrl: ownerSetupUrl,
         },
         title: "Deploy applied",
       },
@@ -407,11 +412,20 @@ describe("workspace operation contracts", () => {
     expect(updated.logs[0]?.message).toContain("Bearer [redacted]");
     expect(updated.logs[0]?.message).toContain("[redacted]");
     expect(updated.result?.deployment?.leaseToken).toBe("[redacted]");
+    expect(updated.result?.deployment?.ownerSetupUrl).toBe(
+      "https://personal.dpeek.workers.dev/setup?token=[redacted]",
+    );
     expect(updated.result?.deployment?.rawAdapterOutput).toBe("[redacted]");
+    expect(updated.result?.summary.fields.ownerSetupUrl).toBe(ownerSetupUrl);
+    expect(updated.summary.fields.ownerSetupUrl).toBe(ownerSetupUrl);
     expect(updated.summary.fields.providerStatePayload).toBe("[redacted]");
+    expect(updated.summary.fields.setupUrl).toBe(
+      "https://personal.dpeek.workers.dev/setup?token=[redacted]",
+    );
     expect(updated.events[0]?.url).toBe("https://dash.cloudflare.com/oauth2/authorize?account=123");
     expect(text).not.toContain(workspaceRoot);
     expect(text).not.toContain("secret-token");
+    expect(text).toContain(ownerSetupUrl);
   });
 });
 

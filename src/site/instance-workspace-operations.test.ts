@@ -328,6 +328,8 @@ describe("Formless workspace operations", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const deploymentEvidence: DeploymentResourceEvidenceSummary[] = [];
     const requests: CapturedRequest[] = [];
+    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
+      [];
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployRecordSource(workspaceRoot);
@@ -364,6 +366,7 @@ describe("Formless workspace operations", () => {
         packageRoot: "/package",
         packageVersion: packageJson.version,
         randomTokens: ["generated-admin-token", setupToken],
+        setupInputs,
         timestamps: [
           "2026-06-02T00:04:00.000Z",
           "2026-06-02T00:04:01.000Z",
@@ -472,10 +475,77 @@ describe("Formless workspace operations", () => {
       "cloudflare-worker-custom-domain",
     ]);
     expect(deploymentEvidence).toHaveLength(3);
+    expect(setupInputs).toEqual([]);
+    expect(state.summary.fields).not.toHaveProperty("ownerSetupUrl");
+    expect(state.result?.summary.fields).not.toHaveProperty("ownerSetupUrl");
     await expectNoDeploymentHistoryRecordSource(workspaceRoot);
+    expect(JSON.stringify(state)).not.toContain("/setup?token=");
     expect(JSON.stringify(state)).not.toContain("generated-admin-token");
     expect(JSON.stringify(state)).not.toContain("alchemy-password");
     expect(JSON.stringify(state)).not.toContain("lease:local-gateway");
+  });
+
+  it("surfaces first deploy owner setup URL without capability internals", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
+      [];
+    const ownerSetupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot, { includeDeployTarget: false });
+    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "deployApply",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        deploymentAdapter: {
+          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+        },
+        fetch: deployApplyFetch(requests),
+        packageRoot: "/package",
+        packageVersion: packageJson.version,
+        randomTokens: ["generated-admin-token", setupToken],
+        setupInputs,
+        timestamps: [
+          "2026-06-02T00:05:00.000Z",
+          "2026-06-02T00:05:01.000Z",
+          "2026-06-02T00:05:02.000Z",
+          "2026-06-02T00:05:03.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    if (state.status !== "succeeded") {
+      throw new Error(JSON.stringify(state.summary.fields));
+    }
+
+    expect(state.summary.fields).toMatchObject({ ownerSetupUrl });
+    expect(state.result?.summary.fields).toMatchObject({ ownerSetupUrl });
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "generated-admin-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(JSON.stringify(state)).toContain(ownerSetupUrl);
+    expect(JSON.stringify(state)).not.toContain("generated-admin-token");
+    expect(JSON.stringify(state)).not.toContain("/setup/capability");
+    expect(JSON.stringify(state)).not.toContain("capabilityCreated");
   });
 
   it("persists display-safe deployment and cleanup summaries with secret redaction", async () => {
@@ -625,6 +695,7 @@ function operationDeps(
     operationIds?: string[];
     packageVersion?: string;
     randomTokens?: string[];
+    setupInputs?: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }>;
     timestamps?: string[];
   } = {},
 ) {
@@ -665,14 +736,18 @@ function operationDeps(
     ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
     randomToken: () => randomTokens.shift() ?? "generated-token",
     setupCapability: {
-      create: async (input: { deploymentUrl: string }) => ({
-        capabilityCreated: true,
-        endpointUrl: new URL(
-          "/api/formless/setup/capability",
-          `${input.deploymentUrl}/`,
-        ).toString(),
-        setupComplete: false,
-      }),
+      create: async (input: { adminToken: string; deploymentUrl: string; setupToken: string }) => {
+        options.setupInputs?.push(input);
+
+        return {
+          capabilityCreated: true,
+          endpointUrl: new URL(
+            "/api/formless/setup/capability",
+            `${input.deploymentUrl}/`,
+          ).toString(),
+          setupComplete: false,
+        };
+      },
     },
   } as RunFormlessWorkspaceOperationDependencies;
 }
@@ -702,6 +777,7 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
 async function writeDeployRecordSource(
   workspaceRoot: string,
   options: {
+    includeDeployTarget?: boolean;
     targetUrl?: string;
     workerName?: string | null;
   } = {},
@@ -1168,6 +1244,7 @@ function controlPlaneRecords(): StoredRecord[] {
 
 function deployControlPlaneRecords(
   options: {
+    includeDeployTarget?: boolean;
     targetUrl?: string;
     workerName?: string | null;
   } = {},
@@ -1175,7 +1252,7 @@ function deployControlPlaneRecords(
   const now = "2026-05-26T00:00:00.000Z";
   const workerName = options.workerName === undefined ? "personal" : options.workerName;
 
-  return [
+  const records = [
     ...controlPlaneRecords(),
     {
       createdAt: now,
@@ -1258,6 +1335,10 @@ function deployControlPlaneRecords(
       },
     },
   ];
+
+  return options.includeDeployTarget === false
+    ? records.filter((record) => record.entity !== "deploy-target")
+    : records;
 }
 
 async function makeTempDir(): Promise<string> {

@@ -490,6 +490,7 @@ function summarizeDeployApplyResult(
         evidenceCount: writeback?.evidenceCount ?? 0,
         healthCheckVersion: result.healthCheck.version,
         migrationPolicy: result.migrationPolicy,
+        ...(result.ownerSetup === undefined ? {} : { ownerSetupUrl: result.ownerSetup.url }),
         url: result.deployment.url,
         writebackStatus: writeback?.status ?? "not-run",
         workerName: result.plan.resources.worker.name,

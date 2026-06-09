@@ -138,6 +138,13 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string;
     }
+  | {
+      adminToken: string | null;
+      kind: "instanceOwnerSetup";
+      open: boolean;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
   | { kind: "help" }
   | { kind: "workspaceCheck"; targetAlias: string | null; workspacePath: string | null }
   | {
@@ -192,6 +199,8 @@ export function formlessCliUsage(): string {
     "       [--runner-id <id>]",
     "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
     "       [--admin-token <token>]",
+    "  instance owner setup [--workspace <path>] [--target <alias>]",
+    "       [--open] [--admin-token <token>]",
   ].join("\n");
 }
 
@@ -524,9 +533,11 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
       return parseInstanceDomainsArgs(rest);
     case "token":
       return parseInstanceTokenArgs(rest);
+    case "owner":
+      return parseInstanceOwnerArgs(rest);
     default:
       throw new Error(
-        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token>",
+        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
       );
   }
 }
@@ -1104,6 +1115,48 @@ function parseInstanceTokenCommandArgs<TKind extends "instanceTokenAdopt" | "ins
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   } as Extract<FormlessCliCommand, { kind: TKind }>;
+}
+
+function parseInstanceOwnerArgs(args: string[]): FormlessCliCommand {
+  const [subcommand, ...rest] = args;
+
+  switch (subcommand) {
+    case "setup":
+      return parseInstanceOwnerSetupArgs(rest);
+    default:
+      throw new Error("Usage: formless instance owner <setup>");
+  }
+}
+
+function parseInstanceOwnerSetupArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance owner setup");
+  let adminToken: string | null = null;
+  let open = false;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--open") {
+      open = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance owner setup: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    kind: "instanceOwnerSetup",
+    open,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
 }
 
 function parseInstanceTargetOptions(

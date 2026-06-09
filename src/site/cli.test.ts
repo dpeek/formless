@@ -139,6 +139,8 @@ describe("Formless Site CLI", () => {
       "       [--runner-id <id>]",
       "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
       "       [--admin-token <token>]",
+      "  instance owner setup [--workspace <path>] [--target <alias>]",
+      "       [--open] [--admin-token <token>]",
     ].join("\n");
     const logs: string[] = [];
 
@@ -623,13 +625,33 @@ describe("Formless Site CLI", () => {
       targetAlias: null,
       workspacePath: ".",
     });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "owner",
+        "setup",
+        "--workspace",
+        "../personal",
+        "--target",
+        "remote",
+        "--open",
+        "--admin-token",
+        "secret",
+      ]),
+    ).toEqual({
+      adminToken: "secret",
+      kind: "instanceOwnerSetup",
+      open: true,
+      targetAlias: "remote",
+      workspacePath: "../personal",
+    });
 
     expect(logs).toEqual([]);
   });
 
   it("validates instance workspace command options", () => {
     expect(() => parseFormlessCliArgs(["instance"])).toThrow(
-      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token>",
+      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
     );
     expect(() => parseFormlessCliArgs(["instance", "init-workspace", "--from-remote"])).toThrow(
       "Missing required option for formless instance init-workspace: --target-url.",
@@ -697,6 +719,12 @@ describe("Formless Site CLI", () => {
     );
     expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
       "Usage: formless instance token <adopt|rotate>",
+    );
+    expect(() => parseFormlessCliArgs(["instance", "owner"])).toThrow(
+      "Usage: formless instance owner <setup>",
+    );
+    expect(() => parseFormlessCliArgs(["instance", "owner", "setup", "--force"])).toThrow(
+      "Unknown option for formless instance owner setup: --force",
     );
   });
 
@@ -909,6 +937,213 @@ describe("Formless Site CLI", () => {
         "targetUrl: https://control-plane.dpeek.workers.dev.",
       ].join("\n"),
     ]);
+  });
+
+  it("creates one owner setup URL for an incomplete target without logging admin token or capability details", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: false });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+
+    await runFormlessCli(
+      [
+        "instance",
+        "owner",
+        "setup",
+        "--workspace",
+        workspaceRoot,
+        "--admin-token",
+        "explicit-admin-token",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        setupInputs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+    ]);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "explicit-admin-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance owner setup URL created.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: instance.primary (https://personal.dpeek.workers.dev).",
+        "Owner setup: incomplete.",
+        `Setup URL: ${setupUrl}.`,
+        "Browser opened: no.",
+      ].join("\n"),
+    ]);
+    expect(logs.join("\n")).not.toContain("explicit-admin-token");
+    expect(logs.join("\n")).not.toContain("/setup/capability");
+    expect(logs.join("\n")).not.toContain("capabilityCreated");
+  });
+
+  it("reports complete owner setup without creating a capability or opening a browser", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({
+      setupComplete: true,
+      owner: {
+        createdAt: "2026-05-01T00:00:00.000Z",
+        email: "david@example.com",
+        id: "owner-1",
+        name: "David Peek",
+      },
+    });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+
+    await runFormlessCli(
+      ["instance", "owner", "setup", "--workspace", workspaceRoot, "--open"],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        openedUrls,
+        setupInputs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+    ]);
+    expect(setupInputs).toEqual([]);
+    expect(openedUrls).toEqual([]);
+    expect(logs).toEqual([
+      [
+        "Instance owner setup already complete.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: instance.primary (https://personal.dpeek.workers.dev).",
+        "Owner setup: complete (David Peek <david@example.com>).",
+      ].join("\n"),
+    ]);
+  });
+
+  it("requires an admin token after reading incomplete owner setup status", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: false });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+
+    await expect(
+      runFormlessCli(
+        ["instance", "owner", "setup", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          fetch: responses.fetcher(requests),
+          openedUrls,
+          setupInputs,
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance owner setup requires an admin token; run `formless instance token adopt` or pass --admin-token.",
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+    ]);
+    expect(setupInputs).toEqual([]);
+    expect(openedUrls).toEqual([]);
+  });
+
+  it("opens owner setup URL from ignored secret state without logging the admin token", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-admin-token\n",
+    );
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: false });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+
+    await runFormlessCli(
+      ["instance", "owner", "setup", "--workspace", workspaceRoot, "--open"],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        openedUrls,
+        setupInputs,
+      }),
+    );
+
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "local-admin-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(openedUrls).toEqual([setupUrl]);
+    expect(logs.at(-1)).toContain(`Setup URL: ${setupUrl}.`);
+    expect(logs.at(-1)).toContain("Browser opened: yes.");
+    expect(logs.join("\n")).not.toContain("local-admin-token");
+    expect(logs.join("\n")).not.toContain("generated-token");
+    expect(logs.join("\n")).not.toContain("/setup/capability");
   });
 
   it("pulls instance workspace archives from the control-plane target URL", async () => {
@@ -3913,6 +4148,7 @@ describe("Formless Site CLI", () => {
     const requests: CapturedFetchRequest[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const localDavid = appArchive("david", "David Peek");
+    const ownerSetupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
     const desiredResourcesByKind = {
       "cloudflare-dns-records": 1,
       "cloudflare-redirect-rule": 1,
@@ -4093,9 +4329,11 @@ describe("Formless Site CLI", () => {
     expect(manifest).toEqual(layoutWorkspaceManifest("personal"));
     expect(JSON.stringify(manifest)).not.toContain("cf-token");
     expect(JSON.stringify(manifest)).not.toContain("alchemy-state-token");
+    expect(JSON.stringify(manifest)).not.toContain(setupToken);
     expect(JSON.stringify(controlPlane)).not.toContain("cf-token");
     expect(JSON.stringify(controlPlane)).not.toContain("alchemy-password");
     expect(JSON.stringify(controlPlane)).not.toContain("generated-token");
+    expect(JSON.stringify(controlPlane)).not.toContain(setupToken);
     expect(
       controlPlane?.records.find((record) => record.entity === "deploy-target")?.values.targetUrl,
     ).toBe("https://personal.dpeek.workers.dev");
@@ -4167,6 +4405,7 @@ describe("Formless Site CLI", () => {
       JSON.stringify(restoreRequests.map((request) => capturedRequestJson(request))),
     ).not.toContain("generated-token");
     expect(logs.at(-1)).toContain("Workspace operation: deploy apply (succeeded).");
+    expect(logs.at(-1)).toContain(`ownerSetupUrl: ${ownerSetupUrl}.`);
     expect(logs.at(-1)).toContain("url: https://personal.dpeek.workers.dev.");
     expect(logs.at(-1)).toContain('"resourcesByKind":');
     expect(logs.at(-1)).toContain('"cloudflare-worker-custom-domain":1');
@@ -4176,6 +4415,8 @@ describe("Formless Site CLI", () => {
     expect(logs.join("\n")).not.toContain("cf-token");
     expect(logs.join("\n")).not.toContain("alchemy-state-token");
     expect(logs.join("\n")).not.toContain("generated-token");
+    expect(logs.join("\n")).not.toContain("/setup/capability");
+    expect(logs.join("\n")).not.toContain("capabilityCreated");
   });
 
   it("redacts deploy secrets from command errors", async () => {
