@@ -968,11 +968,19 @@ export async function checkFormlessInstanceWorkspace(
       throw new Error("Formless instance check did not write a remote instance archive.");
     }
 
-    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
     const localControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
+    const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
+    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
+      manifest,
+      localDomainIntents,
+      liveDomains,
+    )
+      ? compareWorkspaceDomainIntentToLive(localDomainIntents, liveDomains)
+      : [];
     const localAppArchives = await readWorkspaceAppArchiveMapForCheck(
       workspaceRoot,
       manifest,
@@ -981,9 +989,9 @@ export async function checkFormlessInstanceWorkspace(
 
     return {
       drift: compareWorkspaceArchives({
-        domainDesiredDrift: compareWorkspaceDomainIntentToLive(manifest.domains ?? [], liveDomains),
+        domainDesiredDrift,
         localControlPlane,
-        localDomainCount: manifest.domains?.length ?? 0,
+        localDomainCount: localDomainIntents.length,
         localAppArchives,
         manifest,
         remoteDomainCount: liveDomains.length,
@@ -1168,12 +1176,20 @@ export async function pushFormlessInstanceWorkspace(
       throw new Error("Formless instance push could not read remote archive state.");
     }
 
-    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
     const exportedAt = dependencies.now();
     const localControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
       manifest,
       workspaceRoot,
     });
+    const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
+    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
+      manifest,
+      localDomainIntents,
+      liveDomains,
+    )
+      ? compareWorkspaceDomainIntentToLive(localDomainIntents, liveDomains)
+      : [];
     const localAppArchives = await readWorkspaceAppArchivesForPush(
       workspaceRoot,
       manifest,
@@ -1186,9 +1202,9 @@ export async function pushFormlessInstanceWorkspace(
       exportedAt,
     });
     const drift = compareWorkspaceArchives({
-      domainDesiredDrift: compareWorkspaceDomainIntentToLive(manifest.domains ?? [], liveDomains),
+      domainDesiredDrift,
       localControlPlane,
-      localDomainCount: manifest.domains?.length ?? 0,
+      localDomainCount: localDomainIntents.length,
       localAppArchives: new Map(
         localAppArchives.map((archive) => [
           archive.archive.kind === APP_ARCHIVE_KIND ? archive.archive.app.installId : "",
@@ -2121,7 +2137,7 @@ export async function planFormlessInstanceWorkspaceDomains(
 
   const accountId = requireWorkspaceDeployAccountId(deploymentSource.providerConfig);
   const workerName = selectWorkspaceWorkerName(deploymentSource.providerConfig, selectedTarget);
-  const workspaceDomains = manifest.domains ?? [];
+  const workspaceDomains = workspaceDomainIntentsFromSource(manifest, controlPlane);
   const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
   const enabledSourceDomains = (source === "workspace" ? workspaceDomains : liveDomains).filter(
@@ -4410,6 +4426,86 @@ async function readLiveWorkspaceDomainIntents(
   );
 
   return liveMappings.mappings.map(workspaceDomainIntentFromLiveMapping);
+}
+
+function workspaceDomainIntentsFromSource(
+  manifest: FormlessInstanceWorkspaceManifest,
+  controlPlane: InstanceArchiveControlPlane | undefined,
+): FormlessInstanceWorkspaceDomainIntent[] {
+  if (manifest.domains !== undefined) {
+    return [...manifest.domains].sort(compareWorkspaceDomainIntents);
+  }
+
+  return (controlPlane?.records ?? [])
+    .filter(
+      (record) =>
+        !record.deletedAt &&
+        record.entity === "route" &&
+        stringRecordValue(record, "kind") === "mount" &&
+        stringRecordValue(record, "matchHost") !== undefined,
+    )
+    .map(workspaceDomainIntentFromRouteRecord)
+    .sort(compareWorkspaceDomainIntents);
+}
+
+function shouldCompareWorkspaceDomainIntents(
+  manifest: FormlessInstanceWorkspaceManifest,
+  localDomainIntents: readonly FormlessInstanceWorkspaceDomainIntent[],
+  liveDomains: readonly FormlessInstanceWorkspaceDomainIntent[],
+): boolean {
+  return (
+    manifest.domains !== undefined || (localDomainIntents.length > 0 && liveDomains.length > 0)
+  );
+}
+
+function workspaceDomainIntentFromRouteRecord(
+  record: StoredRecord,
+): FormlessInstanceWorkspaceDomainIntent {
+  const host = stringRecordValue(record, "matchHost");
+  const profile = workspaceDomainProfileFromRouteTargetProfile(
+    stringRecordValue(record, "targetProfile"),
+  );
+  const targetInstallId = stringRecordValue(record, "appInstall");
+
+  if (host === undefined) {
+    throw new Error(`Workspace route "${record.id}" is missing matchHost.`);
+  }
+
+  if (profile !== "instance" && targetInstallId === undefined) {
+    throw new Error(`Workspace route "${record.id}" profile "${profile}" is missing appInstall.`);
+  }
+
+  return {
+    enabled: booleanRecordValue(record, "enabled") ?? true,
+    host,
+    profile,
+    ...(targetInstallId === undefined ? {} : { targetInstallId }),
+  };
+}
+
+function workspaceDomainProfileFromRouteTargetProfile(
+  targetProfile: string | undefined,
+): FormlessInstanceWorkspaceDomainIntent["profile"] {
+  switch (targetProfile) {
+    case "app":
+    case "instance":
+      return targetProfile;
+    case "public-site":
+      return "publicSite";
+    default:
+      throw new Error(`Workspace domain route targetProfile is invalid: ${targetProfile ?? ""}`);
+  }
+}
+
+function compareWorkspaceDomainIntents(
+  left: FormlessInstanceWorkspaceDomainIntent,
+  right: FormlessInstanceWorkspaceDomainIntent,
+): number {
+  return (
+    left.host.localeCompare(right.host) ||
+    left.profile.localeCompare(right.profile) ||
+    (left.targetInstallId ?? "").localeCompare(right.targetInstallId ?? "")
+  );
 }
 
 function workspaceDomainIntentFromLiveMapping(

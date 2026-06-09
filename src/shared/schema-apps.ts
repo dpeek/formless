@@ -1,4 +1,4 @@
-export type SchemaKey = "tasks" | "estii" | "site" | "crm";
+export type SchemaKey = "tasks" | "estii" | "site" | "crm" | "cleartrace";
 
 export const defaultSchemaKey = "tasks" satisfies SchemaKey;
 
@@ -39,6 +39,13 @@ export const schemaAppDefinitions = {
     schemaRoute: "/crm/schema",
     seedChangeMutationPrefix: "seed-crm",
   },
+  cleartrace: {
+    key: "cleartrace",
+    label: "ClearTrace",
+    route: "/cleartrace",
+    schemaRoute: "/cleartrace/schema",
+    seedChangeMutationPrefix: "seed-cleartrace",
+  },
 } as const satisfies Record<SchemaKey, SchemaAppDefinition>;
 
 export const schemaApps = [
@@ -46,6 +53,7 @@ export const schemaApps = [
   schemaAppDefinitions.estii,
   schemaAppDefinitions.site,
   schemaAppDefinitions.crm,
+  schemaAppDefinitions.cleartrace,
 ] as const satisfies readonly SchemaAppDefinition[];
 
 export function isSchemaKey(value: string): value is SchemaKey {

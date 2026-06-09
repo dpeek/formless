@@ -1,0 +1,224 @@
+[
+  {
+    "id": "rec_cleartrace_customer_ada",
+    "entity": "customer",
+    "values": {
+      "label": "Ada Research",
+      "email": "samples@adaresearch.example",
+      "status": "active",
+      "notes": "Pilot customer for analytical verification workflow."
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_analyte_peptide_a",
+    "entity": "analyte",
+    "values": {
+      "label": "Peptide reference sample",
+      "category": "peptide",
+      "status": "active",
+      "internalNotes": "Testing-only catalog entry. No sourcing, dosing, or usage advice."
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_catalog_identity",
+    "entity": "service-catalog-item",
+    "values": {
+      "label": "Identity verification",
+      "analyte": "rec_cleartrace_analyte_peptide_a",
+      "status": "active",
+      "basePrice": 180,
+      "currency": "AUD",
+      "turnaroundDays": 5,
+      "publicDescription": "Verify whether the submitted sample matches the requested identity outcome.",
+      "internalDescription": "Manual review required before report release."
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_package_standard",
+    "entity": "test-package",
+    "values": {
+      "label": "Standard verification",
+      "status": "active",
+      "startingPrice": 180,
+      "currency": "AUD",
+      "displayOrder": 1
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_package_standard_identity",
+    "entity": "package-item",
+    "values": {
+      "testPackage": "rec_cleartrace_package_standard",
+      "catalogItem": "rec_cleartrace_catalog_identity",
+      "required": true,
+      "displayOrder": 1
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_order_1001",
+    "entity": "order",
+    "values": {
+      "orderNumber": "CT-1001",
+      "customer": "rec_cleartrace_customer_ada",
+      "status": "awaitingSample",
+      "paymentStatus": "paid",
+      "total": 180,
+      "currency": "AUD",
+      "termsAccepted": true
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_sample_1001_a",
+    "entity": "sample",
+    "values": {
+      "sampleCode": "CT-S-1001-A",
+      "order": "rec_cleartrace_order_1001",
+      "customer": "rec_cleartrace_customer_ada",
+      "analyte": "rec_cleartrace_analyte_peptide_a",
+      "status": "received",
+      "form": "vial",
+      "customerNotes": "Customer requested identity-only testing.",
+      "receivedAt": "2026-06-09"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_order_line_1001_identity",
+    "entity": "order-line",
+    "values": {
+      "order": "rec_cleartrace_order_1001",
+      "catalogItem": "rec_cleartrace_catalog_identity",
+      "description": "Identity verification for CT-S-1001-A",
+      "quantity": 1,
+      "unitPrice": 180,
+      "total": 180,
+      "sample": "rec_cleartrace_sample_1001_a"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_request_1001_a",
+    "entity": "test-request",
+    "values": {
+      "order": "rec_cleartrace_order_1001",
+      "sample": "rec_cleartrace_sample_1001_a",
+      "testPackage": "rec_cleartrace_package_standard",
+      "status": "queued",
+      "priority": "normal",
+      "assignedTo": "Lab intake"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_work_accession_1001_a",
+    "entity": "work-item",
+    "values": {
+      "label": "Accession CT-S-1001-A",
+      "type": "intake",
+      "status": "open",
+      "priority": "normal",
+      "relatedRecordId": "rec_cleartrace_sample_1001_a",
+      "dueDate": "2026-06-10",
+      "assignedTo": "Lab intake"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_method_identity_lcms",
+    "entity": "method",
+    "values": {
+      "label": "Identity LC-MS",
+      "version": "1.0",
+      "status": "active",
+      "publicSummary": "Analytical identity verification by LC-MS."
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_result_1001_a",
+    "entity": "result",
+    "values": {
+      "testRequest": "rec_cleartrace_request_1001_a",
+      "sample": "rec_cleartrace_sample_1001_a",
+      "method": "rec_cleartrace_method_identity_lcms",
+      "status": "approved",
+      "resultKind": "qualitative",
+      "displaySummary": "Sample is consistent with the requested identity outcome.",
+      "analystName": "Analyst One",
+      "reviewedBy": "Reviewer One"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_report_1001_a",
+    "entity": "report",
+    "values": {
+      "reportNumber": "CT-R-1001-A",
+      "order": "rec_cleartrace_order_1001",
+      "sample": "rec_cleartrace_sample_1001_a",
+      "status": "released",
+      "title": "Certificate of analysis CT-S-1001-A",
+      "currentVersion": "rec_cleartrace_report_version_1001_a_v1",
+      "releasedAt": "2026-06-09"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_report_version_1001_a_v1",
+    "entity": "report-version",
+    "values": {
+      "report": "rec_cleartrace_report_1001_a",
+      "versionNumber": 1,
+      "assetId": "media_cleartrace_report_placeholder",
+      "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "released",
+      "generatedAt": "2026-06-09"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_verify_1001_a",
+    "entity": "verification-record",
+    "values": {
+      "verificationCode": "VERIFY-CT-1001-A",
+      "report": "rec_cleartrace_report_1001_a",
+      "reportVersion": "rec_cleartrace_report_version_1001_a_v1",
+      "status": "valid",
+      "publicUrlPath": "/verify/VERIFY-CT-1001-A",
+      "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "issuedAt": "2026-06-09"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_audit_release_1001_a",
+    "entity": "audit-event",
+    "values": {
+      "label": "Released report CT-R-1001-A",
+      "actorType": "staff",
+      "actionKey": "release-report",
+      "recordType": "report",
+      "recordId": "rec_cleartrace_report_1001_a",
+      "occurredAt": "2026-06-09",
+      "notes": "Seeded release event for generated admin review."
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  },
+  {
+    "id": "rec_cleartrace_config_policy",
+    "entity": "app-config",
+    "values": {
+      "key": "policy.testingOnly",
+      "label": "Testing-only policy",
+      "value": "ClearTrace provides analytical testing only. The workflow must not represent sourcing, dosing, prescribing, or usage advice.",
+      "status": "active"
+    },
+    "createdAt": "2026-06-09T00:00:00.000Z"
+  }
+]

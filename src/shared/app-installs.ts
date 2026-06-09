@@ -179,6 +179,18 @@ export const bundledAppPackages = [
     seedRecordsKey: "crm",
     adminRouteBase: "/apps",
   },
+  {
+    packageAppKey: "cleartrace",
+    packageRevision: currentBundledPackageAppRevision,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+    label: schemaAppDefinitions.cleartrace.label,
+    description: "Lab operations app backed by the bundled ClearTrace schema and demo records.",
+    defaultInstallId: "cleartrace",
+    supportsMultipleInstalls: true,
+    sourceSchemaKey: "cleartrace",
+    seedRecordsKey: "cleartrace",
+    adminRouteBase: "/apps",
+  },
 ] as const satisfies readonly BundledAppPackage[];
 
 export function listBundledAppPackages(): BundledAppPackage[] {

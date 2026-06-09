@@ -43,9 +43,9 @@ The ClearTrace source schema SHALL model operational lab workflow state as flat 
 - **AND** order-sample, order-line, sample-test-request, and work-item links are represented by reference fields
 - **AND** no nested line item, sample, test request, or work item arrays are persisted on parent records
 
-#### Scenario: Result and report records stay flat
+#### Scenario: Result, report, verification, and audit records stay flat
 
-- **WHEN** ClearTrace method, result, report, report version, verification record, invoice, payment, submission slip, support ticket, ticket message, notification, compliance attestation, or audit event records are stored
+- **WHEN** ClearTrace method, result, report, report version, verification record, and audit event records are stored
 - **THEN** each record stores only scalar and reference field values
 - **AND** document and media references store flat asset ids or delivery references, not provider-specific object state
 - **AND** report version and verification relationships are represented by reference fields
@@ -96,6 +96,6 @@ ClearTrace SHALL remain a source app and generated admin workflow package in thi
 
 #### Scenario: No provider execution
 
-- **WHEN** ClearTrace order, payment, notification, report, or verification records are stored
+- **WHEN** ClearTrace order, report, or verification records are stored
 - **THEN** no payment provider, email provider, document renderer, lab instrument integration, or external verification provider is called by this change
 - **AND** provider-backed behavior waits for separate provider shell or adapter changes with dev-safe mock paths

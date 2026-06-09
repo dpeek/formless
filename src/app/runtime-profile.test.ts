@@ -116,19 +116,33 @@ describe("runtime profile resolver", () => {
       packageAppKey: "site",
       siteRouteBase: "/sites",
     });
-    expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site", "crm"]);
-    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true, true]);
+    expect(profile.worlds.map((world) => world.app.key)).toEqual([
+      "tasks",
+      "estii",
+      "site",
+      "crm",
+      "cleartrace",
+    ]);
+    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
     expect(profile.worlds.map((world) => world.route)).toEqual([
       "/tasks",
       "/estii",
       "/site",
       "/crm",
+      "/cleartrace",
     ]);
     expect(profile.worlds.map((world) => world.schemaRoute)).toEqual([
       "/tasks/schema",
       "/estii/schema",
       "/site/schema",
       "/crm/schema",
+      "/cleartrace/schema",
     ]);
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();

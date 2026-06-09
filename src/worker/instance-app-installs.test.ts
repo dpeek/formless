@@ -6,6 +6,8 @@ import type {
   MutationResponse,
 } from "../shared/protocol.ts";
 import {
+  cleartraceSeedRecords,
+  cleartraceSourceSchema,
   crmSeedRecords,
   crmSourceSchema,
   rateSeedRecords,
@@ -95,6 +97,13 @@ describe("instance app install API routes", () => {
         packageAppKey: "crm",
         packageRevision: 1,
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+      }),
+      expect.objectContaining({
+        defaultInstallId: "cleartrace",
+        label: "ClearTrace",
+        packageAppKey: "cleartrace",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
       }),
     ]);
     expect(before.body.installs).toEqual([]);
@@ -371,6 +380,52 @@ describe("instance app install API routes", () => {
     expect(bootstrap.body.schema).toEqual(crmSourceSchema);
     expect(bootstrap.body.records).toEqual(crmSeedRecords);
     expect(bootstrap.body.cursor).toBe(crmSeedRecords.length);
+  });
+
+  it("persists ClearTrace installs and bootstraps from the bundled ClearTrace source", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "cleartrace",
+      installId: "cleartrace",
+      label: "ClearTrace",
+    });
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const bootstrap = await getJson<BootstrapResponse>(
+      "/api/app-installs/cleartrace/cleartrace/bootstrap",
+    );
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.initialization).toEqual({
+      installId: "cleartrace",
+      packageAppKey: "cleartrace",
+      seedRecordsKey: "cleartrace",
+      sourceSchemaKey: "cleartrace",
+    });
+    expect(created.body.install).toEqual(
+      expect.objectContaining({
+        adminRoute: "/apps/cleartrace",
+        installId: "cleartrace",
+        label: "ClearTrace",
+        packageAppKey: "cleartrace",
+        packageRevision: 1,
+        schemaRoute: "/apps/cleartrace/schema",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+        status: "installed",
+      }),
+    );
+    expect(created.body.install).not.toHaveProperty("publicRoute");
+    expect(created.body.install).not.toHaveProperty("publicRoutePrefix");
+    expect(
+      controlPlane.body.records
+        .filter((record) => record.entity === "route")
+        .map((record) => [record.values.appInstall, record.values.matchPath, record.values.surface])
+        .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
+    ).toEqual([
+      ["cleartrace", "/apps/cleartrace", "admin"],
+      ["cleartrace", "/apps/cleartrace/schema", "schema"],
+    ]);
+    expect(bootstrap.body.schema).toEqual(cleartraceSourceSchema);
+    expect(bootstrap.body.records).toEqual(cleartraceSeedRecords);
+    expect(bootstrap.body.cursor).toBe(cleartraceSeedRecords.length);
   });
 
   it("rejects duplicate and invalid installs without mutating existing installs", async () => {

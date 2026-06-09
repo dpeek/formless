@@ -22,6 +22,7 @@ describe("instance shell route view", () => {
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
           crm: { installId: "crm", label: "CRM" },
+          cleartrace: { installId: "cleartrace", label: "ClearTrace" },
         }}
         state={readyState({
           installs: [
@@ -310,6 +311,7 @@ describe("instance shell route view", () => {
           tasks: { installId: "tasks", label: "Task Space" },
           estii: { installId: "rates", label: "Rates" },
           crm: { installId: "crm", label: "CRM" },
+          cleartrace: { installId: "cleartrace", label: "ClearTrace" },
         }}
         state={readyState({
           installs: [],
@@ -324,6 +326,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Tasks");
     expect(html).toContain("Estii");
     expect(html).toContain("CRM");
+    expect(html).toContain("ClearTrace");
     expect(html).toContain("Public website app backed by the bundled Site schema");
     expect(html).toContain("Install Site");
     expect(html).toContain('value="Docs Site"');
@@ -332,6 +335,8 @@ describe("instance shell route view", () => {
     expect(html).not.toContain('value="Rates"');
     expect(html).not.toContain('value="CRM"');
     expect(html).not.toContain('value="crm"');
+    expect(html).not.toContain('value="ClearTrace"');
+    expect(html).not.toContain('value="cleartrace"');
   });
 
   it("renders CRM package defaults in the install dialog when CRM is selected", () => {
@@ -355,6 +360,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Tasks");
     expect(html).toContain("Estii");
     expect(html).toContain("CRM");
+    expect(html).toContain("ClearTrace");
     expect(html).toContain("CRM app backed by the bundled CRM schema and demo records.");
     expect(html).toContain("Install CRM");
     expect(html).toContain('value="CRM"');

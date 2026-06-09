@@ -220,6 +220,7 @@ export const instanceControlPlaneSchema = {
       fields: {
         installId: textField("Install id"),
         packageAppKey: enumField("Package", {
+          cleartrace: "ClearTrace",
           crm: "CRM",
           estii: "Estii",
           site: "Site",

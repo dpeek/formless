@@ -18,7 +18,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site, Tasks, Estii, and CRM as installable bundled app packages", () => {
+  it("declares Site, Tasks, Estii, CRM, and ClearTrace as installable bundled app packages", () => {
     expect(listBundledAppPackages()).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
@@ -65,11 +65,23 @@ describe("app install registry", () => {
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
         supportsMultipleInstalls: true,
       }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "cleartrace",
+        label: "ClearTrace",
+        packageAppKey: "cleartrace",
+        packageRevision: 1,
+        seedRecordsKey: "cleartrace",
+        sourceSchemaKey: "cleartrace",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+        supportsMultipleInstalls: true,
+      }),
     ]);
     expect(findBundledAppPackage("site")?.label).toBe("Site");
     expect(findBundledAppPackage("tasks")?.label).toBe("Tasks");
     expect(findBundledAppPackage("estii")?.label).toBe("Estii");
     expect(findBundledAppPackage("crm")?.label).toBe("CRM");
+    expect(findBundledAppPackage("cleartrace")?.label).toBe("ClearTrace");
   });
 
   it("validates route-safe install ids", () => {
@@ -236,6 +248,37 @@ describe("app install registry", () => {
       packageAppKey: "crm",
       seedRecordsKey: "crm",
       sourceSchemaKey: "crm",
+    });
+  });
+
+  it("creates a flat ClearTrace install without Site public route metadata", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "cleartrace",
+        label: " ClearTrace ",
+        now,
+        packageAppKey: "cleartrace",
+      }),
+    );
+
+    expect(result.install).toEqual({
+      adminRoute: "/apps/cleartrace",
+      createdAt: now,
+      installId: "cleartrace",
+      label: "ClearTrace",
+      packageAppKey: "cleartrace",
+      packageRevision: 1,
+      schemaRoute: "/apps/cleartrace/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(result.initialization).toEqual({
+      installId: "cleartrace",
+      packageAppKey: "cleartrace",
+      seedRecordsKey: "cleartrace",
+      sourceSchemaKey: "cleartrace",
     });
   });
 

@@ -45,6 +45,11 @@ describe("Worker deploy metadata", () => {
           packageRevision: 1,
           sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
         },
+        {
+          packageAppKey: "cleartrace",
+          packageRevision: 1,
+          sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+        },
       ],
       packageVersion: "0.1.7",
       runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,

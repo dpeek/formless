@@ -11,13 +11,25 @@ describe("worker schema app definitions", () => {
     const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
     const crm = getWorkerSchemaAppDefinition("crm");
+    const cleartrace = getWorkerSchemaAppDefinition("cleartrace");
 
-    expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "estii", "site", "crm"]);
+    expect(workerSchemaApps.map((app) => app.key)).toEqual([
+      "tasks",
+      "estii",
+      "site",
+      "crm",
+      "cleartrace",
+    ]);
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
     expect(estii.sourceSchema.entities.rate?.label).toBe("Rate");
     expect(site.sourceSchema.entities.site?.label).toBe("Site");
     expect(crm.sourceSchema.entities.contact?.label).toBe("Contact");
     expect(crm.sourceSchema.entities.subscription?.label).toBe("Subscription");
+    expect(cleartrace.sourceSchema.entities.order?.label).toBe("Order");
+    expect(cleartrace.sourceSchema.entities.sample?.label).toBe("Sample");
+    expect(cleartrace.sourceSchema.entities["verification-record"]?.label).toBe(
+      "Verification record",
+    );
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
     expect(site.sourceSchema.entities["block-placement"]?.label).toBe("Placement");
     expect(site.sourceSchema.entities.site?.mutations.create.enabled).toBe(false);
@@ -32,6 +44,7 @@ describe("worker schema app definitions", () => {
     const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
     const crm = getWorkerSchemaAppDefinition("crm");
+    const cleartrace = getWorkerSchemaAppDefinition("cleartrace");
 
     expect(tasks.seedRecords).toHaveLength(5);
     expect(tasks.seedRecords.every((record) => record.entity === "task")).toBe(true);
@@ -68,6 +81,31 @@ describe("worker schema app definitions", () => {
     expect(crm.seedRecords.every((record) => record.entity in crm.sourceSchema.entities)).toBe(
       true,
     );
+    expect(cleartrace.seedRecords).toHaveLength(17);
+    expect(new Set(cleartrace.seedRecords.map((record) => record.entity))).toEqual(
+      new Set([
+        "analyte",
+        "app-config",
+        "audit-event",
+        "customer",
+        "method",
+        "order",
+        "order-line",
+        "package-item",
+        "report",
+        "report-version",
+        "result",
+        "sample",
+        "service-catalog-item",
+        "test-package",
+        "test-request",
+        "verification-record",
+        "work-item",
+      ]),
+    );
+    expect(
+      cleartrace.seedRecords.every((record) => record.entity in cleartrace.sourceSchema.entities),
+    ).toBe(true);
   });
 
   it("returns undefined for unknown worker schema keys", () => {

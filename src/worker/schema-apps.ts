@@ -1,5 +1,7 @@
 import rawCrmSeedRecords from "../../schema/apps/crm/seed-records.json";
 import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
+import rawCleartraceSeedRecords from "../../schema/apps/cleartrace/seed-records.json";
+import rawCleartraceSourceSchema from "../../schema/apps/cleartrace/schema.json";
 import rawEstiiSeedRecords from "../../schema/apps/estii/seed-records.json";
 import rawEstiiSourceSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
@@ -30,6 +32,7 @@ const taskSourceSchema = parseAppSchema(rawTaskSourceSchema);
 const estiiSourceSchema = parseAppSchema(rawEstiiSourceSchema);
 const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
 const crmSourceSchema = parseAppSchema(rawCrmSourceSchema);
+const cleartraceSourceSchema = parseAppSchema(rawCleartraceSourceSchema);
 
 export const workerSchemaAppDefinitions = {
   tasks: {
@@ -51,6 +54,15 @@ export const workerSchemaAppDefinitions = {
     ...schemaAppDefinitions.crm,
     sourceSchema: crmSourceSchema,
     seedRecords: parseSeedRecords(rawCrmSeedRecords, crmSourceSchema, "crm seed records"),
+  },
+  cleartrace: {
+    ...schemaAppDefinitions.cleartrace,
+    sourceSchema: cleartraceSourceSchema,
+    seedRecords: parseSeedRecords(
+      rawCleartraceSeedRecords,
+      cleartraceSourceSchema,
+      "cleartrace seed records",
+    ),
   },
 } as const satisfies Record<SchemaKey, WorkerSchemaAppDefinition>;
 

@@ -124,6 +124,22 @@ describe("app storage identity", () => {
       seedRecordsKey: "crm",
       sourceSchemaKey: "crm",
     });
+    expect(
+      installedAppStorageIdentity({
+        installId: "cleartrace",
+        packageAppKey: "cleartrace",
+      }),
+    ).toEqual({
+      apiRoutePrefix: "/api/app-installs/cleartrace/cleartrace",
+      authorityName: "app:cleartrace",
+      broadcastChannelName: "formless:app:cleartrace",
+      browserDatabaseName: "formless:app:cleartrace",
+      installId: "cleartrace",
+      kind: "appInstall",
+      packageAppKey: "cleartrace",
+      seedRecordsKey: "cleartrace",
+      sourceSchemaKey: "cleartrace",
+    });
   });
 
   it("accepts default Site install identity and rejects invalid identities", () => {
@@ -245,6 +261,17 @@ describe("app storage identity", () => {
         installId: "estii",
         kind: "appInstall",
         packageAppKey: "estii",
+      },
+      path: "/bootstrap",
+    });
+    expect(
+      parseAuthorityApiRoute("/api/app-installs/cleartrace/cleartrace/bootstrap"),
+    ).toMatchObject({
+      identity: {
+        authorityName: "app:cleartrace",
+        installId: "cleartrace",
+        kind: "appInstall",
+        packageAppKey: "cleartrace",
       },
       path: "/bootstrap",
     });

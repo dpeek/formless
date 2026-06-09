@@ -45,6 +45,7 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.entities["app-install"]?.fields.packageAppKey).toMatchObject({
       type: "enum",
       values: {
+        cleartrace: { label: "ClearTrace" },
         crm: { label: "CRM" },
         estii: { label: "Estii" },
         site: { label: "Site" },
@@ -381,8 +382,8 @@ describe("instance control-plane schema contracts", () => {
 
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
-        installId: "tasks",
-        packageAppKey: "tasks",
+        installId: "cleartrace",
+        packageAppKey: "cleartrace",
         now,
       }).map((record) => record.values.surface),
     ).toEqual(["admin", "schema"]);
