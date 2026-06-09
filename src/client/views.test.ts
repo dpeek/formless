@@ -92,6 +92,76 @@ describe("home view model collections", () => {
     ]);
   });
 
+  it("selects generated state-machine field and transition facts", () => {
+    const schema = lifecycleTaskSchema();
+    const listModel = requiredCollectionModel(schema, "taskHome");
+    const recordModel = requiredCollectionModel(schema, "taskRecordHome");
+    const tableModel = requiredCollectionModel(schema, "taskTableHome");
+    const createAction = listModel.actions.find((action) => action.type === "create");
+    const listStatus =
+      listModel.result.type === "list"
+        ? listModel.result.recordFields.find((field) => field.fieldName === "status")
+        : undefined;
+    const recordStatus =
+      recordModel.result.type === "record"
+        ? recordModel.result.recordFields.find((field) => field.fieldName === "status")
+        : undefined;
+    const tableStatus =
+      tableModel.result.type === "table"
+        ? tableModel.result.columns.find(
+            (column) => column.type === "field" && column.fieldName === "status",
+          )
+        : undefined;
+    const tableActionColumn =
+      tableModel.result.type === "table"
+        ? tableModel.result.columns.find((column) => column.type === "invokeAction")
+        : undefined;
+    const editAction =
+      tableActionColumn?.type === "invokeAction"
+        ? tableActionColumn.actions.find((action) => action.type === "editRecord")
+        : undefined;
+
+    expect(listStatus?.stateMachine).toMatchObject({
+      fieldName: "status",
+      machineName: "statusFlow",
+      initialState: "todo",
+      terminalStates: ["done"],
+    });
+    expect(recordStatus?.stateMachine?.machineName).toBe("statusFlow");
+    expect(tableStatus?.type === "field" ? tableStatus.stateMachine?.machineName : undefined).toBe(
+      "statusFlow",
+    );
+    expect(listModel.result.type === "list" ? listModel.result.transitionActions : []).toEqual([
+      expect.objectContaining({
+        actionName: "startTask",
+        fieldName: "status",
+        machineName: "statusFlow",
+        transitionName: "start",
+      }),
+      expect.objectContaining({
+        actionName: "completeTask",
+        fieldName: "status",
+        machineName: "statusFlow",
+        transitionName: "complete",
+      }),
+    ]);
+    expect(
+      recordModel.result.type === "record" ? recordModel.result.transitionActions : [],
+    ).toHaveLength(2);
+    expect(
+      tableModel.result.type === "table" ? tableModel.result.transitionActions : [],
+    ).toHaveLength(2);
+    expect(
+      createAction?.type === "create"
+        ? createAction.fields.find((field) => field.fieldName === "status")?.stateMachine
+            ?.initialState
+        : undefined,
+    ).toBe("todo");
+    expect(
+      editAction?.type === "editRecord" ? editAction.editView.transitionActions : [],
+    ).toHaveLength(2);
+  });
+
   it("exposes render-ready union variant facts for item, create, and edit views", () => {
     const schema = discriminatedTaskSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
@@ -2921,6 +2991,144 @@ function requiredCollectionModel(schema: AppSchema, viewName: string) {
   }
 
   return model;
+}
+
+function lifecycleTaskSchema() {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          status: {
+            type: "enum",
+            required: true,
+            default: "todo",
+            values: {
+              todo: { label: "Todo", presentation: { color: "warning", icon: "flag" } },
+              doing: { label: "Doing", presentation: { color: "success", icon: "flag" } },
+              done: { label: "Done", presentation: { color: "success", icon: "check" } },
+            },
+          },
+        },
+        stateMachines: {
+          statusFlow: {
+            field: "status",
+            initial: "todo",
+            terminal: ["done"],
+            transitions: {
+              start: { label: "Start", from: ["todo"], to: "doing" },
+              complete: { label: "Complete", from: ["doing"], to: "done" },
+            },
+          },
+        },
+        actions: {
+          startTask: {
+            label: "Start",
+            kind: "transition-state",
+            machine: "statusFlow",
+            transition: "start",
+          },
+          completeTask: {
+            label: "Complete",
+            kind: "transition-state",
+            machine: "statusFlow",
+            transition: "complete",
+          },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+      },
+    },
+    queries: {
+      taskAll: { label: "All", entity: "task", expression: { kind: "all" } },
+    },
+    itemViews: {
+      taskItem: {
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          status: { editor: "enum", commit: "immediate" },
+        },
+      },
+    },
+    tableViews: {
+      taskTable: {
+        entity: "task",
+        columns: [
+          { type: "field", field: "title" },
+          { type: "field", field: "status" },
+          { type: "invokeAction", action: "editTask" },
+        ],
+        actions: {
+          editTask: {
+            type: "editRecord",
+            label: "Edit task",
+            target: { kind: "row" },
+            editView: "taskEdit",
+          },
+        },
+      },
+    },
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskItem" },
+        actions: [{ type: "create", createView: "taskCreate" }],
+      },
+      taskRecordHome: {
+        type: "collection",
+        label: "Task",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "record", itemView: "taskItem" },
+      },
+      taskTableHome: {
+        type: "collection",
+        label: "Task table",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskTable" },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+          status: { editor: "enum" },
+        },
+      },
+      taskEdit: {
+        type: "edit",
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          status: { editor: "enum", commit: "immediate" },
+        },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
+  });
 }
 
 function summarizeScreenModel(model: HomeScreenModel) {

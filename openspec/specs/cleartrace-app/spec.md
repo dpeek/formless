@@ -50,11 +50,11 @@ The ClearTrace source schema SHALL model operational lab workflow state as flat 
 - **AND** document and media references store flat asset ids or delivery references, not provider-specific object state
 - **AND** report version and verification relationships are represented by reference fields
 
-#### Scenario: Lifecycle status fields are enum data
+#### Scenario: Lifecycle status fields stay flat
 
 - **WHEN** order, sample, test request, report, invoice, payment, support ticket, or verification records are stored in this source app
 - **THEN** lifecycle status is represented by normal enum fields
-- **AND** this source app does not by itself introduce schema-declared state machines, transition guards, transition effects, or transition event emission
+- **AND** any schema-declared lifecycle machines govern those enum fields without storing nested workflow data on the records
 
 ### Requirement: Generated ClearTrace Admin Workflows
 
@@ -78,24 +78,69 @@ The ClearTrace source schema SHALL define generated screens and views for owner 
 - **THEN** owner or staff users can inspect and maintain analytes, service catalog items, test packages, package items, compliance statements, and app configuration records
 - **AND** implementation-only identifiers, source metadata, and raw provider state are not primary workflow controls
 
-### Requirement: ClearTrace First-Change Boundaries
+### Requirement: ClearTrace Public And Provider Boundaries
 
-ClearTrace SHALL remain a source app and generated admin workflow package in this change. Customer-facing public flows and richer operational primitives belong to later reviewed changes.
+ClearTrace SHALL keep customer-facing public flows and provider-backed behavior
+behind later reviewed changes.
 
 #### Scenario: No public customer workflow
 
 - **WHEN** the ClearTrace package app is installed
-- **THEN** this change does not add a public configure-test page, checkout page, customer portal, report download page, or public verification route
+- **THEN** ClearTrace does not expose a public configure-test page, checkout page, customer portal, report download page, or public verification route
 - **AND** generic ClearTrace mutation and action writes remain protected by existing owner or admin authorization
 
-#### Scenario: No new action primitive
+#### Scenario: No generic action primitive
 
 - **WHEN** the ClearTrace source schema is parsed
-- **THEN** the schema uses only existing action kinds or no actions
-- **AND** this change does not add generic guarded action execution, action-scoped wizards, multi-record transaction declarations, or public record creation actions
+- **THEN** transition-state actions may be used only for schema-declared lifecycle movement
+- **AND** this source app does not add generic guarded action execution, action-scoped wizards, arbitrary multi-record transaction declarations, or public record creation actions
 
 #### Scenario: No provider execution
 
 - **WHEN** ClearTrace order, report, or verification records are stored
-- **THEN** no payment provider, email provider, document renderer, lab instrument integration, or external verification provider is called by this change
+- **THEN** ClearTrace lifecycle state-machine behavior does not call a payment provider, email provider, document renderer, lab instrument integration, or external verification provider
 - **AND** provider-backed behavior waits for separate provider shell or adapter changes with dev-safe mock paths
+
+### Requirement: ClearTrace Lifecycle State Machines
+
+The ClearTrace source schema SHALL use state machines for staff-owned lifecycle
+movement where generated admin operators need guarded transitions.
+
+#### Scenario: Sample intake transitions
+
+- **GIVEN** ClearTrace declares a state machine for `sample.status`
+- **WHEN** staff transition a sample through generated admin controls
+- **THEN** valid intake movement includes `expected` to `received`,
+  `received` to `accessioned`, `accessioned` to `inAnalysis`, and
+  `inAnalysis` to `testingComplete`
+- **AND** terminal movement can end in `retained`, `disposed`, or `rejected`
+- **AND** direct generic patches to `sample.status` are rejected
+
+#### Scenario: Test request transitions
+
+- **GIVEN** ClearTrace declares a state machine for `test-request.status`
+- **WHEN** staff move lab work through generated admin controls
+- **THEN** valid movement includes review, queue, in-progress, technical review,
+  and complete states
+- **AND** `cancelled` is terminal unless a declared recovery transition exists
+- **AND** direct generic patches to `test-request.status` are rejected
+
+#### Scenario: Report release transitions
+
+- **GIVEN** ClearTrace declares a state machine for `report.status`
+- **WHEN** staff move reports through generated admin controls
+- **THEN** valid movement includes draft, review, approved, released, amended,
+  and revoked states
+- **AND** released, amended, and revoked report states remain represented by the
+  flat report record and related flat report-version and verification records
+- **AND** ClearTrace lifecycle state machines do not add public verification pages or document
+  rendering
+
+#### Scenario: Transition audit events
+
+- **GIVEN** a ClearTrace lifecycle transition commits
+- **WHEN** the source schema maps lifecycle transitions to `audit-event`
+- **THEN** one flat audit event record is written for the transition
+- **AND** the event can identify the source record type, source record id,
+  transition key, actor mode, and occurrence date through normal audit-event
+  fields

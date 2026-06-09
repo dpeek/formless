@@ -35,6 +35,7 @@ import type {
   RemoveTreePlacementEntityActionSchema,
   SchemaActionActorKind,
   SubscribeEntityActionSchema,
+  TransitionStateEntityActionSchema,
 } from "./types.ts";
 
 type EntityActionParseContext = {
@@ -90,6 +91,11 @@ const entityActionKindModules = {
     kind: "subscribe",
     capabilities: { createAfterCreateHook: false, publicExecution: true },
     parse: parseSubscribeEntityAction,
+  },
+  "transition-state": {
+    kind: "transition-state",
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
+    parse: parseTransitionStateEntityAction,
   },
 } satisfies EntityActionKindModuleMap;
 
@@ -489,6 +495,51 @@ function parseSubscribeEntityAction(
     label: value.label as string,
     kind: "subscribe",
     ...parseEntityActionPublicOptions(context, value, getEntityActionKindCapabilities("subscribe")),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
+  };
+}
+
+function parseTransitionStateEntityAction(
+  context: EntityActionParseContext,
+  value: Record<string, unknown>,
+): TransitionStateEntityActionSchema {
+  const { actionName, entity, entityName } = context;
+  const actionContext = `Entity action "${entityName}.${actionName}"`;
+
+  assertExactKeys(
+    actionContext,
+    value,
+    ["label", "kind", "machine", "transition"],
+    ["exposure", ...publicActionPolicyKeys],
+  );
+
+  const machineName = parseRequiredNonEmptyString(`${actionContext} machine`, value.machine);
+  const transitionName = parseRequiredNonEmptyString(
+    `${actionContext} transition`,
+    value.transition,
+  );
+  const stateMachine = entity.stateMachines?.[machineName];
+
+  if (!stateMachine) {
+    throw new Error(`${actionContext} references unknown state machine "${machineName}".`);
+  }
+
+  if (!stateMachine.transitions[transitionName]) {
+    throw new Error(
+      `${actionContext} references unknown transition "${machineName}.${transitionName}".`,
+    );
+  }
+
+  return {
+    label: value.label as string,
+    kind: "transition-state",
+    machine: machineName,
+    transition: transitionName,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("transition-state"),
+    ),
     ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }

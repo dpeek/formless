@@ -228,6 +228,38 @@ The system SHALL render schema actions through generated action UI and SHALL use
 - AND leaf policy renders leaf children without descendants
 - AND remove-placement controls tombstone placement edges without showing child delete controls on placement cards
 
+### Requirement: State Machine Controls
+
+The system SHALL render state-machine lifecycle facts from schema models and
+shall invoke transition actions instead of directly patching machine-owned
+status fields.
+
+#### Scenario: Render state badges
+
+- GIVEN a table, list, record, or detail surface includes an enum field owned by
+  a state machine
+- WHEN generated UI renders the field
+- THEN the current state is displayed with the enum label and presentation
+  metadata where available
+- AND terminal states are visually distinguishable from active states
+
+#### Scenario: Render valid transition controls
+
+- GIVEN a generated surface renders a record with transition-state actions
+- WHEN the record's current state allows one or more transitions
+- THEN generated UI renders controls for the valid transition actions
+- AND invalid transition actions are hidden or disabled with schema-derived
+  reasons
+- AND submitting a transition calls the normal Authority action endpoint
+
+#### Scenario: Protect machine-owned field editors
+
+- GIVEN a generated create, edit, table, or detail surface includes a field owned
+  by a state machine
+- WHEN the surface renders existing records
+- THEN generated UI treats the field as read-only outside transition controls
+- AND create forms allow the initial state behavior declared by the schema
+
 ### Requirement: Schema Authoring Surface
 
 The system SHALL provide a generated schema authoring surface with Builder mode and Source mode over the same draft.

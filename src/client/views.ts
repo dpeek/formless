@@ -38,6 +38,10 @@ import {
   type ResultOrderingConfig,
   type ResultOrderingScopeConfig,
 } from "./result-ordering-model.ts";
+import type {
+  StateMachineFieldConfig,
+  TransitionStateActionConfig,
+} from "./state-machine-model.ts";
 
 export { selectRelatedCollectionModels } from "./collection-shell-model.ts";
 export type {
@@ -53,6 +57,7 @@ export type {
   HomeSummarySlotConfig,
   RelatedCollectionConfig,
 } from "./collection-shell-model.ts";
+export type { StateMachineFieldConfig, TransitionStateActionConfig };
 export { fieldLabel } from "./view-labels.ts";
 
 export type RecordFieldConfig = {
@@ -62,6 +67,7 @@ export type RecordFieldConfig = {
   commit: FieldCommitPolicy;
   label?: string;
   format?: TableColumnFormat;
+  stateMachine?: StateMachineFieldConfig;
   visibleWhen?: FieldVisibilityConditionSchema;
   presentation?: FieldPresentationSchema;
   valueUnit?: ValueUnitFieldConfig;
@@ -147,6 +153,7 @@ export type EditViewConfig = {
   entityName: string;
   entity: EntitySchema;
   fields: RecordFieldConfig[];
+  transitionActions: TransitionStateActionConfig[];
   union?: RecordUnionPresentationConfig;
 };
 
@@ -180,6 +187,7 @@ export type CreateFieldConfig = {
   fieldName: string;
   field: FieldSchema;
   editor: FieldEditor;
+  stateMachine?: StateMachineFieldConfig;
   visibleWhen?: FieldVisibilityConditionSchema;
   presentation?: FieldPresentationSchema;
 };
@@ -296,6 +304,7 @@ export type HomeResultConfig =
       type: "list";
       itemViewName: string;
       recordFields: RecordFieldConfig[];
+      transitionActions: TransitionStateActionConfig[];
       recordUnion?: RecordUnionPresentationConfig;
       ordering?: ResultOrderingConfig;
     }
@@ -303,12 +312,14 @@ export type HomeResultConfig =
       type: "record";
       itemViewName: string;
       recordFields: RecordFieldConfig[];
+      transitionActions: TransitionStateActionConfig[];
       recordUnion?: RecordUnionPresentationConfig;
     }
   | {
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
+      transitionActions: TransitionStateActionConfig[];
       ordering?: ResultOrderingConfig;
       footer?: TableFooterSlotConfig[];
     }

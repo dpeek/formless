@@ -22,6 +22,8 @@ import { packageAppFactsForKey } from "../shared/app-installs.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
+  cleartraceSeedRecords,
+  cleartraceSourceSchema,
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
   siteSeedRecords,
@@ -3282,6 +3284,285 @@ describe("authority", () => {
     expect(replay).toEqual(first);
   });
 
+  it("transitions one active target record and emits event records idempotently", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithPriorityStateMachine({ emitEvent: true, removePriorityDefault: true }),
+    });
+    const created = await postMutation("mutation-transition-source", {
+      title: "Transition me",
+      done: false,
+    });
+
+    const first = await postActionForEntity("action-transition-priority", "task", "raisePriority", {
+      input: { recordId: created.record.id },
+    });
+    const replay = await postActionForEntity(
+      "action-transition-priority",
+      "task",
+      "raisePriority",
+      {
+        input: { recordId: created.record.id },
+      },
+    );
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+    const taskChange = first.changes.find((change) => change.entity === "task");
+    const eventChange = first.changes.find((change) => change.entity === "priority-event");
+
+    expect(created.record.values.priority).toBe("normal");
+    expect(first.changes).toHaveLength(2);
+    expect(
+      first.changes.every((change) => change.mutationId === "action-transition-priority"),
+    ).toBe(true);
+    expect(first.changes.every((change) => change.op === "action")).toBe(true);
+    expect(taskChange?.payload).toMatchObject({
+      id: created.record.id,
+      values: { priority: "high" },
+    });
+    expect(eventChange?.payload.values).toMatchObject({
+      sourceEntity: "task",
+      sourceRecordId: created.record.id,
+      transitionKey: "raise",
+      previousState: "normal",
+      nextState: "high",
+      actorMode: "owner",
+      occurredAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+    expect(replay).toEqual(first);
+    expect(bootstrap.records).toContainEqual(
+      expect.objectContaining({
+        id: created.record.id,
+        values: expect.objectContaining({ priority: "high" }),
+      }),
+    );
+    expect(bootstrap.records.filter((record) => record.entity === "priority-event")).toHaveLength(
+      1,
+    );
+    expect(
+      sync.changes.filter((change) => change.mutationId === "action-transition-priority"),
+    ).toHaveLength(2);
+  });
+
+  it("rejects transition actions for incompatible and tombstoned target records", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithPriorityStateMachine({ deleteEnabled: true }),
+    });
+    const lowPriority = getSeedLowPriorityTask();
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-invalid-transition",
+        entity: "task",
+        action: "raisePriority",
+        input: { recordId: lowPriority.id },
+      },
+      `cannot transition record "${lowPriority.id}" from state "low"`,
+    );
+
+    const normalPriority = await postMutation("mutation-normal-priority", {
+      title: "Normal priority",
+      done: false,
+      priority: "normal",
+    });
+    const reusedActionId = await postActionForEntity(
+      "action-invalid-transition",
+      "task",
+      "raisePriority",
+      {
+        input: { recordId: normalPriority.record.id },
+      },
+    );
+    await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-delete-transition-target",
+      entity: "task",
+      op: "delete",
+      recordId: normalPriority.record.id,
+    });
+    const beforeTombstonedAction = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-tombstoned-transition",
+        entity: "task",
+        action: "raisePriority",
+        input: { recordId: normalPriority.record.id },
+      },
+      `cannot transition tombstoned task record "${normalPriority.record.id}"`,
+    );
+
+    expect(reusedActionId.changes).toHaveLength(1);
+    expect(reusedActionId.changes[0]?.payload.values.priority).toBe("high");
+    await expect(getJson<BootstrapResponse>("/api/bootstrap")).resolves.toEqual(
+      beforeTombstonedAction,
+    );
+  });
+
+  it("rejects generic mutations that bypass machine-owned fields", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithPriorityStateMachine(),
+    });
+    const created = await postMutation("mutation-machine-initial", {
+      title: "Initial",
+      done: false,
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-create-progressed-state",
+        entity: "task",
+        op: "create",
+        values: {
+          title: "Progressed",
+          done: false,
+          priority: "high",
+        },
+      },
+      'new records must start at initial state "normal"',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-direct-state-patch",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { priority: "high" },
+      },
+      "must change through transition actions",
+    );
+
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(created.record.values.priority).toBe("normal");
+    expect(bootstrap.records).toContainEqual(
+      expect.objectContaining({
+        id: created.record.id,
+        values: expect.objectContaining({ priority: "normal" }),
+      }),
+    );
+  });
+
+  it("runs ClearTrace lifecycle transitions and writes flat audit events", async () => {
+    await resetSchemaApp("cleartrace");
+    useSchemaApp("cleartrace");
+
+    const sampleId = "rec_cleartrace_sample_1001_a";
+    const requestId = "rec_cleartrace_request_1001_a";
+    const before = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(before.schema).toEqual(cleartraceSourceSchema);
+    expect(before.records).toHaveLength(cleartraceSeedRecords.length);
+
+    const sampleTransition = await postActionForEntity(
+      "action-cleartrace-sample-accession",
+      "sample",
+      "accessionSample",
+      { input: { recordId: sampleId } },
+    );
+    const requestTransition = await postActionForEntity(
+      "action-cleartrace-request-start",
+      "test-request",
+      "startTestRequest",
+      { input: { recordId: requestId } },
+    );
+    const report = await postMutationForEntity("mutation-cleartrace-report-draft", "report", {
+      reportNumber: "CT-R-1001-B",
+      order: "rec_cleartrace_order_1001",
+      sample: sampleId,
+      title: "Draft lifecycle report",
+    });
+    await postActionForEntity(
+      "action-cleartrace-report-submit-review",
+      "report",
+      "submitReportReview",
+      { input: { recordId: report.record.id } },
+    );
+    await postActionForEntity("action-cleartrace-report-approve", "report", "approveReport", {
+      input: { recordId: report.record.id },
+    });
+    const releaseTransition = await postActionForEntity(
+      "action-cleartrace-report-release",
+      "report",
+      "releaseReport",
+      { input: { recordId: report.record.id } },
+    );
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-cleartrace-direct-sample-status",
+        entity: "sample",
+        op: "patch",
+        recordId: sampleId,
+        values: { status: "inAnalysis" },
+      },
+      "must change through transition actions",
+    );
+
+    const after = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sampleEvent = sampleTransition.changes.find((change) => change.entity === "audit-event");
+    const requestEvent = requestTransition.changes.find(
+      (change) => change.entity === "audit-event",
+    );
+    const releaseEvent = releaseTransition.changes.find(
+      (change) => change.entity === "audit-event",
+    );
+    const auditEvents = after.records.filter((record) => record.entity === "audit-event");
+
+    expect(report.record.values.status).toBe("draft");
+    expect(sampleTransition.changes).toHaveLength(2);
+    expect(requestTransition.changes).toHaveLength(2);
+    expect(releaseTransition.changes).toHaveLength(2);
+    expect(sampleEvent?.payload.values).toMatchObject({
+      actionKey: "accessionSample",
+      recordType: "sample",
+      recordId: sampleId,
+      previousState: "received",
+      nextState: "accessioned",
+      actorMode: "owner",
+    });
+    expect(requestEvent?.payload.values).toMatchObject({
+      actionKey: "startTestRequest",
+      recordType: "test-request",
+      recordId: requestId,
+      previousState: "queued",
+      nextState: "inProgress",
+      actorMode: "owner",
+    });
+    expect(releaseEvent?.payload.values).toMatchObject({
+      actionKey: "releaseReport",
+      recordType: "report",
+      recordId: report.record.id,
+      previousState: "approved",
+      nextState: "released",
+      actorMode: "owner",
+    });
+    expect(after.records).toContainEqual(
+      expect.objectContaining({
+        id: sampleId,
+        values: expect.objectContaining({ status: "accessioned" }),
+      }),
+    );
+    expect(after.records).toContainEqual(
+      expect.objectContaining({
+        id: requestId,
+        values: expect.objectContaining({ status: "inProgress" }),
+      }),
+    );
+    expect(after.records).toContainEqual(
+      expect.objectContaining({
+        id: report.record.id,
+        values: expect.objectContaining({ status: "released" }),
+      }),
+    );
+    expect(auditEvents).toHaveLength(
+      cleartraceSeedRecords.filter((record) => record.entity === "audit-event").length + 5,
+    );
+  });
+
   it("rejects action schemas with invalid target queries through the schema route", async () => {
     await expectError(
       "/api/schema",
@@ -3908,6 +4189,16 @@ function getSeedCompletedTask() {
   return completed;
 }
 
+function getSeedLowPriorityTask() {
+  const lowPriority = taskSeedRecords.find((record) => record.values.priority === "low");
+
+  if (!lowPriority) {
+    throw new Error("Task seed records must include a low-priority task.");
+  }
+
+  return lowPriority;
+}
+
 function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
   return {
     kind: "formless.storeSnapshot",
@@ -3991,6 +4282,108 @@ function schemaWithPriorityEnum(
     views: defaultViews(),
     screens: defaultScreens(),
   };
+}
+
+function schemaWithPriorityStateMachine({
+  deleteEnabled = false,
+  emitEvent = false,
+  removePriorityDefault = false,
+}: {
+  deleteEnabled?: boolean;
+  emitEvent?: boolean;
+  removePriorityDefault?: boolean;
+} = {}): AppSchema {
+  const task = appSchema.entities.task;
+  const priorityField = task.fields.priority;
+
+  if (priorityField?.type !== "enum") {
+    throw new Error("Seed task priority field must be an enum.");
+  }
+
+  const priorityFieldForMachine = removePriorityDefault
+    ? {
+        type: "enum" as const,
+        required: priorityField.required,
+        ...(priorityField.label === undefined ? {} : { label: priorityField.label }),
+        values: priorityField.values,
+      }
+    : priorityField;
+  const taskEntity: EntitySchema = {
+    ...task,
+    fields: {
+      ...task.fields,
+      priority: priorityFieldForMachine,
+    },
+    mutations: deleteEnabled ? deleteEnabledMutations() : defaultMutations(),
+    stateMachines: {
+      priorityFlow: {
+        field: "priority",
+        initial: "normal",
+        terminal: ["high"],
+        transitions: {
+          raise: {
+            label: "Raise",
+            from: ["normal"],
+            to: "high",
+          },
+        },
+        ...(emitEvent
+          ? {
+              event: {
+                entity: "priority-event",
+                fields: {
+                  sourceEntity: "sourceEntity",
+                  sourceRecordId: "sourceRecordId",
+                  transitionKey: "transitionKey",
+                  previousState: "previousState",
+                  nextState: "nextState",
+                  actorMode: "actorMode",
+                  occurredAt: "occurredAt",
+                },
+              },
+            }
+          : {}),
+      },
+    },
+    actions: {
+      ...task.actions,
+      raisePriority: {
+        label: "Raise priority",
+        kind: "transition-state",
+        machine: "priorityFlow",
+        transition: "raise",
+      },
+    },
+  };
+
+  return {
+    version: 1,
+    entities: {
+      task: taskEntity,
+      ...(emitEvent
+        ? {
+            "priority-event": {
+              label: "Priority event",
+              fields: {
+                sourceEntity: { type: "text", required: true, label: "Source entity" },
+                sourceRecordId: { type: "text", required: true, label: "Source record" },
+                transitionKey: { type: "text", required: true, label: "Transition" },
+                previousState: { type: "text", required: true, label: "Previous state" },
+                nextState: { type: "text", required: true, label: "Next state" },
+                actorMode: { type: "text", required: true, label: "Actor mode" },
+                occurredAt: { type: "date", required: true, label: "Occurred" },
+              },
+              mutations: defaultMutations(),
+            },
+          }
+        : {}),
+    },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
+    tableViews: {},
+    views: defaultViews(),
+    screens: defaultScreens(),
+  } satisfies AppSchema;
 }
 
 function schemaWithTaskLabel(label: string) {

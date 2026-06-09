@@ -1,5 +1,6 @@
 import { parseEntityMutations } from "./schema-mutations.ts";
 import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./entity-names.ts";
+import { parseStateMachinesForEntities } from "./schema-state-machines.ts";
 import {
   assertExactKeys,
   assertSupportedKeys,
@@ -44,21 +45,30 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
 
   const entities: Record<string, EntitySchema> = {};
   const actionInputsByEntity: Record<string, unknown> = {};
+  const stateMachineInputsByEntity: Record<string, unknown> = {};
 
   for (const [entityName, entityValue] of Object.entries(value)) {
     assertSchemaLocalEntityKey(`Schema entity key "${entityName}"`, entityName);
 
-    const { actionsInput, entity } = parseEntityBase(entityName, entityValue);
+    const { actionsInput, entity, stateMachinesInput } = parseEntityBase(entityName, entityValue);
     entities[entityName] = entity;
 
     if (actionsInput !== undefined) {
       actionInputsByEntity[entityName] = actionsInput;
     }
+
+    if (stateMachinesInput !== undefined) {
+      stateMachineInputsByEntity[entityName] = stateMachinesInput;
+    }
   }
 
   validateReferenceFields(entities);
+  const entitiesWithStateMachines = parseStateMachinesForEntities(
+    entities,
+    stateMachineInputsByEntity,
+  );
 
-  return { entities, actionInputsByEntity };
+  return { entities: entitiesWithStateMachines, actionInputsByEntity };
 }
 
 function validateReferenceFields(entities: Record<string, EntitySchema>) {
@@ -122,7 +132,7 @@ function requireLocalEntityReference(
 function parseEntityBase(
   entityName: string,
   value: unknown,
-): { entity: EntitySchema; actionsInput: unknown } {
+): { entity: EntitySchema; actionsInput: unknown; stateMachinesInput: unknown } {
   if (!isRecord(value)) {
     throw new Error(`Entity "${entityName}" must be an object.`);
   }
@@ -132,6 +142,7 @@ function parseEntityBase(
     "fields",
     "mutations",
     "constraints",
+    "stateMachines",
     "actions",
   ]);
 
@@ -156,6 +167,7 @@ function parseEntityBase(
       ...(constraints === undefined ? {} : { constraints }),
     },
     actionsInput: value.actions,
+    stateMachinesInput: value.stateMachines,
   };
 }
 

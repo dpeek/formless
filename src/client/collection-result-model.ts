@@ -29,6 +29,7 @@ export function selectHomeResultModel(
       type: "table",
       tableViewName: result.tableView,
       columns: tableResult.columns,
+      transitionActions: tableResult.transitionActions,
       ...(tableResult.ordering === undefined ? {} : { ordering: tableResult.ordering }),
       ...(footer.length === 0 ? {} : { footer }),
     };

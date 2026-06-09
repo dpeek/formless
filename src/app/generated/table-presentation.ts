@@ -4,6 +4,7 @@ import type {
   HomeQueryTabConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
+  TransitionStateActionConfig,
 } from "../../client/views.ts";
 import type { RecordLabelFieldConfig } from "./record-delete.tsx";
 import {
@@ -13,6 +14,7 @@ import {
 } from "./ordering-ui.ts";
 
 const deleteColumnId = "__formless_delete";
+const transitionColumnId = "__formless_transitions";
 
 export type GeneratedTableDataColumnPresentation = {
   type: "data";
@@ -33,8 +35,19 @@ export type GeneratedTableDeleteColumnPresentation = {
   isUtility: true;
 };
 
+export type GeneratedTableTransitionColumnPresentation = {
+  type: "transition";
+  id: typeof transitionColumnId;
+  key: Key;
+  actions: TransitionStateActionConfig[];
+  header: GeneratedTableHeaderPresentation;
+  isRowHeader: false;
+  isUtility: true;
+};
+
 export type GeneratedTableColumnPresentation =
   | GeneratedTableDataColumnPresentation
+  | GeneratedTableTransitionColumnPresentation
   | GeneratedTableDeleteColumnPresentation;
 
 export type GeneratedTableHeaderPresentation = {
@@ -133,6 +146,7 @@ export function selectGeneratedTablePresentation({
   orderingDragPatchEnabled,
   pendingDragRecordId = null,
   queryName,
+  transitionActions = [],
 }: {
   canDelete: boolean;
   canPatch: boolean;
@@ -144,6 +158,7 @@ export function selectGeneratedTablePresentation({
   pendingDragRecordId?: string | null;
   query: HomeQueryTabConfig["query"];
   queryName?: string;
+  transitionActions?: TransitionStateActionConfig[];
 }): GeneratedTablePresentation {
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
   const rowHeaderColumnIndex = selectRowHeaderColumnIndex(visibleColumns);
@@ -161,9 +176,13 @@ export function selectGeneratedTablePresentation({
       isUtility: isUtilityColumn(column),
     };
   });
+  const columnsWithTransitions =
+    transitionActions.length === 0
+      ? dataColumns
+      : [...dataColumns, transitionColumnPresentation(transitionActions)];
   const tableColumns: GeneratedTableColumnPresentation[] = canDelete
-    ? [...dataColumns, deleteColumnPresentation()]
-    : dataColumns;
+    ? [...columnsWithTransitions, deleteColumnPresentation()]
+    : columnsWithTransitions;
   const dragPatchEnabled = orderingDragPatchEnabled ?? canPatch;
   const rows = orderedRecordIds.map((recordId) =>
     tableRowPresentation({
@@ -284,7 +303,7 @@ function tableFooterPresentation(
     id: "footer",
     key: "footer",
     cells: columns.map((column) => {
-      if (column.type === "delete") {
+      if (column.type !== "data") {
         return emptyFooterCell(column);
       }
 
@@ -339,6 +358,24 @@ function deleteColumnPresentation(): GeneratedTableDeleteColumnPresentation {
     header: {
       label: "",
       accessibleLabel: "Delete",
+      isVisuallyHidden: true,
+    },
+    isRowHeader: false,
+    isUtility: true,
+  };
+}
+
+function transitionColumnPresentation(
+  actions: TransitionStateActionConfig[],
+): GeneratedTableTransitionColumnPresentation {
+  return {
+    type: "transition",
+    id: transitionColumnId,
+    key: transitionColumnId,
+    actions,
+    header: {
+      label: "",
+      accessibleLabel: "Lifecycle transitions",
       isVisuallyHidden: true,
     },
     isRowHeader: false,

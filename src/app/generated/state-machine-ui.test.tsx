@@ -1,0 +1,313 @@
+import "fake-indexeddb/auto";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import { deleteClientDb, saveBootstrapResponse } from "../../client/db.ts";
+import {
+  resetClientStore,
+  getClientStoreSnapshot,
+  refreshClientStoreFromDb,
+} from "../../client/store.ts";
+import {
+  selectStateMachineField,
+  selectTransitionStateActions,
+} from "../../client/state-machine-model.ts";
+import type { ActionResponse, ChangeRow, StoredRecord } from "../../shared/protocol.ts";
+import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
+import { RecordFieldEditor } from "./record-field-editor.tsx";
+import {
+  RecordTransitionActionControls,
+  StateMachineStateBadge,
+  submitTransitionStateAction,
+} from "./state-machine-ui.tsx";
+
+beforeEach(async () => {
+  await deleteClientDb("tasks");
+  resetClientStore();
+});
+
+describe("generated state-machine UI", () => {
+  it("renders enum state badges with presentation metadata and terminal state facts", () => {
+    const schema = lifecycleSchema();
+    const entity = schema.entities.task;
+    const field = entity.fields.status;
+    const stateMachine = selectStateMachineField(entity, "status");
+
+    if (field.type !== "enum" || !stateMachine) {
+      throw new Error("Missing lifecycle field.");
+    }
+
+    const html = renderToStaticMarkup(
+      <StateMachineStateBadge
+        field={field}
+        label="Status"
+        stateMachine={stateMachine}
+        value="done"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Status: Done terminal"');
+    expect(html).toContain('data-formless-state-machine="statusFlow"');
+    expect(html).toContain('data-formless-state-terminal="true"');
+    expect(html).toContain('data-formless-state-value="done"');
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain(">Done</span>");
+  });
+
+  it("renders valid and invalid transition controls with schema-derived reasons", () => {
+    const schema = lifecycleSchema();
+    const actions = selectTransitionStateActions(schema.entities.task);
+    const html = renderToStaticMarkup(
+      <RecordTransitionActionControls
+        actions={actions}
+        entityName="task"
+        recordId="task-1"
+        values={{ status: "todo", title: "First" }}
+      />,
+    );
+
+    expect(html).toContain('data-formless-transition-action="startTask"');
+    expect(html).toContain('data-formless-transition-state-valid="true"');
+    expect(html).toContain('data-formless-transition-target-state="doing"');
+    expect(html).toContain('data-formless-transition-action="completeTask"');
+    expect(html).toContain('data-formless-transition-state-valid="false"');
+    expect(html).toContain('data-formless-transition-disabled-reason="Requires Doing."');
+  });
+
+  it("renders existing machine-owned fields as read-only badges", async () => {
+    const schema = lifecycleSchema();
+    const entity = schema.entities.task;
+    const field = entity.fields.status;
+    const stateMachine = selectStateMachineField(entity, "status");
+
+    if (!stateMachine) {
+      throw new Error("Missing lifecycle field.");
+    }
+
+    await saveBootstrapResponse("tasks", {
+      schema,
+      schemaUpdatedAt: "2026-06-09T00:00:00.000Z",
+      records: [taskRecord("task-1", "todo")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const html = renderToStaticMarkup(
+      <RecordFieldEditor
+        canPatch={true}
+        entityName="task"
+        fieldConfig={{
+          fieldName: "status",
+          field,
+          editor: "enum",
+          commit: "immediate",
+          label: "Status",
+          stateMachine,
+        }}
+        recordId="task-1"
+        showLabel={true}
+      />,
+    );
+
+    expect(html).toContain('data-formless-state-machine-readonly="status"');
+    expect(html).toContain('data-formless-state-machine="statusFlow"');
+    expect(html).toContain(">Status</span>");
+    expect(html).not.toContain("<select");
+  });
+
+  it("renders create machine-owned fields at the initial state", () => {
+    const schema = lifecycleSchema();
+    const entity = schema.entities.task;
+    const field = entity.fields.status;
+    const stateMachine = selectStateMachineField(entity, "status");
+
+    if (!stateMachine) {
+      throw new Error("Missing lifecycle field.");
+    }
+
+    const html = renderToStaticMarkup(
+      <GeneratedCreateFieldControl
+        fieldConfig={{
+          fieldName: "status",
+          field,
+          editor: "enum",
+          stateMachine,
+        }}
+      />,
+    );
+
+    expect(html).toContain('data-formless-state-machine-create="status"');
+    expect(html).toContain('data-formless-state-value="todo"');
+    expect(html).toContain('name="status"');
+    expect(html).toContain('value="todo"');
+    expect(html).not.toContain("<select");
+  });
+
+  it("submits transition actions through the normal action endpoint with recordId input", async () => {
+    const schema = lifecycleSchema();
+    const changed = taskRecord("task-1", "doing");
+    let submittedAction: { actionId: string; entity: string; action: string; input?: unknown };
+
+    await saveBootstrapResponse("tasks", {
+      schema,
+      schemaUpdatedAt: "2026-06-09T00:00:00.000Z",
+      records: [taskRecord("task-1", "todo")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    await submitTransitionStateAction(
+      "tasks",
+      "task",
+      "startTask",
+      "task-1",
+      async (input, init) => {
+        submittedAction = parseActionRequestBody(init?.body);
+
+        expect(input).toBe("/api/tasks/actions");
+        expect(init?.method).toBe("POST");
+        expect(submittedAction).toMatchObject({
+          entity: "task",
+          action: "startTask",
+          input: { recordId: "task-1" },
+        });
+
+        return Response.json({
+          actionId: submittedAction.actionId,
+          changes: [actionChange(2, changed, submittedAction.actionId)],
+          cursor: 2,
+        } satisfies ActionResponse);
+      },
+    );
+
+    expect(getClientStoreSnapshot().recordsById["task-1"]?.values.status).toBe("doing");
+  });
+});
+
+function lifecycleSchema(): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          status: {
+            type: "enum",
+            required: true,
+            default: "todo",
+            values: {
+              todo: { label: "Todo", presentation: { color: "warning", icon: "flag" } },
+              doing: { label: "Doing", presentation: { color: "success", icon: "flag" } },
+              done: { label: "Done", presentation: { color: "success", icon: "check" } },
+            },
+          },
+        },
+        stateMachines: {
+          statusFlow: {
+            field: "status",
+            initial: "todo",
+            terminal: ["done"],
+            transitions: {
+              start: { label: "Start", from: ["todo"], to: "doing" },
+              complete: { label: "Complete", from: ["doing"], to: "done" },
+            },
+          },
+        },
+        actions: {
+          startTask: {
+            label: "Start",
+            kind: "transition-state",
+            machine: "statusFlow",
+            transition: "start",
+          },
+          completeTask: {
+            label: "Complete",
+            kind: "transition-state",
+            machine: "statusFlow",
+            transition: "complete",
+          },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+      },
+    },
+    queries: {
+      taskAll: { label: "All", entity: "task", expression: { kind: "all" } },
+    },
+    itemViews: {
+      taskItem: {
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          status: { editor: "enum", commit: "immediate" },
+        },
+      },
+    },
+    tableViews: {},
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskItem" },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
+  });
+}
+
+function taskRecord(id: string, status: "todo" | "doing" | "done"): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: {
+      title: "First",
+      status,
+    },
+    createdAt: "2026-06-09T00:00:00.000Z",
+  };
+}
+
+function actionChange(seq: number, payload: StoredRecord, actionId: string): ChangeRow {
+  return {
+    seq,
+    mutationId: actionId,
+    op: "action",
+    entity: payload.entity,
+    recordId: payload.id,
+    payload,
+    createdAt: "2026-06-09T00:00:01.000Z",
+  };
+}
+
+function parseActionRequestBody(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") {
+    throw new Error("Expected a string request body.");
+  }
+
+  const parsed = JSON.parse(body) as unknown;
+
+  expect(parsed).toEqual(
+    expect.objectContaining({
+      actionId: expect.any(String),
+    }),
+  );
+
+  return parsed as { actionId: string; entity: string; action: string; input?: unknown };
+}

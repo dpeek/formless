@@ -1,0 +1,108 @@
+# State Machines Specification
+
+## Purpose
+
+State machines declare lifecycle behavior over flat enum fields. They let app
+schemas define valid transitions, protected status writes, generated transition
+controls, and transition event records without storing nested workflow state or
+hard-coding app-specific lifecycle logic.
+
+## Requirements
+
+### Requirement: Enum-Backed State Machines
+
+The system SHALL let an entity declare state machines over required enum fields.
+
+#### Scenario: Parse state machine declaration
+
+- GIVEN an entity declares a state machine
+- WHEN the app schema is parsed
+- THEN the machine references an existing required enum field on the same entity
+- AND every declared state and transition target references an enum value from
+  that field
+- AND every transition declares a non-empty label, one or more allowed source
+  states, and one destination state
+- AND terminal states cannot be used as transition source states unless the
+  transition explicitly opts in to terminal recovery
+
+#### Scenario: Store state as normal field value
+
+- GIVEN a record belongs to an entity with a state machine
+- WHEN the record is stored, synced, snapshotted, archived, or restored
+- THEN the current state is stored only as the machine's enum field value
+- AND no nested machine state, transition history, or generated workflow object
+  is persisted on the record
+
+### Requirement: Transition Actions
+
+The system SHALL expose state transitions through schema-declared transition
+actions instead of generic status patches.
+
+#### Scenario: Parse transition action
+
+- GIVEN an entity action declares transition behavior
+- WHEN the app schema is parsed
+- THEN the action references a state machine on the same entity
+- AND the action references a transition declared by that machine
+- AND the action remains unavailable for anonymous public execution in this
+  change
+
+#### Scenario: Execute valid transition
+
+- GIVEN an active record has a current state allowed by a transition action
+- WHEN an authorized caller invokes that transition action for the record
+- THEN Authority patches the machine enum field to the transition destination
+  state
+- AND the write commits through normal action idempotency and write-log behavior
+- AND the action response includes the committed record change
+
+#### Scenario: Reject invalid transition
+
+- GIVEN a record is missing, tombstoned, or in a state not accepted by the
+  selected transition
+- WHEN a caller invokes the transition action
+- THEN the request is rejected before commit
+- AND no record changes, transition events, or action execution rows are written
+
+### Requirement: Protected Machine Fields
+
+The system SHALL prevent direct lifecycle bypass for fields owned by a state
+machine.
+
+#### Scenario: Reject direct status patch
+
+- GIVEN an entity field is owned by a state machine
+- WHEN a generic patch mutation attempts to change that field
+- THEN Authority rejects the mutation
+- AND callers must use a declared transition action for lifecycle movement
+
+#### Scenario: Create record at initial state
+
+- GIVEN an entity has a state machine with an initial state
+- WHEN a normal create mutation writes a new record for that entity
+- THEN the machine field is omitted or equals the initial state
+- AND source seed bootstrap, reset, restore, and package migrations remain the
+  explicit paths for loading already-progressed historical records
+
+### Requirement: Transition Events
+
+The system SHALL support one flat event record emitted by a transition action
+when the machine declares an event target.
+
+#### Scenario: Emit transition event
+
+- GIVEN a state machine declares a transition event target and field mappings
+- WHEN a transition action commits
+- THEN Authority creates one event record in the same action outcome
+- AND the event records the source entity, source record id, transition key,
+  previous state, next state, actor mode, and occurred date where mapped by the
+  schema
+- AND event records remain ordinary flat app records governed by the target
+  entity schema
+
+#### Scenario: Reject invalid event mapping
+
+- GIVEN a state machine declares a transition event target
+- WHEN the target entity or mapped fields cannot satisfy required event values
+- THEN schema parsing fails
+- AND the invalid app schema is not used for generated UI or writes

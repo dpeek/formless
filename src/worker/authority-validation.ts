@@ -140,6 +140,7 @@ export function validateMutationRequest(
 
     const patchValues = validatePatchValues(value.values, entity);
     assertImmutableFieldsNotPatched(schema, value.entity, patchValues);
+    assertStateMachineFieldsNotPatched(value.entity, entity, existingRecord, patchValues);
     const recordValues = validateRecordValues(
       { ...existingRecord.values, ...patchValues },
       entity,
@@ -168,10 +169,15 @@ export function validateMutationRequest(
       mutationId: value.mutationId,
       entity: value.entity,
       op: "create",
-      values: validateRecordValues(value.values, entity, storage, {
-        entityName: value.entity,
-        schema,
-      }),
+      values: validateRecordValues(
+        normalizeStateMachineCreateValues(value.entity, entity, value.values),
+        entity,
+        storage,
+        {
+          entityName: value.entity,
+          schema,
+        },
+      ),
     } satisfies CreateMutation,
   };
 }
@@ -521,6 +527,52 @@ function assertImmutableFieldsNotPatched(
     if (immutableFields.includes(fieldName)) {
       throw new BadRequestError(`Field "${entityName}.${fieldName}" is immutable.`);
     }
+  }
+}
+
+function normalizeStateMachineCreateValues(
+  entityName: string,
+  entity: EntitySchema,
+  values: Record<string, unknown>,
+) {
+  const normalized = { ...values };
+
+  for (const [machineName, machine] of Object.entries(entity.stateMachines ?? {})) {
+    const currentValue = normalized[machine.field];
+
+    if (currentValue === undefined) {
+      normalized[machine.field] = machine.initial;
+      continue;
+    }
+
+    if (currentValue !== machine.initial) {
+      throw new BadRequestError(
+        `Field "${entityName}.${machine.field}" is owned by state machine "${machineName}" and new records must start at initial state "${machine.initial}".`,
+      );
+    }
+  }
+
+  return normalized;
+}
+
+function assertStateMachineFieldsNotPatched(
+  entityName: string,
+  entity: EntitySchema,
+  existingRecord: StoredRecord,
+  patchValues: Partial<RecordValues>,
+) {
+  for (const [machineName, machine] of Object.entries(entity.stateMachines ?? {})) {
+    if (!(machine.field in patchValues)) {
+      continue;
+    }
+
+    if (patchValues[machine.field] === existingRecord.values[machine.field]) {
+      continue;
+    }
+
+    throw new BadRequestError(
+      `Field "${entityName}.${machine.field}" is owned by state machine "${machineName}" and must change through transition actions.`,
+    );
   }
 }
 

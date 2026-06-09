@@ -1,4 +1,4 @@
-import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
 import type {
   AppInstall,
   AppInstallInitializationPlan,
@@ -62,17 +62,23 @@ export type RemoveTreePlacementActionInput = {
   placementId: string;
 };
 
+export type TransitionStateActionInput = {
+  recordId: string;
+};
+
 export type ActionRequestInput =
   | CreateSelectedJoinRecordActionInput
   | RemoveSelectedJoinRecordsActionInput
   | CreateTreeChildActionInput
-  | RemoveTreePlacementActionInput;
+  | RemoveTreePlacementActionInput
+  | TransitionStateActionInput;
 
 export type ActionRequest = {
   actionId: string;
   entity: EntityName;
   action: string;
   input?: ActionRequestInput;
+  actorKind?: SchemaActionActorKind;
 };
 
 export type PublicActionRequest = {

@@ -114,24 +114,26 @@ function renderRoute(
 
 function listResult(
   recordFields: RecordFieldConfig[],
-  options: Omit<ListResultModel, "type" | "itemViewName" | "recordFields"> = {},
+  options: Partial<Omit<ListResultModel, "type" | "itemViewName" | "recordFields">> = {},
 ): ListResultModel {
   return {
     type: "list",
     itemViewName: "testItem",
     recordFields,
+    transitionActions: [],
     ...options,
   };
 }
 
 function tableResult(
   columns: TableColumnConfig[],
-  options: Omit<TableCollectionResultModel, "type" | "tableViewName" | "columns"> = {},
+  options: Partial<Omit<TableCollectionResultModel, "type" | "tableViewName" | "columns">> = {},
 ): TableCollectionResultModel {
   return {
     type: "table",
     tableViewName: "testTable",
     columns,
+    transitionActions: [],
     ...options,
   };
 }

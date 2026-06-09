@@ -20,15 +20,18 @@ import type {
   TableColumnConfig,
   TableFooterSlotConfig,
   TableOrderingConfig,
+  TransitionStateActionConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
 import { selectAggregateSlot } from "./collection-shell-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
+import { selectStateMachineField, selectTransitionStateActions } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
 
 export type TableResultModel = {
   columns: TableColumnConfig[];
+  transitionActions: TransitionStateActionConfig[];
   ordering?: ResultOrderingConfig;
 };
 
@@ -62,6 +65,7 @@ export function selectTableResultModel(
 
   return {
     columns,
+    transitionActions: selectTransitionStateActions(entity),
     ...(ordering === undefined ? {} : { ordering }),
   };
 }
@@ -121,6 +125,9 @@ function selectTableColumns(
         editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
         commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
         label: column.label ?? fieldLabel(column.field, field),
+        ...(selectStateMachineField(referencedEntity, column.field) === undefined
+          ? {}
+          : { stateMachine: selectStateMachineField(referencedEntity, column.field) }),
         ...(column.align === undefined ? {} : { align: column.align }),
         ...(column.width === undefined ? {} : { width: column.width }),
         display: column.display ?? "editor",
@@ -181,6 +188,9 @@ function selectTableColumns(
       editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
       commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
       label: column.label ?? fieldLabel(column.field, field),
+      ...(selectStateMachineField(entity, column.field) === undefined
+        ? {}
+        : { stateMachine: selectStateMachineField(entity, column.field) }),
       ...(column.align === undefined ? {} : { align: column.align }),
       ...(column.width === undefined ? {} : { width: column.width }),
       display: column.display ?? (ordering?.fieldName === column.field ? "hidden" : "editor"),
@@ -355,6 +365,7 @@ function selectEditViewConfig(schema: AppSchema, editViewName: string): EditView
     entityName: view.entity,
     entity,
     fields: selectEditFields(view, entity),
+    transitionActions: selectTransitionStateActions(entity),
     ...(union === undefined ? {} : { union }),
   };
 }
@@ -365,6 +376,9 @@ function selectEditFields(view: EditViewSchema, entity: EntitySchema): RecordFie
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(selectStateMachineField(entity, fieldName) === undefined
+      ? {}
+      : { stateMachine: selectStateMachineField(entity, fieldName) }),
     ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
@@ -375,6 +389,9 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(selectStateMachineField(entity, fieldName) === undefined
+      ? {}
+      : { stateMachine: selectStateMachineField(entity, fieldName) }),
     ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }

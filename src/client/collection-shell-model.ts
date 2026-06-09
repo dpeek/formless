@@ -26,6 +26,11 @@ import {
   selectCreateUnionPresentation,
   selectRecordUnionPresentation,
 } from "./union-presentation-model.ts";
+import {
+  selectStateMachineField,
+  selectTransitionStateActions,
+  type TransitionStateActionConfig,
+} from "./state-machine-model.ts";
 import { humanizeFieldName } from "./view-labels.ts";
 import type {
   CreateDefaultConfig,
@@ -94,6 +99,7 @@ export type HomeContextConfig = {
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
   recordFields?: RecordFieldConfig[];
+  transitionActions: TransitionStateActionConfig[];
   recordUnion?: RecordUnionPresentationConfig;
 };
 
@@ -274,6 +280,7 @@ function selectContext(
         }),
     ...(relatedCollection === undefined ? {} : { relatedCollection }),
     ...(createAction === undefined ? {} : { createAction }),
+    transitionActions: selectTransitionStateActions(contextEntity),
     ...(itemViewName === undefined
       ? {}
       : {
@@ -461,6 +468,9 @@ function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): Creat
     fieldName,
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
+    ...(selectStateMachineField(entity, fieldName) === undefined
+      ? {}
+      : { stateMachine: selectStateMachineField(entity, fieldName) }),
     ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
@@ -482,6 +492,9 @@ export function selectRecordFields(
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(selectStateMachineField(entity, fieldName) === undefined
+      ? {}
+      : { stateMachine: selectStateMachineField(entity, fieldName) }),
     ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }

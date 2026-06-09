@@ -2,7 +2,7 @@
 
 ## Purpose
 
-App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, actions, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
+App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, actions, state machines, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
 
 ## Requirements
 
@@ -325,6 +325,39 @@ The system SHALL declare generic mutations and schema action kinds as data-owned
 - THEN shared action kind capability facts drive runtime eligibility and UI
   input facts
 - AND action writes remain schema-declared commands over flat records
+
+### Requirement: State Machines
+
+The system SHALL let app schemas declare lifecycle state machines over enum
+fields without adding nested stored workflow state.
+
+#### Scenario: Parse enum-backed state machine
+
+- GIVEN an entity declares a state machine over an enum field
+- WHEN the schema is parsed
+- THEN the machine field exists on the same entity
+- AND the machine field is a required enum field
+- AND machine state keys, initial state, terminal states, transition source
+  states, and transition destination states all reference values declared by
+  that enum field
+
+#### Scenario: Parse transition action kind
+
+- GIVEN an entity action declares transition-state behavior
+- WHEN the schema is parsed
+- THEN the action references a state machine on the same entity
+- AND the action references one transition from that machine
+- AND the action uses normal actor exposure metadata for owner, admin, CLI
+  deployer, and runner callers
+- AND anonymous public access is rejected for this action kind
+
+#### Scenario: Preserve flat lifecycle records
+
+- GIVEN a record belongs to an entity with a state machine
+- WHEN the record is created, patched through transition actions, synced,
+  snapshotted, archived, or restored
+- THEN the current state is represented by the normal enum field value
+- AND state machine metadata does not create nested record values
 
 ### Requirement: Action Access Policy Schema
 

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
-import { sourceLikeSchemas, sourceLikeSiteSchema } from "./schema-builders.ts";
+import {
+  sourceLikeSchemas,
+  sourceLikeSiteSchema,
+  sourceLikeTaskSchema,
+} from "./schema-builders.ts";
 import { testSiteSeedRecords } from "./site-records.ts";
 import {
   formatQualifiedEntityName,
@@ -4559,6 +4563,77 @@ describe("source schemas", () => {
       expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
     }
   });
+
+  it("parses source-like state machine declarations and rejects invalid source machines", () => {
+    const schema = sourceLikeTaskSchema();
+    const task = schema.entities.task;
+
+    if (!task) {
+      throw new Error("Task source schema must include task entity.");
+    }
+
+    task.stateMachines = {
+      priorityFlow: {
+        field: "priority",
+        initial: "normal",
+        terminal: ["high"],
+        transitions: {
+          escalate: { label: "Escalate", from: ["normal"], to: "high" },
+          lower: {
+            label: "Lower",
+            from: ["high"],
+            to: "normal",
+            allowTerminalRecovery: true,
+          },
+        },
+      },
+    };
+    task.actions = {
+      ...task.actions,
+      escalatePriority: {
+        label: "Escalate priority",
+        kind: "transition-state",
+        machine: "priorityFlow",
+        transition: "escalate",
+      },
+    };
+
+    const parsed = parseAppSchema(schema);
+
+    expect(parsed.entities.task?.stateMachines?.priorityFlow).toMatchObject({
+      field: "priority",
+      initial: "normal",
+      terminal: ["high"],
+    });
+    expect(parsed.entities.task?.actions?.escalatePriority).toEqual({
+      label: "Escalate priority",
+      kind: "transition-state",
+      machine: "priorityFlow",
+      transition: "escalate",
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(parsed)))).toEqual(parsed);
+
+    const invalidSchema = sourceLikeTaskSchema();
+    const invalidTask = invalidSchema.entities.task;
+
+    if (!invalidTask) {
+      throw new Error("Task source schema must include task entity.");
+    }
+
+    invalidTask.stateMachines = {
+      priorityFlow: {
+        field: "priority",
+        initial: "urgent",
+        transitions: {
+          escalate: { label: "Escalate", from: ["normal"], to: "high" },
+        },
+      },
+    };
+
+    expect(() => parseAppSchema(invalidSchema)).toThrow(
+      'Entity "task" state machine "priorityFlow" initial references unknown state "urgent".',
+    );
+  });
 });
 
 describe("schema read models", () => {
@@ -6499,6 +6574,7 @@ describe("schema entity actions", () => {
       "create-tree-child": { createAfterCreateHook: false, publicExecution: false },
       "remove-tree-placement": { createAfterCreateHook: false, publicExecution: false },
       subscribe: { createAfterCreateHook: false, publicExecution: true },
+      "transition-state": { createAfterCreateHook: false, publicExecution: false },
     } satisfies Record<EntityActionKind, EntityActionCapabilities>;
 
     for (const [kind, capabilities] of Object.entries(capabilitiesByKind)) {

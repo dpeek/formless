@@ -30,6 +30,55 @@ describe("worker schema app definitions", () => {
     expect(cleartrace.sourceSchema.entities["verification-record"]?.label).toBe(
       "Verification record",
     );
+    expect(cleartrace.sourceSchema.entities.sample?.stateMachines?.sampleLifecycle).toMatchObject({
+      field: "status",
+      initial: "expected",
+      terminal: ["retained", "disposed", "rejected"],
+      transitions: {
+        accessionSample: { from: ["received"], to: "accessioned" },
+      },
+      event: {
+        entity: "audit-event",
+        fields: {
+          sourceEntity: "recordType",
+          transitionKey: "actionKey",
+          actorMode: "actorMode",
+        },
+      },
+    });
+    expect(
+      cleartrace.sourceSchema.entities["test-request"]?.stateMachines?.testRequestLifecycle,
+    ).toMatchObject({
+      field: "status",
+      initial: "pendingReview",
+      terminal: ["complete", "cancelled"],
+      transitions: {
+        startTestRequest: { from: ["queued"], to: "inProgress" },
+        cancelTestRequest: { to: "cancelled" },
+      },
+    });
+    expect(cleartrace.sourceSchema.entities.report?.stateMachines?.reportLifecycle).toMatchObject({
+      field: "status",
+      initial: "draft",
+      terminal: ["revoked"],
+      transitions: {
+        releaseReport: { from: ["approved"], to: "released" },
+        revokeReport: { from: ["released", "amended"], to: "revoked" },
+      },
+    });
+    expect(Object.keys(cleartrace.sourceSchema.entities.sample?.actions ?? {})).toContain(
+      "accessionSample",
+    );
+    expect(Object.keys(cleartrace.sourceSchema.entities["test-request"]?.actions ?? {})).toContain(
+      "startTestRequest",
+    );
+    expect(Object.keys(cleartrace.sourceSchema.entities.report?.actions ?? {})).toContain(
+      "releaseReport",
+    );
+    expect(cleartrace.sourceSchema.entities["audit-event"]?.fields.actorMode).toMatchObject({
+      type: "text",
+      required: true,
+    });
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
     expect(site.sourceSchema.entities["block-placement"]?.label).toBe("Placement");
     expect(site.sourceSchema.entities.site?.mutations.create.enabled).toBe(false);
@@ -106,6 +155,16 @@ describe("worker schema app definitions", () => {
     expect(
       cleartrace.seedRecords.every((record) => record.entity in cleartrace.sourceSchema.entities),
     ).toBe(true);
+    expect(
+      cleartrace.seedRecords.find((record) => record.id === "rec_cleartrace_audit_release_1001_a")
+        ?.values,
+    ).toMatchObject({
+      actionKey: "releaseReport",
+      recordType: "report",
+      previousState: "approved",
+      nextState: "released",
+      actorMode: "owner",
+    });
   });
 
   it("returns undefined for unknown worker schema keys", () => {

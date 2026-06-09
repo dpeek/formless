@@ -15,6 +15,7 @@ import {
   GeneratedFieldPresentationIcon,
 } from "./field-presentation.tsx";
 import { formatFieldDisplayValue } from "./format.ts";
+import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 type DisplayTableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
 
@@ -34,6 +35,20 @@ export function RecordFieldDisplay({
         recordValue={recordValue}
         suffix={column.suffix}
       />
+    );
+  }
+
+  if (column.field.type === "enum" && column.stateMachine) {
+    return (
+      <>
+        <StateMachineStateBadge
+          field={column.field}
+          label={column.label}
+          stateMachine={column.stateMachine}
+          value={recordValue}
+        />
+        {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+      </>
     );
   }
 

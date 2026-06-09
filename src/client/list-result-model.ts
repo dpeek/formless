@@ -1,6 +1,7 @@
 import type { AppSchema, CollectionViewSchema, EntitySchema } from "@dpeek/formless-schema";
 import { selectRecordFields } from "./collection-shell-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
+import { selectTransitionStateActions } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import type { HomeResultConfig } from "./views.ts";
 
@@ -24,6 +25,7 @@ export function selectListResultModel(
     type: "list",
     itemViewName: result.itemView,
     recordFields: selectRecordFields(itemView, entity),
+    transitionActions: selectTransitionStateActions(entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
     ...(ordering === undefined ? {} : { ordering }),
   };
@@ -45,6 +47,7 @@ export function selectRecordResultModel(
     type: "record",
     itemViewName: result.itemView,
     recordFields: selectRecordFields(itemView, entity),
+    transitionActions: selectTransitionStateActions(entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }

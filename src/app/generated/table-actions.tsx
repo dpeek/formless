@@ -28,6 +28,7 @@ import type {
 import type { StoredRecord } from "../../shared/protocol.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
@@ -306,11 +307,23 @@ function RecordEditDialog({
       </ModalHeader>
       <ModalBody>
         {targetRecord && targetRecordId ? (
-          <EditViewFields
-            editView={action.editView}
-            targetRecord={targetRecord}
-            targetRecordId={targetRecordId}
-          />
+          <>
+            <EditViewFields
+              editView={action.editView}
+              targetRecord={targetRecord}
+              targetRecordId={targetRecordId}
+            />
+            {action.editView.transitionActions.length > 0 ? (
+              <div className="mt-3">
+                <RecordTransitionActionControls
+                  actions={action.editView.transitionActions}
+                  entityName={action.editView.entityName}
+                  recordId={targetRecordId}
+                  values={targetRecord.values}
+                />
+              </div>
+            ) : null}
+          </>
         ) : (
           <p className="text-sm text-slate-600">Record unavailable.</p>
         )}

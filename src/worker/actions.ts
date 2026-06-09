@@ -10,6 +10,7 @@ import type {
   PublicActionExecutionEnvelope,
   RecordValues,
   StoredRecord,
+  TransitionStateActionInput,
 } from "../shared/protocol.ts";
 import type {
   AfterCreateHookSchema,
@@ -21,6 +22,7 @@ import type {
   EntitySchema,
   ManyToManyRelationshipSchema,
   SchemaActionActorKind,
+  StateMachineTransitionEventFieldMappingsSchema,
   ToManyRelationshipSchema,
 } from "@dpeek/formless-schema";
 import {
@@ -46,6 +48,7 @@ import {
   type WriteOutcome,
   writeRecordSetForActionOutcome,
 } from "./storage.ts";
+import { nowIsoString } from "../shared/clock.ts";
 
 type EntityActionRequestInputValidationContext<TAction extends EntityActionSchema> = {
   actionName: string;
@@ -156,6 +159,13 @@ const entityActionKindRuntimeModules = {
     executePublic: executeSubscribePublicAction,
     executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
+  "transition-state": {
+    kind: "transition-state",
+    capabilities: getEntityActionKindCapabilities("transition-state"),
+    validateInput: validateTransitionStateActionInput,
+    execute: executeTransitionStateAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
+  },
 } satisfies EntityActionKindRuntimeModuleMap;
 
 export function executeEntityAction(
@@ -215,6 +225,7 @@ export function validateEntityActionRequest(
     actionId: value.actionId,
     entity: value.entity,
     action: value.action,
+    actorKind,
     ...(input === undefined ? {} : { input }),
   };
 }
@@ -380,6 +391,28 @@ function executeCreateMissingJoinRecordsAction(
     context.request.entity,
     context.request.action,
     values,
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+    },
+  );
+}
+
+function executeTransitionStateAction(
+  context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "transition-state" }>>,
+) {
+  const plans = selectTransitionStateWritePlans(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return writeRecordSetForActionOutcome(
+    context.storage,
+    context.request.actionId,
+    context.request.entity,
+    context.request.action,
+    plans,
     (entity, recordValues, options) => {
       assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
     },
@@ -731,6 +764,24 @@ function validateNoActionInput() {
   return undefined;
 }
 
+function validateTransitionStateActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "transition-state" }>
+  >,
+): TransitionStateActionInput {
+  const value = context.value;
+
+  if (!isRecord(value)) {
+    throw new BadRequestError(`Action "${context.actionName}" requires input with recordId.`);
+  }
+
+  if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
+    throw new BadRequestError(`Action "${context.actionName}" input recordId must be non-empty.`);
+  }
+
+  return { recordId: value.recordId };
+}
+
 function validateCreateSelectedJoinRecordActionInput(
   context: EntityActionRequestInputValidationContext<
     Extract<EntityActionSchema, { kind: "create-selected-join-record" }>
@@ -877,6 +928,132 @@ function selectActionTargetRecords(
   return getActiveRecordsByEntity(storage, request.entity).filter((record) =>
     matchesQuery(record, targetQuery.expression),
   );
+}
+
+function selectTransitionStateWritePlans(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: Extract<EntityActionSchema, { kind: "transition-state" }>,
+): ActionRecordWritePlan[] {
+  const input = requireTransitionStateInput(request);
+  const entity = schema.entities[request.entity];
+  const machine = entity?.stateMachines?.[action.machine];
+  const transition = machine?.transitions[action.transition];
+
+  if (!entity || !machine || !transition) {
+    throw new Error(`Action "${request.action}" references an invalid state transition.`);
+  }
+
+  const record = requireActiveTransitionTargetRecord(storage, request, input.recordId);
+  const previousState = record.values[machine.field];
+
+  if (typeof previousState !== "string") {
+    throw new BadRequestError(
+      `Action "${request.action}" target record "${record.id}" field "${machine.field}" does not contain a state.`,
+    );
+  }
+
+  if (!transition.from.includes(previousState)) {
+    throw new BadRequestError(
+      `Action "${request.action}" cannot transition record "${record.id}" from state "${previousState}".`,
+    );
+  }
+
+  const nextValues = validateRecordValues(
+    {
+      ...record.values,
+      [machine.field]: transition.to,
+    },
+    entity,
+    storage,
+    {
+      entityName: request.entity,
+      existingRecordId: record.id,
+      schema,
+    },
+  );
+
+  const plans: ActionRecordWritePlan[] = [{ kind: "patch", record, values: nextValues }];
+
+  const event = machine.event;
+  if (event) {
+    const eventEntity = schema.entities[event.entity];
+
+    if (!eventEntity) {
+      throw new Error(
+        `Action "${request.action}" references unknown transition event entity "${event.entity}".`,
+      );
+    }
+
+    const eventValues = transitionEventRecordValues(
+      request,
+      event.fields,
+      record.id,
+      action.transition,
+      previousState,
+      transition.to,
+    );
+
+    plans.push({
+      kind: "create",
+      entity: event.entity,
+      values: () =>
+        validateRecordValues(eventValues, eventEntity, storage, {
+          entityName: event.entity,
+          schema,
+        }),
+    });
+  }
+
+  return plans;
+}
+
+function transitionEventRecordValues(
+  request: ActionRequest,
+  fields: StateMachineTransitionEventFieldMappingsSchema,
+  recordId: string,
+  transitionKey: string,
+  previousState: string,
+  nextState: string,
+): RecordValues {
+  return {
+    [fields.sourceEntity]: request.entity,
+    [fields.sourceRecordId]: recordId,
+    [fields.transitionKey]: transitionKey,
+    [fields.previousState]: previousState,
+    [fields.nextState]: nextState,
+    [fields.actorMode]: request.actorKind ?? "owner",
+    [fields.occurredAt]: nowIsoString().slice(0, 10),
+  };
+}
+
+function requireActiveTransitionTargetRecord(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  recordId: string,
+): StoredRecord {
+  const record = getStoredRecord(storage, recordId);
+
+  if (!record) {
+    throw new BadRequestError(
+      `Action "${request.action}" references unknown ${request.entity} record "${recordId}".`,
+    );
+  }
+
+  if (record.entity !== request.entity) {
+    throw new BadRequestError(
+      `Action "${request.action}" target record "${recordId}" must reference a ${request.entity} record.`,
+    );
+  }
+
+  if (record.deletedAt) {
+    throw new BadRequestError(
+      `Action "${request.action}" cannot transition tombstoned ${request.entity} record "${recordId}".`,
+    );
+  }
+
+  return record;
 }
 
 export function selectMissingJoinRecordValues(
@@ -1385,6 +1562,16 @@ function requireRemoveTreePlacementInput(request: ActionRequest): RemoveTreePlac
   }
 
   return { placementId: input.placementId };
+}
+
+function requireTransitionStateInput(request: ActionRequest): TransitionStateActionInput {
+  const input = request.input;
+
+  if (!input || !("recordId" in input) || typeof input.recordId !== "string") {
+    throw new BadRequestError(`Action "${request.action}" requires input with recordId.`);
+  }
+
+  return { recordId: input.recordId };
 }
 
 function requireActiveEndpointRecord(

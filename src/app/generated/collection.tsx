@@ -51,6 +51,7 @@ import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
@@ -648,6 +649,16 @@ function ContextRecordEditor({
           />
         );
       })}
+      {context.transitionActions.length > 0 ? (
+        <div className={density === "compact" ? "pt-1" : "self-end"}>
+          <RecordTransitionActionControls
+            actions={context.transitionActions}
+            entityName={context.entityName}
+            recordId={recordId}
+            values={record?.values}
+          />
+        </div>
+      ) : null}
       {canDelete ? (
         <div className={density === "compact" ? "pt-1" : "self-end"}>
           <DeleteRecordButton
@@ -908,6 +919,14 @@ function RecordDetail({
             showLabel={true}
           />
         ))}
+        {result.transitionActions.length > 0 ? (
+          <RecordTransitionActionControls
+            actions={result.transitionActions}
+            entityName={entityName}
+            recordId={recordId}
+            values={record?.values}
+          />
+        ) : null}
         {canDelete ? (
           <div>
             <DeleteRecordButton
@@ -1108,6 +1127,7 @@ export function RecordList({
             recordUnion={recordUnion}
             recordId={item.recordId}
             showOrderingHandle={hasDragOrdering}
+            transitionActions={result.transitionActions}
           />
         )}
         reorder={
@@ -1192,6 +1212,7 @@ function RecordRow({
   recordUnion,
   recordId,
   showOrderingHandle = false,
+  transitionActions,
 }: {
   canDelete: boolean;
   canPatch: boolean;
@@ -1201,6 +1222,7 @@ function RecordRow({
   recordUnion?: RecordUnionPresentationConfig;
   recordId: string;
   showOrderingHandle?: boolean;
+  transitionActions: ListResultModel["transitionActions"];
 }) {
   const record = useRecord(recordId);
   const warnings = useRecordReadinessWarnings(recordId);
@@ -1223,6 +1245,15 @@ function RecordRow({
             />
           ))}
         </div>
+        {transitionActions.length > 0 ? (
+          <RecordTransitionActionControls
+            actions={transitionActions}
+            className="shrink-0"
+            entityName={entityName}
+            recordId={recordId}
+            values={record?.values}
+          />
+        ) : null}
         {canDelete ? (
           <DeleteRecordButton
             className="shrink-0"

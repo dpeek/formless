@@ -21,6 +21,7 @@ import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-v
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
 import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
+import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 export function GeneratedCreateFieldControl({
   fieldConfig,
@@ -32,6 +33,18 @@ export function GeneratedCreateFieldControl({
   const { field, fieldName, editor } = fieldConfig;
   const label = fieldLabel(fieldName, field);
   const fieldControl = selectGeneratedFieldControl({ editor, field, label });
+
+  if (field.type === "enum" && fieldConfig.stateMachine) {
+    return (
+      <CreateStateMachineField
+        field={field}
+        fieldName={fieldName}
+        label={label}
+        onValueChange={onValueChange}
+        stateMachine={fieldConfig.stateMachine}
+      />
+    );
+  }
 
   if (fieldControl.controlKind === "checkbox") {
     const completionMode = fieldConfig.presentation?.mode === "completion";
@@ -185,6 +198,39 @@ export function GeneratedCreateFieldControl({
       <Label>{fieldControl.label}</Label>
       <Input />
     </TextField>
+  );
+}
+
+function CreateStateMachineField({
+  field,
+  fieldName,
+  label,
+  onValueChange,
+  stateMachine,
+}: {
+  field: Extract<FieldSchema, { type: "enum" }>;
+  fieldName: string;
+  label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
+  stateMachine: NonNullable<CreateFieldConfig["stateMachine"]>;
+}) {
+  return (
+    <div className="space-y-1" data-formless-state-machine-create={fieldName}>
+      <Label>{label}</Label>
+      <StateMachineStateBadge
+        field={field}
+        label={label}
+        stateMachine={stateMachine}
+        value={stateMachine.initialState}
+      />
+      <input
+        name={fieldName}
+        onChange={(event) => onValueChange?.(event.currentTarget.value)}
+        readOnly
+        type="hidden"
+        value={stateMachine.initialState}
+      />
+    </div>
   );
 }
 

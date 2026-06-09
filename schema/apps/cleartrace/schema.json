@@ -391,6 +391,102 @@
         "receivedAt": { "type": "date", "required": false, "label": "Received at" },
         "accessionedAt": { "type": "date", "required": false, "label": "Accessioned at" }
       },
+      "stateMachines": {
+        "sampleLifecycle": {
+          "field": "status",
+          "initial": "expected",
+          "terminal": ["retained", "disposed", "rejected"],
+          "transitions": {
+            "receiveSample": { "label": "Mark received", "from": ["expected"], "to": "received" },
+            "accessionSample": {
+              "label": "Accession",
+              "from": ["received"],
+              "to": "accessioned"
+            },
+            "startSampleAnalysis": {
+              "label": "Start analysis",
+              "from": ["accessioned"],
+              "to": "inAnalysis"
+            },
+            "completeSampleTesting": {
+              "label": "Complete testing",
+              "from": ["inAnalysis"],
+              "to": "testingComplete"
+            },
+            "retainSample": {
+              "label": "Retain",
+              "from": ["testingComplete"],
+              "to": "retained"
+            },
+            "disposeSample": {
+              "label": "Dispose",
+              "from": ["testingComplete"],
+              "to": "disposed"
+            },
+            "rejectSample": {
+              "label": "Reject",
+              "from": ["expected", "received", "accessioned", "inAnalysis"],
+              "to": "rejected"
+            }
+          },
+          "event": {
+            "entity": "audit-event",
+            "fields": {
+              "sourceEntity": "recordType",
+              "sourceRecordId": "recordId",
+              "transitionKey": "actionKey",
+              "previousState": "previousState",
+              "nextState": "nextState",
+              "actorMode": "actorMode",
+              "occurredAt": "occurredAt"
+            }
+          }
+        }
+      },
+      "actions": {
+        "receiveSample": {
+          "label": "Mark received",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "receiveSample"
+        },
+        "accessionSample": {
+          "label": "Accession",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "accessionSample"
+        },
+        "startSampleAnalysis": {
+          "label": "Start analysis",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "startSampleAnalysis"
+        },
+        "completeSampleTesting": {
+          "label": "Complete testing",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "completeSampleTesting"
+        },
+        "retainSample": {
+          "label": "Retain",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "retainSample"
+        },
+        "disposeSample": {
+          "label": "Dispose",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "disposeSample"
+        },
+        "rejectSample": {
+          "label": "Reject",
+          "kind": "transition-state",
+          "machine": "sampleLifecycle",
+          "transition": "rejectSample"
+        }
+      },
       "mutations": {
         "create": { "enabled": true },
         "patch": { "enabled": true },
@@ -456,6 +552,116 @@
           "required": false,
           "label": "On-hold reason",
           "format": "longText"
+        }
+      },
+      "stateMachines": {
+        "testRequestLifecycle": {
+          "field": "status",
+          "initial": "pendingReview",
+          "terminal": ["complete", "cancelled"],
+          "transitions": {
+            "acceptTestRequest": {
+              "label": "Accept",
+              "from": ["pendingReview"],
+              "to": "accepted"
+            },
+            "queueTestRequest": { "label": "Queue", "from": ["accepted"], "to": "queued" },
+            "startTestRequest": {
+              "label": "Start work",
+              "from": ["queued"],
+              "to": "inProgress"
+            },
+            "submitTechnicalReview": {
+              "label": "Technical review",
+              "from": ["inProgress"],
+              "to": "technicalReview"
+            },
+            "completeTestRequest": {
+              "label": "Complete",
+              "from": ["technicalReview"],
+              "to": "complete"
+            },
+            "placeTestRequestOnHold": {
+              "label": "Place on hold",
+              "from": ["queued", "inProgress", "technicalReview"],
+              "to": "onHold"
+            },
+            "resumeTestRequest": { "label": "Resume", "from": ["onHold"], "to": "queued" },
+            "cancelTestRequest": {
+              "label": "Cancel",
+              "from": [
+                "pendingReview",
+                "accepted",
+                "queued",
+                "inProgress",
+                "technicalReview",
+                "onHold"
+              ],
+              "to": "cancelled"
+            }
+          },
+          "event": {
+            "entity": "audit-event",
+            "fields": {
+              "sourceEntity": "recordType",
+              "sourceRecordId": "recordId",
+              "transitionKey": "actionKey",
+              "previousState": "previousState",
+              "nextState": "nextState",
+              "actorMode": "actorMode",
+              "occurredAt": "occurredAt"
+            }
+          }
+        }
+      },
+      "actions": {
+        "acceptTestRequest": {
+          "label": "Accept",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "acceptTestRequest"
+        },
+        "queueTestRequest": {
+          "label": "Queue",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "queueTestRequest"
+        },
+        "startTestRequest": {
+          "label": "Start work",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "startTestRequest"
+        },
+        "submitTechnicalReview": {
+          "label": "Technical review",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "submitTechnicalReview"
+        },
+        "completeTestRequest": {
+          "label": "Complete",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "completeTestRequest"
+        },
+        "placeTestRequestOnHold": {
+          "label": "Place on hold",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "placeTestRequestOnHold"
+        },
+        "resumeTestRequest": {
+          "label": "Resume",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "resumeTestRequest"
+        },
+        "cancelTestRequest": {
+          "label": "Cancel",
+          "kind": "transition-state",
+          "machine": "testRequestLifecycle",
+          "transition": "cancelTestRequest"
         }
       },
       "mutations": {
@@ -643,6 +849,72 @@
         },
         "releasedAt": { "type": "date", "required": false, "label": "Released at" }
       },
+      "stateMachines": {
+        "reportLifecycle": {
+          "field": "status",
+          "initial": "draft",
+          "terminal": ["revoked"],
+          "transitions": {
+            "submitReportReview": {
+              "label": "Submit review",
+              "from": ["draft", "amended"],
+              "to": "review"
+            },
+            "approveReport": { "label": "Approve", "from": ["review"], "to": "approved" },
+            "releaseReport": { "label": "Release", "from": ["approved"], "to": "released" },
+            "amendReport": { "label": "Amend", "from": ["released"], "to": "amended" },
+            "revokeReport": {
+              "label": "Revoke",
+              "from": ["released", "amended"],
+              "to": "revoked"
+            }
+          },
+          "event": {
+            "entity": "audit-event",
+            "fields": {
+              "sourceEntity": "recordType",
+              "sourceRecordId": "recordId",
+              "transitionKey": "actionKey",
+              "previousState": "previousState",
+              "nextState": "nextState",
+              "actorMode": "actorMode",
+              "occurredAt": "occurredAt"
+            }
+          }
+        }
+      },
+      "actions": {
+        "submitReportReview": {
+          "label": "Submit review",
+          "kind": "transition-state",
+          "machine": "reportLifecycle",
+          "transition": "submitReportReview"
+        },
+        "approveReport": {
+          "label": "Approve",
+          "kind": "transition-state",
+          "machine": "reportLifecycle",
+          "transition": "approveReport"
+        },
+        "releaseReport": {
+          "label": "Release",
+          "kind": "transition-state",
+          "machine": "reportLifecycle",
+          "transition": "releaseReport"
+        },
+        "amendReport": {
+          "label": "Amend",
+          "kind": "transition-state",
+          "machine": "reportLifecycle",
+          "transition": "amendReport"
+        },
+        "revokeReport": {
+          "label": "Revoke",
+          "kind": "transition-state",
+          "machine": "reportLifecycle",
+          "transition": "revokeReport"
+        }
+      },
       "mutations": {
         "create": { "enabled": true },
         "patch": { "enabled": true },
@@ -738,7 +1010,7 @@
     "audit-event": {
       "label": "Audit event",
       "fields": {
-        "label": { "type": "text", "required": true, "label": "Label" },
+        "label": { "type": "text", "required": false, "label": "Label" },
         "actorType": {
           "type": "enum",
           "required": true,
@@ -753,6 +1025,9 @@
         "actionKey": { "type": "text", "required": true, "label": "Action key" },
         "recordType": { "type": "text", "required": true, "label": "Record type" },
         "recordId": { "type": "text", "required": true, "label": "Record id" },
+        "previousState": { "type": "text", "required": true, "label": "Previous state" },
+        "nextState": { "type": "text", "required": true, "label": "Next state" },
+        "actorMode": { "type": "text", "required": true, "label": "Actor mode" },
         "occurredAt": { "type": "date", "required": true, "label": "Occurred at" },
         "notes": { "type": "text", "required": false, "label": "Notes", "format": "longText" }
       },
@@ -1312,7 +1587,12 @@
       "columns": [
         { "type": "field", "field": "label", "editor": "text" },
         { "type": "field", "field": "actorType", "editor": "enum" },
+        { "type": "field", "field": "actorMode", "editor": "text" },
+        { "type": "field", "field": "actionKey", "editor": "text" },
         { "type": "field", "field": "recordType", "editor": "text" },
+        { "type": "field", "field": "recordId", "editor": "text" },
+        { "type": "field", "field": "previousState", "editor": "text" },
+        { "type": "field", "field": "nextState", "editor": "text" },
         { "type": "field", "field": "occurredAt", "editor": "date" }
       ]
     },

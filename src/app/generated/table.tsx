@@ -36,6 +36,7 @@ import type {
   ReferenceFieldTableColumnConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
+  TransitionStateActionConfig,
 } from "../../client/views.ts";
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
 import {
@@ -59,6 +60,7 @@ import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
 import {
   selectGeneratedTablePresentation,
@@ -114,6 +116,7 @@ export function RecordTable({
     pendingDragRecordId,
     query,
     queryName,
+    transitionActions: result.transitionActions,
   });
 
   async function handleOrderingDragEnd(event: DragEndEvent) {
@@ -433,6 +436,16 @@ function RecordTableCellContent({
     );
   }
 
+  if (cell.column.type === "transition") {
+    return (
+      <RecordTransitionTableCell
+        actions={cell.column.actions}
+        entityName={entityName}
+        recordId={cell.recordId}
+      />
+    );
+  }
+
   return (
     <RecordTableCell
       canPatch={canPatch}
@@ -442,6 +455,28 @@ function RecordTableCellContent({
       orderingHandleDisabled={orderingHandleDisabled}
       orderingHandleRef={orderingHandleRef}
       recordId={cell.recordId}
+    />
+  );
+}
+
+function RecordTransitionTableCell({
+  actions,
+  entityName,
+  recordId,
+}: {
+  actions: TransitionStateActionConfig[];
+  entityName: string;
+  recordId: string;
+}) {
+  const record = useRecord(recordId);
+
+  return (
+    <RecordTransitionActionControls
+      actions={actions}
+      className="justify-end"
+      entityName={entityName}
+      recordId={recordId}
+      values={record?.values}
     />
   );
 }
@@ -912,12 +947,20 @@ function tableHeadClassForPresentationColumn(column: GeneratedTableColumnPresent
     return "h-8 w-16 min-w-16 px-1 text-end text-xs";
   }
 
+  if (column.type === "transition") {
+    return "h-8 w-36 min-w-36 px-1 text-end text-xs";
+  }
+
   return tableHeadClass(column.column);
 }
 
 function tableCellClassForPresentationColumn(column: GeneratedTableColumnPresentation) {
   if (column.type === "delete") {
     return "w-16 min-w-16 px-1 py-1 text-end text-xs";
+  }
+
+  if (column.type === "transition") {
+    return "w-36 min-w-36 px-1 py-1 text-end text-xs";
   }
 
   return tableCellClass(column.column);

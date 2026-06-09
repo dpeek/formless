@@ -47,6 +47,32 @@ describe("generated ClearTrace admin workflows", () => {
     expect(html).toContain("Add verification record");
     expect(html).not.toContain("contentHash");
   });
+
+  it("renders seeded lifecycle controls and transition audit facts", () => {
+    const samplesHtml = renderCleartraceScreen("/samples", {
+      requests: "rec_cleartrace_sample_1001_a",
+    });
+    const reportsHtml = renderCleartraceScreen("/reports", {
+      verification: "rec_cleartrace_report_1001_a",
+      versions: "rec_cleartrace_report_1001_a",
+    });
+    const settingsHtml = renderCleartraceScreen("/settings", {});
+
+    expect(samplesHtml).toContain('data-formless-state-machine="sampleLifecycle"');
+    expect(samplesHtml).toContain('data-formless-transition-action="accessionSample"');
+    expect(samplesHtml).toContain('data-formless-transition-target-state="accessioned"');
+    expect(samplesHtml).toContain('data-formless-transition-action="startTestRequest"');
+    expect(samplesHtml).toContain('data-formless-transition-target-state="inProgress"');
+    expect(samplesHtml).toContain('data-formless-transition-disabled-reason="Requires Expected."');
+    expect(reportsHtml).toContain('data-formless-state-machine="reportLifecycle"');
+    expect(reportsHtml).toContain('data-formless-transition-action="amendReport"');
+    expect(reportsHtml).toContain('data-formless-transition-action="revokeReport"');
+    expect(reportsHtml).toContain('data-formless-transition-disabled-reason="Requires Approved."');
+    expect(settingsHtml).toContain("releaseReport");
+    expect(settingsHtml).toContain("approved");
+    expect(settingsHtml).toContain("released");
+    expect(settingsHtml).toContain("owner");
+  });
 });
 
 function renderCleartraceScreen(path: string, selectedContextBySection: Record<string, string>) {

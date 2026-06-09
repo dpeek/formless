@@ -202,9 +202,12 @@
     "values": {
       "label": "Released report CT-R-1001-A",
       "actorType": "staff",
-      "actionKey": "release-report",
+      "actionKey": "releaseReport",
       "recordType": "report",
       "recordId": "rec_cleartrace_report_1001_a",
+      "previousState": "approved",
+      "nextState": "released",
+      "actorMode": "owner",
       "occurredAt": "2026-06-09",
       "notes": "Seeded release event for generated admin review."
     },

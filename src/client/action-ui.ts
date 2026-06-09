@@ -63,6 +63,10 @@ const entityActionUiModules = {
     kind: "subscribe",
     selectUi: selectDefaultEntityActionUi,
   },
+  "transition-state": {
+    kind: "transition-state",
+    selectUi: selectDefaultEntityActionUi,
+  },
 } satisfies EntityActionUiModuleMap;
 
 export function selectEntityActionUi<TAction extends EntityActionSchema>(

@@ -143,6 +143,34 @@ The system MUST commit writes only when Authority validation succeeds.
 - THEN the delete is rejected
 - AND the target record remains active
 
+#### Scenario: State machine field patch guard
+
+- GIVEN an active record belongs to an entity with a state machine
+- WHEN a generic patch mutation attempts to change the machine-owned enum field
+- THEN the mutation is rejected before commit
+- AND the field can change only through a declared transition action, source
+  bootstrap, reset, restore, or migration path
+
+#### Scenario: State machine transition action
+
+- GIVEN an authorized caller invokes a declared transition action for an active
+  record
+- WHEN the record's current enum state is accepted by that transition
+- THEN Authority commits the enum field patch through the action write path
+- AND any declared transition event record is committed in the same action
+  outcome
+- AND action idempotency and write-log cursor behavior match other committed
+  action writes
+
+#### Scenario: Invalid state machine transition
+
+- GIVEN a caller invokes a transition action for a missing, tombstoned, or
+  incompatible-state record
+- WHEN Authority validates the action
+- THEN the action is rejected before materialization
+- AND no partial record patch, event record, write-log change, or action
+  execution is stored
+
 ### Requirement: Storage Write Log Boundary
 
 The system SHALL keep committed Authority write facts behind a storage

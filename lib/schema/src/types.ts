@@ -823,6 +823,37 @@ export type EntityActionTargetSchema = {
   query: string;
 };
 
+export type StateMachineTransitionSchema = {
+  label: string;
+  from: string[];
+  to: string;
+  allowTerminalRecovery?: boolean;
+};
+
+export type StateMachineTransitionEventFieldMappingsSchema = {
+  sourceEntity: string;
+  sourceRecordId: string;
+  transitionKey: string;
+  previousState: string;
+  nextState: string;
+  actorMode: string;
+  occurredAt: string;
+};
+
+export type StateMachineTransitionEventSchema = {
+  entity: string;
+  fields: StateMachineTransitionEventFieldMappingsSchema;
+};
+
+export type StateMachineSchema = {
+  field: string;
+  initial: string;
+  states?: string[];
+  terminal?: string[];
+  transitions: Record<string, StateMachineTransitionSchema>;
+  event?: StateMachineTransitionEventSchema;
+};
+
 export type EntityActionJoinSourceSchema = {
   field: string;
   query: string;
@@ -891,6 +922,12 @@ export type SubscribeEntityActionSchema = EntityActionBaseSchema & {
   kind: "subscribe";
 };
 
+export type TransitionStateEntityActionSchema = EntityActionBaseSchema & {
+  kind: "transition-state";
+  machine: string;
+  transition: string;
+};
+
 export type EntityActionSchemaByKind = {
   "clear-completed": ClearCompletedEntityActionSchema;
   "create-missing-join-records": CreateMissingJoinRecordsEntityActionSchema;
@@ -899,6 +936,7 @@ export type EntityActionSchemaByKind = {
   "create-tree-child": CreateTreeChildEntityActionSchema;
   "remove-tree-placement": RemoveTreePlacementEntityActionSchema;
   subscribe: SubscribeEntityActionSchema;
+  "transition-state": TransitionStateEntityActionSchema;
 };
 
 export type EntityActionKind = keyof EntityActionSchemaByKind;
@@ -920,6 +958,7 @@ export type EntitySchema = {
   fields: Record<string, FieldSchema>;
   mutations: EntityMutationPolicy;
   constraints?: Record<string, EntityConstraintSchema>;
+  stateMachines?: Record<string, StateMachineSchema>;
   actions?: Record<string, EntityActionSchema>;
 };
 

@@ -7,7 +7,7 @@ import {
 import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
-import type { RecordFieldConfig } from "../../client/views.ts";
+import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import {
@@ -22,16 +22,9 @@ import {
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
-export function RecordFieldEditor({
-  canPatch,
-  density = "default",
-  entityName,
-  fieldConfig,
-  presentation = "default",
-  recordId,
-  showLabel = false,
-}: {
+type RecordFieldEditorProps = {
   canPatch: boolean;
   density?: "default" | "compact";
   entityName: string;
@@ -39,7 +32,25 @@ export function RecordFieldEditor({
   presentation?: "default" | "heading";
   recordId: string;
   showLabel?: boolean;
-}) {
+};
+
+export function RecordFieldEditor(props: RecordFieldEditorProps) {
+  if (props.fieldConfig.field.type === "enum" && props.fieldConfig.stateMachine) {
+    return <StateMachineRecordField {...props} />;
+  }
+
+  return <EditableRecordFieldEditor {...props} />;
+}
+
+function EditableRecordFieldEditor({
+  canPatch,
+  density = "default",
+  entityName,
+  fieldConfig,
+  presentation = "default",
+  recordId,
+  showLabel = false,
+}: RecordFieldEditorProps) {
   const appTarget = useSchemaAppTarget();
   const { field, fieldName } = fieldConfig;
   const schema = useSchema();
@@ -310,5 +321,51 @@ export function RecordFieldEditor({
       mediaPreviewHref={mediaAuthoring.mediaPreviewHref}
       uploadEnabled={mediaAuthoring.uploadEnabled}
     />
+  );
+}
+
+function StateMachineRecordField({
+  density = "default",
+  fieldConfig,
+  presentation = "default",
+  recordId,
+  showLabel = false,
+}: RecordFieldEditorProps) {
+  const record = useRecord(recordId);
+  const { field, fieldName, stateMachine } = fieldConfig;
+
+  if (field.type !== "enum" || !stateMachine) {
+    return null;
+  }
+
+  const label = fieldConfig.label ?? fieldLabel(fieldName, field);
+  const badge = (
+    <StateMachineStateBadge
+      field={field}
+      label={label}
+      stateMachine={stateMachine}
+      value={record?.values[fieldName]}
+    />
+  );
+
+  if (showLabel && presentation !== "heading") {
+    return (
+      <div
+        className="min-w-28 flex-none space-y-1"
+        data-formless-state-machine-readonly={fieldName}
+      >
+        <span className="block text-xs font-medium text-slate-600">{label}</span>
+        {badge}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`${density === "compact" ? "min-h-6" : "min-h-7"} flex shrink-0 items-center`}
+      data-formless-state-machine-readonly={fieldName}
+    >
+      {badge}
+    </div>
   );
 }
