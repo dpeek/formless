@@ -36,6 +36,11 @@
     "prepack": "bun run package:build",
     "preview": "vp preview",
     "formless": "bun run scripts/formless.ts",
+    "instance:onboarding:dev": "bun run scripts/formless.ts dev --workspace instances/onboarding --open",
+    "instance:onboarding:dev:no-open": "bun run scripts/formless.ts dev --workspace instances/onboarding",
+    "instance:onboarding:save": "bun run scripts/formless.ts save --workspace instances/onboarding",
+    "instance:onboarding:check": "bun run scripts/formless.ts save --workspace instances/onboarding --check",
+    "instance:onboarding:reset": "bun run scripts/onboarding-workspace.ts reset",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
     "deploy": "vp build && wrangler deploy"
   },
