@@ -4,11 +4,13 @@ import {
   areSchemaKeyApiRoutesEnabledForRequest,
   isClientShellRoute,
   isDynamicSiteIconPath,
+  ownerBrowserRouteAccessForRequest,
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
+  shouldRedirectAnonymousOwnerBrowserRoute,
   shouldServeMappedAppHostClientShell,
   workerRuntimeRoutePolicy,
 } from "./routing.ts";
@@ -179,6 +181,95 @@ describe("Worker document routing", () => {
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/pages/home"), instanceProfile),
     ).toBe(false);
+  });
+
+  it("marks only owner browser routes for anonymous login redirects", () => {
+    const instanceProfile = { profile: "instance" };
+    const publicSiteRoute = {
+      access: "anonymous",
+      id: "route:site:public-site",
+      kind: "mount",
+      matchPath: "/sites/personal",
+      matchPrefix: "/sites/personal/",
+      surface: "public-site",
+      targetProfile: "public-site",
+    } as const;
+    const anonymousAppRoute = {
+      access: "anonymous",
+      id: "route:tasks:admin",
+      kind: "mount",
+      matchPath: "/apps/tasks",
+      surface: "admin",
+      targetProfile: "app",
+    } as const;
+
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/apps/personal?screen=routes"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        new Request("http://example.com/apps/personal/schema", {
+          headers: { Accept: "text/html" },
+          method: "HEAD",
+        }),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/login"),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/setup"),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/sites/personal/blog"),
+        instanceProfile,
+        publicSiteRoute,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/assets/index.js"),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        new Request("http://example.com/apps/personal", {
+          headers: { Accept: "application/json" },
+        }),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/apps/personal"),
+        { profile: "publishedSite" },
+      ),
+    ).toBe(false);
+    expect(
+      ownerBrowserRouteAccessForRequest(
+        documentRequest("http://example.com/apps/tasks"),
+        instanceProfile,
+        anonymousAppRoute,
+      ),
+    ).toBe("anonymous");
   });
 
   it("answers schema-key route policy by runtime profile", () => {

@@ -15,6 +15,9 @@ import {
   parseOwnerPasskeyRegistrationVerifyRequest,
   parseOwnerPasskeyRegistrationVerifyResponse,
   parseOwnerSessionStatusResponse,
+  ownerLoginRedirectLocationForRoute,
+  ownerLoginRedirectTargetFromSearch,
+  parseOwnerLoginRedirectTarget,
 } from "./instance-auth.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
@@ -182,6 +185,42 @@ describe("owner passkey protocol", () => {
         stack: "private stack trace",
       }),
     ).toThrow('Instance auth error response has unsupported key "stack".');
+  });
+});
+
+describe("owner login redirects", () => {
+  it("keeps only same-origin path and query return targets", () => {
+    expect(parseOwnerLoginRedirectTarget("/apps/personal?screen=routes")).toBe(
+      "/apps/personal?screen=routes",
+    );
+    expect(
+      ownerLoginRedirectTargetFromSearch(
+        "?redirectTo=%2Fapps%2Fpersonal%2Fsettings%3Fpanel%3Ddeploy",
+      ),
+    ).toBe("/apps/personal/settings?panel=deploy");
+    expect(ownerLoginRedirectLocationForRoute("/apps/personal?screen=routes")).toBe(
+      "/login?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
+    );
+  });
+
+  it("ignores unsafe owner login return targets", () => {
+    for (const value of [
+      "https://formless.local/apps/personal",
+      "https://example.com/apps/personal",
+      "//example.com/apps/personal",
+      "apps/personal",
+      "/apps/personal#secret",
+      "/\\example.com",
+      "/apps/personal\u0000",
+      undefined,
+    ]) {
+      expect(parseOwnerLoginRedirectTarget(value)).toBeUndefined();
+    }
+
+    expect(ownerLoginRedirectTargetFromSearch("?redirectTo=https%3A%2F%2Fexample.com")).toBe("/");
+    expect(ownerLoginRedirectLocationForRoute("https://example.com/apps/personal")).toBe(
+      "/login?redirectTo=%2F",
+    );
   });
 });
 

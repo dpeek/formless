@@ -65,7 +65,19 @@ describe("owner login route view", () => {
     const html = renderOwnerLoginState({ status: "complete", owner });
 
     expect(html).toContain("Continue");
+    expect(html).toContain('href="/"');
     expect(html).toContain("Sign out");
+  });
+
+  it("renders signed-in continuation to the safe return target", () => {
+    const html = renderToStaticMarkup(
+      <OwnerLoginRouteView
+        redirectTarget="/apps/personal/settings?panel=routes"
+        state={{ status: "complete", owner }}
+      />,
+    );
+
+    expect(html).toContain('href="/apps/personal/settings?panel=routes"');
   });
 });
 

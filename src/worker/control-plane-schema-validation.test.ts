@@ -301,6 +301,19 @@ describe("control-plane schema runtime validation", () => {
     await authority.expectError(
       "/api/mutations",
       {
+        mutationId: "mutation-route-access",
+        entity: "route",
+        op: "create",
+        values: mountRouteValues(siteInstall.record.id, {
+          access: "admin",
+        }),
+      },
+      'Field "access" must be a known enum value.',
+    );
+
+    await authority.expectError(
+      "/api/mutations",
+      {
         mutationId: "mutation-route-public-site-capability",
         entity: "route",
         op: "create",

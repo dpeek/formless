@@ -120,9 +120,9 @@ records.
 - **WHEN** the `route` entity is inspected
 - **THEN** each route record can store camelCase fields for enabled state,
   optional match host, match path, optional match prefix, kind, optional target
-  profile, optional app install reference, optional surface, optional provider
-  config reference, redirect target fields, redirect policy fields, created
-  time, and updated time
+  profile, optional app install reference, optional surface, optional access
+  policy, optional provider config reference, redirect target fields, redirect
+  policy fields, created time, and updated time
 - **AND** route records remain flat schema records
 
 #### Scenario: Mount route
@@ -134,6 +134,18 @@ records.
   `app-install` record
 - **AND** the route records the selected target profile and surface without
   duplicating installed app data or storage state
+
+#### Scenario: Mount route access
+
+- **GIVEN** an owner or admin creates a mount route
+- **WHEN** the route includes access policy
+- **THEN** `access` is either `anonymous` or `owner`
+- **AND** `anonymous` means the route can be read without an owner session
+- **AND** `owner` means browser reads require an owner session and management
+  API reads require an owner session or admin bearer authorization
+- **AND** omitted access defaults to `owner` for instance, app admin, and app
+  schema mounts
+- **AND** omitted access defaults to `anonymous` for public Site mounts
 
 #### Scenario: Redirect route
 

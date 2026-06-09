@@ -12,7 +12,7 @@ import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { ActiveAppSurface } from "./app/app-surface.tsx";
 import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
-import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
+import { OwnerLoginRoute, fetchOwnerSessionStatus } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import {
   SitePageRoute as DefaultSitePageRoute,
@@ -45,6 +45,11 @@ import {
   type ClientAppTarget,
 } from "./client/app-target.ts";
 import type { AppInstall } from "./shared/app-installs.ts";
+import {
+  ownerLoginRedirectLocationForRoute,
+  type OwnerLoginRedirectTarget,
+} from "./shared/instance-auth.ts";
+import type { RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels } from "./client/views.ts";
 
@@ -447,7 +452,9 @@ function AppRoutes({
       ) : null}
       {browserRoutes.instanceShellRoute ? (
         <Route path={browserRoutes.instanceShellRoute}>
-          <InstanceShellRoute />
+          <OwnerRouteGuard access="owner">
+            <InstanceShellRoute />
+          </OwnerRouteGuard>
         </Route>
       ) : null}
       {runtimeProfile.publishedSite ? (
@@ -465,23 +472,29 @@ function AppRoutes({
       {generatedWorlds.map((world) =>
         world.schemaRoute ? (
           <Route key={world.schemaRoute} path={world.schemaRoute}>
-            <SchemaRoute schemaKey={world.app.key} target={world.target} />
+            <OwnerRouteGuard access={world.schemaRouteAccess ?? "anonymous"}>
+              <SchemaRoute schemaKey={world.app.key} target={world.target} />
+            </OwnerRouteGuard>
           </Route>
         ) : null,
       )}
       {generatedWorlds.map((world) => (
         <Route key={world.route} path={world.route}>
-          <HomeRoute schemaKey={world.app.key} screenPath="/" target={world.target} />
+          <OwnerRouteGuard access={world.access ?? "anonymous"}>
+            <HomeRoute schemaKey={world.app.key} screenPath="/" target={world.target} />
+          </OwnerRouteGuard>
         </Route>
       ))}
       {generatedWorlds.map((world) => (
         <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
           {(params) => (
-            <HomeRoute
-              schemaKey={world.app.key}
-              screenPath={runtimeWildcardScreenPath(params)}
-              target={world.target}
-            />
+            <OwnerRouteGuard access={world.access ?? "anonymous"}>
+              <HomeRoute
+                schemaKey={world.app.key}
+                screenPath={runtimeWildcardScreenPath(params)}
+                target={world.target}
+              />
+            </OwnerRouteGuard>
           )}
         </Route>
       ))}
@@ -613,7 +626,11 @@ function InstalledAppSchemaRoute({
     return <NotFoundRoute />;
   }
 
-  return <SchemaRoute schemaKey={world.app.key} target={world.target} />;
+  return (
+    <OwnerRouteGuard access={world.schemaRouteAccess ?? "owner"}>
+      <SchemaRoute schemaKey={world.app.key} target={world.target} />
+    </OwnerRouteGuard>
+  );
 }
 
 function InstalledAppHomeRoute({
@@ -647,7 +664,11 @@ function InstalledAppHomeRoute({
     return <NotFoundRoute />;
   }
 
-  return <HomeRoute schemaKey={world.app.key} screenPath={screenPath} target={world.target} />;
+  return (
+    <OwnerRouteGuard access={world.access ?? "owner"}>
+      <HomeRoute schemaKey={world.app.key} screenPath={screenPath} target={world.target} />
+    </OwnerRouteGuard>
+  );
 }
 
 function InstalledSitePublicRoute({
@@ -699,6 +720,78 @@ function InstalledSitePublicRoute({
 
 function RouteLoading() {
   return <p className="text-sm text-muted-fg">Loading...</p>;
+}
+
+function OwnerRouteGuard({
+  access,
+  children,
+}: {
+  access: RuntimeRouteAccess;
+  children: ReactNode;
+}) {
+  const [location] = useLocation();
+  const [state, setState] = useState<"authorized" | "checking" | "redirect">(() =>
+    access === "owner" && typeof window !== "undefined" ? "checking" : "authorized",
+  );
+
+  useEffect(() => {
+    if (access !== "owner") {
+      setState("authorized");
+      return;
+    }
+
+    const controller = new AbortController();
+    let stopped = false;
+
+    setState("checking");
+
+    async function checkOwnerSession() {
+      try {
+        const status = await fetchOwnerSessionStatus({ signal: controller.signal });
+
+        if (!stopped) {
+          setState(status.authenticated ? "authorized" : "redirect");
+        }
+      } catch {
+        if (!stopped && !controller.signal.aborted) {
+          setState("redirect");
+        }
+      }
+    }
+
+    void checkOwnerSession();
+
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [access, location]);
+
+  if (access !== "owner" || state === "authorized") {
+    return <>{children}</>;
+  }
+
+  if (state === "redirect") {
+    return <Redirect replace to={ownerLoginRedirectLocationForRoute(ownerRouteTarget(location))} />;
+  }
+
+  return <OwnerRouteLoading />;
+}
+
+function OwnerRouteLoading() {
+  return <p className="text-sm text-muted-fg">Checking owner access...</p>;
+}
+
+function ownerRouteTarget(location: string): OwnerLoginRedirectTarget {
+  if (typeof window === "undefined") {
+    return ownerRouteTargetFromLocation(location);
+  }
+
+  return ownerRouteTargetFromLocation(`${window.location.pathname}${window.location.search}`);
+}
+
+function ownerRouteTargetFromLocation(location: string): OwnerLoginRedirectTarget {
+  return location.startsWith("/") ? (location as OwnerLoginRedirectTarget) : "/";
 }
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {

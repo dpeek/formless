@@ -166,7 +166,13 @@ async function createSiteInstall(input: { cookie: string | null }) {
 }
 
 async function getJson<T>(path: string, init?: HarnessFetchInit) {
-  const response = await harness.fetch(path, init);
+  const response = await harness.fetch(path, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  });
 
   expect(response.status).toBe(200);
 

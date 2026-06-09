@@ -6,6 +6,7 @@ import {
 } from "./schema-parse-helpers.ts";
 import type {
   CollectionScreenSectionSchema,
+  ScreenAccessSchema,
   ScreenLayoutSchema,
   ScreenNavigationSchema,
   ScreenSchema,
@@ -64,7 +65,7 @@ function parseScreen(
     `Screen "${screenName}"`,
     value,
     ["type", "label", "layout"],
-    ["navigation", "path"],
+    ["access", "navigation", "path"],
   );
 
   if (value.type !== "workspace") {
@@ -73,6 +74,7 @@ function parseScreen(
 
   const label = parseRequiredNonEmptyString(`Screen "${screenName}" label`, value.label);
   const path = parseScreenPath(screenName, value.path);
+  const access = parseScreenAccess(screenName, value.access);
   const navigation = parseScreenNavigation(screenName, value.navigation);
   const layout = parseScreenLayout(screenName, value.layout, views);
 
@@ -80,9 +82,22 @@ function parseScreen(
     type: "workspace",
     label,
     ...(path === undefined ? {} : { path }),
+    ...(access === undefined ? {} : { access }),
     ...(navigation === undefined ? {} : { navigation }),
     layout,
   };
+}
+
+function parseScreenAccess(screenName: string, value: unknown): ScreenAccessSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "anonymous" && value !== "owner") {
+    throw new Error(`Screen "${screenName}" access must be "anonymous" or "owner".`);
+  }
+
+  return value;
 }
 
 function parseScreenPath(screenName: string, value: unknown): string | undefined {

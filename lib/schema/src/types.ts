@@ -723,6 +723,8 @@ export type ScreenNavigationSchema = {
   primary: boolean;
 };
 
+export type ScreenAccessSchema = "anonymous" | "owner";
+
 export type CollectionScreenSectionSchema = {
   id: string;
   type: "collection";
@@ -743,6 +745,7 @@ export type WorkspaceScreenSchema = {
   type: "workspace";
   label: string;
   path?: string;
+  access?: ScreenAccessSchema;
   navigation?: ScreenNavigationSchema;
   layout: ScreenLayoutSchema;
 };

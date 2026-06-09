@@ -7,6 +7,7 @@ import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-prov
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
+  INTERNAL_READ_RECORDS_PATH,
   INTERNAL_SYNC_DOMAIN_INTENT_PATH,
   INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH,
 } from "./instance-control-plane.ts";
@@ -63,10 +64,16 @@ export async function readControlPlaneRecords(input: {
 
   const id = input.env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
   const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`, input.requestUrl), {
-      headers: { Accept: "application/json" },
-      method: "GET",
-    }),
+    new Request(
+      new URL(
+        `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_READ_RECORDS_PATH}`,
+        input.requestUrl,
+      ),
+      {
+        headers: { Accept: "application/json" },
+        method: "GET",
+      },
+    ),
   );
   const body = (await response.json()) as { error?: string; records?: StoredRecord[] };
 

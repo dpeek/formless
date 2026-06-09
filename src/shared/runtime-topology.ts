@@ -10,6 +10,10 @@ export const runtimeProfileKinds = [
 
 export type RuntimeProfileKind = (typeof runtimeProfileKinds)[number];
 
+export const runtimeRouteAccessKinds = ["anonymous", "owner"] as const;
+
+export type RuntimeRouteAccess = (typeof runtimeRouteAccessKinds)[number];
+
 export type RuntimeTopologyRoutePolicy = {
   instanceBrowserRoutes: boolean;
   installedAppApiRoutes: boolean;
@@ -99,6 +103,37 @@ export function parseRuntimeProfileKind(value: string | undefined): RuntimeProfi
     default:
       return undefined;
   }
+}
+
+export function parseRuntimeRouteAccess(value: string | undefined): RuntimeRouteAccess | undefined {
+  switch (value) {
+    case "anonymous":
+    case "owner":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+export function isRuntimeRouteAccess(value: unknown): value is RuntimeRouteAccess {
+  return typeof value === "string" && parseRuntimeRouteAccess(value) !== undefined;
+}
+
+export function stricterRuntimeRouteAccess(
+  left: RuntimeRouteAccess,
+  right: RuntimeRouteAccess,
+): RuntimeRouteAccess {
+  return left === "owner" || right === "owner" ? "owner" : "anonymous";
+}
+
+export function effectiveRuntimeRouteAccess(input: {
+  routeAccess?: RuntimeRouteAccess | undefined;
+  screenAccess?: RuntimeRouteAccess | undefined;
+}): RuntimeRouteAccess {
+  return stricterRuntimeRouteAccess(
+    input.routeAccess ?? "anonymous",
+    input.screenAccess ?? "anonymous",
+  );
 }
 
 export function runtimeProfileKindFromHost(

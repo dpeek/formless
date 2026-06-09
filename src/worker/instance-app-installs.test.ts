@@ -4,6 +4,8 @@ import type {
   BootstrapResponse,
   CreateAppInstallResponse,
   MutationResponse,
+  OwnerIdentity,
+  SitePageTreeResponse,
 } from "../shared/protocol.ts";
 import {
   cleartraceSeedRecords,
@@ -18,6 +20,7 @@ import {
 } from "../test/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -40,6 +43,12 @@ type PackageMigrationApplyResponse = {
 };
 
 const adminToken = "test-admin-token";
+const owner: OwnerIdentity = {
+  id: "owner-1",
+  name: "Ada Owner",
+  email: "ada@example.com",
+  createdAt: "2026-06-09T00:00:00.000Z",
+};
 
 let harness: Harness;
 
@@ -173,6 +182,13 @@ describe("instance app install API routes", () => {
       ["schema", "/apps/personal/schema"],
       ["publicSite", "/sites/personal"],
     ]);
+    expect(after.body.installs[0]?.routes?.map((route) => [route.routeKind, route.access])).toEqual(
+      [
+        ["admin", "owner"],
+        ["schema", "owner"],
+        ["publicSite", "anonymous"],
+      ],
+    );
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {
@@ -496,10 +512,62 @@ describe("instance app install API routes", () => {
     });
     expect(accepted.response.status).toBe(201);
   });
+
+  it("requires owner or admin authorization for app management reads when configured", async () => {
+    const anonymous = await harness.fetch("/api/formless/app-installs");
+    const admin = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const ownerRead = await getOwnerJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await anonymous.json()).toEqual({
+      error: "Owner session or admin authorization is required for this read endpoint.",
+    });
+    expect(admin.body.installs).toEqual([]);
+    expect(ownerRead.body.installs).toEqual([]);
+  });
+
+  it("guards installed app management reads while keeping public Site tree reads anonymous", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+
+    const anonymousBootstrap = await harness.fetch("/api/app-installs/site/personal/bootstrap");
+    const anonymousTree = await harness.fetch("/api/app-installs/site/personal/tree/home");
+    const adminBootstrap = await getJson<BootstrapResponse>(
+      "/api/app-installs/site/personal/bootstrap",
+    );
+    const ownerBootstrap = await getOwnerJson<BootstrapResponse>(
+      "/api/app-installs/site/personal/bootstrap",
+    );
+    const tree = (await anonymousTree.json()) as SitePageTreeResponse;
+
+    expect(anonymousBootstrap.status).toBe(401);
+    expect(await anonymousBootstrap.json()).toEqual({
+      error: "Owner session or admin authorization is required for this read endpoint.",
+    });
+    expect(anonymousTree.status).toBe(200);
+    expect(tree.page.id).toBe("rec_site_starter_page_home");
+    expect(adminBootstrap.body.schema).toEqual(siteSourceSchema);
+    expect(ownerBootstrap.body.schema).toEqual(siteSourceSchema);
+  });
 });
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(path);
+  const response = await harness.fetch(path, { headers: adminHeaders() });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function getOwnerJson<T>(path: string) {
+  const response = await harness.fetch(path, { headers: await ownerSessionHeaders() });
 
   expect(response.status).toBe(200);
 
@@ -512,10 +580,7 @@ async function getJson<T>(path: string) {
 async function postAdminJson<T>(path: string, body: unknown) {
   const response = await harness.fetch(path, {
     body: JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
+    headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",
   });
 
@@ -523,4 +588,29 @@ async function postAdminJson<T>(path: string, body: unknown) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+function adminHeaders(headers: Record<string, string> = {}) {
+  return {
+    ...headers,
+    Authorization: `Bearer ${adminToken}`,
+  };
+}
+
+async function ownerSessionHeaders() {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner,
+    request: new Request("http://example.com/apps"),
+  });
+
+  return {
+    Cookie: cookiePair(created.cookie),
+  };
+}
+
+function cookiePair(cookie: string) {
+  return cookie.split(";")[0] ?? cookie;
 }

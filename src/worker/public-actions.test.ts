@@ -477,7 +477,9 @@ async function patchSubscriptionStatus(recordId: string, status: "subscribed" | 
 }
 
 async function getJson<T>(path: string, target: Harness = harness) {
-  const response = await target.fetch(path);
+  const response = await target.fetch(path, {
+    headers: adminHeaders(),
+  });
 
   expect(response.status).toBe(200);
 
@@ -490,10 +492,11 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
     headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",
   });
+  const text = await response.text();
 
-  expect([200, 201]).toContain(response.status);
+  expect([200, 201], text).toContain(response.status);
 
-  return (await response.json()) as T;
+  return JSON.parse(text) as T;
 }
 
 function postPublicAction(path: string, body: unknown, target: Harness = harness) {

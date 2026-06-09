@@ -6,6 +6,7 @@ import type {
   FieldEditor,
   FieldSchema,
 } from "@dpeek/formless-schema";
+import type { RuntimeRouteAccess } from "./runtime-topology.ts";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
@@ -86,6 +87,7 @@ export type InstanceControlPlaneAppRouteSurface = "admin" | "publicSite" | "sche
 export type InstanceControlPlaneRouteKind = "mount" | "redirect";
 export type InstanceControlPlaneRouteSurface = "admin" | "public-site" | "schema";
 export type InstanceControlPlaneRouteTargetProfile = "app" | "instance" | "public-site";
+export type InstanceControlPlaneRouteAccess = RuntimeRouteAccess;
 
 export type InstanceControlPlaneRouteValues = {
   enabled: boolean;
@@ -96,6 +98,7 @@ export type InstanceControlPlaneRouteValues = {
   targetProfile?: InstanceControlPlaneRouteTargetProfile;
   appInstall?: AppInstallId;
   surface?: InstanceControlPlaneRouteSurface;
+  access?: InstanceControlPlaneRouteAccess;
   providerConfig?: string;
   toHost?: string;
   toUrl?: string;
@@ -266,6 +269,10 @@ export const instanceControlPlaneSchema = {
           "public-site": "Public Site",
           schema: "Schema",
         }),
+        access: optionalEnumField("Access", {
+          anonymous: "Anonymous",
+          owner: "Owner",
+        }),
         providerConfig: optionalReferenceField("Provider config", "provider-config-ref", "label"),
         toHost: optionalTextField("To host"),
         toUrl: optionalTextField("To URL", "href"),
@@ -425,6 +432,7 @@ export const instanceControlPlaneSchema = {
         { field: "targetProfile", display: "readOnly" },
         { field: "appInstall", display: "readOnly" },
         { field: "surface", display: "readOnly" },
+        { field: "access", display: "readOnly" },
         { field: "providerConfig", display: "readOnly" },
         { field: "toHost", display: "readOnly" },
         { field: "toUrl", display: "readOnly" },
@@ -504,6 +512,7 @@ export const instanceControlPlaneSchema = {
         field: "surface",
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
+      { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
       "providerConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -527,6 +536,7 @@ export const instanceControlPlaneSchema = {
         field: "surface",
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
+      { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
       "providerConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -832,10 +842,32 @@ function mountRouteRecord(
       targetProfile: route.targetProfile,
       appInstall: input.install.installId,
       surface: route.surface,
+      access: instanceControlPlaneDefaultRouteAccess({
+        kind: "mount",
+        surface: route.surface,
+        targetProfile: route.targetProfile,
+      }),
       createdAt: input.now,
       updatedAt: input.now,
     },
   };
+}
+
+export function instanceControlPlaneDefaultRouteAccess(
+  route: Pick<InstanceControlPlaneRouteValues, "kind"> &
+    Partial<Pick<InstanceControlPlaneRouteValues, "surface" | "targetProfile">>,
+): InstanceControlPlaneRouteAccess {
+  return route.kind === "mount" &&
+    (route.targetProfile === "public-site" || route.surface === "public-site")
+    ? "anonymous"
+    : "owner";
+}
+
+export function instanceControlPlaneEffectiveRouteAccess(
+  route: Pick<InstanceControlPlaneRouteValues, "kind"> &
+    Partial<Pick<InstanceControlPlaneRouteValues, "access" | "surface" | "targetProfile">>,
+): InstanceControlPlaneRouteAccess {
+  return route.access ?? instanceControlPlaneDefaultRouteAccess(route);
 }
 
 function textField(label: string, format?: "href" | "longText"): FieldSchema {
@@ -1143,6 +1175,7 @@ function editorForField(field: string): FieldEditor {
     field === "status" ||
     field === "routeKind" ||
     field === "surface" ||
+    field === "access" ||
     field === "packageCapability" ||
     field === "targetKind" ||
     field === "targetProfile" ||

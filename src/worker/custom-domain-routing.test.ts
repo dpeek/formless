@@ -243,7 +243,9 @@ describe("installed Site custom-domain Worker routing", () => {
     const publicSitePage = await fetchHost("admin.example.com", "/blog/starter-post", {
       headers: { Accept: "text/html" },
     });
-    const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings");
+    const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings", {
+      headers: adminHeaders(),
+    });
     const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
     const homeText = await home.text();
 
@@ -287,6 +289,7 @@ describe("installed Site custom-domain Worker routing", () => {
     const installApi = await fetchHost(
       mappedAppHost,
       `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      { headers: adminHeaders() },
     );
     const homeHtml = await home.text();
     const schemaHtml = await schema.text();

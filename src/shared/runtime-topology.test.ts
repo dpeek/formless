@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   acceptsRuntimeHtml,
+  effectiveRuntimeRouteAccess,
+  isRuntimeRouteAccess,
   isRuntimeApiPath,
   isRuntimeClientShellRoute,
   isRuntimeDynamicSiteIconPath,
@@ -11,11 +13,13 @@ import {
   looksLikeRuntimeStaticAssetPath,
   matchRuntimeRouteBase,
   parseRuntimeProfileKind,
+  parseRuntimeRouteAccess,
   publishedSiteRedirectLocation,
   resolveRuntimeProfileKind,
   runtimeRouteFromBase,
   runtimeProfileKindFromHost,
   runtimeRoutePolicyForProfileKind,
+  stricterRuntimeRouteAccess,
   runtimeTopologyRoutes,
 } from "./runtime-topology.ts";
 
@@ -28,6 +32,24 @@ describe("runtime topology", () => {
     expect(parseRuntimeProfileKind("publishedSite")).toBe("publishedSite");
     expect(parseRuntimeProfileKind("")).toBeUndefined();
     expect(parseRuntimeProfileKind("missing")).toBeUndefined();
+  });
+
+  it("parses route access and resolves stricter effective access", () => {
+    expect(parseRuntimeRouteAccess("anonymous")).toBe("anonymous");
+    expect(parseRuntimeRouteAccess("owner")).toBe("owner");
+    expect(parseRuntimeRouteAccess("")).toBeUndefined();
+    expect(parseRuntimeRouteAccess("admin")).toBeUndefined();
+    expect(isRuntimeRouteAccess("anonymous")).toBe(true);
+    expect(isRuntimeRouteAccess("owner")).toBe(true);
+    expect(isRuntimeRouteAccess("admin")).toBe(false);
+    expect(stricterRuntimeRouteAccess("anonymous", "anonymous")).toBe("anonymous");
+    expect(stricterRuntimeRouteAccess("anonymous", "owner")).toBe("owner");
+    expect(stricterRuntimeRouteAccess("owner", "anonymous")).toBe("owner");
+    expect(effectiveRuntimeRouteAccess({ routeAccess: "anonymous" })).toBe("anonymous");
+    expect(effectiveRuntimeRouteAccess({ routeAccess: "owner" })).toBe("owner");
+    expect(effectiveRuntimeRouteAccess({ routeAccess: "anonymous", screenAccess: "owner" })).toBe(
+      "owner",
+    );
   });
 
   it("infers profile kinds from current host conventions", () => {

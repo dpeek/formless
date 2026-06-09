@@ -213,7 +213,9 @@ describe("runtime profile resolver", () => {
 
     expect(world.app.key).toBe("site");
     expect(world.route).toBe("/apps/personal");
+    expect(world.access).toBe("owner");
     expect(world.schemaRoute).toBe("/apps/personal/schema");
+    expect(world.schemaRouteAccess).toBe("owner");
     expect(world.target.installId).toBe("personal");
     expect(world.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
     expect(tasksWorld.app.key).toBe("tasks");

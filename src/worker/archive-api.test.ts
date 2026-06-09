@@ -439,7 +439,9 @@ async function postArchiveRestore(
 }
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(path);
+  const response = await harness.fetch(path, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
 
   return {
     body: (await response.json()) as T,

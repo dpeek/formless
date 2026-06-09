@@ -153,6 +153,30 @@ local-dev owner sessions.
 - AND later session status requests without a valid cookie report
   unauthenticated state
 
+### Requirement: Owner Login Redirects
+
+The system SHALL preserve safe owner-login return targets for browser routes
+that require an owner session.
+
+#### Scenario: Login completes with return target
+
+- GIVEN an anonymous browser was redirected from an owner-only route to
+  `/login` with a same-origin `redirectTo` path and query
+- WHEN passkey login succeeds
+- THEN an owner session cookie is issued
+- AND the browser is returned to the requested route
+- AND the return target is not exposed to passkey challenge verification as an
+  authorization input
+
+#### Scenario: Unsafe return target rejected
+
+- GIVEN an owner login URL contains an absolute, protocol-relative,
+  cross-origin, malformed, or unsupported `redirectTo` value
+- WHEN login renders or completes
+- THEN the unsafe return target is ignored
+- AND the browser falls back to the product instance root after successful
+  login
+
 ### Requirement: Admin Bearer Boundary
 
 The system MUST keep admin bearer authorization separate from passkey browser

@@ -14,6 +14,7 @@ import type {
   FieldVisibilityConditionSchema,
   FieldVisibilityValue,
   FieldSchema,
+  ScreenAccessSchema,
   ScreenNavigationSchema,
   ScreenSchema,
   ToManyRelationshipSchema,
@@ -381,6 +382,7 @@ export type HomeScreenModel = {
   type: "workspace";
   label: string;
   path?: string;
+  access?: ScreenAccessSchema;
   navigation: ScreenNavigationSchema;
   layout: HomeScreenLayoutModel;
 };
@@ -459,6 +461,7 @@ function selectScreenModel(
     type: screen.type,
     label: screen.label,
     ...(screen.path === undefined ? {} : { path: screen.path }),
+    ...(screen.access === undefined ? {} : { access: screen.access }),
     navigation: {
       primary: screen.navigation?.primary ?? true,
     },

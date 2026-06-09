@@ -838,6 +838,7 @@ function isInstanceControlPlaneRouteValidationEntity(schema: AppSchema, entityNa
     entity.fields.targetProfile?.type === "enum" &&
     entity.fields.appInstall?.type === "reference" &&
     entity.fields.surface?.type === "enum" &&
+    entity.fields.access?.type === "enum" &&
     entity.fields.providerConfig?.type === "reference" &&
     entity.fields.toHost?.type === "text" &&
     entity.fields.toUrl?.type === "text" &&

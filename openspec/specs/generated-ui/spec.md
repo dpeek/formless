@@ -84,6 +84,24 @@ The system SHALL render generated screens from screen models and collection sect
 - THEN the sidebar lists the app screens
 - AND the sidebar title is the app label
 
+#### Scenario: Owner screen route guard
+
+- GIVEN a generated app route has effective access `owner` from its mounted
+  route, selected schema screen, or both
+- WHEN an anonymous browser navigates to that route
+- THEN generated UI does not render the screen workspace
+- AND the runtime owner-login redirect handles the browser route
+- AND app record sync or owner-only screen data loading does not start before
+  the owner access check resolves
+
+#### Scenario: Anonymous screen route
+
+- GIVEN a generated app route has effective access `anonymous`
+- WHEN an anonymous browser navigates to that route
+- THEN generated UI can render the selected screen without an owner session
+- AND mutation, action, or management controls still use their existing write
+  and action authorization contracts
+
 ### Requirement: Collection Rendering
 
 The system SHALL render collection views with query tabs, context selection, summary slots, actions, and schema-declared result types.

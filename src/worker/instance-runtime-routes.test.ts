@@ -94,6 +94,7 @@ describe("instance runtime route resolution", () => {
   it("resolves enabled app, schema, public Site, exact-host, and disabled mount routes", () => {
     const records = [
       routeRecord("route:tasks:admin", {
+        access: "owner",
         enabled: true,
         matchPath: "/apps/tasks",
         kind: "mount",
@@ -114,6 +115,7 @@ describe("instance runtime route resolution", () => {
         updatedAt: "2026-06-02T00:00:00.000Z",
       }),
       routeRecord("route:site:public-site", {
+        access: "anonymous",
         enabled: true,
         matchPath: "/sites/site",
         matchPrefix: "/sites/site/",
@@ -154,6 +156,7 @@ describe("instance runtime route resolution", () => {
         request: { host: "formless.local", pathname: "/apps/tasks" },
       }),
     ).toMatchObject({
+      access: "owner",
       id: "route:tasks:admin",
       kind: "mount",
       surface: "admin",
@@ -167,6 +170,7 @@ describe("instance runtime route resolution", () => {
         request: { host: "formless.local", pathname: "/apps/tasks/schema" },
       }),
     ).toMatchObject({
+      access: "owner",
       id: "route:tasks:schema",
       surface: "schema",
       target: { installId: "tasks", kind: "appInstall", packageAppKey: "tasks" },
@@ -178,6 +182,7 @@ describe("instance runtime route resolution", () => {
         request: { host: "formless.local", pathname: "/sites/site/blog" },
       }),
     ).toMatchObject({
+      access: "anonymous",
       id: "route:site:public-site",
       matchPrefix: "/sites/site/",
       surface: "public-site",
@@ -191,6 +196,7 @@ describe("instance runtime route resolution", () => {
         request: { host: "www.example.com", pathname: "/blog" },
       }),
     ).toMatchObject({
+      access: "anonymous",
       id: "route:host:publicSite:www.example.com",
       matchHost: "www.example.com",
       surface: "public-site",

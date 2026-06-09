@@ -2,7 +2,8 @@ import { FormlessAuthority } from "./authority.ts";
 import { handleWorkspaceGatewayProxyRequest } from "@dpeek/formless-gateway/worker";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
-import { authorizeInstanceWrite } from "./authority-admin-guard.ts";
+import { authorizeInstanceWrite, authorizeOwnerManagementRead } from "./authority-admin-guard.ts";
+import { selectAuthorityOperation } from "./authority-operations.ts";
 import { handleClientAssetRequest } from "./client-shell.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import {
@@ -20,13 +21,16 @@ import { mappedSiteHostFromRuntimeRoute } from "./mapped-site-host.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
+import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
   mappedSiteHostRedirectForRequest,
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
+  shouldRedirectAnonymousOwnerBrowserRoute,
   workerRuntimeProfileInput,
+  type WorkerRuntimeRequestTopology,
 } from "./routing.ts";
 import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
@@ -239,6 +243,23 @@ export default {
         return Response.json({ error: "Not found." }, { status: 404 });
       }
 
+      if (
+        authorityRoute.identity.kind === "appInstall" &&
+        isInstalledAppManagementApiRead(request, authorityRoute.path)
+      ) {
+        const authorization = await authorizeOwnerManagementRead(request, env);
+
+        if (!authorization.authorized) {
+          return Response.json(
+            { error: authorization.error },
+            {
+              headers: authorization.headers,
+              status: authorization.status,
+            },
+          );
+        }
+      }
+
       const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
@@ -252,6 +273,17 @@ export default {
 
     if (siteDocumentResponse) {
       return siteDocumentResponse;
+    }
+
+    const ownerBrowserRedirect = await redirectAnonymousOwnerBrowserRoute(
+      request,
+      env,
+      requestTopology,
+      runtimeRoute,
+    );
+
+    if (ownerBrowserRedirect) {
+      return ownerBrowserRedirect;
     }
 
     if (env.ASSETS && shouldDeferToStaticAssets(request, requestTopology)) {
@@ -290,6 +322,57 @@ function isOwnerAuthRoute(pathname: string): boolean {
     pathname === "/api/formless/passkeys" ||
     pathname.startsWith("/api/formless/passkeys/")
   );
+}
+
+function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): boolean {
+  const operation = selectAuthorityOperation({
+    method: request.method,
+    path,
+    searchParams: new URL(request.url).searchParams,
+  });
+
+  if (operation?.metadata.mode === "read") {
+    return operation.kind !== "siteTree";
+  }
+
+  return request.method === "GET" && path === "/sync/ws";
+}
+
+async function redirectAnonymousOwnerBrowserRoute(
+  request: Request,
+  env: Env,
+  requestTopology: WorkerRuntimeRequestTopology,
+  exactHostRuntimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+): Promise<Response | undefined> {
+  if (!shouldRedirectAnonymousOwnerBrowserRoute(request, requestTopology, exactHostRuntimeRoute)) {
+    return undefined;
+  }
+
+  const runtimeRoute =
+    exactHostRuntimeRoute?.kind === "mount"
+      ? exactHostRuntimeRoute
+      : await resolveInstanceRuntimeRouteForRequest(request, env);
+
+  if (!shouldRedirectAnonymousOwnerBrowserRoute(request, requestTopology, runtimeRoute)) {
+    return undefined;
+  }
+
+  const ownerSession = await validateOwnerSessionCookie(request, env);
+
+  if (ownerSession.ok) {
+    return undefined;
+  }
+
+  return redirectResponse(
+    ownerLoginRedirectLocationForRoute(ownerBrowserRedirectTarget(request)),
+    302,
+  );
+}
+
+function ownerBrowserRedirectTarget(request: Request) {
+  const url = new URL(request.url);
+
+  return `${url.pathname}${url.search}`;
 }
 
 function notFoundResponse(json: boolean): Response {

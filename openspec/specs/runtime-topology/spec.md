@@ -2,7 +2,11 @@
 
 ## Purpose
 
-Runtime topology defines the observable profile, route policy, mapped host, and request routing contracts for a Formless instance. It keeps product instance, dev workbench, app, Site authoring, and published Site behavior coherent across browser shells, APIs, static assets, SSR documents, indexing, icons, and public Site compatibility routes.
+Runtime topology defines the observable profile, route policy, route access,
+mapped host, and request routing contracts for a Formless instance. It keeps
+product instance, dev workbench, app, Site authoring, and published Site
+behavior coherent across browser shells, APIs, static assets, SSR documents,
+indexing, icons, and public Site compatibility routes.
 
 ## Requirements
 
@@ -72,6 +76,49 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - GIVEN the runtime profile is `siteAuthoring`
 - WHEN a browser navigates to `/` or `/admin`
 - THEN the public Site preview and generated Site admin are mounted in the same profile
+
+### Requirement: Route Access Policy
+
+The system SHALL evaluate route access after runtime profile route eligibility
+and enabled route-record resolution, and before serving owner-only browser
+surfaces or owner-only management API data.
+
+#### Scenario: Anonymous owner browser route
+
+- GIVEN a runtime browser route has effective access `owner`
+- AND the request is a `GET` or `HEAD` request that accepts HTML
+- WHEN the request does not include a valid owner session
+- THEN the runtime redirects to the owner login route with a safe same-origin
+  return target for the original path and query
+- AND the owner-only browser shell, instance dashboard, generated app surface,
+  or schema editor is not served
+
+#### Scenario: Authenticated owner browser route
+
+- GIVEN a runtime browser route has effective access `owner`
+- WHEN the request includes a valid owner session
+- THEN the route remains eligible for the matching instance dashboard,
+  generated app surface, or schema editor
+
+#### Scenario: Anonymous route remains public
+
+- GIVEN a runtime browser route has effective access `anonymous`
+- WHEN the request is otherwise eligible for the active runtime profile
+- THEN the route can be served without an owner session
+- AND owner setup, owner login, installed Site public routes, published Site
+  documents, public Site resources, static assets, and public actions remain
+  available according to their existing route policies
+
+#### Scenario: Owner management API route
+
+- GIVEN a management API route exposes owner-only instance dashboard or
+  generated app administration data
+- WHEN the request does not include a valid owner session or valid admin bearer
+  authorization
+- THEN the runtime returns an unauthorized JSON response
+- AND public Site document reads, public Site indexing resources, public
+  actions, and public route discovery needed for anonymous Site rendering are
+  not made owner-only by that management API guard
 
 ### Requirement: Published Site Documents
 

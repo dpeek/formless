@@ -92,6 +92,67 @@ export type InstanceAuthErrorResponse = {
   error: string;
 };
 
+export type OwnerLoginRedirectTarget = `/${string}`;
+
+export const ownerLoginDefaultRedirectTarget = "/" satisfies OwnerLoginRedirectTarget;
+
+const ownerLoginRedirectBaseOrigin = "https://formless.local";
+
+export function parseOwnerLoginRedirectTarget(
+  value: unknown,
+): OwnerLoginRedirectTarget | undefined {
+  if (
+    typeof value !== "string" ||
+    value === "" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.startsWith("/\\") ||
+    hasOwnerLoginRedirectControlCharacter(value)
+  ) {
+    return undefined;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(value, ownerLoginRedirectBaseOrigin);
+  } catch {
+    return undefined;
+  }
+
+  if (url.origin !== ownerLoginRedirectBaseOrigin || url.username || url.password || url.hash) {
+    return undefined;
+  }
+
+  return `${url.pathname}${url.search}` as OwnerLoginRedirectTarget;
+}
+
+export function ownerLoginRedirectTargetFromSearch(search: string): OwnerLoginRedirectTarget {
+  const normalized = search.startsWith("?") ? search : `?${search}`;
+  const redirectTo = new URLSearchParams(normalized).get("redirectTo");
+
+  return parseOwnerLoginRedirectTarget(redirectTo) ?? ownerLoginDefaultRedirectTarget;
+}
+
+export function ownerLoginRedirectLocationForRoute(routeTarget: string): `/login?${string}` {
+  const redirectTarget =
+    parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
+
+  return `/login?redirectTo=${encodeURIComponent(redirectTarget)}`;
+}
+
+function hasOwnerLoginRedirectControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+
+    if (code <= 31 || code === 127) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const authenticatorAttachments = ["cross-platform", "platform"] as const;
 const authenticatorTransports = [

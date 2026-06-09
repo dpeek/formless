@@ -27,6 +27,8 @@ export type InstanceWriteAuthorizationResult =
       status: number;
     };
 
+export type OwnerManagementReadAuthorizationResult = InstanceWriteAuthorizationResult;
+
 export function authorizeAuthorityOperation(
   request: Request,
   operation: AuthorityOperation,
@@ -67,6 +69,25 @@ export async function authorizeInstanceWrite(
   request: Request,
   env: AuthorityAdminGuardEnv,
 ): Promise<InstanceWriteAuthorizationResult> {
+  return authorizeOwnerSessionOrAdmin(request, env, {
+    error: "Owner session or admin authorization is required for this write endpoint.",
+  });
+}
+
+export async function authorizeOwnerManagementRead(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+): Promise<OwnerManagementReadAuthorizationResult> {
+  return authorizeOwnerSessionOrAdmin(request, env, {
+    error: "Owner session or admin authorization is required for this read endpoint.",
+  });
+}
+
+async function authorizeOwnerSessionOrAdmin(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+  options: { error: string },
+): Promise<InstanceWriteAuthorizationResult> {
   const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
   const sessionProtectionConfigured =
     normalizedAdminToken(env.FORMLESS_OWNER_SESSION_SECRET) !== undefined;
@@ -87,7 +108,7 @@ export async function authorizeInstanceWrite(
 
   return {
     authorized: false,
-    error: "Owner session or admin authorization is required for this write endpoint.",
+    error: options.error,
     headers: {
       "WWW-Authenticate": 'Bearer realm="formless-admin"',
     },

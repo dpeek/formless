@@ -2124,14 +2124,23 @@ describe("home view model collections", () => {
   });
 
   it("exposes route-ready screen paths and selects models by path", () => {
+    const accessSchema: AppSchema = {
+      ...rateCardSchema,
+      screens: {
+        rateHome: { ...rateCardSchema.screens!.rateHome, access: "owner" },
+        rateSetup: { ...rateCardSchema.screens!.rateSetup, access: "anonymous" },
+      },
+    };
+
     expect(
-      selectPrimaryScreenModels(rateCardSchema).map((model) => ({
+      selectPrimaryScreenModels(accessSchema).map((model) => ({
         screenName: model.screenName,
         path: model.path,
+        access: model.access,
       })),
     ).toEqual([
-      { screenName: "rateHome", path: "/" },
-      { screenName: "rateSetup", path: "/setup" },
+      { screenName: "rateHome", path: "/", access: "owner" },
+      { screenName: "rateSetup", path: "/setup", access: "anonymous" },
     ]);
     expect(selectScreenModelByPath(rateCardSchema, "/setup")?.screenName).toBe("rateSetup");
     expect(selectScreenModelByPath(rateCardSchema, "/missing")).toBeUndefined();

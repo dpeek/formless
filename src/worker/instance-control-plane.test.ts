@@ -9,6 +9,7 @@ import type {
   AppInstallsResponse,
   BootstrapResponse,
   MutationResponse,
+  OwnerIdentity,
   StoreSnapshot,
   StoredRecord,
   SyncResponse,
@@ -17,6 +18,7 @@ import type { AppSchema, EntityMutationPolicy } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -28,6 +30,12 @@ type FailureResponse = {
 
 const adminToken = "test-admin-token";
 const controlPlaneApi = "/api/formless/control-plane";
+const owner: OwnerIdentity = {
+  id: "owner-1",
+  name: "Ada Owner",
+  email: "ada@example.com",
+  createdAt: "2026-06-09T00:00:00.000Z",
+};
 
 let harness: Harness;
 
@@ -48,6 +56,20 @@ afterEach(async () => {
 });
 
 describe("instance control-plane API routes", () => {
+  it("requires owner or admin authorization for dashboard control-plane reads", async () => {
+    const anonymous = await harness.fetch(`${controlPlaneApi}/bootstrap`);
+    const admin = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
+    const ownerRead = await getOwnerJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
+
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await anonymous.json()).toEqual({
+      error: "Owner session or admin authorization is required for this read endpoint.",
+    });
+    expect(admin.body.records).toEqual([]);
+    expect(ownerRead.body.records).toEqual([]);
+  });
+
   it("bootstraps the runtime-owned control-plane storage identity for safe query actors", async () => {
     const runnerBootstrap = await getJson<BootstrapResponse>(
       `${controlPlaneApi}/bootstrap?actorKind=runner`,
@@ -332,7 +354,9 @@ describe("instance control-plane API routes", () => {
       ]),
     );
 
-    const blocked = await harness.fetch(`${controlPlaneApi}/bootstrap`);
+    const blocked = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
+      headers: adminHeaders(),
+    });
     const body = (await blocked.json()) as FailureResponse;
 
     expect(blocked.status).toBe(400);
@@ -465,7 +489,18 @@ describe("instance control-plane API routes", () => {
 });
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(path);
+  const response = await harness.fetch(path, { headers: adminHeaders() });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function getOwnerJson<T>(path: string) {
+  const response = await harness.fetch(path, { headers: await ownerSessionHeaders() });
 
   expect(response.status).toBe(200);
 
@@ -477,7 +512,7 @@ async function getJson<T>(path: string) {
 
 async function postAdminJson<T>(path: string, body: unknown, options: { actorKind?: string } = {}) {
   return postJson<T>(path, body, {
-    Authorization: `Bearer ${adminToken}`,
+    ...adminHeaders(),
     ...(options.actorKind === undefined
       ? {}
       : { "X-Formless-Control-Plane-Actor": options.actorKind }),
@@ -498,6 +533,31 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
     body: (await response.json()) as T,
     response,
   };
+}
+
+function adminHeaders(headers: Record<string, string> = {}) {
+  return {
+    ...headers,
+    Authorization: `Bearer ${adminToken}`,
+  };
+}
+
+async function ownerSessionHeaders() {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner,
+    request: new Request("http://example.com/"),
+  });
+
+  return {
+    Cookie: cookiePair(created.cookie),
+  };
+}
+
+function cookiePair(cookie: string) {
+  return cookie.split(";")[0] ?? cookie;
 }
 
 function appInstallValues(

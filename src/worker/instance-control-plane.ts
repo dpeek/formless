@@ -17,6 +17,8 @@ import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneAppRouteId,
   instanceControlPlaneAppInstallRecord,
+  instanceControlPlaneDefaultRouteAccess,
+  instanceControlPlaneEffectiveRouteAccess,
   type InstanceControlPlaneRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
@@ -50,6 +52,7 @@ import {
 } from "../shared/upgrade-migrations.ts";
 import {
   authorizeAuthorityOperation,
+  authorizeOwnerManagementRead,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import {
@@ -82,6 +85,7 @@ const createAppInstallControlPlaneAction = "createAppInstall";
 export const INTERNAL_BACKFILL_APP_INSTALLS_PATH = "/_internal/backfill-app-installs";
 export const INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH =
   "/_internal/update-app-install-package-facts";
+export const INTERNAL_READ_RECORDS_PATH = "/_internal/read-records";
 export const INTERNAL_SYNC_DOMAIN_INTENT_PATH = "/_internal/sync-domain-intent";
 export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
 const instanceControlPlaneSourceSchema = parseAppSchema(instanceControlPlaneSchema);
@@ -165,6 +169,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
       return await handleInternalUpdateAppInstallPackageFacts(request, storage);
     }
 
+    if (route.path === INTERNAL_READ_RECORDS_PATH) {
+      return handleInternalReadRecords(request, storage);
+    }
+
     if (route.path === INTERNAL_SYNC_DOMAIN_INTENT_PATH) {
       return await handleInternalSyncDomainIntent(request, storage);
     }
@@ -196,7 +204,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
     }
 
     const actorKind = controlPlaneActorKindFromRequest(request, url);
-    const authorization = await authorizeAuthorityOperation(request, operation, env);
+    const authorization =
+      operation.metadata.mode === "read"
+        ? await authorizeOwnerManagementRead(request, env)
+        : await authorizeAuthorityOperation(request, operation, env);
 
     if (!authorization.authorized) {
       return jsonResponse(
@@ -338,6 +349,18 @@ async function handleInternalUpdateAppInstallPackageFacts(
   return jsonResponse({
     install: findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId),
     installs: readControlPlaneAppInstalls(storage),
+  });
+}
+
+function handleInternalReadRecords(request: Request, storage: DurableObjectStorage): Response {
+  if (request.method !== "GET") {
+    return methodNotAllowedResponse("GET");
+  }
+
+  ensureControlPlaneStorage(storage);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
   });
 }
 
@@ -721,6 +744,11 @@ function legacyAppRouteMigrationCandidate(
     targetProfile: routeKind === "publicSite" ? "public-site" : "app",
     appInstall,
     surface,
+    access: instanceControlPlaneDefaultRouteAccess({
+      kind: "mount",
+      surface,
+      targetProfile: routeKind === "publicSite" ? "public-site" : "app",
+    }),
     createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
     updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
   };
@@ -1055,6 +1083,11 @@ function domainMappingRouteRecordValues(
     targetProfile: domainMappingTargetProfile(mapping.profile),
     ...(appInstall === undefined ? {} : { appInstall }),
     ...(surface === undefined ? {} : { surface }),
+    access: instanceControlPlaneDefaultRouteAccess({
+      kind: "mount",
+      surface,
+      targetProfile: domainMappingTargetProfile(mapping.profile),
+    }),
     createdAt: mapping.createdAt,
     updatedAt: mapping.updatedAt,
   };
@@ -1146,6 +1179,7 @@ function appInstallRouteFromControlPlaneRoute(
   }
 
   return {
+    access: instanceControlPlaneEffectiveRouteAccess(values),
     enabled: values.enabled,
     id,
     path: values.matchPath,

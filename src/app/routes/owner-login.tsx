@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import { fieldErrorStyles } from "@dpeek/formless-ui/field";
+import { useLocation } from "wouter";
 import {
+  ownerLoginRedirectTargetFromSearch,
   parseOwnerLogoutResponse,
   parseOwnerPasskeyLoginOptionsResponse,
   parseOwnerPasskeyLoginVerifyResponse,
@@ -43,6 +45,10 @@ type OwnerLoginFetchOptions = {
 
 export function OwnerLoginRoute() {
   const [state, setState] = useState<OwnerLoginRouteState>({ status: "loading" });
+  const [location, setLocation] = useLocation();
+  const redirectTarget = ownerLoginRedirectTargetFromSearch(
+    ownerLoginSearchFromRouteLocation(location),
+  );
 
   useEffect(
     () =>
@@ -71,6 +77,7 @@ export function OwnerLoginRoute() {
       const response = await loginWithPasskey();
 
       setState({ status: "complete", owner: response.owner });
+      setLocation(redirectTarget, { replace: true });
     } catch (error) {
       setState({
         status: "failed",
@@ -106,6 +113,7 @@ export function OwnerLoginRoute() {
       disabled={disabled}
       onLogout={logout}
       onSubmit={submitLogin}
+      redirectTarget={redirectTarget}
       state={state}
     />
   );
@@ -115,11 +123,13 @@ export function OwnerLoginRouteView({
   disabled,
   onLogout,
   onSubmit,
+  redirectTarget = "/",
   state,
 }: {
   disabled?: boolean;
   onLogout?: () => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  redirectTarget?: `/${string}`;
   state: OwnerLoginRouteState;
 }) {
   return (
@@ -130,6 +140,7 @@ export function OwnerLoginRouteView({
             disabled={disabled ?? state.status === "submitting"}
             onLogout={onLogout}
             onSubmit={onSubmit}
+            redirectTarget={redirectTarget}
             state={state}
           />
         </div>
@@ -315,18 +326,20 @@ function OwnerLoginStateBody({
   disabled,
   onLogout,
   onSubmit,
+  redirectTarget,
   state,
 }: {
   disabled: boolean;
   onLogout?: () => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  redirectTarget: `/${string}`;
   state: OwnerLoginRouteState;
 }) {
   switch (state.status) {
     case "complete":
       return (
         <OwnerLoginMessage
-          action={<OwnerLoginSessionActions onLogout={onLogout} />}
+          action={<OwnerLoginSessionActions onLogout={onLogout} redirectTarget={redirectTarget} />}
           heading="Owner signed in"
           message={`Signed in as ${state.owner.name}.`}
         />
@@ -425,21 +438,27 @@ function OwnerLoginHeader({ heading, message }: { heading: string; message: stri
   );
 }
 
-function OwnerLoginContinueLink() {
+function OwnerLoginContinueLink({ redirectTarget }: { redirectTarget: `/${string}` }) {
   return (
     <a
       className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-fg transition-colors hover:bg-primary/80"
-      href="/"
+      href={redirectTarget}
     >
       Continue
     </a>
   );
 }
 
-function OwnerLoginSessionActions({ onLogout }: { onLogout?: () => void }) {
+function OwnerLoginSessionActions({
+  onLogout,
+  redirectTarget,
+}: {
+  onLogout?: () => void;
+  redirectTarget: `/${string}`;
+}) {
   return (
     <div className="flex flex-wrap gap-2">
-      <OwnerLoginContinueLink />
+      <OwnerLoginContinueLink redirectTarget={redirectTarget} />
       <Button intent="secondary" onPress={onLogout} type="button">
         Sign out
       </Button>
@@ -461,6 +480,16 @@ function ownerLoginErrorMessage(value: unknown, fallback: string): string {
   return isRecord(value) && typeof value.error === "string" && value.error.trim() !== ""
     ? value.error
     : fallback;
+}
+
+function ownerLoginSearchFromRouteLocation(location: string): string {
+  const queryStart = location.indexOf("?");
+
+  if (queryStart >= 0) {
+    return location.slice(queryStart);
+  }
+
+  return typeof window === "undefined" ? "" : window.location.search;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

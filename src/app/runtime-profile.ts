@@ -21,6 +21,7 @@ import {
   runtimeRoutePolicyForProfileKind,
   runtimeTopologyRoutes,
   stringRuntimeConfigValue,
+  type RuntimeRouteAccess,
   type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
 
@@ -29,9 +30,11 @@ export type { RuntimeProfileKind };
 export type RuntimeShellKind = "instance" | "dev" | "app" | "publishedSite";
 
 export type RuntimeWorldMount = {
+  access?: RuntimeRouteAccess;
   app: SchemaAppDefinition;
   generatedRoutes: boolean;
   route: `/${string}`;
+  schemaRouteAccess?: RuntimeRouteAccess;
   schemaRoute?: `/${string}`;
   target?: AppStorageIdentity;
 };
@@ -550,10 +553,11 @@ export function installedAppWorldMountFromInstall(
   }
 
   const fallbackRoute = runtimeRouteFromBase(routes.appRouteBase, target.installId);
-  const route =
-    enabledInstallRoutePath(install, "admin") ?? (install.routes ? undefined : fallbackRoute);
+  const adminRoute = enabledInstallRoute(install, "admin");
+  const schemaInstallRoute = enabledInstallRoute(install, "schema");
+  const route = adminRoute?.path ?? (install.routes ? undefined : fallbackRoute);
   const schemaRoute =
-    enabledInstallRoutePath(install, "schema") ??
+    schemaInstallRoute?.path ??
     (install.routes
       ? undefined
       : (`${fallbackRoute}${runtimeTopologyRoutes.schemaRoute}` as const));
@@ -564,10 +568,16 @@ export function installedAppWorldMountFromInstall(
   }
 
   return {
+    access: adminRoute?.access ?? "owner",
     app,
     generatedRoutes: true,
     route,
-    ...(routes.schemaRoutes && schemaRoute ? { schemaRoute } : {}),
+    ...(routes.schemaRoutes && schemaRoute
+      ? {
+          schemaRoute,
+          schemaRouteAccess: schemaInstallRoute?.access ?? "owner",
+        }
+      : {}),
     target,
   };
 }
@@ -658,13 +668,6 @@ function findInstalledAppByInstallId(
   installId: string,
 ): AppInstall | undefined {
   return appInstalls?.find((install) => install.installId === installId);
-}
-
-function enabledInstallRoutePath(
-  install: AppInstall,
-  routeKind: AppInstallRoute["routeKind"],
-): `/${string}` | undefined {
-  return enabledInstallRoute(install, routeKind)?.path;
 }
 
 function enabledInstallRoute(

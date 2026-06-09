@@ -482,7 +482,13 @@ async function createStoredCredential(credentialIdValue: string) {
 }
 
 async function getJson<T = unknown>(path: string, init: HarnessFetchInit = {}) {
-  const response = await harness.fetch(path, init);
+  const response = await harness.fetch(path, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      ...(init.headers as Record<string, string> | undefined),
+    },
+  });
 
   return {
     body: (await response.json()) as T,

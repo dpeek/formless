@@ -228,6 +228,23 @@ The system SHALL let app schemas define workspace screens that compose collectio
 - THEN each section references an existing collection view
 - AND valid sections are available in schema order
 
+#### Scenario: Screen access policy
+
+- GIVEN a workspace screen declares access policy
+- WHEN the schema is parsed
+- THEN `access` is either `anonymous` or `owner`
+- AND `anonymous` means the screen does not require an owner session beyond the
+  access required by its mounted route
+- AND `owner` means the screen requires an owner session
+- AND omitted screen access inherits the mounted route access
+
+#### Scenario: Reject invalid screen access
+
+- GIVEN a workspace screen declares an unsupported access value
+- WHEN the schema is parsed
+- THEN parsing fails
+- AND the invalid screen is not made available for generated UI navigation
+
 ### Requirement: Entity Unions
 
 The system SHALL model unions as schema metadata over flat entity records.

@@ -19,7 +19,11 @@ import {
   type PackageAppRevision,
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
-import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
+import {
+  authorizeInstanceWrite,
+  authorizeOwnerManagementRead,
+  type AuthorityAdminGuardEnv,
+} from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   INTERNAL_BACKFILL_APP_INSTALLS_PATH,
@@ -136,6 +140,16 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
     }
 
     if (request.method === "GET") {
+      const authorization = await authorizeOwnerManagementRead(request, env);
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
       return jsonResponse(await appInstallsResponse(request, storage, env));
     }
 

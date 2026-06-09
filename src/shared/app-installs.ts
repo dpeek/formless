@@ -1,4 +1,5 @@
 import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
+import type { RuntimeRouteAccess } from "./runtime-topology.ts";
 import {
   bundledSourceSchemaHashFixtures,
   type PackageAppRevision,
@@ -11,6 +12,7 @@ export type AppInstallStatus = "installed";
 export type AppInstallRouteKind = "admin" | "publicSite" | "schema";
 
 export type AppInstallRoute = {
+  access?: RuntimeRouteAccess;
   enabled: boolean;
   id: string;
   path: `/${string}`;

@@ -7,11 +7,13 @@ import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneEffectiveRouteAccess,
   type InstanceControlPlaneRedirectStatusCode,
   type InstanceControlPlaneRouteSurface,
   type InstanceControlPlaneRouteTargetProfile,
   type InstanceControlPlaneRouteValues,
 } from "../shared/instance-control-plane.ts";
+import { parseRuntimeRouteAccess, type RuntimeRouteAccess } from "../shared/runtime-topology.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 
 export const INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH = "/_internal/resolve-runtime-route";
@@ -19,6 +21,7 @@ export const INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH = "/_internal/resolve-
 export type InstanceRuntimeRedirectStatus = 301 | 302 | 303 | 307 | 308;
 
 export type InstanceRuntimeMountRouteResolution = {
+  access: RuntimeRouteAccess;
   id: string;
   kind: "mount";
   matchHost?: string;
@@ -189,6 +192,7 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
   const matchHost = optionalString(values.matchHost);
   const matchPath = optionalAbsolutePath(values.matchPath);
   const matchPrefix = optionalAbsolutePath(values.matchPrefix);
+  const access = parseRuntimeRouteAccess(optionalString(values.access));
 
   if ((kind !== "mount" && kind !== "redirect") || !matchPath) {
     return undefined;
@@ -211,6 +215,7 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
     values.surface === "public-site"
       ? { surface: values.surface }
       : {}),
+    ...(access === undefined ? {} : { access }),
     ...(typeof values.providerConfig === "string" ? { providerConfig: values.providerConfig } : {}),
     ...(typeof values.toHost === "string" ? { toHost: values.toHost } : {}),
     ...(typeof values.toUrl === "string" ? { toUrl: values.toUrl } : {}),
@@ -295,6 +300,7 @@ function runtimeRouteResolutionFromCandidate(
   }
 
   return {
+    access: instanceControlPlaneEffectiveRouteAccess(values),
     id: candidate.id,
     kind: "mount",
     ...(candidate.matchHost === undefined ? {} : { matchHost: candidate.matchHost }),

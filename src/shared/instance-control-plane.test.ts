@@ -5,6 +5,7 @@ import {
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneDefaultRoutesForInstall,
+  instanceControlPlaneEffectiveRouteAccess,
   instanceControlPlaneEntityNames,
   instanceControlPlaneImmutableFields,
   instanceControlPlaneSchema,
@@ -100,6 +101,14 @@ describe("instance control-plane schema contracts", () => {
           schema: { label: "Schema" },
         },
       },
+      access: {
+        type: "enum",
+        required: false,
+        values: {
+          anonymous: { label: "Anonymous" },
+          owner: { label: "Owner" },
+        },
+      },
       providerConfig: {
         type: "reference",
         required: false,
@@ -133,6 +142,7 @@ describe("instance control-plane schema contracts", () => {
       "targetProfile",
       "appInstall",
       "surface",
+      "access",
       "providerConfig",
       "toHost",
       "toUrl",
@@ -255,6 +265,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "targetProfile", display: "readOnly" },
       { field: "appInstall", display: "readOnly" },
       { field: "surface", display: "readOnly" },
+      { field: "access", display: "readOnly" },
       { field: "providerConfig", display: "readOnly" },
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
@@ -268,6 +279,7 @@ describe("instance control-plane schema contracts", () => {
     ).toMatchObject({
       targetProfile: { visibleWhen: { field: "kind", values: ["mount"] } },
       appInstall: { visibleWhen: { field: "targetProfile", values: ["app", "public-site"] } },
+      access: { visibleWhen: { field: "kind", values: ["mount"] } },
       toHost: { visibleWhen: { field: "kind", values: ["redirect"] } },
       statusCode: { visibleWhen: { field: "kind", values: ["redirect"] } },
     });
@@ -354,6 +366,7 @@ describe("instance control-plane schema contracts", () => {
         targetProfile: "app",
         appInstall: "personal",
         surface: "admin",
+        access: "owner",
         createdAt: now,
         updatedAt: now,
       },
@@ -364,6 +377,7 @@ describe("instance control-plane schema contracts", () => {
         targetProfile: "app",
         appInstall: "personal",
         surface: "schema",
+        access: "owner",
         createdAt: now,
         updatedAt: now,
       },
@@ -375,6 +389,7 @@ describe("instance control-plane schema contracts", () => {
         targetProfile: "public-site",
         appInstall: "personal",
         surface: "public-site",
+        access: "anonymous",
         createdAt: now,
         updatedAt: now,
       },
@@ -387,6 +402,28 @@ describe("instance control-plane schema contracts", () => {
         now,
       }).map((record) => record.values.surface),
     ).toEqual(["admin", "schema"]);
+    expect(
+      instanceControlPlaneDefaultRoutesForInstall({
+        installId: "cleartrace",
+        packageAppKey: "cleartrace",
+        now,
+      }).map((record) => record.values.access),
+    ).toEqual(["owner", "owner"]);
+    expect(
+      instanceControlPlaneEffectiveRouteAccess({
+        kind: "mount",
+        targetProfile: "public-site",
+        surface: "public-site",
+      }),
+    ).toBe("anonymous");
+    expect(
+      instanceControlPlaneEffectiveRouteAccess({
+        kind: "mount",
+        targetProfile: "public-site",
+        surface: "public-site",
+        access: "owner",
+      }),
+    ).toBe("owner");
   });
 
   it("keeps route paths static, app-relative, lowercase, and away from reserved roots", () => {

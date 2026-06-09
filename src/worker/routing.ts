@@ -12,9 +12,12 @@ import {
   publishedSiteRedirectLocation,
   resolveRuntimeProfileKind,
   runtimeRoutePolicyForProfileKind,
+  runtimeTopologyRoutes,
   stringRuntimeConfigValue,
+  type RuntimeRouteAccess,
   type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
+import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
 
 export type WorkerRuntimeProfileInput = {
   hostname?: string | undefined;
@@ -242,6 +245,56 @@ export function shouldDeferToStaticAssets(
   }
 
   return true;
+}
+
+export function shouldRedirectAnonymousOwnerBrowserRoute(
+  request: Request,
+  input: WorkerRuntimeRouteInput = {},
+  runtimeRoute?: InstanceRuntimeRouteResolution,
+): boolean {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (
+    !topology.readMethod ||
+    !topology.acceptsHtml ||
+    topology.apiPath ||
+    topology.staticAssetPath ||
+    topology.pathname === runtimeTopologyRoutes.loginRoute ||
+    topology.pathname === runtimeTopologyRoutes.setupRoute
+  ) {
+    return false;
+  }
+
+  return ownerBrowserRouteAccessForRequest(request, topology, runtimeRoute) === "owner";
+}
+
+export function ownerBrowserRouteAccessForRequest(
+  request: Request,
+  input: WorkerRuntimeRouteInput = {},
+  runtimeRoute?: InstanceRuntimeRouteResolution,
+): RuntimeRouteAccess {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+  const mountRoute = runtimeRoute?.kind === "mount" ? runtimeRoute : undefined;
+  const instanceBrowserProfile =
+    topology.profileKind === "instance" || topology.profileKind === "dev";
+
+  if (!instanceBrowserProfile) {
+    return "anonymous";
+  }
+
+  if (mountRoute) {
+    return mountRoute.access;
+  }
+
+  if (
+    topology.pathname === runtimeTopologyRoutes.instanceRootRoute ||
+    topology.pathname === runtimeTopologyRoutes.appRouteBase ||
+    topology.pathname.startsWith(`${runtimeTopologyRoutes.appRouteBase}/`)
+  ) {
+    return "owner";
+  }
+
+  return "anonymous";
 }
 
 export function publishedSiteRedirectForRequest(
