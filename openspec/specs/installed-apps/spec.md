@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Installed apps define the product instance app shape: stable app install identity, package-backed initialization, install-scoped routes, and install-scoped storage/API behavior. They let one Formless instance host multiple Site, Tasks, and Estii installs without mixing app data, browser replicas, public Site routes, or source schema-key storage.
+Installed apps define the product instance app shape: stable app install identity, package-backed initialization, install-scoped routes, and install-scoped storage/API behavior. They let one Formless instance host multiple Site, Tasks, Estii, CRM, and ClearTrace installs without mixing app data, browser replicas, public Site routes, or source schema-key storage.
 
 ## Requirements
 
@@ -26,13 +26,13 @@ The system SHALL treat an app install id as the stable instance-local identity f
 
 ### Requirement: Bundled Package Apps
 
-The system MUST expose bundled Site, Tasks, Estii, and CRM packages as installable package apps.
+The system MUST expose bundled Site, Tasks, Estii, CRM, and ClearTrace packages as installable package apps.
 
 #### Scenario: Package metadata
 
 - **GIVEN** the instance app install registry is read
 - **WHEN** bundled packages are listed
-- **THEN** Site, Tasks, Estii, and CRM packages are returned with package app keys `site`, `tasks`, `estii`, and `crm`
+- **THEN** Site, Tasks, Estii, CRM, and ClearTrace packages are returned with package app keys `site`, `tasks`, `estii`, `crm`, and `cleartrace`
 - **AND** each package declares its default install id, label, source schema key, seed records key, and admin route base
 
 #### Scenario: Unsupported package
@@ -63,7 +63,7 @@ instance `route` records.
 
 #### Scenario: Non-Site install routes
 
-- **GIVEN** a Tasks or Estii app install is created
+- **GIVEN** a Tasks, Estii, CRM, or ClearTrace app install is created
 - **WHEN** install metadata is returned
 - **THEN** the app install metadata stores package app key, label, and status
 - **AND** route records target the install for admin and schema routes under
@@ -126,6 +126,13 @@ The system MUST initialize a created package app install from that package's sou
 - **WHEN** `/api/app-installs/crm/crm/bootstrap` is read
 - **THEN** the bootstrap response contains the bundled CRM source schema and source seed records
 - **AND** the install metadata keeps label and route identity scoped to `crm`
+
+#### Scenario: ClearTrace initialization
+
+- **GIVEN** a ClearTrace app install is created with install id `cleartrace`
+- **WHEN** `/api/app-installs/cleartrace/cleartrace/bootstrap` is read
+- **THEN** the bootstrap response contains the bundled ClearTrace source schema and source seed records
+- **AND** the install metadata keeps label and route identity scoped to `cleartrace`
 
 ### Requirement: Launch Fixtures
 
@@ -224,7 +231,7 @@ schema-owned `route` records that target app install records.
 
 #### Scenario: Non-Site install route records
 
-- **GIVEN** a Tasks or Estii app install is created
+- **GIVEN** a Tasks, Estii, CRM, or ClearTrace app install is created
 - **WHEN** default route records are created
 - **THEN** route records target the app install for admin and schema routes
   under `/apps/<installId>`
