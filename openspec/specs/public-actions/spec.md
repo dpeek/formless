@@ -105,6 +105,16 @@ The system SHALL support Turnstile as an anonymous public action challenge.
 
 The system SHALL use separate runtime configuration for public Turnstile widget keys and server-side verification secrets.
 
+#### Scenario: Deployment-provided challenge configuration
+
+- GIVEN a deployed instance provisions a Turnstile widget for public actions
+- WHEN runtime bindings are configured
+- THEN `FORMLESS_TURNSTILE_SITE_KEY` contains the public widget site key
+- AND `FORMLESS_TURNSTILE_SECRET_KEY` contains the server-side verification
+  secret
+- AND public action APIs, Site trees, snapshots, archives, and bootstrap data do
+  not expose the verification secret
+
 #### Scenario: Public site key reaches renderer
 
 - GIVEN `FORMLESS_TURNSTILE_SITE_KEY` is configured

@@ -844,6 +844,10 @@ describe("Alchemy Formless instance deployment", () => {
       props: unknown;
     }> = [];
     const secrets: string[] = [];
+    const turnstiles: Array<{
+      id: string;
+      props: unknown;
+    }> = [];
     const workers: Array<{
       id: string;
       props: AlchemyFormlessInstanceDeploymentWorkerProps;
@@ -851,6 +855,7 @@ describe("Alchemy Formless instance deployment", () => {
     const mediaBucket = { type: "r2_bucket", name: "brother-instance-media" };
     const authorityNamespace = { className: "FormlessAuthority", type: "durable_object_namespace" };
     const adminSecret = { name: "FORMLESS_ADMIN_TOKEN", type: "secret" };
+    const turnstileSecret = { name: "FORMLESS_TURNSTILE_SECRET_KEY", type: "secret" };
     let finalized = 0;
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async (name, options) => {
@@ -872,6 +877,15 @@ describe("Alchemy Formless instance deployment", () => {
       createSecret: (value) => {
         secrets.push(value);
         return adminSecret;
+      },
+      createTurnstileWidget: async (id, props) => {
+        turnstiles.push({ id, props });
+
+        return fakeTurnstileWidgetOutput({
+          domains: props.domains,
+          name: props.name,
+          verificationSecret: turnstileSecret,
+        });
       },
       deployViteWorker: async (id, props) => {
         workers.push({ id, props });
@@ -935,6 +949,19 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
     ]);
+    expect(turnstiles).toEqual([
+      {
+        id: "turnstile",
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          domains: ["brother-instance.dpeek.workers.dev"],
+          mode: "managed",
+          name: "Formless brother-instance public actions",
+          profile: "personal",
+        },
+      },
+    ]);
     expect(secrets).toEqual(["alchemy-password", "admin-secret"]);
     expect(workers).toEqual([
       {
@@ -958,6 +985,8 @@ describe("Alchemy Formless instance deployment", () => {
             FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
             FORMLESS_MEDIA: mediaBucket,
             FORMLESS_RUNTIME_PROFILE: "instance",
+            FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+            FORMLESS_TURNSTILE_SITE_KEY: "turnstile-site-key",
           },
           build: {
             command: "bun run build",
@@ -988,6 +1017,7 @@ describe("Alchemy Formless instance deployment", () => {
     const events: string[] = [];
     const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
     const secrets: string[] = [];
+    const turnstileCalls: Array<{ id: string; props: unknown }> = [];
     let finalized = 0;
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async () => {
@@ -1065,6 +1095,16 @@ describe("Alchemy Formless instance deployment", () => {
 
         return { index: secrets.length, type: "secret" };
       },
+      createTurnstileWidget: async (id, props) => {
+        events.push("turnstile");
+        turnstileCalls.push({ id, props });
+
+        return fakeTurnstileWidgetOutput({
+          domains: props.domains,
+          name: props.name,
+          verificationSecret: { index: "turnstile-secret", type: "secret" },
+        });
+      },
       deployViteWorker: async () => {
         events.push("worker");
 
@@ -1121,6 +1161,7 @@ describe("Alchemy Formless instance deployment", () => {
           inputs: {
             host: "app.example.com",
             name: "app.example.com",
+            profile: "publicSite",
             workerName: plan.resources.worker.name,
             zoneId: "zone-1",
           },
@@ -1153,17 +1194,30 @@ describe("Alchemy Formless instance deployment", () => {
       ["RedirectRule", "brother-instance-redirect-rule-old-example-com-app-example-com"],
       ["CustomDomain", "brother-instance-custom-domain-app-example-com-instance"],
     ]);
+    expect(turnstileCalls).toEqual([
+      {
+        id: "turnstile",
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          apiToken: { index: 1, type: "secret" },
+          domains: ["app.example.com", "brother-instance.dpeek.workers.dev"],
+          mode: "managed",
+          name: "Formless brother-instance public actions",
+        },
+      },
+    ]);
     expect(routeResourceCalls[0]?.props).toMatchObject({
-      apiToken: { index: 4, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       zoneId: "zone-1",
     });
     expect(routeResourceCalls[1]?.props).toMatchObject({
-      apiToken: { index: 4, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       statusCode: 308,
       zone: "zone-1",
     });
     expect(routeResourceCalls[2]?.props).toMatchObject({
-      apiToken: { index: 4, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       name: "app.example.com",
       workerName: "brother-instance",
       zoneId: "zone-1",
@@ -1185,6 +1239,7 @@ describe("Alchemy Formless instance deployment", () => {
       "app",
       "r2",
       "durable-object",
+      "turnstile",
       "worker",
       "dns-records",
       "redirect-rule",
@@ -1196,6 +1251,7 @@ describe("Alchemy Formless instance deployment", () => {
 
   it("marks Worker and media resources for adoption when deploying an existing instance", async () => {
     const buckets: Array<{ props: unknown }> = [];
+    const turnstiles: Array<{ props: unknown }> = [];
     const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async () => ({
@@ -1207,6 +1263,14 @@ describe("Alchemy Formless instance deployment", () => {
         return {};
       },
       createSecret: () => ({}),
+      createTurnstileWidget: async (_id, props) => {
+        turnstiles.push({ props });
+
+        return fakeTurnstileWidgetOutput({
+          domains: props.domains,
+          name: props.name,
+        });
+      },
       deployViteWorker: async (_id, props) => {
         workers.push({ props });
         return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
@@ -1254,6 +1318,7 @@ describe("Alchemy Formless instance deployment", () => {
       },
     });
     expect(buckets[0]?.props).toMatchObject({ adopt: true });
+    expect(turnstiles[0]?.props).toMatchObject({ adopt: true });
     expect(workers[0]?.props).toMatchObject({ adopt: true });
   });
 
@@ -1347,6 +1412,15 @@ describe("Alchemy Formless instance deployment", () => {
         secrets.push(value);
 
         return { type: "secret", index: secrets.length };
+      },
+      createTurnstileWidget: async (id, props) => {
+        events.push("turnstile");
+
+        return fakeTurnstileWidgetOutput({
+          domains: props.domains,
+          name: props.name,
+          verificationSecret: { type: "secret", id },
+        });
       },
       deployViteWorker: async (_id, props) => {
         events.push("worker");
@@ -1455,6 +1529,7 @@ describe("Alchemy Formless instance deployment", () => {
       durableObjectNamespace: "destroyed",
       mediaBucket: "destroyed",
       redirectRules: 1,
+      turnstileWidget: "destroyed",
       worker: "destroyed",
       workerAssets: "destroyed",
       workerSecrets: "destroyed",
@@ -1495,15 +1570,15 @@ describe("Alchemy Formless instance deployment", () => {
       ["CustomDomain", "brother-instance-custom-domain-app-example-com-instance"],
     ]);
     expect(routeResourceCalls[0]?.props).toMatchObject({
-      apiToken: { index: 2, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       zoneId: "zone-1",
     });
     expect(routeResourceCalls[1]?.props).toMatchObject({
-      apiToken: { index: 2, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       zone: "zone-1",
     });
     expect(routeResourceCalls[2]?.props).toMatchObject({
-      apiToken: { index: 2, type: "secret" },
+      apiToken: { index: 1, type: "secret" },
       name: "app.example.com",
       workerName: "brother-instance",
       zoneId: "zone-1",
@@ -1513,13 +1588,14 @@ describe("Alchemy Formless instance deployment", () => {
       "app",
       "r2",
       "durable-object",
+      "turnstile",
       "worker",
       "dns-records",
       "redirect-rule",
       "custom-domain",
       "finalize",
     ]);
-    expect(secrets).toEqual(["alchemy-password", "cf-token", "destroy-placeholder"]);
+    expect(secrets).toEqual(["cf-token", "alchemy-password", "destroy-placeholder"]);
     expect(finalized).toBe(1);
   });
 
@@ -1545,6 +1621,10 @@ describe("Alchemy Formless instance deployment", () => {
       createSecret: () => {
         calls.push("createSecret");
         return {};
+      },
+      createTurnstileWidget: async () => {
+        calls.push("createTurnstileWidget");
+        return fakeTurnstileWidgetOutput();
       },
       deployViteWorker: async () => {
         calls.push("deployViteWorker");
@@ -1834,6 +1914,27 @@ describe("Formless instance state", () => {
     ).toThrow("formless.instance.json workersDevUrl must be a workers.dev origin URL.");
   });
 });
+
+function fakeTurnstileWidgetOutput(
+  input: {
+    domains?: readonly string[];
+    name?: string;
+    siteKey?: string;
+    verificationSecret?: unknown;
+  } = {},
+): Awaited<ReturnType<AlchemyFormlessInstanceDeploymentDependencies["createTurnstileWidget"]>> {
+  return {
+    botFightMode: false,
+    domains: [...(input.domains ?? ["brother-instance.dpeek.workers.dev"])],
+    ephemeralId: false,
+    id: input.siteKey ?? "turnstile-site-key",
+    mode: "managed",
+    name: input.name ?? "Formless brother-instance public actions",
+    offlabel: false,
+    siteKey: input.siteKey ?? "turnstile-site-key",
+    verificationSecret: input.verificationSecret ?? { type: "secret", value: "turnstile" },
+  };
+}
 
 function randomTokenSequence(...tokens: string[]): () => string {
   let index = 0;

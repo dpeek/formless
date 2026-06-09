@@ -200,7 +200,7 @@ describe("public action runtime", () => {
     expect(after.records).toEqual(before.records);
   });
 
-  it("fails closed when Turnstile secret configuration is missing", async () => {
+  it("fails closed when Turnstile secret configuration is missing or blank", async () => {
     const missingConfigRequests: unknown[] = [];
     const missingConfigHarness = await createPublicActionHarness({
       bindings: {
@@ -227,6 +227,36 @@ describe("public action runtime", () => {
       expect(missingConfigRequests).toEqual([]);
     } finally {
       await missingConfigHarness.dispose();
+    }
+
+    const blankConfigRequests: unknown[] = [];
+    const blankConfigHarness = await createPublicActionHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: " ",
+      },
+      turnstileVerify: async (request) => {
+        blankConfigRequests.push(await request.json());
+
+        return Response.json({ success: true });
+      },
+    });
+
+    try {
+      const response = await postPublicAction(
+        "/api/site/public/actions/subscribe",
+        publicSubscribeBody({ idempotencyKey: "blank-config" }),
+        blankConfigHarness,
+      );
+
+      expect(response.status).toBe(503);
+      expect((await response.json()) as { error: string }).toEqual({
+        error: "Public action challenge is unavailable.",
+      });
+      expect(blankConfigRequests).toEqual([]);
+    } finally {
+      await blankConfigHarness.dispose();
     }
   });
 
@@ -268,6 +298,84 @@ describe("public action runtime", () => {
       },
     });
     expect(JSON.stringify(tree)).not.toContain(turnstileSecret);
+  });
+
+  it("uses deployed Turnstile bindings for subscribe form rendering and verification", async () => {
+    const deployedSiteKey = "deployed-turnstile-site-key";
+    const deployedSecret = "deployed-turnstile-secret";
+    const deployedRequests: unknown[] = [];
+    const deployedHarness = await createPublicActionHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: deployedSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: deployedSecret,
+      },
+      turnstileVerify: async (request) => {
+        deployedRequests.push(await request.json());
+
+        return Response.json({ success: true });
+      },
+    });
+
+    try {
+      await resetSchemaApp("site", deployedHarness);
+      const block = await postAdminJson<MutationResponse>(
+        "/api/site/mutations",
+        {
+          mutationId: "mutation-create-deployed-subscribe-form",
+          entity: "block",
+          op: "create",
+          values: {
+            type: "subscribeForm",
+            label: "Join the deployed list",
+            actionName: "subscribe",
+            buttonLabel: "Join",
+          },
+        },
+        deployedHarness,
+      );
+      await postAdminJson<MutationResponse>(
+        "/api/site/mutations",
+        {
+          mutationId: "mutation-place-deployed-subscribe-form",
+          entity: "block-placement",
+          op: "create",
+          values: {
+            parent: "rec_site_starter_page_home",
+            block: block.record.id,
+            order: 4500,
+            label: "Join the deployed list",
+          },
+        },
+        deployedHarness,
+      );
+
+      const tree = await getJson<SitePageTreeResponse>("/api/site/tree/home", deployedHarness);
+      const subscribePlacement = tree.page.placements.find(
+        (placement) => placement.block.id === block.record.id,
+      );
+      const accepted = await postPublicAction(
+        "/api/site/public/actions/subscribe",
+        publicSubscribeBody({ idempotencyKey: "deployed-bindings" }),
+        deployedHarness,
+      );
+
+      expect(subscribePlacement?.block.publicAction?.challenge).toEqual({
+        kind: "turnstile",
+        siteKey: deployedSiteKey,
+      });
+      expect(accepted.status).toBe(200);
+      expect(deployedRequests).toEqual([
+        {
+          secret: deployedSecret,
+          response: "token-ok",
+          idempotency_key: "deployed-bindings",
+        },
+      ]);
+      expect(JSON.stringify(tree)).not.toContain(deployedSecret);
+    } finally {
+      await deployedHarness.dispose();
+    }
   });
 
   it("keeps one email address and one subscription for duplicate subscribes", async () => {
@@ -421,8 +529,8 @@ async function turnstileVerifyResponse(request: Request) {
   return Response.json(turnstileResponse);
 }
 
-async function resetSchemaApp(schemaKey: "tasks" | "site") {
-  const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {
+async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = harness) {
+  const response = await target.fetch(`/api/${schemaKey}/reset/seed`, {
     body: "{}",
     headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",

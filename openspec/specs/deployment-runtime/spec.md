@@ -138,6 +138,34 @@ stable logical ids and provider resource declarations.
 - **THEN** it represents desired resources for planning
 - **AND** it does not claim to be the current provider resource state
 
+### Requirement: Turnstile Challenge Deployment
+
+The deployment runtime SHALL provision per-instance Turnstile challenge
+configuration for deployed public action forms that require Turnstile.
+
+#### Scenario: Declare Turnstile widget resource
+
+- WHEN a deployer applies a Formless instance target whose public actions use
+  Turnstile challenges
+- THEN it declares a stable Cloudflare Turnstile widget resource in tracked
+  Alchemy state with the Worker, Durable Object namespace, R2 bucket, and
+  route-derived provider resources
+- AND the widget inputs include a deterministic name, widget mode, and the
+  deployed workers.dev host plus enabled public Site custom-domain hosts
+- AND changed or removed widget host inputs reconcile through the next deploy
+  without storing Turnstile provider state in app records
+
+#### Scenario: Bind Turnstile runtime configuration
+
+- GIVEN the Turnstile widget resource returns a public site key and server-side
+  verification secret
+- WHEN the Worker resource is declared
+- THEN the deployer binds the site key to `FORMLESS_TURNSTILE_SITE_KEY`
+- AND binds the verification secret to `FORMLESS_TURNSTILE_SECRET_KEY` as a
+  Worker secret
+- AND deployment desired state, result writeback, status, metadata, and public
+  artifacts do not include raw Turnstile secret values
+
 ### Requirement: Deployment Attempts
 
 The system SHALL record deployment attempts against one exact desired-state

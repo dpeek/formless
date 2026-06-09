@@ -13,11 +13,20 @@ import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-run
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
 import {
+  FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
+  FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
+} from "../shared/turnstile-config.ts";
+import {
   applyAlchemyDeployResourceGraph,
   type AlchemyDeployResourceZoneResolver,
   type AlchemyDomainProviderFactories,
 } from "../worker/domain-provider-alchemy.ts";
 import { appendDotEnvValue, parseDotEnv } from "./dotenv.ts";
+import {
+  CloudflareTurnstileWidget,
+  type TurnstileWidgetOutput,
+  type TurnstileWidgetProps,
+} from "./turnstile-alchemy.ts";
 
 export const ALCHEMY_PASSWORD_ENV_NAME = "ALCHEMY_PASSWORD";
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
@@ -173,6 +182,7 @@ export type DestroyFormlessInstanceResourceSummary = {
   durableObjectNamespace: DestroyFormlessInstanceResourceStatus;
   mediaBucket: DestroyFormlessInstanceResourceStatus;
   redirectRules: number;
+  turnstileWidget: DestroyFormlessInstanceResourceStatus;
   worker: DestroyFormlessInstanceResourceStatus;
   workerAssets: DestroyFormlessInstanceResourceStatus;
   workerSecrets: DestroyFormlessInstanceResourceStatus;
@@ -285,6 +295,8 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
   url: true;
 };
 
+export type AlchemyFormlessInstanceDeploymentTurnstileWidgetProps = TurnstileWidgetProps;
+
 export type AlchemyFormlessInstanceDeploymentDependencies = {
   createApp: (
     name: typeof FORMLESS_ALCHEMY_APP_NAME,
@@ -315,6 +327,10 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
   ) => Promise<unknown>;
   createRedirectRule?: AlchemyDomainProviderFactories["RedirectRule"];
   createSecret: (value: string) => unknown;
+  createTurnstileWidget: (
+    id: "turnstile",
+    props: AlchemyFormlessInstanceDeploymentTurnstileWidgetProps,
+  ) => Promise<TurnstileWidgetOutput<unknown>>;
   deployViteWorker: (
     id: "worker",
     props: AlchemyFormlessInstanceDeploymentWorkerProps,
@@ -783,6 +799,18 @@ export async function deployFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
+  let cloudflareApiTokenSecret: unknown;
+  const secretCloudflareApiToken = (): unknown => {
+    if (cloudflareApiToken === undefined) {
+      return undefined;
+    }
+
+    if (cloudflareApiTokenSecret === undefined) {
+      cloudflareApiTokenSecret = resolvedDependencies.createSecret(cloudflareApiToken);
+    }
+
+    return cloudflareApiTokenSecret;
+  };
   const adoptExistingDeployment = plan.migrationPolicy === "existing";
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     phase: "up",
@@ -801,6 +829,20 @@ export async function deployFormlessInstanceWithAlchemy(
     className: plan.resources.authority.className,
     sqlite: true,
   });
+  const turnstileWidget = await resolvedDependencies.createTurnstileWidget("turnstile", {
+    adopt: adoptExistingDeployment,
+    ...turnstileCloudflareResourceOptions({
+      accountId: plan.account.id,
+      apiToken: secretCloudflareApiToken(),
+      credentialProfile,
+    }),
+    domains: turnstileWidgetDomains({
+      deploymentResourceGraph: input.deploymentResourceGraph,
+      plan,
+    }),
+    mode: "managed",
+    name: turnstileWidgetName(plan),
+  });
   const worker = await resolvedDependencies.deployViteWorker("worker", {
     adopt: adoptExistingDeployment,
     accountId: plan.account.id,
@@ -811,7 +853,7 @@ export async function deployFormlessInstanceWithAlchemy(
       ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
       ...(cloudflareApiToken === undefined
         ? {}
-        : { CLOUDFLARE_API_TOKEN: resolvedDependencies.createSecret(cloudflareApiToken) }),
+        : { CLOUDFLARE_API_TOKEN: secretCloudflareApiToken() }),
       FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret(adminToken),
       FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
       FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
@@ -820,6 +862,8 @@ export async function deployFormlessInstanceWithAlchemy(
       FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
       FORMLESS_INSTANCE_AUTH_ORIGIN: plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
       FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
+      [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: turnstileWidget.verificationSecret,
+      [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,
     },
     build: {
       command: "bun run build",
@@ -841,10 +885,7 @@ export async function deployFormlessInstanceWithAlchemy(
   ) {
     const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
       accountId: plan.account.id,
-      apiToken:
-        cloudflareApiToken === undefined
-          ? undefined
-          : resolvedDependencies.createSecret(cloudflareApiToken),
+      apiToken: secretCloudflareApiToken(),
       credentialProfile,
     });
 
@@ -886,8 +927,8 @@ export async function destroyFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
-  let cloudflareApiTokenSecret: unknown | undefined;
-  const secretCloudflareApiToken = (): unknown | undefined => {
+  let cloudflareApiTokenSecret: unknown;
+  const secretCloudflareApiToken = (): unknown => {
     if (cloudflareApiToken === undefined) {
       return undefined;
     }
@@ -916,6 +957,21 @@ export async function destroyFormlessInstanceWithAlchemy(
     const authorityNamespace = resolvedDependencies.createDurableObjectNamespace("authority", {
       className: plan.resources.authority.className,
       sqlite: true,
+    });
+
+    await resolvedDependencies.createTurnstileWidget("turnstile", {
+      adopt: plan.migrationPolicy === "existing",
+      ...turnstileCloudflareResourceOptions({
+        accountId: plan.account.id,
+        apiToken: secretCloudflareApiToken(),
+        credentialProfile,
+      }),
+      domains: turnstileWidgetDomains({
+        deploymentResourceGraph: input.domainProviderResources,
+        plan,
+      }),
+      mode: "managed",
+      name: turnstileWidgetName(plan),
     });
 
     await resolvedDependencies.deployViteWorker("worker", {
@@ -1075,6 +1131,55 @@ function cloudflareAlchemyResourceOptions(input: {
   };
 }
 
+function turnstileCloudflareResourceOptions(input: {
+  accountId: string;
+  apiToken?: unknown;
+  credentialProfile: string | null;
+}): Pick<TurnstileWidgetProps, "accountId" | "apiToken" | "profile"> {
+  const options = cloudflareAlchemyResourceOptions(input);
+
+  return {
+    accountId: input.accountId,
+    ...(options.apiToken === undefined
+      ? options.profile === undefined
+        ? {}
+        : { profile: options.profile }
+      : { apiToken: options.apiToken as NonNullable<TurnstileWidgetProps["apiToken"]> }),
+  };
+}
+
+function turnstileWidgetName(plan: FormlessInstanceDeploymentPlan): string {
+  return `Formless ${plan.instanceName} public actions`;
+}
+
+function turnstileWidgetDomains(input: {
+  deploymentResourceGraph?: DeployResourceGraph;
+  plan: FormlessInstanceDeploymentPlan;
+}): string[] {
+  const domains = new Set<string>([normalizeCloudflareHost(input.plan.expectedUrl.host)]);
+
+  for (const resource of input.deploymentResourceGraph?.resources ?? []) {
+    if (
+      resource.kind !== "cloudflare-worker-custom-domain" ||
+      resource.inputs.profile !== "publicSite"
+    ) {
+      continue;
+    }
+
+    const host = deployResourceInputString(resource.inputs.host);
+
+    if (host !== undefined) {
+      domains.add(normalizeCloudflareHost(host));
+    }
+  }
+
+  return [...domains].filter(Boolean).sort((left, right) => left.localeCompare(right));
+}
+
+function deployResourceInputString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 function deploymentResourceFactories(
   dependencies: AlchemyFormlessInstanceDeploymentDependencies,
   cloudflareOptions: AlchemyCloudflareApiOptions,
@@ -1232,6 +1337,7 @@ function destroyResourceSummary(
     redirectRules: domainProviderResources.filter(
       (resource) => resource.kind === "cloudflare-redirect-rule",
     ).length,
+    turnstileWidget: status,
     worker: status,
     workerAssets: status,
     workerSecrets: status,
@@ -1264,6 +1370,7 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
     createRedirectRule: (id, props) => cloudflare.RedirectRule(id, props),
     createSecret: (value) => alchemy.secret(value),
+    createTurnstileWidget: (id, props) => CloudflareTurnstileWidget(id, props),
     deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),
   };
 }

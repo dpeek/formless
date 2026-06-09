@@ -389,6 +389,7 @@ function summarizeDeployPlanResult(
 ): WorkspaceOperationResult {
   return {
     deployment: {
+      builtInResources: deploymentBuiltInResourceSummary("planned"),
       cleanup: notRunDeploymentCleanupSummary(),
       desiredState: {
         logicalIds: result.desiredState.logicalIds,
@@ -434,6 +435,7 @@ function summarizeDeployPlanResult(
         migrationPolicy: result.plan.migrationPolicy,
         routeTargetCount: result.desiredState.routeTargetCount,
         writebackStatus: "not-run",
+        turnstileWidget: "planned",
         workerName: result.plan.resources.worker.name,
       },
       title: "Deploy planned",
@@ -449,6 +451,7 @@ function summarizeDeployApplyResult(
   return {
     deployment: {
       attempt: writeback?.attempt ?? null,
+      builtInResources: deploymentBuiltInResourceSummary("provisioned"),
       cleanup: notRunDeploymentCleanupSummary(),
       drift: result.push ? summarizeDrift(result.push.drift) : { status: "not-checked" },
       evidence: writeback?.evidence ?? emptyDeploymentEvidenceSummary(),
@@ -491,6 +494,7 @@ function summarizeDeployApplyResult(
         healthCheckVersion: result.healthCheck.version,
         migrationPolicy: result.migrationPolicy,
         ...(result.ownerSetup === undefined ? {} : { ownerSetupUrl: result.ownerSetup.url }),
+        turnstileWidget: "provisioned",
         url: result.deployment.url,
         writebackStatus: writeback?.status ?? "not-run",
         workerName: result.plan.resources.worker.name,
@@ -513,6 +517,12 @@ function notRunDeploymentCleanupSummary(): WorkspaceOperationDisplayObject {
   return {
     affectedLogicalIds: [],
     status: "not-run",
+  };
+}
+
+function deploymentBuiltInResourceSummary(status: "planned" | "provisioned") {
+  return {
+    turnstileWidget: status,
   };
 }
 

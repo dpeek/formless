@@ -3988,7 +3988,7 @@ describe("Formless Site CLI", () => {
         "Durable Object namespace: personal-authority.",
         "Media bucket: personal-media.",
         "Route provider resources: 3 provider resources from 2 routes (instance:route; dpeek.com, old.dpeek.com).",
-        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 1, Alchemy state destroyed.",
+        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Turnstile widget destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 1, Alchemy state destroyed.",
         `Ignored deploy state: ${path.relative(tempDir, deploymentStateRoot)}.`,
         `Deployment facts: ${path.relative(
           tempDir,
@@ -4023,6 +4023,38 @@ describe("Formless Site CLI", () => {
 
     expect(destroyInputs).toHaveLength(1);
     expect(destroyInputs[0]?.stateRoot).toBe(path.join(workspaceRoot, ".formless/deploy/personal"));
+  });
+
+  it("reports Turnstile widget handling in destroy summaries without leaking secrets", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceDeployState(workspaceRoot);
+
+    await runFormlessCli(
+      ["instance", "destroy", "--workspace", workspaceRoot, "--confirm", "personal"],
+      cliDeps(tempDir, {
+        destroy: async (input) => {
+          destroyInputs.push(input);
+
+          return { resources: destroyedResourceSummary(input) };
+        },
+        logs,
+        packageRoot: "/package",
+      }),
+    );
+
+    expect(destroyInputs).toHaveLength(1);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Turnstile widget destroyed");
+    expect(logs[0]).toContain("Destroyed resources:");
+    expect(logs.join("\n")).not.toContain("state-cf-token");
+    expect(logs.join("\n")).not.toContain("alchemy-password");
+    expect(logs.join("\n")).not.toContain("FORMLESS_TURNSTILE_SECRET_KEY");
   });
 
   it("refuses destroy before provider mutation when no workspace target is selected", async () => {
@@ -4406,7 +4438,9 @@ describe("Formless Site CLI", () => {
     ).not.toContain("generated-token");
     expect(logs.at(-1)).toContain("Workspace operation: deploy apply (succeeded).");
     expect(logs.at(-1)).toContain(`ownerSetupUrl: ${ownerSetupUrl}.`);
+    expect(logs.at(-1)).toContain("turnstileWidget: provisioned.");
     expect(logs.at(-1)).toContain("url: https://personal.dpeek.workers.dev.");
+    expect(logs.at(-1)).toContain('"turnstileWidget":"provisioned"');
     expect(logs.at(-1)).toContain('"resourcesByKind":');
     expect(logs.at(-1)).toContain('"cloudflare-worker-custom-domain":1');
     expect(logs.at(-1)).toContain('"cloudflare-dns-records":1');
@@ -6502,6 +6536,7 @@ function destroyedResourceSummary(
       mediaBucket: "destroyed",
       redirectRules: resources.filter((resource) => resource.kind === "cloudflare-redirect-rule")
         .length,
+      turnstileWidget: "destroyed",
       worker: "destroyed",
       workerAssets: "destroyed",
       workerSecrets: "destroyed",
@@ -6515,6 +6550,7 @@ function destroyedResourceSummary(
     durableObjectNamespace: "destroyed",
     mediaBucket: "destroyed",
     redirectRules: 0,
+    turnstileWidget: "destroyed",
     worker: "destroyed",
     workerAssets: "destroyed",
     workerSecrets: "destroyed",

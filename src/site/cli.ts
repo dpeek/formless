@@ -1707,7 +1707,7 @@ function formatInstanceWorkspaceDestroyResult(
     `Route provider resources: ${formatDestroyRouteProviderResources(
       result.routeProviderResources,
     )}.`,
-    `Destroyed resources: Worker ${resources.worker}, Durable Object namespace ${resources.durableObjectNamespace}, R2 media bucket ${resources.mediaBucket}, Worker assets ${resources.workerAssets}, Worker secrets ${resources.workerSecrets}, custom domains ${resources.customDomains}, DNS records ${resources.dnsRecords}, redirects ${resources.redirectRules}, Alchemy state ${resources.alchemyState}.`,
+    `Destroyed resources: Worker ${resources.worker}, Durable Object namespace ${resources.durableObjectNamespace}, R2 media bucket ${resources.mediaBucket}, Turnstile widget ${resources.turnstileWidget}, Worker assets ${resources.workerAssets}, Worker secrets ${resources.workerSecrets}, custom domains ${resources.customDomains}, DNS records ${resources.dnsRecords}, redirects ${resources.redirectRules}, Alchemy state ${resources.alchemyState}.`,
     `Ignored deploy state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
     `Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`,
     `Local deploy secrets: ${formatCliPath(cwd, result.localSecretPath)}.`,

@@ -209,6 +209,9 @@ describe("Formless workspace operations", () => {
       operation: "deployPlan",
       result: {
         deployment: {
+          builtInResources: {
+            turnstileWidget: "planned",
+          },
           cleanup: {
             status: "not-run",
           },
@@ -251,6 +254,7 @@ describe("Formless workspace operations", () => {
             evidenceCount: 0,
             expectedUrl: "https://personal.dpeek.workers.dev",
             routeTargetCount: 2,
+            turnstileWidget: "planned",
             writebackStatus: "not-run",
             workerName: "personal",
           },
@@ -409,6 +413,9 @@ describe("Formless workspace operations", () => {
             status: "succeeded",
             targetId: "instance.primary",
           },
+          builtInResources: {
+            turnstileWidget: "provisioned",
+          },
           cleanup: {
             status: "not-run",
           },
@@ -447,6 +454,7 @@ describe("Formless workspace operations", () => {
             desiredStateVersion: desiredState.versionId,
             drift: "no-drift",
             evidenceCount: 3,
+            turnstileWidget: "provisioned",
             writebackStatus: "succeeded",
           },
           title: "Deploy applied",
