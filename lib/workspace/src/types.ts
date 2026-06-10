@@ -29,14 +29,15 @@ export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_VERSION = 1;
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES = [
   "app-install",
   "route",
-  "deploy-target",
-  "provider-config-ref",
-  "deploy-desired-resource",
+  "deployment-config",
 ] as const;
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_EXCLUDED_ENTITIES = [
+  "deploy-desired-resource",
+  "deploy-target",
   "deploy-attempt",
   "deploy-evidence-summary",
   "deploy-drift-report",
+  "provider-config-ref",
 ] as const;
 
 export const WORKSPACE_OPERATION_STATE_FILE_KIND = "formless.workspaceOperation";

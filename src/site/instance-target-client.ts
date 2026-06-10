@@ -107,8 +107,7 @@ export type FormlessInstanceControlPlaneRecords = {
   actorKind: DeployControlPlaneProtocolActorKind;
   appInstalls: DeployControlPlaneRecord[];
   appRoutes: DeployControlPlaneRecord[];
-  deployDesiredResources: DeployControlPlaneRecord[];
-  deployTargets: DeployControlPlaneRecord[];
+  deploymentConfigs: DeployControlPlaneRecord[];
   domainMappings: DeployControlPlaneRecord[];
   records: DeployControlPlaneRecord[];
   redirectIntents: DeployControlPlaneRecord[];
@@ -1685,8 +1684,7 @@ function controlPlaneRecordsByEntity(
     actorKind,
     appInstalls: deployControlPlaneRecordsByEntity(records, "app-install"),
     appRoutes: deployControlPlaneRecordsByEntity(records, "app-route"),
-    deployDesiredResources: deployControlPlaneRecordsByEntity(records, "deploy-desired-resource"),
-    deployTargets: deployControlPlaneRecordsByEntity(records, "deploy-target"),
+    deploymentConfigs: deployControlPlaneRecordsByEntity(records, "deployment-config"),
     domainMappings: deployControlPlaneRecordsByEntity(records, "domain-mapping"),
     records,
     redirectIntents: deployControlPlaneRecordsByEntity(records, "redirect-intent"),

@@ -114,7 +114,7 @@ identifiers.
 #### Scenario: Parse schema-local entity key
 
 - WHEN an app schema declares entity keys such as `block`, `app-install`, or
-  `deploy-desired-resource`
+  `deployment-config`
 - THEN schema parsing accepts those keys as local entity identifiers
 - AND the entity keys remain unqualified inside the schema's `entities` object
 

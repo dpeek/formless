@@ -10,7 +10,6 @@ import {
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneRouteProjectionRecord,
   type ControlPlaneRedirectStatusCode,
-  type DeployResource,
   type DeployResourceGraph,
 } from "@dpeek/formless-deploy";
 
@@ -152,6 +151,10 @@ import {
   type FormlessInstanceLocalSecretEnvStore,
   type EnsureFormlessInstanceLocalSecretEnvResult,
 } from "./instance-onboarding.ts";
+import {
+  FORMLESS_ALCHEMY_DEFAULT_PROFILE,
+  FORMLESS_ALCHEMY_PROFILE_REF_PREFIX,
+} from "./instance-workspace-credential-setup.ts";
 import { packageExecCommand } from "./package-commands.ts";
 import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import {
@@ -520,6 +523,7 @@ export type PlanDeployFormlessInstanceWorkspaceDependencies = Pick<
 >;
 
 export type PlanDeployFormlessInstanceWorkspaceResult = {
+  credentialProfile: string | null;
   plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
@@ -1486,6 +1490,8 @@ export async function deployLocalFormlessWorkspace(
 
   await copyLocalWorkspaceDeploySecretEnv({
     adminToken,
+    credentialProfile: planned.credentialProfile,
+    credentialProfileFromConfig: planned.credentialProfileFromConfig,
     env: dependencies.env,
     localSecretEnv,
     plan: planned.plan,
@@ -1497,12 +1503,12 @@ export async function deployLocalFormlessWorkspace(
   });
 
   const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
-    credentialProfile: null,
+    credentialProfile: planned.credentialProfile,
     deploymentStateRoot,
     plan: planned.plan,
   });
   const deployment = await dependencies.deploymentAdapter.deploy({
-    credentialProfile: null,
+    credentialProfile: planned.credentialProfile,
     deploymentResourceGraph: planned.desiredState.resourceGraph,
     packageRoot: dependencies.packageRoot,
     plan: planned.plan,
@@ -1528,7 +1534,7 @@ export async function deployLocalFormlessWorkspace(
     url: deploymentUrl,
   });
 
-  await writeLocalWorkspaceDeployTargetSource({
+  await writeLocalWorkspaceDeploymentConfigSource({
     manifest: planned.manifest,
     now: dependencies.now(),
     plan: planned.plan,
@@ -1853,9 +1859,9 @@ export async function planDeployLocalFormlessWorkspace(
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const existingSelectedTarget =
-    deploymentSource.deployTarget === undefined
+    deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "deploy");
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "deploy");
   const preflight = existingSelectedTarget
     ? await checkFormlessInstanceWorkspace(
         {
@@ -1874,15 +1880,16 @@ export async function planDeployLocalFormlessWorkspace(
 
   const account = await resolveLocalWorkspaceDeploymentAccount({
     accountDiscovery: dependencies.accountDiscovery,
-    providerConfig: deploymentSource.providerConfig,
+    credentialProfile: deploymentSource.credentialProfile,
+    deploymentConfig: deploymentSource.deploymentConfig,
   });
   const planned = planLocalWorkspaceDeployment({
     account,
-    deployTarget: deploymentSource.deployTarget,
+    credentialProfile: deploymentSource.credentialProfile,
+    deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
-    providerConfig: deploymentSource.providerConfig,
     targetAlias: input.targetAlias,
   });
   const desiredState = projectLocalWorkspaceDeploymentDesiredState({
@@ -1925,7 +1932,7 @@ export async function deployFormlessInstanceWorkspace(
     root: deploymentStateRoot,
   });
   const deployment = await dependencies.deploymentAdapter.deploy({
-    credentialProfile: null,
+    credentialProfile: planned.credentialProfile,
     packageRoot: dependencies.packageRoot,
     plan,
     secrets: {
@@ -1975,23 +1982,26 @@ export async function planDeployFormlessInstanceWorkspace(
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const selectedTarget =
-    deploymentSource.deployTarget === undefined
+    deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "deploy");
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "deploy");
 
   if (selectedTarget === undefined) {
-    throw new Error("Formless instance deploy requires an enabled instance deploy-target record.");
+    throw new Error(
+      "Formless instance deploy requires an enabled instance deployment-config record.",
+    );
   }
 
   const plan = formlessInstanceWorkspaceDeploymentPlan({
+    deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
     migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
-    providerConfig: deploymentSource.providerConfig,
     selectedTarget,
   });
 
   return {
+    credentialProfile: deploymentSource.credentialProfile ?? null,
     plan,
     selectedTarget,
     workspaceRoot,
@@ -2091,21 +2101,21 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const selectedTarget =
-    deploymentSource.deployTarget === undefined
+    deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, input.commandName);
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, input.commandName);
 
   if (selectedTarget === undefined) {
     throw new Error(
-      `Formless instance ${input.commandName} requires an enabled instance deploy-target record.`,
+      `Formless instance ${input.commandName} requires an enabled instance deployment-config record.`,
     );
   }
 
   const plan = formlessInstanceWorkspaceDeploymentPlan({
     commandName: input.commandName,
+    deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
     packageVersion: dependencies.packageVersion,
-    providerConfig: deploymentSource.providerConfig,
     selectedTarget,
   });
   const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, plan);
@@ -2119,7 +2129,10 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
   });
 
   return {
-    credentialProfile: localSecretEnv.credentialProfile,
+    credentialProfile:
+      deploymentSource.credentialProfile === undefined
+        ? localSecretEnv.credentialProfile
+        : deploymentSource.credentialProfile,
     deploymentStatePath,
     deploymentStateRoot,
     localSecretPath: localSecretEnv.path,
@@ -2143,18 +2156,18 @@ export async function planFormlessInstanceWorkspaceDomains(
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const selectedTarget =
-    deploymentSource.deployTarget === undefined
+    deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "domains plan");
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "domains plan");
 
   if (selectedTarget === undefined) {
     throw new Error(
-      "Formless instance domains plan requires an enabled instance deploy-target record.",
+      "Formless instance domains plan requires an enabled instance deployment-config record.",
     );
   }
 
-  const accountId = requireWorkspaceDeployAccountId(deploymentSource.providerConfig);
-  const workerName = selectWorkspaceWorkerName(deploymentSource.providerConfig, selectedTarget);
+  const accountId = requireWorkspaceDeployAccountId(deploymentSource.deploymentConfig);
+  const workerName = selectWorkspaceWorkerName(deploymentSource.deploymentConfig, selectedTarget);
   const workspaceDomains = workspaceDomainIntentsFromSource(manifest, controlPlane);
   const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
@@ -2381,10 +2394,10 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
   const selectedTarget =
-    deploymentSource.deployTarget === undefined
+    deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeployTargetRecord(deploymentSource.deployTarget, "token rotate");
-  const workerName = selectWorkspaceWorkerName(deploymentSource.providerConfig, selectedTarget);
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "token rotate");
+  const workerName = selectWorkspaceWorkerName(deploymentSource.deploymentConfig, selectedTarget);
   const adminToken =
     resolveFormlessInstanceWorkspaceAdminToken({
       env: dependencies.env,
@@ -2410,7 +2423,7 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
 
     await dependencies.runCommand(command.command, command.args, {
       cwd: dependencies.packageRoot,
-      env: rotateCommandEnv(dependencies.env, deploymentSource.providerConfig),
+      env: rotateCommandEnv(dependencies.env, deploymentSource.deploymentConfig),
     });
     await writeFormlessInstanceWorkspaceSecretState(workspaceRoot, { adminToken });
     await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
@@ -3196,7 +3209,7 @@ function comparableControlPlaneIntentRecords(
   const records = new Map<string, string>();
 
   for (const record of controlPlane?.records ?? []) {
-    if (record.deletedAt || !controlPlaneIntentEntities.has(record.entity)) {
+    if (record.deletedAt || controlPlaneRecordEntity(record) === undefined) {
       continue;
     }
 
@@ -3340,7 +3353,7 @@ function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive:
     if (nextArchive.controlPlane) {
       nextArchive.controlPlane.schemaUpdatedAt = generatedAt;
       nextArchive.controlPlane.records = nextArchive.controlPlane.records
-        .filter((record) => !record.deletedAt && controlPlaneIntentEntities.has(record.entity))
+        .filter((record) => !record.deletedAt && controlPlaneRecordEntity(record) !== undefined)
         .map((record) => ({
           ...record,
           values: normalizeControlPlaneGeneratedValues(record.values, generatedAt),
@@ -3620,25 +3633,10 @@ async function prepareWorkspaceDirectories(
   ]);
 }
 
-const controlPlaneIntentEntities = new Set([
-  "app-install",
-  "route",
-  "deploy-target",
-  "provider-config-ref",
-  "deploy-desired-resource",
-]);
-const sourceOnlyDeploymentIntentEntities = new Set([
-  "deploy-target",
-  "provider-config-ref",
-  "deploy-desired-resource",
-]);
+const sourceOnlyDeploymentIntentEntities = new Set(["deployment-config"]);
 
 function workspaceDeployTargetId() {
   return "instance.primary";
-}
-
-function workspaceProviderConfigRefId() {
-  return "provider-config:cloudflare:primary";
 }
 
 type WorkspaceTargetCommandName =
@@ -3682,7 +3680,7 @@ async function resolveWorkspaceTarget(input: {
     manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });
-  const deployTarget = selectLocalWorkspaceDeployTarget(
+  const deploymentConfig = selectLocalWorkspaceDeploymentConfig(
     controlPlane?.records.filter((record) => !record.deletedAt) ?? [],
     input.targetAlias,
     {
@@ -3691,16 +3689,16 @@ async function resolveWorkspaceTarget(input: {
     },
   );
 
-  return deployTarget === undefined
+  return deploymentConfig === undefined
     ? undefined
-    : workspaceTargetFromDeployTargetRecord(deployTarget, input.commandName);
+    : workspaceTargetFromDeploymentConfig(deploymentConfig, input.commandName);
 }
 
-function requireWorkspaceDeployAccountId(providerConfig: StoredRecord | undefined): string {
-  const accountId = stringRecordValue(providerConfig, "accountId")?.trim();
+function requireWorkspaceDeployAccountId(deploymentConfig: StoredRecord | undefined): string {
+  const accountId = stringRecordValue(deploymentConfig, "accountId")?.trim();
 
   if (!accountId) {
-    throw new Error("Formless instance domains plan requires provider-config-ref.accountId.");
+    throw new Error("Formless instance domains plan requires deployment-config.accountId.");
   }
 
   return accountId;
@@ -3719,26 +3717,29 @@ function selectLocalWorkspaceDeploymentSource(
   }
 
   const records = controlPlane.records.filter((record) => !record.deletedAt);
-  const deployTarget = selectLocalWorkspaceDeployTarget(records, targetAlias, {
+  const deploymentConfig = selectLocalWorkspaceDeploymentConfig(records, targetAlias, {
     commandName: "deploy",
     required: false,
   });
-  const providerConfig = selectLocalWorkspaceProviderConfig(records);
+  const credentialProfile =
+    deploymentConfig === undefined
+      ? undefined
+      : credentialProfileFromDeploymentConfig(deploymentConfig);
 
   return {
-    deployTarget,
-    ...(providerConfig === undefined ? {} : { providerConfig }),
+    deploymentConfig,
+    ...(credentialProfile === undefined ? {} : { credentialProfile }),
   };
 }
 
-function selectLocalWorkspaceDeployTarget(
+function selectLocalWorkspaceDeploymentConfig(
   records: readonly StoredRecord[],
   targetAlias: string | null | undefined,
   options: { commandName: WorkspaceTargetCommandName; required: boolean },
 ): StoredRecord | undefined {
   const targets = records.filter(
     (record) =>
-      record.entity === "deploy-target" &&
+      record.entity === "deployment-config" &&
       record.values.targetKind === "instance" &&
       record.values.enabled !== false,
   );
@@ -3775,7 +3776,7 @@ function selectLocalWorkspaceDeployTarget(
   if (targets.length === 0) {
     if (options.required) {
       throw new Error(
-        `Formless instance ${options.commandName} requires an enabled instance deploy-target record.`,
+        `Formless instance ${options.commandName} requires an enabled instance deployment-config record.`,
       );
     }
 
@@ -3783,11 +3784,11 @@ function selectLocalWorkspaceDeployTarget(
   }
 
   throw new Error(
-    `Formless instance ${options.commandName} targetAlias is required when multiple deploy targets exist.`,
+    `Formless instance ${options.commandName} targetAlias is required when multiple deployment configs exist.`,
   );
 }
 
-function workspaceTargetFromDeployTargetRecord(
+function workspaceTargetFromDeploymentConfig(
   record: StoredRecord,
   commandName: WorkspaceTargetCommandName,
 ): FormlessInstanceWorkspaceTarget {
@@ -3796,7 +3797,7 @@ function workspaceTargetFromDeployTargetRecord(
 
   if (targetUrl === undefined) {
     throw new Error(
-      `Formless instance ${commandName} deploy-target "${targetId}" requires targetUrl.`,
+      `Formless instance ${commandName} deployment-config "${targetId}" requires targetUrl.`,
     );
   }
 
@@ -3806,45 +3807,31 @@ function workspaceTargetFromDeployTargetRecord(
   };
 }
 
-function selectLocalWorkspaceProviderConfig(
-  records: readonly StoredRecord[],
-): StoredRecord | undefined {
-  const configs = records.filter(
-    (record) =>
-      record.entity === "provider-config-ref" && record.values.providerFamily === "cloudflare",
-  );
-  const referencedConfigIds = new Set(
-    records
-      .filter((record) => record.entity === "route" && !record.deletedAt)
-      .map((record) => stringRecordValue(record, "providerConfig"))
-      .filter((value): value is string => value !== undefined),
-  );
-  const referencedConfigs = configs.filter((record) => referencedConfigIds.has(record.id));
+function credentialProfileFromDeploymentConfig(record: StoredRecord): string | null | undefined {
+  const credentialRef = stringRecordValue(record, "credentialRef")?.trim();
 
-  if (referencedConfigs.length === 1) {
-    return referencedConfigs[0];
+  if (credentialRef === undefined || credentialRef === "") {
+    return undefined;
   }
 
-  if (referencedConfigs.length > 1) {
+  if (!credentialRef.startsWith(FORMLESS_ALCHEMY_PROFILE_REF_PREFIX)) {
     throw new Error(
-      "Formless deploy plan requires one Cloudflare provider-config-ref for provider-scoped routes.",
+      `Formless instance deployment-config "${record.id}" credentialRef must use ${FORMLESS_ALCHEMY_PROFILE_REF_PREFIX}<profile>.`,
     );
   }
 
-  if (configs.length === 1) {
-    return configs[0];
+  const profile = credentialRef.slice(FORMLESS_ALCHEMY_PROFILE_REF_PREFIX.length).trim();
+
+  if (!profile) {
+    throw new Error(`Formless instance deployment-config "${record.id}" credentialRef is empty.`);
   }
 
-  if (configs.length > 1) {
-    throw new Error(
-      "Formless deploy plan requires one Cloudflare provider-config-ref or route providerConfig selection.",
-    );
-  }
-
-  return undefined;
+  return profile === FORMLESS_ALCHEMY_DEFAULT_PROFILE ? null : profile;
 }
 
 type LocalWorkspaceDeploymentPlanResult = {
+  credentialProfile: string | null;
+  credentialProfileFromConfig: boolean;
   manifest: FormlessInstanceWorkspaceManifest;
   plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
@@ -3861,17 +3848,19 @@ type LocalWorkspaceDeploymentDesiredState = {
 };
 
 type LocalWorkspaceDeploymentSource = {
-  deployTarget?: StoredRecord;
-  providerConfig?: StoredRecord;
+  credentialProfile?: string | null;
+  deploymentConfig?: StoredRecord;
 };
 
 async function resolveLocalWorkspaceDeploymentAccount(input: {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
-  providerConfig?: StoredRecord;
+  credentialProfile?: string | null;
+  deploymentConfig?: StoredRecord;
 }): Promise<FormlessInstanceDeploymentAccount> {
-  const configuredAccountId = stringRecordValue(input.providerConfig, "accountId");
+  const credentialProfile = input.credentialProfile ?? null;
+  const configuredAccountId = stringRecordValue(input.deploymentConfig, "accountId");
 
-  const accounts = await input.accountDiscovery.listAccounts({ credentialProfile: null });
+  const accounts = await input.accountDiscovery.listAccounts({ credentialProfile });
 
   if (!Array.isArray(accounts)) {
     throw new Error("Cloudflare account discovery adapter must return an account array.");
@@ -3879,7 +3868,7 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
 
   const account =
     configuredAccountId === undefined || configuredAccountId === ""
-      ? selectOnlyFormlessInstanceAccount({ accounts, credentialProfile: null })
+      ? selectOnlyFormlessInstanceAccount({ accounts, credentialProfile })
       : accounts.find((candidate) => candidate.id === configuredAccountId);
 
   if (!account) {
@@ -3893,16 +3882,18 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
 
 function planLocalWorkspaceDeployment(input: {
   account: FormlessInstanceDeploymentAccount;
-  deployTarget?: StoredRecord;
+  credentialProfile?: string | null;
+  deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
-  providerConfig?: StoredRecord;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
-  const workerName = deploymentWorkerNameFromProviderConfigOrManifest({
+  const credentialProfile = input.credentialProfile ?? null;
+  const credentialProfileFromConfig = input.credentialProfile !== undefined;
+  const workerName = deploymentWorkerNameFromConfigOrManifest({
+    deploymentConfig: input.deploymentConfig,
     manifest: input.manifest,
-    providerConfig: input.providerConfig,
   });
   const plan = planFormlessInstanceDeployment({
     account: input.account,
@@ -3913,10 +3904,10 @@ function planLocalWorkspaceDeployment(input: {
 
   const targetAlias =
     input.targetAlias ??
-    stringRecordValue(input.deployTarget, "targetId") ??
-    input.deployTarget?.id ??
+    stringRecordValue(input.deploymentConfig, "targetId") ??
+    input.deploymentConfig?.id ??
     workspaceDeployTargetId();
-  const targetUrl = stringRecordValue(input.deployTarget, "targetUrl");
+  const targetUrl = stringRecordValue(input.deploymentConfig, "targetUrl");
   const selectedTarget = {
     alias: targetAlias,
     url:
@@ -3932,6 +3923,8 @@ function planLocalWorkspaceDeployment(input: {
   }
 
   return {
+    credentialProfile,
+    credentialProfileFromConfig,
     manifest: input.manifest,
     plan,
     selectedTarget,
@@ -3958,29 +3951,7 @@ function projectLocalWorkspaceDeploymentDesiredState(input: {
     targetId: input.targetId,
     workerName: input.plan.resources.worker.name,
   });
-  const routeLogicalIds = new Set(
-    routeProjection.resourceGraph.resources.map((resource) => resource.logicalId),
-  );
-  const desiredResources = records
-    .filter(
-      (record) =>
-        record.entity === "deploy-desired-resource" &&
-        stringRecordValue(record, "deployTarget") === input.targetId &&
-        booleanRecordValue(record, "enabled") !== false,
-    )
-    .map(deployDesiredResourceFromStoredRecord)
-    .filter((resource) => !routeLogicalIds.has(resource.logicalId));
-  const resourceGraph: DeployResourceGraph = {
-    resources: [...routeProjection.resourceGraph.resources, ...desiredResources].sort(
-      compareDeployResources,
-    ),
-    targetId: input.targetId,
-  };
-  const sourceFingerprint =
-    resourceGraph.resources.length === routeProjection.resourceGraph.resources.length
-      ? routeProjection.sourceFingerprint
-      : (firstStringRecordValue(records, "deploy-desired-resource", "sourceFingerprint") ??
-        routeProjection.sourceFingerprint);
+  const resourceGraph = routeProjection.resourceGraph;
 
   return {
     logicalIds: resourceGraph.resources.map((resource) => resource.logicalId),
@@ -3988,7 +3959,7 @@ function projectLocalWorkspaceDeploymentDesiredState(input: {
     resourceGraph,
     resourcesByKind: resourceCountsByKind(resourceGraph),
     routeTargetCount: routeProjection.routeTargets.length,
-    sourceFingerprint,
+    sourceFingerprint: routeProjection.sourceFingerprint,
     targetId: input.targetId,
   };
 }
@@ -4016,69 +3987,6 @@ function appInstallProjectionRecordsFromStoredRecords(
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function deployDesiredResourceFromStoredRecord(record: StoredRecord): DeployResource {
-  return {
-    dependencies: parseDeployResourceDependenciesJson(
-      stringRecordValue(record, "dependenciesJson"),
-    ),
-    inputs: parseDeployResourceInputsJson(stringRecordValue(record, "inputsJson")),
-    kind: stringRecordValue(record, "kind") as DeployResource["kind"],
-    logicalId: stringRecordValue(record, "logicalId") ?? record.id,
-    providerFamily: stringRecordValue(record, "providerFamily") as DeployResource["providerFamily"],
-    targetId: stringRecordValue(record, "deployTarget") ?? workspaceDeployTargetId(),
-  };
-}
-
-function parseDeployResourceInputsJson(value: string | undefined): DeployResource["inputs"] {
-  if (value === undefined) {
-    return {};
-  }
-
-  const parsed = JSON.parse(value) as unknown;
-
-  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-    return parsed as DeployResource["inputs"];
-  }
-
-  throw new Error("Control-plane deploy-desired-resource inputsJson must be an object.");
-}
-
-function parseDeployResourceDependenciesJson(
-  value: string | undefined,
-): DeployResource["dependencies"] {
-  if (value === undefined) {
-    return [];
-  }
-
-  const parsed = JSON.parse(value) as unknown;
-
-  if (Array.isArray(parsed)) {
-    return parsed as DeployResource["dependencies"];
-  }
-
-  throw new Error("Control-plane deploy-desired-resource dependenciesJson must be an array.");
-}
-
-function firstStringRecordValue(
-  records: readonly StoredRecord[],
-  entity: string,
-  fieldName: string,
-): string | undefined {
-  for (const record of records) {
-    if (record.entity !== entity) {
-      continue;
-    }
-
-    const value = stringRecordValue(record, fieldName);
-
-    if (value !== undefined) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
 function resourceCountsByKind(resourceGraph: DeployResourceGraph): Record<string, number> {
   const counts: Record<string, number> = {};
 
@@ -4089,34 +3997,25 @@ function resourceCountsByKind(resourceGraph: DeployResourceGraph): Record<string
   return counts;
 }
 
-function compareDeployResources(left: DeployResource, right: DeployResource): number {
-  return (
-    left.targetId.localeCompare(right.targetId) ||
-    left.providerFamily.localeCompare(right.providerFamily) ||
-    left.kind.localeCompare(right.kind) ||
-    left.logicalId.localeCompare(right.logicalId)
-  );
-}
-
 function formlessInstanceWorkspaceDeploymentPlan(input: {
   commandName?: "deploy" | "destroy" | "domains run";
+  deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
-  providerConfig?: StoredRecord;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 }): FormlessInstanceDeploymentPlan {
   const commandName = input.commandName ?? "deploy";
   const targetUrl = input.selectedTarget.url;
-  const workerName = deploymentWorkerNameFromProviderConfigOrManifest({
+  const workerName = deploymentWorkerNameFromConfigOrManifest({
+    deploymentConfig: input.deploymentConfig,
     manifest: input.manifest,
-    providerConfig: input.providerConfig,
   });
   const facts = workersDevTargetFacts(targetUrl, workerName);
-  const accountId = stringRecordValue(input.providerConfig, "accountId")?.trim();
+  const accountId = stringRecordValue(input.deploymentConfig, "accountId")?.trim();
 
   if (!accountId) {
-    throw new Error(`Formless instance ${commandName} requires provider-config-ref.accountId.`);
+    throw new Error(`Formless instance ${commandName} requires deployment-config.accountId.`);
   }
 
   const migrationPolicy = input.migrationPolicy ?? ("existing" as const);
@@ -4132,11 +4031,11 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
   });
 }
 
-function deploymentWorkerNameFromProviderConfigOrManifest(input: {
+function deploymentWorkerNameFromConfigOrManifest(input: {
+  deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
-  providerConfig?: StoredRecord;
 }): string {
-  const workerName = stringRecordValue(input.providerConfig, "workerName")?.trim();
+  const workerName = stringRecordValue(input.deploymentConfig, "workerName")?.trim();
 
   return workerName === undefined || workerName === "" ? input.manifest.name : workerName;
 }
@@ -4173,7 +4072,7 @@ function workersDevTargetFacts(
 
   if (expectedWorkerName !== undefined && expectedWorkerName !== workerName) {
     throw new Error(
-      `Formless instance deploy target worker "${workerName}" does not match provider-config-ref.workerName or manifest name "${expectedWorkerName}".`,
+      `Formless instance deploy target worker "${workerName}" does not match deployment-config.workerName or manifest name "${expectedWorkerName}".`,
     );
   }
 
@@ -4421,15 +4320,15 @@ function workspaceAppArchivePath(
 }
 
 function selectWorkspaceWorkerName(
-  providerConfig: StoredRecord | undefined,
+  deploymentConfig: StoredRecord | undefined,
   target: FormlessInstanceWorkspaceTarget | undefined,
 ): string {
   const workerName =
-    stringRecordValue(providerConfig, "workerName") ?? workerNameFromWorkersDevUrl(target?.url);
+    stringRecordValue(deploymentConfig, "workerName") ?? workerNameFromWorkersDevUrl(target?.url);
 
   if (!workerName) {
     throw new Error(
-      "Formless instance command requires provider-config-ref.workerName or a workers.dev target URL.",
+      "Formless instance command requires deployment-config.workerName or a workers.dev target URL.",
     );
   }
 
@@ -4655,9 +4554,9 @@ async function readWorkspaceAdminToken(
 
 function rotateCommandEnv(
   env: NodeJS.ProcessEnv | undefined,
-  providerConfig: StoredRecord | undefined,
+  deploymentConfig: StoredRecord | undefined,
 ): NodeJS.ProcessEnv {
-  const accountId = stringRecordValue(providerConfig, "accountId");
+  const accountId = stringRecordValue(deploymentConfig, "accountId");
 
   return {
     ...env,
@@ -4906,7 +4805,7 @@ function routeProjectionRecordFromStoredRecord(
   const matchPrefix = stringRecordValue(record, "matchPrefix");
   const preservePath = booleanRecordValue(record, "preservePath");
   const preserveQueryString = booleanRecordValue(record, "preserveQueryString");
-  const providerConfig = stringRecordValue(record, "providerConfig");
+  const deploymentConfig = stringRecordValue(record, "deploymentConfig");
   const surface = routeSurfaceRecordValue(record, "surface");
   const targetProfile = routeTargetProfileRecordValue(record, "targetProfile");
   const toHost = stringRecordValue(record, "toHost");
@@ -4922,7 +4821,7 @@ function routeProjectionRecordFromStoredRecord(
     ...(matchPrefix === undefined ? {} : { matchPrefix }),
     ...(preservePath === undefined ? {} : { preservePath }),
     ...(preserveQueryString === undefined ? {} : { preserveQueryString }),
-    ...(providerConfig === undefined ? {} : { providerConfig }),
+    ...(deploymentConfig === undefined ? {} : { providerConfig: deploymentConfig }),
     ...(statusCode === undefined ? {} : { statusCode }),
     ...(surface === undefined ? {} : { surface }),
     ...(targetProfile === undefined ? {} : { targetProfile }),
@@ -4938,7 +4837,7 @@ function providerConfigProjectionRecordsFromStoredRecords(
     .filter(
       (record) =>
         !record.deletedAt &&
-        record.entity === "provider-config-ref" &&
+        record.entity === "deployment-config" &&
         stringRecordValue(record, "providerFamily") === "cloudflare",
     )
     .map((record) => {
@@ -5043,6 +4942,8 @@ async function removeLocalWorkspaceDeployState(deploymentStateRoot: string): Pro
 
 async function copyLocalWorkspaceDeploySecretEnv(input: {
   adminToken: string;
+  credentialProfile: string | null;
+  credentialProfileFromConfig: boolean;
   env: NodeJS.ProcessEnv | undefined;
   localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
   plan: FormlessInstanceDeploymentPlan;
@@ -5055,11 +4956,15 @@ async function copyLocalWorkspaceDeploySecretEnv(input: {
   values.CLOUDFLARE_ACCOUNT_ID = input.plan.account.id;
 
   const cloudflareApiToken = optionalCloudflareApiToken(input.env);
-  const alchemyProfile = input.env?.ALCHEMY_PROFILE?.trim();
+  const alchemyProfile = input.credentialProfileFromConfig
+    ? input.credentialProfile
+    : (input.credentialProfile ?? input.env?.ALCHEMY_PROFILE?.trim());
   const alchemyStateToken = input.env?.ALCHEMY_STATE_TOKEN?.trim();
 
   if (alchemyProfile) {
     values.ALCHEMY_PROFILE = alchemyProfile;
+  } else if (input.credentialProfileFromConfig) {
+    delete values.ALCHEMY_PROFILE;
   }
 
   if (cloudflareApiToken) {
@@ -5095,7 +5000,7 @@ async function writeLocalWorkspaceDeploymentState(input: {
   return statePath;
 }
 
-async function writeLocalWorkspaceDeployTargetSource(input: {
+async function writeLocalWorkspaceDeploymentConfigSource(input: {
   manifest: FormlessInstanceWorkspaceManifest;
   now: string;
   plan: FormlessInstanceDeploymentPlan;
@@ -5109,61 +5014,36 @@ async function writeLocalWorkspaceDeployTargetSource(input: {
   const targetId = input.selectedTarget.alias;
   const existing = current?.records.find(
     (record) =>
-      record.entity === "deploy-target" &&
+      record.entity === "deployment-config" &&
       (record.id === targetId || stringRecordValue(record, "targetId") === targetId),
   );
-  const providerConfig = selectLocalWorkspaceProviderConfig(
-    current?.records.filter((record) => !record.deletedAt) ?? [],
-  );
-  const providerConfigId =
-    stringRecordValue(providerConfig, "configRef") ??
-    providerConfig?.id ??
-    workspaceProviderConfigRefId();
-  const deployTargetRecord: StoredRecord = {
+  const deploymentConfigRecord: StoredRecord = {
     id: targetId,
-    entity: "deploy-target",
+    entity: "deployment-config",
     values: {
       ...existing?.values,
       targetId,
       targetKind: "instance",
-      targetUrl: input.selectedTarget.url,
       label: stringRecordValue(existing, "label") ?? targetId,
       enabled: true,
+      targetUrl: input.selectedTarget.url,
+      providerFamily: "cloudflare",
+      accountId: input.plan.account.id,
+      workerName: input.plan.resources.worker.name,
       createdAt: stringRecordValue(existing, "createdAt") ?? input.now,
       updatedAt: input.now,
     },
     createdAt: existing?.createdAt ?? input.now,
   };
-  const providerConfigRecord: StoredRecord = {
-    id: providerConfigId,
-    entity: "provider-config-ref",
-    values: {
-      ...providerConfig?.values,
-      providerFamily: "cloudflare",
-      configRef: providerConfigId,
-      label: stringRecordValue(providerConfig, "label") ?? "Primary Cloudflare",
-      accountId: input.plan.account.id,
-      workerName: input.plan.resources.worker.name,
-      createdAt: stringRecordValue(providerConfig, "createdAt") ?? input.now,
-      updatedAt: input.now,
-    },
-    createdAt: providerConfig?.createdAt ?? input.now,
-  };
   const records = [
     ...(current?.records.filter(
       (record) =>
         !(
-          record.entity === "deploy-target" &&
+          record.entity === "deployment-config" &&
           (record.id === targetId || stringRecordValue(record, "targetId") === targetId)
-        ) &&
-        !(
-          record.entity === "provider-config-ref" &&
-          (record.id === providerConfigId ||
-            stringRecordValue(record, "configRef") === providerConfigId)
         ),
     ) ?? []),
-    deployTargetRecord,
-    providerConfigRecord,
+    deploymentConfigRecord,
   ];
 
   await writeInstanceWorkspaceControlPlaneRecordSource({

@@ -76,7 +76,8 @@ const controlPlaneEntitySpecs: Record<InstanceWorkspaceControlPlaneRecordSourceE
         targetProfile: enumField(false, ["app", "instance", "public-site"]),
         appInstall: referenceField(false, "app-install"),
         surface: enumField(false, ["admin", "public-site", "schema"]),
-        providerConfig: referenceField(false, "provider-config-ref"),
+        access: enumField(false, ["anonymous", "owner"]),
+        deploymentConfig: referenceField(false, "deployment-config"),
         toHost: textField(false),
         toUrl: textField(false),
         statusCode: enumField(false, ["301", "302", "303", "307", "308"]),
@@ -86,50 +87,21 @@ const controlPlaneEntitySpecs: Record<InstanceWorkspaceControlPlaneRecordSourceE
         updatedAt: textField(true),
       },
     },
-    "deploy-target": {
+    "deployment-config": {
       fields: {
         targetId: textField(true),
         targetKind: enumField(true, ["instance"]),
-        targetUrl: textField(true),
         label: textField(true),
         enabled: booleanField(true, true),
+        targetUrl: textField(true),
+        providerFamily: enumField(true, ["cloudflare"]),
+        accountId: textField(false),
+        workerName: textField(false),
+        credentialRef: textField(false),
         createdAt: textField(true),
         updatedAt: textField(true),
       },
       unique: [["targetId"]],
-    },
-    "provider-config-ref": {
-      fields: {
-        providerFamily: enumField(true, ["cloudflare"]),
-        configRef: textField(true),
-        label: textField(true),
-        accountId: textField(false),
-        workerName: textField(false),
-        secretRef: textField(false),
-        createdAt: textField(true),
-        updatedAt: textField(true),
-      },
-      unique: [["configRef"]],
-    },
-    "deploy-desired-resource": {
-      fields: {
-        deployTarget: referenceField(true, "deploy-target"),
-        route: referenceField(false, "route"),
-        logicalId: textField(true),
-        kind: enumField(true, [
-          "cloudflare-dns-records",
-          "cloudflare-redirect-rule",
-          "cloudflare-worker-custom-domain",
-        ]),
-        providerFamily: enumField(true, ["cloudflare"]),
-        inputsJson: textField(true),
-        dependenciesJson: textField(false),
-        enabled: booleanField(true, true),
-        sourceFingerprint: textField(true),
-        createdAt: textField(true),
-        updatedAt: textField(true),
-      },
-      unique: [["deployTarget", "logicalId"]],
     },
   };
 
@@ -591,29 +563,19 @@ function assertSourceRecordImmutableIdentity(record: InstanceWorkspaceStoredReco
     }
   }
 
-  if (record.entity === "deploy-target") {
+  if (record.entity === "deployment-config") {
     const targetId = requiredStringValue(record, "targetId");
     const targetUrl = requiredStringValue(record, "targetUrl");
 
     if (record.id !== targetId) {
       throw new Error(
-        `Workspace control-plane record source record "${record.id}" field "instance:deploy-target.targetId" must match record id.`,
+        `Workspace control-plane record source record "${record.id}" field "instance:deployment-config.targetId" must match record id.`,
       );
     }
 
     if (targetUrl !== normalizeInstanceWorkspaceTargetUrl(targetUrl)) {
       throw new Error(
-        `Workspace control-plane record source record "${record.id}" field "instance:deploy-target.targetUrl" must be a normalized HTTP origin.`,
-      );
-    }
-  }
-
-  if (record.entity === "provider-config-ref") {
-    const configRef = requiredStringValue(record, "configRef");
-
-    if (record.id !== configRef) {
-      throw new Error(
-        `Workspace control-plane record source record "${record.id}" field "instance:provider-config-ref.configRef" must match record id.`,
+        `Workspace control-plane record source record "${record.id}" field "instance:deployment-config.targetUrl" must be a normalized HTTP origin.`,
       );
     }
   }
@@ -639,7 +601,7 @@ function validateSourceRoute(
   const matchPath = requiredStringValue(route, "matchPath");
   const matchPrefix = optionalStringValue(route, "matchPrefix");
   const kind = requiredStringValue(route, "kind");
-  const providerConfig = optionalStringValue(route, "providerConfig");
+  const deploymentConfig = optionalStringValue(route, "deploymentConfig");
 
   if (matchHost !== undefined) {
     assertNormalizedExactHost(route, "matchHost", matchHost);
@@ -651,9 +613,9 @@ function validateSourceRoute(
     assertNormalizedMatchPrefix(route, matchPath, matchPrefix);
   }
 
-  if (providerConfig !== undefined && matchHost === undefined) {
+  if (deploymentConfig !== undefined && matchHost === undefined) {
     throw new Error(
-      `Workspace control-plane record source route "${route.id}" field "instance:route.providerConfig" can only be set on exact-host route records.`,
+      `Workspace control-plane record source route "${route.id}" field "instance:route.deploymentConfig" can only be set on exact-host route records.`,
     );
   }
 
@@ -1384,15 +1346,11 @@ function uniqueConstraintName(
     return "uniqueStorageIdentity";
   }
 
-  if (entity === "deploy-target") {
+  if (entity === "deployment-config") {
     return "uniqueTargetId";
   }
 
-  if (entity === "provider-config-ref") {
-    return "uniqueConfigRef";
-  }
-
-  return "uniqueTargetLogicalId";
+  return fields.join(",");
 }
 
 function isForbiddenControlPlaneFieldName(fieldName: string) {

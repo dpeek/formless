@@ -330,10 +330,7 @@ describe("Formless instance target control-plane client", () => {
     expect(records.appInstalls.map((record) => record.id)).toEqual(["site"]);
     expect(records.appRoutes.map((record) => record.id)).toEqual(["app-route:site:publicSite"]);
     expect(records.domainMappings.map((record) => record.id)).toEqual(["domain:www.example.com"]);
-    expect(records.deployTargets.map((record) => record.id)).toEqual(["instance.primary"]);
-    expect(records.deployDesiredResources.map((record) => record.id)).toEqual([
-      "desired:www.example.com",
-    ]);
+    expect(records.deploymentConfigs.map((record) => record.id)).toEqual(["instance.primary"]);
   });
 
   it("reads runner control-plane context before binding an exact desired-state version", async () => {
@@ -425,14 +422,15 @@ function controlPlaneBootstrapResponse(): Response {
         values: { appRoute: "app-route:site:publicSite", host: "www.example.com" },
       },
       {
-        entity: "deploy-target",
+        entity: "deployment-config",
         id: "instance.primary",
-        values: { targetId: "instance.primary" },
-      },
-      {
-        entity: "deploy-desired-resource",
-        id: "desired:www.example.com",
-        values: { deployTarget: "instance.primary", logicalId: "custom-domain:www" },
+        values: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+          targetKind: "instance",
+          targetUrl: "https://instance.example",
+        },
       },
     ],
     schema: {},

@@ -144,14 +144,17 @@ describe("control-plane schema runtime validation", () => {
 
     const siteInstall = await createControlPlaneAppInstall("site", "Personal Site");
     const tasksInstall = await createControlPlaneAppInstall("tasks", "Team Tasks");
-    const providerConfig = await authority.postJson<MutationResponse>("/api/mutations", {
-      mutationId: "mutation-control-plane-provider-config",
-      entity: "provider-config-ref",
+    const deploymentConfig = await authority.postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-control-plane-deployment-config",
+      entity: "deployment-config",
       op: "create",
       values: {
-        providerFamily: "cloudflare",
-        configRef: "primary",
+        targetId: "instance.primary",
+        targetKind: "instance",
         label: "Primary Cloudflare",
+        enabled: true,
+        targetUrl: "https://personal.example.workers.dev",
+        providerFamily: "cloudflare",
         createdAt: now,
         updatedAt: now,
       },
@@ -163,7 +166,7 @@ describe("control-plane schema runtime validation", () => {
       op: "create",
       values: mountRouteValues(siteInstall.record.id, {
         matchHost: "app.example.com",
-        providerConfig: providerConfig.record.id,
+        deploymentConfig: deploymentConfig.record.id,
       }),
     });
 
@@ -171,7 +174,7 @@ describe("control-plane schema runtime validation", () => {
       kind: "mount",
       matchHost: "app.example.com",
       matchPath: "/apps/personal",
-      providerConfig: providerConfig.record.id,
+      deploymentConfig: deploymentConfig.record.id,
       targetProfile: "app",
     });
 
@@ -274,28 +277,28 @@ describe("control-plane schema runtime validation", () => {
     await authority.expectError(
       "/api/mutations",
       {
-        mutationId: "mutation-route-hostless-provider-config",
+        mutationId: "mutation-route-hostless-deployment-config",
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
-          providerConfig: providerConfig.record.id,
+          deploymentConfig: deploymentConfig.record.id,
         }),
       },
-      'Field "providerConfig" can only be set on exact-host route records.',
+      'Field "deploymentConfig" can only be set on exact-host route records.',
     );
 
     await authority.expectError(
       "/api/mutations",
       {
-        mutationId: "mutation-route-provider-config-reference",
+        mutationId: "mutation-route-deployment-config-reference",
         entity: "route",
         op: "create",
         values: mountRouteValues(siteInstall.record.id, {
           matchHost: "missing-provider.example.com",
-          providerConfig: "missing-provider",
+          deploymentConfig: "missing-provider",
         }),
       },
-      'Field "providerConfig" references unknown provider-config-ref record "missing-provider".',
+      'Field "deploymentConfig" references unknown deployment-config record "missing-provider".',
     );
 
     await authority.expectError(
@@ -602,7 +605,7 @@ function instanceRouteRuntimeSchema(): AppSchema {
       ...taskSourceSchema.entities,
       "app-install": controlPlaneSchema.entities["app-install"],
       route: controlPlaneSchema.entities.route,
-      "provider-config-ref": controlPlaneSchema.entities["provider-config-ref"],
+      "deployment-config": controlPlaneSchema.entities["deployment-config"],
     },
     runtime: {
       owner: "runtime",
@@ -611,8 +614,8 @@ function instanceRouteRuntimeSchema(): AppSchema {
         entities: {
           "app-install": controlPlaneSchema.runtime!.controlPlane!.entities["app-install"]!,
           route: controlPlaneSchema.runtime!.controlPlane!.entities.route!,
-          "provider-config-ref":
-            controlPlaneSchema.runtime!.controlPlane!.entities["provider-config-ref"]!,
+          "deployment-config":
+            controlPlaneSchema.runtime!.controlPlane!.entities["deployment-config"]!,
         },
       },
     },

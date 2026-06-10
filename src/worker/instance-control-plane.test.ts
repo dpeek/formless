@@ -223,8 +223,6 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/snapshot/restore`,
       legacyRouteIntentSnapshot(now, [
         legacyAppInstallRecord("personal", now),
-        legacyProviderConfigRecord(now),
-        legacyDeployTargetRecord(now),
         legacyAppRouteRecord("legacy:personal:admin", {
           appInstall: "personal",
           routeKind: "admin",
@@ -237,7 +235,6 @@ describe("instance control-plane API routes", () => {
           host: "www.example.com",
           profile: "publicSite",
           targetInstallId: "personal",
-          providerConfigRef: "provider-config:cloudflare:primary",
           enabled: true,
           createdAt: now,
           updatedAt: now,
@@ -248,7 +245,6 @@ describe("instance control-plane API routes", () => {
           statusCode: "308",
           preservePath: true,
           preserveQueryString: false,
-          providerConfigRef: "provider-config:cloudflare:primary",
           enabled: true,
           createdAt: now,
           updatedAt: now,
@@ -271,7 +267,6 @@ describe("instance control-plane API routes", () => {
           matchHost: "www.example.com",
           matchPath: "/",
           matchPrefix: "/",
-          providerConfig: "provider-config:cloudflare:primary",
           surface: "public-site",
           targetProfile: "public-site",
         }),
@@ -297,7 +292,6 @@ describe("instance control-plane API routes", () => {
           matchPrefix: "/",
           preservePath: true,
           preserveQueryString: false,
-          providerConfig: "provider-config:cloudflare:primary",
           statusCode: "308",
           toHost: "www.example.com",
         }),
@@ -422,45 +416,34 @@ describe("instance control-plane API routes", () => {
 
   it("allows secret references but rejects secret values in records and snapshot restore", async () => {
     const now = "2026-05-28T00:00:00.000Z";
-    const providerConfig = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-provider-ref",
-      entity: "provider-config-ref",
+    const deploymentConfig = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
+      mutationId: "mutation-deployment-config",
+      entity: "deployment-config",
       op: "create",
       values: {
-        providerFamily: "cloudflare",
-        configRef: "cloudflare-primary",
-        label: "Cloudflare",
-        secretRef: "secret:cloudflare:primary",
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-    const target = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-target",
-      entity: "deploy-target",
-      op: "create",
-      values: {
-        targetId: "instance",
+        targetId: "instance.primary",
         targetKind: "instance",
-        targetUrl: "https://instance.example.workers.dev",
-        label: "Instance",
+        label: "Cloudflare",
         enabled: true,
+        targetUrl: "https://instance.example.workers.dev",
+        providerFamily: "cloudflare",
+        credentialRef: "secret:cloudflare:primary",
         createdAt: now,
         updatedAt: now,
       },
     });
     const rejectedRecord = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-secret-resource",
-      entity: "deploy-desired-resource",
+      mutationId: "mutation-secret-deployment-config",
+      entity: "deployment-config",
       op: "create",
       values: {
-        deployTarget: target.body.record.id,
-        logicalId: "secret-resource",
-        kind: "cloudflare-dns-records",
-        providerFamily: "cloudflare",
-        inputsJson: JSON.stringify({ apiToken: "CF_API_TOKEN" }),
+        targetId: "instance.secret",
+        targetKind: "instance",
+        label: "Secret",
         enabled: true,
-        sourceFingerprint: "source:secret",
+        targetUrl: "https://secret.example.workers.dev",
+        providerFamily: "cloudflare",
+        accountId: "CF_API_TOKEN",
         createdAt: now,
         updatedAt: now,
       },
@@ -473,13 +456,13 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/bootstrap?actorKind=owner`,
     );
 
-    expect(providerConfig.response.status).toBe(200);
-    expect(providerConfig.body.record.values.secretRef).toBe("secret:cloudflare:primary");
+    expect(deploymentConfig.response.status).toBe(200);
+    expect(deploymentConfig.body.record.values.credentialRef).toBe("secret:cloudflare:primary");
     expect(JSON.stringify(browserBootstrap.body)).not.toContain("CF_API_TOKEN");
     expect(JSON.stringify(browserBootstrap.body)).not.toContain("ALCHEMY_PASSWORD");
     expect(rejectedRecord.response.status).toBe(400);
     expect(rejectedRecord.body.error).toBe(
-      'Field "deploy-desired-resource.inputsJson" cannot store control-plane secret values.',
+      'Field "deployment-config.accountId" cannot store control-plane secret values.',
     );
     expect(rejectedSnapshot.response.status).toBe(400);
     expect(rejectedSnapshot.body.error).toBe(
@@ -648,11 +631,6 @@ function legacyRouteIntentSchema(): AppSchema {
             publicSite: "Public Site",
           }),
           targetInstallId: optionalTextField("Target install id"),
-          providerConfigRef: optionalReferenceField(
-            "Provider config",
-            "provider-config-ref",
-            "label",
-          ),
           enabled: booleanField("Enabled", true),
           createdAt: textField("Created at"),
           updatedAt: textField("Updated at"),
@@ -674,11 +652,6 @@ function legacyRouteIntentSchema(): AppSchema {
           }),
           preservePath: booleanField("Preserve path", true),
           preserveQueryString: booleanField("Preserve query string", true),
-          providerConfigRef: optionalReferenceField(
-            "Provider config",
-            "provider-config-ref",
-            "label",
-          ),
           enabled: booleanField("Enabled", true),
           createdAt: textField("Created at"),
           updatedAt: textField("Updated at"),
@@ -708,40 +681,6 @@ function legacyAppInstallRecord(installId: string, now: string): StoredRecord {
       label: "Personal Site",
       status: "installed",
       storageIdentity: `app:${installId}`,
-      createdAt: now,
-      updatedAt: now,
-    },
-  };
-}
-
-function legacyProviderConfigRecord(now: string): StoredRecord {
-  return {
-    id: "provider-config:cloudflare:primary",
-    entity: "provider-config-ref",
-    createdAt: now,
-    values: {
-      providerFamily: "cloudflare",
-      configRef: "cloudflare-primary",
-      label: "Cloudflare primary",
-      workerName: "formless-primary",
-      secretRef: "secret:cloudflare:primary",
-      createdAt: now,
-      updatedAt: now,
-    },
-  };
-}
-
-function legacyDeployTargetRecord(now: string): StoredRecord {
-  return {
-    id: "instance.primary",
-    entity: "deploy-target",
-    createdAt: now,
-    values: {
-      targetId: "instance.primary",
-      targetKind: "instance",
-      targetUrl: "https://personal.dpeek.workers.dev",
-      label: "Primary",
-      enabled: true,
       createdAt: now,
       updatedAt: now,
     },
@@ -809,8 +748,4 @@ function enumField(label: string, values: Record<string, string>) {
 
 function referenceField(label: string, to: string, displayField: string) {
   return { type: "reference", required: true, label, to, displayField };
-}
-
-function optionalReferenceField(label: string, to: string, displayField: string) {
-  return { type: "reference", required: false, label, to, displayField };
 }

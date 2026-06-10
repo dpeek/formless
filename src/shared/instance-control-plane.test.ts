@@ -34,8 +34,9 @@ describe("instance control-plane schema contracts", () => {
     );
     expect(Object.keys(schema.entities)).not.toContain("appInstall");
     expect(referenceTargets.filter((target) => target.includes(":"))).toEqual([]);
-    expect(referenceTargets).toEqual(
-      expect.arrayContaining(["app-install", "route", "deploy-target"]),
+    expect(referenceTargets).toEqual(expect.arrayContaining(["app-install", "deployment-config"]));
+    expect(Object.keys(schema.entities)).not.toEqual(
+      expect.arrayContaining(["deploy-target", "provider-config-ref", "deploy-desired-resource"]),
     );
     expect(schema.relationships?.routeInstall).toEqual({
       kind: "toOne",
@@ -109,10 +110,10 @@ describe("instance control-plane schema contracts", () => {
           owner: { label: "Owner" },
         },
       },
-      providerConfig: {
+      deploymentConfig: {
         type: "reference",
         required: false,
-        to: "provider-config-ref",
+        to: "deployment-config",
         displayField: "label",
       },
       toHost: { type: "text", required: false },
@@ -143,7 +144,7 @@ describe("instance control-plane schema contracts", () => {
       "appInstall",
       "surface",
       "access",
-      "providerConfig",
+      "deploymentConfig",
       "toHost",
       "toUrl",
       "statusCode",
@@ -175,16 +176,23 @@ describe("instance control-plane schema contracts", () => {
       "packageAppKey",
       "storageIdentity",
     ]);
+    expect(instanceControlPlaneImmutableFields["deployment-config"]).toEqual([
+      "targetId",
+      "targetKind",
+      "providerFamily",
+    ]);
     expect(instanceControlPlaneImmutableFields.route).toEqual(["kind"]);
     expect(isInstanceControlPlaneEntityName("app-install")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("deployment-config")).toBe(true);
     expect(isInstanceControlPlaneEntityName("app-route")).toBe(false);
+    expect(isInstanceControlPlaneEntityName("deploy-target")).toBe(false);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
 
     const schema = parseAppSchema(instanceControlPlaneSchema);
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "installId")).toBe(true);
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "label")).toBe(false);
     expect(
-      isRuntimeControlPlaneSecretReferenceField(schema, "provider-config-ref", "secretRef"),
+      isRuntimeControlPlaneSecretReferenceField(schema, "deployment-config", "credentialRef"),
     ).toBe(true);
     expect(schema.entities["deploy-attempt"]).toBeUndefined();
     expect(schema.entities["deploy-evidence-summary"]).toBeUndefined();
@@ -194,7 +202,7 @@ describe("instance control-plane schema contracts", () => {
   it("marks generated install and route editor fields by ownership", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const routeTable = schema.tableViews.routeTable;
-    const routesByProviderConfigList = schema.views.routesByProviderConfigList;
+    const routesByDeploymentConfigList = schema.views.routesByDeploymentConfigList;
     const routesScreen = schema.screens?.routes;
 
     expect(schema.views.appInstallList?.type === "collection").toBe(true);
@@ -222,23 +230,23 @@ describe("instance control-plane schema contracts", () => {
       "routePublicSiteMount",
     ]);
     expect(
-      routesByProviderConfigList?.type === "collection"
+      routesByDeploymentConfigList?.type === "collection"
         ? {
-            context: routesByProviderConfigList.context,
-            defaultQuery: routesByProviderConfigList.defaultQuery,
+            context: routesByDeploymentConfigList.context,
+            defaultQuery: routesByDeploymentConfigList.defaultQuery,
           }
         : undefined,
     ).toMatchObject({
       context: {
-        name: "providerConfig",
-        entity: "provider-config-ref",
-        relationship: "providerConfigRoutes",
+        name: "deploymentConfig",
+        entity: "deployment-config",
+        relationship: "deploymentConfigRoutes",
       },
-      defaultQuery: "routesForSelectedProviderConfig",
+      defaultQuery: "routesForSelectedDeploymentConfig",
     });
     expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual([
       "routeList",
-      "routesByProviderConfigList",
+      "routesByDeploymentConfigList",
     ]);
     expect(JSON.stringify(routesScreen)).not.toContain("deployEvidenceSummaryList");
     expect(JSON.stringify(routesScreen)).not.toContain("deployDriftReportList");
@@ -266,7 +274,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "appInstall", display: "readOnly" },
       { field: "surface", display: "readOnly" },
       { field: "access", display: "readOnly" },
-      { field: "providerConfig", display: "readOnly" },
+      { field: "deploymentConfig", display: "readOnly" },
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
       { field: "statusCode", display: "readOnly" },
@@ -290,28 +298,28 @@ describe("instance control-plane schema contracts", () => {
     const deployments = schema.screens?.deployments;
 
     expect(deployments?.layout.sections.map((section) => section.view)).toEqual([
-      "deployTargetList",
-      "providerConfigRefList",
-      "deployDesiredResourceList",
+      "deploymentConfigList",
     ]);
-    expect(schema.views.deployTargetList?.type === "collection").toBe(true);
+    expect(schema.views.deploymentConfigList?.type === "collection").toBe(true);
     expect(
-      schema.views.deployTargetList?.type === "collection"
-        ? schema.views.deployTargetList.actions
+      schema.views.deploymentConfigList?.type === "collection"
+        ? schema.views.deploymentConfigList.actions
         : undefined,
-    ).toEqual([{ type: "create", createView: "deployTargetCreate" }]);
+    ).toEqual([{ type: "create", createView: "deploymentConfigCreate" }]);
     expect(schema.views.deployAttemptList).toBeUndefined();
     expect(schema.views.deployEvidenceSummaryList).toBeUndefined();
     expect(schema.views.deployDriftReportList).toBeUndefined();
-    expect(schema.tableViews.deployDesiredResourceTable?.columns).toMatchObject([
-      { field: "deployTarget", display: "readOnly" },
-      { field: "route", display: "readOnly" },
-      { field: "logicalId", display: "readOnly" },
-      { field: "kind", display: "readOnly" },
+    expect(schema.tableViews.deploymentConfigTable?.columns).toMatchObject([
+      { field: "label", display: "readOnly" },
+      { field: "targetId", display: "readOnly" },
+      { field: "targetKind", display: "readOnly" },
       { field: "providerFamily", display: "readOnly" },
+      { field: "accountId", display: "readOnly" },
+      { field: "workerName", display: "readOnly" },
+      { field: "targetUrl", display: "readOnly" },
       { field: "enabled", display: "readOnly" },
-      { field: "sourceFingerprint", display: "readOnly" },
     ]);
+    expect(schema.tableViews.deployDesiredResourceTable).toBeUndefined();
     expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();
     expect(schema.tableViews.deployDriftReportTable).toBeUndefined();
   });

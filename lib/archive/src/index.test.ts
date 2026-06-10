@@ -105,14 +105,14 @@ describe("portable archive protocol", () => {
     const formattedArchive = JSON.parse(formatted) as InstanceArchive;
 
     expect(parsed.controlPlane?.records.map((record) => record.entity)).toContain(
-      "deploy-desired-resource",
+      "deployment-config",
     );
     expect(formattedArchive.controlPlane?.records.map((record) => record.entity)).toContain(
-      "instance:deploy-desired-resource",
+      "instance:deployment-config",
     );
     expect(
       parseInstanceArchive(formattedArchive).controlPlane?.records.map((record) => record.entity),
-    ).toContain("deploy-desired-resource");
+    ).toContain("deployment-config");
     expect(JSON.stringify(parsed.controlPlane)).not.toContain("rec_site");
     expect(formatInstanceArchive(parseInstanceArchive(JSON.parse(formatted)))).toBe(formatted);
     const controlPlane = archive.controlPlane;
@@ -127,7 +127,7 @@ describe("portable archive protocol", () => {
         controlPlane: {
           ...controlPlane,
           records: controlPlaneRecords({
-            inputsJson: JSON.stringify({ apiToken: "CF_API_TOKEN" }),
+            accountId: "CF_API_TOKEN",
           }),
         },
       }),
@@ -213,7 +213,7 @@ describe("portable archive protocol", () => {
     });
 
     expect(() => parseInstanceArchive(archive)).toThrow(
-      'Instance archive controlPlane records[5] record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
+      'Instance archive controlPlane records[4] record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
     );
   });
 
@@ -382,7 +382,7 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
   };
 }
 
-function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecord[] {
+function controlPlaneRecords(options: { accountId?: string } = {}): StoredRecord[] {
   return [
     {
       id: "site",
@@ -433,30 +433,15 @@ function controlPlaneRecords(options: { inputsJson?: string } = {}): StoredRecor
     },
     {
       id: "instance.primary",
-      entity: "deploy-target",
+      entity: "deployment-config",
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
-        targetUrl: "https://personal.dpeek.workers.dev",
         label: "instance.primary",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      createdAt: now,
-    },
-    {
-      id: "deploy-resource:instance.primary:site-domain",
-      entity: "deploy-desired-resource",
-      values: {
-        deployTarget: "instance.primary",
-        route: "route:host:publicSite:www.example.com",
-        logicalId: "site-domain",
-        kind: "cloudflare-worker-custom-domain",
+        targetUrl: "https://personal.dpeek.workers.dev",
         providerFamily: "cloudflare",
-        inputsJson: options.inputsJson ?? JSON.stringify({ host: "www.example.com" }),
-        enabled: true,
-        sourceFingerprint: "source",
+        ...(options.accountId === undefined ? {} : { accountId: options.accountId }),
         createdAt: now,
         updatedAt: now,
       },

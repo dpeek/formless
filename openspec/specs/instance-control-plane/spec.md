@@ -3,10 +3,10 @@
 ## Purpose
 
 Instance control plane models Formless instance management data as runtime-owned
-schema records. It keeps app installs, app routes, domain intent, deployment
-intent, and display-safe deployment history in flat Authority records while
-installed app data, provider secrets, raw lease tokens, and provider resource
-truth stay outside those records.
+schema records. It keeps app installs, app routes, domain intent, and deployment
+configuration in flat Authority records while installed app data, provider
+secrets, raw lease tokens, projected deployment resource graphs, and provider
+resource truth stay outside those records.
 
 ## Requirements
 
@@ -22,10 +22,13 @@ outside control-plane source records.
 - **WHEN** its storage identity is selected
 - **THEN** it uses schema key `instance-control-plane`, storage identity
   `instance:control-plane`, and API prefix `/api/formless/control-plane`
-- **AND** it defines flat records for app installs, unified routes, deploy
-  targets, provider config references, and desired resources
-- **AND** each deploy target stores display-safe `targetUrl` origin facts for
-  commands that need to contact the deployed instance
+- **AND** it defines flat records for app installs, unified routes, and
+  deployment configs
+- **AND** each deployment config stores the target identity, display-safe
+  `targetUrl` origin facts, provider family, provider account, worker name, and
+  optional display-safe credential reference used for that deployment target
+- **AND** it does not define separate `deploy-target`,
+  `provider-config-ref`, or `deploy-desired-resource` entities
 - **AND** it does not define `deploy-attempt`, `deploy-evidence-summary`, or
   `deploy-drift-report` as schema-owned control-plane record entities
 - **AND** deployment attempts, evidence summaries, drift reports, cleanup audit
@@ -69,6 +72,11 @@ schema-owned control-plane intent records.
   records
 - **AND** enabled `route` records provide app mount, custom-domain, DNS, and
   redirect desired route resources
+- **AND** `deployment-config` records provide the target URL, provider account,
+  worker name, and credential reference needed to project provider-facing
+  resources
+- **AND** no projected `DeploymentResourceGraph` resource is stored as
+  schema-owned source intent
 - **AND** the desired-state hash is computed from canonical projected content
 
 #### Scenario: Projection omits operational secrets
@@ -121,8 +129,8 @@ records.
 - **THEN** each route record can store camelCase fields for enabled state,
   optional match host, match path, optional match prefix, kind, optional target
   profile, optional app install reference, optional surface, optional access
-  policy, optional provider config reference, redirect target fields, redirect
-  policy fields, created time, and updated time
+  policy, optional deployment config reference, redirect target fields,
+  redirect policy fields, created time, and updated time
 - **AND** route records remain flat schema records
 
 #### Scenario: Mount route
@@ -165,6 +173,42 @@ records.
   evidence, cleanup history, deployment attempt, or drift report is mutated by
   the route write itself
 
+### Requirement: Deployment Config Records
+
+The system SHALL represent deploy target and provider selection as one
+`deployment-config` control-plane record.
+
+#### Scenario: Deployment config shape
+
+- **GIVEN** the instance control-plane schema is loaded
+- **WHEN** the `deployment-config` entity is inspected
+- **THEN** each record stores camelCase fields for target id, target kind,
+  display label, enabled state, display-safe target URL, provider family,
+  provider account id, worker name, optional display-safe credential reference,
+  created time, and updated time
+- **AND** the target id and provider family are immutable after creation
+- **AND** provider API tokens, Alchemy passwords, Alchemy state tokens, raw
+  lease tokens, and runtime secrets are not stored on the record
+
+#### Scenario: Route deployment selection
+
+- **GIVEN** a route needs provider-managed DNS, custom-domain, or redirect
+  resources
+- **WHEN** the route omits an explicit deployment config reference
+- **THEN** projection uses the enabled primary instance deployment config
+- **AND** a route may reference a specific deployment config only when the
+  instance has multiple enabled deployment configs
+
+#### Scenario: Deployment config write
+
+- **GIVEN** an owner, admin, local workspace gateway, or CLI writes deployment
+  setup
+- **WHEN** the write commits
+- **THEN** the write stores deployment intent as a `deployment-config` record
+- **AND** no provider resource, deployment attempt, evidence summary, drift
+  report, cleanup history, or projected desired resource row is written by the
+  deployment config write itself
+
 ### Requirement: Workspace Canonical Control-Plane Source
 
 The system SHALL use schema-owned instance control-plane records as the
@@ -173,9 +217,9 @@ canonical source for workspace-authored instance intent.
 #### Scenario: Save control-plane records to workspace source
 
 - **WHEN** local Authority control-plane state is saved to workspace source
-- **THEN** `app-install`, `route`, `deploy-target`, `provider-config-ref`, and
-  `deploy-desired-resource` records are written as schema-owned record source
-- **AND** enabled `deploy-target` source records include the display-safe
+- **THEN** `app-install`, `route`, and `deployment-config` records are written
+  as schema-owned record source
+- **AND** enabled `deployment-config` source records include the display-safe
   deployed HTTP origin in `targetUrl`
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:app-install` and
@@ -183,16 +227,16 @@ canonical source for workspace-authored instance intent.
 - **AND** the default workspace record source root is
   `records/instance-control-plane`
 - **AND** record source under that root is stored as one deterministic JSON file
-  per supported entity: `app-install.json`, `route.json`,
-  `deploy-target.json`, `provider-config-ref.json`, and
-  `deploy-desired-resource.json`
+  per supported entity: `app-install.json`, `route.json`, and
+  `deployment-config.json`
 - **AND** each file declares kind
   `formless.instanceControlPlaneRecordSource`, version `1`, schema key
   `instance-control-plane`, a `schemaUpdatedAt` timestamp, the qualified
   entity name, and records for only that entity
 - **AND** `formless.json` does not duplicate those records as app, route,
   domain, or deploy intent
-- **AND** `deploy-attempt`, `deploy-evidence-summary`, and
+- **AND** `deploy-target`, `provider-config-ref`,
+  `deploy-desired-resource`, `deploy-attempt`, `deploy-evidence-summary`, and
   `deploy-drift-report` records are not written as workspace source
 
 #### Scenario: Restore control-plane records from workspace source
@@ -222,8 +266,7 @@ writing schema-owned control-plane records.
 #### Scenario: Browser edits deploy and domain intent
 
 - **WHEN** a browser owner or admin edits domain or deployment configuration
-- **THEN** the write commits unified `route`, `deploy-target`,
-  `provider-config-ref`, or `deploy-desired-resource` records through
-  Authority validation
+- **THEN** the write commits unified `route` or `deployment-config` records
+  through Authority validation
 - **AND** provider credentials, raw provider state, and runtime secrets remain
   outside control-plane records

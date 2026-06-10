@@ -216,7 +216,9 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
       ? { surface: values.surface }
       : {}),
     ...(access === undefined ? {} : { access }),
-    ...(typeof values.providerConfig === "string" ? { providerConfig: values.providerConfig } : {}),
+    ...(typeof values.deploymentConfig === "string"
+      ? { deploymentConfig: values.deploymentConfig }
+      : {}),
     ...(typeof values.toHost === "string" ? { toHost: values.toHost } : {}),
     ...(typeof values.toUrl === "string" ? { toUrl: values.toUrl } : {}),
     ...(isRedirectStatusCode(values.statusCode) ? { statusCode: values.statusCode } : {}),

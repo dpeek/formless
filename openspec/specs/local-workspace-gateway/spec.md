@@ -342,7 +342,7 @@ responses and reviewable source.
 - **THEN** the gateway resolves provider credentials from environment or ignored
   workspace secret state
 - **AND** existing deployed instance targets are resolved from enabled
-  `deploy-target.targetUrl` workspace record source
+  `deployment-config.targetUrl` workspace record source
 - **AND** the browser receives only display-safe plan, attempt, health check,
   restore, and writeback summaries
 - **AND** deployment attempts, evidence summaries, drift reports, and cleanup

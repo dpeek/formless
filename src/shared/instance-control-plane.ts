@@ -17,9 +17,7 @@ export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-pl
 export const instanceControlPlaneEntityNames = [
   "app-install",
   "route",
-  "deploy-target",
-  "provider-config-ref",
-  "deploy-desired-resource",
+  "deployment-config",
 ] as const;
 
 export type InstanceControlPlaneEntityName = (typeof instanceControlPlaneEntityNames)[number];
@@ -99,7 +97,7 @@ export type InstanceControlPlaneRouteValues = {
   appInstall?: AppInstallId;
   surface?: InstanceControlPlaneRouteSurface;
   access?: InstanceControlPlaneRouteAccess;
-  providerConfig?: string;
+  deploymentConfig?: string;
   toHost?: string;
   toUrl?: string;
   statusCode?: InstanceControlPlaneRedirectStatusCode;
@@ -109,57 +107,29 @@ export type InstanceControlPlaneRouteValues = {
   updatedAt: string;
 };
 
-export type InstanceControlPlaneDeployTargetKind = "instance";
-
-export type InstanceControlPlaneDeployTargetValues = {
-  targetId: string;
-  targetKind: InstanceControlPlaneDeployTargetKind;
-  targetUrl: string;
-  label: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type InstanceControlPlaneProviderFamily = "cloudflare";
 
-export type InstanceControlPlaneProviderConfigRefValues = {
-  providerFamily: InstanceControlPlaneProviderFamily;
-  configRef: string;
+export type InstanceControlPlaneDeploymentConfigTargetKind = "instance";
+
+export type InstanceControlPlaneDeploymentConfigValues = {
+  targetId: string;
+  targetKind: InstanceControlPlaneDeploymentConfigTargetKind;
   label: string;
+  enabled: boolean;
+  targetUrl: string;
+  providerFamily: InstanceControlPlaneProviderFamily;
   accountId?: string;
   workerName?: string;
-  secretRef?: string;
+  credentialRef?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export type InstanceControlPlaneRedirectStatusCode = "301" | "302" | "303" | "307" | "308";
 
-export type InstanceControlPlaneDeploymentResourceKind =
-  | "cloudflare-dns-records"
-  | "cloudflare-redirect-rule"
-  | "cloudflare-worker-custom-domain";
-
-export type InstanceControlPlaneDeployDesiredResourceValues = {
-  deployTarget: string;
-  route?: string;
-  logicalId: string;
-  kind: InstanceControlPlaneDeploymentResourceKind;
-  providerFamily: InstanceControlPlaneProviderFamily;
-  inputsJson: string;
-  dependenciesJson?: string;
-  enabled: boolean;
-  sourceFingerprint: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type InstanceControlPlaneRecordValuesByEntity = {
   "app-install": InstanceControlPlaneAppInstallValues;
-  "deploy-desired-resource": InstanceControlPlaneDeployDesiredResourceValues;
-  "deploy-target": InstanceControlPlaneDeployTargetValues;
-  "provider-config-ref": InstanceControlPlaneProviderConfigRefValues;
+  "deployment-config": InstanceControlPlaneDeploymentConfigValues;
   route: InstanceControlPlaneRouteValues;
 };
 
@@ -190,9 +160,7 @@ export type AnyInstanceControlPlaneRecord = {
 
 export const instanceControlPlaneImmutableFields = {
   "app-install": ["installId", "packageAppKey", "storageIdentity"],
-  "deploy-desired-resource": ["deployTarget", "logicalId", "kind", "providerFamily"],
-  "deploy-target": ["targetId", "targetKind"],
-  "provider-config-ref": ["providerFamily", "configRef"],
+  "deployment-config": ["targetId", "targetKind", "providerFamily"],
   route: ["kind"],
 } as const satisfies Record<InstanceControlPlaneEntityName, readonly string[]>;
 
@@ -273,7 +241,7 @@ export const instanceControlPlaneSchema = {
           anonymous: "Anonymous",
           owner: "Owner",
         }),
-        providerConfig: optionalReferenceField("Provider config", "provider-config-ref", "label"),
+        deploymentConfig: optionalReferenceField("Deployment config", "deployment-config", "label"),
         toHost: optionalTextField("To host"),
         toUrl: optionalTextField("To URL", "href"),
         statusCode: optionalEnumField("Status code", {
@@ -290,14 +258,18 @@ export const instanceControlPlaneSchema = {
       },
       mutations: editableMutations,
     },
-    "deploy-target": {
-      label: "Deploy target",
+    "deployment-config": {
+      label: "Deployment config",
       fields: {
         targetId: textField("Target id"),
         targetKind: enumField("Kind", { instance: "Instance" }),
-        targetUrl: textField("Target URL", "href"),
         label: textField("Label"),
         enabled: booleanField("Enabled", true),
+        targetUrl: textField("Target URL", "href"),
+        providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
+        accountId: optionalTextField("Account id"),
+        workerName: optionalTextField("Worker name"),
+        credentialRef: optionalTextField("Credential ref"),
         createdAt: textField("Created at"),
         updatedAt: textField("Updated at"),
       },
@@ -306,71 +278,22 @@ export const instanceControlPlaneSchema = {
         uniqueTargetId: { kind: "unique", fields: ["targetId"] },
       },
     },
-    "provider-config-ref": {
-      label: "Provider config",
-      fields: {
-        providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
-        configRef: textField("Config ref"),
-        label: textField("Label"),
-        accountId: optionalTextField("Account id"),
-        workerName: optionalTextField("Worker name"),
-        secretRef: optionalTextField("Secret ref"),
-        createdAt: textField("Created at"),
-        updatedAt: textField("Updated at"),
-      },
-      mutations: editableMutations,
-      constraints: {
-        uniqueConfigRef: { kind: "unique", fields: ["configRef"] },
-      },
-    },
-    "deploy-desired-resource": {
-      label: "Desired resource",
-      fields: {
-        deployTarget: referenceField("Deploy target", "deploy-target", "label"),
-        route: optionalReferenceField("Route", "route", "matchPath"),
-        logicalId: textField("Logical id"),
-        kind: deploymentResourceKindField(),
-        providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
-        inputsJson: textField("Inputs", "longText"),
-        dependenciesJson: optionalTextField("Dependencies", "longText"),
-        enabled: booleanField("Enabled", true),
-        sourceFingerprint: textField("Source fingerprint"),
-        createdAt: textField("Created at"),
-        updatedAt: textField("Updated at"),
-      },
-      mutations: editableMutations,
-      constraints: {
-        uniqueTargetLogicalId: { kind: "unique", fields: ["deployTarget", "logicalId"] },
-      },
-    },
   },
   relationships: {
     routeInstall: toOne("Route install", "route", "appInstall", "app-install"),
-    routeProviderConfig: toOne(
-      "Route provider config",
+    routeDeploymentConfig: toOne(
+      "Route deployment config",
       "route",
-      "providerConfig",
-      "provider-config-ref",
-      "providerConfigRoutes",
+      "deploymentConfig",
+      "deployment-config",
+      "deploymentConfigRoutes",
     ),
-    providerConfigRoutes: toMany(
-      "Provider config routes",
-      "provider-config-ref",
+    deploymentConfigRoutes: toMany(
+      "Deployment config routes",
+      "deployment-config",
       "route",
-      "providerConfig",
-      "routeProviderConfig",
-    ),
-    desiredResourceTarget: toOne(
-      "Desired resource target",
-      "deploy-desired-resource",
-      "deployTarget",
-      "deploy-target",
-    ),
-    desiredResourceRoute: toOne(
-      "Desired resource route",
-      "deploy-desired-resource",
-      "route",
-      "route",
+      "deploymentConfig",
+      "routeDeploymentConfig",
     ),
   },
   queries: {
@@ -386,28 +309,27 @@ export const instanceControlPlaneSchema = {
     routeInstanceMount: whereQuery("Instance paths", "route", "targetProfile", "instance"),
     routeAppMount: whereQuery("App install routes", "route", "targetProfile", "app"),
     routePublicSiteMount: whereQuery("Public Site routes", "route", "targetProfile", "public-site"),
-    routesForSelectedProviderConfig: whereQuery(
-      "Selected provider config",
+    routesForSelectedDeploymentConfig: whereQuery(
+      "Selected deployment config",
       "route",
-      "providerConfig",
-      { kind: "context", name: "providerConfig" },
+      "deploymentConfig",
+      { kind: "context", name: "deploymentConfig" },
     ),
-    deployTargetAll: allQuery("Deploy targets", "deploy-target"),
-    providerConfigRefAll: allQuery("Provider config", "provider-config-ref"),
-    deployDesiredResourceAll: allQuery("Desired resources", "deploy-desired-resource"),
+    deploymentConfigAll: allQuery("Deployment configs", "deployment-config"),
+    deploymentConfigEnabled: whereQuery(
+      "Enabled deployment configs",
+      "deployment-config",
+      "enabled",
+      true,
+    ),
   },
   itemViews: {
     appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
     routeItem: itemView("route", ["matchHost", "matchPath", "kind", "enabled"]),
-    deployTargetItem: itemView("deploy-target", ["label", "targetId", "targetUrl", "enabled"]),
-    providerConfigRefItem: itemView("provider-config-ref", [
+    deploymentConfigItem: itemView("deployment-config", [
       "label",
+      "targetId",
       "providerFamily",
-      "configRef",
-    ]),
-    deployDesiredResourceItem: itemView("deploy-desired-resource", [
-      "logicalId",
-      "kind",
       "enabled",
     ]),
   },
@@ -433,7 +355,7 @@ export const instanceControlPlaneSchema = {
         { field: "appInstall", display: "readOnly" },
         { field: "surface", display: "readOnly" },
         { field: "access", display: "readOnly" },
-        { field: "providerConfig", display: "readOnly" },
+        { field: "deploymentConfig", display: "readOnly" },
         { field: "toHost", display: "readOnly" },
         { field: "toUrl", display: "readOnly" },
         { field: "statusCode", display: "readOnly" },
@@ -452,28 +374,15 @@ export const instanceControlPlaneSchema = {
         actionLabel: "Route actions",
       },
     ),
-    deployTargetTable: tableView("deploy-target", [
+    deploymentConfigTable: tableView("deployment-config", [
       "label",
       "targetId",
       "targetKind",
-      "targetUrl",
-      "enabled",
-    ]),
-    providerConfigRefTable: tableView("provider-config-ref", [
-      "label",
       "providerFamily",
-      "configRef",
       "accountId",
       "workerName",
-    ]),
-    deployDesiredResourceTable: tableView("deploy-desired-resource", [
-      "deployTarget",
-      "route",
-      "logicalId",
-      "kind",
-      "providerFamily",
+      "targetUrl",
       "enabled",
-      "sourceFingerprint",
     ]),
   },
   views: {
@@ -513,7 +422,7 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
-      "providerConfig",
+      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -537,7 +446,7 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
-      "providerConfig",
+      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -557,62 +466,46 @@ export const instanceControlPlaneSchema = {
       ],
       navigation: true,
     }),
-    routesByProviderConfigList: collectionView(
-      "Routes by provider config",
+    routesByDeploymentConfigList: collectionView(
+      "Routes by deployment config",
       "route",
-      "routesForSelectedProviderConfig",
+      "routesForSelectedDeploymentConfig",
       "routeTable",
       {
         context: {
-          name: "providerConfig",
-          entity: "provider-config-ref",
-          query: "providerConfigRefAll",
+          name: "deploymentConfig",
+          entity: "deployment-config",
+          query: "deploymentConfigAll",
           labelField: "label",
           presentation: "listDetail",
-          relationship: "providerConfigRoutes",
-          createView: "providerConfigRefCreate",
-          itemView: "providerConfigRefItem",
+          relationship: "deploymentConfigRoutes",
+          createView: "deploymentConfigCreate",
+          itemView: "deploymentConfigItem",
         },
       },
     ),
-    deployTargetCreate: createView("deploy-target", [
+    deploymentConfigCreate: createView("deployment-config", [
       "targetId",
       "targetKind",
-      "targetUrl",
       "label",
       "enabled",
-      "createdAt",
-      "updatedAt",
-    ]),
-    deployTargetList: collectionView(
-      "Deploy targets",
-      "deploy-target",
-      "deployTargetAll",
-      "deployTargetTable",
-      { createView: "deployTargetCreate" },
-    ),
-    providerConfigRefCreate: createView("provider-config-ref", [
+      "targetUrl",
       "providerFamily",
-      "configRef",
-      "label",
       "accountId",
       "workerName",
-      "secretRef",
+      "credentialRef",
       "createdAt",
       "updatedAt",
     ]),
-    providerConfigRefList: collectionView(
-      "Provider config",
-      "provider-config-ref",
-      "providerConfigRefAll",
-      "providerConfigRefTable",
-      { createView: "providerConfigRefCreate" },
-    ),
-    deployDesiredResourceList: collectionView(
-      "Desired resources",
-      "deploy-desired-resource",
-      "deployDesiredResourceAll",
-      "deployDesiredResourceTable",
+    deploymentConfigList: collectionView(
+      "Deployment configs",
+      "deployment-config",
+      "deploymentConfigAll",
+      "deploymentConfigTable",
+      {
+        createView: "deploymentConfigCreate",
+        extraQueries: ["deploymentConfigEnabled"],
+      },
     ),
   },
   screens: {
@@ -636,10 +529,10 @@ export const instanceControlPlaneSchema = {
         sections: [
           { id: "routes", type: "collection", view: "routeList" },
           {
-            id: "routes-by-provider-config",
-            label: "Routes by provider config",
+            id: "routes-by-deployment-config",
+            label: "Routes by deployment config",
             type: "collection",
-            view: "routesByProviderConfigList",
+            view: "routesByDeploymentConfigList",
           },
         ],
       },
@@ -651,11 +544,7 @@ export const instanceControlPlaneSchema = {
       navigation: { primary: true },
       layout: {
         type: "stack",
-        sections: [
-          { id: "deploy-targets", type: "collection", view: "deployTargetList" },
-          { id: "provider-config", type: "collection", view: "providerConfigRefList" },
-          { id: "desired-resources", type: "collection", view: "deployDesiredResourceList" },
-        ],
+        sections: [{ id: "deployment-configs", type: "collection", view: "deploymentConfigList" }],
       },
     },
   },
@@ -670,15 +559,9 @@ export const instanceControlPlaneSchema = {
         route: {
           immutableFields: [...instanceControlPlaneImmutableFields.route],
         },
-        "deploy-desired-resource": {
-          immutableFields: [...instanceControlPlaneImmutableFields["deploy-desired-resource"]],
-        },
-        "deploy-target": {
-          immutableFields: [...instanceControlPlaneImmutableFields["deploy-target"]],
-        },
-        "provider-config-ref": {
-          immutableFields: [...instanceControlPlaneImmutableFields["provider-config-ref"]],
-          secretReferenceFields: ["secretRef"],
+        "deployment-config": {
+          immutableFields: [...instanceControlPlaneImmutableFields["deployment-config"]],
+          secretReferenceFields: ["credentialRef"],
         },
       },
     },
@@ -918,20 +801,8 @@ function optionalEnumField(
   return { ...field, required: false };
 }
 
-function referenceField(label: string, to: string, displayField: string): FieldSchema {
-  return { type: "reference", required: true, label, to, displayField };
-}
-
 function optionalReferenceField(label: string, to: string, displayField: string): FieldSchema {
   return { type: "reference", required: false, label, to, displayField };
-}
-
-function deploymentResourceKindField(): FieldSchema {
-  return enumField("Kind", {
-    "cloudflare-dns-records": "Cloudflare DNS records",
-    "cloudflare-redirect-rule": "Cloudflare redirect rule",
-    "cloudflare-worker-custom-domain": "Cloudflare Worker custom domain",
-  });
 }
 
 function toOne(
@@ -1193,14 +1064,11 @@ function editorForField(field: string): FieldEditor {
   if (
     field === "appInstall" ||
     field === "appRoute" ||
-    field === "providerConfig" ||
-    field === "providerConfigRef" ||
+    field === "deploymentConfig" ||
     field === "route" ||
-    field === "deployTarget" ||
     field === "domainMapping" ||
     field === "redirectIntent" ||
-    field === "deployAttempt" ||
-    field === "deployDesiredResource"
+    field === "deployAttempt"
   ) {
     return "reference";
   }

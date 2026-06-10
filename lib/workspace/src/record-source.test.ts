@@ -43,9 +43,7 @@ describe("instance workspace control-plane record source", () => {
     ).toEqual([
       "records/instance-control-plane/app-install.json",
       "records/instance-control-plane/route.json",
-      "records/instance-control-plane/deploy-target.json",
-      "records/instance-control-plane/provider-config-ref.json",
-      "records/instance-control-plane/deploy-desired-resource.json",
+      "records/instance-control-plane/deployment-config.json",
     ]);
 
     const appInstallFile = JSON.parse(
@@ -70,9 +68,7 @@ describe("instance workspace control-plane record source", () => {
     expect(read?.records.map((record) => `${record.entity}:${record.id}`)).toEqual([
       "app-install:site",
       "route:route:site:public-site",
-      "deploy-target:instance.primary",
-      "provider-config-ref:provider-config:cloudflare:primary",
-      "deploy-desired-resource:deploy-resource:instance.primary:site-domain",
+      "deployment-config:instance.primary",
     ]);
   });
 
@@ -93,7 +89,7 @@ describe("instance workspace control-plane record source", () => {
     await expect(
       writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
-          inputsJson: JSON.stringify({ apiToken: "CF_API_TOKEN" }),
+          deploymentConfigValues: { credentialRef: "CF_API_TOKEN" },
         }),
         manifest,
         workspaceRoot,
@@ -103,7 +99,9 @@ describe("instance workspace control-plane record source", () => {
     await expect(
       writeInstanceWorkspaceControlPlaneRecordSource({
         controlPlane: controlPlaneSourceRecords({
-          inputsJson: JSON.stringify({ providerState: { rawLeaseToken: "lease-token" } }),
+          deploymentConfigValues: {
+            credentialRef: JSON.stringify({ providerState: { rawLeaseToken: "lease-token" } }),
+          },
         }),
         manifest,
         workspaceRoot,
@@ -177,8 +175,8 @@ describe("instance workspace control-plane record source", () => {
 function controlPlaneSourceRecords(
   options: {
     appInstallValues?: Partial<InstanceWorkspaceStoredRecord["values"]>;
+    deploymentConfigValues?: Partial<InstanceWorkspaceStoredRecord["values"]>;
     extraRecords?: InstanceWorkspaceStoredRecord[];
-    inputsJson?: string;
   } = {},
 ): InstanceWorkspaceControlPlaneRecordSourceControlPlane {
   const records: InstanceWorkspaceStoredRecord[] = [
@@ -208,46 +206,19 @@ function controlPlaneSourceRecords(
     }),
     {
       id: "instance.primary",
-      entity: "deploy-target",
+      entity: "deployment-config",
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
-        targetUrl: "https://personal.dpeek.workers.dev",
         label: "Primary",
         enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      createdAt: now,
-    },
-    {
-      id: "provider-config:cloudflare:primary",
-      entity: "provider-config-ref",
-      values: {
+        targetUrl: "https://personal.dpeek.workers.dev",
         providerFamily: "cloudflare",
-        configRef: "provider-config:cloudflare:primary",
-        label: "Primary Cloudflare",
         accountId: "account-123",
         workerName: "personal",
         createdAt: now,
         updatedAt: now,
-      },
-      createdAt: now,
-    },
-    {
-      id: "deploy-resource:instance.primary:site-domain",
-      entity: "deploy-desired-resource",
-      values: {
-        deployTarget: "instance.primary",
-        route: "route:site:public-site",
-        logicalId: "site-domain",
-        kind: "cloudflare-worker-custom-domain",
-        providerFamily: "cloudflare",
-        inputsJson: options.inputsJson ?? JSON.stringify({ host: "www.example.com" }),
-        enabled: true,
-        sourceFingerprint: "workspace",
-        createdAt: now,
-        updatedAt: now,
+        ...options.deploymentConfigValues,
       },
       createdAt: now,
     },

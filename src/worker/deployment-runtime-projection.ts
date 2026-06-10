@@ -20,7 +20,7 @@ import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.t
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   readControlPlaneRecords,
-  syncDeploymentProjectionToControlPlane,
+  syncDeploymentConfigToControlPlane,
 } from "./deployment-control-plane-client.ts";
 import { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 import { readInstanceDomainMappings } from "./instance-domain-mappings-state.ts";
@@ -57,12 +57,10 @@ export async function buildPrimaryInstanceDeploymentDesiredStateProjection(
     targetId: input.targetId,
   });
 
-  await syncDeploymentProjectionToControlPlane({
+  await syncDeploymentConfigToControlPlane({
     env: input.env,
     now: input.now,
     requestUrl: input.requestUrl,
-    resources: projection.resourceGraph.resources,
-    sourceFingerprint: projection.source.fingerprint,
     target: input.target ?? {
       kind: "instance",
       targetId: input.targetId,
@@ -133,42 +131,22 @@ export function buildDeploymentDesiredStateProjectionFromControlPlaneRecords(
   source: DeploymentDesiredStateSource;
 } {
   const activeRecords = records.filter((record) => !record.deletedAt);
-  const target = activeRecords.find(
-    (record) =>
-      record.entity === "deploy-target" &&
-      record.values.targetId === input.targetId &&
-      record.values.enabled === true,
-  );
-  const providerConfigs = providerConfigRecordsById(activeRecords);
+  const deploymentConfigs = deploymentConfigRecordsById(activeRecords);
+  const primaryDeploymentConfig = primaryDeploymentConfigRecord(activeRecords, input.targetId);
   const routeProjectionInput = {
+    deploymentConfigs,
     env: input.env ?? {},
-    providerConfigs,
+    primaryDeploymentConfig,
     targetId: input.targetId,
   };
   const routeResources = activeRecords.flatMap((record) =>
     deploymentResourcesFromRouteRecord(record, routeProjectionInput),
   );
-  const routeLogicalIds = new Set(
-    records.flatMap((record) => deploymentRouteLogicalIds(record, routeProjectionInput)),
-  );
-  const desiredResourceRecords = activeRecords.filter(
-    (record) =>
-      record.entity === "deploy-desired-resource" &&
-      record.values.deployTarget === (target?.id ?? input.targetId) &&
-      record.values.enabled === true,
-  );
-  const desiredResources = desiredResourceRecords
-    .map(deploymentResourceFromControlPlaneRecord)
-    .filter((resource) => !routeLogicalIds.has(resource.logicalId));
-  const resources = [...routeResources, ...desiredResources];
   const hasRouteIntent = records.some(isRouteProviderIntentRecord);
   const resourceGraph = canonicalizeDeploymentResourceGraph({
-    resources,
+    resources: routeResources,
     targetId: input.targetId,
   });
-  const sourceFingerprint = firstStringValue(
-    desiredResourceRecords.map((record) => record.values.sourceFingerprint),
-  );
 
   if (resourceGraph.resources.length === 0) {
     return {
@@ -182,45 +160,65 @@ export function buildDeploymentDesiredStateProjectionFromControlPlaneRecords(
   return {
     resourceGraph,
     source: {
-      fingerprint:
-        routeResources.length > 0 || hasRouteIntent
-          ? `intent:${input.targetId}.routes:${deploymentResourceGraphCanonicalJson(resourceGraph)}`
-          : (sourceFingerprint ??
-            `intent:${input.targetId}.control-plane:${deploymentResourceGraphCanonicalJson(
-              resourceGraph,
-            )}`),
+      fingerprint: `intent:${input.targetId}.routes:${deploymentResourceGraphCanonicalJson(
+        resourceGraph,
+      )}`,
       intentRevision: resourceGraph.resources.length,
     },
   };
 }
 
-type ProviderConfigProjection = {
+type DeploymentConfigProjection = {
+  targetId: DeploymentTarget["targetId"];
   workerName?: string;
 };
 
-function providerConfigRecordsById(
+function deploymentConfigRecordsById(
   records: readonly StoredRecord[],
-): ReadonlyMap<string, ProviderConfigProjection> {
-  const configs = new Map<string, ProviderConfigProjection>();
+): ReadonlyMap<string, DeploymentConfigProjection> {
+  const configs = new Map<string, DeploymentConfigProjection>();
 
   for (const record of records) {
-    if (record.entity !== "provider-config-ref" || record.values.providerFamily !== "cloudflare") {
+    if (
+      record.entity !== "deployment-config" ||
+      record.values.providerFamily !== "cloudflare" ||
+      record.values.targetKind !== "instance" ||
+      record.values.enabled !== true
+    ) {
       continue;
     }
 
+    const targetId = optionalString(record.values.targetId) ?? record.id;
     const workerName = optionalString(record.values.workerName);
 
-    configs.set(record.id, workerName === undefined ? {} : { workerName });
+    configs.set(record.id, {
+      targetId,
+      ...(workerName === undefined ? {} : { workerName }),
+    });
   }
 
   return configs;
+}
+
+function primaryDeploymentConfigRecord(
+  records: readonly StoredRecord[],
+  targetId: DeploymentTarget["targetId"],
+): DeploymentConfigProjection | undefined {
+  const enabledDeploymentConfigs = [...deploymentConfigRecordsById(records).values()];
+  const matchingPrimary = enabledDeploymentConfigs.find((config) => config.targetId === targetId);
+
+  return (
+    matchingPrimary ??
+    (enabledDeploymentConfigs.length === 1 ? enabledDeploymentConfigs[0] : undefined)
+  );
 }
 
 function deploymentResourcesFromRouteRecord(
   record: StoredRecord,
   input: {
     env: PrimaryInstanceDeploymentProjectionEnv;
-    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    deploymentConfigs: ReadonlyMap<string, DeploymentConfigProjection>;
+    primaryDeploymentConfig?: DeploymentConfigProjection;
     targetId: DeploymentTarget["targetId"];
   },
 ): DeploymentResource[] {
@@ -246,37 +244,6 @@ function deploymentResourcesFromRouteRecord(
   return [];
 }
 
-function deploymentRouteLogicalIds(
-  record: StoredRecord,
-  input: {
-    env: PrimaryInstanceDeploymentProjectionEnv;
-    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
-    targetId: DeploymentTarget["targetId"];
-  },
-): string[] {
-  if (record.entity !== "route" || typeof record.values.matchHost !== "string") {
-    return [];
-  }
-
-  try {
-    if (record.values.kind === "mount") {
-      const resource = deploymentCustomDomainResourceFromRoute(record, input);
-
-      return resource === undefined ? [] : [resource.logicalId];
-    }
-
-    if (record.values.kind === "redirect") {
-      return deploymentRedirectResourcesFromRoute(record, input).map(
-        (resource) => resource.logicalId,
-      );
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
-}
-
 function isRouteProviderIntentRecord(record: StoredRecord): boolean {
   return (
     record.entity === "route" &&
@@ -289,7 +256,8 @@ function deploymentCustomDomainResourceFromRoute(
   record: StoredRecord,
   input: {
     env: PrimaryInstanceDeploymentProjectionEnv;
-    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    deploymentConfigs: ReadonlyMap<string, DeploymentConfigProjection>;
+    primaryDeploymentConfig?: DeploymentConfigProjection;
     targetId: DeploymentTarget["targetId"];
   },
 ): DeploymentResource | undefined {
@@ -301,7 +269,13 @@ function deploymentCustomDomainResourceFromRoute(
   }
 
   const targetInstallId = optionalString(record.values.appInstall);
-  const workerName = routeWorkerName(record.values.providerConfig, input);
+  const deploymentConfig = routeDeploymentConfig(record.values.deploymentConfig, input);
+
+  if (deploymentConfig !== undefined && deploymentConfig.targetId !== input.targetId) {
+    return undefined;
+  }
+
+  const workerName = routeWorkerName(deploymentConfig, input);
 
   return {
     dependencies: [],
@@ -332,13 +306,18 @@ function deploymentRedirectResourcesFromRoute(
   record: StoredRecord,
   input: {
     env: PrimaryInstanceDeploymentProjectionEnv;
-    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    deploymentConfigs: ReadonlyMap<string, DeploymentConfigProjection>;
+    primaryDeploymentConfig?: DeploymentConfigProjection;
     targetId: DeploymentTarget["targetId"];
   },
 ): DeploymentResource[] {
   const fromHost = optionalString(record.values.matchHost);
+  const deploymentConfig = routeDeploymentConfig(record.values.deploymentConfig, input);
 
-  if (fromHost === undefined) {
+  if (
+    fromHost === undefined ||
+    (deploymentConfig !== undefined && deploymentConfig.targetId !== input.targetId)
+  ) {
     return [];
   }
 
@@ -374,20 +353,30 @@ function domainMappingProfileFromRouteTarget(
   return undefined;
 }
 
+function routeDeploymentConfig(
+  deploymentConfigId: unknown,
+  input: {
+    deploymentConfigs: ReadonlyMap<string, DeploymentConfigProjection>;
+    primaryDeploymentConfig?: DeploymentConfigProjection;
+  },
+): DeploymentConfigProjection | undefined {
+  const deploymentConfig = optionalString(deploymentConfigId);
+
+  if (deploymentConfig !== undefined) {
+    return input.deploymentConfigs.get(deploymentConfig);
+  }
+
+  return input.primaryDeploymentConfig;
+}
+
 function routeWorkerName(
-  providerConfigId: unknown,
+  deploymentConfig: DeploymentConfigProjection | undefined,
   input: {
     env: PrimaryInstanceDeploymentProjectionEnv;
-    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
   },
 ): string | undefined {
-  const providerConfig = optionalString(providerConfigId);
-
-  if (providerConfig !== undefined) {
-    return (
-      input.providerConfigs.get(providerConfig)?.workerName ??
-      optionalDeploymentEnv(input.env.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME)
-    );
+  if (deploymentConfig?.workerName !== undefined) {
+    return deploymentConfig.workerName;
   }
 
   return optionalDeploymentEnv(input.env.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME);
@@ -514,53 +503,6 @@ function deploymentRedirectResourcesFromIntent(
       targetId: input.targetId,
     },
   ];
-}
-
-function deploymentResourceFromControlPlaneRecord(record: StoredRecord): DeploymentResource {
-  return {
-    dependencies: parseJsonArray(record.values.dependenciesJson),
-    inputs: parseJsonObject(record.values.inputsJson),
-    kind: String(record.values.kind) as DeploymentResource["kind"],
-    logicalId: String(record.values.logicalId),
-    providerFamily: String(record.values.providerFamily) as DeploymentResource["providerFamily"],
-    targetId: String(record.values.deployTarget) as DeploymentResource["targetId"],
-  };
-}
-
-function parseJsonObject(value: unknown): DeploymentResource["inputs"] {
-  if (typeof value !== "string") {
-    return {};
-  }
-
-  const parsed = JSON.parse(value) as unknown;
-
-  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-    return parsed as DeploymentResource["inputs"];
-  }
-
-  throw new Error("Control-plane deploy-desired-resource inputsJson must be an object.");
-}
-
-function parseJsonArray(value: unknown): DeploymentResource["dependencies"] {
-  if (value === undefined) {
-    return [];
-  }
-
-  if (typeof value !== "string") {
-    throw new Error("Control-plane deploy-desired-resource dependenciesJson must be a string.");
-  }
-
-  const parsed = JSON.parse(value) as unknown;
-
-  if (Array.isArray(parsed)) {
-    return parsed as DeploymentResource["dependencies"];
-  }
-
-  throw new Error("Control-plane deploy-desired-resource dependenciesJson must be an array.");
-}
-
-function firstStringValue(values: unknown[]): string | undefined {
-  return values.find((value): value is string => typeof value === "string");
 }
 
 function optionalDeploymentEnv(value: unknown): string | undefined {

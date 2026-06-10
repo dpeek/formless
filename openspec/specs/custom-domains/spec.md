@@ -76,7 +76,7 @@ evidence.
 
 ### Requirement: Provider Plan
 
-The system SHALL plan provider changes from enabled routes, provider config
+The system SHALL plan provider changes from enabled routes, deployment config
 facts, and applied provider state.
 
 #### Scenario: Plan status
@@ -155,7 +155,7 @@ semantics.
   redirect DNS graph resources
 - **AND** disabled redirect routes do not create desired provider resources
 
-#### Scenario: Removed routes disappear from desired resources
+#### Scenario: Removed routes disappear from desired state
 
 - **GIVEN** a custom-domain or redirect route was previously deployed
 - **WHEN** that route is disabled or deleted
@@ -200,13 +200,13 @@ The system SHALL make route forgetting and provider repair cleanup explicit.
 ### Requirement: Domain CLI Workflows
 
 The system SHALL expose domain inspection and explicit provider repair cleanup
-workflows while provider mutation for domain, DNS, and redirect desired
+workflows while provider mutation for domain, DNS, and redirect projected
 resources runs through generic deployment attempts.
 
 #### Scenario: Domain resources deploy through workspace deploy
 
 - **GIVEN** a claimed instance workspace has enabled route records that project
-  DNS, custom-domain, or redirect desired resources
+  DNS, custom-domain, or redirect resources
 - **WHEN** `formless deploy` runs
 - **THEN** the CLI or trusted deployer declares those resources in tracked
   Alchemy desired state through the generic deployment path

@@ -2251,9 +2251,9 @@ describe("home view model collections", () => {
           entityName: "route",
         },
         {
-          id: "routes-by-provider-config",
-          label: "Routes by provider config",
-          viewName: "routesByProviderConfigList",
+          id: "routes-by-deployment-config",
+          label: "Routes by deployment config",
+          viewName: "routesByDeploymentConfigList",
           entityName: "route",
         },
       ],
@@ -2278,19 +2278,19 @@ describe("home view model collections", () => {
         : false,
     ).toBe(true);
     expect(providerRouteSection?.collection.context).toMatchObject({
-      name: "providerConfig",
-      entityName: "provider-config-ref",
-      queryName: "providerConfigRefAll",
+      name: "deploymentConfig",
+      entityName: "deployment-config",
+      queryName: "deploymentConfigAll",
       labelField: "label",
       presentation: "listDetail",
       relatedCollection: {
-        relationshipName: "providerConfigRoutes",
+        relationshipName: "deploymentConfigRoutes",
         entityName: "route",
-        referenceFieldName: "providerConfig",
+        referenceFieldName: "deploymentConfig",
       },
     });
     expect(providerRouteSection?.collection.queries.defaultQueryName).toBe(
-      "routesForSelectedProviderConfig",
+      "routesForSelectedDeploymentConfig",
     );
   });
 
@@ -2309,22 +2309,10 @@ describe("home view model collections", () => {
       layoutType: "stack",
       sections: [
         {
-          id: "deploy-targets",
-          label: "Deploy targets",
-          viewName: "deployTargetList",
-          entityName: "deploy-target",
-        },
-        {
-          id: "provider-config",
-          label: "Provider config",
-          viewName: "providerConfigRefList",
-          entityName: "provider-config-ref",
-        },
-        {
-          id: "desired-resources",
-          label: "Desired resources",
-          viewName: "deployDesiredResourceList",
-          entityName: "deploy-desired-resource",
+          id: "deployment-configs",
+          label: "Deployment configs",
+          viewName: "deploymentConfigList",
+          entityName: "deployment-config",
         },
       ],
     });

@@ -56,10 +56,10 @@ const archiveNormalizers = createArchiveNormalizerRegistry([
 const legacyInstanceControlPlaneEntityNames: Record<string, InstanceControlPlaneEntityName> = {
   appInstall: "app-install",
   appRoute: "route",
-  deployDesiredResource: "deploy-desired-resource",
-  deployTarget: "deploy-target",
+  deployDesiredResource: "deployment-config",
+  deployTarget: "deployment-config",
   domainMapping: "route",
-  providerConfigRef: "provider-config-ref",
+  providerConfigRef: "deployment-config",
   redirectIntent: "route",
 };
 

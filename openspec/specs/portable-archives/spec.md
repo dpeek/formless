@@ -48,7 +48,8 @@ import validation.
   camelCase instance control-plane entity names
 - THEN the reader normalizes those names to canonical qualified names such as
   `instance:app-install`, `instance:app-route`,
-  `instance:domain-mapping`, and `instance:deploy-target` before validation
+  `instance:domain-mapping`, and `instance:deployment-config` before
+  validation
 - AND dry-run or check output reports the normalization evidence
 - AND canonical output is written with kebab-case qualified entity names
 
@@ -216,9 +217,9 @@ of truth for local-first Formless workspaces.
   local state or process environment
 - **AND** the CLI does not create empty app archive, control-plane record
   source, or media directories
-- **AND** no app install, route, deploy target, provider config, desired
-  resource, Cloudflare resource, Alchemy resource, provider credential, or
-  remote instance is created by fresh local workspace bootstrap
+- **AND** no app install, route, deployment config, Cloudflare resource,
+  Alchemy resource, provider credential, or remote instance is created by fresh
+  local workspace bootstrap
 
 #### Scenario: Save from local Authority
 
@@ -292,14 +293,13 @@ in the manifest.
 - **THEN** `formless.json` remains manifest version `1` and stores only layout
   and local configuration such as kind, name, control-plane record source path,
   app archive root, media root, local state root, and ignored secret state root
-- **AND** `app-install`, unified `route`, `deploy-target`,
-  `provider-config-ref`, and `deploy-desired-resource` intent, remote target
-  facts, deployment execution history, and default app policy are not stored in
-  `formless.json`
+- **AND** `app-install`, unified `route`, `deployment-config` intent, remote
+  target facts, deployment execution history, and default app policy are not
+  stored in `formless.json`
 - **AND** provider worker-name overrides are deployment intent stored in
-  schema-owned provider configuration records, not in `formless.json`
-- **AND** deployed remote target origin facts are stored on `deploy-target`
-  records as display-safe `targetUrl` values
+  schema-owned deployment config records, not in `formless.json`
+- **AND** deployed remote target origin facts are stored on
+  `deployment-config` records as display-safe `targetUrl` values
 - **AND** secret-looking fields are rejected
 
 #### Scenario: Workspace push apply
@@ -321,11 +321,10 @@ workspace source.
 - **WHEN** a workspace targeting a remote instance runs `formless instance check`
 - **THEN** remote target archive state is compared with local app archives and
   local schema-owned control-plane record source
-- **AND** `app-install`, unified `route`, `deploy-target`,
-  `provider-config-ref`, `deploy-desired-resource`, app record, and media drift
-  are reported without deriving intent from `formless.json`
+- **AND** `app-install`, unified `route`, `deployment-config`, app record, and
+  media drift are reported without deriving intent from `formless.json`
 - **AND** remote drift checks select the deployed instance origin from enabled
-  `deploy-target.targetUrl` record source
+  `deployment-config.targetUrl` record source
 - **AND** deployment attempt, evidence, drift, cleanup, and status summaries are
   treated as runtime execution state rather than source drift
 
@@ -346,11 +345,9 @@ workspace record-source boundaries.
 - WHEN instance control-plane records are written to an instance archive or
   workspace record source
 - THEN the record boundary identifies entity names as `instance:app-install`,
-  `instance:app-route`, `instance:deploy-target`,
-  `instance:provider-config-ref`, `instance:domain-mapping`,
-  `instance:redirect-intent`, `instance:deploy-desired-resource`,
-  `instance:deploy-attempt`, `instance:deploy-evidence-summary`, or
-  `instance:deploy-drift-report`
+  `instance:app-route`, `instance:deployment-config`,
+  `instance:domain-mapping`, `instance:redirect-intent`, or
+  `instance:route`
 - AND restore maps the qualified entity name back to the schema-local entity key
   before Authority validation
 
@@ -370,11 +367,10 @@ control-plane records without storing secrets or deployment execution history.
 #### Scenario: Instance archive includes control-plane intent
 
 - **WHEN** an instance archive includes instance control-plane configuration
-- **THEN** `app-install`, `route`, `deploy-target`, `provider-config-ref`, and
-  `deploy-desired-resource` records are represented as control-plane schema
-  records with qualified entity names such as `instance:app-install`,
-  `instance:route`, `instance:deploy-target`,
-  `instance:provider-config-ref`, and `instance:deploy-desired-resource`
+- **THEN** `app-install`, `route`, and `deployment-config` records are
+  represented as control-plane schema records with qualified entity names such
+  as `instance:app-install`, `instance:route`, and
+  `instance:deployment-config`
 - **AND** provider API tokens, Alchemy passwords, Alchemy state tokens, raw lease
   tokens, and full provider resource JSON are excluded
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
@@ -392,9 +388,8 @@ control-plane records without storing secrets or deployment execution history.
   kebab-case entity names at the workspace boundary
 - **AND** record source is rooted at manifest `source.records`, defaults to
   `records/instance-control-plane`, and writes deterministic entity files for
-  `instance:app-install`, `instance:route`, `instance:deploy-target`,
-  `instance:provider-config-ref`, and
-  `instance:deploy-desired-resource`
+  `instance:app-install`, `instance:route`, and
+  `instance:deployment-config`
 - **AND** each entity file declares kind
   `formless.instanceControlPlaneRecordSource`, version `1`, schema key
   `instance-control-plane`, a `schemaUpdatedAt` timestamp, the qualified
@@ -414,8 +409,8 @@ schema-owned control-plane records.
 
 - **GIVEN** `formless instance check` compares instance control-plane state
 - **WHEN** remote and local control-plane records differ
-- **THEN** drift is reported from schema-owned app install, route, deploy
-  target, provider reference, and desired resource records
+- **THEN** drift is reported from schema-owned app install, route, and
+  deployment config records
 - **AND** app path, exact-host mapping, and redirect drift are compared through
   `instance:route` records
 - **AND** provider drift summaries remain separate from desired intent drift

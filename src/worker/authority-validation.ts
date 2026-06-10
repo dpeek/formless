@@ -839,7 +839,7 @@ function isInstanceControlPlaneRouteValidationEntity(schema: AppSchema, entityNa
     entity.fields.appInstall?.type === "reference" &&
     entity.fields.surface?.type === "enum" &&
     entity.fields.access?.type === "enum" &&
-    entity.fields.providerConfig?.type === "reference" &&
+    entity.fields.deploymentConfig?.type === "reference" &&
     entity.fields.toHost?.type === "text" &&
     entity.fields.toUrl?.type === "text" &&
     entity.fields.statusCode?.type === "enum"
@@ -856,7 +856,7 @@ function validateInstanceControlPlaneRouteValues(
   const matchPath = stringRecordValue(values, "matchPath");
   const matchPrefix = optionalStringRecordValue(values, "matchPrefix");
   const kind = stringRecordValue(values, "kind");
-  const providerConfig = optionalStringRecordValue(values, "providerConfig");
+  const deploymentConfig = optionalStringRecordValue(values, "deploymentConfig");
 
   if (matchHost !== undefined) {
     assertNormalizedExactHost("matchHost", matchHost);
@@ -868,9 +868,9 @@ function validateInstanceControlPlaneRouteValues(
     assertNormalizedMatchPrefix(matchPath, matchPrefix);
   }
 
-  if (providerConfig !== undefined && matchHost === undefined) {
+  if (deploymentConfig !== undefined && matchHost === undefined) {
     throw new BadRequestError(
-      'Field "providerConfig" can only be set on exact-host route records.',
+      'Field "deploymentConfig" can only be set on exact-host route records.',
     );
   }
 

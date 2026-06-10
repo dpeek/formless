@@ -12,12 +12,12 @@ provider reconciliation and provider resource state.
 ### Requirement: Normal Provider Mutation Path
 
 The system SHALL use generic deployment attempts as the only normal provider
-mutation path for control-plane desired resources.
+mutation path for projected deployment resource graphs.
 
-#### Scenario: Apply control-plane desired resources
+#### Scenario: Apply projected deployment resources
 
 - **WHEN** a CLI, browser workspace gateway, CI job, or trusted deploy node
-  applies control-plane desired resources
+  applies deployment intent
 - **THEN** it starts or reuses a deployment attempt for the exact desired-state
   version and target
 - **AND** provider mutation is performed by declaring the desired resource graph
@@ -54,7 +54,7 @@ mutation path for control-plane desired resources.
 - **WHEN** an authorized cleanup workflow selects that evidence
 - **THEN** cleanup may mutate the selected provider resource or evidence outside
   normal deploy reconciliation
-- **AND** cleanup does not change control-plane desired resources unless a
+- **AND** cleanup does not change control-plane deployment intent unless a
   separate authorized intent write is submitted
 
 ### Requirement: Versioned Desired Deployment State
@@ -69,10 +69,12 @@ supported deployment target.
   revision, stable hash, schema version, target id, resource graph, and display
   summary
 - **AND** targets backed by schema-owned control-plane records project the
-  resource graph from enabled route, provider config reference, deploy target,
-  and desired resource records for that target
+  resource graph from enabled route records, deployment config records, and
+  higher-level runtime intent for that target
 - **AND** host mount routes project custom-domain and DNS resources
 - **AND** redirect routes project redirect and redirect DNS resources
+- **AND** raw desired resource rows are not schema-owned control-plane source
+  records
 - **AND** the response does not include provider credentials, Alchemy
   passwords, state tokens, raw lease tokens, or runtime secrets
 - **AND** the response is not cached
@@ -130,7 +132,7 @@ stable logical ids and provider resource declarations.
 - **THEN** each graph resource has a stable logical id, kind, target id,
   provider family, inputs, and dependency metadata
 - **AND** logical ids are deterministic for the same enabled route and provider
-  config intent
+  deployment config intent
 
 #### Scenario: Graph is not provider truth
 
@@ -334,8 +336,8 @@ provider mutation, writeback, repair cleanup, and audit behavior exact.
   secrets outside the runtime desired-state response, declares the exact desired
   graph in tracked Alchemy state or another provider reconciler, and writes back
   the result for the exact desired-state version
-- **AND** Worker, R2, DNS, custom-domain, redirect, and other control-plane
-  desired resources use the same deployer protocol boundary
+- **AND** Worker, R2, DNS, custom-domain, redirect, and other projected
+  provider resources use the same deployer protocol boundary
 
 #### Scenario: Route deletion is not provider mutation
 
@@ -438,11 +440,13 @@ reviewable source.
 #### Scenario: Save deployment intent
 
 - **WHEN** deployment intent is saved from Authority to workspace source
-- **THEN** `route`, `deploy-target`, `provider-config-ref`, and
-  `deploy-desired-resource` records are written as schema-owned record source
+- **THEN** `route` and `deployment-config` records are written as
+  schema-owned record source
 - **AND** workspace and archive boundaries identify those records with
-  qualified entity names such as `instance:deploy-target` and
-  `instance:deploy-desired-resource`
+  qualified entity names such as `instance:route` and
+  `instance:deployment-config`
+- **AND** projected deployment resource graph entries are runtime desired-state
+  content, not reviewable control-plane source records
 - **AND** `formless.json` does not store deployment intent or target facts
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
   `deploy-drift-report`, cleanup audit summaries, raw leases, and provider
@@ -451,7 +455,8 @@ reviewable source.
 #### Scenario: Worker name source
 
 - **WHEN** local workspace deploy planning resolves the provider worker name
-- **THEN** a schema-owned provider config worker-name value is used when present
+- **THEN** a schema-owned deployment config worker-name value is used when
+  present
 - **AND** otherwise the deployment plan may default the worker name from the
   layout manifest workspace name
 - **AND** `formless.json` does not store a separate worker-name override

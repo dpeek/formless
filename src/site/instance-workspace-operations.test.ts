@@ -42,6 +42,7 @@ import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
+  type FormlessInstanceAccountDiscoveryAdapter,
 } from "./instance-onboarding.ts";
 import {
   runFormlessWorkspaceOperation,
@@ -169,9 +170,12 @@ describe("Formless workspace operations", () => {
   it("plans deploy from schema-owned record source and desired-state projection", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
+    const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot, {
+      credentialRef: "alchemy-profile:personal-profile",
+    });
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
@@ -181,17 +185,25 @@ describe("Formless workspace operations", () => {
       },
       operationDeps(tempDir, {
         accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
+          listAccounts: async (input) => {
+            accountDiscoveryInputs.push(input);
+
+            return [
+              {
+                id: "account-123",
+                workersDevSubdomain: "dpeek",
+              },
+            ];
+          },
+        } satisfies FormlessInstanceAccountDiscoveryAdapter,
         fetch: authorityExportFetch(
           [installedSite("david", "David Peek")],
           { david: { records: [] } },
-          { controlPlaneRecords: deployControlPlaneRecords() },
+          {
+            controlPlaneRecords: deployControlPlaneRecords({
+              credentialRef: "alchemy-profile:personal-profile",
+            }),
+          },
         ),
         operationIds: ["op_deploy_plan_00000001"],
         packageVersion: packageJson.version,
@@ -267,6 +279,7 @@ describe("Formless workspace operations", () => {
       (state.result?.deployment?.plan as { affectedLogicalIds?: unknown[] } | null | undefined)
         ?.affectedLogicalIds,
     ).toHaveLength(3);
+    expect(accountDiscoveryInputs).toEqual([{ credentialProfile: "personal-profile" }]);
     await expectNoDeploymentHistoryRecordSource(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
   });
@@ -336,7 +349,9 @@ describe("Formless workspace operations", () => {
       [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot, {
+      credentialRef: "alchemy-profile:personal-profile",
+    });
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
@@ -365,7 +380,11 @@ describe("Formless workspace operations", () => {
             return { resourceEvidence, url: input.plan.expectedUrl.url };
           },
         },
-        fetch: deployApplyFetch(requests),
+        fetch: deployApplyFetch(requests, {
+          controlPlaneRecords: deployControlPlaneRecords({
+            credentialRef: "alchemy-profile:personal-profile",
+          }),
+        }),
         operationIds: ["op_deploy_apply_00000001"],
         packageRoot: "/package",
         packageVersion: packageJson.version,
@@ -475,6 +494,7 @@ describe("Formless workspace operations", () => {
       leaseToken: "lease:local-gateway",
     });
     expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.credentialProfile).toBe("personal-profile");
     expect(
       deployInputs[0]?.deploymentResourceGraph?.resources.map((resource) => resource.kind),
     ).toEqual([
@@ -499,7 +519,7 @@ describe("Formless workspace operations", () => {
     const requests: CapturedRequest[] = [];
     const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
       [];
-    const ownerSetupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
+    const ownerSetupUrl = `https://personal-sites.dpeek.workers.dev/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployRecordSource(workspaceRoot, { includeDeployTarget: false });
@@ -546,7 +566,7 @@ describe("Formless workspace operations", () => {
     expect(setupInputs).toEqual([
       {
         adminToken: "generated-admin-token",
-        deploymentUrl: "https://personal.dpeek.workers.dev",
+        deploymentUrl: "https://personal-sites.dpeek.workers.dev",
         setupToken,
       },
     ]);
@@ -691,9 +711,7 @@ async function expectNoDeploymentHistoryRecordSource(workspaceRoot: string) {
 function operationDeps(
   cwd: string,
   options: {
-    accountDiscovery?: {
-      listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
-    };
+    accountDiscovery?: FormlessInstanceAccountDiscoveryAdapter;
     deploymentAdapter?: {
       deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
     };
@@ -785,6 +803,7 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
 async function writeDeployRecordSource(
   workspaceRoot: string,
   options: {
+    credentialRef?: string;
     includeDeployTarget?: boolean;
     targetUrl?: string;
     workerName?: string | null;
@@ -907,7 +926,10 @@ type CapturedRequest = {
   url: string;
 };
 
-function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
+function deployApplyFetch(
+  requests: CapturedRequest[],
+  options: { controlPlaneRecords?: StoredRecord[] } = {},
+): typeof fetch {
   return async (url, init) => {
     const requestUrl =
       typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
@@ -943,7 +965,11 @@ function deployApplyFetch(requests: CapturedRequest[]): typeof fetch {
     }
 
     if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
-      return Response.json({ cursor: 1, records: deployControlPlaneRecords(), schema: {} });
+      return Response.json({
+        cursor: 1,
+        records: options.controlPlaneRecords ?? deployControlPlaneRecords(),
+        schema: {},
+      });
     }
 
     if (parsedUrl.pathname === "/api/app-installs/site/david/snapshot") {
@@ -1252,6 +1278,7 @@ function controlPlaneRecords(): StoredRecord[] {
 
 function deployControlPlaneRecords(
   options: {
+    credentialRef?: string;
     includeDeployTarget?: boolean;
     targetUrl?: string;
     workerName?: string | null;
@@ -1290,7 +1317,7 @@ function deployControlPlaneRecords(
         matchHost: "www.example.com",
         matchPath: "/",
         matchPrefix: "/",
-        providerConfig: "cloudflare-personal",
+        deploymentConfig: "instance.primary",
         surface: "public-site",
         targetProfile: "public-site",
         updatedAt: now,
@@ -1316,37 +1343,43 @@ function deployControlPlaneRecords(
     },
     {
       createdAt: now,
-      entity: "deploy-target",
+      entity: "deployment-config",
       id: "instance.primary",
       values: {
+        accountId: "account-123",
         createdAt: now,
         enabled: true,
         label: "Primary instance",
+        providerFamily: "cloudflare",
         targetId: "instance.primary",
         targetKind: "instance",
         targetUrl: options.targetUrl ?? "https://personal.dpeek.workers.dev",
         updatedAt: now,
-      },
-    },
-    {
-      createdAt: now,
-      entity: "provider-config-ref",
-      id: "cloudflare-personal",
-      values: {
-        accountId: "account-123",
-        configRef: "cloudflare-personal",
-        createdAt: now,
-        label: "Cloudflare personal",
-        providerFamily: "cloudflare",
-        updatedAt: now,
+        ...(options.credentialRef === undefined ? {} : { credentialRef: options.credentialRef }),
         ...(workerName === null ? {} : { workerName }),
       },
     },
   ];
 
-  return options.includeDeployTarget === false
-    ? records.filter((record) => record.entity !== "deploy-target")
-    : records;
+  if (options.includeDeployTarget !== false) {
+    return records;
+  }
+
+  return records
+    .filter((record) => record.entity !== "deployment-config")
+    .map((record) => {
+      if (record.id !== "route:host:public-site:www.example.com") {
+        return record;
+      }
+
+      const values = { ...record.values };
+      delete values.deploymentConfig;
+
+      return {
+        ...record,
+        values,
+      };
+    });
 }
 
 async function makeTempDir(): Promise<string> {

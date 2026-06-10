@@ -2,7 +2,7 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
 } from "../shared/instance-control-plane.ts";
-import type { DeploymentResource, DeploymentTarget } from "../shared/deployment-runtime.ts";
+import type { DeploymentTarget } from "../shared/deployment-runtime.ts";
 import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
@@ -16,20 +16,16 @@ export type DeploymentControlPlaneClientEnv = {
   FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
 
-export async function syncDeploymentProjectionToControlPlane(input: {
+export async function syncDeploymentConfigToControlPlane(input: {
   env: DeploymentControlPlaneClientEnv;
   now: string;
   requestUrl: string;
-  resources: DeploymentResource[];
-  sourceFingerprint: string;
   target: DeploymentTarget;
   targetUrl: string;
 }): Promise<StoredRecord[] | undefined> {
   return postInternalControlPlaneRecords(input.env, input.requestUrl, {
     body: {
       now: input.now,
-      resources: input.resources,
-      sourceFingerprint: input.sourceFingerprint,
       target: input.target,
       targetUrl: input.targetUrl,
     },

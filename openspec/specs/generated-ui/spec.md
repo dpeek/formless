@@ -344,16 +344,17 @@ entity keys and render clean human labels for those entities.
 ### Requirement: Schema-Driven Instance Management UI
 
 The system SHALL render instance management in the instance shell from
-schema-owned app install, route, deployment, provider evidence, view, screen,
-read model, and action models.
+schema-owned app install, route, deployment config, provider evidence, view,
+screen, read model, and action models.
 
 #### Scenario: Instance management surface
 
 - **GIVEN** the product instance shell renders instance management
 - **WHEN** control-plane records are available
-- **THEN** app installs, routes, deploy targets, desired resources, attempt
-  status, evidence summaries, and drift summaries come from the instance
+- **THEN** app installs, routes, and deployment configs come from the instance
   control-plane schema
+- **AND** attempt status, evidence summaries, and drift summaries come from the
+  deployment runtime or local gateway operation state
 - **AND** custom-domain desired route state and provider applied evidence remain
   visually separate
 
@@ -424,10 +425,10 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **GIVEN** owner or admin users inspect routes
 - **WHEN** route records render
 - **THEN** routes show match host, match path, match prefix, kind, target
-  profile, app install target, surface, redirect target, provider config,
+  profile, app install target, surface, redirect target, deployment config,
   enabled state, and timestamps where applicable
 - **AND** routes are grouped or filterable by instance paths, host mappings,
-  public Site routes, redirects, app install, and provider config
+  public Site routes, redirects, app install, and deployment config
 
 #### Scenario: Edit mount route
 
@@ -527,7 +528,7 @@ behavior for onboarding steps that write schema records.
 #### Scenario: Onboarding record form
 
 - **WHEN** a browser onboarding step creates or edits app install, route,
-  provider config, deploy target, or desired resource records
+  or deployment config records
 - **THEN** field rendering reuses generated create/edit field controls, field
   editor selection, defaults, `visibleWhen`, and union variant behavior where
   the step is backed by schema view facts

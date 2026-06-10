@@ -78,9 +78,8 @@ app install, credential setup, and deploy operations.
   product instance runtime starts
 - **AND** the CLI does not create empty app archive, control-plane record
   source, or media directories
-- **AND** no app install, route, deploy target, provider config, desired
-  resource, Cloudflare resource, Alchemy resource, provider credential, or
-  remote instance is created
+- **AND** no app install, route, deployment config, Cloudflare resource,
+  Alchemy resource, provider credential, or remote instance is created
 - **AND** the workspace name defaults from the selected directory unless
   interactive confirmation supplies another valid name
 
@@ -292,7 +291,7 @@ intent lives in schema-owned record source.
 - **AND** check reports archive and control-plane record drift against the
   selected target
 - **AND** status, pull, check, and push select the remote HTTP origin from an
-  enabled `deploy-target.targetUrl` record rather than `formless.json`
+  enabled `deployment-config.targetUrl` record rather than `formless.json`
 
 #### Scenario: Push apply
 
@@ -395,9 +394,9 @@ deployment intent records.
 
 - **WHEN** CLI status, check, pull, push, plan, deploy, or domain workflows need
   instance control-plane state
-- **THEN** they read allowed `app-install`, `route`, `deploy-target`,
-  `provider-config-ref`, and `deploy-desired-resource` records through the
-  instance control-plane protocol or workspace record source
+- **THEN** they read allowed `app-install`, `route`, and
+  `deployment-config` records through the instance control-plane protocol or
+  workspace record source
 - **AND** provider credentials remain in CLI, local gateway, or runner-held
   secret locations
 - **AND** deployment attempt, evidence, drift, cleanup, and status summaries are
@@ -429,8 +428,8 @@ available where they expose behavior not replaced by workspace deploy.
 - **GIVEN** users inspect domain, route, deployment, drift, or provider evidence
   state
 - **WHEN** a supported non-mutating command executes
-- **THEN** output may include schema-owned route, desired resource, deployment
-  attempt, evidence, and drift record ids
+- **THEN** output may include schema-owned route ids and deployment attempt,
+  evidence, and drift record ids
 - **AND** the command does not mutate provider resources
 
 #### Scenario: Removed direct fallback commands are unsupported

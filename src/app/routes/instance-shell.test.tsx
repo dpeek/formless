@@ -1,6 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
+import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts";
 import { listBundledAppPackages, type AppInstall } from "../../shared/app-installs.ts";
+import {
+  instanceControlPlaneSchema,
+  type InstanceControlPlaneDeploymentConfigValues,
+} from "../../shared/instance-control-plane.ts";
+import type { StoredRecord } from "../../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
 import {
   InstallAppDialogForm,
@@ -12,6 +19,10 @@ import {
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
 import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
+
+beforeEach(() => {
+  resetClientStore();
+});
 
 describe("instance shell route view", () => {
   it("renders generated control-plane app, route, and deployment surfaces", () => {
@@ -42,7 +53,9 @@ describe("instance shell route view", () => {
     expect(html).toContain("No provider evidence.");
     expect(html).toContain("Deployments");
     expect(html).toContain('data-formless-control-plane-screen="deployments"');
-    expect(html).toContain("Control-plane deployment records");
+    expect(html).toContain('data-formless-deployment-setup-progress="true"');
+    expect(html).toContain("Deployment setup and progress");
+    expect(html).not.toContain("Control-plane deployment records");
     expect(html).not.toContain("Custom domains");
     expect(html).not.toContain("No custom domains.");
     expect(html).not.toContain("Add redirect");
@@ -51,6 +64,80 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
     expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");
     expect(html).not.toContain("Rate-card app backed by the bundled Estii schema");
+  });
+
+  it("renders deployment setup and progress from deployment config plus runtime operation status", () => {
+    applyBootstrapResponse(
+      {
+        cursor: 1,
+        records: [
+          deploymentConfigRecord({
+            accountId: "account-123",
+            label: "Primary Cloudflare",
+            targetUrl: "https://personal.dpeek.workers.dev",
+            workerName: "personal-worker",
+          }),
+        ],
+        schema: instanceControlPlaneSchema,
+        schemaUpdatedAt: "2026-06-10T00:00:00.000Z",
+      },
+      instanceControlPlaneClientTarget(),
+    );
+
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={readyState({
+          deploymentStatus: {
+            status: {
+              attemptId: "attempt.11111111-1111-4111-8111-111111111111",
+              checkedAt: "2026-06-10T00:00:00.000Z",
+              desiredState: {
+                hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                revision: 3,
+                targetId: "instance.primary",
+                versionId: "desired-state.instance.primary.3",
+              },
+              mode: "plan",
+              startedAt: "2026-06-10T00:00:00.000Z",
+              state: "in-progress",
+              targetId: "instance.primary",
+              actor: { actorId: "browser", kind: "runner", displayName: "Owner" },
+            },
+            target: {
+              kind: "instance",
+              label: "Primary instance target",
+              targetId: "instance.primary",
+            },
+          },
+          installs: [siteInstall({ installId: "site", label: "Site" })],
+        })}
+        workspaceGatewayState={workspaceGatewayState({
+          currentOperation: workspaceOperation({
+            operation: "deployPlan",
+            status: "running",
+            summary: {
+              fields: { desiredStateVersion: "desired-state.instance.primary.3" },
+              title: "Deploy planning",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-formless-deployment-setup-progress="true"');
+    expect(html).toContain('data-formless-deployment-config-summary="true"');
+    expect(html).toContain('data-formless-deployment-operation-status="true"');
+    expect(html).toContain("Enabled 1/1");
+    expect(html).toContain("Primary Cloudflare");
+    expect(html).toContain("https://personal.dpeek.workers.dev");
+    expect(html).toContain("Cloudflare · Account account-123");
+    expect(html).toContain("personal-worker");
+    expect(html).toContain("In progress · Plan revision 3 by Owner");
+    expect(html).toContain("Gateway");
+    expect(html).toContain("Deploy plan · Running");
+    expect(html).not.toContain("deploy-target");
+    expect(html).not.toContain("provider-config-ref");
+    expect(html).not.toContain("deploy-desired-resource");
   });
 
   it("renders local workspace gateway controls and browser onboarding state", () => {
@@ -86,7 +173,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Apply deploy");
     expect(html).toContain('data-formless-workspace-onboarding="local"');
     expect(html).toContain(
-      'data-formless-onboarding-generated-record-controls="routes deployments"',
+      'data-formless-onboarding-generated-record-controls="routes deployment-config"',
     );
     expect(html).toContain("No package apps are installed.");
     expect(html).toContain("Install first app");
@@ -196,7 +283,7 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain('data-formless-control-plane-screen="deployments"');
     expect(html).toContain(
-      'data-formless-onboarding-generated-record-controls="routes deployments"',
+      'data-formless-onboarding-generated-record-controls="routes deployment-config"',
     );
     expect(html).not.toContain("Owner setup");
     expect(html).not.toContain("passkey");
@@ -703,6 +790,31 @@ function workspaceOperation(
     version: 1,
     workspace: { label: "personal-sites" },
     ...overrides,
+  };
+}
+
+function deploymentConfigRecord(
+  overrides: Partial<InstanceControlPlaneDeploymentConfigValues> = {},
+): StoredRecord {
+  const values = {
+    accountId: "account-123",
+    createdAt: "2026-06-10T00:00:00.000Z",
+    enabled: true,
+    label: "Primary deployment",
+    providerFamily: "cloudflare",
+    targetId: "instance.primary",
+    targetKind: "instance",
+    targetUrl: "https://example.formless.dev",
+    updatedAt: "2026-06-10T00:00:00.000Z",
+    workerName: "formless-primary",
+    ...overrides,
+  } satisfies InstanceControlPlaneDeploymentConfigValues;
+
+  return {
+    createdAt: values.createdAt,
+    entity: "deployment-config",
+    id: values.targetId,
+    values,
   };
 }
 

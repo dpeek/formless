@@ -27,11 +27,7 @@ import {
   type InstanceControlPlaneRedirectStatusCode,
   type InstanceControlPlaneRouteValues,
 } from "../shared/instance-control-plane.ts";
-import type {
-  DeploymentJsonValue,
-  DeploymentResource,
-  DeploymentTarget,
-} from "../shared/deployment-runtime.ts";
+import type { DeploymentTarget } from "../shared/deployment-runtime.ts";
 import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
 import type {
   InstanceDomainMapping,
@@ -788,16 +784,11 @@ function legacyDomainMappingMigrationCandidate(
     updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
   };
   const values = domainMappingRouteRecordValues(storage, mapping);
-  const providerConfig = stringRecordValue(record.values.providerConfigRef);
-
   return [
     {
       id,
       source: `legacy domain-mapping "${record.id}"`,
-      values: {
-        ...values,
-        ...(providerConfig === undefined ? {} : { providerConfig }),
-      },
+      values,
     },
   ];
 }
@@ -834,16 +825,11 @@ function legacyRedirectIntentMigrationCandidate(
     createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
     updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
   };
-  const providerConfig = stringRecordValue(record.values.providerConfigRef);
-
   return [
     {
       id,
       source: `legacy redirect-intent "${record.id}"`,
-      values: {
-        ...redirectRouteRecordValues(intent),
-        ...(providerConfig === undefined ? {} : { providerConfig }),
-      },
+      values: redirectRouteRecordValues(intent),
     },
   ];
 }
@@ -852,61 +838,11 @@ function syncDeploymentProjectionRecords(
   storage: DurableObjectStorage,
   input: {
     now: string;
-    resources: DeploymentResource[];
-    sourceFingerprint: string;
     target: DeploymentTarget;
     targetUrl: string;
   },
 ) {
-  const targetRecordId = upsertDeploymentTargetRecord(
-    storage,
-    input.target,
-    input.targetUrl,
-    input.now,
-  );
-  const nextResourceRecordIds = new Set<string>();
-
-  for (const resource of input.resources) {
-    const recordId = deploymentDesiredResourceRecordId(input.target.targetId, resource.logicalId);
-    const existing = getStoredRecord(storage, recordId);
-    const values = deploymentDesiredResourceValues({
-      createdAt: stringRecordValue(existing?.values.createdAt) ?? input.now,
-      resource,
-      sourceFingerprint: input.sourceFingerprint,
-      targetRecordId,
-      updatedAt: input.now,
-    });
-
-    upsertControlPlaneRecord(storage, {
-      action: "syncDeploymentProjection",
-      entity: "deploy-desired-resource",
-      id: recordId,
-      values,
-    });
-    nextResourceRecordIds.add(recordId);
-  }
-
-  for (const record of activeControlPlaneRecords(storage)) {
-    if (
-      record.entity !== "deploy-desired-resource" ||
-      record.values.deployTarget !== targetRecordId ||
-      nextResourceRecordIds.has(record.id) ||
-      record.values.enabled !== true
-    ) {
-      continue;
-    }
-
-    upsertControlPlaneRecord(storage, {
-      action: "disableDeploymentProjectionResource",
-      entity: "deploy-desired-resource",
-      id: record.id,
-      values: {
-        ...record.values,
-        enabled: false,
-        updatedAt: input.now,
-      },
-    });
-  }
+  upsertDeploymentConfigRecord(storage, input);
 }
 
 function syncDomainIntentRecords(
@@ -958,31 +894,48 @@ function syncDomainIntentRecords(
   }
 }
 
-function upsertDeploymentTargetRecord(
+function upsertDeploymentConfigRecord(
   storage: DurableObjectStorage,
-  target: DeploymentTarget,
-  targetUrl: string,
-  now: string,
+  input: {
+    now: string;
+    target: DeploymentTarget;
+    targetUrl: string;
+  },
 ) {
-  const existing = getStoredRecord(storage, target.targetId);
+  const existing = findActiveDeploymentConfigRecord(storage, input.target.targetId);
+
+  if (existing) {
+    return;
+  }
+
   const values: RecordValues = {
-    targetId: target.targetId,
-    targetKind: target.kind,
-    targetUrl,
-    label: target.label ?? target.targetId,
+    targetId: input.target.targetId,
+    targetKind: input.target.kind,
+    label: input.target.label ?? input.target.targetId,
     enabled: true,
-    createdAt: stringRecordValue(existing?.values.createdAt) ?? now,
-    updatedAt: now,
+    targetUrl: input.targetUrl,
+    providerFamily: "cloudflare",
+    createdAt: input.now,
+    updatedAt: input.now,
   };
 
   upsertControlPlaneRecord(storage, {
-    action: "syncDeploymentTarget",
-    entity: "deploy-target",
-    id: target.targetId,
+    action: "syncDeploymentConfig",
+    entity: "deployment-config",
+    id: input.target.targetId,
     values,
   });
+}
 
-  return target.targetId;
+function findActiveDeploymentConfigRecord(
+  storage: DurableObjectStorage,
+  targetId: string,
+): StoredRecord | undefined {
+  return activeControlPlaneRecords(storage).find(
+    (record) =>
+      record.entity === "deployment-config" &&
+      stringRecordValue(record.values.targetId) === targetId,
+  );
 }
 
 function upsertControlPlaneRecord(
@@ -1027,29 +980,6 @@ function upsertControlPlaneRecord(
     input.values,
     validate,
   );
-}
-
-function deploymentDesiredResourceValues(input: {
-  createdAt: string;
-  resource: DeploymentResource;
-  sourceFingerprint: string;
-  targetRecordId: string;
-  updatedAt: string;
-}): RecordValues {
-  return {
-    deployTarget: input.targetRecordId,
-    logicalId: input.resource.logicalId,
-    kind: input.resource.kind,
-    providerFamily: input.resource.providerFamily,
-    inputsJson: JSON.stringify(input.resource.inputs),
-    ...(input.resource.dependencies.length === 0
-      ? {}
-      : { dependenciesJson: JSON.stringify(input.resource.dependencies) }),
-    enabled: true,
-    sourceFingerprint: input.sourceFingerprint,
-    createdAt: input.createdAt,
-    updatedAt: input.updatedAt,
-  };
 }
 
 function domainMappingRouteCandidate(
@@ -1237,8 +1167,6 @@ function enabledAppInstallRoute(
 
 function parseInternalDeploymentProjectionRequest(value: unknown): {
   now: string;
-  resources: DeploymentResource[];
-  sourceFingerprint: string;
   target: DeploymentTarget;
   targetUrl: string;
 } {
@@ -1248,11 +1176,9 @@ function parseInternalDeploymentProjectionRequest(value: unknown): {
 
   const target = parseDeploymentTarget(value.target);
   const targetUrl = parseRequiredString("targetUrl", value.targetUrl);
-  const resources = parseDeploymentResources(value.resources);
-  const sourceFingerprint = parseRequiredString("sourceFingerprint", value.sourceFingerprint);
   const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
 
-  return { now, resources, sourceFingerprint, target, targetUrl };
+  return { now, target, targetUrl };
 }
 
 function parseDeploymentTarget(value: unknown): DeploymentTarget {
@@ -1271,50 +1197,6 @@ function parseDeploymentTarget(value: unknown): DeploymentTarget {
     targetId,
     kind,
     ...(typeof value.label === "string" && value.label.trim() !== "" ? { label: value.label } : {}),
-  };
-}
-
-function parseDeploymentResources(value: unknown): DeploymentResource[] {
-  if (!Array.isArray(value)) {
-    throw new BadRequestError("Deployment resources must be an array.");
-  }
-
-  return value.map(parseDeploymentResource);
-}
-
-function parseDeploymentResource(value: unknown): DeploymentResource {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Deployment resource must be an object.");
-  }
-
-  const dependencies = Array.isArray(value.dependencies)
-    ? value.dependencies.map((dependency) => {
-        if (!isRecord(dependency)) {
-          throw new BadRequestError("Deployment resource dependency must be an object.");
-        }
-
-        return {
-          logicalId: parseRequiredString("dependency.logicalId", dependency.logicalId),
-          ...(typeof dependency.reason === "string" && dependency.reason.trim() !== ""
-            ? { reason: dependency.reason }
-            : {}),
-        };
-      })
-    : [];
-  const inputs = isRecord(value.inputs)
-    ? (value.inputs as Record<string, DeploymentJsonValue>)
-    : {};
-
-  return {
-    dependencies,
-    inputs,
-    kind: parseRequiredString("resource.kind", value.kind) as DeploymentResource["kind"],
-    logicalId: parseRequiredString("resource.logicalId", value.logicalId),
-    providerFamily: parseRequiredString(
-      "resource.providerFamily",
-      value.providerFamily,
-    ) as DeploymentResource["providerFamily"],
-    targetId: parseRequiredString("resource.targetId", value.targetId),
   };
 }
 
@@ -1651,10 +1533,6 @@ function activeControlPlaneRecordExists(
   const record = getStoredRecord(storage, id);
 
   return record?.entity === entity && !record.deletedAt;
-}
-
-function deploymentDesiredResourceRecordId(targetId: string, logicalId: string) {
-  return `deploy-resource:${targetId}:${logicalId}`;
 }
 
 function assertRouteMigrationCandidatesAreSafe(

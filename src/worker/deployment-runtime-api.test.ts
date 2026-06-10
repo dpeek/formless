@@ -332,7 +332,7 @@ describe("instance deployment runtime API routes", () => {
     expect(serialized).not.toContain("secret-alchemy-password");
   });
 
-  it("projects desired state from control-plane desired resource records", async () => {
+  it("does not materialize projected desired resources as control-plane records", async () => {
     await createAppInstall({ packageAppKey: "tasks", installId: "tasks", label: "Tasks" });
     await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
       host: "app.example.com",
@@ -350,53 +350,49 @@ describe("instance deployment runtime API routes", () => {
     const controlPlane = await getJson<BootstrapResponse>(
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
-    const desiredResourceRecords = controlPlane.body.records.filter(
-      (record) => record.entity === "deploy-desired-resource",
+    const deploymentConfigRecords = controlPlane.body.records.filter(
+      (record) => record.entity === "deployment-config",
     );
-    const projectedResources = desiredResourceRecords.map((record) => ({
-      dependencies:
-        typeof record.values.dependenciesJson === "string"
-          ? JSON.parse(record.values.dependenciesJson)
-          : [],
-      inputs: JSON.parse(String(record.values.inputsJson)),
-      kind: record.values.kind,
-      logicalId: record.values.logicalId,
-      providerFamily: record.values.providerFamily,
-      targetId: record.values.deployTarget,
-    }));
+    const serializedControlPlane = JSON.stringify(controlPlane.body.records);
 
-    expect(projectedResources).toEqual(desired.body.desiredState.resourceGraph.resources);
-    expect(desiredResourceRecords.map((record) => record.values.sourceFingerprint)).toEqual([
-      desired.body.desiredState.source.fingerprint,
-      desired.body.desiredState.source.fingerprint,
-      desired.body.desiredState.source.fingerprint,
-    ]);
+    expect(desired.body.desiredState.resourceGraph.resources).toHaveLength(3);
+    expect(serializedControlPlane).not.toContain("deploy-desired-resource");
+    expect(deploymentConfigRecords.map((record) => record.values.targetId)).toContain(
+      INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+    );
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-cloudflare-token");
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-alchemy-password");
   });
 
   it("projects provider resources directly from route records without route timestamps or secrets", async () => {
     const now = "2026-05-28T00:00:00.000Z";
-    const providerConfig = await createControlPlaneRecord("provider-config-ref", {
-      configRef: "cloudflare-primary",
+    const deploymentConfig = await createControlPlaneRecord("deployment-config", {
+      targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+      targetKind: "instance",
       createdAt: now,
       label: "Cloudflare primary",
+      enabled: true,
+      targetUrl: "https://direct.example.workers.dev",
       providerFamily: "cloudflare",
-      secretRef: "secret:cloudflare:primary",
+      credentialRef: "secret:cloudflare:primary",
       updatedAt: now,
       workerName: "config-worker",
     });
+    expect(deploymentConfig.response.status).toBe(200);
+
     const enabledRoute = await createControlPlaneRecord("route", {
       enabled: true,
       kind: "mount",
       matchHost: "direct.example.com",
       matchPath: "/",
       matchPrefix: "/",
-      providerConfig: providerConfig.body.record.id,
+      deploymentConfig: deploymentConfig.body.record.id,
       targetProfile: "instance",
       createdAt: now,
       updatedAt: now,
     });
+    expect(enabledRoute.response.status).toBe(200);
+
     await createControlPlaneRecord("route", {
       enabled: false,
       kind: "mount",

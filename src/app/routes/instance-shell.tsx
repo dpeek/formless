@@ -33,6 +33,7 @@ import {
   DeploymentRuntimeApiError,
   fetchInstanceDeploymentStatus,
 } from "../../client/deployment-runtime.ts";
+import { useRecordsById } from "../../client/store.ts";
 import {
   listBundledAppPackages,
   type AppInstall,
@@ -58,7 +59,11 @@ import {
   deploymentStatusDisplaySummary,
   type InstanceDeploymentStatusResponse,
 } from "../../shared/deployment-runtime.ts";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../../shared/instance-control-plane.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  type InstanceControlPlaneDeploymentConfigValues,
+} from "../../shared/instance-control-plane.ts";
+import type { StoredRecord } from "../../shared/protocol.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderDeleteJob,
@@ -764,7 +769,10 @@ export function InstanceShellRouteView({
         onRefreshPlan={onRefreshDomainProviderPlan}
         state={state}
       />
-      <GeneratedDeploymentManagementSection deploymentStatus={state.deploymentStatus} />
+      <GeneratedDeploymentManagementSection
+        deploymentStatus={state.deploymentStatus}
+        workspaceGatewayState={workspaceGatewayState}
+      />
       <InstallAppDialog
         installDrafts={installDrafts}
         onDraftChange={onInstallDraftChange}
@@ -952,10 +960,10 @@ function WorkspaceOnboardingFlowSection({
       </div>
       <div
         className="flex min-w-0 flex-wrap content-start gap-2 text-xs text-muted-fg"
-        data-formless-onboarding-generated-record-controls="routes deployments"
+        data-formless-onboarding-generated-record-controls="routes deployment-config"
       >
         <span className="rounded border border-border px-2 py-1">Routes</span>
-        <span className="rounded border border-border px-2 py-1">Deployments</span>
+        <span className="rounded border border-border px-2 py-1">Deployment config</span>
       </div>
     </div>
   );
@@ -1276,10 +1284,13 @@ function workspaceProviderLabel(provider: "alchemy" | "cloudflare"): string {
 
 function GeneratedDeploymentManagementSection({
   deploymentStatus,
+  workspaceGatewayState,
 }: {
   deploymentStatus?: InstanceDeploymentStatusResponse;
+  workspaceGatewayState: WorkspaceGatewayRouteState;
 }) {
   const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
+  const deploymentConfigs = useDeploymentConfigRecords();
   const deploymentSummary =
     deploymentStatus === undefined
       ? undefined
@@ -1293,7 +1304,7 @@ function GeneratedDeploymentManagementSection({
             Deployments
           </h2>
           {deploymentSummary === undefined ? (
-            <p className="text-xs text-muted-fg">Control-plane deployment records</p>
+            <p className="text-xs text-muted-fg">Deployment setup and progress</p>
           ) : (
             <p className="text-xs text-muted-fg">
               {deploymentSummary.label} · {deploymentSummary.detail}
@@ -1301,6 +1312,11 @@ function GeneratedDeploymentManagementSection({
           )}
         </div>
       </div>
+      <DeploymentSetupProgressSurface
+        deploymentConfigs={deploymentConfigs}
+        deploymentStatus={deploymentStatus}
+        workspaceGatewayState={workspaceGatewayState}
+      />
       <div data-formless-control-plane-screen="deployments">
         <HomeRoute
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
@@ -1310,6 +1326,183 @@ function GeneratedDeploymentManagementSection({
       </div>
     </section>
   );
+}
+
+type DeploymentConfigStoredRecord = StoredRecord & {
+  entity: "deployment-config";
+  values: InstanceControlPlaneDeploymentConfigValues;
+};
+
+function useDeploymentConfigRecords(): DeploymentConfigStoredRecord[] {
+  const recordsById = useRecordsById();
+
+  return useMemo(
+    () =>
+      Object.values(recordsById)
+        .filter(isDeploymentConfigStoredRecord)
+        .toSorted(compareDeploymentConfigRecords),
+    [recordsById],
+  );
+}
+
+function isDeploymentConfigStoredRecord(
+  record: StoredRecord,
+): record is DeploymentConfigStoredRecord {
+  return record.entity === "deployment-config" && record.deletedAt === undefined;
+}
+
+function compareDeploymentConfigRecords(
+  left: DeploymentConfigStoredRecord,
+  right: DeploymentConfigStoredRecord,
+): number {
+  const enabledCompare = Number(right.values.enabled) - Number(left.values.enabled);
+
+  if (enabledCompare !== 0) {
+    return enabledCompare;
+  }
+
+  return left.values.label.localeCompare(right.values.label) || left.id.localeCompare(right.id);
+}
+
+function DeploymentSetupProgressSurface({
+  deploymentConfigs,
+  deploymentStatus,
+  workspaceGatewayState,
+}: {
+  deploymentConfigs: DeploymentConfigStoredRecord[];
+  deploymentStatus?: InstanceDeploymentStatusResponse;
+  workspaceGatewayState: WorkspaceGatewayRouteState;
+}) {
+  const primaryConfig =
+    deploymentConfigs.find((config) => config.values.enabled) ?? deploymentConfigs[0];
+  const enabledCount = deploymentConfigs.filter((config) => config.values.enabled).length;
+  const operation = deploymentWorkspaceOperation(workspaceGatewayState);
+  const deploymentSummary =
+    deploymentStatus === undefined
+      ? undefined
+      : deploymentStatusDisplaySummary(deploymentStatus.status);
+
+  return (
+    <div
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-2"
+      data-formless-deployment-setup-progress="true"
+    >
+      <div className="min-w-0 space-y-3" data-formless-deployment-config-summary="true">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">Deployment setup</h3>
+          <p className="text-xs text-muted-fg">
+            {deploymentConfigs.length === 0
+              ? "No deployment configs"
+              : `Enabled ${enabledCount}/${deploymentConfigs.length}`}
+          </p>
+        </div>
+        {primaryConfig ? <DeploymentConfigFacts config={primaryConfig} /> : null}
+      </div>
+      <div className="min-w-0 space-y-3" data-formless-deployment-operation-status="true">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">Deployment progress</h3>
+          <p className="text-xs text-muted-fg">
+            {deploymentSummary === undefined
+              ? "Runtime status unavailable"
+              : `${deploymentSummary.label} · ${deploymentSummary.detail}`}
+          </p>
+        </div>
+        <dl className="grid gap-2 text-xs text-muted-fg">
+          {deploymentStatus ? (
+            <div className="min-w-0">
+              <dt className="font-medium text-fg">Target</dt>
+              <dd className="break-words">
+                {deploymentStatus.target.label} · <code>{deploymentStatus.target.targetId}</code>
+              </dd>
+            </div>
+          ) : null}
+          <div className="min-w-0">
+            <dt className="font-medium text-fg">Gateway</dt>
+            <dd className="break-words">
+              {workspaceGatewayOperationSummary(workspaceGatewayState, operation)}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+  );
+}
+
+function DeploymentConfigFacts({ config }: { config: DeploymentConfigStoredRecord }) {
+  return (
+    <dl className="grid gap-2 text-xs text-muted-fg">
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Config</dt>
+        <dd className="break-words">
+          {config.values.label} · <code>{config.values.targetId}</code>
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Target URL</dt>
+        <dd className="break-words">{config.values.targetUrl || "Not set"}</dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Provider</dt>
+        <dd className="break-words">
+          {providerFamilyLabel(config.values.providerFamily)}
+          {config.values.accountId ? ` · Account ${displaySafeText(config.values.accountId)}` : ""}
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Worker</dt>
+        <dd className="break-words">
+          {config.values.workerName ? displaySafeText(config.values.workerName) : "Not set"}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function deploymentWorkspaceOperation(
+  state: WorkspaceGatewayRouteState,
+): WorkspaceGatewayOperation | undefined {
+  if (state.status !== "ready") {
+    return undefined;
+  }
+
+  const operation = state.currentOperation;
+
+  if (!operation || !isDeploymentWorkspaceOperationKind(operation.operation)) {
+    return undefined;
+  }
+
+  return operation;
+}
+
+function isDeploymentWorkspaceOperationKind(kind: WorkspaceGatewayOperationKind): boolean {
+  return kind === "credentialSetup" || kind === "deployPlan" || kind === "deployApply";
+}
+
+function workspaceGatewayOperationSummary(
+  state: WorkspaceGatewayRouteState,
+  operation?: WorkspaceGatewayOperation,
+): string {
+  if (state.status === "loading") {
+    return "Loading";
+  }
+
+  if (state.status === "unavailable") {
+    return "Unavailable";
+  }
+
+  if (operation) {
+    return `${workspaceOperationKindLabel(operation.operation)} · ${workspaceOperationStatusLabel(
+      operation.status,
+    )}`;
+  }
+
+  return state.csrfToken ? "Ready" : "Connected";
+}
+
+function providerFamilyLabel(
+  providerFamily: InstanceControlPlaneDeploymentConfigValues["providerFamily"],
+): string {
+  return providerFamily === "cloudflare" ? "Cloudflare" : fieldKeyLabel(providerFamily);
 }
 
 function GeneratedInstanceAppsSection({
