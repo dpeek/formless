@@ -243,6 +243,18 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
   `);
 }
 
+export function resetInstanceAuthTables(storage: DurableObjectStorage) {
+  ensureInstanceAuthTables(storage);
+
+  storage.transactionSync(() => {
+    storage.sql.exec(`
+      DELETE FROM instance_auth_passkey_credentials;
+      DELETE FROM instance_auth_challenges;
+      DELETE FROM instance_auth_config;
+    `);
+  });
+}
+
 export function readInstanceAuthConfig(
   storage: DurableObjectStorage,
 ): StoredInstanceAuthConfig | undefined {

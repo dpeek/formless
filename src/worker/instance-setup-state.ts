@@ -98,6 +98,17 @@ export function ensureInstanceSetupTables(storage: DurableObjectStorage) {
   `);
 }
 
+export function resetInstanceSetupTables(storage: DurableObjectStorage) {
+  ensureInstanceSetupTables(storage);
+
+  storage.transactionSync(() => {
+    storage.sql.exec(`
+      DELETE FROM owner_setup_capability;
+      DELETE FROM instance_owners;
+    `);
+  });
+}
+
 export async function hashOwnerSetupToken(value: unknown): Promise<string> {
   const token = parseOwnerSetupToken(value);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));

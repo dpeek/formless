@@ -15,6 +15,7 @@ import {
   getChangesAfter,
   getCurrentCursor,
   initializeStorageFromSource,
+  resetStorageToEmpty,
   type StorageSource,
   type WriteOutcome,
 } from "./storage.ts";
@@ -49,6 +50,8 @@ import {
   handleAppStorageUpgradeStatusDurableObjectRequest,
   handleInstanceUpgradeStatusDurableObjectRequest,
 } from "./upgrade-status-api.ts";
+
+export const INTERNAL_RESET_APP_STORAGE_PATH = "/_internal/reset-app-storage";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -174,6 +177,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceArchiveResponse) {
       return instanceArchiveResponse;
+    }
+
+    if (url.pathname === INTERNAL_RESET_APP_STORAGE_PATH) {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+      }
+
+      resetStorageToEmpty(this.ctx.storage);
+
+      return jsonResponse({ reset: true });
     }
 
     const route = parseAuthorityRoute(url.pathname);

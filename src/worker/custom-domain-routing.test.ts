@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -7,7 +7,10 @@ import {
 } from "../app/runtime-profile.ts";
 import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -21,15 +24,21 @@ const taskInstallId = "task-workspace";
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 let harness: Harness;
+let defaultHarness: Harness;
 let assetRequests: string[];
 
-beforeEach(async () => {
-  assetRequests = [];
-  harness = await createCustomDomainHarness("instance");
+beforeAll(async () => {
+  defaultHarness = await createCustomDomainHarness("instance");
 });
 
-afterEach(async () => {
-  await harness.dispose();
+beforeEach(async () => {
+  harness = defaultHarness;
+  assetRequests = [];
+  await resetWorkerState(harness);
+});
+
+afterAll(async () => {
+  await defaultHarness.dispose();
 });
 
 describe("installed Site custom-domain Worker routing", () => {
@@ -195,34 +204,36 @@ describe("installed Site custom-domain Worker routing", () => {
   });
 
   it("redirects an anonymous instance profile custom host instead of public Site SSR", async () => {
-    await harness.dispose();
-    harness = await createCustomDomainHarness("publishedSite");
-    await postAdminJson("/api/formless/domain-mappings", {
-      host: "admin.example.com",
-      profile: "instance",
-    });
-    assetRequests = [];
+    await withHarness(await createCustomDomainHarness("publishedSite"), async () => {
+      await postAdminJson("/api/formless/domain-mappings", {
+        host: "admin.example.com",
+        profile: "instance",
+      });
+      assetRequests = [];
 
-    const home = await fetchHost("admin.example.com", "/", {
-      headers: { Accept: "text/html" },
-      redirect: "manual",
-    });
-    const publicSitePage = await fetchHost("admin.example.com", "/blog/starter-post", {
-      headers: { Accept: "text/html" },
-      redirect: "manual",
-    });
-    const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings", {
-      headers: adminHeaders(),
-    });
-    const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
+      const home = await fetchHost("admin.example.com", "/", {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+      const publicSitePage = await fetchHost("admin.example.com", "/blog/starter-post", {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+      const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings", {
+        headers: adminHeaders(),
+      });
+      const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
 
-    expect(home.status).toBe(302);
-    expect(home.headers.get("Location")).toBe("/login?redirectTo=%2F");
-    expect(publicSitePage.status).toBe(302);
-    expect(publicSitePage.headers.get("Location")).toBe("/login?redirectTo=%2Fblog%2Fstarter-post");
-    expect(instanceApi.status).toBe(200);
-    expect(schemaKeyApi.status).toBe(404);
-    expect(assetRequests).toEqual([]);
+      expect(home.status).toBe(302);
+      expect(home.headers.get("Location")).toBe("/login?redirectTo=%2F");
+      expect(publicSitePage.status).toBe(302);
+      expect(publicSitePage.headers.get("Location")).toBe(
+        "/login?redirectTo=%2Fblog%2Fstarter-post",
+      );
+      expect(instanceApi.status).toBe(200);
+      expect(schemaKeyApi.status).toBe(404);
+      expect(assetRequests).toEqual([]);
+    });
   });
 
   it("serves an app profile custom host with installed app document hints", async () => {
@@ -549,6 +560,62 @@ function assetResponse(request: Request): Response {
   return new Response(`asset:${pathname}`, {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
+}
+
+async function resetWorkerState(target: Harness) {
+  await Promise.all([
+    postReset(target, `${controlPlaneApi}/reset/seed`),
+    postReset(target, `/api/app-installs/site/${installId}/reset/seed`),
+    postReset(target, `/api/app-installs/tasks/${taskInstallId}/reset/seed`),
+    postInternalInstanceReset(target, INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH),
+    postInternalInstanceReset(target, INTERNAL_RESET_OWNER_SETUP_PATH),
+    clearMediaBucket(target),
+  ]);
+}
+
+async function postReset(target: Harness, path: string) {
+  const response = await target.fetch(path, {
+    body: "{}",
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalInstanceReset(target: Harness, path: string) {
+  const response = await target.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    path,
+    {
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+}
+
+async function clearMediaBucket(target: Harness) {
+  const bucket = await target.mf.getR2Bucket("FORMLESS_MEDIA");
+  const objects = await bucket.list();
+
+  if (objects.objects.length > 0) {
+    await bucket.delete(objects.objects.map((object) => object.key));
+  }
+}
+
+async function withHarness(target: Harness, run: () => Promise<void>) {
+  const previousHarness = harness;
+
+  harness = target;
+
+  try {
+    await run();
+  } finally {
+    harness = previousHarness;
+    await target.dispose();
+  }
 }
 
 function createCustomDomainHarness(runtimeProfile?: "instance" | "publishedSite") {

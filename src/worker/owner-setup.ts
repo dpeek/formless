@@ -10,6 +10,7 @@ import {
   completeFirstOwnerSetup,
   hashOwnerSetupToken,
   readInstanceSetupState,
+  resetInstanceSetupTables,
   writeOwnerSetupCapability,
   type CompleteFirstOwnerSetupResult,
   type WriteOwnerSetupCapabilityResult,
@@ -21,11 +22,12 @@ import {
   validateOwnerSessionCookie,
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { readInstanceAuthConfig } from "./instance-auth-state.ts";
+import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
 import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 export const OWNER_SESSION_API_PATH = "/api/formless/session";
+export const INTERNAL_RESET_OWNER_SETUP_PATH = "/_internal/reset-owner-setup";
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
@@ -60,6 +62,17 @@ export async function handleOwnerSetupDurableObjectRequest(
   env: OwnerSetupApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
+
+  if (pathname === INTERNAL_RESET_OWNER_SETUP_PATH) {
+    if (request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
+    }
+
+    resetInstanceSetupTables(storage);
+    resetInstanceAuthTables(storage);
+
+    return jsonResponse({ reset: true });
+  }
 
   if (!isOwnerApiPath(pathname)) {
     return undefined;

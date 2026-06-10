@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type {
   AppInstallsResponse,
   BootstrapResponse,
@@ -52,7 +52,7 @@ const owner: OwnerIdentity = {
 
 let harness: Harness;
 
-beforeEach(async () => {
+beforeAll(async () => {
   harness = await createWorkerHarness(
     "src/worker/index.ts",
     {
@@ -64,7 +64,11 @@ beforeEach(async () => {
   );
 });
 
-afterEach(async () => {
+beforeEach(async () => {
+  await resetWorkerState();
+});
+
+afterAll(async () => {
   await harness.dispose();
 });
 
@@ -588,6 +592,28 @@ async function postAdminJson<T>(path: string, body: unknown) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+async function resetWorkerState() {
+  await Promise.all([
+    postReset("/api/formless/control-plane/reset/seed"),
+    postReset("/api/app-installs/site/site/reset/seed"),
+    postReset("/api/app-installs/site/personal/reset/seed"),
+    postReset("/api/app-installs/tasks/tasks/reset/seed"),
+    postReset("/api/app-installs/estii/rates/reset/seed"),
+    postReset("/api/app-installs/crm/crm/reset/seed"),
+    postReset("/api/app-installs/cleartrace/cleartrace/reset/seed"),
+  ]);
+}
+
+async function postReset(path: string) {
+  const response = await harness.fetch(path, {
+    body: "{}",
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
 }
 
 function adminHeaders(headers: Record<string, string> = {}) {

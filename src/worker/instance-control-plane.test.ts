@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppInstallValues,
@@ -39,8 +39,20 @@ const owner: OwnerIdentity = {
 
 let harness: Harness;
 
+beforeAll(async () => {
+  harness = await createHarness();
+});
+
 beforeEach(async () => {
-  harness = await createWorkerHarness(
+  await resetWorkerState();
+});
+
+afterAll(async () => {
+  await harness.dispose();
+});
+
+function createHarness() {
+  return createWorkerHarness(
     "src/worker/index.ts",
     {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
@@ -49,11 +61,7 @@ beforeEach(async () => {
       bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
     },
   );
-});
-
-afterEach(async () => {
-  await harness.dispose();
-});
+}
 
 describe("instance control-plane API routes", () => {
   it("requires owner or admin authorization for dashboard control-plane reads", async () => {
@@ -516,6 +524,34 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
     body: (await response.json()) as T,
     response,
   };
+}
+
+async function resetWorkerState() {
+  try {
+    await resetKnownState();
+  } catch {
+    await harness.dispose();
+    harness = await createHarness();
+    await resetKnownState();
+  }
+}
+
+async function resetKnownState() {
+  await Promise.all([
+    postReset(`${controlPlaneApi}/reset/seed`),
+    postReset("/api/app-installs/site/personal/reset/seed"),
+    postReset("/api/app-installs/site/work/reset/seed"),
+  ]);
+}
+
+async function postReset(path: string) {
+  const response = await harness.fetch(path, {
+    body: "{}",
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
 }
 
 function adminHeaders(headers: Record<string, string> = {}) {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { CreateAppInstallResponse, MutationResponse } from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
@@ -33,7 +33,9 @@ import {
 } from "../shared/domain-provider-api.ts";
 import { CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS } from "../shared/domain-provider-protocol.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
+import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
 import { INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID } from "./deployment-runtime-state.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -43,8 +45,21 @@ const adminToken = "test-admin-token";
 let harness: Harness;
 let controlPlaneMutationCounter = 0;
 
+beforeAll(async () => {
+  harness = await createHarness();
+});
+
 beforeEach(async () => {
-  harness = await createWorkerHarness(
+  controlPlaneMutationCounter = 0;
+  await resetWorkerState();
+});
+
+afterAll(async () => {
+  await harness.dispose();
+});
+
+function createHarness() {
+  return createWorkerHarness(
     "src/worker/index.ts",
     {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
@@ -59,11 +74,7 @@ beforeEach(async () => {
       },
     },
   );
-});
-
-afterEach(async () => {
-  await harness.dispose();
-});
+}
 
 describe("instance deployment runtime API routes", () => {
   it("reads the primary desired-state version without provider secrets", async () => {
@@ -1237,6 +1248,37 @@ async function getJson<T>(path: string) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+async function resetWorkerState() {
+  await Promise.all([
+    postReset(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/reset/seed`),
+    postInternalInstanceReset(INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH),
+  ]);
+}
+
+async function postReset(path: string) {
+  const response = await harness.fetch(path, {
+    body: "{}",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalInstanceReset(path: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    path,
+    { method: "POST" },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function createAppInstall(input: {

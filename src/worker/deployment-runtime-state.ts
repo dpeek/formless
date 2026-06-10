@@ -457,6 +457,20 @@ export function ensureInstanceDeploymentRuntimeTables(storage: DurableObjectStor
   `);
 }
 
+export function resetInstanceDeploymentRuntimeTables(storage: DurableObjectStorage) {
+  ensureInstanceDeploymentRuntimeTables(storage);
+
+  storage.transactionSync(() => {
+    storage.sql.exec(`
+      DELETE FROM instance_deployment_evidence_summaries;
+      DELETE FROM instance_deployment_drift_reports;
+      DELETE FROM instance_deployment_leases;
+      DELETE FROM instance_deployment_attempts;
+      DELETE FROM instance_deployment_desired_state_versions;
+    `);
+  });
+}
+
 export function readLatestDeploymentDesiredStateVersion(
   storage: DurableObjectStorage,
   targetId: DeploymentTargetId,

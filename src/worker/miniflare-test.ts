@@ -1,10 +1,15 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 
 type DispatchFetchInit = Parameters<Miniflare["dispatchFetch"]>[1];
+type DurableObjectNamespaceForHarness = Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>;
+type DurableObjectFetchInit = Parameters<
+  ReturnType<DurableObjectNamespaceForHarness["get"]>["fetch"]
+>[1];
 type ServiceBindingHandler = (request: Request) => Promise<Response> | Response;
 
 type DurableObjectBindings = Record<
@@ -22,24 +27,27 @@ type WorkerHarnessOptions = {
   serviceBindings?: Record<string, ServiceBindingHandler>;
 };
 
+type WorkerBundleInput = {
+  mtimeMs: number;
+  path: string;
+  size: number;
+};
+
+type WorkerBundle = {
+  inputs: WorkerBundleInput[];
+  modulesRoot: string;
+  scriptPath: string;
+};
+
+const workerBundleCache = new Map<string, Promise<WorkerBundle>>();
+let workerBundleCacheRoot: Promise<string> | null = null;
+
 export async function createWorkerHarness(
   entryPoint: string,
   durableObjects: DurableObjectBindings,
   options: WorkerHarnessOptions = {},
 ) {
-  const tempDir = await mkdtemp(join(tmpdir(), "formless-worker-test-"));
-  const scriptPath = join(tempDir, "worker.mjs");
-
-  await build({
-    bundle: true,
-    entryPoints: [resolve(entryPoint)],
-    external: ["cloudflare:workers"],
-    format: "esm",
-    loader: { ".wasm": "copy" },
-    nodePaths: [resolve("node_modules")],
-    outfile: scriptPath,
-    platform: "browser",
-  });
+  const bundle = await workerBundle(entryPoint);
 
   const mf = new Miniflare({
     bindings: options.bindings,
@@ -47,11 +55,11 @@ export async function createWorkerHarness(
     durableObjects,
     durableObjectsPersist: false,
     modules: true,
-    modulesRoot: tempDir,
+    modulesRoot: bundle.modulesRoot,
     modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }],
     r2Buckets: options.r2Buckets,
     r2Persist: false,
-    scriptPath,
+    scriptPath: bundle.scriptPath,
     serviceBindings: options.serviceBindings,
   });
 
@@ -59,9 +67,117 @@ export async function createWorkerHarness(
     mf,
     fetch: (path: string, init?: DispatchFetchInit) =>
       mf.dispatchFetch(`http://example.com${path}`, init),
+    async durableObjectFetch(
+      bindingName: string,
+      objectName: string,
+      path: string,
+      init?: DurableObjectFetchInit,
+    ) {
+      const namespace = await mf.getDurableObjectNamespace(bindingName);
+      const id = namespace.idFromName(objectName);
+
+      return namespace.get(id).fetch(`http://example.com${path}`, init);
+    },
     async dispose() {
       await mf.dispose();
-      await rm(tempDir, { recursive: true, force: true });
     },
   };
+}
+
+async function workerBundle(entryPoint: string): Promise<WorkerBundle> {
+  const entryPath = resolve(entryPoint);
+  const cached = workerBundleCache.get(entryPath);
+
+  if (cached) {
+    const bundle = await cached;
+
+    if (await workerBundleIsFresh(bundle)) {
+      return bundle;
+    }
+
+    workerBundleCache.delete(entryPath);
+  }
+
+  const next = buildWorkerBundle(entryPath);
+  workerBundleCache.set(entryPath, next);
+
+  try {
+    return await next;
+  } catch (error) {
+    if (workerBundleCache.get(entryPath) === next) {
+      workerBundleCache.delete(entryPath);
+    }
+
+    throw error;
+  }
+}
+
+async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
+  const root = await currentWorkerBundleCacheRoot();
+  const modulesRoot = await mkdtemp(join(root, "bundle-"));
+  const scriptPath = join(modulesRoot, "worker.mjs");
+
+  try {
+    const result = await build({
+      bundle: true,
+      entryPoints: [entryPoint],
+      external: ["cloudflare:workers"],
+      format: "esm",
+      loader: { ".wasm": "copy" },
+      metafile: true,
+      nodePaths: [resolve("node_modules")],
+      outfile: scriptPath,
+      platform: "browser",
+    });
+
+    return {
+      inputs: await Promise.all(
+        Object.keys(result.metafile.inputs).map(async (inputPath) => {
+          const path = resolve(inputPath);
+          const inputStat = await stat(path);
+
+          return {
+            mtimeMs: inputStat.mtimeMs,
+            path,
+            size: inputStat.size,
+          };
+        }),
+      ),
+      modulesRoot,
+      scriptPath,
+    };
+  } catch (error) {
+    rmSync(modulesRoot, { force: true, recursive: true });
+    throw error;
+  }
+}
+
+async function workerBundleIsFresh(bundle: WorkerBundle): Promise<boolean> {
+  for (const input of bundle.inputs) {
+    try {
+      const inputStat = await stat(input.path);
+
+      if (inputStat.mtimeMs !== input.mtimeMs || inputStat.size !== input.size) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function currentWorkerBundleCacheRoot(): Promise<string> {
+  workerBundleCacheRoot ??= mkdtemp(join(tmpdir(), "formless-worker-bundle-cache-")).then(
+    (root) => {
+      process.once("exit", () => {
+        rmSync(root, { force: true, recursive: true });
+      });
+
+      return root;
+    },
+  );
+
+  return workerBundleCacheRoot;
 }

@@ -54,6 +54,7 @@ import {
   INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
   materializeDeploymentDesiredStateVersion,
   readLatestDeploymentStatus,
+  resetInstanceDeploymentRuntimeTables,
   startDeploymentAttempt,
   writeDeploymentAttemptFailure,
   writeDeploymentAttemptPlan,
@@ -71,6 +72,9 @@ type DurableObjectDeploymentRuntimeEnv = AuthorityAdminGuardEnv & {
   FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_WORKER_NAME?: string;
 };
+
+export const INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH =
+  "/_internal/reset-instance-deployment-runtime";
 
 const deploymentActorKinds = new Set<DeploymentActorKind>(["ci", "cli", "runner", "system"]);
 const deploymentDriftStatusSet = new Set<DeploymentDriftStatus>(deploymentDriftStatuses);
@@ -107,6 +111,16 @@ export async function handleInstanceDeploymentRuntimeDurableObjectRequest(
   env: DurableObjectDeploymentRuntimeEnv,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
+
+  if (url.pathname === INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH) {
+    if (request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
+    }
+
+    resetInstanceDeploymentRuntimeTables(storage);
+
+    return jsonResponse({ reset: true });
+  }
 
   if (!isInstanceDeploymentRuntimeApiPath(url.pathname)) {
     return undefined;

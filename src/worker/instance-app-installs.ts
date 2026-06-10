@@ -29,10 +29,14 @@ import {
   INTERNAL_BACKFILL_APP_INSTALLS_PATH,
   INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
 } from "./instance-control-plane.ts";
-import { readLegacyInstanceAppInstalls } from "./instance-app-installs-state.ts";
+import {
+  readLegacyInstanceAppInstalls,
+  resetInstanceAppInstallTables,
+} from "./instance-app-installs-state.ts";
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 export const INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX = "/package-migrations/apply";
+export const INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH = "/_internal/reset-instance-app-installs";
 
 export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -81,6 +85,16 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
   env: InstanceAppInstallsApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
+
+  if (pathname === INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH) {
+    if (request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
+    }
+
+    resetInstanceAppInstallTables(storage);
+
+    return jsonResponse({ reset: true });
+  }
 
   if (!isInstanceAppInstallsApiPath(pathname)) {
     return undefined;

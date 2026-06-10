@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { BootstrapResponse, CreateAppInstallResponse } from "../shared/protocol.ts";
 import type {
   ForgetInstanceDomainMappingResponse,
@@ -7,6 +7,8 @@ import type {
   InstanceDomainMappingsResponse,
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -27,8 +29,20 @@ const adminToken = "test-admin-token";
 
 let harness: Harness;
 
+beforeAll(async () => {
+  harness = await createHarness();
+});
+
 beforeEach(async () => {
-  harness = await createWorkerHarness(
+  await resetWorkerState();
+});
+
+afterAll(async () => {
+  await harness.dispose();
+});
+
+function createHarness() {
+  return createWorkerHarness(
     "src/worker/index.ts",
     {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
@@ -37,11 +51,7 @@ beforeEach(async () => {
       bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
     },
   );
-});
-
-afterEach(async () => {
-  await harness.dispose();
-});
+}
 
 describe("instance domain mapping API routes", () => {
   it("lists, creates, persists, and looks up enabled Site domain mappings", async () => {
@@ -547,6 +557,37 @@ async function createAppInstall(input: {
   label: string;
 }) {
   return postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", input);
+}
+
+async function resetWorkerState() {
+  await Promise.all([
+    postReset("/api/formless/control-plane/reset/seed"),
+    postInternalInstanceReset(INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH),
+  ]);
+}
+
+async function postReset(path: string) {
+  const response = await harness.fetch(path, {
+    body: "{}",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalInstanceReset(path: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    path,
+    { method: "POST" },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function getJson<T>(path: string) {

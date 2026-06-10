@@ -78,6 +78,11 @@ export function readLegacyInstanceAppInstalls(storage: DurableObjectStorage): Ap
   return readInstanceAppInstalls(storage);
 }
 
+export function resetInstanceAppInstallTables(storage: DurableObjectStorage) {
+  ensureInstanceAppInstallTables(storage);
+  storage.sql.exec("DELETE FROM app_installs");
+}
+
 export function createInstanceAppInstall(
   storage: DurableObjectStorage,
   input: CreateAppInstallRequest & { now: string },

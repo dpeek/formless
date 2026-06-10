@@ -203,6 +203,24 @@ export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage)
   });
 }
 
+export function resetInstanceDomainMappingTables(storage: DurableObjectStorage) {
+  ensureInstanceDomainMappingTables(storage);
+
+  storage.transactionSync(() => {
+    storage.sql.exec(`
+      DELETE FROM instance_domain_mappings;
+      DELETE FROM instance_domain_mapping_applied_state;
+      DELETE FROM instance_domain_mapping_audit_events;
+      DELETE FROM instance_domain_mapping_desired_cleanup_events;
+      DELETE FROM sqlite_sequence
+      WHERE name IN (
+        'instance_domain_mapping_audit_events',
+        'instance_domain_mapping_desired_cleanup_events'
+      );
+    `);
+  });
+}
+
 export function readInstanceDomainMappings(storage: DurableObjectStorage): InstanceDomainMapping[] {
   ensureInstanceDomainMappingTables(storage);
 

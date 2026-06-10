@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
@@ -13,6 +13,7 @@ import {
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
+import { INTERNAL_RESET_INSTANCE_DOMAIN_PROVIDER_PATH } from "./domain-provider-api.ts";
 import {
   INSTANCE_DEPLOYMENT_STATUS_API_PATH,
   type InstanceDeploymentStatusResponse,
@@ -24,6 +25,9 @@ import type {
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
+import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -40,23 +44,22 @@ const domainMappingsApplyEvidenceApiPath = "/api/formless/domain-mappings/apply-
 const domainMappingsApiPath = "/api/formless/domain-mappings";
 
 let harness: Harness;
+let defaultHarness: Harness;
 
-afterEach(async () => {
-  await harness.dispose();
+beforeAll(async () => {
+  defaultHarness = await createHarness(defaultProviderBindings());
+});
+
+beforeEach(async () => {
+  harness = defaultHarness;
+  await resetWorkerState(harness);
+});
+
+afterAll(async () => {
+  await defaultHarness.dispose();
 });
 
 describe("instance domain provider API routes", () => {
-  beforeEach(async () => {
-    harness = await createHarness({
-      ALCHEMY_PASSWORD: alchemyPassword,
-      CLOUDFLARE_API_TOKEN: cloudflareToken,
-      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
-      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
-      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
-      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
-    });
-  });
-
   it("returns dry-run provider config and plan without exposing provider secrets", async () => {
     await postAdminJson<CreateInstanceDomainMappingResponse>(domainMappingsApiPath, {
       host: "admin.example.com",
@@ -121,196 +124,203 @@ describe("instance domain provider API routes", () => {
   });
 
   it("keeps missing provider config actionable and display-safe", async () => {
-    await harness.dispose();
-    harness = await createHarness({});
+    await withHarness(await createHarness({}), async () => {
+      const plan = await getJson<InstanceDomainProviderPlanResponse>(
+        INSTANCE_DOMAIN_PROVIDER_API_PATH,
+      );
 
-    const plan = await getJson<InstanceDomainProviderPlanResponse>(
-      INSTANCE_DOMAIN_PROVIDER_API_PATH,
-    );
-
-    expect(plan.body.config.deleteReady).toBe(false);
-    expect(plan.body.config.issues.map((issue) => issue.code)).toEqual([
-      "missing-instance-id",
-      "missing-worker-name",
-      "missing-account-id",
-      "missing-zone-config",
-    ]);
-    expect(JSON.stringify(plan.body)).not.toContain(cloudflareToken);
-    expect(JSON.stringify(plan.body)).not.toContain(alchemyPassword);
+      expect(plan.body.config.deleteReady).toBe(false);
+      expect(plan.body.config.issues.map((issue) => issue.code)).toEqual([
+        "missing-instance-id",
+        "missing-worker-name",
+        "missing-account-id",
+        "missing-zone-config",
+      ]);
+      expect(JSON.stringify(plan.body)).not.toContain(cloudflareToken);
+      expect(JSON.stringify(plan.body)).not.toContain(alchemyPassword);
+    });
   });
 
   it("creates and completes delete jobs from recorded evidence without Worker-held runner secrets", async () => {
-    await harness.dispose();
-    harness = await createHarness({
-      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
-      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
-      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
-      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
-    });
+    await withHarness(
+      await createHarness({
+        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+        FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
+      }),
+      async () => {
+        await resetWorkerState(harness);
 
-    await createMappedCustomDomainEvidence({
-      host: "admin.example.com",
-      logicalId: "primary-custom-domain-admin-example-com-instance",
-      runnerId: "runner-seed",
-      workerDomainId: "custom-domain-123",
-    });
-    await deleteAdminJson(`${domainMappingsApiPath}?host=admin.example.com&profile=instance`);
-    const intentBeforeCleanup = await getJson<BootstrapResponse>(
-      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
-    );
-
-    const deleteJob = await postAdminJson<InstanceDomainProviderDeleteResponse>(
-      INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
-      {
-        host: "admin.example.com",
-        kind: "cloudflare-worker-custom-domain",
-        runnerId: "runner-delete",
-      },
-    );
-
-    expect(deleteJob.response.status).toBe(202);
-    expect(deleteJob.body).toMatchObject({
-      code: "domain-provider-delete-job-ready",
-      status: "ready",
-      targets: [
-        expect.objectContaining({
+        await createMappedCustomDomainEvidence({
           host: "admin.example.com",
-          kind: "cloudflare-worker-custom-domain",
-          resourceId: "custom-domain-123",
-        }),
-      ],
-    });
-    expect(JSON.stringify(deleteJob.body)).not.toContain("lease:");
+          logicalId: "primary-custom-domain-admin-example-com-instance",
+          runnerId: "runner-seed",
+          workerDomainId: "custom-domain-123",
+        });
+        await deleteAdminJson(`${domainMappingsApiPath}?host=admin.example.com&profile=instance`);
+        const intentBeforeCleanup = await getJson<BootstrapResponse>(
+          `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
+        );
 
-    if (deleteJob.body.status !== "ready") {
-      throw new Error("Delete did not create a job.");
-    }
+        const deleteJob = await postAdminJson<InstanceDomainProviderDeleteResponse>(
+          INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+          {
+            host: "admin.example.com",
+            kind: "cloudflare-worker-custom-domain",
+            runnerId: "runner-delete",
+          },
+        );
 
-    const cleanupStatus = await getJson<InstanceDeploymentStatusResponse>(
-      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
-    );
+        expect(deleteJob.response.status).toBe(202);
+        expect(deleteJob.body).toMatchObject({
+          code: "domain-provider-delete-job-ready",
+          status: "ready",
+          targets: [
+            expect.objectContaining({
+              host: "admin.example.com",
+              kind: "cloudflare-worker-custom-domain",
+              resourceId: "custom-domain-123",
+            }),
+          ],
+        });
+        expect(JSON.stringify(deleteJob.body)).not.toContain("lease:");
 
-    expect(cleanupStatus.body.status).toMatchObject({
-      actor: {
-        actorId: "domain-provider.delete",
-        kind: "runner",
-        runnerId: "runner-delete",
+        if (deleteJob.body.status !== "ready") {
+          throw new Error("Delete did not create a job.");
+        }
+
+        const cleanupStatus = await getJson<InstanceDeploymentStatusResponse>(
+          INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+        );
+
+        expect(cleanupStatus.body.status).toMatchObject({
+          actor: {
+            actorId: "domain-provider.delete",
+            kind: "runner",
+            runnerId: "runner-delete",
+          },
+          mode: "destroy",
+          state: "in-progress",
+          targetId: "instance.primary",
+        });
+
+        const completion = await postAdminJson<InstanceDomainProviderDeleteJobResponse>(
+          `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}/result`,
+          {
+            resources: deleteJob.body.targets.map((target) => ({
+              action: "deleted",
+              host: target.host,
+              kind: target.kind,
+              logicalId: target.logicalId,
+            })),
+            runnerId: "runner-delete",
+            status: "succeeded",
+          },
+        );
+        const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
+        const cleanupDeployed = await getJson<InstanceDeploymentStatusResponse>(
+          INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+        );
+        const intentAfterCleanup = await getJson<BootstrapResponse>(
+          `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
+        );
+
+        expect(completion.body.job).toMatchObject({
+          result: { evidenceCount: 1 },
+          status: "succeeded",
+        });
+        expect(after.body.mappings).toEqual([
+          expect.objectContaining({ enabled: false, host: "admin.example.com" }),
+        ]);
+        expect(after.body.appliedStates).toEqual([]);
+        expect(after.body.auditEvents.map((event) => event.action)).toEqual(["created", "deleted"]);
+        expect(cleanupDeployed.body.status).toMatchObject({
+          latestDesiredState: {
+            targetId: "instance.primary",
+          },
+          state: "deployed",
+          targetId: "instance.primary",
+        });
+        expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
+          routeAndAppIntentSnapshot(intentBeforeCleanup.body),
+        );
       },
-      mode: "destroy",
-      state: "in-progress",
-      targetId: "instance.primary",
-    });
-
-    const completion = await postAdminJson<InstanceDomainProviderDeleteJobResponse>(
-      `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}/result`,
-      {
-        resources: deleteJob.body.targets.map((target) => ({
-          action: "deleted",
-          host: target.host,
-          kind: target.kind,
-          logicalId: target.logicalId,
-        })),
-        runnerId: "runner-delete",
-        status: "succeeded",
-      },
-    );
-    const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
-    const cleanupDeployed = await getJson<InstanceDeploymentStatusResponse>(
-      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
-    );
-    const intentAfterCleanup = await getJson<BootstrapResponse>(
-      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
-    );
-
-    expect(completion.body.job).toMatchObject({
-      result: { evidenceCount: 1 },
-      status: "succeeded",
-    });
-    expect(after.body.mappings).toEqual([
-      expect.objectContaining({ enabled: false, host: "admin.example.com" }),
-    ]);
-    expect(after.body.appliedStates).toEqual([]);
-    expect(after.body.auditEvents.map((event) => event.action)).toEqual(["created", "deleted"]);
-    expect(cleanupDeployed.body.status).toMatchObject({
-      latestDesiredState: {
-        targetId: "instance.primary",
-      },
-      state: "deployed",
-      targetId: "instance.primary",
-    });
-    expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
-      routeAndAppIntentSnapshot(intentBeforeCleanup.body),
     );
   });
 
   it("marks manually removed CustomDomain evidence without Cloudflare credentials", async () => {
-    await harness.dispose();
-    harness = await createHarness({
-      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
-      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
-      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
-      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
-    });
-
-    const logicalId = "primary-custom-domain-manual-example-com-instance";
-
-    await createMappedCustomDomainEvidence({
-      host: "manual.example.com",
-      logicalId,
-      runnerId: "runner-1",
-      workerDomainId: "custom-domain-123",
-    });
-    await deleteAdminJson(`${domainMappingsApiPath}?host=manual.example.com&profile=instance`);
-    const intentBeforeCleanup = await getJson<BootstrapResponse>(
-      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
-    );
-
-    const unrelated = await postAdminJson<DomainProviderFailureResponse>(
-      INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
-      {
-        host: "manual.example.com",
-        kind: "cloudflare-worker-custom-domain",
-        logicalId: "unrelated-resource",
-      },
-    );
-    const stillApplied = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
-
-    expect(unrelated.response.status).toBe(404);
-    expect(unrelated.body).toMatchObject({
-      code: "domain-provider-manual-cleanup-not-found",
-    });
-    expect(stillApplied.body.appliedStates).toHaveLength(1);
-
-    const cleanup = await postAdminJson<InstanceDomainProviderManualCleanupResponse>(
-      INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
-      {
-        host: "manual.example.com",
-        kind: "cloudflare-worker-custom-domain",
-        logicalId,
-      },
-    );
-    const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
-    const intentAfterCleanup = await getJson<BootstrapResponse>(
-      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
-    );
-
-    expect(cleanup.response.status).toBe(200);
-    expect(cleanup.body).toMatchObject({
-      action: "manually-removed",
-      status: "cleaned",
-      target: expect.objectContaining({
-        host: "manual.example.com",
-        kind: "cloudflare-worker-custom-domain",
-        logicalId,
+    await withHarness(
+      await createHarness({
+        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+        FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
       }),
-    });
-    expect(after.body.appliedStates).toEqual([]);
-    expect(after.body.auditEvents.map((event) => event.action)).toEqual([
-      "created",
-      "manually-removed",
-    ]);
-    expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
-      routeAndAppIntentSnapshot(intentBeforeCleanup.body),
+      async () => {
+        await resetWorkerState(harness);
+
+        const logicalId = "primary-custom-domain-manual-example-com-instance";
+
+        await createMappedCustomDomainEvidence({
+          host: "manual.example.com",
+          logicalId,
+          runnerId: "runner-1",
+          workerDomainId: "custom-domain-123",
+        });
+        await deleteAdminJson(`${domainMappingsApiPath}?host=manual.example.com&profile=instance`);
+        const intentBeforeCleanup = await getJson<BootstrapResponse>(
+          `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
+        );
+
+        const unrelated = await postAdminJson<DomainProviderFailureResponse>(
+          INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+          {
+            host: "manual.example.com",
+            kind: "cloudflare-worker-custom-domain",
+            logicalId: "unrelated-resource",
+          },
+        );
+        const stillApplied = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
+
+        expect(unrelated.response.status).toBe(404);
+        expect(unrelated.body).toMatchObject({
+          code: "domain-provider-manual-cleanup-not-found",
+        });
+        expect(stillApplied.body.appliedStates).toHaveLength(1);
+
+        const cleanup = await postAdminJson<InstanceDomainProviderManualCleanupResponse>(
+          INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+          {
+            host: "manual.example.com",
+            kind: "cloudflare-worker-custom-domain",
+            logicalId,
+          },
+        );
+        const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
+        const intentAfterCleanup = await getJson<BootstrapResponse>(
+          `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
+        );
+
+        expect(cleanup.response.status).toBe(200);
+        expect(cleanup.body).toMatchObject({
+          action: "manually-removed",
+          status: "cleaned",
+          target: expect.objectContaining({
+            host: "manual.example.com",
+            kind: "cloudflare-worker-custom-domain",
+            logicalId,
+          }),
+        });
+        expect(after.body.appliedStates).toEqual([]);
+        expect(after.body.auditEvents.map((event) => event.action)).toEqual([
+          "created",
+          "manually-removed",
+        ]);
+        expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
+          routeAndAppIntentSnapshot(intentBeforeCleanup.body),
+        );
+      },
     );
   });
 
@@ -443,6 +453,62 @@ async function createHarness(bindings: Record<string, string>) {
       },
     },
   );
+}
+
+function defaultProviderBindings(): Record<string, string> {
+  return {
+    ALCHEMY_PASSWORD: alchemyPassword,
+    CLOUDFLARE_API_TOKEN: cloudflareToken,
+    FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+    FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+    FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+    FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
+  };
+}
+
+async function withHarness<T>(target: Harness, run: () => Promise<T>): Promise<T> {
+  const previous = harness;
+  harness = target;
+
+  try {
+    return await run();
+  } finally {
+    harness = previous;
+    await target.dispose();
+  }
+}
+
+async function resetWorkerState(target: Harness) {
+  await Promise.all([
+    postReset(target, `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/reset/seed`),
+    postInternalInstanceReset(target, INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH),
+    postInternalInstanceReset(target, INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH),
+    postInternalInstanceReset(target, INTERNAL_RESET_INSTANCE_DOMAIN_PROVIDER_PATH),
+  ]);
+}
+
+async function postReset(target: Harness, path: string) {
+  const response = await target.fetch(path, {
+    body: "{}",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalInstanceReset(target: Harness, path: string) {
+  const response = await target.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    path,
+    { method: "POST" },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function createMappedCustomDomainEvidence(input: {

@@ -482,6 +482,15 @@ export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSe
   });
 }
 
+export function resetStorageToEmpty(storage: DurableObjectStorage) {
+  ensureStorageTables(storage);
+  storage.transactionSync(() => {
+    clearStorageForSourceSeedReset(storage);
+    storage.sql.exec(`DELETE FROM ${appliedPackageAppMigrationsTableName}`);
+    storage.sql.exec(`DELETE FROM ${packageAppStateTableName}`);
+  });
+}
+
 export function exportStorageSnapshot(
   storage: DurableObjectStorage,
   schemaKey: string,

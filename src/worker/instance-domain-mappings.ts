@@ -26,6 +26,7 @@ import {
   readInstanceDomainMappings,
   recordInstanceDomainMappingDesiredCleanup,
   recordInstanceDomainMappingApplyEvidence,
+  resetInstanceDomainMappingTables,
 } from "./instance-domain-mappings-state.ts";
 import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
 import {
@@ -35,6 +36,8 @@ import {
 import type { StoredRecord } from "../shared/protocol.ts";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
+export const INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH =
+  "/_internal/reset-instance-domain-mappings";
 const INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/lookup`;
 const INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/forget`;
 const INSTANCE_DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
@@ -107,6 +110,16 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
   env: InstanceDomainMappingsApiEnv,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
+
+  if (url.pathname === INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH) {
+    if (request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
+    }
+
+    resetInstanceDomainMappingTables(storage);
+
+    return jsonResponse({ reset: true });
+  }
 
   if (!isInstanceDomainMappingsApiPath(url.pathname)) {
     return undefined;

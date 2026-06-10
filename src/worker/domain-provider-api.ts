@@ -229,6 +229,9 @@ type DurableObjectDomainProviderEnv = Omit<InstanceDomainProviderApiEnv, "FORMLE
   FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
 
+export const INTERNAL_RESET_INSTANCE_DOMAIN_PROVIDER_PATH =
+  "/_internal/reset-instance-domain-provider";
+
 type DomainProviderMutationLockResult =
   | { acquired: true }
   | {
@@ -325,6 +328,16 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
 
+  if (url.pathname === INTERNAL_RESET_INSTANCE_DOMAIN_PROVIDER_PATH) {
+    if (request.method !== "POST") {
+      return methodNotAllowedResponse("POST");
+    }
+
+    resetInstanceDomainProviderTables(storage);
+
+    return jsonResponse({ reset: true });
+  }
+
   if (!isInstanceDomainProviderApiPath(url.pathname)) {
     return undefined;
   }
@@ -375,6 +388,30 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
   }
 
   return jsonResponse({ error: "Not found." }, 404);
+}
+
+function resetInstanceDomainProviderTables(storage: DurableObjectStorage) {
+  ensureDomainProviderMutationLockTable(storage);
+  ensureDomainProviderDeleteJobsTable(storage);
+  ensureDomainProviderRedirectIntentsTable(storage);
+  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
+  ensureDomainProviderAppliedResourcesTables(storage);
+
+  storage.transactionSync(() => {
+    storage.sql.exec(`
+      DELETE FROM instance_domain_provider_mutation_lock;
+      DELETE FROM instance_domain_provider_delete_jobs;
+      DELETE FROM instance_domain_provider_redirect_intents;
+      DELETE FROM instance_domain_provider_redirect_intent_cleanup_events;
+      DELETE FROM instance_domain_provider_applied_resources;
+      DELETE FROM instance_domain_provider_audit_events;
+      DELETE FROM sqlite_sequence
+      WHERE name IN (
+        'instance_domain_provider_redirect_intent_cleanup_events',
+        'instance_domain_provider_audit_events'
+      );
+    `);
+  });
 }
 
 function handleDeleteRequest(

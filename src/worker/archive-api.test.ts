@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
   APP_ARCHIVE_KIND,
@@ -23,15 +23,18 @@ import type {
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH } from "./instance-app-installs.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 const adminToken = "test-admin-token";
+const internalResetAppStoragePath = "/_internal/reset-app-storage";
 
 let harness: Harness;
 
-beforeEach(async () => {
+beforeAll(async () => {
   harness = await createWorkerHarness(
     "src/worker/index.ts",
     {
@@ -44,7 +47,11 @@ beforeEach(async () => {
   );
 });
 
-afterEach(async () => {
+beforeEach(async () => {
+  await resetWorkerState();
+});
+
+afterAll(async () => {
   await harness.dispose();
 });
 
@@ -413,6 +420,65 @@ describe("instance archive restore API", () => {
     });
   });
 });
+
+async function resetWorkerState() {
+  await Promise.all([
+    postReset("/api/formless/control-plane/reset/seed"),
+    postInternalInstanceReset(INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH),
+    postInternalAppStorageReset("personal"),
+    postInternalAppStorageReset("work"),
+    postInternalAppStorageReset("rates"),
+    clearMediaBucket(),
+  ]);
+}
+
+async function postReset(path: string) {
+  const response = await harness.fetch(path, {
+    body: "{}",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalInstanceReset(path: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    path,
+    {
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+}
+
+async function postInternalAppStorageReset(installId: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    `app:${installId}`,
+    internalResetAppStoragePath,
+    {
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+}
+
+async function clearMediaBucket() {
+  const bucket = await harness.mf.getR2Bucket("FORMLESS_MEDIA");
+  const objects = await bucket.list();
+
+  if (objects.objects.length > 0) {
+    await bucket.delete(objects.objects.map((object) => object.key));
+  }
+}
 
 async function postArchiveRestore(
   archive: AppArchive | InstanceArchive,
