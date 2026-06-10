@@ -204,6 +204,7 @@ export type FormlessInstanceWorkspaceDiscoveryResult = {
 };
 
 export type FormlessInstanceWorkspaceStatusInput = {
+  adminToken?: string | null;
   includeDeploymentStatus?: boolean;
   targetAlias?: string | null;
   workspacePath?: string;
@@ -231,6 +232,7 @@ export type PullFormlessInstanceWorkspaceInput = {
 
 export type PullFormlessInstanceWorkspaceDependencies = {
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   now: () => string;
 };
@@ -266,6 +268,7 @@ export type SaveLocalFormlessWorkspaceInput = {
 
 export type CheckFormlessInstanceWorkspaceDependencies = {
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   now: () => string;
 };
@@ -846,9 +849,15 @@ export async function getFormlessInstanceWorkspaceStatus(
     workspaceRoot,
   });
   const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    explicitAdminToken: input.adminToken,
+    secretState,
+  });
   const remoteStatus = selectedTarget
     ? await readFormlessInstanceTargetStatus(
         {
+          adminToken,
           includeDeploymentStatus: input.includeDeploymentStatus,
           targetUrl: selectedTarget.url,
         },
@@ -878,6 +887,7 @@ export async function pullFormlessInstanceWorkspace(
     targetAlias: input.targetAlias,
     workspaceRoot,
   });
+  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "pull");
 
   try {
@@ -886,6 +896,7 @@ export async function pullFormlessInstanceWorkspace(
     await prepareWorkspaceDirectories(workspaceRoot, manifest);
     const instanceArchive = await exportInstanceArchive(
       {
+        adminToken,
         outDir: instanceArchiveRoot,
         target: selectedTarget.url,
       },
@@ -949,6 +960,7 @@ export async function checkFormlessInstanceWorkspace(
     targetAlias: input.targetAlias,
     workspaceRoot,
   });
+  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "check");
 
   try {
@@ -956,6 +968,7 @@ export async function checkFormlessInstanceWorkspace(
 
     await exportInstanceArchive(
       {
+        adminToken,
         outDir: remoteArchiveRoot,
         target: selectedTarget.url,
       },
@@ -1143,6 +1156,7 @@ export async function pushFormlessInstanceWorkspace(
       targetAlias: input.targetAlias,
       workspaceRoot,
     }));
+  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
 
@@ -1150,6 +1164,7 @@ export async function pushFormlessInstanceWorkspace(
     const backup = input.apply
       ? await exportInstanceArchive(
           {
+            adminToken,
             outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
             target: selectedTarget.url,
           },
@@ -1163,6 +1178,7 @@ export async function pushFormlessInstanceWorkspace(
     if (!backup) {
       await exportInstanceArchive(
         {
+          adminToken,
           outDir: remoteArchiveRoot,
           target: selectedTarget.url,
         },
@@ -1228,11 +1244,6 @@ export async function pushFormlessInstanceWorkspace(
       );
     }
 
-    const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
-    const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
-      env: dependencies.env,
-      secretState,
-    });
     const dryRun = await restorePortableArchive(
       {
         adminToken,
@@ -1480,6 +1491,11 @@ export async function deployLocalFormlessWorkspace(
     plan: planned.plan,
   });
 
+  const deploymentSecrets = await readDestroyLocalDeploySecretEnv({
+    deploymentStateRoot,
+    env: dependencies.env,
+  });
+
   const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
     credentialProfile: null,
     deploymentStateRoot,
@@ -1491,8 +1507,10 @@ export async function deployLocalFormlessWorkspace(
     packageRoot: dependencies.packageRoot,
     plan: planned.plan,
     secrets: {
-      ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
-      ...optionalCloudflareApiTokenSecret(dependencies.env),
+      ALCHEMY_PASSWORD: deploymentSecrets.secrets.ALCHEMY_PASSWORD,
+      ...(deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN === undefined
+        ? {}
+        : { CLOUDFLARE_API_TOKEN: deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN }),
       FORMLESS_ADMIN_TOKEN: adminToken,
     },
     stateRoot: deploymentStateRoot,
@@ -3335,6 +3353,8 @@ function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive:
 
   if (nextArchive.data.kind === "storeSnapshot") {
     nextArchive.data.snapshot.exportedAt = generatedAt;
+    nextArchive.data.snapshot.schemaUpdatedAt = generatedAt;
+    nextArchive.data.snapshot.sourceCursor = 0;
   }
 
   return nextArchive;
@@ -4619,6 +4639,18 @@ function workspaceSecretStateLabel(
   }
 
   return secretState.adminToken ? "stored" : "missing";
+}
+
+async function readWorkspaceAdminToken(
+  workspaceRoot: string,
+  dependencies: { env?: NodeJS.ProcessEnv },
+): Promise<string | null> {
+  const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+
+  return resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    secretState,
+  });
 }
 
 function rotateCommandEnv(

@@ -1,0 +1,3617 @@
+{
+  "kind": "formless.appArchive",
+  "version": 2,
+  "exportedAt": "2026-06-09T00:48:49.791Z",
+  "capabilities": ["app-store-snapshots", "core-media-assets"],
+  "restorePolicy": {
+    "dryRun": true,
+    "installCollisions": "reject"
+  },
+  "app": {
+    "installId": "david",
+    "packageAppKey": "site",
+    "packageRevision": 1,
+    "sourceSchemaKey": "site",
+    "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+    "label": "David Peek",
+    "status": "installed",
+    "createdAt": "2026-05-24T23:44:20.123Z",
+    "updatedAt": "2026-05-24T23:44:20.123Z"
+  },
+  "data": {
+    "kind": "storeSnapshot",
+    "snapshot": {
+      "kind": "formless.storeSnapshot",
+      "version": 1,
+      "schemaKey": "site",
+      "exportedAt": "2026-06-09T00:48:49.831Z",
+      "schemaUpdatedAt": "2026-06-08T14:41:33.742Z",
+      "sourceCursor": 106,
+      "schema": {
+        "entities": {
+          "audience": {
+            "constraints": {
+              "uniqueAudienceKey": {
+                "fields": ["key"],
+                "kind": "unique"
+              }
+            },
+            "fields": {
+              "key": {
+                "label": "Key",
+                "required": true,
+                "type": "text"
+              },
+              "label": {
+                "label": "Label",
+                "required": true,
+                "type": "text"
+              }
+            },
+            "label": "Audience",
+            "mutations": {
+              "create": {
+                "enabled": false
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "block": {
+            "fields": {
+              "actionName": {
+                "label": "Action name",
+                "required": false,
+                "type": "text"
+              },
+              "alignment": {
+                "label": "Media side",
+                "required": false,
+                "type": "enum",
+                "values": {
+                  "left": {
+                    "label": "Left"
+                  },
+                  "right": {
+                    "label": "Right"
+                  }
+                }
+              },
+              "body": {
+                "format": "markdown",
+                "label": "Body",
+                "required": false,
+                "type": "text"
+              },
+              "buttonLabel": {
+                "label": "Button label",
+                "required": false,
+                "type": "text"
+              },
+              "color": {
+                "format": "color",
+                "label": "Color",
+                "required": false,
+                "type": "text"
+              },
+              "date": {
+                "label": "Date",
+                "required": false,
+                "type": "date"
+              },
+              "height": {
+                "integer": true,
+                "label": "Height",
+                "min": 0,
+                "required": false,
+                "type": "number"
+              },
+              "href": {
+                "format": "href",
+                "label": "Link",
+                "required": false,
+                "type": "text"
+              },
+              "icon": {
+                "format": "icon",
+                "label": "Icon",
+                "required": false,
+                "type": "text"
+              },
+              "label": {
+                "label": "Label",
+                "required": true,
+                "type": "text"
+              },
+              "linkTargetBlock": {
+                "displayField": "label",
+                "label": "Target block",
+                "required": false,
+                "to": "block",
+                "type": "reference"
+              },
+              "linkTargetMode": {
+                "label": "Link target",
+                "required": false,
+                "type": "enum",
+                "values": {
+                  "external": {
+                    "label": "External"
+                  },
+                  "internal": {
+                    "label": "Internal"
+                  }
+                }
+              },
+              "mediaAssetId": {
+                "label": "Media asset",
+                "required": false,
+                "type": "text"
+              },
+              "type": {
+                "label": "Type",
+                "required": true,
+                "type": "enum",
+                "values": {
+                  "feature": {
+                    "label": "Feature"
+                  },
+                  "footer": {
+                    "label": "Footer"
+                  },
+                  "footerSection": {
+                    "label": "Footer section"
+                  },
+                  "footerSocial": {
+                    "label": "Footer social"
+                  },
+                  "group": {
+                    "label": "Group"
+                  },
+                  "header": {
+                    "label": "Header"
+                  },
+                  "headerPrimary": {
+                    "label": "Header primary"
+                  },
+                  "headerSecondary": {
+                    "label": "Header secondary"
+                  },
+                  "hero": {
+                    "label": "Hero"
+                  },
+                  "image": {
+                    "label": "Image"
+                  },
+                  "link": {
+                    "label": "Link"
+                  },
+                  "markdown": {
+                    "label": "Markdown"
+                  },
+                  "page": {
+                    "label": "Page"
+                  },
+                  "post": {
+                    "label": "Post"
+                  },
+                  "postList": {
+                    "label": "Post list"
+                  },
+                  "project": {
+                    "label": "Project"
+                  },
+                  "projectList": {
+                    "label": "Project list"
+                  },
+                  "subscribeForm": {
+                    "label": "Subscribe form"
+                  }
+                }
+              },
+              "width": {
+                "integer": true,
+                "label": "Width",
+                "min": 0,
+                "required": false,
+                "type": "number"
+              }
+            },
+            "label": "Block",
+            "mutations": {
+              "create": {
+                "enabled": true
+              },
+              "delete": {
+                "enabled": true
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "block-placement": {
+            "actions": {
+              "addTreeChild": {
+                "childField": "block",
+                "kind": "create-tree-child",
+                "label": "Add child",
+                "orderField": "order",
+                "relationship": "blockPlacements"
+              },
+              "removeTreePlacement": {
+                "kind": "remove-tree-placement",
+                "label": "Remove child",
+                "relationship": "blockPlacements"
+              }
+            },
+            "fields": {
+              "block": {
+                "displayField": "label",
+                "label": "Child block",
+                "required": true,
+                "to": "block",
+                "type": "reference"
+              },
+              "label": {
+                "label": "Label",
+                "required": false,
+                "type": "text"
+              },
+              "order": {
+                "default": 1000,
+                "label": "Order",
+                "min": 0,
+                "required": true,
+                "type": "number"
+              },
+              "parent": {
+                "displayField": "label",
+                "label": "Parent block",
+                "required": true,
+                "to": "block",
+                "type": "reference"
+              },
+              "slot": {
+                "label": "Slot",
+                "required": false,
+                "type": "text"
+              }
+            },
+            "label": "Placement",
+            "mutations": {
+              "create": {
+                "enabled": true
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "contact": {
+            "fields": {
+              "label": {
+                "label": "Label",
+                "required": true,
+                "type": "text"
+              }
+            },
+            "label": "Contact",
+            "mutations": {
+              "create": {
+                "enabled": false
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "email-address": {
+            "constraints": {
+              "uniqueNormalizedAddress": {
+                "fields": ["normalizedAddress"],
+                "kind": "unique"
+              }
+            },
+            "fields": {
+              "address": {
+                "label": "Address",
+                "required": true,
+                "type": "text"
+              },
+              "contact": {
+                "displayField": "label",
+                "label": "Contact",
+                "required": true,
+                "to": "contact",
+                "type": "reference"
+              },
+              "normalizedAddress": {
+                "label": "Normalized address",
+                "required": true,
+                "type": "text"
+              }
+            },
+            "label": "Email address",
+            "mutations": {
+              "create": {
+                "enabled": false
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "site": {
+            "constraints": {
+              "uniqueSiteKey": {
+                "fields": ["key"],
+                "kind": "unique"
+              }
+            },
+            "fields": {
+              "accentColor": {
+                "format": "color",
+                "label": "Accent color",
+                "required": false,
+                "type": "text"
+              },
+              "backgroundColor": {
+                "format": "color",
+                "label": "Background color",
+                "required": false,
+                "type": "text"
+              },
+              "description": {
+                "format": "longText",
+                "label": "Description",
+                "required": false,
+                "type": "text"
+              },
+              "icon": {
+                "format": "icon",
+                "label": "Icon",
+                "required": false,
+                "type": "text"
+              },
+              "key": {
+                "label": "Key",
+                "required": true,
+                "type": "text"
+              },
+              "label": {
+                "label": "Label",
+                "required": true,
+                "type": "text"
+              }
+            },
+            "label": "Site",
+            "mutations": {
+              "create": {
+                "enabled": false
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          },
+          "subscription": {
+            "actions": {
+              "subscribe": {
+                "access": {
+                  "actor": "anonymous",
+                  "challenge": {
+                    "kind": "turnstile"
+                  },
+                  "origin": {
+                    "kind": "same-origin"
+                  }
+                },
+                "kind": "subscribe",
+                "label": "Subscribe",
+                "publicInput": {
+                  "fields": {
+                    "email": {
+                      "label": "Email",
+                      "required": true,
+                      "type": "text"
+                    }
+                  }
+                }
+              }
+            },
+            "constraints": {
+              "uniqueEmailAudience": {
+                "fields": ["emailAddress", "audience"],
+                "kind": "unique"
+              }
+            },
+            "fields": {
+              "audience": {
+                "displayField": "label",
+                "label": "Audience",
+                "required": true,
+                "to": "audience",
+                "type": "reference"
+              },
+              "consentedAt": {
+                "label": "Consented at",
+                "required": true,
+                "type": "text"
+              },
+              "emailAddress": {
+                "displayField": "address",
+                "label": "Email address",
+                "required": true,
+                "to": "email-address",
+                "type": "reference"
+              },
+              "sourceActionName": {
+                "label": "Action",
+                "required": true,
+                "type": "text"
+              },
+              "sourceApiRoutePrefix": {
+                "label": "API route prefix",
+                "required": true,
+                "type": "text"
+              },
+              "sourceHost": {
+                "label": "Host",
+                "required": true,
+                "type": "text"
+              },
+              "sourceInstallId": {
+                "label": "Install id",
+                "required": false,
+                "type": "text"
+              },
+              "sourceKind": {
+                "default": "publicAction",
+                "label": "Source kind",
+                "required": true,
+                "type": "enum",
+                "values": {
+                  "publicAction": {
+                    "label": "Public action"
+                  }
+                }
+              },
+              "sourcePackageAppKey": {
+                "label": "Package app key",
+                "required": true,
+                "type": "text"
+              },
+              "sourcePath": {
+                "label": "Path",
+                "required": true,
+                "type": "text"
+              },
+              "sourceSchemaKey": {
+                "label": "Source schema key",
+                "required": true,
+                "type": "text"
+              },
+              "sourceSiteBlockId": {
+                "label": "Site block",
+                "required": false,
+                "type": "text"
+              },
+              "sourceTargetKind": {
+                "label": "Target kind",
+                "required": true,
+                "type": "enum",
+                "values": {
+                  "appInstall": {
+                    "label": "App install"
+                  },
+                  "schemaKey": {
+                    "label": "Schema key"
+                  }
+                }
+              },
+              "status": {
+                "default": "subscribed",
+                "label": "Status",
+                "required": true,
+                "type": "enum",
+                "values": {
+                  "subscribed": {
+                    "label": "Subscribed"
+                  },
+                  "unsubscribed": {
+                    "label": "Unsubscribed"
+                  }
+                }
+              }
+            },
+            "label": "Subscription",
+            "mutations": {
+              "create": {
+                "enabled": false
+              },
+              "delete": {
+                "enabled": false
+              },
+              "patch": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        "itemViews": {
+          "blockContextItem": {
+            "entity": "block",
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            }
+          },
+          "blockListItem": {
+            "entity": "block",
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            }
+          },
+          "blockPlacementTreeItem": {
+            "entity": "block-placement",
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            }
+          },
+          "blockRootDetail": {
+            "entity": "block",
+            "fallback": {
+              "fields": {
+                "label": {
+                  "commit": "field-commit",
+                  "editor": "text"
+                }
+              },
+              "presentation": "fields"
+            },
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            },
+            "union": "blockByType",
+            "variants": {
+              "feature": {
+                "fields": {
+                  "alignment": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "hero": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "image": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  },
+                  "mediaAssetId": {
+                    "commit": "field-commit",
+                    "editor": "media"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "link": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["", "external"]
+                    }
+                  },
+                  "icon": {
+                    "commit": "field-commit",
+                    "editor": "icon"
+                  },
+                  "linkTargetBlock": {
+                    "commit": "immediate",
+                    "editor": "reference",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["internal"]
+                    }
+                  },
+                  "linkTargetMode": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "markdown": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "page": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  },
+                  "icon": {
+                    "commit": "field-commit",
+                    "editor": "icon"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "post": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "commit": "field-commit",
+                    "editor": "date"
+                  },
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "project": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "commit": "field-commit",
+                    "editor": "date"
+                  },
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "subscribeForm": {
+                "fields": {
+                  "actionName": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "buttonLabel": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  }
+                },
+                "presentation": "fields"
+              }
+            }
+          },
+          "blockTreeNode": {
+            "entity": "block",
+            "fallback": {
+              "fields": {
+                "label": {
+                  "commit": "field-commit",
+                  "editor": "text"
+                }
+              },
+              "presentation": "fields"
+            },
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            },
+            "union": "blockByType",
+            "variants": {
+              "feature": {
+                "fields": {
+                  "alignment": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "footer": {
+                "labelField": "label",
+                "presentation": "contextLink",
+                "target": {
+                  "context": "block",
+                  "kind": "selectContext",
+                  "record": "self"
+                }
+              },
+              "header": {
+                "labelField": "label",
+                "presentation": "contextLink",
+                "target": {
+                  "context": "block",
+                  "kind": "selectContext",
+                  "record": "self"
+                }
+              },
+              "hero": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "image": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  },
+                  "mediaAssetId": {
+                    "commit": "field-commit",
+                    "editor": "media"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "link": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["", "external"]
+                    }
+                  },
+                  "icon": {
+                    "commit": "field-commit",
+                    "editor": "icon"
+                  },
+                  "linkTargetBlock": {
+                    "commit": "immediate",
+                    "editor": "reference",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["internal"]
+                    }
+                  },
+                  "linkTargetMode": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "markdown": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "project": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "commit": "field-commit",
+                    "editor": "date"
+                  },
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "subscribeForm": {
+                "fields": {
+                  "actionName": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "buttonLabel": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  }
+                },
+                "presentation": "fields"
+              }
+            }
+          },
+          "siteSettingsForm": {
+            "entity": "site",
+            "fields": {
+              "accentColor": {
+                "commit": "field-commit",
+                "editor": "color"
+              },
+              "backgroundColor": {
+                "commit": "field-commit",
+                "editor": "color"
+              },
+              "description": {
+                "commit": "field-commit",
+                "editor": "textarea"
+              },
+              "icon": {
+                "commit": "field-commit",
+                "editor": "icon"
+              },
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            }
+          }
+        },
+        "queries": {
+          "audienceAll": {
+            "entity": "audience",
+            "expression": {
+              "kind": "all"
+            },
+            "label": "All"
+          },
+          "blockAll": {
+            "entity": "block",
+            "expression": {
+              "kind": "all"
+            },
+            "label": "All"
+          },
+          "blockGroups": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "group"
+            },
+            "label": "Groups"
+          },
+          "blockImages": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "image"
+            },
+            "label": "Images"
+          },
+          "blockLinks": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "link"
+            },
+            "label": "Links"
+          },
+          "blockNavigationRoots": {
+            "entity": "block",
+            "expression": {
+              "expressions": [
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "header"
+                },
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "footer"
+                }
+              ],
+              "kind": "or"
+            },
+            "label": "Navigation"
+          },
+          "blockPages": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "page"
+            },
+            "label": "Pages"
+          },
+          "blockPosts": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "post"
+            },
+            "label": "Posts"
+          },
+          "blockProjects": {
+            "entity": "block",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "type"
+              },
+              "value": "project"
+            },
+            "label": "Projects"
+          },
+          "blockSiteRoots": {
+            "entity": "block",
+            "expression": {
+              "expressions": [
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "page"
+                },
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "post"
+                },
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "project"
+                },
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "header"
+                },
+                {
+                  "kind": "where",
+                  "op": "eq",
+                  "ref": {
+                    "kind": "value",
+                    "name": "type"
+                  },
+                  "value": "footer"
+                }
+              ],
+              "kind": "or"
+            },
+            "label": "Site roots"
+          },
+          "emailAddressAll": {
+            "entity": "email-address",
+            "expression": {
+              "kind": "all"
+            },
+            "label": "All"
+          },
+          "placementsForSelectedBlock": {
+            "entity": "block-placement",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "parent"
+              },
+              "value": {
+                "kind": "context",
+                "name": "block"
+              }
+            },
+            "label": "Selected block"
+          },
+          "sitePrimary": {
+            "entity": "site",
+            "expression": {
+              "kind": "where",
+              "op": "eq",
+              "ref": {
+                "kind": "value",
+                "name": "key"
+              },
+              "value": "primary"
+            },
+            "label": "Primary"
+          },
+          "subscriptionAll": {
+            "entity": "subscription",
+            "expression": {
+              "kind": "all"
+            },
+            "label": "All"
+          }
+        },
+        "relationships": {
+          "audienceSubscriptions": {
+            "from": {
+              "entity": "audience"
+            },
+            "inverse": "subscriptionAudience",
+            "kind": "toMany",
+            "label": "Subscriptions",
+            "to": {
+              "entity": "subscription",
+              "field": "audience"
+            }
+          },
+          "blockPlacements": {
+            "from": {
+              "entity": "block"
+            },
+            "inverse": "placementParent",
+            "kind": "toMany",
+            "label": "Placements",
+            "to": {
+              "entity": "block-placement",
+              "field": "parent"
+            }
+          },
+          "blockUsedInPlacements": {
+            "from": {
+              "entity": "block"
+            },
+            "inverse": "placementBlock",
+            "kind": "toMany",
+            "label": "Used in placements",
+            "to": {
+              "entity": "block-placement",
+              "field": "block"
+            }
+          },
+          "contactEmailAddresses": {
+            "from": {
+              "entity": "contact"
+            },
+            "inverse": "emailAddressContact",
+            "kind": "toMany",
+            "label": "Email addresses",
+            "to": {
+              "entity": "email-address",
+              "field": "contact"
+            }
+          },
+          "emailAddressContact": {
+            "from": {
+              "entity": "email-address",
+              "field": "contact"
+            },
+            "inverse": "contactEmailAddresses",
+            "kind": "toOne",
+            "label": "Contact",
+            "to": {
+              "entity": "contact"
+            }
+          },
+          "emailAddressSubscriptions": {
+            "from": {
+              "entity": "email-address"
+            },
+            "inverse": "subscriptionEmailAddress",
+            "kind": "toMany",
+            "label": "Subscriptions",
+            "to": {
+              "entity": "subscription",
+              "field": "emailAddress"
+            }
+          },
+          "placementBlock": {
+            "from": {
+              "entity": "block-placement",
+              "field": "block"
+            },
+            "inverse": "blockUsedInPlacements",
+            "kind": "toOne",
+            "label": "Child block",
+            "to": {
+              "entity": "block"
+            }
+          },
+          "placementParent": {
+            "from": {
+              "entity": "block-placement",
+              "field": "parent"
+            },
+            "inverse": "blockPlacements",
+            "kind": "toOne",
+            "label": "Parent block",
+            "to": {
+              "entity": "block"
+            }
+          },
+          "subscriptionAudience": {
+            "from": {
+              "entity": "subscription",
+              "field": "audience"
+            },
+            "inverse": "audienceSubscriptions",
+            "kind": "toOne",
+            "label": "Audience",
+            "to": {
+              "entity": "audience"
+            }
+          },
+          "subscriptionEmailAddress": {
+            "from": {
+              "entity": "subscription",
+              "field": "emailAddress"
+            },
+            "inverse": "emailAddressSubscriptions",
+            "kind": "toOne",
+            "label": "Email address",
+            "to": {
+              "entity": "email-address"
+            }
+          }
+        },
+        "screens": {
+          "siteEditor": {
+            "label": "Blocks",
+            "layout": {
+              "sections": [
+                {
+                  "id": "site",
+                  "type": "collection",
+                  "view": "siteCompositionHome"
+                }
+              ],
+              "type": "stack"
+            },
+            "navigation": {
+              "primary": true
+            },
+            "path": "/",
+            "type": "workspace"
+          },
+          "siteSettings": {
+            "label": "Settings",
+            "layout": {
+              "sections": [
+                {
+                  "id": "settings",
+                  "type": "collection",
+                  "view": "siteSettingsHome"
+                }
+              ],
+              "type": "stack"
+            },
+            "navigation": {
+              "primary": true
+            },
+            "path": "/settings",
+            "type": "workspace"
+          },
+          "siteSubscribers": {
+            "label": "Subscribers",
+            "layout": {
+              "sections": [
+                {
+                  "id": "subscriptions",
+                  "type": "collection",
+                  "view": "subscriptionHome"
+                },
+                {
+                  "id": "emailAddresses",
+                  "type": "collection",
+                  "view": "emailAddressHome"
+                },
+                {
+                  "id": "audiences",
+                  "type": "collection",
+                  "view": "audienceHome"
+                }
+              ],
+              "type": "stack"
+            },
+            "navigation": {
+              "primary": true
+            },
+            "path": "/subscribers",
+            "type": "workspace"
+          }
+        },
+        "tableViews": {
+          "audienceTable": {
+            "columns": [
+              {
+                "field": "label",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "field": "key",
+                "type": "field",
+                "width": "md"
+              }
+            ],
+            "entity": "audience"
+          },
+          "blockPlacementTable": {
+            "actions": {
+              "editChildBlock": {
+                "editView": "blockEdit",
+                "label": "Edit block",
+                "target": {
+                  "field": "block",
+                  "kind": "reference"
+                },
+                "type": "editRecord"
+              }
+            },
+            "columns": [
+              {
+                "type": "orderingHandle",
+                "width": "xs"
+              },
+              {
+                "commit": "immediate",
+                "editor": "reference",
+                "field": "block",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "text",
+                "field": "label",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "text",
+                "field": "slot",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "action": "editChildBlock",
+                "align": "end",
+                "includeOrdering": true,
+                "type": "invokeAction",
+                "width": "xs"
+              }
+            ],
+            "entity": "block-placement",
+            "ordering": {
+              "field": "order",
+              "presentations": ["dragHandle", "moveMenu"],
+              "scope": [
+                {
+                  "field": "parent",
+                  "kind": "field"
+                },
+                {
+                  "field": "slot",
+                  "kind": "field"
+                }
+              ]
+            }
+          },
+          "blockTable": {
+            "columns": [
+              {
+                "commit": "immediate",
+                "editor": "enum",
+                "field": "type",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "text",
+                "field": "label",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "markdown",
+                "field": "body",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "href",
+                "field": "href",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "media",
+                "field": "mediaAssetId",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "date",
+                "field": "date",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "icon",
+                "field": "icon",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "commit": "field-commit",
+                "editor": "color",
+                "field": "color",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "commit": "immediate",
+                "editor": "enum",
+                "field": "alignment",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "align": "end",
+                "commit": "field-commit",
+                "editor": "number",
+                "field": "width",
+                "format": "number",
+                "type": "field",
+                "width": "xs"
+              },
+              {
+                "align": "end",
+                "commit": "field-commit",
+                "editor": "number",
+                "field": "height",
+                "format": "number",
+                "type": "field",
+                "width": "xs"
+              }
+            ],
+            "entity": "block"
+          },
+          "emailAddressTable": {
+            "columns": [
+              {
+                "field": "address",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "field": "normalizedAddress",
+                "type": "field",
+                "width": "lg"
+              },
+              {
+                "field": "contact",
+                "type": "field",
+                "width": "md"
+              }
+            ],
+            "entity": "email-address"
+          },
+          "subscriptionTable": {
+            "columns": [
+              {
+                "field": "address",
+                "label": "Email",
+                "referenceField": "emailAddress",
+                "type": "referenceField",
+                "width": "lg"
+              },
+              {
+                "field": "label",
+                "label": "Audience",
+                "referenceField": "audience",
+                "type": "referenceField",
+                "width": "md"
+              },
+              {
+                "field": "status",
+                "type": "field",
+                "width": "sm"
+              },
+              {
+                "field": "consentedAt",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "field": "sourceHost",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "field": "sourcePath",
+                "type": "field",
+                "width": "md"
+              },
+              {
+                "field": "sourceSiteBlockId",
+                "type": "field",
+                "width": "md"
+              }
+            ],
+            "entity": "subscription"
+          }
+        },
+        "unions": {
+          "blockByType": {
+            "discriminator": "type",
+            "entity": "block",
+            "fallback": {
+              "fields": ["label", "type"],
+              "label": "Block"
+            },
+            "variants": {
+              "feature": {
+                "fields": ["label", "body", "alignment"],
+                "label": "Feature"
+              },
+              "footer": {
+                "fields": ["label"],
+                "label": "Footer"
+              },
+              "footerSection": {
+                "fields": ["label"],
+                "label": "Footer section"
+              },
+              "footerSocial": {
+                "fields": ["label"],
+                "label": "Footer social"
+              },
+              "group": {
+                "fields": ["label"],
+                "label": "Group"
+              },
+              "header": {
+                "fields": ["label"],
+                "label": "Header"
+              },
+              "headerPrimary": {
+                "fields": ["label"],
+                "label": "Header primary"
+              },
+              "headerSecondary": {
+                "fields": ["label"],
+                "label": "Header secondary"
+              },
+              "hero": {
+                "fields": ["label", "body"],
+                "label": "Hero"
+              },
+              "image": {
+                "fields": ["label", "mediaAssetId", "href"],
+                "label": "Image",
+                "requiredFields": ["label"]
+              },
+              "link": {
+                "fields": ["label", "linkTargetMode", "linkTargetBlock", "href", "icon"],
+                "label": "Link",
+                "requiredFields": ["label", "linkTargetMode"]
+              },
+              "markdown": {
+                "fields": ["label", "body"],
+                "label": "Markdown"
+              },
+              "page": {
+                "fields": ["label", "href", "icon"],
+                "label": "Page",
+                "requiredFields": ["label", "href"]
+              },
+              "post": {
+                "fields": ["label", "date", "body", "href"],
+                "label": "Post",
+                "requiredFields": ["label", "href"]
+              },
+              "postList": {
+                "fields": ["label"],
+                "label": "Post list"
+              },
+              "project": {
+                "fields": ["label", "date", "body", "href"],
+                "label": "Project",
+                "requiredFields": ["label", "href"]
+              },
+              "projectList": {
+                "fields": ["label"],
+                "label": "Project list"
+              },
+              "subscribeForm": {
+                "fields": ["label", "body", "actionName", "buttonLabel"],
+                "label": "Subscribe form"
+              }
+            }
+          }
+        },
+        "version": 1,
+        "views": {
+          "audienceHome": {
+            "defaultQuery": "audienceAll",
+            "entity": "audience",
+            "label": "Audiences",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "audienceAll"
+              }
+            ],
+            "result": {
+              "tableView": "audienceTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "blockCompositionHome": {
+            "actions": [
+              {
+                "createView": "blockPlacementCreate",
+                "label": "Add placement",
+                "type": "create"
+              }
+            ],
+            "context": {
+              "entity": "block",
+              "itemView": "blockContextItem",
+              "labelField": "label",
+              "name": "block",
+              "presentation": "tabs",
+              "query": "blockAll",
+              "relationship": "blockPlacements"
+            },
+            "defaultQuery": "placementsForSelectedBlock",
+            "entity": "block-placement",
+            "label": "Placements",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "placementsForSelectedBlock"
+              }
+            ],
+            "result": {
+              "tableView": "blockPlacementTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "blockCreate": {
+            "entity": "block",
+            "fallback": {
+              "fields": {
+                "label": {
+                  "editor": "text"
+                }
+              },
+              "presentation": "fields"
+            },
+            "fields": {
+              "label": {
+                "editor": "text"
+              },
+              "type": {
+                "editor": "enum"
+              }
+            },
+            "type": "create",
+            "union": "blockByType",
+            "variants": {
+              "feature": {
+                "fields": {
+                  "alignment": {
+                    "editor": "enum"
+                  },
+                  "body": {
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "hero": {
+                "fields": {
+                  "body": {
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "image": {
+                "fields": {
+                  "href": {
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "link": {
+                "fields": {
+                  "href": {
+                    "editor": "href",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["", "external"]
+                    }
+                  },
+                  "icon": {
+                    "editor": "icon"
+                  },
+                  "linkTargetBlock": {
+                    "editor": "reference",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["internal"]
+                    }
+                  },
+                  "linkTargetMode": {
+                    "editor": "enum"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "markdown": {
+                "fields": {
+                  "body": {
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "page": {
+                "fields": {
+                  "href": {
+                    "editor": "href"
+                  },
+                  "icon": {
+                    "editor": "icon"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "post": {
+                "fields": {
+                  "body": {
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "editor": "date"
+                  },
+                  "href": {
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "project": {
+                "fields": {
+                  "body": {
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "editor": "date"
+                  },
+                  "href": {
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "subscribeForm": {
+                "fields": {
+                  "actionName": {
+                    "editor": "text"
+                  },
+                  "body": {
+                    "editor": "markdown"
+                  },
+                  "buttonLabel": {
+                    "editor": "text"
+                  }
+                },
+                "presentation": "fields"
+              }
+            }
+          },
+          "blockEdit": {
+            "entity": "block",
+            "fallback": {
+              "fields": {
+                "label": {
+                  "commit": "field-commit",
+                  "editor": "text"
+                }
+              },
+              "presentation": "fields"
+            },
+            "fields": {
+              "label": {
+                "commit": "field-commit",
+                "editor": "text"
+              }
+            },
+            "type": "edit",
+            "union": "blockByType",
+            "variants": {
+              "feature": {
+                "fields": {
+                  "alignment": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "hero": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "image": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  },
+                  "mediaAssetId": {
+                    "commit": "field-commit",
+                    "editor": "media"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "link": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["", "external"]
+                    }
+                  },
+                  "icon": {
+                    "commit": "field-commit",
+                    "editor": "icon"
+                  },
+                  "linkTargetBlock": {
+                    "commit": "immediate",
+                    "editor": "reference",
+                    "visibleWhen": {
+                      "field": "linkTargetMode",
+                      "values": ["internal"]
+                    }
+                  },
+                  "linkTargetMode": {
+                    "commit": "immediate",
+                    "editor": "enum"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "markdown": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "page": {
+                "fields": {
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  },
+                  "icon": {
+                    "commit": "field-commit",
+                    "editor": "icon"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "post": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "commit": "field-commit",
+                    "editor": "date"
+                  },
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "project": {
+                "fields": {
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "date": {
+                    "commit": "field-commit",
+                    "editor": "date"
+                  },
+                  "href": {
+                    "commit": "field-commit",
+                    "editor": "href"
+                  }
+                },
+                "presentation": "fields"
+              },
+              "subscribeForm": {
+                "fields": {
+                  "actionName": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  },
+                  "body": {
+                    "commit": "field-commit",
+                    "editor": "markdown"
+                  },
+                  "buttonLabel": {
+                    "commit": "field-commit",
+                    "editor": "text"
+                  }
+                },
+                "presentation": "fields"
+              }
+            }
+          },
+          "blockHome": {
+            "actions": [
+              {
+                "createView": "blockCreate",
+                "type": "create"
+              }
+            ],
+            "defaultQuery": "blockAll",
+            "entity": "block",
+            "label": "Blocks",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockAll"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockPages"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockPosts"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockProjects"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockLinks"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockGroups"
+              },
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "blockImages"
+              }
+            ],
+            "result": {
+              "tableView": "blockTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "blockPageCreate": {
+            "defaults": {
+              "type": {
+                "kind": "literal",
+                "value": "page"
+              }
+            },
+            "entity": "block",
+            "fields": {
+              "href": {
+                "editor": "href"
+              },
+              "icon": {
+                "editor": "icon"
+              },
+              "label": {
+                "editor": "text"
+              }
+            },
+            "type": "create"
+          },
+          "blockPlacementCreate": {
+            "defaults": {
+              "parent": {
+                "kind": "context",
+                "name": "block"
+              }
+            },
+            "entity": "block-placement",
+            "fields": {
+              "block": {
+                "editor": "reference"
+              },
+              "label": {
+                "editor": "text"
+              }
+            },
+            "type": "create"
+          },
+          "blockPostCreate": {
+            "defaults": {
+              "type": {
+                "kind": "literal",
+                "value": "post"
+              }
+            },
+            "entity": "block",
+            "fields": {
+              "body": {
+                "editor": "markdown"
+              },
+              "date": {
+                "editor": "date"
+              },
+              "href": {
+                "editor": "href"
+              },
+              "label": {
+                "editor": "text"
+              }
+            },
+            "type": "create"
+          },
+          "blockProjectCreate": {
+            "defaults": {
+              "type": {
+                "kind": "literal",
+                "value": "project"
+              }
+            },
+            "entity": "block",
+            "fields": {
+              "body": {
+                "editor": "markdown"
+              },
+              "date": {
+                "editor": "date"
+              },
+              "href": {
+                "editor": "href"
+              },
+              "label": {
+                "editor": "text"
+              }
+            },
+            "type": "create"
+          },
+          "emailAddressHome": {
+            "defaultQuery": "emailAddressAll",
+            "entity": "email-address",
+            "label": "Email addresses",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "emailAddressAll"
+              }
+            ],
+            "result": {
+              "tableView": "emailAddressTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "navigationCompositionHome": {
+            "actions": [
+              {
+                "createView": "blockPlacementCreate",
+                "label": "Add placement",
+                "type": "create"
+              }
+            ],
+            "context": {
+              "entity": "block",
+              "itemView": "blockRootDetail",
+              "labelField": "label",
+              "name": "block",
+              "presentation": "listDetail",
+              "query": "blockNavigationRoots",
+              "relationship": "blockPlacements"
+            },
+            "defaultQuery": "placementsForSelectedBlock",
+            "entity": "block-placement",
+            "label": "Navigation",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "placementsForSelectedBlock"
+              }
+            ],
+            "result": {
+              "tableView": "blockPlacementTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "pageCompositionHome": {
+            "actions": [
+              {
+                "createView": "blockPlacementCreate",
+                "label": "Add placement",
+                "type": "create"
+              }
+            ],
+            "context": {
+              "entity": "block",
+              "itemView": "blockRootDetail",
+              "labelField": "label",
+              "name": "block",
+              "presentation": "listDetail",
+              "query": "blockPages",
+              "relationship": "blockPlacements"
+            },
+            "defaultQuery": "placementsForSelectedBlock",
+            "entity": "block-placement",
+            "label": "Pages",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "placementsForSelectedBlock"
+              }
+            ],
+            "result": {
+              "tableView": "blockPlacementTable",
+              "type": "table"
+            },
+            "type": "collection"
+          },
+          "siteCompositionHome": {
+            "context": {
+              "entity": "block",
+              "itemView": "blockRootDetail",
+              "labelField": "label",
+              "name": "block",
+              "navigation": {
+                "groups": [
+                  {
+                    "createView": "blockPageCreate",
+                    "label": "Pages",
+                    "query": "blockPages"
+                  },
+                  {
+                    "createView": "blockPostCreate",
+                    "label": "Posts",
+                    "query": "blockPosts"
+                  },
+                  {
+                    "createView": "blockProjectCreate",
+                    "label": "Projects",
+                    "query": "blockProjects"
+                  },
+                  {
+                    "label": "Navigation",
+                    "query": "blockNavigationRoots"
+                  }
+                ],
+                "placement": "sidebar"
+              },
+              "presentation": "listDetail",
+              "query": "blockSiteRoots",
+              "relationship": "blockPlacements"
+            },
+            "defaultQuery": "placementsForSelectedBlock",
+            "entity": "block-placement",
+            "label": "Site",
+            "navigation": {
+              "primary": true
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "placementsForSelectedBlock"
+              }
+            ],
+            "result": {
+              "branches": {
+                "variants": {
+                  "feature": {
+                    "children": [
+                      {
+                        "label": "Feature image",
+                        "placementValues": {
+                          "slot": "media"
+                        },
+                        "variant": "image"
+                      },
+                      {
+                        "label": "Action link",
+                        "placementValues": {
+                          "slot": "actions"
+                        },
+                        "variant": "link"
+                      }
+                    ]
+                  },
+                  "footer": {
+                    "action": "leaf",
+                    "children": ["footerSection", "footerSocial", "link"]
+                  },
+                  "footerSection": {
+                    "children": ["link"]
+                  },
+                  "footerSocial": {
+                    "children": ["link"]
+                  },
+                  "group": {
+                    "children": [
+                      "group",
+                      "hero",
+                      "feature",
+                      "markdown",
+                      "image",
+                      "link",
+                      "project",
+                      "postList",
+                      "projectList",
+                      "subscribeForm"
+                    ]
+                  },
+                  "header": {
+                    "action": "leaf",
+                    "children": ["headerPrimary", "headerSecondary"]
+                  },
+                  "headerPrimary": {
+                    "children": ["link"]
+                  },
+                  "headerSecondary": {
+                    "children": ["link"]
+                  },
+                  "page": {
+                    "children": [
+                      "group",
+                      "hero",
+                      "feature",
+                      "markdown",
+                      "image",
+                      "link",
+                      "project",
+                      "postList",
+                      "projectList",
+                      "subscribeForm"
+                    ]
+                  },
+                  "post": {
+                    "children": [
+                      "markdown",
+                      {
+                        "label": "Primary image",
+                        "placementValues": {
+                          "slot": "primaryImage"
+                        },
+                        "variant": "image"
+                      }
+                    ]
+                  },
+                  "postList": "leaf",
+                  "project": {
+                    "children": [
+                      {
+                        "label": "Primary image",
+                        "placementValues": {
+                          "slot": "primaryImage"
+                        },
+                        "variant": "image"
+                      }
+                    ]
+                  },
+                  "projectList": "leaf",
+                  "subscribeForm": "leaf"
+                }
+              },
+              "childField": "block",
+              "childItemView": "blockTreeNode",
+              "composition": {
+                "createAction": "addTreeChild",
+                "removeAction": "removeTreePlacement"
+              },
+              "maxDepth": 8,
+              "ordering": {
+                "field": "order",
+                "presentations": ["dragHandle"],
+                "scope": [
+                  {
+                    "field": "parent",
+                    "kind": "field"
+                  },
+                  {
+                    "field": "slot",
+                    "kind": "field"
+                  }
+                ]
+              },
+              "relationship": "blockPlacements",
+              "type": "tree"
+            },
+            "type": "collection"
+          },
+          "siteSettingsHome": {
+            "defaultQuery": "sitePrimary",
+            "entity": "site",
+            "label": "Settings",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "query": "sitePrimary"
+              }
+            ],
+            "result": {
+              "itemView": "siteSettingsForm",
+              "type": "record"
+            },
+            "type": "collection"
+          },
+          "subscriptionHome": {
+            "defaultQuery": "subscriptionAll",
+            "entity": "subscription",
+            "label": "Subscriptions",
+            "navigation": {
+              "primary": false
+            },
+            "queries": [
+              {
+                "count": {
+                  "type": "count"
+                },
+                "query": "subscriptionAll"
+              }
+            ],
+            "result": {
+              "tableView": "subscriptionTable",
+              "type": "table"
+            },
+            "type": "collection"
+          }
+        }
+      },
+      "records": [
+        {
+          "id": "rec_site_content_home",
+          "entity": "block",
+          "values": {
+            "body": "A concise personal site for current work, writing, and project notes.",
+            "href": "/",
+            "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />\n    <polyline points=\"9 22 9 12 15 12 15 22\" />\n</svg>",
+            "label": "Home",
+            "type": "page"
+          },
+          "createdAt": "2026-05-05T00:00:04.000Z"
+        },
+        {
+          "id": "rec_site_content_blog",
+          "entity": "block",
+          "values": {
+            "body": "Notes on product engineering",
+            "href": "/blog",
+            "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z\" />\n    <path d=\"M12 9v4\" />\n    <path d=\"M12 17h0.01\" />\n</svg>",
+            "label": "Blog",
+            "type": "page"
+          },
+          "createdAt": "2026-05-05T00:00:05.000Z"
+        },
+        {
+          "id": "rec_site_content_resume",
+          "entity": "block",
+          "values": {
+            "body": "A practical summary of roles, projects, and strengths.",
+            "href": "/resume",
+            "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16\" />\n    <rect width=\"20\" height=\"14\" rx=\"2\" x=\"2\" y=\"6\" />\n</svg>",
+            "label": "Resume",
+            "type": "page"
+          },
+          "createdAt": "2026-05-05T00:00:06.000Z"
+        },
+        {
+          "id": "rec_site_content_projects",
+          "entity": "block",
+          "values": {
+            "body": "Current and recent product work",
+            "href": "/projects",
+            "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18z\" />\n    <path d=\"M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2\" />\n    <path d=\"M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2\" />\n    <path d=\"M10 6h4\" />\n    <path d=\"M10 10h4\" />\n    <path d=\"M10 14h4\" />\n    <path d=\"M10 18h4\" />\n</svg>",
+            "label": "Projects",
+            "type": "page"
+          },
+          "createdAt": "2026-05-05T00:00:07.000Z"
+        },
+        {
+          "id": "rec_site_content_project_estii",
+          "entity": "block",
+          "values": {
+            "body": "Estimation and pricing for service providers.",
+            "date": "2026-05-01",
+            "href": "https://estii.com",
+            "label": "Estii",
+            "type": "project"
+          },
+          "createdAt": "2026-05-05T00:00:08.000Z"
+        },
+        {
+          "id": "rec_site_content_project_opensurf",
+          "entity": "block",
+          "values": {
+            "body": "Framework for building reliable web agents.",
+            "date": "2026-05-08",
+            "href": "https://opensurf.ai",
+            "label": "OpenSurf",
+            "type": "project"
+          },
+          "createdAt": "2026-05-05T00:00:09.000Z"
+        },
+        {
+          "id": "rec_site_content_project_formless",
+          "entity": "block",
+          "values": {
+            "body": "Schema-driven synchronised app runtime.",
+            "date": "2026-05-03",
+            "href": "https://github.com/dpeek/formless",
+            "label": "Formless",
+            "type": "project"
+          },
+          "createdAt": "2026-05-05T00:00:10.000Z"
+        },
+        {
+          "id": "rec_site_content_post_shipped_schema",
+          "entity": "block",
+          "values": {
+            "body": "A quick introduction to Formless: the schema-as-data runtime I built instead of updating my CV.",
+            "date": "2026-05-12",
+            "href": "/blog/agents-are-enablers",
+            "label": "Agents are enablers",
+            "type": "post"
+          },
+          "createdAt": "2026-05-05T00:00:11.000Z"
+        },
+        {
+          "id": "rec_site_content_post_draft_notes",
+          "entity": "block",
+          "values": {
+            "body": "What if your schema gave you a local-first, synchronising date store and CRUD UI for free? Low-code for coders.",
+            "date": "2026-05-13",
+            "href": "/blog/the-schema-is-the-app",
+            "label": "The schema is the app",
+            "type": "post"
+          },
+          "createdAt": "2026-05-05T00:00:12.000Z"
+        },
+        {
+          "id": "rec_site_content_link_home",
+          "entity": "block",
+          "values": {
+            "href": "/",
+            "label": "David Peek",
+            "linkTargetBlock": "rec_site_content_home",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:12.100Z"
+        },
+        {
+          "id": "rec_site_content_link_blog",
+          "entity": "block",
+          "values": {
+            "href": "/blog",
+            "label": "Blog",
+            "linkTargetBlock": "rec_site_content_blog",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:12.200Z"
+        },
+        {
+          "id": "rec_site_content_link_projects",
+          "entity": "block",
+          "values": {
+            "href": "/projects",
+            "label": "Projects",
+            "linkTargetBlock": "rec_site_content_projects",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:12.300Z"
+        },
+        {
+          "id": "rec_site_content_link_resume",
+          "entity": "block",
+          "values": {
+            "href": "/resume",
+            "label": "Resume",
+            "linkTargetBlock": "rec_site_content_resume",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:12.400Z"
+        },
+        {
+          "id": "rec_site_content_link_github",
+          "entity": "block",
+          "values": {
+            "href": "https://github.com/dpeek",
+            "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path class=\"cls-1\" d=\"M16 2a14 14 0 0 0-4.43 27.28c0.7 0.13 1-0.3 1-0.67s0-1.21 0-2.38c-3.89 0.84-4.71-1.88-4.71-1.88a3.71 3.71 0 0 0-1.62-2.05c-1.27-0.86 0.1-0.85 0.1-0.85a2.94 2.94 0 0 1 2.14 1.45 3 3 0 0 0 4.08 1.16 2.93 2.93 0 0 1 0.88-1.87c-3.1-0.36-6.37-1.56-6.37-6.92a5.4 5.4 0 0 1 1.44-3.76 5 5 0 0 1 0.14-3.7c0 0 1.17-0.38 3.85 1.43a13.3 13.3 0 0 1 7 0c2.67-1.81 3.84-1.43 3.84-1.43a5 5 0 0 1 0.14 3.7 5.4 5.4 0 0 1 1.44 3.76c0 5.38-3.27 6.56-6.39 6.91a3.33 3.33 0 0 1 0.95 2.59c0 1.87 0 3.38 0 3.84s0.25 0.81 1 0.67A14 14 0 0 0 16 2z\" fill-rule=\"evenodd\" />\n</svg>",
+            "label": "GitHub",
+            "linkTargetMode": "external",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:13.000Z"
+        },
+        {
+          "id": "rec_site_content_link_linkedin",
+          "entity": "block",
+          "values": {
+            "href": "https://linkedin.com/in/dpeekdotcom",
+            "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M26.2 4H5.8C4.8 4 4 4.8 4 5.7v20.5c0 0.9 0.8 1.7 1.8 1.7h20.4c1 0 1.8-0.8 1.8-1.7V5.7C28 4.8 27.2 4 26.2 4zM11.1 24.4H7.6V13h3.5zM9.4 11.4c-1.1 0-2.1-0.9-2.1-2.1s0.9-2.1 2.1-2.1c1.1 0 2.1 0.9 2.1 2.1s-1 2.1-2.1 2.1zM24.5 24.3H21v-5.6c0-1.3 0-3.1-1.9-3.1S17 17.1 17 18.5v5.7h-3.5V13h3.3v1.5h0.1c0.5-0.9 1.7-1.9 3.4-1.9 3.6 0 4.3 2.4 4.3 5.5v6.2z\" />\n</svg>",
+            "label": "LinkedIn",
+            "linkTargetMode": "external",
+            "type": "link"
+          },
+          "createdAt": "2026-05-05T00:00:14.000Z"
+        },
+        {
+          "id": "rec_site_content_group_header",
+          "entity": "block",
+          "values": {
+            "label": "Header",
+            "type": "header"
+          },
+          "createdAt": "2026-05-05T00:00:16.000Z"
+        },
+        {
+          "id": "rec_site_content_group_header_primary",
+          "entity": "block",
+          "values": {
+            "label": "Primary",
+            "type": "headerPrimary"
+          },
+          "createdAt": "2026-05-05T00:00:16.100Z"
+        },
+        {
+          "id": "rec_site_content_group_header_secondary",
+          "entity": "block",
+          "values": {
+            "label": "Secondary",
+            "type": "headerSecondary"
+          },
+          "createdAt": "2026-05-05T00:00:16.200Z"
+        },
+        {
+          "id": "rec_site_content_group_footer",
+          "entity": "block",
+          "values": {
+            "label": "Footer",
+            "type": "footer"
+          },
+          "createdAt": "2026-05-05T00:00:16.500Z"
+        },
+        {
+          "id": "rec_site_content_group_footer_main",
+          "entity": "block",
+          "values": {
+            "label": "Pages",
+            "type": "footerSection"
+          },
+          "createdAt": "2026-05-05T00:00:17.000Z"
+        },
+        {
+          "id": "rec_site_content_group_footer_social",
+          "entity": "block",
+          "values": {
+            "label": "Social",
+            "type": "footerSocial"
+          },
+          "createdAt": "2026-05-05T00:00:18.000Z"
+        },
+        {
+          "id": "rec_site_block_post_body",
+          "entity": "block",
+          "values": {
+            "body": "This whole site started as pure developer hedonism.\n\nI sat down to update my CV and, in the most predictable developer move imaginable, rebuilt my personal site instead.\n\nThe sensible version of that story is: pick a Markdown site generator, write the pages, ship the thing. I did not do that. I used the excuse to build something I have wanted for a while: Formless, a schema-as-data app runtime.\n\nThe idea is simple: describe your app as data. The schema defines entities, fields, relationships, queries, read models, views, screens, mutations, and actions. The runtime uses that schema to give you a working app surface: local browser state, authority-backed storage, generated editing UI, generic create and patch flows, and named domain actions for behavior that needs more than CRUD.\n\nThat changes the usual stack shape. Instead of spreading the same product knowledge across a database schema, ORM models, API handlers, client state, validation, form components, labels, locale strings, and display formatting, Formless asks a more interesting question: what if the schema was allowed to carry the useful product metadata too?\n\nSo a field is not just `email: text`. It can know its label, validation, display behavior, editor, help copy, defaults, and where it should appear. A relationship is not just a foreign key you rediscover in every screen. It can be named runtime data. A read model is not another persisted column. It can be a display-only value computed from flat records.\n\nThat is the part that feels newly interesting in an agentic world.\n\nAgents are much better when the system gives them a map. A codebase full of implicit conventions asks an agent to infer intent from scattered implementation details. A schema-as-data runtime gives it a structured description of what exists, what is editable, which relationships matter, and which commands are valid. The metadata is not just for rendering UI. It is a shared contract for humans, runtime code, and agents.\n\nThis site is the first dogfood pass. The CMS behind it is built in Formless. The Site schema has block and placement records; public pages render from a tree projection; posts and projects are content blocks with dates, routes, summaries, and child markdown placements. I get an admin UI mostly because the runtime can read the schema and generate one.\n\nIt is still a toy. There are lots of missing grown-up things: users, permissions, richer publishing, imports, a media library, dashboards, all of that. But it works well enough to write this post inside the thing itself, which is exactly the unreasonable loop I wanted.\n\nThis is the first note in a series. Next I want to dig into the data model, the generated UI, the local-first browser replica and Durable Object authority split, and what schema-driven apps make possible when agents can use the schema as a real interface instead of a pile of hints.",
+            "label": "Body",
+            "type": "markdown"
+          },
+          "createdAt": "2026-05-05T00:00:18.400Z"
+        },
+        {
+          "id": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
+          "entity": "block",
+          "values": {
+            "href": "https://bsky.app/profile/dpeek.com",
+            "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M12 10.8c-1.087-2.114-4.046-6.053-6.798-7.995-2.636-1.861-3.641-1.539-4.3-1.24C0.139 1.908 0 3.08 0 3.768c0 0.69 0.378 5.65 0.624 6.479 0.815 2.736 3.713 3.66 6.383 3.364 0.136-0.02 0.275-0.039 0.415-0.056-0.138 0.022-0.276 0.04-0.415 0.056-3.912 0.58-7.387 2.005-2.83 7.078 5.013 5.19 6.87-1.113 7.823-4.308 0.953 3.195 2.05 9.271 7.733 4.308 4.267-4.308 1.172-6.498-2.74-7.078a8.741 8.741 0 0 1-0.415-0.056c0.14 0.017 0.279 0.036 0.415 0.056 2.67 0.297 5.568-0.628 6.383-3.364C23.622 9.419 24 4.457 24 3.769c0-0.69-0.139-1.861-0.902-2.206-0.659-0.298-1.664-0.62-4.3 1.24C16.046 4.748 13.087 8.687 12 10.8z\" />\n</svg>",
+            "label": "Bluesky",
+            "linkTargetMode": "external",
+            "type": "link"
+          },
+          "createdAt": "2026-05-12T04:27:33.010Z"
+        },
+        {
+          "id": "record_0749e061-1ba8-4923-841e-143fc825427c",
+          "entity": "block",
+          "values": {
+            "href": "https://x.com/dpeekdotcom",
+            "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M18.2342 14.1624 26.9766 4h-2.0717l-7.591 8.8238L11.251 4H4.2581l9.1684 13.3432L4.2581 28h2.0718l8.0163-9.3183L20.7491 28h6.9929l-9.5083-13.8376zM15.3966 17.4608l-0.9289-1.3287L7.0763 5.5596h3.1822l5.9649 8.5323 0.9289 1.3287 7.7536 11.0907h-3.1822l-6.3272-9.05z\" />\n</svg>",
+            "label": "X",
+            "linkTargetMode": "external",
+            "type": "link"
+          },
+          "createdAt": "2026-05-12T04:28:23.801Z"
+        },
+        {
+          "id": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
+          "entity": "block",
+          "values": {
+            "href": "/",
+            "label": "Home",
+            "linkTargetBlock": "rec_site_content_home",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-12T04:30:55.995Z"
+        },
+        {
+          "id": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+          "entity": "block",
+          "values": {
+            "label": "All rights reserved © David Peek 2026",
+            "type": "group"
+          },
+          "createdAt": "2026-05-12T04:31:48.064Z"
+        },
+        {
+          "id": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+          "entity": "block",
+          "values": {
+            "body": "Helping humans and agents build amazing software together",
+            "label": "Code is ✨",
+            "type": "hero"
+          },
+          "createdAt": "2026-05-12T04:56:24.201Z"
+        },
+        {
+          "id": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
+          "entity": "block",
+          "values": {
+            "body": "Sometimes a blog post is as far as you should take your next startup idea.",
+            "label": "Shower thoughts",
+            "type": "hero"
+          },
+          "createdAt": "2026-05-12T05:02:46.686Z"
+        },
+        {
+          "id": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+          "entity": "block",
+          "values": {
+            "body": "> Lead / Staff Software Engineer based in Sydney, Australia\n> AI-native systems, automation, distributed architecture\n\n## Summary\n\nStaff-level engineer with 15+ years experience designing and shipping complex systems across frontend platforms, distributed infrastructure, and AI-native automation.\n\nCombines deep technical execution with product and commercial understanding, with a track record of building high-leverage systems in small teams, from multi-platform video SDKs used by major broadcasters to an offline-first commercial estimation platform and a next-generation browser automation runtime.\n\n## Experience\n\n### Co-founder - [OpenSurf](https://opensurf.ai/)\n\n_2025 - Present_\n\nBuilding an AI-native browser automation platform focused on reliable, local-first agent execution.\n\n* Designed and implemented a typed actor runtime for coordinating browser sessions, agents, and UI across Playwright and Chrome extension environments, using synchronized TinyBase stores and RPC-style communication.\n* Built a semantic graph and fingerprinting system to replace brittle DOM selectors with resilient, structure-aware targeting across UI changes.\n* Developed a deterministic validation platform for browser automation, enabling repeatable testing, regression detection, and safe evolution of agent behaviour.\n* Architected a local-first execution model to avoid limitations of cloud browsers (latency, blocking, auth fragility).\n* Built tooling for artefact capture, replay, and scoring of automation workflows (DOM snapshots, screenshots, semantic state).\n\nImpact:\n\n* Established the core technical foundation for reliable web automation beyond script-based approaches.\n* Enabled measurable benchmarking and validation of agent performance.\n\n### Co-founder & CTO - [Estii](https://estii.com/)\n\n_2021 - Present_\n\nBuilt and operated a commercial estimation platform for services businesses, replacing spreadsheet-based workflows with a structured, real-time system.\n\n* Architected an offline-first, real-time collaborative system using Next.js, Replicache, and Cloudflare Durable Objects.\n* Designed a typed document graph model and shared calculation engine linking scope, pricing, scheduling, and forecasting.\n* Built a financially correct feedback loop between estimation and scheduling, handling complex pricing models (multi-currency, tiered pricing, margins, recurring services).\n* Implemented a heuristic scheduling engine exploring and ranking valid project plans under business constraints.\n* Designed an asynchronous forecasting pipeline to aggregate distributed deal data under serverless memory constraints.\n* Built full platform infrastructure: sync, schema validation (Zod), migrations, backups, exports, E2E automation, and CI/CD.\n\nTechnical scope:\n\n* Custom replication model with cross-entity sync (between deal and workspace).\n* Memoized calculation engine with selective invalidation.\n* Distributed data model using Durable Objects (sharded by workspace/deal).\n* Comprehensive unit, integration and E2E test suite\n* Automated product documentation pipeline (screenshots + videos update on CI)\n\nCommercial outcomes:\n\n* 30 active users across 3 paying customers ($30K ARR).\n* Supported multi-million EUR deal pipelines (10M+ handled by a single customer).\n* Zero major incidents or data loss over 4+ years of operation.\n\nKey insight: Delivered a high-complexity, financially critical system with a two-person team by investing heavily in system primitives and automation.\n\n### Director of Solution Engineering - [Deltatre](https://deltatre.com/)\n\n_2017 - 2021_\n\nLed solution design and commercial estimation for large-scale video platform integrations.\n\n* Owned end-to-end RFP response process for $1-5M+ deals across OTT video platforms.\n* Translated ambiguous client requirements into scoped architecture, delivery plans, and pricing models.\n* Built structured estimation workflows that later evolved into Estii.\n* Coordinated stakeholders across design, frontend, backend, video delivery, and infrastructure teams.\n* Influenced product roadmap through analysis of pipeline demand.\n\nScope:\n\n* Video ingest, encoding, DRM (Widevine, FairPlay), streaming (HLS).\n* Authentication, payments, analytics, ad integration.\n* Multi-platform frontend delivery.\n\nImpact:\n\n* Developed data-driven estimation workflow that increased accuracy and improved delivery margins.\n* Key role in winning DAZN and WWE, growing revenue to $40M leading to a $130M aquisition.\n\n### Lead Frontend Engineer / Architect - [Deltatre](https://deltatre.com/)\n\n_2009 - 2017_\n\nLed development of a cross-platform application SDK powering OTT apps across web, mobile, and connected devices.\n\n* Built a multi-platform SDK enabling shared code across 20+ device platforms (Web, iOS, Android, Samsung, PlayStation, LG, etc.).\n* Designed a runtime abstraction layer spanning HTML, Flash, and native (OpenGL/SDL) environments.\n* Developed a UI framework, component system, and application architecture.\n* Led a team building tooling for cross-device testing and deployment.\n\nImpact:\n\n* SDK used in applications for BBC, ITV, DAZN, WWE Network, Channel 5, YouView, and others.\n* Enabled reuse of application logic across a fragmented device ecosystem.\n\n## Technical Skills\n\n* Languages: TypeScript, JavaScript\n* Architecture: Distributed systems, offline-first sync, actor models\n* AI/Automation: LLM-driven workflows, agent systems, browser automation\n* Frontend: React, Next.js, Tailwind\n* Infrastructure: Cloudflare, AWS, Vercel\n* Data: Replicache, TinyBase, Zod, Drizzle\n* Testing: Playwright, E2E automation, deterministic validation systems",
+            "label": "David Peek",
+            "type": "markdown"
+          },
+          "createdAt": "2026-05-12T05:04:06.684Z"
+        },
+        {
+          "id": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
+          "entity": "block",
+          "values": {
+            "body": "Products, libraries and half-baked ideas.",
+            "label": "Active projects",
+            "type": "hero"
+          },
+          "createdAt": "2026-05-12T05:16:25.529Z"
+        },
+        {
+          "id": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
+          "entity": "block",
+          "values": {
+            "href": "/blog",
+            "label": "Blog",
+            "linkTargetBlock": "rec_site_content_blog",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-12T15:14:16.373Z"
+        },
+        {
+          "id": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
+          "entity": "block",
+          "values": {
+            "body": "Agent-first development-loop supervisor.",
+            "date": "2026-05-10",
+            "href": "https://github.com/dpeek/devstate",
+            "label": "Devstate",
+            "type": "project"
+          },
+          "createdAt": "2026-05-13T05:27:49.348Z"
+        },
+        {
+          "id": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
+          "entity": "block",
+          "values": {
+            "body": "In the first post I described the idea: Formless is a schema-as-data app runtime.\n\nThis post is the slower version. What does that actually mean? What goes in the schema? What does the runtime do with it? And which layers of normal app boilerplate disappear when the schema carries more intent?\n\n## 1. Start with an entity\n\nMost apps start with a model.\n\nIn a conventional stack, the same concept gets described several times:\n\n* database table\n* ORM model\n* validation schema\n* API request/response types\n* form fields\n* labels and help text\n* client-side state shape\n* display formatting\n\nIn Formless, the entity starts as runtime data:\n\n```json\n{\n  \"entities\": {\n    \"task\": {\n      \"label\": \"Task\",\n      \"fields\": {\n        \"title\": {\n          \"type\": \"text\",\n          \"label\": \"Title\",\n          \"required\": true\n        },\n        \"done\": {\n          \"type\": \"boolean\",\n          \"label\": \"Done\",\n          \"default\": false\n        },\n        \"dueDate\": {\n          \"type\": \"date\",\n          \"label\": \"Due date\"\n        }\n      },\n      \"mutations\": {\n        \"create\": { \"enabled\": true },\n        \"patch\": { \"enabled\": true },\n        \"delete\": { \"enabled\": false }\n      }\n    }\n  }\n}\n```\n\nThat is already more than a database shape. It describes storage-facing fields, validation, editor defaults, display labels, and mutation policy.\n\n## 2. Add queries\n\nA model is not enough. Apps need useful subsets of data.\n\n```json\n{\n  \"queries\": {\n    \"taskActive\": {\n      \"entity\": \"task\",\n      \"where\": {\n        \"field\": \"done\",\n        \"equals\": false\n      }\n    },\n    \"taskCompleted\": {\n      \"entity\": \"task\",\n      \"where\": {\n        \"field\": \"done\",\n        \"equals\": true\n      }\n    }\n  }\n}\n```\n\nIn a typical app, this logic might appear in an API route, a SQL query, a React selector, and a tab count calculation.\n\nIn Formless, it is named once. The runtime can use it for generated UI, local projections, and sync-safe display.\n\n## 3. Add views\n\nQueries say what records exist. Views say how people interact with them.\n\n```json\n{\n  \"views\": {\n    \"taskCreate\": {\n      \"type\": \"create\",\n      \"entity\": \"task\",\n      \"fields\": {\n        \"title\": {},\n        \"dueDate\": {}\n      }\n    },\n    \"taskHome\": {\n      \"type\": \"collection\",\n      \"entity\": \"task\",\n      \"groups\": [\n        {\n          \"label\": \"Active\",\n          \"query\": \"taskActive\",\n          \"createView\": \"taskCreate\"\n        },\n        {\n          \"label\": \"Completed\",\n          \"query\": \"taskCompleted\"\n        }\n      ]\n    }\n  }\n}\n```\n\nThis is where the schema starts to feel like an app description rather than a data description.\n\nThe runtime now knows:\n\n* which records are visible\n* how they are grouped\n* which create form belongs to the collection\n* which fields should appear when creating records\n* which generic mutations are allowed\n\n## 4. Add a screen\n\nA screen turns views into routes and workspaces.\n\n```json\n{\n  \"screens\": {\n    \"taskHome\": {\n      \"type\": \"workspace\",\n      \"navigation\": {\n        \"primary\": true,\n        \"label\": \"Tasks\"\n      },\n      \"layout\": {\n        \"type\": \"stack\",\n        \"sections\": [\n          {\n            \"id\": \"tasks\",\n            \"type\": \"collection\",\n            \"view\": \"taskHome\"\n          }\n        ]\n      }\n    }\n  }\n}\n```\n\nAt this point the schema can generate a usable app surface.\n\nNot a mockup. A real route. Real records. Real create and patch flows. Local browser state. Authority-backed writes.\n\n## 5. The runtime takes over the boring parts\n\nThe payoff is not that JSON is magically better than code. The payoff is that runtime code can become generic.\n\nA normal stack often needs bespoke code for:\n\n* DB schema\n* ORM model\n* API create route\n* API patch route\n* API validation\n* request/response types\n* React query/cache wiring\n* form components\n* field labels\n* field validation messages\n* list filters\n* empty states\n* optimistic local updates\n* sync merge behavior\n\nFormless tries to move the repeatable parts into the runtime.\n\nThe schema says:\n\n* what exists\n* what fields mean\n* what can be edited\n* what queries matter\n* what views should exist\n* what screens compose those views\n* what actions are valid\n\nThe runtime handles:\n\n* parsing the schema\n* validating writes\n* storing flat records\n* syncing browser replicas\n* generating editors\n* rendering collections\n* running generic create/patch mutations\n* dispatching named actions\n\n## 6. Where this sits in the ecosystem\n\nFormless overlaps with a few familiar layers, but it is not exactly any of them.\n\n### Compared to an ORM\n\nAn ORM maps code objects to storage.\n\nFormless starts higher up. It describes the app model and interaction surface. Storage is one consumer of the schema, not the whole point.\n\n### Compared to validation libraries\n\nValidation libraries answer: \"is this input allowed?\"\n\nFormless wants the same field definition to also answer: \"how should this be edited, displayed, labeled, defaulted, queried, and patched?\"\n\n### Compared to generated admin tools\n\nAdmin generators usually introspect a database and give you CRUD.\n\nFormless makes the authoring surface explicit in schema data: views, screens, relationships, read models, and actions are part of the app definition.\n\n### Compared to sync frameworks\n\nSync frameworks move data around.\n\nFormless still needs sync, but the schema gives sync more context: records are keyed by schema app, mutations are generic, read models are display-only, and the authority owns invariants.\n\n### Compared to local state libraries\n\nLocal state libraries help the UI remember things.\n\nFormless uses a browser replica as part of the runtime. The app state is not hand-modeled per screen; it is projected from schema, records, queries, and selected context.\n\n## 7. Why this matters for agents\n\nThis is the agentic-world bit.\n\nAgents work better when the app exposes a structured map of itself.\n\nA schema can tell an agent:\n\n* these are the entities\n* these fields are editable\n* these fields are required\n* these relationships matter\n* these views are user-facing\n* these actions are valid commands\n* these values are computed, not stored\n\nThat is much better than asking an agent to infer product rules from scattered UI components, ORM models, route handlers, and validation helpers.\n\nThe schema becomes an interface. Not just for rendering UI, but for understanding and safely changing the app.\n\n## 8. The honest boundary\n\nFormless does not remove all code.\n\nThe current Site app still has a public renderer. The authority still owns invariants. Named actions still need runtime implementations. Complex product behavior still deserves real code.\n\nThe goal is narrower and more useful:\n\n* ordinary app structure should be data\n* specific domain behaviour should be code\n* the runtime should know the difference",
+            "label": "Body",
+            "type": "markdown"
+          },
+          "createdAt": "2026-05-13T05:38:22.200Z"
+        },
+        {
+          "id": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
+          "entity": "block",
+          "values": {
+            "body": "Manage your streaming subscriptions.",
+            "date": "2026-04-15",
+            "href": "https://streamwolf.com",
+            "label": "StreamWolf",
+            "type": "project"
+          },
+          "createdAt": "2026-05-13T07:19:58.013Z"
+        },
+        {
+          "id": "rec_site_block_blog_posts",
+          "entity": "block",
+          "values": {
+            "label": "Latest posts",
+            "type": "postList"
+          },
+          "createdAt": "2026-05-14T01:31:00.000Z"
+        },
+        {
+          "id": "rec_site_block_projects_index",
+          "entity": "block",
+          "values": {
+            "label": "Projects",
+            "type": "projectList"
+          },
+          "createdAt": "2026-05-14T01:31:01.000Z"
+        },
+        {
+          "id": "rec_site_media_post_agents_primary",
+          "entity": "block",
+          "values": {
+            "height": 1000,
+            "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Ccircle%20cx%3D%271180%27%20cy%3D%27320%27%20r%3D%27180%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.35%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27470%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3EAgents%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27595%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eenablers%3C%2Ftext%3E%3C%2Fsvg%3E",
+            "label": "Agents article primary image",
+            "type": "image",
+            "width": 1600
+          },
+          "createdAt": "2026-05-14T02:40:00.000Z"
+        },
+        {
+          "id": "rec_site_media_post_schema_primary",
+          "entity": "block",
+          "values": {
+            "height": 1000,
+            "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%231e3a8a%27%2F%3E%3Cpath%20d%3D%27M160%20740%20L520%20340%20L860%20580%20L1200%20260%20L1440%20740Z%27%20fill%3D%27%2393c5fd%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27270%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3ESchema-driven%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27380%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eapps%3C%2Ftext%3E%3C%2Fsvg%3E",
+            "label": "Schema-driven apps primary image",
+            "type": "image",
+            "width": 1600
+          },
+          "createdAt": "2026-05-14T02:40:01.000Z"
+        },
+        {
+          "id": "rec_site_media_project_estii_primary",
+          "entity": "block",
+          "values": {
+            "height": 1906,
+            "label": "Image",
+            "mediaAssetId": "david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+            "type": "image",
+            "width": 2978
+          },
+          "createdAt": "2026-05-14T02:40:02.000Z"
+        },
+        {
+          "id": "rec_site_media_project_opensurf_primary",
+          "entity": "block",
+          "values": {
+            "height": 2132,
+            "label": "Image",
+            "mediaAssetId": "david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+            "type": "image",
+            "width": 4020
+          },
+          "createdAt": "2026-05-14T02:40:03.000Z"
+        },
+        {
+          "id": "rec_site_media_project_formless_primary",
+          "entity": "block",
+          "values": {
+            "height": 1886,
+            "label": "Image",
+            "mediaAssetId": "david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+            "type": "image",
+            "width": 2936
+          },
+          "createdAt": "2026-05-14T02:40:04.000Z"
+        },
+        {
+          "id": "rec_site_block_home_feature_agents",
+          "entity": "block",
+          "values": {
+            "alignment": "right",
+            "body": "This is David and he's a developer based in Sydney.\n\nHe founded [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and absolutely loves building ambitious teams, codebases and products.\n\nWith the right tooling and workflows, it is now possible for small, high-agency teams to ship incredibly ambitious ideas. And the scope of what is possible will only continue to grow.\n\nIt is an _amazing_ time to be a builder.\n\n### Commonly asked questions",
+            "label": "Welcome, humans and agents",
+            "type": "feature"
+          },
+          "createdAt": "2026-05-14T02:40:05.000Z"
+        },
+        {
+          "id": "rec_site_media_home_feature_agents",
+          "entity": "block",
+          "values": {
+            "height": 2226,
+            "label": "David Peek",
+            "mediaAssetId": "david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+            "type": "image",
+            "width": 2226
+          },
+          "createdAt": "2026-05-14T02:40:06.000Z"
+        },
+        {
+          "id": "rec_site_link_home_feature_notes",
+          "entity": "block",
+          "values": {
+            "href": "/blog",
+            "label": "Who is this guy?",
+            "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-14T02:40:07.000Z"
+        },
+        {
+          "id": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
+          "entity": "block",
+          "values": {
+            "label": "What has he done?",
+            "linkTargetBlock": "rec_site_content_projects",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-14T03:14:31.372Z"
+        },
+        {
+          "id": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
+          "entity": "block",
+          "values": {
+            "label": "Should we hire him?",
+            "linkTargetBlock": "rec_site_content_resume",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-14T03:15:47.149Z"
+        },
+        {
+          "id": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
+          "entity": "block",
+          "values": {
+            "height": 1334,
+            "label": "Image",
+            "mediaAssetId": "david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+            "type": "image",
+            "width": 1840
+          },
+          "createdAt": "2026-05-14T04:00:54.315Z"
+        },
+        {
+          "id": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
+          "entity": "block",
+          "values": {
+            "height": 1310,
+            "label": "Image",
+            "mediaAssetId": "david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+            "type": "image",
+            "width": 2276
+          },
+          "createdAt": "2026-05-14T04:01:21.269Z"
+        },
+        {
+          "id": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+          "entity": "block",
+          "values": {
+            "href": "/about",
+            "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <circle cx=\"12\" cy=\"12\" r=\"10\" />\n    <circle cx=\"12\" cy=\"10\" r=\"3\" />\n    <path d=\"M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662\" />\n</svg>",
+            "label": "About",
+            "type": "page"
+          },
+          "createdAt": "2026-05-14T05:50:12.427Z"
+        },
+        {
+          "id": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+          "entity": "block",
+          "values": {
+            "body": "1. My dad worked as an Australian Diplomat so I grew up in Malaysia, South Africa, Chile and France\n2. I once sat next to an actual princess at a lunch\n3. I'm frustratingly close to a round 200cm tall\n4. I love languages and speak Spanish, French and a bit of Italian and German (recovering DuoLingo addict)\n5. I am on a lifelong quest to make the perfect coffee, sour dough, pizza and smoked brisket\n6. I lived in London with my wife and two kids for six years (we planned to be there for 12 months)\n7. I'm a great whistler\n8. I can somehow experience both incredible optimism and abject doomerism for the future simultaneously\n9. I am a huge space nerd\n10. My wife is a volunteer for Sydney Wildlife Rescue, meaning I generally have a possum living in my office (see below)",
+            "label": "Ten things about me",
+            "type": "markdown"
+          },
+          "createdAt": "2026-05-14T05:52:31.254Z"
+        },
+        {
+          "id": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
+          "entity": "block",
+          "values": {
+            "label": "About",
+            "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-14T05:52:57.238Z"
+        },
+        {
+          "id": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
+          "entity": "block",
+          "values": {
+            "label": "About",
+            "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+            "linkTargetMode": "internal",
+            "type": "link"
+          },
+          "createdAt": "2026-05-14T05:53:34.601Z"
+        },
+        {
+          "id": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
+          "entity": "block",
+          "values": {
+            "height": 892,
+            "label": "Brush tail possums exhibiting weapons-grade cuteness",
+            "mediaAssetId": "david-b6227945-be74-4946-a055-9171d08a0b02.png",
+            "type": "image",
+            "width": 1578
+          },
+          "createdAt": "2026-05-14T06:13:22.256Z"
+        },
+        {
+          "id": "record_0534c8e0-9fe0-4c58-8e82-b451be55a09c",
+          "entity": "block",
+          "values": {
+            "href": "/job/canva",
+            "label": "Canva",
+            "type": "page"
+          },
+          "createdAt": "2026-05-15T02:33:57.937Z"
+        },
+        {
+          "id": "record_c332de6d-a4e1-44fd-a0a2-87eea6a07890",
+          "entity": "block",
+          "values": {
+            "body": "Dear Canva team,\n\nI’m applying for the Principal Frontend Engineer role within Client Platform. My background spans frontend architecture, distributed systems, and product delivery, with a consistent focus on building platforms that scale across teams, runtimes, and complex user experiences.\n\nEarlier in my career, I led the development of a cross-platform frontend SDK used across web, mobile, and 20+ connected devices, supporting major broadcasters including BBC, ITV, and DAZN. That work required deep understanding of browser and runtime constraints, rendering systems, and performance tradeoffs across highly fragmented environments—challenges that feel closely aligned with Canva’s frontend platform at scale.\n\nMore recently, I’ve been building systems end-to-end as a founder. At Estii, I designed and implemented an offline-first, real-time collaborative application with a complex calculation and scheduling model. At OpenSurf, I’ve been working on an AI-native browser automation runtime, including a typed actor system and semantic layer for interacting reliably with dynamic web UIs. Across both, the focus has been on designing the right abstractions to manage complexity and enable fast iteration.\n\nI’m particularly drawn to this role because of the opportunity to work on foundational frontend systems that support hundreds of engineers and millions of users. I enjoy operating at that level—defining architecture, improving developer leverage, and solving performance and scalability challenges in a way that holds up over time.\n\nI’d love to contribute to evolving Canva’s frontend platform and helping teams move faster with confidence.\n\nBest regards,\n\nDavid Peek",
+            "label": "Body",
+            "type": "markdown"
+          },
+          "createdAt": "2026-05-15T02:34:13.523Z"
+        },
+        {
+          "id": "rec_site_place_header_primary",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_group_header_primary",
+            "order": 1000,
+            "parent": "rec_site_content_group_header"
+          },
+          "createdAt": "2026-05-05T00:00:19.000Z"
+        },
+        {
+          "id": "rec_site_place_header_secondary",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_group_header_secondary",
+            "order": 2000,
+            "parent": "rec_site_content_group_header"
+          },
+          "createdAt": "2026-05-05T00:00:19.100Z"
+        },
+        {
+          "id": "rec_site_place_header_home",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_home",
+            "order": 1000,
+            "parent": "rec_site_content_group_header_primary"
+          },
+          "createdAt": "2026-05-05T00:00:19.200Z"
+        },
+        {
+          "id": "rec_site_place_header_blog",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_blog",
+            "order": 1000,
+            "parent": "rec_site_content_group_header_secondary"
+          },
+          "createdAt": "2026-05-05T00:00:20.000Z"
+        },
+        {
+          "id": "rec_site_place_header_projects",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_projects",
+            "order": 2000,
+            "parent": "rec_site_content_group_header_secondary"
+          },
+          "createdAt": "2026-05-05T00:00:21.000Z"
+        },
+        {
+          "id": "rec_site_place_header_resume",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_resume",
+            "order": 3000,
+            "parent": "rec_site_content_group_header_secondary"
+          },
+          "createdAt": "2026-05-05T00:00:22.000Z"
+        },
+        {
+          "id": "rec_site_place_footer_projects",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_projects",
+            "order": 1000,
+            "parent": "rec_site_content_group_footer_main"
+          },
+          "createdAt": "2026-05-05T00:00:23.000Z"
+        },
+        {
+          "id": "rec_site_place_footer_resume",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_resume",
+            "order": 2000,
+            "parent": "rec_site_content_group_footer_main"
+          },
+          "createdAt": "2026-05-05T00:00:24.000Z"
+        },
+        {
+          "id": "rec_site_place_footer_github",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_github",
+            "order": 1000,
+            "parent": "rec_site_content_group_footer_social"
+          },
+          "createdAt": "2026-05-05T00:00:25.000Z"
+        },
+        {
+          "id": "rec_site_place_footer_linkedin",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_link_linkedin",
+            "order": 2000,
+            "parent": "rec_site_content_group_footer_social"
+          },
+          "createdAt": "2026-05-05T00:00:26.000Z"
+        },
+        {
+          "id": "rec_site_place_footer_section_explore",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_group_footer_main",
+            "order": 1000,
+            "parent": "rec_site_content_group_footer"
+          },
+          "createdAt": "2026-05-05T00:00:26.200Z"
+        },
+        {
+          "id": "rec_site_place_footer_section_social",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_content_group_footer_social",
+            "order": 1500,
+            "parent": "rec_site_content_group_footer"
+          },
+          "createdAt": "2026-05-05T00:00:26.300Z"
+        },
+        {
+          "id": "rec_site_place_post_body",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_block_post_body",
+            "order": 1000,
+            "parent": "rec_site_content_post_shipped_schema"
+          },
+          "createdAt": "2026-05-05T00:00:30.000Z"
+        },
+        {
+          "id": "record_a83332ce-88e9-4be3-a01d-23fa251738f8",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
+            "order": 3000,
+            "parent": "rec_site_content_group_footer_social"
+          },
+          "createdAt": "2026-05-12T04:27:33.010Z"
+        },
+        {
+          "id": "record_df809264-df03-4773-9eec-4a79e36ccf4b",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_0749e061-1ba8-4923-841e-143fc825427c",
+            "order": 4000,
+            "parent": "rec_site_content_group_footer_social"
+          },
+          "createdAt": "2026-05-12T04:28:23.801Z"
+        },
+        {
+          "id": "record_62cf35f7-0f2f-4179-83c0-e35632ce26d3",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
+            "order": 500,
+            "parent": "rec_site_content_group_footer_main"
+          },
+          "createdAt": "2026-05-12T04:30:55.995Z"
+        },
+        {
+          "id": "record_adafde98-6f1b-42b2-a5b4-b54d12d5cb83",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+            "order": 2000,
+            "parent": "rec_site_content_group_footer"
+          },
+          "createdAt": "2026-05-12T04:31:48.064Z"
+        },
+        {
+          "id": "record_4f205edd-6b96-41da-8f9f-3defac28da1a",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+            "order": 1000,
+            "parent": "rec_site_content_home"
+          },
+          "createdAt": "2026-05-12T04:56:24.201Z"
+        },
+        {
+          "id": "record_bbb296c2-25ec-41e8-8da1-9523297d7f2d",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
+            "order": 1000,
+            "parent": "rec_site_content_blog"
+          },
+          "createdAt": "2026-05-12T05:02:46.686Z"
+        },
+        {
+          "id": "record_2182aea7-7023-497e-b9d6-ed3b1ab7ee10",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+            "order": 1000,
+            "parent": "rec_site_content_resume"
+          },
+          "createdAt": "2026-05-12T05:04:06.684Z"
+        },
+        {
+          "id": "record_24fbbfd1-6aec-47d4-8909-99e4bcd52895",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
+            "order": 1000,
+            "parent": "rec_site_content_projects"
+          },
+          "createdAt": "2026-05-12T05:16:25.529Z"
+        },
+        {
+          "id": "record_aababd9c-df39-475b-8010-ac6a990cd893",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
+            "order": 750,
+            "parent": "rec_site_content_group_footer_main"
+          },
+          "createdAt": "2026-05-12T15:14:16.373Z"
+        },
+        {
+          "id": "record_9f4a7ad8-8a9b-4a35-aa97-29af6b7f810d",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
+            "order": 1000,
+            "parent": "rec_site_content_post_draft_notes"
+          },
+          "createdAt": "2026-05-13T05:38:22.200Z"
+        },
+        {
+          "id": "rec_site_place_blog_posts",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_block_blog_posts",
+            "order": 2000,
+            "parent": "rec_site_content_blog"
+          },
+          "createdAt": "2026-05-14T01:31:02.000Z"
+        },
+        {
+          "id": "rec_site_place_projects_index",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_block_projects_index",
+            "order": 2000,
+            "parent": "rec_site_content_projects"
+          },
+          "createdAt": "2026-05-14T01:31:03.000Z"
+        },
+        {
+          "id": "rec_site_place_project_estii_primary_image",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_media_project_estii_primary",
+            "order": 500,
+            "parent": "rec_site_content_project_estii",
+            "slot": "primaryImage"
+          },
+          "createdAt": "2026-05-14T02:41:02.000Z"
+        },
+        {
+          "id": "rec_site_place_project_opensurf_primary_image",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_media_project_opensurf_primary",
+            "order": 500,
+            "parent": "rec_site_content_project_opensurf",
+            "slot": "primaryImage"
+          },
+          "createdAt": "2026-05-14T02:41:03.000Z"
+        },
+        {
+          "id": "rec_site_place_project_formless_primary_image",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_media_project_formless_primary",
+            "order": 500,
+            "parent": "rec_site_content_project_formless",
+            "slot": "primaryImage"
+          },
+          "createdAt": "2026-05-14T02:41:04.000Z"
+        },
+        {
+          "id": "rec_site_place_home_feature_agents",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_block_home_feature_agents",
+            "order": 3000,
+            "parent": "rec_site_content_home"
+          },
+          "createdAt": "2026-05-14T02:41:05.000Z"
+        },
+        {
+          "id": "rec_site_place_feature_agents_media",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_media_home_feature_agents",
+            "order": 1000,
+            "parent": "rec_site_block_home_feature_agents",
+            "slot": "media"
+          },
+          "createdAt": "2026-05-14T02:41:06.000Z"
+        },
+        {
+          "id": "rec_site_place_feature_agents_action",
+          "entity": "block-placement",
+          "values": {
+            "block": "rec_site_link_home_feature_notes",
+            "order": 1000,
+            "parent": "rec_site_block_home_feature_agents",
+            "slot": "actions"
+          },
+          "createdAt": "2026-05-14T02:41:07.000Z"
+        },
+        {
+          "id": "record_ada280be-aab1-4cdb-af81-8d32bac06462",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
+            "order": 2000,
+            "parent": "rec_site_block_home_feature_agents",
+            "slot": "actions"
+          },
+          "createdAt": "2026-05-14T03:14:31.372Z"
+        },
+        {
+          "id": "record_250c6c97-9ea5-4b1b-9e6c-e429ff3ebb72",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
+            "order": 3000,
+            "parent": "rec_site_block_home_feature_agents",
+            "slot": "actions"
+          },
+          "createdAt": "2026-05-14T03:15:47.149Z"
+        },
+        {
+          "id": "record_ccb322f8-07bc-4fdd-ac77-53f24653a27c",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
+            "order": 1000,
+            "parent": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
+            "slot": "primaryImage"
+          },
+          "createdAt": "2026-05-14T04:00:54.315Z"
+        },
+        {
+          "id": "record_f7f59edb-6126-454a-ba74-36114a757492",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
+            "order": 1000,
+            "parent": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
+            "slot": "primaryImage"
+          },
+          "createdAt": "2026-05-14T04:01:21.269Z"
+        },
+        {
+          "id": "record_cc0031df-0f32-4c2c-8cbb-a6a142bb58f5",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+            "order": 1000,
+            "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
+          },
+          "createdAt": "2026-05-14T05:52:31.254Z"
+        },
+        {
+          "id": "record_bf3cc2de-5feb-420e-bd0e-41ad37afb42b",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
+            "order": 500,
+            "parent": "rec_site_content_group_header_secondary"
+          },
+          "createdAt": "2026-05-14T05:52:57.238Z"
+        },
+        {
+          "id": "record_afa1ab82-876a-4f04-8235-7e6fe38ce5d2",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
+            "order": 625,
+            "parent": "rec_site_content_group_footer_main"
+          },
+          "createdAt": "2026-05-14T05:53:34.601Z"
+        },
+        {
+          "id": "record_0b57298f-2552-4428-96e0-ef4654644410",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
+            "order": 2000,
+            "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
+          },
+          "createdAt": "2026-05-14T06:13:22.256Z"
+        },
+        {
+          "id": "record_dc97ff25-57e7-48e5-81ae-071de3640d83",
+          "entity": "block-placement",
+          "values": {
+            "block": "record_c332de6d-a4e1-44fd-a0a2-87eea6a07890",
+            "order": 1000,
+            "parent": "record_0534c8e0-9fe0-4c58-8e82-b451be55a09c"
+          },
+          "createdAt": "2026-05-15T02:34:13.523Z"
+        },
+        {
+          "id": "rec_site_settings_primary",
+          "entity": "site",
+          "values": {
+            "accentColor": "#FFC800",
+            "backgroundColor": "#171717",
+            "description": "Full-stack developer and product builder based in Sydney",
+            "icon": "<svg width=\"42\" height=\"42\" viewBox=\"0 0 42 42\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<rect width=\"42\" height=\"42\" fill=\"#2C2C2C\"/>\n<path d=\"M21.4995 36.0002V28.0002C21.4995 26.6195 22.6188 25.5002 23.9995 25.5002H28.9995C30.9865 25.5002 32.4995 23.7563 32.4995 22.0002C32.4995 20.2442 30.9865 18.5002 28.9995 18.5002H22.3521C22.1278 20.3434 21.6122 22.292 20.5688 23.9944C18.9201 26.6844 16.1063 28.5002 11.9995 28.5002C7.56891 28.5002 4.49951 24.7443 4.49951 21.0002C4.49951 17.2561 7.56891 13.5002 11.9995 13.5002H17.0112C16.6716 12.6434 16.1483 11.8092 15.4194 11.0803C14.014 9.67487 11.6817 8.50024 7.99951 8.50024C6.6188 8.50024 5.49951 7.38096 5.49951 6.00024C5.49951 4.61953 6.6188 3.50024 7.99951 3.50024C12.8178 3.50024 16.4852 5.07573 18.9546 7.54517C20.6949 9.28547 21.7552 11.3915 22.2202 13.5002H28.9995C34.0135 13.5002 37.4995 17.7561 37.4995 22.0002C37.4995 26.2444 34.0135 30.5002 28.9995 30.5002H26.4995V36.0002C26.4995 37.381 25.3802 38.5002 23.9995 38.5002C22.6188 38.5002 21.4995 37.381 21.4995 36.0002ZM9.49951 21.0002C9.49951 22.2563 10.596 23.5002 11.9995 23.5002C14.3927 23.5002 15.5789 22.566 16.3052 21.3811C16.7918 20.5871 17.1142 19.5939 17.3003 18.5002H11.9995C10.596 18.5002 9.49951 19.7442 9.49951 21.0002Z\" fill=\"white\"/>\n</svg>\n",
+            "key": "primary",
+            "label": "David Peek"
+          },
+          "createdAt": "2026-05-18T00:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "media": {
+    "objects": [
+      {
+        "storageKey": "media/images/david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+        "archivePath": "media/david/media/images/david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+        "contentType": "image/png",
+        "byteSize": 2889395,
+        "deliveryHref": "/api/formless/media/media/images/david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+        "asset": {
+          "byteSize": 2889395,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+          "id": "david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+          "kind": "image",
+          "label": "david-180343e6-8764-4c17-9b53-51bb7da665b4.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-180343e6-8764-4c17-9b53-51bb7da665b4.png"
+        }
+      },
+      {
+        "storageKey": "media/images/david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+        "archivePath": "media/david/media/images/david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+        "contentType": "image/png",
+        "byteSize": 1188749,
+        "deliveryHref": "/api/formless/media/media/images/david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+        "asset": {
+          "byteSize": 1188749,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+          "id": "david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+          "kind": "image",
+          "label": "david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png"
+        }
+      },
+      {
+        "storageKey": "media/images/david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+        "archivePath": "media/david/media/images/david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+        "contentType": "image/jpeg",
+        "byteSize": 620102,
+        "deliveryHref": "/api/formless/media/media/images/david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+        "asset": {
+          "byteSize": 620102,
+          "contentType": "image/jpeg",
+          "deliveryHref": "/api/formless/media/media/images/david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+          "id": "david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+          "kind": "image",
+          "label": "david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg"
+        }
+      },
+      {
+        "storageKey": "media/images/david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+        "archivePath": "media/david/media/images/david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+        "contentType": "image/png",
+        "byteSize": 236156,
+        "deliveryHref": "/api/formless/media/media/images/david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+        "asset": {
+          "byteSize": 236156,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+          "id": "david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+          "kind": "image",
+          "label": "david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png"
+        }
+      },
+      {
+        "storageKey": "media/images/david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+        "archivePath": "media/david/media/images/david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+        "contentType": "image/png",
+        "byteSize": 1519090,
+        "deliveryHref": "/api/formless/media/media/images/david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+        "asset": {
+          "byteSize": 1519090,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+          "id": "david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+          "kind": "image",
+          "label": "david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-9a4cfb73-b5bc-4691-b038-fa4e52b69696.png"
+        }
+      },
+      {
+        "storageKey": "media/images/david-b6227945-be74-4946-a055-9171d08a0b02.png",
+        "archivePath": "media/david/media/images/david-b6227945-be74-4946-a055-9171d08a0b02.png",
+        "contentType": "image/png",
+        "byteSize": 2580298,
+        "deliveryHref": "/api/formless/media/media/images/david-b6227945-be74-4946-a055-9171d08a0b02.png",
+        "asset": {
+          "byteSize": 2580298,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-b6227945-be74-4946-a055-9171d08a0b02.png",
+          "id": "david-b6227945-be74-4946-a055-9171d08a0b02.png",
+          "kind": "image",
+          "label": "david-b6227945-be74-4946-a055-9171d08a0b02.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-b6227945-be74-4946-a055-9171d08a0b02.png"
+        }
+      },
+      {
+        "storageKey": "media/images/david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+        "archivePath": "media/david/media/images/david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+        "contentType": "image/png",
+        "byteSize": 759254,
+        "deliveryHref": "/api/formless/media/media/images/david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+        "asset": {
+          "byteSize": 759254,
+          "contentType": "image/png",
+          "deliveryHref": "/api/formless/media/media/images/david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+          "id": "david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+          "kind": "image",
+          "label": "david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+          "provider": "r2",
+          "status": "ready",
+          "storageKey": "media/images/david-c99fdda7-af55-4c6f-9f50-3e7253aa9931.png"
+        }
+      }
+    ]
+  }
+}

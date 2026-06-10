@@ -237,6 +237,7 @@ type FormlessInstanceAppInstallFactPresence = {
 
 export async function readFormlessInstanceTargetStatus(
   input: {
+    adminToken?: string | null;
     archiveInput?: PortableArchiveInputStatus;
     includeDeploymentStatus?: boolean;
     targetUrl: string;
@@ -247,7 +248,10 @@ export async function readFormlessInstanceTargetStatus(
   const [deployMetadataResult, ownerSetup, appRegistryResult, deployment] = await Promise.all([
     readFormlessInstanceDeployMetadataResult({ targetUrl }, dependencies),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
-    readFormlessInstanceAppRegistryResult({ targetUrl }, dependencies),
+    readFormlessInstanceAppRegistryResult(
+      { adminToken: input.adminToken, targetUrl },
+      dependencies,
+    ),
     input.includeDeploymentStatus
       ? readOptionalFormlessInstanceDeploymentStatus({ targetUrl }, dependencies)
       : undefined,
@@ -605,13 +609,19 @@ export async function applyFormlessInstalledAppAutoSafePackageMigrations(
 }
 
 async function readFormlessInstanceAppRegistryResult(
-  input: { targetUrl: string },
+  input: { adminToken?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceAppRegistryReadResult> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const registryUrl = apiUrl(targetUrl, APP_INSTALLS_API_PATH);
+  const headers: Record<string, string> = { accept: "application/json" };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
   const value = await fetchJson(dependencies.fetch, registryUrl, {
-    headers: { accept: "application/json" },
+    headers,
   });
   const appRegistry = parseAppRegistry(value, registryUrl);
 
@@ -697,6 +707,7 @@ export async function readFormlessInstanceDeploymentStatus(
 
 export async function readFormlessInstanceControlPlaneRecords(
   input: {
+    adminToken?: string | null;
     actorKind?: DeployControlPlaneProtocolActorKind;
     targetUrl: string;
   },
@@ -705,12 +716,18 @@ export async function readFormlessInstanceControlPlaneRecords(
   const actorKind = input.actorKind ?? "cliDeployer";
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const controlPlaneUrl = apiUrl(targetUrl, deployControlPlaneBootstrapPath(actorKind));
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    ...deployControlPlaneActorHeaders(actorKind),
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
   const bootstrap = parseControlPlaneBootstrapResponse(
     await fetchJson(dependencies.fetch, controlPlaneUrl, {
-      headers: {
-        accept: "application/json",
-        ...deployControlPlaneActorHeaders(actorKind),
-      },
+      headers,
     }),
     controlPlaneUrl,
   );
@@ -720,6 +737,7 @@ export async function readFormlessInstanceControlPlaneRecords(
 
 export async function readOptionalFormlessInstanceControlPlaneRecords(
   input: {
+    adminToken?: string | null;
     actorKind?: DeployControlPlaneProtocolActorKind;
     targetUrl: string;
   },

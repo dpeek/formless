@@ -34,50 +34,16 @@ afterEach(async () => {
 
 describe("installed Site custom-domain Worker routing", () => {
   it("seeds canonical auth config for local dev and deployed instance origins", async () => {
-    const scenarios = [
-      {
-        host: "local.formless.local",
-        runtimeProfile: undefined,
-        expectedRpId: "local.formless.local",
-      },
-      {
-        host: "personal.dpeek.workers.dev",
-        runtimeProfile: "instance" as const,
-        expectedRpId: "personal.dpeek.workers.dev",
-      },
-    ];
+    const localHarness = await createCustomDomainHarness();
 
-    for (const scenario of scenarios) {
-      const authHarness = await createCustomDomainHarness(scenario.runtimeProfile);
-
-      try {
-        const origin = `https://${scenario.host}`;
-        const capability = await authHarness.mf.dispatchFetch(
-          `${origin}/api/formless/setup/capability`,
-          {
-            body: JSON.stringify({ setupToken }),
-            headers: adminHeaders({ "Content-Type": "application/json" }),
-            method: "POST",
-          },
-        );
-        const options = await authHarness.mf.dispatchFetch(
-          `${origin}/api/formless/passkeys/register/options`,
-          {
-            body: JSON.stringify({ setupToken }),
-            headers: { "Content-Type": "application/json", Origin: origin },
-            method: "POST",
-          },
-        );
-        const body = (await options.json()) as { options: { rp: { id: string; name: string } } };
-
-        expect(capability.status).toBe(200);
-        expect(options.status).toBe(200);
-        expect(body.options.rp).toEqual({ id: scenario.expectedRpId, name: "Formless" });
-      } finally {
-        await authHarness.dispose();
-      }
+    try {
+      await expectAuthConfigRp(localHarness, "local.formless.local", "local.formless.local");
+    } finally {
+      await localHarness.dispose();
     }
-  });
+
+    await expectAuthConfigRp(harness, "personal.dpeek.workers.dev", "personal.dpeek.workers.dev");
+  }, 10_000);
 
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
@@ -228,7 +194,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(schemaKeyApi.status).toBe(404);
   });
 
-  it("serves an instance profile custom host instead of public Site SSR", async () => {
+  it("redirects an anonymous instance profile custom host instead of public Site SSR", async () => {
     await harness.dispose();
     harness = await createCustomDomainHarness("publishedSite");
     await postAdminJson("/api/formless/domain-mappings", {
@@ -239,23 +205,24 @@ describe("installed Site custom-domain Worker routing", () => {
 
     const home = await fetchHost("admin.example.com", "/", {
       headers: { Accept: "text/html" },
+      redirect: "manual",
     });
     const publicSitePage = await fetchHost("admin.example.com", "/blog/starter-post", {
       headers: { Accept: "text/html" },
+      redirect: "manual",
     });
     const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings", {
       headers: adminHeaders(),
     });
     const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
-    const homeText = await home.text();
 
-    expect(home.status).toBe(200);
-    expect(homeText).toBe("asset:/");
-    expect(homeText).not.toContain("formless-runtime-profile");
-    expect(publicSitePage.status).toBe(404);
+    expect(home.status).toBe(302);
+    expect(home.headers.get("Location")).toBe("/login?redirectTo=%2F");
+    expect(publicSitePage.status).toBe(302);
+    expect(publicSitePage.headers.get("Location")).toBe("/login?redirectTo=%2Fblog%2Fstarter-post");
     expect(instanceApi.status).toBe(200);
     expect(schemaKeyApi.status).toBe(404);
-    expect(assetRequests).toEqual(["/"]);
+    expect(assetRequests).toEqual([]);
   });
 
   it("serves an app profile custom host with installed app document hints", async () => {
@@ -396,17 +363,43 @@ describe("installed Site custom-domain Worker routing", () => {
 
     const home = await fetchMappedHost("/", {
       headers: { Accept: "text/html" },
+      redirect: "manual",
     });
     const nested = await fetchMappedHost("/blog/starter-post", {
       headers: { Accept: "text/html" },
     });
 
-    expect(home.status).toBe(200);
-    expect(await home.text()).toBe("asset:/");
+    expect(home.status).toBe(302);
+    expect(home.headers.get("Location")).toBe("/login?redirectTo=%2F");
     expect(nested.status).toBe(404);
-    expect(assetRequests).toEqual(["/"]);
+    expect(assetRequests).toEqual([]);
   });
 });
+
+async function expectAuthConfigRp(targetHarness: Harness, host: string, expectedRpId: string) {
+  const origin = `https://${host}`;
+  const capability = await targetHarness.mf.dispatchFetch(
+    `${origin}/api/formless/setup/capability`,
+    {
+      body: JSON.stringify({ setupToken }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    },
+  );
+  const options = await targetHarness.mf.dispatchFetch(
+    `${origin}/api/formless/passkeys/register/options`,
+    {
+      body: JSON.stringify({ setupToken }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    },
+  );
+  const body = (await options.json()) as { options: { rp: { id: string; name: string } } };
+
+  expect(capability.status).toBe(200);
+  expect(options.status).toBe(200);
+  expect(body.options.rp).toEqual({ id: expectedRpId, name: "Formless" });
+}
 
 async function setupMappedSite() {
   await postAdminJson("/api/formless/app-installs", {

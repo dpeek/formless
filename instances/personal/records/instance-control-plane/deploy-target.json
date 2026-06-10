@@ -1,0 +1,23 @@
+{
+  "kind": "formless.instanceControlPlaneRecordSource",
+  "version": 1,
+  "schemaKey": "instance-control-plane",
+  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "entity": "instance:deploy-target",
+  "records": [
+    {
+      "id": "instance.primary",
+      "entity": "instance:deploy-target",
+      "values": {
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "label": "Primary instance target",
+        "targetId": "instance.primary",
+        "targetKind": "instance",
+        "targetUrl": "https://formless.twitchy.workers.dev",
+        "updatedAt": "2026-06-09T06:48:19.663Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    }
+  ]
+}

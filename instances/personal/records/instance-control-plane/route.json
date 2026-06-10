@@ -1,0 +1,198 @@
+{
+  "kind": "formless.instanceControlPlaneRecordSource",
+  "version": 1,
+  "schemaKey": "instance-control-plane",
+  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "entity": "instance:route",
+  "records": [
+    {
+      "id": "route:david:admin",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "david",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/david",
+        "surface": "admin",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:david:public-site",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "david",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/sites/david",
+        "matchPrefix": "/sites/david/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:david:schema",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "david",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/david/schema",
+        "surface": "schema",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:dom:admin",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "dom",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/dom",
+        "surface": "admin",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:dom:public-site",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "dom",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/sites/dom",
+        "matchPrefix": "/sites/dom/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:dom:schema",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "dom",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/dom/schema",
+        "surface": "schema",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:host:publicSite:dom.dpeek.com",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "dom",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchHost": "dom.dpeek.com",
+        "matchPath": "/",
+        "matchPrefix": "/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:host:publicSite:dpeek.com",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "david",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchHost": "dpeek.com",
+        "matchPath": "/",
+        "matchPrefix": "/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:host:publicSite:james.dpeek.com",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "james",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchHost": "james.dpeek.com",
+        "matchPath": "/",
+        "matchPrefix": "/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:james:admin",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "james",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/james",
+        "surface": "admin",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:james:public-site",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "james",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/sites/james",
+        "matchPrefix": "/sites/james/",
+        "surface": "public-site",
+        "targetProfile": "public-site",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    },
+    {
+      "id": "route:james:schema",
+      "entity": "instance:route",
+      "values": {
+        "appInstall": "james",
+        "createdAt": "2026-06-09T00:00:00.000Z",
+        "enabled": true,
+        "kind": "mount",
+        "matchPath": "/apps/james/schema",
+        "surface": "schema",
+        "targetProfile": "app",
+        "updatedAt": "2026-06-09T00:00:00.000Z"
+      },
+      "createdAt": "2026-06-09T00:00:00.000Z"
+    }
+  ]
+}

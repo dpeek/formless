@@ -1,0 +1,57 @@
+{
+  "kind": "formless.instanceControlPlaneRecordSource",
+  "version": 1,
+  "schemaKey": "instance-control-plane",
+  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "entity": "instance:deploy-desired-resource",
+  "records": [
+    {
+      "id": "deploy-resource:instance.primary:formless-custom-domain-dom-dpeek-com-publicsite-dom",
+      "entity": "instance:deploy-desired-resource",
+      "values": {
+        "createdAt": "2026-06-08T14:41:34.885Z",
+        "deployTarget": "instance.primary",
+        "enabled": true,
+        "inputsJson": "{\"adopt\":false,\"host\":\"dom.dpeek.com\",\"name\":\"dom.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"dom\",\"workerName\":\"formless\"}",
+        "kind": "cloudflare-worker-custom-domain",
+        "logicalId": "formless-custom-domain-dom-dpeek-com-publicsite-dom",
+        "providerFamily": "cloudflare",
+        "sourceFingerprint": "intent:instance.primary.routes:{\"resources\":[{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dom.dpeek.com\",\"name\":\"dom.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"dom\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dom-dpeek-com-publicsite-dom\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dpeek.com\",\"name\":\"dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"david\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dpeek-com-publicsite-david\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"james.dpeek.com\",\"name\":\"james.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"james\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-james-dpeek-com-publicsite-james\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"}],\"targetId\":\"instance.primary\"}",
+        "updatedAt": "2026-06-08T14:41:34.885Z"
+      },
+      "createdAt": "2026-06-08T14:41:34.929Z"
+    },
+    {
+      "id": "deploy-resource:instance.primary:formless-custom-domain-dpeek-com-publicsite-david",
+      "entity": "instance:deploy-desired-resource",
+      "values": {
+        "createdAt": "2026-06-08T14:41:34.885Z",
+        "deployTarget": "instance.primary",
+        "enabled": true,
+        "inputsJson": "{\"adopt\":false,\"host\":\"dpeek.com\",\"name\":\"dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"david\",\"workerName\":\"formless\"}",
+        "kind": "cloudflare-worker-custom-domain",
+        "logicalId": "formless-custom-domain-dpeek-com-publicsite-david",
+        "providerFamily": "cloudflare",
+        "sourceFingerprint": "intent:instance.primary.routes:{\"resources\":[{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dom.dpeek.com\",\"name\":\"dom.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"dom\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dom-dpeek-com-publicsite-dom\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dpeek.com\",\"name\":\"dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"david\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dpeek-com-publicsite-david\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"james.dpeek.com\",\"name\":\"james.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"james\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-james-dpeek-com-publicsite-james\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"}],\"targetId\":\"instance.primary\"}",
+        "updatedAt": "2026-06-08T14:41:34.885Z"
+      },
+      "createdAt": "2026-06-08T14:41:34.929Z"
+    },
+    {
+      "id": "deploy-resource:instance.primary:formless-custom-domain-james-dpeek-com-publicsite-james",
+      "entity": "instance:deploy-desired-resource",
+      "values": {
+        "createdAt": "2026-06-08T14:41:34.885Z",
+        "deployTarget": "instance.primary",
+        "enabled": true,
+        "inputsJson": "{\"adopt\":false,\"host\":\"james.dpeek.com\",\"name\":\"james.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"james\",\"workerName\":\"formless\"}",
+        "kind": "cloudflare-worker-custom-domain",
+        "logicalId": "formless-custom-domain-james-dpeek-com-publicsite-james",
+        "providerFamily": "cloudflare",
+        "sourceFingerprint": "intent:instance.primary.routes:{\"resources\":[{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dom.dpeek.com\",\"name\":\"dom.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"dom\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dom-dpeek-com-publicsite-dom\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"dpeek.com\",\"name\":\"dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"david\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-dpeek-com-publicsite-david\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"},{\"dependencies\":[],\"inputs\":{\"adopt\":false,\"host\":\"james.dpeek.com\",\"name\":\"james.dpeek.com\",\"overrideExistingOrigin\":false,\"profile\":\"publicSite\",\"targetInstallId\":\"james\",\"workerName\":\"formless\"},\"kind\":\"cloudflare-worker-custom-domain\",\"logicalId\":\"formless-custom-domain-james-dpeek-com-publicsite-james\",\"providerFamily\":\"cloudflare\",\"targetId\":\"instance.primary\"}],\"targetId\":\"instance.primary\"}",
+        "updatedAt": "2026-06-08T14:41:34.885Z"
+      },
+      "createdAt": "2026-06-08T14:41:34.929Z"
+    }
+  ]
+}

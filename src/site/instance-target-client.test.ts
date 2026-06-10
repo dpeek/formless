@@ -129,13 +129,15 @@ describe("Formless instance target client", () => {
           version: 1,
         },
         includeDeploymentStatus: true,
+        adminToken: "status-token",
         targetUrl: "https://instance.example",
       },
       {
-        fetch: async (url) => {
+        fetch: async (url, init) => {
           const requestUrl =
             typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
           const pathname = new URL(requestUrl).pathname;
+          const headers = new Headers(init?.headers);
 
           requests.push(`GET ${requestUrl}`);
 
@@ -161,6 +163,7 @@ describe("Formless instance target client", () => {
           }
 
           if (pathname === "/api/formless/app-installs") {
+            expect(headers.get("authorization")).toBe("Bearer status-token");
             return Response.json({
               packages: listBundledAppPackages(),
               installs: [

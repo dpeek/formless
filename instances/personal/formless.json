@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "kind": "formless-instance-workspace",
+  "name": "personal",
+  "source": {
+    "records": "records/instance-control-plane"
+  },
+  "archives": {
+    "apps": "archives/apps"
+  },
+  "media": {
+    "root": "media"
+  },
+  "local": {
+    "stateRoot": ".formless/local",
+    "secretStateRoot": ".formless"
+  }
+}

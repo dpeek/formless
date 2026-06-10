@@ -114,6 +114,7 @@ export type ImportSiteProjectArchiveResult = ArchiveDiskWriteResult & {
 
 export async function exportInstanceArchive(
   input: {
+    adminToken?: string | null;
     outDir: string;
     target: string;
   },
@@ -121,12 +122,14 @@ export async function exportInstanceArchive(
 ): Promise<ArchiveDiskWriteResult> {
   const target = normalizeTargetUrl(input.target);
   const exportedAt = dependencies.now();
-  const registry = await fetchRemoteAppRegistry(target, dependencies.fetch);
+  const auth = { adminToken: input.adminToken, env: dependencies.env };
+  const registry = await fetchRemoteAppRegistry(target, { ...dependencies, ...auth });
   const [controlPlane, entries] = await Promise.all([
-    fetchRemoteControlPlaneArchive({ exportedAt, fetcher: dependencies.fetch, target }),
+    fetchRemoteControlPlaneArchive({ auth, exportedAt, fetcher: dependencies.fetch, target }),
     Promise.all(
       registry.installs.map((install) =>
         buildRemoteAppArchiveEntry({
+          auth,
           exportedAt,
           fetcher: dependencies.fetch,
           install,
@@ -153,12 +156,17 @@ export async function exportInstanceArchive(
 }
 
 async function fetchRemoteControlPlaneArchive(input: {
+  auth?: ArchiveExportAuth;
   exportedAt: string;
   fetcher: typeof fetch;
   target: string;
 }): Promise<InstanceArchiveControlPlane | undefined> {
   const controlPlane = await readOptionalFormlessInstanceControlPlaneRecords(
-    { actorKind: "cliDeployer", targetUrl: input.target },
+    {
+      adminToken: archiveExportAdminToken(input.auth),
+      actorKind: "cliDeployer",
+      targetUrl: input.target,
+    },
     { fetch: input.fetcher },
   );
 
@@ -245,6 +253,7 @@ function instanceArchiveCapabilities(
 
 export async function exportAppArchive(
   input: {
+    adminToken?: string | null;
     installId: string;
     outDir: string;
     target: string;
@@ -252,7 +261,8 @@ export async function exportAppArchive(
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<ArchiveDiskWriteResult> {
   const target = normalizeTargetUrl(input.target);
-  const registry = await fetchRemoteAppRegistry(target, dependencies.fetch);
+  const auth = { adminToken: input.adminToken, env: dependencies.env };
+  const registry = await fetchRemoteAppRegistry(target, { ...dependencies, ...auth });
   const install = findAppInstall(registry.installs, input.installId);
 
   if (!install) {
@@ -260,6 +270,7 @@ export async function exportAppArchive(
   }
 
   const entry = await buildRemoteAppArchiveEntry({
+    auth,
     exportedAt: dependencies.now(),
     fetcher: dependencies.fetch,
     install,
@@ -442,6 +453,7 @@ function restorePolicy(input: { apply: boolean; replace: boolean }): ArchiveRest
 }
 
 async function buildRemoteAppArchiveEntry(input: {
+  auth?: ArchiveExportAuth;
   exportedAt: string;
   fetcher: typeof fetch;
   install: AppInstall;
@@ -464,7 +476,7 @@ async function buildRemoteAppArchiveEntry(input: {
   const snapshot = await fetchJson<StoreSnapshot>(
     input.fetcher,
     apiUrl(input.target, appApiPath(input.install, "/snapshot")),
-    { headers: { accept: "application/json" } },
+    { headers: archiveExportRequestHeaders(input.auth, "application/json") },
   );
 
   if (!sourceSchemaKey) {
@@ -478,6 +490,7 @@ async function buildRemoteAppArchiveEntry(input: {
   }
 
   const media = await exportRemoteAppMedia({
+    auth: input.auth,
     fetcher: input.fetcher,
     install: input.install,
     records: snapshot.records,
@@ -516,6 +529,7 @@ async function buildRemoteAppArchiveEntry(input: {
 }
 
 async function exportRemoteAppMedia(input: {
+  auth?: ArchiveExportAuth;
   fetcher: typeof fetch;
   install: AppInstall;
   records: readonly StoredRecord[];
@@ -527,7 +541,7 @@ async function exportRemoteAppMedia(input: {
 
   for (const reference of references) {
     const response = await input.fetcher(apiUrl(input.target, reference.deliveryHref), {
-      headers: { accept: reference.contentType },
+      headers: archiveExportRequestHeaders(input.auth, reference.contentType),
     });
 
     if (!response.ok) {
@@ -657,11 +671,33 @@ function mediaKeyPrefix(prefix: string): string {
 
 async function fetchRemoteAppRegistry(
   target: string,
-  fetcher: typeof fetch,
+  dependencies: ArchiveExportAuth & Pick<ArchiveWorkflowDependencies, "fetch">,
 ): Promise<AppInstallsResponse> {
-  return fetchJson<AppInstallsResponse>(fetcher, apiUrl(target, "/api/formless/app-installs"), {
-    headers: { accept: "application/json" },
-  });
+  return fetchJson<AppInstallsResponse>(
+    dependencies.fetch,
+    apiUrl(target, "/api/formless/app-installs"),
+    { headers: archiveExportRequestHeaders(dependencies, "application/json") },
+  );
+}
+
+type ArchiveExportAuth = {
+  adminToken?: string | null;
+  env?: NodeJS.ProcessEnv;
+};
+
+function archiveExportRequestHeaders(auth: ArchiveExportAuth | undefined, accept: string): Headers {
+  const headers = new Headers({ accept });
+  const token = archiveExportAdminToken(auth);
+
+  if (token) {
+    headers.set("authorization", `Bearer ${token}`);
+  }
+
+  return headers;
+}
+
+function archiveExportAdminToken(auth: ArchiveExportAuth | undefined): string | undefined {
+  return auth?.adminToken?.trim() || auth?.env?.FORMLESS_ADMIN_TOKEN?.trim() || undefined;
 }
 
 async function postRemoteArchiveRestore(

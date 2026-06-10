@@ -1,0 +1,57 @@
+{
+  "kind": "formless.instanceControlPlaneRecordSource",
+  "version": 1,
+  "schemaKey": "instance-control-plane",
+  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "entity": "instance:app-install",
+  "records": [
+    {
+      "id": "david",
+      "entity": "instance:app-install",
+      "values": {
+        "createdAt": "2026-05-24T23:44:20.123Z",
+        "installId": "david",
+        "label": "David Peek",
+        "packageAppKey": "site",
+        "packageRevision": 1,
+        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "status": "installed",
+        "storageIdentity": "app:david",
+        "updatedAt": "2026-05-24T23:44:20.123Z"
+      },
+      "createdAt": "2026-05-24T23:44:20.123Z"
+    },
+    {
+      "id": "dom",
+      "entity": "instance:app-install",
+      "values": {
+        "createdAt": "2026-05-24T23:44:20.188Z",
+        "installId": "dom",
+        "label": "Dominic De Lorenzo",
+        "packageAppKey": "site",
+        "packageRevision": 1,
+        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "status": "installed",
+        "storageIdentity": "app:dom",
+        "updatedAt": "2026-05-24T23:44:20.188Z"
+      },
+      "createdAt": "2026-05-24T23:44:20.188Z"
+    },
+    {
+      "id": "james",
+      "entity": "instance:app-install",
+      "values": {
+        "createdAt": "2026-05-24T23:44:20.235Z",
+        "installId": "james",
+        "label": "James Peek",
+        "packageAppKey": "site",
+        "packageRevision": 1,
+        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "status": "installed",
+        "storageIdentity": "app:james",
+        "updatedAt": "2026-05-24T23:44:20.235Z"
+      },
+      "createdAt": "2026-05-24T23:44:20.235Z"
+    }
+  ]
+}

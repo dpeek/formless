@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sites": [
+    {
+      "key": "david",
+      "label": "David Peek",
+      "sourceProject": "/Users/dpeek/code/sites/dpeek.com",
+      "domain": "dpeek.com",
+      "publicRoute": "/sites/david",
+      "adminRoute": "/apps/david"
+    },
+    {
+      "key": "dom",
+      "label": "Dominic De Lorenzo",
+      "sourceProject": "/Users/dpeek/code/sites/dominicdelorenzo.com",
+      "domain": "dominicdelorenzo.com",
+      "publicRoute": "/sites/dom",
+      "adminRoute": "/apps/dom"
+    },
+    {
+      "key": "james",
+      "label": "James Peek",
+      "sourceProject": "/Users/dpeek/code/sites/james.peek.net.au",
+      "domain": "james.peek.net.au",
+      "publicRoute": "/sites/james",
+      "adminRoute": "/apps/james"
+    }
+  ]
+}

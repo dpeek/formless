@@ -770,6 +770,7 @@ export async function initFormlessInstanceWorkspace(
 
 export async function getFormlessInstanceWorkspaceStatus(
   input: {
+    adminToken?: string | null;
     includeDeploymentStatus?: boolean;
     targetAlias?: string | null;
     workspacePath?: string;
@@ -1015,6 +1016,7 @@ export async function setupFormlessInstanceOwner(
 ): Promise<SetupFormlessInstanceOwnerResult> {
   const status = await getFormlessInstanceWorkspaceStatus(
     {
+      adminToken: input.adminToken,
       targetAlias: input.targetAlias,
       workspacePath: input.workspacePath,
     },

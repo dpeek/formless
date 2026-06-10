@@ -980,6 +980,7 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
     ]);
+    expect(requests.at(2)?.headers.authorization).toBe("Bearer explicit-admin-token");
     expect(setupInputs).toEqual([
       {
         adminToken: "explicit-admin-token",
@@ -1131,6 +1132,7 @@ describe("Formless Site CLI", () => {
       }),
     );
 
+    expect(requests.at(2)?.headers.authorization).toBe("Bearer local-admin-token");
     expect(setupInputs).toEqual([
       {
         adminToken: "local-admin-token",
@@ -4689,6 +4691,7 @@ describe("Formless Site CLI", () => {
         outDir,
       ],
       cliDeps(tempDir, {
+        env: { FORMLESS_ADMIN_TOKEN: "export-token" },
         fetch: responses.fetcher(requests),
         logs,
       }),
@@ -4719,6 +4722,11 @@ describe("Formless Site CLI", () => {
       "GET https://instance.example/api/formless/app-installs",
       "GET https://instance.example/api/app-installs/site/personal/snapshot",
       "GET https://instance.example/api/formless/media/media/images/cover.png",
+    ]);
+    expect(requests.slice(0, 3).map((request) => request.headers.authorization)).toEqual([
+      "Bearer export-token",
+      "Bearer export-token",
+      "Bearer export-token",
     ]);
 
     responses.queueJson({
@@ -4991,6 +4999,7 @@ describe("Formless Site CLI", () => {
     await runFormlessCli(
       ["archive", "export", "--target", "https://instance.example", "--out", outDir],
       cliDeps(tempDir, {
+        env: { FORMLESS_ADMIN_TOKEN: "export-token" },
         fetch: responses.fetcher(requests),
         logs,
       }),
@@ -5059,6 +5068,14 @@ describe("Formless Site CLI", () => {
       "GET https://instance.example/api/app-installs/tasks/work/snapshot",
       "GET https://instance.example/api/app-installs/estii/rates/snapshot",
       "GET https://instance.example/api/formless/media/media/images/cover.png",
+    ]);
+    expect(requests.slice(0, 6).map((request) => request.headers.authorization)).toEqual([
+      "Bearer export-token",
+      "Bearer export-token",
+      "Bearer export-token",
+      "Bearer export-token",
+      "Bearer export-token",
+      "Bearer export-token",
     ]);
     expect(logs.at(-1)).toContain("Instance archive exported.");
 

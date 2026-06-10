@@ -321,6 +321,7 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
     props: {
       adopt: boolean;
       accountId: string;
+      empty?: boolean;
       name: string;
       profile?: string;
     },
@@ -951,6 +952,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
       adopt: plan.migrationPolicy === "existing",
       accountId: plan.account.id,
+      empty: true,
       ...profileOptions,
       name: plan.resources.mediaBucket.name,
     });

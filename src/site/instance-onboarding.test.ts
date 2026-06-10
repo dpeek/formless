@@ -1548,6 +1548,7 @@ describe("Alchemy Formless instance deployment", () => {
     ]);
     expect(buckets[0]?.props).toMatchObject({
       accountId: "account-123",
+      empty: true,
       name: "brother-instance-media",
       profile: "personal",
     });
