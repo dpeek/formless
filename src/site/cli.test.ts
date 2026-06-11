@@ -124,7 +124,7 @@ describe("Formless Site CLI", () => {
       "       [--label <label>]",
       "  instance init-workspace [--workspace <path>] [--name <name>]",
       "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
-      "  instance status|pull|check [--workspace <path>] [--target <alias>]",
+      "  instance status|refresh|pull|check [--workspace <path>] [--target <alias>]",
       "  instance push [--workspace <path>] [--target <alias>]",
       "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
       "  instance dev|reset-local [--workspace <path>]",
@@ -422,6 +422,11 @@ describe("Formless Site CLI", () => {
       targetAlias: "local",
       workspacePath: ".",
     });
+    expect(parseFormlessCliArgs(["instance", "refresh", "--target", "local"])).toEqual({
+      kind: "instanceDeploymentRefresh",
+      targetAlias: "local",
+      workspacePath: ".",
+    });
     expect(parseFormlessCliArgs(["instance", "pull", "--workspace", "../personal"])).toEqual({
       kind: "instancePull",
       targetAlias: null,
@@ -651,7 +656,7 @@ describe("Formless Site CLI", () => {
 
   it("validates instance workspace command options", () => {
     expect(() => parseFormlessCliArgs(["instance"])).toThrow(
-      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
+      "Usage: formless instance <init-workspace|status|refresh|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
     );
     expect(() => parseFormlessCliArgs(["instance", "init-workspace", "--from-remote"])).toThrow(
       "Missing required option for formless instance init-workspace: --target-url.",
@@ -937,6 +942,63 @@ describe("Formless Site CLI", () => {
         "targetUrl: https://control-plane.dpeek.workers.dev.",
       ].join("\n"),
     ]);
+  });
+
+  it("refreshes persisted deployment observations from the CLI", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=secret\n",
+    );
+
+    await runFormlessCli(
+      ["instance", "refresh", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        fetch: deploymentApplyFetch(requests, async (url) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+
+          throw new Error(`Unexpected fetch: ${requestUrl}`);
+        }),
+        logs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
+      [
+        "GET /api/formless/deployments/desired-state",
+        "GET /api/formless/deployments/status",
+        "POST /api/formless/control-plane/mutations",
+      ],
+    );
+    expect(requests.map((request) => request.headers.authorization ?? "")).toEqual([
+      "",
+      "",
+      "Bearer secret",
+    ]);
+    expect(
+      capturedRequestJson<{
+        entity: string;
+        op: string;
+        recordId: string;
+        values: { observedStatus: string };
+      }>(requests.at(-1)),
+    ).toMatchObject({
+      entity: "deployment-config",
+      op: "patch",
+      recordId: "instance.primary",
+      values: {
+        observedStatus: "unknown",
+      },
+    });
+    expect(logs.at(-1)).toContain("Workspace operation: deployment refresh (succeeded).");
   });
 
   it("creates one owner setup URL for an incomplete target without logging admin token or capability details", async () => {
@@ -4251,36 +4313,27 @@ describe("Formless Site CLI", () => {
         request.method === "POST" &&
         request.url === "https://personal.dpeek.workers.dev/api/formless/archive/restore",
     );
-    const deploymentRequests = requests.filter((request) =>
-      new URL(request.url).pathname.startsWith("/api/formless/deployments/"),
-    );
+    const deploymentRequests = requests.filter((request) => {
+      const pathname = new URL(request.url).pathname;
+
+      return (
+        pathname.startsWith("/api/formless/deployments/") ||
+        pathname === "/api/formless/control-plane/mutations"
+      );
+    });
     const desiredState = deploymentDesiredStateRef();
-    const startRequest = capturedRequestJson<{
-      desiredState: typeof desiredState;
-      idempotencyKey: string;
-      mode: string;
+    const observationRequest = capturedRequestJson<{
+      entity: string;
+      op: string;
+      recordId: string;
+      values: {
+        observedDesiredStateHash: string;
+        observedStatus: string;
+        observedSummary: string;
+      };
     }>(
       deploymentRequests.find(
-        (request) => new URL(request.url).pathname === "/api/formless/deployments/attempts/start",
-      ),
-    );
-    const planRequest = capturedRequestJson<{
-      attemptId: string;
-      desiredState: typeof desiredState;
-      summary: { changes: { create: number; delete: number; noChange: number; update: number } };
-    }>(
-      deploymentRequests.find(
-        (request) => new URL(request.url).pathname === "/api/formless/deployments/attempts/plan",
-      ),
-    );
-    const successRequest = capturedRequestJson<{
-      attemptId: string;
-      desiredState: typeof desiredState;
-      evidence: unknown[];
-      leaseToken: string;
-    }>(
-      deploymentRequests.find(
-        (request) => new URL(request.url).pathname === "/api/formless/deployments/attempts/success",
+        (request) => new URL(request.url).pathname === "/api/formless/control-plane/mutations",
       ),
     );
 
@@ -4368,31 +4421,21 @@ describe("Formless Site CLI", () => {
       deploymentRequests.map((request) => `${request.method} ${new URL(request.url).pathname}`),
     ).toEqual([
       "GET /api/formless/deployments/desired-state",
-      "POST /api/formless/deployments/attempts/start",
-      "POST /api/formless/deployments/attempts/plan",
-      "POST /api/formless/deployments/attempts/success",
+      "POST /api/formless/control-plane/mutations",
     ]);
     expect(deploymentRequests.map((request) => request.headers.authorization ?? "")).toEqual([
       "",
       "Bearer generated-token",
-      "Bearer generated-token",
-      "Bearer generated-token",
     ]);
-    expect(startRequest).toMatchObject({
-      desiredState,
-      idempotencyKey: `local-gateway-deploy:${desiredState.targetId}:${desiredState.versionId}:${desiredState.hash}`,
-      mode: "apply",
-    });
-    expect(planRequest).toMatchObject({
-      attemptId: "attempt.local-gateway.1",
-      desiredState,
-      summary: { changes: { create: 3, delete: 0, noChange: 0, update: 0 } },
-    });
-    expect(successRequest).toMatchObject({
-      attemptId: "attempt.local-gateway.1",
-      desiredState,
-      evidence: [],
-      leaseToken: "lease:local-gateway",
+    expect(observationRequest).toMatchObject({
+      entity: "deployment-config",
+      op: "patch",
+      recordId: "instance.primary",
+      values: {
+        observedDesiredStateHash: desiredState.hash,
+        observedStatus: "deployed",
+        observedSummary: "3 deployment resources applied from workspace source.",
+      },
     });
     expect(
       restoreRequests.map(
@@ -5426,6 +5469,14 @@ function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
   return JSON.parse(request.body) as T;
 }
 
+function parseRequestBody<T>(init: RequestInit | undefined): T {
+  if (typeof init?.body !== "string") {
+    throw new Error("Expected request body to be a JSON string.");
+  }
+
+  return JSON.parse(init.body) as T;
+}
+
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
@@ -5870,6 +5921,20 @@ function archiveFetch(
       });
     }
 
+    if (parsedUrl.pathname === "/api/formless/deployments/status") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        status: {
+          checkedAt: "2026-05-12T02:00:00.000Z",
+          latestDesiredState: desiredState,
+          state: "pending-changes",
+          targetId: desiredState.targetId,
+        },
+        target: { kind: "instance", targetId: desiredState.targetId },
+      });
+    }
+
     if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
       if (controlPlaneRecords === undefined) {
         return Response.json({ error: "not found" }, { status: 404 });
@@ -6240,7 +6305,10 @@ function deploymentApplyFetch(
     const parsedUrl = new URL(requestUrl);
     const desiredState = deploymentDesiredStateRef();
 
-    if (parsedUrl.pathname.startsWith("/api/formless/deployments/")) {
+    if (
+      parsedUrl.pathname.startsWith("/api/formless/deployments/") ||
+      parsedUrl.pathname === "/api/formless/control-plane/mutations"
+    ) {
       requests.push({
         body: init?.body,
         headers: normalizeHeaders(init?.headers),
@@ -6267,82 +6335,48 @@ function deploymentApplyFetch(
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/start") {
-      return Response.json(
-        {
-          attempt: deploymentAttempt({ desiredState, status: "started" }),
-          lease: {
-            actor: deploymentActor(),
-            acquiredAt: "2026-05-12T02:00:00.000Z",
-            attemptId: "attempt.local-gateway.1",
-            expiresAt: "2026-05-12T02:10:00.000Z",
-            leaseId: "lease.local-gateway.1",
-            mode: "apply",
-            status: "active",
-            targetId: desiredState.targetId,
-            token: "lease:local-gateway",
-          },
-          replayed: false,
-        },
-        { status: 201 },
-      );
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/plan") {
+    if (parsedUrl.pathname === "/api/formless/deployments/status") {
       return Response.json({
-        attempt: deploymentAttempt({ desiredState, status: "started" }),
-        plan: {
-          ...desiredState,
-          attemptId: "attempt.local-gateway.1",
-          kind: "plan",
-          recordedAt: "2026-05-12T02:00:00.000Z",
-          summary: {
-            blockers: [],
-            changes: { create: resourceCount, delete: 0, noChange: 0, update: 0 },
-            warnings: [],
-          },
-        },
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/success") {
-      return Response.json({
-        attempt: deploymentAttempt({
-          completedAt: "2026-05-12T02:00:01.000Z",
-          desiredState,
-          status: "succeeded",
-        }),
-        lease: {
-          attemptId: "attempt.local-gateway.1",
-          leaseId: "lease.local-gateway.1",
-          releasedAt: "2026-05-12T02:00:01.000Z",
-          status: "released",
+        status: {
+          checkedAt: "2026-05-12T02:00:00.000Z",
+          latestDesiredState: desiredState,
+          state: "pending-changes",
           targetId: desiredState.targetId,
-          token: "lease:local-gateway",
         },
-        result: {
-          ...desiredState,
-          alchemy: { app: FORMLESS_ALCHEMY_APP_NAME, scope: "instance.primary", stage: "personal" },
-          attemptId: "attempt.local-gateway.1",
-          completedAt: "2026-05-12T02:00:01.000Z",
-          evidence: [],
-          kind: "success",
-          runnerId: "local-gateway",
-        },
+        target: { kind: "instance", targetId: desiredState.targetId },
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/failure") {
+    if (parsedUrl.pathname === "/api/formless/control-plane/mutations") {
+      const body = parseRequestBody<{
+        mutationId: string;
+        recordId: string;
+        values: Record<string, unknown>;
+      }>(init);
+
       return Response.json({
-        attempt: deploymentAttempt({ desiredState, status: "failed" }),
-        result: {
-          ...desiredState,
-          actor: deploymentActor(),
-          attemptId: "attempt.local-gateway.1",
-          failedAt: "2026-05-12T02:00:01.000Z",
-          kind: "failure",
-          summary: { code: "local-gateway-deploy-apply-failed", displayMessage: "failed" },
+        changes: [],
+        cursor: 2,
+        mutationId: body.mutationId,
+        record: {
+          createdAt: "2026-05-26T00:00:00.000Z",
+          entity: "deployment-config",
+          id: body.recordId,
+          values: {
+            accountId: "account-123",
+            createdAt: "2026-05-26T00:00:00.000Z",
+            enabled: true,
+            label: "Primary instance",
+            providerFamily: "cloudflare",
+            targetId: "instance.primary",
+            targetKind: "instance",
+            targetUrl: "https://personal.dpeek.workers.dev",
+            updatedAt: "2026-05-26T00:00:00.000Z",
+            workerName: "personal",
+            ...body.values,
+          },
         },
+        status: "accepted",
       });
     }
 
@@ -6356,34 +6390,6 @@ function deploymentDesiredStateRef() {
     revision: 3,
     targetId: "instance.primary",
     versionId: "desired.instance.primary.3",
-  };
-}
-
-function deploymentActor() {
-  return {
-    actorId: "local-gateway.deploy",
-    displayName: "Local workspace gateway",
-    kind: "cli",
-    runnerId: "local-gateway",
-  };
-}
-
-function deploymentAttempt(input: {
-  completedAt?: string;
-  desiredState: ReturnType<typeof deploymentDesiredStateRef>;
-  status: "failed" | "started" | "succeeded";
-}) {
-  return {
-    ...input.desiredState,
-    ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
-    actor: deploymentActor(),
-    attemptId: "attempt.local-gateway.1",
-    idempotencyKey: `local-gateway-deploy:instance.primary:desired.instance.primary.3:${input.desiredState.hash}`,
-    mode: "apply",
-    runnerId: "local-gateway",
-    startedAt: "2026-05-12T02:00:00.000Z",
-    status: input.status,
-    updatedAt: input.completedAt ?? "2026-05-12T02:00:00.000Z",
   };
 }
 

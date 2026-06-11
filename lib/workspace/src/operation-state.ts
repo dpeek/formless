@@ -158,6 +158,7 @@ export function workspaceOperationInputDisplay(
       };
     case "check":
     case "pull":
+    case "deploymentRefresh":
       return input.targetAlias === undefined || input.targetAlias === null
         ? {}
         : { targetAlias: input.targetAlias };

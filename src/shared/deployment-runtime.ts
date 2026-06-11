@@ -786,30 +786,34 @@ export type DeploymentActiveStatus = {
 };
 
 export type DeploymentDeployedStatus = {
-  attemptId: DeploymentAttemptId;
+  attemptId?: DeploymentAttemptId;
   checkedAt: string;
   deployedAt: string;
   latestDesiredState: DeploymentDesiredStateVersionRef;
+  runnerId?: DeploymentRunnerId;
+  summary?: string;
   state: "deployed";
   targetId: DeploymentTargetId;
 };
 
 export type DeploymentFailedCurrentVersionStatus = {
-  attemptId: DeploymentAttemptId;
+  attemptId?: DeploymentAttemptId;
   checkedAt: string;
   failedAt: string;
   latestDesiredState: DeploymentDesiredStateVersionRef;
+  runnerId?: DeploymentRunnerId;
   state: "failed-current-version";
   summary: DeploymentFailureSummary;
   targetId: DeploymentTargetId;
 };
 
 export type DeploymentFailedOlderVersionStatus = {
-  attemptId: DeploymentAttemptId;
+  attemptId?: DeploymentAttemptId;
   checkedAt: string;
   failedAt: string;
   failedDesiredState: DeploymentDesiredStateVersionRef;
   latestDesiredState: DeploymentDesiredStateVersionRef;
+  runnerId?: DeploymentRunnerId;
   state: "failed-older-version";
   summary: DeploymentFailureSummary;
   targetId: DeploymentTargetId;
@@ -819,8 +823,10 @@ export type DeploymentDriftedStatus = {
   checkedAt: string;
   latestDesiredState: DeploymentDesiredStateVersionRef;
   latestSuccessfulDesiredState?: DeploymentDesiredStateVersionRef;
-  report: DeploymentDriftReport;
+  report?: DeploymentDriftReport;
+  runnerId?: DeploymentRunnerId;
   state: "drift";
+  summary?: string;
   targetId: DeploymentTargetId;
 };
 
@@ -888,7 +894,11 @@ export function deploymentStatusDisplaySummary(
       };
     case "drift":
       return {
-        detail: deploymentDriftLabel(status.report.summary),
+        detail:
+          status.summary ??
+          (status.report === undefined
+            ? "Latest observation reports drift"
+            : deploymentDriftLabel(status.report.summary)),
         label: "Drift detected",
         state: status.state,
         tone: "warning",

@@ -8,6 +8,7 @@ import {
   type DeployDesiredStateVersionRef,
   type DeployControlPlaneBootstrapResponse,
 } from "@dpeek/formless-deploy/client";
+import type { ControlPlaneDeploymentConfigObservedStatus } from "@dpeek/formless-deploy";
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
@@ -55,6 +56,7 @@ import {
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   listBundledAppPackages,
@@ -70,7 +72,12 @@ import type {
   RecordInstanceDomainMappingApplyEvidenceRequest,
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
-import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
+import type {
+  AppInstallsResponse,
+  MutationResponse,
+  OwnerSetupStatusResponse,
+  RecordValues,
+} from "../shared/protocol.ts";
 import {
   isSourceSchemaHash,
   isUpgradeMigrationChecksum,
@@ -118,6 +125,15 @@ export type FormlessInstanceDeploymentCommandContext = {
   desiredState: InstanceDeploymentDesiredStateResponse;
   desiredStateRef: DeployDesiredStateVersionRef;
   status: InstanceDeploymentStatusResponse;
+};
+
+export type FormlessInstanceDeploymentObservationPatch = {
+  observedAt: string;
+  observedDesiredStateHash: string;
+  observedError?: string | null;
+  observedRunnerId?: string | null;
+  observedStatus: ControlPlaneDeploymentConfigObservedStatus;
+  observedSummary?: string | null;
 };
 
 export type FormlessInstanceTargetDeployMetadata = {
@@ -778,6 +794,47 @@ export async function readFormlessInstanceDeploymentCommandContext(
   };
 }
 
+export async function patchFormlessInstanceDeploymentConfigObservation(
+  input: {
+    adminToken?: string | null;
+    mutationId?: string;
+    observation: FormlessInstanceDeploymentObservationPatch;
+    targetId: string;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<MutationResponse> {
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
+  const mutationUrl = apiUrl(targetUrl, `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`);
+  const values = deploymentObservationPatchValues(input.observation);
+  const mutationId =
+    input.mutationId ??
+    `deployment-observation:${input.targetId}:${input.observation.observedDesiredStateHash}:${input.observation.observedStatus}:${input.observation.observedAt}`;
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseMutationResponse(
+    await postJson(dependencies.fetch, mutationUrl, {
+      body: JSON.stringify({
+        entity: "deployment-config",
+        mutationId,
+        op: "patch",
+        recordId: input.targetId,
+        values,
+      }),
+      headers,
+      method: "POST",
+    }),
+    mutationUrl,
+  );
+}
+
 async function readOptionalFormlessInstanceDeploymentStatus(
   input: { targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
@@ -791,6 +848,20 @@ async function readOptionalFormlessInstanceDeploymentStatus(
 
     throw error;
   }
+}
+
+function deploymentObservationPatchValues(
+  observation: FormlessInstanceDeploymentObservationPatch,
+): RecordValues {
+  return {
+    observedAt: observation.observedAt,
+    observedDesiredStateHash: observation.observedDesiredStateHash,
+    observedError: observation.observedError ?? "",
+    observedRunnerId: observation.observedRunnerId ?? "",
+    observedStatus: observation.observedStatus,
+    observedSummary: observation.observedSummary ?? "",
+    updatedAt: observation.observedAt,
+  };
 }
 
 export async function startFormlessInstanceDeploymentAttempt(
@@ -1674,6 +1745,20 @@ function parseControlPlaneRecord(value: unknown, context: string): DeployControl
     ...(typeof value.updatedAt === "string" ? { updatedAt: value.updatedAt } : {}),
     values: value.values,
   };
+}
+
+function parseMutationResponse(value: unknown, context: string): MutationResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.mutationId !== "string" ||
+    typeof value.cursor !== "number" ||
+    !isRecord(value.record) ||
+    !Array.isArray(value.changes)
+  ) {
+    throw new Error(`${context} failed: mutation response is invalid.`);
+  }
+
+  return value as MutationResponse;
 }
 
 function controlPlaneRecordsByEntity(

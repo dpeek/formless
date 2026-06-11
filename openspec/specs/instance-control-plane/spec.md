@@ -4,9 +4,10 @@
 
 Instance control plane models Formless instance management data as runtime-owned
 schema records. It keeps app installs, app routes, domain intent, and deployment
-configuration in flat Authority records while installed app data, provider
-secrets, raw lease tokens, projected deployment resource graphs, and provider
-resource truth stay outside those records.
+configuration in flat Authority records. Deployment config records may include a
+display-safe latest deployment observation cache while installed app data,
+provider secrets, raw operation tokens, projected deployment resource graphs,
+deployment history, and provider resource truth stay outside those records.
 
 ## Requirements
 
@@ -27,13 +28,16 @@ outside control-plane source records.
 - **AND** each deployment config stores the target identity, display-safe
   `targetUrl` origin facts, provider family, provider account, worker name, and
   optional display-safe credential reference used for that deployment target
+- **AND** each deployment config may store display-safe latest deployment
+  observation fields such as status, observed time, desired-state hash, summary,
+  error, and runner
 - **AND** it does not define separate `deploy-target`,
   `provider-config-ref`, or `deploy-desired-resource` entities
 - **AND** it does not define `deploy-attempt`, `deploy-evidence-summary`, or
   `deploy-drift-report` as schema-owned control-plane record entities
-- **AND** deployment attempts, evidence summaries, drift reports, cleanup audit
-  summaries, and raw leases remain deployment runtime or local gateway
-  operation state
+- **AND** deployment attempt history, evidence history, drift history, cleanup
+  audit summaries, raw operation tokens, and provider resource truth are not
+  schema-owned control-plane record entities
 
 ### Requirement: App Install Records
 
@@ -61,7 +65,7 @@ records.
 
 ### Requirement: Deployment Projection Boundary
 
-The system SHALL build deployment runtime desired-state versions from
+The system SHALL build deployment runtime desired-state projections from
 schema-owned control-plane intent records.
 
 #### Scenario: Project desired state
@@ -78,6 +82,8 @@ schema-owned control-plane intent records.
 - **AND** no projected `DeploymentResourceGraph` resource is stored as
   schema-owned source intent
 - **AND** the desired-state hash is computed from canonical projected content
+- **AND** latest deployment observation fields do not affect the desired-state
+  hash
 
 #### Scenario: Projection omits operational secrets
 
@@ -87,22 +93,26 @@ schema-owned control-plane intent records.
   lease tokens, and runtime secrets are omitted
 - **AND** display-safe secret references may be included when needed
 
-### Requirement: Deployment Execution Boundary
+### Requirement: Deployment Observation Boundary
 
-The system SHALL keep provider execution and execution history outside
-schema-owned source records while returning display-safe deployment summaries
-through runtime and gateway channels.
+The system SHALL keep provider execution and deployment history outside
+reviewable source while storing only the latest display-safe deployment
+observation cache on `deployment-config` records.
 
-#### Scenario: Display-safe history
+#### Scenario: Display-safe latest observation
 
-- **GIVEN** a CLI deployer, local workspace gateway, CI job, or trusted deploy
-  node writes plan, success, failure, cleanup, or drift results
-- **WHEN** the writeback is accepted
-- **THEN** the writeback binds to an exact desired-state version and actor
-- **AND** display-safe attempt, evidence, drift, cleanup, and status summaries
-  may be stored by deployment runtime state or local gateway operation state
-- **AND** those summaries are not mirrored as schema-owned control-plane
-  records and are not written to reviewable workspace source
+- **GIVEN** a CLI deployer, local workspace gateway, or explicit refresh
+  observes deployment state
+- **WHEN** the observation is persisted
+- **THEN** the observation patches the matching `deployment-config` record with
+  display-safe latest state such as status, observed time, desired-state hash,
+  summary, error, and runner
+- **AND** the observation does not store provider credentials, raw provider
+  state, raw operation tokens, or full execution logs
+- **AND** previous observations are replaced rather than appended as
+  schema-owned history records
+- **AND** provider reality remains owned by the provider and tracked Alchemy
+  state
 
 ### Requirement: Deploy Vertical Slice
 
@@ -185,10 +195,12 @@ The system SHALL represent deploy target and provider selection as one
 - **THEN** each record stores camelCase fields for target id, target kind,
   display label, enabled state, display-safe target URL, provider family,
   provider account id, worker name, optional display-safe credential reference,
-  created time, and updated time
+  created time, updated time, and optional latest deployment observation fields
 - **AND** the target id and provider family are immutable after creation
 - **AND** provider API tokens, Alchemy passwords, Alchemy state tokens, raw
   lease tokens, and runtime secrets are not stored on the record
+- **AND** latest deployment observation fields are runtime-observed cache fields
+  rather than deploy intent fields
 
 #### Scenario: Route deployment selection
 
@@ -208,6 +220,16 @@ The system SHALL represent deploy target and provider selection as one
 - **AND** no provider resource, deployment attempt, evidence summary, drift
   report, cleanup history, or projected desired resource row is written by the
   deployment config write itself
+
+#### Scenario: Deployment observation cache write
+
+- **GIVEN** a local workspace gateway, CLI deploy, or explicit refresh observes
+  deployment state for a deployment config
+- **WHEN** it writes the observation
+- **THEN** it patches only the deployment config's runtime-observed cache fields
+- **AND** source intent fields such as provider family, account id, worker name,
+  target URL, route intent, and credential reference remain unchanged unless a
+  separate authorized intent write is submitted
 
 ### Requirement: Workspace Canonical Control-Plane Source
 
@@ -238,6 +260,8 @@ canonical source for workspace-authored instance intent.
 - **AND** `deploy-target`, `provider-config-ref`,
   `deploy-desired-resource`, `deploy-attempt`, `deploy-evidence-summary`, and
   `deploy-drift-report` records are not written as workspace source
+- **AND** runtime-observed deployment cache fields on `deployment-config`
+  records are omitted from reviewable workspace source
 
 #### Scenario: Restore control-plane records from workspace source
 
@@ -248,6 +272,8 @@ canonical source for workspace-authored instance intent.
 - **AND** Authority validation rejects invalid references, immutable field
   changes, route conflicts, secret values, and unsupported control-plane
   entities before behavior changes
+- **AND** workspace source containing runtime-observed deployment cache fields is
+  rejected or stripped before restore
 
 ### Requirement: Browser-Owned Instance Intent
 

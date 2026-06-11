@@ -303,8 +303,8 @@ intent lives in schema-owned record source.
 ### Requirement: Domain And Deploy Commands
 
 The system SHALL keep deployment, destroy, and explicit provider repair cleanup
-credential-scoped while making generic deployment attempts the only normal
-provider mutation path for workspace-controlled deploy intent.
+credential-scoped while making projected deployment resource graphs the normal
+provider mutation input for workspace-controlled deploy intent.
 
 #### Scenario: First workspace deploy
 
@@ -335,7 +335,8 @@ provider mutation path for workspace-controlled deploy intent.
 - **THEN** the CLI or trusted local deployer omits those resources from tracked
   Alchemy desired state
 - **AND** Alchemy removes the omitted tracked provider resources
-- **AND** deploy writes exact-version deletion evidence to the runtime
+- **AND** deploy may patch the target deployment config's latest observation
+  cache with the exact desired-state hash and display-safe result summary
 
 #### Scenario: Workspace destroy
 
@@ -370,7 +371,7 @@ provider mutation path for workspace-controlled deploy intent.
 
 The Site CLI SHALL keep explicit provider repair cleanup available for recorded
 evidence while route-derived provider resources reconcile through workspace
-deployment attempts.
+deploy reconciliation.
 
 #### Scenario: Domain cleanup remains repair-only
 
@@ -399,17 +400,35 @@ deployment intent records.
   workspace record source
 - **AND** provider credentials remain in CLI, local gateway, or runner-held
   secret locations
-- **AND** deployment attempt, evidence, drift, cleanup, and status summaries are
-  read through deployment runtime or local gateway operation responses rather
-  than control-plane record source
+- **AND** deployment observation, evidence, drift, cleanup, and status summaries
+  are read through read-only deployment runtime projection or local gateway
+  operation responses rather than control-plane record source
+- **AND** latest persisted deployment status is read from display-safe
+  deployment config observation cache fields
 
-#### Scenario: CLI binds exact desired-state version
+#### Scenario: CLI deploy writes latest observation
 
 - **WHEN** a deployment command starts against a schema-owned target
-- **THEN** it binds deployment-runtime attempt and writeback calls to the exact
-  desired-state version and idempotency key
+- **THEN** it reads the current desired-state projection and applies the
+  projected resource graph through the local deployment adapter
+- **AND** after deploy or failure it patches the target deployment config's
+  display-safe latest observation cache
 - **AND** runner-held credentials remain outside browser, archive, record
   source, and workspace manifest responses
+
+#### Scenario: CLI check remains read-only
+
+- **WHEN** a check command compares local workspace source, remote instance
+  source, deployment projection, or provider state
+- **THEN** it reports fresh deployment observations without patching deployment
+  config observation cache fields
+
+#### Scenario: CLI refresh persists observation
+
+- **WHEN** a refresh or status-write command explicitly persists latest
+  deployment observation
+- **THEN** it patches only deployment config observation cache fields
+- **AND** deployment intent fields remain unchanged
 
 #### Scenario: CLI reads app routes
 
@@ -428,8 +447,8 @@ available where they expose behavior not replaced by workspace deploy.
 - **GIVEN** users inspect domain, route, deployment, drift, or provider evidence
   state
 - **WHEN** a supported non-mutating command executes
-- **THEN** output may include schema-owned route ids and deployment attempt,
-  evidence, and drift record ids
+- **THEN** output may include schema-owned route ids, deployment config ids,
+  desired-state hashes, latest observation summaries, and provider evidence ids
 - **AND** the command does not mutate provider resources
 
 #### Scenario: Removed direct fallback commands are unsupported

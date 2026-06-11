@@ -698,7 +698,7 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(planned.body)).not.toContain("secret");
   });
 
-  it("runs deploy apply through the gateway with exact desired-state writeback", async () => {
+  it("runs deploy apply through the gateway with exact desired-state observation", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
     const requests: CapturedRequest[] = [];
@@ -755,12 +755,6 @@ describe("local workspace gateway", () => {
       operation: "deployApply",
       result: {
         deployment: {
-          attempt: {
-            attemptId: "attempt.local-gateway.1",
-            mode: "apply",
-            status: "succeeded",
-            targetId: "instance.primary",
-          },
           cleanup: {
             status: "not-run",
           },
@@ -770,37 +764,21 @@ describe("local workspace gateway", () => {
           evidence: {
             count: 0,
           },
-          plan: {
-            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
-          },
-          writeback: {
-            attemptId: "attempt.local-gateway.1",
+          observation: {
             desiredState: deploymentDesiredStateRef(),
             evidenceCount: 0,
-            planRecordedAt: "2026-06-02T01:11:02.000Z",
             runnerId: "local-gateway",
-            status: "succeeded",
-            successCompletedAt: "2026-06-02T01:11:03.000Z",
+            observedStatus: "deployed",
           },
         },
       },
       status: "succeeded",
     });
     expect(
-      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
-        requestByPath(requests, "/api/formless/deployments/attempts/start"),
+      capturedRequestJson<{ recordId: string; values: { observedStatus: string } }>(
+        requestByPath(requests, "/api/formless/control-plane/mutations"),
       ),
-    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
-    expect(
-      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
-        requestByPath(requests, "/api/formless/deployments/attempts/plan"),
-      ),
-    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
-    expect(
-      capturedRequestJson<{ desiredState: ReturnType<typeof deploymentDesiredStateRef> }>(
-        requestByPath(requests, "/api/formless/deployments/attempts/success"),
-      ),
-    ).toMatchObject({ desiredState: deploymentDesiredStateRef() });
+    ).toMatchObject({ recordId: "instance.primary", values: { observedStatus: "deployed" } });
     const requestCountAfterApply = requests.length;
     const read = await gatewayJson(
       new Request(
@@ -820,9 +798,9 @@ describe("local workspace gateway", () => {
       operation: "deployApply",
       result: {
         deployment: {
-          writeback: {
+          observation: {
             desiredState: deploymentDesiredStateRef(),
-            status: "succeeded",
+            observedStatus: "deployed",
           },
         },
       },
@@ -837,6 +815,61 @@ describe("local workspace gateway", () => {
       expect(serialized).not.toContain(applied.sidecar.endpoint);
       expect(serialized).not.toContain(proxyToken);
     }
+  });
+
+  it("runs explicit deployment refresh through the gateway", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+    const requests: CapturedRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=generated-admin-token\n",
+    );
+
+    const refreshed = await gatewayJson(
+      operationRequest(
+        {
+          kind: "deploymentRefresh",
+        },
+        browserHeaders({ cookie, csrf: true }),
+      ),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          fetch: deployApplyFetch(requests, "site"),
+          operationIds: ["op_deployment_refresh_00000001"],
+        }),
+      },
+    );
+
+    expect(refreshed.response.status).toBe(200);
+    expect(refreshed.body.operation).toMatchObject({
+      actor: "browser",
+      id: "op_deployment_refresh_00000001",
+      operation: "deploymentRefresh",
+      result: {
+        deployment: {
+          observation: {
+            observedStatus: "unknown",
+            targetId: "instance.primary",
+          },
+          status: {
+            state: "pending-changes",
+          },
+        },
+      },
+      status: "succeeded",
+    });
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
+      [
+        "GET /api/formless/deployments/desired-state",
+        "GET /api/formless/deployments/status",
+        "POST /api/formless/control-plane/mutations",
+      ],
+    );
   });
 
   it("scopes operation ids to the configured workspace root", async () => {
@@ -1258,99 +1291,50 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/start") {
-      const desiredState = deploymentDesiredStateRef();
-
-      return Response.json(
-        {
-          attempt: deploymentAttempt({ desiredState, status: "started" }),
-          lease: {
-            actor: {
-              actorId: "local-gateway.deploy",
-              displayName: "Local workspace gateway",
-              kind: "cli",
-              runnerId: "local-gateway",
-            },
-            acquiredAt: "2026-06-02T01:11:02.000Z",
-            attemptId: "attempt.local-gateway.1",
-            expiresAt: "2026-06-02T01:21:02.000Z",
-            leaseId: "lease.local-gateway.1",
-            mode: "apply",
-            status: "active",
-            targetId: desiredState.targetId,
-            token: "lease:local-gateway",
-          },
-          replayed: false,
-        },
-        { status: 201 },
-      );
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/plan") {
+    if (parsedUrl.pathname === "/api/formless/deployments/status") {
       const desiredState = deploymentDesiredStateRef();
 
       return Response.json({
-        attempt: deploymentAttempt({ desiredState, status: "started" }),
-        plan: {
-          ...desiredState,
-          attemptId: "attempt.local-gateway.1",
-          kind: "plan",
-          recordedAt: "2026-06-02T01:11:02.000Z",
-          summary: {
-            blockers: [],
-            changes: { create: 1, delete: 0, noChange: 0, update: 0 },
-            warnings: [],
-          },
-        },
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/success") {
-      const desiredState = deploymentDesiredStateRef();
-
-      return Response.json({
-        attempt: deploymentAttempt({
-          completedAt: "2026-06-02T01:11:03.000Z",
-          desiredState,
-          status: "succeeded",
-        }),
-        lease: {
-          attemptId: "attempt.local-gateway.1",
-          leaseId: "lease.local-gateway.1",
-          releasedAt: "2026-06-02T01:11:03.000Z",
-          status: "released",
+        status: {
+          checkedAt: "2026-06-02T01:11:02.000Z",
+          latestDesiredState: desiredState,
+          state: "pending-changes",
           targetId: desiredState.targetId,
-          token: "lease:local-gateway",
         },
-        result: {
-          ...desiredState,
-          alchemy: { app: "formless-instance", scope: "instance.primary", stage: "personal" },
-          attemptId: "attempt.local-gateway.1",
-          completedAt: "2026-06-02T01:11:03.000Z",
-          evidence: [],
-          kind: "success",
-          runnerId: "local-gateway",
-        },
+        target: { kind: "instance", targetId: desiredState.targetId },
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/deployments/attempts/failure") {
-      const desiredState = deploymentDesiredStateRef();
+    if (parsedUrl.pathname === "/api/formless/control-plane/mutations") {
+      const body = parseCapturedBody<{
+        mutationId: string;
+        recordId: string;
+        values: Record<string, unknown>;
+      }>(init);
 
       return Response.json({
-        attempt: deploymentAttempt({ desiredState, status: "failed" }),
-        result: {
-          ...desiredState,
-          actor: {
-            actorId: "local-gateway.deploy",
-            kind: "cli",
-            runnerId: "local-gateway",
+        changes: [],
+        cursor: 2,
+        mutationId: body.mutationId,
+        record: {
+          createdAt: "2026-05-26T00:00:00.000Z",
+          entity: "deployment-config",
+          id: body.recordId,
+          values: {
+            accountId: "account-123",
+            createdAt: "2026-05-26T00:00:00.000Z",
+            enabled: true,
+            label: "Primary instance",
+            providerFamily: "cloudflare",
+            targetId: "instance.primary",
+            targetKind: "instance",
+            targetUrl: "https://personal.dpeek.workers.dev",
+            updatedAt: "2026-05-26T00:00:00.000Z",
+            workerName: "personal",
+            ...body.values,
           },
-          attemptId: "attempt.local-gateway.1",
-          failedAt: "2026-06-02T01:11:03.000Z",
-          kind: "failure",
-          summary: { code: "local-gateway-deploy-apply-failed", displayMessage: "failed" },
         },
+        status: "accepted",
       });
     }
 
@@ -1548,29 +1532,6 @@ function deploymentDesiredStateRef() {
     revision: 3,
     targetId: "instance.primary",
     versionId: "desired.instance.primary.3",
-  };
-}
-
-function deploymentAttempt(input: {
-  completedAt?: string;
-  desiredState: ReturnType<typeof deploymentDesiredStateRef>;
-  status: "failed" | "started" | "succeeded";
-}) {
-  return {
-    ...input.desiredState,
-    ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
-    actor: {
-      actorId: "local-gateway.deploy",
-      displayName: "Local workspace gateway",
-      kind: "cli",
-      runnerId: "local-gateway",
-    },
-    attemptId: "attempt.local-gateway.1",
-    idempotencyKey: "local-gateway-deploy:instance.primary:desired.instance.primary.3",
-    mode: "apply",
-    startedAt: "2026-06-02T01:11:02.000Z",
-    status: input.status,
-    updatedAt: "2026-06-02T01:11:03.000Z",
   };
 }
 

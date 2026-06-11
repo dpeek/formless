@@ -121,6 +121,16 @@ describe("portable archive protocol", () => {
       throw new Error("Expected control-plane archive records.");
     }
 
+    expect(
+      formatInstanceArchive({
+        ...archive,
+        controlPlane: {
+          ...controlPlane,
+          records: controlPlaneRecords({ observedCache: true }),
+        },
+      }),
+    ).not.toContain("observedStatus");
+
     expect(() =>
       parseInstanceArchive({
         ...archive,
@@ -174,6 +184,15 @@ describe("portable archive protocol", () => {
     ).toThrow(
       'Instance archive controlPlane records record "route:site:public-site" field "instance:route.appInstall" references unknown instance:app-install record "missing".',
     );
+    expect(() =>
+      parseInstanceArchive({
+        ...archive,
+        controlPlane: {
+          ...controlPlane,
+          records: controlPlaneRecords({ observedCache: true }),
+        },
+      }),
+    ).toThrow("cannot store runtime-observed deployment cache fields");
   });
 
   it("rejects deployment execution history as instance control-plane source", () => {
@@ -382,7 +401,9 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
   };
 }
 
-function controlPlaneRecords(options: { accountId?: string } = {}): StoredRecord[] {
+function controlPlaneRecords(
+  options: { accountId?: string; observedCache?: boolean } = {},
+): StoredRecord[] {
   return [
     {
       id: "site",
@@ -442,6 +463,17 @@ function controlPlaneRecords(options: { accountId?: string } = {}): StoredRecord
         targetUrl: "https://personal.dpeek.workers.dev",
         providerFamily: "cloudflare",
         ...(options.accountId === undefined ? {} : { accountId: options.accountId }),
+        ...(options.observedCache
+          ? {
+              observedAt: now,
+              observedDesiredStateHash:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              observedError: "none",
+              observedRunnerId: "local-gateway",
+              observedStatus: "deployed",
+              observedSummary: "Deployed revision 2",
+            }
+          : {}),
         createdAt: now,
         updatedAt: now,
       },

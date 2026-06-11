@@ -1,5 +1,6 @@
 import {
   INSTANCE_WORKSPACE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+  INSTANCE_WORKSPACE_CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES,
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_EXCLUDED_ENTITIES,
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND,
@@ -21,6 +22,9 @@ const recordSourceEntitySet = new Set<string>(
 );
 const excludedRecordSourceEntitySet = new Set<string>(
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_EXCLUDED_ENTITIES,
+);
+const deploymentConfigObservedFieldSet = new Set<string>(
+  INSTANCE_WORKSPACE_CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
 );
 const schemaLocalEntityKeyPattern = /^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*$/;
 const hostnameLabelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -244,6 +248,7 @@ export function instanceWorkspaceControlPlaneRecordSourceRecords(
       sourceRecords.push({
         ...record,
         entity,
+        values: reviewableRecordSourceValues(entity, record.values),
       });
       continue;
     }
@@ -1112,11 +1117,28 @@ function canonicalRecordSourceRecord(
     id: record.id,
     entity: formatInstanceWorkspaceControlPlaneBoundaryEntityName(entity),
     values: Object.fromEntries(
-      Object.entries(record.values).sort(([left], [right]) => left.localeCompare(right)),
+      Object.entries(reviewableRecordSourceValues(entity, record.values)).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
     ) as InstanceWorkspaceRecordValues,
     createdAt: record.createdAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
+}
+
+function reviewableRecordSourceValues(
+  entity: InstanceWorkspaceControlPlaneRecordSourceEntity,
+  values: InstanceWorkspaceRecordValues,
+): InstanceWorkspaceRecordValues {
+  if (entity !== "deployment-config") {
+    return values;
+  }
+
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => !deploymentConfigObservedFieldSet.has(fieldName),
+    ),
+  ) as InstanceWorkspaceRecordValues;
 }
 
 function compareRecordSourceRecords(

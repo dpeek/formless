@@ -2316,6 +2316,32 @@ describe("home view model collections", () => {
         },
       ],
     });
+    const deploymentSection = deployments.layout.sections[0];
+    const deploymentColumns =
+      deploymentSection?.collection.result.type === "table"
+        ? deploymentSection.collection.result.columns
+        : [];
+
+    expect(
+      deploymentColumns
+        .filter((column): column is FieldTableColumnConfig => column.type === "field")
+        .map((column) => ({ fieldName: column.fieldName, display: column.display })),
+    ).toEqual([
+      { fieldName: "label", display: "readOnly" },
+      { fieldName: "targetId", display: "readOnly" },
+      { fieldName: "targetKind", display: "readOnly" },
+      { fieldName: "providerFamily", display: "readOnly" },
+      { fieldName: "accountId", display: "readOnly" },
+      { fieldName: "workerName", display: "readOnly" },
+      { fieldName: "targetUrl", display: "readOnly" },
+      { fieldName: "enabled", display: "readOnly" },
+      { fieldName: "observedStatus", display: "readOnly" },
+      { fieldName: "observedAt", display: "readOnly" },
+      { fieldName: "observedDesiredStateHash", display: "readOnly" },
+      { fieldName: "observedSummary", display: "readOnly" },
+      { fieldName: "observedError", display: "readOnly" },
+      { fieldName: "observedRunnerId", display: "readOnly" },
+    ]);
     expect(deployments.layout.sections.map((section) => section.id)).not.toContain("attempts");
     expect(deployments.layout.sections.map((section) => section.id)).not.toContain("evidence");
     expect(deployments.layout.sections.map((section) => section.id)).not.toContain("drift");

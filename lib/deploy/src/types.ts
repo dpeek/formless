@@ -143,6 +143,25 @@ export type ControlPlaneProviderConfigProjectionRecord = {
   workerName?: string;
 };
 
+export type ControlPlaneDeploymentConfigObservedStatus =
+  | "deployed"
+  | "drifted"
+  | "failed"
+  | "in-sync"
+  | "unknown";
+
+export const CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS = [
+  "observedStatus",
+  "observedAt",
+  "observedDesiredStateHash",
+  "observedSummary",
+  "observedError",
+  "observedRunnerId",
+] as const;
+
+export type ControlPlaneDeploymentConfigObservedField =
+  (typeof CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS)[number];
+
 export type ControlPlaneRedirectStatusCode = 301 | 302 | 303 | 307 | 308;
 
 export type DeployEvidenceAction = "adopted" | "created" | "deleted" | "no-change" | "updated";

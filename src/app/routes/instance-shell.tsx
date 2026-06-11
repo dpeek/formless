@@ -905,6 +905,15 @@ function WorkspaceGatewayOperationControls({
       <Button
         intent="outline"
         isDisabled={!canRunPostBootstrapOperation}
+        onPress={() => onStartOperation?.({ kind: "deploymentRefresh" })}
+        size="sm"
+        type="button"
+      >
+        Refresh deploy
+      </Button>
+      <Button
+        intent="outline"
+        isDisabled={!canRunPostBootstrapOperation}
         onPress={() => onStartOperation?.({ kind: "credentialSetup", provider: "cloudflare" })}
         size="sm"
         type="button"
@@ -1261,6 +1270,8 @@ function workspaceOperationKindLabel(kind: WorkspaceGatewayOperationKind): strin
   switch (kind) {
     case "credentialSetup":
       return "Credential setup";
+    case "deploymentRefresh":
+      return "Deployment refresh";
     case "deployApply":
       return "Deploy apply";
     case "deployPlan":
@@ -1475,7 +1486,12 @@ function deploymentWorkspaceOperation(
 }
 
 function isDeploymentWorkspaceOperationKind(kind: WorkspaceGatewayOperationKind): boolean {
-  return kind === "credentialSetup" || kind === "deployPlan" || kind === "deployApply";
+  return (
+    kind === "credentialSetup" ||
+    kind === "deploymentRefresh" ||
+    kind === "deployPlan" ||
+    kind === "deployApply"
+  );
 }
 
 function workspaceGatewayOperationSummary(

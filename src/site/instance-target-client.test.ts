@@ -7,6 +7,7 @@ import {
 import { listBundledAppPackages } from "../shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
+  patchFormlessInstanceDeploymentConfigObservation,
   readFormlessInstanceAppRegistry,
   readFormlessInstanceControlPlaneRecords,
   readFormlessInstanceDeploymentCommandContext,
@@ -395,6 +396,92 @@ describe("Formless instance target control-plane client", () => {
       "https://instance.example/api/formless/deployments/status",
     ]);
     expect(requests[0]?.headers["X-Formless-Control-Plane-Actor"]).toBe("runner");
+  });
+
+  it("patches deployment-config observed fields through the control-plane mutation API", async () => {
+    const requests: Array<{
+      body: BodyInit | null | undefined;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }> = [];
+
+    const patched = await patchFormlessInstanceDeploymentConfigObservation(
+      {
+        adminToken: "admin-token",
+        mutationId: "observe:instance.primary",
+        observation: {
+          observedAt: "2026-06-11T01:00:00.000Z",
+          observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
+          observedError: "",
+          observedRunnerId: "local-gateway",
+          observedStatus: "deployed",
+          observedSummary: "1 deployment resource applied from workspace source.",
+        },
+        targetId: "instance.primary",
+        targetUrl: "https://instance.example",
+      },
+      {
+        fetch: async (input, init) => {
+          const request = {
+            body: init?.body,
+            headers: normalizeHeaders(init?.headers),
+            method: init?.method ?? "GET",
+            url:
+              typeof input === "string"
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url,
+          };
+
+          requests.push(request);
+
+          if (typeof request.body !== "string") {
+            throw new Error("Expected observation patch request body.");
+          }
+
+          return Response.json({
+            changes: [],
+            cursor: 4,
+            mutationId: "observe:instance.primary",
+            record: {
+              entity: "deployment-config",
+              id: "instance.primary",
+              values: JSON.parse(request.body).values,
+            },
+            status: "accepted",
+          });
+        },
+      },
+    );
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      headers: {
+        accept: "application/json",
+        authorization: "Bearer admin-token",
+        "content-type": "application/json",
+      },
+      method: "POST",
+      url: "https://instance.example/api/formless/control-plane/mutations",
+    });
+    const requestBody = requests[0]?.body;
+
+    expect(typeof requestBody).toBe("string");
+    expect(JSON.parse(requestBody as string)).toMatchObject({
+      entity: "deployment-config",
+      mutationId: "observe:instance.primary",
+      op: "patch",
+      recordId: "instance.primary",
+      values: {
+        observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
+        observedStatus: "deployed",
+        observedSummary: "1 deployment resource applied from workspace source.",
+      },
+    });
+    expect(patched.record.id).toBe("instance.primary");
+    expect(patched.record.values.observedStatus).toBe("deployed");
   });
 });
 

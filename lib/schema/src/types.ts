@@ -982,6 +982,7 @@ export type RuntimeSchemaHistorySchema = {
 
 export type RuntimeSchemaControlPlaneEntitySchema = {
   immutableFields?: string[];
+  observedFields?: string[];
   secretReferenceFields?: string[];
   routeValidation?: RuntimeSchemaRouteValidationSchema;
   history?: RuntimeSchemaHistorySchema;

@@ -139,12 +139,21 @@ describe("instance workspace control-plane record source", () => {
     );
   });
 
-  it("omits deployment execution history from record source files", async () => {
+  it("omits deployment execution history and observation cache from record source files", async () => {
     const workspaceRoot = await makeTempDir();
     const manifest = defaultInstanceWorkspaceManifest({ name: "personal" });
 
     await writeInstanceWorkspaceControlPlaneRecordSource({
       controlPlane: controlPlaneSourceRecords({
+        deploymentConfigValues: {
+          observedAt: now,
+          observedDesiredStateHash:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          observedError: "none",
+          observedRunnerId: "local-gateway",
+          observedStatus: "deployed",
+          observedSummary: "Deployed revision 2",
+        },
         extraRecords: [
           executionHistoryRecord("deploy-attempt", "attempt.1"),
           executionHistoryRecord("deploy-evidence-summary", "evidence.1"),
@@ -169,6 +178,31 @@ describe("instance workspace control-plane record source", () => {
     expect(sourceContents.join("\n")).not.toContain("deploy-attempt");
     expect(sourceContents.join("\n")).not.toContain("deploy-evidence-summary");
     expect(sourceContents.join("\n")).not.toContain("deploy-drift-report");
+    expect(sourceContents.join("\n")).not.toContain("observedStatus");
+    expect(sourceContents.join("\n")).not.toContain("observedDesiredStateHash");
+
+    const deploymentConfigPath = instanceWorkspaceControlPlaneRecordSourcePath(
+      workspaceRoot,
+      manifest,
+      "deployment-config",
+    );
+    const deploymentConfigFile = JSON.parse(await readFile(deploymentConfigPath, "utf8")) as {
+      records: InstanceWorkspaceStoredRecord[];
+    };
+    deploymentConfigFile.records[0] = {
+      ...deploymentConfigFile.records[0]!,
+      values: {
+        ...deploymentConfigFile.records[0]!.values,
+        observedStatus: "deployed",
+      },
+    };
+    await writeFile(deploymentConfigPath, JSON.stringify(deploymentConfigFile, null, 2));
+
+    await expect(
+      readInstanceWorkspaceControlPlaneRecordSource({ manifest, workspaceRoot }),
+    ).rejects.toThrow(
+      'Workspace control-plane record source records record "instance.primary" includes unknown field "instance:deployment-config.observedStatus".',
+    );
   });
 });
 

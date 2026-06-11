@@ -294,8 +294,8 @@ in the manifest.
   and local configuration such as kind, name, control-plane record source path,
   app archive root, media root, local state root, and ignored secret state root
 - **AND** `app-install`, unified `route`, `deployment-config` intent, remote
-  target facts, deployment execution history, and default app policy are not
-  stored in `formless.json`
+  target facts, deployment observation cache, deployment execution history, and
+  default app policy are not stored in `formless.json`
 - **AND** provider worker-name overrides are deployment intent stored in
   schema-owned deployment config records, not in `formless.json`
 - **AND** deployed remote target origin facts are stored on
@@ -325,8 +325,9 @@ workspace source.
   media drift are reported without deriving intent from `formless.json`
 - **AND** remote drift checks select the deployed instance origin from enabled
   `deployment-config.targetUrl` record source
-- **AND** deployment attempt, evidence, drift, cleanup, and status summaries are
-  treated as runtime execution state rather than source drift
+- **AND** deployment attempt, evidence, drift, cleanup, status summaries, and
+  deployment config observation cache fields are treated as runtime observation
+  state rather than source drift
 
 #### Scenario: Refuse stale push
 
@@ -362,7 +363,8 @@ workspace record-source boundaries.
 
 The system SHALL represent `app-install`, unified `route`, and deployment
 intent in workspace record source and instance archives as schema-owned
-control-plane records without storing secrets or deployment execution history.
+control-plane records without storing secrets, deployment observation cache, or
+deployment execution history.
 
 #### Scenario: Instance archive includes control-plane intent
 
@@ -376,6 +378,8 @@ control-plane records without storing secrets or deployment execution history.
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
   `deploy-drift-report`, cleanup audit summaries, and provider state payloads
   are excluded from instance archives and workspace record source
+- **AND** runtime-observed deployment cache fields on `deployment-config`
+  records are excluded from instance archives and workspace record source
 - **AND** installed app data remains represented through app snapshots scoped by
   app install identity
 
@@ -396,8 +400,10 @@ control-plane records without storing secrets or deployment execution history.
   entity name, and records for only that entity
 - **AND** `formless.json` does not duplicate that intent
 - **AND** deployment attempts, evidence summaries, drift reports, and cleanup
-  audit summaries are available only through deployment runtime or gateway
-  operation status, not reviewable source records
+  audit summaries are available only through deployment runtime projection or
+  gateway operation status, not reviewable source records
+- **AND** deployment config observation cache fields are omitted from reviewable
+  source records
 - **AND** secret-looking fields are rejected from reviewable workspace state
 
 ### Requirement: Schema Control-Plane Drift

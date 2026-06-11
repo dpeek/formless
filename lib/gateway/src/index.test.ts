@@ -19,6 +19,7 @@ describe("Gateway runtime-neutral contracts", () => {
     expect(WORKSPACE_GATEWAY_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",
+      "deploymentRefresh",
       "deployApply",
       "deployPlan",
       "pull",
@@ -28,6 +29,7 @@ describe("Gateway runtime-neutral contracts", () => {
     ]);
     expect(WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceGatewayOperationKind("deployApply")).toBe(true);
+    expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(true);
     expect(isWorkspaceGatewayOperationKind("init")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("cleanup")).toBe(false);
   });
@@ -48,6 +50,10 @@ describe("Gateway runtime-neutral contracts", () => {
         profileLabel: undefined,
         provider: "cloudflare",
       },
+      ok: true,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "deploymentRefresh" })).toEqual({
+      input: { kind: "deploymentRefresh", targetAlias: undefined },
       ok: true,
     });
     expect(parseWorkspaceGatewayStartInput({ kind: "deployPlan", migrationPolicy: "old" })).toEqual(

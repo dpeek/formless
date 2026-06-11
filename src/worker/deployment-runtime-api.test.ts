@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import type { CreateAppInstallResponse, MutationResponse } from "../shared/protocol.ts";
+import type {
+  BootstrapResponse,
+  CreateAppInstallResponse,
+  MutationResponse,
+} from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
-import type { BootstrapResponse } from "../shared/protocol.ts";
 import {
   INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
   INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
@@ -11,20 +14,7 @@ import {
   INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
   INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
   INSTANCE_DEPLOYMENT_STATUS_API_PATH,
-  type DeploymentDesiredStateVersionRef,
-  type InstanceDeploymentAttemptFailureWritebackRequest,
-  type InstanceDeploymentAttemptFailureWritebackResponse,
-  type InstanceDeploymentAttemptHeartbeatRequest,
-  type InstanceDeploymentAttemptHeartbeatResponse,
-  type InstanceDeploymentAttemptPlanWritebackRequest,
-  type InstanceDeploymentAttemptPlanWritebackResponse,
-  type InstanceDeploymentAttemptStartRequest,
-  type InstanceDeploymentAttemptStartResponse,
-  type InstanceDeploymentAttemptSuccessWritebackRequest,
-  type InstanceDeploymentAttemptSuccessWritebackResponse,
   type InstanceDeploymentDesiredStateResponse,
-  type InstanceDeploymentDriftWritebackRequest,
-  type InstanceDeploymentDriftWritebackResponse,
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
 import {
@@ -77,7 +67,7 @@ function createHarness() {
 }
 
 describe("instance deployment runtime API routes", () => {
-  it("reads the primary desired-state version without provider secrets", async () => {
+  it("reads the primary desired-state projection without provider secrets", async () => {
     const first = await getJson<InstanceDeploymentDesiredStateResponse>(
       INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
     );
@@ -102,20 +92,29 @@ describe("instance deployment runtime API routes", () => {
         resources: [],
         targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
       },
-      revision: 1,
+      revision: 0,
       schemaVersion: 1,
       source: {
         fingerprint: "intent:instance.primary.empty",
         intentRevision: 0,
       },
       targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-      versionId: `desired.${INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID}.1`,
     });
     expect(first.body.desiredState.hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(first.body.desiredState.versionId).toBe(
+      `desired.${INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID}.${first.body.desiredState.hash}`,
+    );
     expect(first.body.desiredState.createdAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
-    expect(second.body.desiredState).toEqual(first.body.desiredState);
+    expect(second.body.desiredState).toMatchObject({
+      display: first.body.desiredState.display,
+      hash: first.body.desiredState.hash,
+      resourceGraph: first.body.desiredState.resourceGraph,
+      revision: first.body.desiredState.revision,
+      source: first.body.desiredState.source,
+      versionId: first.body.desiredState.versionId,
+    });
     expect(serialized).not.toContain("secret-cloudflare-token");
     expect(serialized).not.toContain("secret-alchemy-password");
   });
@@ -361,16 +360,10 @@ describe("instance deployment runtime API routes", () => {
     const controlPlane = await getJson<BootstrapResponse>(
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
     );
-    const deploymentConfigRecords = controlPlane.body.records.filter(
-      (record) => record.entity === "deployment-config",
-    );
     const serializedControlPlane = JSON.stringify(controlPlane.body.records);
 
     expect(desired.body.desiredState.resourceGraph.resources).toHaveLength(3);
     expect(serializedControlPlane).not.toContain("deploy-desired-resource");
-    expect(deploymentConfigRecords.map((record) => record.values.targetId)).toContain(
-      INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-    );
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-cloudflare-token");
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-alchemy-password");
   });
@@ -418,14 +411,6 @@ describe("instance deployment runtime API routes", () => {
     const first = await getJson<InstanceDeploymentDesiredStateResponse>(
       INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
     );
-    const started = await postAttemptStart(
-      attemptStartRequest(desiredStateRef(first.body.desiredState), {
-        idempotencyKey: "apply:primary:route-projection",
-        mode: "apply",
-      }),
-    );
-
-    expect(started.response.status).toBe(201);
 
     await patchControlPlaneRecord("route", enabledRoute.body.record.id, {
       updatedAt: "2026-05-28T00:01:00.000Z",
@@ -455,7 +440,6 @@ describe("instance deployment runtime API routes", () => {
     expect(serialized).not.toContain("secret:cloudflare:primary");
     expect(serialized).not.toContain("secret-cloudflare-token");
     expect(serialized).not.toContain("secret-alchemy-password");
-    expect(serialized).not.toContain(started.body.lease?.token ?? "lease-token-missing");
   });
 
   it("uses no-store cache policy for method and target errors", async () => {
@@ -488,752 +472,111 @@ describe("instance deployment runtime API routes", () => {
     });
   });
 
-  it("reads latest deployment status without materializing desired state", async () => {
+  it("derives deployment status from deployment-config observation fields", async () => {
+    const now = "2026-05-28T00:00:00.000Z";
     const empty = await getJson<InstanceDeploymentStatusResponse>(
       INSTANCE_DEPLOYMENT_STATUS_API_PATH,
     );
-    const methodRejected = await harness.fetch(INSTANCE_DEPLOYMENT_STATUS_API_PATH, {
-      method: "POST",
-    });
-    const targetRejected = await harness.fetch(
-      `${INSTANCE_DEPLOYMENT_STATUS_API_PATH}?targetId=instance.secondary`,
-    );
-
-    expect(empty.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(empty.body.target).toEqual({
-      kind: "instance",
-      label: "Primary instance target",
+    const deploymentConfig = await createControlPlaneRecord("deployment-config", {
       targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+      targetKind: "instance",
+      createdAt: now,
+      label: "Cloudflare primary",
+      enabled: true,
+      targetUrl: "https://direct.example.workers.dev",
+      providerFamily: "cloudflare",
+      updatedAt: now,
     });
-    expect(empty.body.status).toMatchObject({
-      state: "no-target",
-    });
-
-    expect(methodRejected.status).toBe(405);
-    expect(methodRejected.headers.get("Allow")).toBe("GET");
-    expect(methodRejected.headers.get("Cache-Control")).toBe("no-store");
-
-    expect(targetRejected.status).toBe(404);
-    expect(targetRejected.headers.get("Cache-Control")).toBe("no-store");
-    expect(await targetRejected.json()).toEqual({
-      error: 'Deployment target "instance.secondary" was not found.',
-    });
-  });
-
-  it("starts apply attempts with a lease and replays idempotency keys", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const request = attemptStartRequest(desiredStateRef(desiredState), {
-      idempotencyKey: "apply:primary:one",
-      mode: "apply",
-    });
-    const started = await postAttemptStart(request);
-
-    expect(started.response.status).toBe(201);
-    expect(started.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(started.body).toMatchObject({
-      attempt: {
-        actor: {
-          actorId: "runner:primary",
-          kind: "runner",
-          runnerId: "runner.primary",
-        },
-        hash: desiredState.hash,
-        idempotencyKey: "apply:primary:one",
-        mode: "apply",
-        revision: desiredState.revision,
-        status: "started",
-        targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-        versionId: desiredState.versionId,
-      },
-      lease: {
-        actor: {
-          actorId: "runner:primary",
-          kind: "runner",
-          runnerId: "runner.primary",
-        },
-        mode: "apply",
-        status: "active",
-        targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-      },
-      replayed: false,
-    });
-    expect(started.body.attempt.attemptId).toMatch(/^attempt\.[a-f0-9-]{36}$/);
-    expect(started.body.attempt.leaseId).toMatch(/^lease\.[a-f0-9-]{36}$/);
-    expect(started.body.lease?.leaseId).toBe(started.body.attempt.leaseId);
-    expect(started.body.lease?.attemptId).toBe(started.body.attempt.attemptId);
-    expect(started.body.lease?.token).toMatch(/^lease:[a-f0-9-]{36}$/);
-    expect(Date.parse(started.body.lease?.expiresAt ?? "")).toBeGreaterThan(
-      Date.parse(started.body.lease?.acquiredAt ?? ""),
+    const desired = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
     );
-    expect(JSON.stringify(started.body)).not.toContain("secret-cloudflare-token");
-    expect(JSON.stringify(started.body)).not.toContain("secret-alchemy-password");
-
-    const replayed = await postAttemptStart(request);
-
-    expect(replayed.response.status).toBe(200);
-    expect(replayed.body).toEqual({
-      ...started.body,
-      replayed: true,
-    });
-  });
-
-  it("rejects stale desired-state starts before acquiring a mutating lease", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const stale = await postAttemptStart(
-      attemptStartRequest(
-        {
-          ...desiredStateRef(desiredState),
-          hash: `sha256:${"b".repeat(64)}`,
-        },
-        {
-          idempotencyKey: "apply:primary:stale",
-          mode: "apply",
-        },
-      ),
-    );
-
-    expect(stale.response.status).toBe(409);
-    expect(stale.body).toEqual({
-      code: "deployment-desired-state-stale",
-      error: `Deployment desired state for target "${INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID}" is stale. Read the latest desired state before starting an attempt.`,
-    });
-
-    const first = await postAttemptStart(
-      attemptStartRequest(desiredStateRef(desiredState), {
-        idempotencyKey: "apply:primary:first",
-        mode: "apply",
-      }),
-    );
-    const second = await postAttemptStart(
-      attemptStartRequest(desiredStateRef(desiredState), {
-        idempotencyKey: "apply:primary:second",
-        mode: "destroy",
-      }),
-    );
-
-    expect(first.response.status).toBe(201);
-    expect(second.response.status).toBe(409);
-    expect(second.body).toEqual({
-      code: "deployment-attempt-active-lease",
-      error: `Deployment target "${INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID}" already has an active apply attempt.`,
-    });
-  });
-
-  it("starts plan attempts without a deployment lease", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const planned = await postAttemptStart(
-      attemptStartRequest(desiredStateRef(desiredState), {
-        idempotencyKey: "plan:primary:one",
-        mode: "plan",
-      }),
-    );
-
-    expect(planned.response.status).toBe(201);
-    expect(planned.body.attempt).toMatchObject({
-      idempotencyKey: "plan:primary:one",
-      mode: "plan",
-      status: "started",
-    });
-    expect(planned.body.attempt.leaseId).toBeUndefined();
-    expect(planned.body.lease).toBeUndefined();
-  });
-
-  it("heartbeats active mutating attempt leases", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const started = await postAttemptStart(
-      attemptStartRequest(desiredStateRef(desiredState), {
-        idempotencyKey: "apply:primary:heartbeat",
-        mode: "apply",
-      }),
-    );
-
-    expect(started.response.status).toBe(201);
-    expect(started.body.lease).toBeDefined();
-
-    const heartbeat = await postAttemptHeartbeat({
-      attemptId: started.body.attempt.attemptId,
-      desiredState: desiredStateRef(desiredState),
-      leaseToken: started.body.lease?.token ?? "",
-    });
-
-    expect(heartbeat.response.status).toBe(200);
-    expect(heartbeat.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(heartbeat.body).toMatchObject({
-      attempt: {
-        attemptId: started.body.attempt.attemptId,
-        status: "started",
-      },
-      lease: {
-        attemptId: started.body.attempt.attemptId,
-        leaseId: started.body.lease?.leaseId,
-        status: "active",
-      },
-    });
-    expect(Date.parse(heartbeat.body.lease.expiresAt)).toBeGreaterThanOrEqual(
-      Date.parse(started.body.lease?.expiresAt ?? ""),
-    );
-
-    const tokenRejected = await postAttemptHeartbeat({
-      attemptId: started.body.attempt.attemptId,
-      desiredState: desiredStateRef(desiredState),
-      leaseToken: "lease:wrong",
-    });
-
-    expect(tokenRejected.response.status).toBe(409);
-    expect(tokenRejected.body).toEqual({
-      code: "deployment-lease-token-mismatch",
-      error: `Deployment lease token for attempt "${started.body.attempt.attemptId}" does not match.`,
-    });
-  });
-
-  it("covers worker deployment API lifecycle status from exact writebacks", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const desired = desiredStateRef(desiredState);
-    const stale = await postAttemptStart(
-      attemptStartRequest(
-        { ...desired, versionId: "desired.instance.primary.stale" },
-        {
-          idempotencyKey: "apply:primary:lifecycle:stale",
-          mode: "apply",
-        },
-      ),
-    );
-
-    expect(stale.response.status).toBe(409);
-    expect(stale.body).toMatchObject({ code: "deployment-desired-state-stale" });
-
-    const startRequest = attemptStartRequest(desired, {
-      idempotencyKey: "apply:primary:lifecycle:success",
-      mode: "apply",
-    });
-    const started = await postAttemptStart(startRequest);
-    const replayed = await postAttemptStart(startRequest);
-    const conflicted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "apply:primary:lifecycle:conflict",
-        mode: "destroy",
-      }),
-    );
-
-    expect(started.response.status).toBe(201);
-    expect(replayed.response.status).toBe(200);
-    expect(replayed.body).toEqual({ ...started.body, replayed: true });
-    expect(conflicted.response.status).toBe(409);
-    expect(conflicted.body).toMatchObject({ code: "deployment-attempt-active-lease" });
-
-    const heartbeat = await postAttemptHeartbeat({
-      attemptId: started.body.attempt.attemptId,
-      desiredState: desired,
-      leaseToken: started.body.lease?.token ?? "",
-    });
-    const active = await getJson<InstanceDeploymentStatusResponse>(
+    const pending = await getJson<InstanceDeploymentStatusResponse>(
       INSTANCE_DEPLOYMENT_STATUS_API_PATH,
     );
 
-    expect(heartbeat.response.status).toBe(200);
-    expect(active.body.status).toMatchObject({
-      attemptId: started.body.attempt.attemptId,
-      state: "in-progress",
+    expect(empty.body.status).toMatchObject({ state: "no-target" });
+    expect(pending.body.status).toMatchObject({
+      latestDesiredState: {
+        hash: desired.body.desiredState.hash,
+        revision: desired.body.desiredState.revision,
+        targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+        versionId: desired.body.desiredState.versionId,
+      },
+      state: "pending-changes",
     });
 
-    const success = await postAttemptSuccess({
-      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-      attemptId: started.body.attempt.attemptId,
-      desiredState: desired,
-      evidence: [
-        {
-          action: "created",
-          alchemyResourceId: "alchemy:custom-domain:admin.example.com",
-          displayName: "admin.example.com",
-          kind: "cloudflare-worker-custom-domain",
-          logicalId: "custom-domain:admin.example.com",
-          providerFamily: "cloudflare",
-          providerResourceIds: ["cf-custom-domain-lifecycle"],
-          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-        },
-      ],
-      leaseToken: started.body.lease?.token ?? "",
-      runnerId: "runner.primary",
+    await patchControlPlaneRecord("deployment-config", deploymentConfig.body.record.id, {
+      observedAt: "2026-05-28T00:01:00.000Z",
+      observedDesiredStateHash: desired.body.desiredState.hash,
+      observedRunnerId: "runner.primary",
+      observedStatus: "deployed",
+      observedSummary: "Deployed current state.",
     });
     const deployed = await getJson<InstanceDeploymentStatusResponse>(
       INSTANCE_DEPLOYMENT_STATUS_API_PATH,
     );
 
-    expect(success.response.status).toBe(200);
-    expect(success.body.attempt.status).toBe("succeeded");
     expect(deployed.body.status).toMatchObject({
-      attemptId: started.body.attempt.attemptId,
-      state: "deployed",
-    });
-
-    const drift = await postDeploymentDrift({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      desiredState: desired,
-      status: "drifted",
-      summary: {
-        affectedLogicalIds: ["custom-domain:admin.example.com"],
-        create: 0,
-        delete: 0,
-        update: 1,
-      },
-    });
-    const driftStatus = await getJson<InstanceDeploymentStatusResponse>(
-      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
-    );
-
-    expect(drift.response.status).toBe(200);
-    expect(driftStatus.body.status).toMatchObject({
-      report: {
-        summary: {
-          affectedLogicalIds: ["custom-domain:admin.example.com"],
-          update: 1,
-        },
-      },
-      state: "drift",
-    });
-
-    const failureStarted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "apply:primary:lifecycle:failure",
-        mode: "apply",
-      }),
-    );
-    const failure = await postAttemptFailure({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      attemptId: failureStarted.body.attempt.attemptId,
-      desiredState: desired,
-      leaseToken: failureStarted.body.lease?.token ?? "",
+      deployedAt: "2026-05-28T00:01:00.000Z",
       runnerId: "runner.primary",
-      summary: {
-        code: "provider-error",
-        displayMessage: "Provider apply failed.",
-      },
+      state: "deployed",
+      summary: "Deployed current state.",
+    });
+
+    await patchControlPlaneRecord("deployment-config", deploymentConfig.body.record.id, {
+      observedAt: "2026-05-28T00:02:00.000Z",
+      observedDesiredStateHash: desired.body.desiredState.hash,
+      observedError: "Provider apply failed.",
+      observedStatus: "failed",
     });
     const failed = await getJson<InstanceDeploymentStatusResponse>(
       INSTANCE_DEPLOYMENT_STATUS_API_PATH,
     );
 
-    expect(failure.response.status).toBe(200);
     expect(failed.body.status).toMatchObject({
-      attemptId: failureStarted.body.attempt.attemptId,
+      failedAt: "2026-05-28T00:02:00.000Z",
       state: "failed-current-version",
       summary: {
-        code: "provider-error",
+        code: "observed-failure",
         displayMessage: "Provider apply failed.",
       },
     });
+
+    await patchControlPlaneRecord("deployment-config", deploymentConfig.body.record.id, {
+      observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
+      observedStatus: "failed",
+    });
+    const staleObserved = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(staleObserved.body.status).toMatchObject({ state: "pending-changes" });
   });
 
-  it("writes plan, success, failure, and drift facts for exact desired-state versions", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const desired = desiredStateRef(desiredState);
-
-    const planStarted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "plan:primary:writeback",
-        mode: "plan",
-      }),
-    );
-    const plan = await postAttemptPlan({
-      attemptId: planStarted.body.attempt.attemptId,
-      desiredState: desired,
-      runnerId: "runner.primary",
-      summary: {
-        blockers: [],
-        changes: { create: 1, delete: 0, noChange: 2, update: 1 },
-        displayText: "1 create, 1 update",
-        warnings: [
-          { code: "preview", logicalId: "custom-domain:app.example.com", message: "Preview only." },
-        ],
-      },
-    });
-
-    expect(plan.response.status).toBe(200);
-    expect(plan.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(plan.body.attempt).toMatchObject({
-      attemptId: planStarted.body.attempt.attemptId,
-      mode: "plan",
-      status: "planned",
-    });
-    expect(plan.body.attempt.completedAt).toBeDefined();
-    expect(plan.body.plan).toMatchObject({
-      attemptId: planStarted.body.attempt.attemptId,
-      kind: "plan",
-      runnerId: "runner.primary",
-      summary: {
-        changes: { create: 1, delete: 0, noChange: 2, update: 1 },
-        displayText: "1 create, 1 update",
-      },
-      versionId: desired.versionId,
-    });
-
-    const applyStarted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "apply:primary:success-writeback",
-        mode: "apply",
-      }),
-    );
-    const applyPlan = await postAttemptPlan({
-      attemptId: applyStarted.body.attempt.attemptId,
-      desiredState: desired,
-      summary: {
-        blockers: [],
-        changes: { create: 1, delete: 0, noChange: 0, update: 0 },
-        warnings: [],
-      },
-    });
-
-    expect(applyPlan.response.status).toBe(200);
-    expect(applyPlan.body.attempt.status).toBe("started");
-
-    const staleSuccess = await postAttemptSuccess({
-      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-      attemptId: applyStarted.body.attempt.attemptId,
-      desiredState: { ...desired, hash: `sha256:${"c".repeat(64)}` },
-      evidence: [],
-      leaseToken: applyStarted.body.lease?.token ?? "",
-      runnerId: "runner.primary",
-    });
-
-    expect(staleSuccess.response.status).toBe(409);
-    expect(staleSuccess.body).toMatchObject({
-      code: "deployment-attempt-version-mismatch",
-    });
-
-    const success = await postAttemptSuccess({
-      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-      attemptId: applyStarted.body.attempt.attemptId,
-      desiredState: desired,
-      evidence: [
-        {
-          action: "created",
-          alchemyResourceId: "alchemy:custom-domain:app.example.com",
-          displayName: "app.example.com",
-          kind: "cloudflare-worker-custom-domain",
-          logicalId: "custom-domain:app.example.com",
-          providerFamily: "cloudflare",
-          providerResourceIds: ["cf-custom-domain-1"],
-          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+  it("keeps the deployment runtime API read-only by rejecting removed writeback endpoints", async () => {
+    for (const path of [
+      INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
+      INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
+      INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH,
+      INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH,
+      INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
+      INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
+    ]) {
+      const response = await harness.fetch(path, {
+        body: "{}",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json",
         },
-      ],
-      leaseToken: applyStarted.body.lease?.token ?? "",
-      runnerId: "runner.primary",
-    });
+        method: "POST",
+      });
 
-    expect(success.response.status).toBe(200);
-    expect(success.body).toMatchObject({
-      attempt: {
-        attemptId: applyStarted.body.attempt.attemptId,
-        status: "succeeded",
-      },
-      lease: {
-        attemptId: applyStarted.body.attempt.attemptId,
-        status: "released",
-      },
-      result: {
-        alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-        evidence: [
-          {
-            action: "created",
-            kind: "cloudflare-worker-custom-domain",
-            logicalId: "custom-domain:app.example.com",
-          },
-        ],
-        kind: "success",
-        runnerId: "runner.primary",
-        versionId: desired.versionId,
-      },
-    });
-    expect(success.body.result.completedAt).toBe(success.body.attempt.completedAt);
-    expect(JSON.stringify(success.body)).not.toContain("secret-cloudflare-token");
-    expect(JSON.stringify(success.body)).not.toContain("secret-alchemy-password");
-
-    const failureStarted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "apply:primary:failure-writeback",
-        mode: "apply",
-      }),
-    );
-    const missingLeaseFailure = await postAttemptFailure({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      attemptId: failureStarted.body.attempt.attemptId,
-      desiredState: desired,
-      summary: {
-        code: "provider-error",
-        details: "Cloudflare rejected the mutation.",
-        displayMessage: "Provider apply failed.",
-      },
-    });
-
-    expect(missingLeaseFailure.response.status).toBe(409);
-    expect(missingLeaseFailure.body).toMatchObject({
-      code: "deployment-lease-token-missing",
-    });
-
-    const actorMismatchFailure = await postAttemptFailure({
-      actor: {
-        actorId: "runner:other",
-        kind: "runner",
-        runnerId: "runner.other",
-      },
-      attemptId: failureStarted.body.attempt.attemptId,
-      desiredState: desired,
-      leaseToken: failureStarted.body.lease?.token ?? "",
-      runnerId: "runner.other",
-      summary: {
-        code: "provider-error",
-        displayMessage: "Provider apply failed.",
-      },
-    });
-
-    expect(actorMismatchFailure.response.status).toBe(409);
-    expect(actorMismatchFailure.body).toMatchObject({
-      code: "deployment-attempt-actor-mismatch",
-    });
-
-    const failure = await postAttemptFailure({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      attemptId: failureStarted.body.attempt.attemptId,
-      desiredState: desired,
-      leaseToken: failureStarted.body.lease?.token ?? "",
-      runnerId: "runner.primary",
-      summary: {
-        code: "provider-error",
-        details: "Cloudflare rejected the mutation.",
-        displayMessage: "Provider apply failed.",
-      },
-    });
-
-    expect(failure.response.status).toBe(200);
-    expect(failure.body).toMatchObject({
-      attempt: {
-        attemptId: failureStarted.body.attempt.attemptId,
-        status: "failed",
-      },
-      lease: {
-        attemptId: failureStarted.body.attempt.attemptId,
-        status: "released",
-      },
-      result: {
-        actor: {
-          actorId: "runner:primary",
-          kind: "runner",
-          runnerId: "runner.primary",
-        },
-        kind: "failure",
-        runnerId: "runner.primary",
-        summary: {
-          code: "provider-error",
-          displayMessage: "Provider apply failed.",
-        },
-        versionId: desired.versionId,
-      },
-    });
-
-    const drift = await postDeploymentDrift({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      desiredState: desired,
-      status: "drifted",
-      summary: {
-        affectedLogicalIds: ["custom-domain:app.example.com"],
-        create: 0,
-        delete: 0,
-        update: 1,
-      },
-    });
-
-    expect(drift.response.status).toBe(200);
-    expect(drift.body.report).toMatchObject({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      status: "drifted",
-      summary: {
-        affectedLogicalIds: ["custom-domain:app.example.com"],
-        update: 1,
-      },
-      versionId: desired.versionId,
-    });
-    expect(drift.body.report.reportId).toMatch(/^drift\.[a-f0-9-]{36}$/);
-
-    const controlPlane = await getJson<BootstrapResponse>(
-      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
-    );
-
-    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
-      "deploy-attempt",
-    );
-    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
-      "deploy-evidence-summary",
-    );
-    expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
-      "deploy-drift-report",
-    );
-    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
-      planStarted.body.attempt.attemptId,
-    );
-    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
-      applyStarted.body.attempt.attemptId,
-    );
-    expect(JSON.stringify(controlPlane.body.records)).not.toContain(
-      failureStarted.body.attempt.attemptId,
-    );
-    expect(JSON.stringify(controlPlane.body.records)).not.toContain(success.body.lease.token);
-
-    const staleDrift = await postDeploymentDrift({
-      actor: {
-        actorId: "runner:primary",
-        kind: "runner",
-        runnerId: "runner.primary",
-      },
-      desiredState: { ...desired, hash: `sha256:${"d".repeat(64)}` },
-      status: "unknown",
-      summary: {
-        affectedLogicalIds: [],
-        create: 0,
-        delete: 0,
-        update: 0,
-      },
-    });
-
-    expect(staleDrift.response.status).toBe(409);
-    expect(staleDrift.body).toMatchObject({
-      code: "deployment-desired-state-stale",
-    });
-  });
-
-  it("guards and validates attempt start writes", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const methodRejected = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH);
-    const unauthorized = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH, {
-      body: JSON.stringify(attemptStartRequest(desiredStateRef(desiredState))),
-      method: "POST",
-    });
-    const invalid = await postAttemptStart({
-      ...attemptStartRequest(desiredStateRef(desiredState)),
-      mode: "launch",
-    } as unknown as InstanceDeploymentAttemptStartRequest);
-
-    expect(methodRejected.status).toBe(405);
-    expect(methodRejected.headers.get("Allow")).toBe("POST");
-    expect(methodRejected.headers.get("Cache-Control")).toBe("no-store");
-
-    expect(unauthorized.status).toBe(401);
-    expect(unauthorized.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
-    expect(unauthorized.headers.get("Cache-Control")).toBe("no-store");
-
-    expect(invalid.response.status).toBe(400);
-    expect(invalid.body).toMatchObject({
-      code: "invalid-attempt-mode",
-      field: "mode",
-    });
-  });
-
-  it("rejects hidden secret values and provider-truth fields in writeback evidence", async () => {
-    const desiredState = (
-      await getJson<InstanceDeploymentDesiredStateResponse>(
-        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
-      )
-    ).body.desiredState;
-    const desired = desiredStateRef(desiredState);
-    const secretStarted = await postAttemptStart(
-      attemptStartRequest(desired, {
-        idempotencyKey: "apply:primary:secret-evidence",
-        mode: "apply",
-      }),
-    );
-    const secretEvidence = await postAttemptSuccess({
-      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-      attemptId: secretStarted.body.attempt.attemptId,
-      desiredState: desired,
-      evidence: [
-        {
-          action: "created",
-          kind: "cloudflare-worker-custom-domain",
-          logicalId: "custom-domain:secret.example.com",
-          providerFamily: "cloudflare",
-          providerResourceIds: ["CLOUDFLARE_API_TOKEN=hidden"],
-          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-        },
-      ],
-      leaseToken: secretStarted.body.lease?.token ?? "",
-    });
-    const providerTruthEvidence = await postAttemptSuccess({
-      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
-      attemptId: secretStarted.body.attempt.attemptId,
-      desiredState: desired,
-      evidence: [
-        {
-          action: "created",
-          kind: "cloudflare-worker-custom-domain",
-          logicalId: "custom-domain:truth.example.com",
-          providerFamily: "cloudflare",
-          providerResourceIds: ["cf-custom-domain-truth"],
-          providerResourceJson: "{}",
-          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-        },
-      ],
-      leaseToken: secretStarted.body.lease?.token ?? "",
-    } as unknown as InstanceDeploymentAttemptSuccessWritebackRequest);
-
-    expect(secretEvidence.response.status).toBe(400);
-    expect(secretEvidence.body.error).toBe(
-      "Deployment resource evidence[0] provider resource ids cannot include secret values.",
-    );
-    expect(providerTruthEvidence.response.status).toBe(400);
-    expect(providerTruthEvidence.body.error).toBe(
-      'Deployment resource evidence[0] has unsupported field "providerResourceJson".',
-    );
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.json()).toEqual({
+        error: "Deployment runtime API is read-only.",
+      });
+    }
   });
 });
 
@@ -1340,146 +683,5 @@ async function postAdminJson<T>(path: string, body: unknown) {
   return {
     body: (await response.json()) as T,
     response,
-  };
-}
-
-async function postAttemptStart(request: InstanceDeploymentAttemptStartRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentAttemptStartResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-async function postAttemptHeartbeat(request: InstanceDeploymentAttemptHeartbeatRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentAttemptHeartbeatResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-async function postAttemptPlan(request: InstanceDeploymentAttemptPlanWritebackRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentAttemptPlanWritebackResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-async function postAttemptSuccess(request: InstanceDeploymentAttemptSuccessWritebackRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentAttemptSuccessWritebackResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-async function postAttemptFailure(request: InstanceDeploymentAttemptFailureWritebackRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentAttemptFailureWritebackResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-async function postDeploymentDrift(request: InstanceDeploymentDriftWritebackRequest) {
-  const response = await harness.fetch(INSTANCE_DEPLOYMENT_DRIFT_API_PATH, {
-    body: JSON.stringify(request),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
-    },
-    method: "POST",
-  });
-
-  return {
-    body: (await response.json()) as InstanceDeploymentDriftWritebackResponse & {
-      code?: string;
-      error?: string;
-    },
-    response,
-  };
-}
-
-function attemptStartRequest(
-  desiredState: DeploymentDesiredStateVersionRef,
-  input: Partial<Pick<InstanceDeploymentAttemptStartRequest, "idempotencyKey" | "mode">> = {},
-): InstanceDeploymentAttemptStartRequest {
-  return {
-    actor: {
-      actorId: "runner:primary",
-      kind: "runner",
-      runnerId: "runner.primary",
-    },
-    desiredState,
-    idempotencyKey: input.idempotencyKey ?? "apply:primary:default",
-    mode: input.mode ?? "apply",
-  };
-}
-
-function desiredStateRef(
-  desiredState: InstanceDeploymentDesiredStateResponse["desiredState"],
-): DeploymentDesiredStateVersionRef {
-  return {
-    hash: desiredState.hash,
-    revision: desiredState.revision,
-    targetId: desiredState.targetId,
-    versionId: desiredState.versionId,
   };
 }

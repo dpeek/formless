@@ -14,6 +14,7 @@ import {
 } from "./types.ts";
 
 export {
+  CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
   DEPLOY_ACTOR_KINDS,
   DEPLOY_CONTROL_PLANE_ACTION_IDS,
   DEPLOY_PUBLIC_CONTRACT_VERSION,
@@ -22,6 +23,8 @@ export type {
   ControlPlaneAppRouteKind,
   ControlPlaneAppRouteSurface,
   ControlPlaneAppInstallProjectionRecord,
+  ControlPlaneDeploymentConfigObservedField,
+  ControlPlaneDeploymentConfigObservedStatus,
   ControlPlaneDomainMappingProfile,
   ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneRedirectStatusCode,

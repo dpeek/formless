@@ -169,6 +169,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Pull");
     expect(html).toContain("Push");
     expect(html).toContain("Credentials");
+    expect(html).toContain("Refresh deploy");
     expect(html).toContain("Plan deploy");
     expect(html).toContain("Apply deploy");
     expect(html).toContain('data-formless-workspace-onboarding="local"');
@@ -192,6 +193,7 @@ describe("instance shell route view", () => {
     expect(html).not.toContain('data-formless-workspace-gateway="local"');
     expect(html).not.toContain('data-formless-workspace-operation-controls="true"');
     expect(html).not.toContain("Initialize workspace");
+    expect(html).not.toContain("Refresh deploy");
     expect(html).not.toContain("Plan deploy");
     expect(html).not.toContain("Apply deploy");
   });

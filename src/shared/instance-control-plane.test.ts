@@ -5,6 +5,7 @@ import {
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneDefaultRoutesForInstall,
+  instanceControlPlaneDeploymentConfigObservedFields,
   instanceControlPlaneEffectiveRouteAccess,
   instanceControlPlaneEntityNames,
   instanceControlPlaneImmutableFields,
@@ -17,6 +18,7 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   isRuntimeControlPlaneImmutableField,
+  isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
 } from "@dpeek/formless-schema";
 
@@ -59,6 +61,63 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.screens?.deployments.path).toBe("/deployments");
     expect(schema.runtime?.owner).toBe("runtime");
     expect(schema.runtime?.builder.editable).toBe(false);
+  });
+
+  it("defines deployment config intent and observation cache fields", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const deploymentFields = schema.entities["deployment-config"]?.fields;
+
+    expect(deploymentFields).toMatchObject({
+      targetId: { type: "text", required: true },
+      targetKind: {
+        type: "enum",
+        required: true,
+        values: { instance: { label: "Instance" } },
+      },
+      label: { type: "text", required: true },
+      enabled: { type: "boolean", required: true, default: true },
+      targetUrl: { type: "text", required: true, format: "href" },
+      providerFamily: {
+        type: "enum",
+        required: true,
+        values: { cloudflare: { label: "Cloudflare" } },
+      },
+      accountId: { type: "text", required: false },
+      workerName: { type: "text", required: false },
+      credentialRef: { type: "text", required: false },
+      observedStatus: {
+        type: "enum",
+        required: false,
+        values: {
+          deployed: { label: "Deployed" },
+          drifted: { label: "Drifted" },
+          failed: { label: "Failed" },
+          "in-sync": { label: "In sync" },
+          unknown: { label: "Unknown" },
+        },
+      },
+      observedAt: { type: "text", required: false },
+      observedDesiredStateHash: { type: "text", required: false },
+      observedSummary: { type: "text", required: false, format: "longText" },
+      observedError: { type: "text", required: false, format: "longText" },
+      observedRunnerId: { type: "text", required: false },
+      createdAt: { type: "text", required: true },
+      updatedAt: { type: "text", required: true },
+    });
+    expect(Object.keys(deploymentFields ?? {})).toEqual([
+      "targetId",
+      "targetKind",
+      "label",
+      "enabled",
+      "targetUrl",
+      "providerFamily",
+      "accountId",
+      "workerName",
+      "credentialRef",
+      ...instanceControlPlaneDeploymentConfigObservedFields,
+      "createdAt",
+      "updatedAt",
+    ]);
   });
 
   it("defines flat unified route fields for mount and redirect intent", () => {
@@ -194,6 +253,14 @@ describe("instance control-plane schema contracts", () => {
     expect(
       isRuntimeControlPlaneSecretReferenceField(schema, "deployment-config", "credentialRef"),
     ).toBe(true);
+    expect(
+      instanceControlPlaneDeploymentConfigObservedFields.every((field) =>
+        isRuntimeControlPlaneObservedField(schema, "deployment-config", field),
+      ),
+    ).toBe(true);
+    expect(isRuntimeControlPlaneObservedField(schema, "deployment-config", "targetUrl")).toBe(
+      false,
+    );
     expect(schema.entities["deploy-attempt"]).toBeUndefined();
     expect(schema.entities["deploy-evidence-summary"]).toBeUndefined();
     expect(schema.entities["deploy-drift-report"]).toBeUndefined();
@@ -318,6 +385,12 @@ describe("instance control-plane schema contracts", () => {
       { field: "workerName", display: "readOnly" },
       { field: "targetUrl", display: "readOnly" },
       { field: "enabled", display: "readOnly" },
+      { field: "observedStatus", display: "readOnly" },
+      { field: "observedAt", display: "readOnly" },
+      { field: "observedDesiredStateHash", display: "readOnly" },
+      { field: "observedSummary", display: "readOnly" },
+      { field: "observedError", display: "readOnly" },
+      { field: "observedRunnerId", display: "readOnly" },
     ]);
     expect(schema.tableViews.deployDesiredResourceTable).toBeUndefined();
     expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();

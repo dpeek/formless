@@ -39,6 +39,14 @@ export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_EXCLUDED_ENTITIES = 
   "deploy-drift-report",
   "provider-config-ref",
 ] as const;
+export const INSTANCE_WORKSPACE_CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS = [
+  "observedStatus",
+  "observedAt",
+  "observedDesiredStateHash",
+  "observedSummary",
+  "observedError",
+  "observedRunnerId",
+] as const;
 
 export const WORKSPACE_OPERATION_STATE_FILE_KIND = "formless.workspaceOperation";
 export const WORKSPACE_OPERATION_STATE_FILE_VERSION = 1;
@@ -47,6 +55,7 @@ export const WORKSPACE_OPERATION_STATE_ROOT = ".formless/operations";
 export const WORKSPACE_OPERATION_KINDS = [
   "check",
   "credentialSetup",
+  "deploymentRefresh",
   "deployApply",
   "deployPlan",
   "init",
@@ -59,6 +68,7 @@ export const WORKSPACE_OPERATION_KINDS = [
 export const WORKSPACE_BROWSER_OPERATION_KINDS = [
   "check",
   "credentialSetup",
+  "deploymentRefresh",
   "deployApply",
   "deployPlan",
   "pull",
@@ -233,6 +243,12 @@ export type DeployApplyWorkspaceOperationInput = {
   workspacePath?: string | null;
 };
 
+export type DeploymentRefreshWorkspaceOperationInput = {
+  kind: "deploymentRefresh";
+  targetAlias?: string | null;
+  workspacePath?: string | null;
+};
+
 export type CredentialSetupWorkspaceOperationInput = {
   accountId?: string | null;
   kind: "credentialSetup";
@@ -244,6 +260,7 @@ export type CredentialSetupWorkspaceOperationInput = {
 export type WorkspaceOperationInput =
   | CheckWorkspaceOperationInput
   | CredentialSetupWorkspaceOperationInput
+  | DeploymentRefreshWorkspaceOperationInput
   | DeployApplyWorkspaceOperationInput
   | DeployPlanWorkspaceOperationInput
   | InitWorkspaceOperationInput
@@ -295,9 +312,15 @@ export type WorkspaceOperationDeployStartInput = {
   targetAlias?: string | null;
 };
 
+export type WorkspaceOperationDeploymentRefreshStartInput = {
+  kind: "deploymentRefresh";
+  targetAlias?: string | null;
+};
+
 export type WorkspaceOperationStartInput =
   | WorkspaceOperationCheckOrPullStartInput
   | WorkspaceOperationCredentialSetupStartInput
+  | WorkspaceOperationDeploymentRefreshStartInput
   | WorkspaceOperationDeployStartInput
   | WorkspaceOperationPushStartInput
   | WorkspaceOperationSaveStartInput

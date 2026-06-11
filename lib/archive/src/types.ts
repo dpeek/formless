@@ -17,6 +17,7 @@ import {
   type StoredRecord,
 } from "../../../src/shared/protocol.ts";
 import {
+  isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
   isValidStoredFieldValue,
   parseAppSchema,
@@ -197,7 +198,9 @@ export function parseAppArchive(value: unknown): AppArchive {
 }
 
 export function formatInstanceArchive(archive: InstanceArchive): string {
-  return `${JSON.stringify(canonicalInstanceArchive(parseInstanceArchive(archive)), null, 2)}\n`;
+  const strippedArchive = canonicalInstanceArchive(archive);
+
+  return `${JSON.stringify(canonicalInstanceArchive(parseInstanceArchive(strippedArchive)), null, 2)}\n`;
 }
 
 export function formatAppArchive(archive: AppArchive): string {
@@ -471,6 +474,12 @@ function validateInstanceArchiveControlPlaneRecord(
   const fields = entity.fields as Record<string, FieldSchema>;
 
   for (const fieldName of Object.keys(record.values)) {
+    if (isRuntimeControlPlaneObservedField(instanceControlPlaneSchema, record.entity, fieldName)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store runtime-observed deployment cache fields.`,
+      );
+    }
+
     if (!fields[fieldName]) {
       throw new Error(
         `${context} record "${record.id}" includes unknown field "${controlPlaneFieldLabel(record, fieldName)}".`,
@@ -1003,12 +1012,25 @@ function canonicalInstanceArchiveControlPlaneRecord(record: StoredRecord): Store
   const canonical = canonicalStoredRecord({
     ...record,
     entity,
+    values: reviewableControlPlaneArchiveValues(entity, record.values),
   });
 
   return {
     ...canonical,
     entity: formatInstanceControlPlaneBoundaryEntityName(entity),
   };
+}
+
+function reviewableControlPlaneArchiveValues(
+  entity: InstanceControlPlaneEntityName,
+  values: RecordValues,
+): RecordValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) =>
+        !isRuntimeControlPlaneObservedField(instanceControlPlaneSchema, entity, fieldName),
+    ),
+  ) as RecordValues;
 }
 
 function canonicalAppArchive(archive: AppArchive): AppArchive {

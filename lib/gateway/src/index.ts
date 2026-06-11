@@ -208,6 +208,7 @@ export function parseWorkspaceGatewayStartInput(
         return { input: { check: optionalBoolean(body.check), kind }, ok: true };
       case "check":
       case "pull":
+      case "deploymentRefresh":
         return { input: { kind, targetAlias: optionalString(body.targetAlias) }, ok: true };
       case "push":
         return {

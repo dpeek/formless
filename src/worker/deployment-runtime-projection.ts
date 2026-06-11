@@ -18,10 +18,7 @@ import {
 import { CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS } from "../shared/domain-provider-protocol.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
-import {
-  readControlPlaneRecords,
-  syncDeploymentConfigToControlPlane,
-} from "./deployment-control-plane-client.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 import { readInstanceDomainMappings } from "./instance-domain-mappings-state.ts";
 
@@ -55,17 +52,6 @@ export async function buildPrimaryInstanceDeploymentDesiredStateProjection(
     env: input.env,
     fallbackSource: legacy.source,
     targetId: input.targetId,
-  });
-
-  await syncDeploymentConfigToControlPlane({
-    env: input.env,
-    now: input.now,
-    requestUrl: input.requestUrl,
-    target: input.target ?? {
-      kind: "instance",
-      targetId: input.targetId,
-    },
-    targetUrl: new URL(input.requestUrl).origin,
   });
 
   return projection;

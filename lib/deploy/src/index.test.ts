@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
   computeDeployProjectionHash,
   deployProjectionCanonicalJson,
   projectDeployControlPlaneDesiredState,
@@ -12,6 +13,17 @@ import type {
 } from "./types.ts";
 
 describe("Deploy control-plane projection helpers", () => {
+  it("declares display-safe deployment-config observation fields", () => {
+    expect(CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS).toEqual([
+      "observedStatus",
+      "observedAt",
+      "observedDesiredStateHash",
+      "observedSummary",
+      "observedError",
+      "observedRunnerId",
+    ]);
+  });
+
   it("projects enabled hostless mount routes as deterministic route targets", () => {
     expect(projectDeployRouteTargets([...appRoutes].reverse(), appInstalls)).toEqual([
       {

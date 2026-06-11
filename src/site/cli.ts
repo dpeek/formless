@@ -536,6 +536,18 @@ export async function runFormlessCli(
       dependencies.log(formatCliWorkspaceOperationResult(result));
       return;
     }
+    case "instanceDeploymentRefresh": {
+      const result = await runCliWorkspaceOperation(
+        {
+          kind: "deploymentRefresh",
+          targetAlias: command.targetAlias,
+          workspacePath: command.workspacePath,
+        },
+        dependencies,
+      );
+      dependencies.log(formatCliWorkspaceOperationResult(result));
+      return;
+    }
     case "instancePull": {
       const result = await runCliWorkspaceOperation(
         {
@@ -1581,6 +1593,8 @@ function formatWorkspaceOperationLabel(operation: WorkspaceOperationState["opera
       return "deploy apply";
     case "deployPlan":
       return "deploy plan";
+    case "deploymentRefresh":
+      return "deployment refresh";
     default:
       return operation;
   }

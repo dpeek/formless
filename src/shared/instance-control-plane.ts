@@ -1,4 +1,8 @@
 import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
+import {
+  CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
+  type ControlPlaneDeploymentConfigObservedStatus,
+} from "@dpeek/formless-deploy";
 import { formatQualifiedEntityName, parseQualifiedEntityName } from "@dpeek/formless-schema";
 import type {
   AppSchema,
@@ -110,6 +114,11 @@ export type InstanceControlPlaneRouteValues = {
 export type InstanceControlPlaneProviderFamily = "cloudflare";
 
 export type InstanceControlPlaneDeploymentConfigTargetKind = "instance";
+export type InstanceControlPlaneDeploymentConfigObservedStatus =
+  ControlPlaneDeploymentConfigObservedStatus;
+
+export const instanceControlPlaneDeploymentConfigObservedFields =
+  CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS;
 
 export type InstanceControlPlaneDeploymentConfigValues = {
   targetId: string;
@@ -121,6 +130,12 @@ export type InstanceControlPlaneDeploymentConfigValues = {
   accountId?: string;
   workerName?: string;
   credentialRef?: string;
+  observedStatus?: InstanceControlPlaneDeploymentConfigObservedStatus;
+  observedAt?: string;
+  observedDesiredStateHash?: string;
+  observedSummary?: string;
+  observedError?: string;
+  observedRunnerId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -270,6 +285,18 @@ export const instanceControlPlaneSchema = {
         accountId: optionalTextField("Account id"),
         workerName: optionalTextField("Worker name"),
         credentialRef: optionalTextField("Credential ref"),
+        observedStatus: optionalEnumField("Observed status", {
+          deployed: "Deployed",
+          drifted: "Drifted",
+          failed: "Failed",
+          "in-sync": "In sync",
+          unknown: "Unknown",
+        }),
+        observedAt: optionalTextField("Observed at"),
+        observedDesiredStateHash: optionalTextField("Observed desired-state hash"),
+        observedSummary: optionalTextField("Observed summary", "longText"),
+        observedError: optionalTextField("Observed error", "longText"),
+        observedRunnerId: optionalTextField("Observed runner"),
         createdAt: textField("Created at"),
         updatedAt: textField("Updated at"),
       },
@@ -331,6 +358,8 @@ export const instanceControlPlaneSchema = {
       "targetId",
       "providerFamily",
       "enabled",
+      "observedStatus",
+      "observedAt",
     ]),
   },
   tableViews: {
@@ -383,6 +412,12 @@ export const instanceControlPlaneSchema = {
       "workerName",
       "targetUrl",
       "enabled",
+      "observedStatus",
+      "observedAt",
+      "observedDesiredStateHash",
+      "observedSummary",
+      "observedError",
+      "observedRunnerId",
     ]),
   },
   views: {
@@ -561,6 +596,7 @@ export const instanceControlPlaneSchema = {
         },
         "deployment-config": {
           immutableFields: [...instanceControlPlaneImmutableFields["deployment-config"]],
+          observedFields: [...instanceControlPlaneDeploymentConfigObservedFields],
           secretReferenceFields: ["credentialRef"],
         },
       },
@@ -1051,6 +1087,7 @@ function editorForField(field: string): FieldEditor {
     field === "targetKind" ||
     field === "targetProfile" ||
     field === "providerFamily" ||
+    field === "observedStatus" ||
     field === "profile" ||
     field === "statusCode" ||
     field === "kind" ||

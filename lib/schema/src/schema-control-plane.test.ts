@@ -4,6 +4,7 @@ import {
   isEntityActionExposedToActor,
   isEntityActionVisibleToBrowser,
   isRuntimeControlPlaneImmutableField,
+  isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
   parseAppSchema,
   type AppSchema,
@@ -36,12 +37,15 @@ describe("control-plane schema runtime metadata", () => {
           },
           task: {
             immutableFields: ["title"],
+            observedFields: ["done"],
             secretReferenceFields: ["secretRef"],
           },
         },
       },
     });
     expect(isRuntimeControlPlaneImmutableField(schema, "task", "title")).toBe(true);
+    expect(isRuntimeControlPlaneObservedField(schema, "task", "done")).toBe(true);
+    expect(isRuntimeControlPlaneObservedField(schema, "task", "title")).toBe(false);
     expect(isRuntimeControlPlaneSecretReferenceField(schema, "task", "secretRef")).toBe(true);
     expect(action?.exposure).toEqual({
       actors: ["runner"],
@@ -62,6 +66,23 @@ describe("control-plane schema runtime metadata", () => {
           controlPlane: {
             entities: {
               task: { immutableFields: ["missing"] },
+            },
+          },
+        },
+      }),
+    ).toThrow('references unknown field "missing"');
+  });
+
+  it("rejects observed field metadata that references unknown fields", () => {
+    expect(() =>
+      parseAppSchema({
+        ...controlPlaneTaskSchema(),
+        runtime: {
+          owner: "runtime",
+          builder: { editable: false },
+          controlPlane: {
+            entities: {
+              task: { observedFields: ["missing"] },
             },
           },
         },
@@ -179,6 +200,7 @@ function controlPlaneTaskSchema(): AppSchema {
         entities: {
           task: {
             immutableFields: ["title"],
+            observedFields: ["done"],
             secretReferenceFields: ["secretRef"],
           },
           route: {

@@ -22,6 +22,7 @@ import {
   planDeployLocalFormlessWorkspace,
   pullFormlessInstanceWorkspace,
   pushFormlessInstanceWorkspace,
+  refreshFormlessInstanceDeploymentObservation,
   resolveFormlessInstanceWorkspaceRoot,
   saveLocalFormlessWorkspace,
   type CheckLocalFormlessWorkspaceResult,
@@ -33,6 +34,7 @@ import {
   type PlanDeployLocalFormlessWorkspaceResult,
   type PullFormlessInstanceWorkspaceResult,
   type PushFormlessInstanceWorkspaceResult,
+  type RefreshFormlessInstanceDeploymentObservationResult,
   type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
 import type { RestorePortableArchiveResult } from "./archive-workflows.ts";
@@ -133,6 +135,16 @@ async function runWorkspaceOperationBody(
     case "pull":
       return summarizePullResult(
         await pullFormlessInstanceWorkspace(
+          {
+            targetAlias: input.targetAlias,
+            workspacePath: input.workspacePath ?? undefined,
+          },
+          dependencies,
+        ),
+      );
+    case "deploymentRefresh":
+      return summarizeDeploymentRefreshResult(
+        await refreshFormlessInstanceDeploymentObservation(
           {
             targetAlias: input.targetAlias,
             workspacePath: input.workspacePath ?? undefined,
@@ -326,11 +338,16 @@ function summarizeCheckResult(result: CheckLocalFormlessWorkspaceResult): Worksp
 
   return {
     details: {
+      deploymentStatus: result.remote.deploymentStatus ?? null,
       drift: summarizeDrift(result.remote.drift),
       target: result.remote.selectedTarget.alias,
     },
     summary: {
       fields: {
+        deployment:
+          result.remote.deploymentStatus === undefined
+            ? "unavailable"
+            : result.remote.deploymentStatus.state,
         drift: result.remote.drift.status,
         mode: "remote",
       },
@@ -384,6 +401,39 @@ function summarizePushResult(
   };
 }
 
+function summarizeDeploymentRefreshResult(
+  result: RefreshFormlessInstanceDeploymentObservationResult,
+): WorkspaceOperationResult {
+  return {
+    deployment: {
+      observation: {
+        desiredState: result.observation.desiredState,
+        observedAt: result.observation.observedAt,
+        ...(result.observation.observedError === undefined
+          ? {}
+          : { observedError: result.observation.observedError }),
+        observedStatus: result.observation.observedStatus,
+        observedSummary: result.observation.observedSummary,
+        resourceCount: result.observation.resourceCount,
+        resourcesByKind: result.observation.resourcesByKind,
+        runnerId: result.observation.runnerId,
+        targetId: result.observation.targetId,
+      },
+      status: result.deploymentStatus,
+      targetAlias: result.selectedTarget.alias,
+    },
+    summary: {
+      fields: {
+        desiredStateVersion: result.observation.desiredState.versionId,
+        observedStatus: result.observation.observedStatus,
+        status: result.deploymentStatus.state,
+        target: result.selectedTarget.alias,
+      },
+      title: "Deployment observation refreshed",
+    },
+  };
+}
+
 function summarizeDeployPlanResult(
   result: PlanDeployLocalFormlessWorkspaceResult,
 ): WorkspaceOperationResult {
@@ -420,7 +470,7 @@ function summarizeDeployPlanResult(
         targetId: result.desiredState.targetId,
       },
       targetAlias: result.selectedTarget.alias,
-      writeback: {
+      observation: {
         status: "not-run",
       },
       workerName: result.plan.resources.worker.name,
@@ -434,7 +484,7 @@ function summarizeDeployPlanResult(
         expectedUrl: result.plan.expectedUrl.url,
         migrationPolicy: result.plan.migrationPolicy,
         routeTargetCount: result.desiredState.routeTargetCount,
-        writebackStatus: "not-run",
+        observationStatus: "not-run",
         turnstileWidget: "planned",
         workerName: result.plan.resources.worker.name,
       },
@@ -446,18 +496,32 @@ function summarizeDeployPlanResult(
 function summarizeDeployApplyResult(
   result: DeployFormlessInstanceWorkspaceResult,
 ): WorkspaceOperationResult {
-  const writeback = result.deploymentWriteback;
+  const observation = result.deploymentObservation;
 
   return {
     deployment: {
-      attempt: writeback?.attempt ?? null,
       builtInResources: deploymentBuiltInResourceSummary("provisioned"),
       cleanup: notRunDeploymentCleanupSummary(),
       drift: result.push ? summarizeDrift(result.push.drift) : { status: "not-checked" },
-      evidence: writeback?.evidence ?? emptyDeploymentEvidenceSummary(),
+      evidence: observation?.evidence ?? emptyDeploymentEvidenceSummary(),
       healthCheckVersion: result.healthCheck.version,
       migrationPolicy: result.migrationPolicy,
-      plan: writeback?.plan ?? null,
+      observation: observation
+        ? {
+            desiredState: observation.desiredState,
+            evidenceCount: observation.evidenceCount,
+            observedAt: observation.observedAt,
+            ...(observation.observedError === undefined
+              ? {}
+              : { observedError: observation.observedError }),
+            observedStatus: observation.observedStatus,
+            observedSummary: observation.observedSummary,
+            resourceCount: observation.resourceCount,
+            resourcesByKind: observation.resourcesByKind,
+            runnerId: observation.runnerId,
+            targetId: observation.targetId,
+          }
+        : null,
       push: result.push
         ? {
             applyRestoreOk: result.push.applyResult?.remote.ok ?? null,
@@ -468,35 +532,20 @@ function summarizeDeployApplyResult(
         : null,
       targetAlias: result.selectedTarget.alias,
       url: result.deployment.url,
-      writeback: writeback
-        ? {
-            attemptId: writeback.attemptId,
-            desiredState: writeback.desiredState,
-            evidenceCount: writeback.evidenceCount,
-            planRecordedAt: writeback.writeback.planRecordedAt,
-            resourceCount: writeback.resourceCount,
-            resourcesByKind: writeback.resourcesByKind,
-            runnerId: writeback.runnerId,
-            status: writeback.status,
-            successCompletedAt: writeback.writeback.successCompletedAt,
-            targetId: writeback.targetId,
-          }
-        : null,
       workerName: result.plan.resources.worker.name,
     },
     summary: {
       fields: {
-        attemptId: writeback?.attemptId ?? null,
         cleanupStatus: "not-run",
-        desiredStateVersion: writeback?.desiredState.versionId ?? null,
+        desiredStateVersion: observation?.desiredState.versionId ?? null,
         drift: result.push?.drift.status ?? "not-checked",
-        evidenceCount: writeback?.evidenceCount ?? 0,
+        evidenceCount: observation?.evidenceCount ?? 0,
         healthCheckVersion: result.healthCheck.version,
         migrationPolicy: result.migrationPolicy,
+        observationStatus: observation?.observedStatus ?? "not-run",
         ...(result.ownerSetup === undefined ? {} : { ownerSetupUrl: result.ownerSetup.url }),
         turnstileWidget: "provisioned",
         url: result.deployment.url,
-        writebackStatus: writeback?.status ?? "not-run",
         workerName: result.plan.resources.worker.name,
       },
       title: "Deploy applied",

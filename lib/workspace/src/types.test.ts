@@ -278,6 +278,7 @@ describe("workspace operation contracts", () => {
     expect(WORKSPACE_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",
+      "deploymentRefresh",
       "deployApply",
       "deployPlan",
       "init",
@@ -289,6 +290,7 @@ describe("workspace operation contracts", () => {
     expect(WORKSPACE_BROWSER_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",
+      "deploymentRefresh",
       "deployApply",
       "deployPlan",
       "pull",
@@ -298,6 +300,7 @@ describe("workspace operation contracts", () => {
     ]);
     expect(isWorkspaceOperationKind("init")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("init")).toBe(false);
+    expect(isWorkspaceBrowserOperationKind("deploymentRefresh")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("credentialSetup")).toBe(true);
     expect(workspaceOperationInputDisplay({ check: true, kind: "save", source: "cli" })).toEqual({
       check: true,

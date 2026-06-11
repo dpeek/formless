@@ -2,49 +2,50 @@
 
 ## Purpose
 
-Deployment runtime versions Formless deployment intent for supported instance
-targets, coordinates exact-version deployment attempts, and stores audit/status
-summaries while deployers declare tracked Alchemy desired state and Alchemy owns
-provider reconciliation and provider resource state.
+Deployment runtime projects Formless deployment intent for supported instance
+targets and derives display status from schema-owned deployment config
+observation cache. Deployers declare tracked Alchemy desired state, Alchemy owns
+provider reconciliation and provider resource state, and `deployment-config`
+records store only the latest display-safe observation.
 
 ## Requirements
 
 ### Requirement: Normal Provider Mutation Path
 
-The system SHALL use generic deployment attempts as the only normal provider
-mutation path for projected deployment resource graphs.
+The system SHALL use projected deployment resource graphs as the normal provider
+mutation input without storing deployment attempts in runtime SQL tables.
 
 #### Scenario: Apply projected deployment resources
 
 - **WHEN** a CLI, browser workspace gateway, CI job, or trusted deploy node
   applies deployment intent
-- **THEN** it starts or reuses a deployment attempt for the exact desired-state
-  version and target
+- **THEN** it reads the current desired-state projection for the target
 - **AND** provider mutation is performed by declaring the desired resource graph
   in tracked Alchemy state or an equivalent provider reconciler
-- **AND** successful or failed results are written back to the deployment
-  runtime for that exact desired-state version
+- **AND** successful or failed results may patch the target deployment config's
+  latest display-safe observation cache
 
-#### Scenario: Route-derived resources share deployment attempts
+#### Scenario: Route-derived resources share projected deploy graph
 
 - **WHEN** route records project DNS, custom-domain, or redirect resources
-- **THEN** those resources are applied through the same deployment attempt model
+- **THEN** those resources are applied through the same projected resource graph
   as Worker and R2 resources
-- **AND** deployment attempts, leases, evidence, drift, and status remain the
-  shared provider mutation record
+- **AND** latest deployment status remains a cache on the target
+  `deployment-config` record, not separate attempt, lease, evidence, or drift
+  records
 
 #### Scenario: Removed route resources reconcile through deploy
 
 - **GIVEN** a previous successful deploy tracked route-derived DNS,
   custom-domain, or redirect resources in Alchemy state
-- **WHEN** the next desired-state version omits those resources because a route
-  was disabled or deleted
+- **WHEN** the next desired-state projection omits those resources because a
+  route was disabled or deleted
 - **THEN** the deployer declares the new desired resource graph in the same
   tracked Alchemy app, stage, and state scope
 - **AND** Alchemy destroys the omitted tracked provider resources during deploy
   reconciliation
-- **AND** deployment writeback records non-secret delete evidence for the exact
-  desired-state version
+- **AND** deployment observation records only display-safe latest status and
+  summary fields on the deployment config
 
 #### Scenario: Repair cleanup can remain explicit
 
@@ -57,17 +58,16 @@ mutation path for projected deployment resource graphs.
 - **AND** cleanup does not change control-plane deployment intent unless a
   separate authorized intent write is submitted
 
-### Requirement: Versioned Desired Deployment State
+### Requirement: Read-Only Desired Deployment State
 
-The system SHALL expose immutable desired deployment state versions for a
+The system SHALL expose a read-only desired deployment state projection for a
 supported deployment target.
 
 #### Scenario: Read latest desired state
 
 - **WHEN** a client reads desired deployment state for a target
-- **THEN** the response includes a desired-state version id, monotonic
-  revision, stable hash, schema version, target id, resource graph, and display
-  summary
+- **THEN** the response includes a stable hash, schema version, target id,
+  resource graph, and display summary
 - **AND** targets backed by schema-owned control-plane records project the
   resource graph from enabled route records, deployment config records, and
   higher-level runtime intent for that target
@@ -85,7 +85,8 @@ supported deployment target.
 - **THEN** repeated desired-state reads for the same target produce the same
   hash
 - **AND** timestamps, attempt history, evidence summaries, cleanup history,
-  drift reports, and status display data do not change the desired-state hash
+  drift reports, deployment config observation cache fields, and status display
+  data do not change the desired-state hash
 
 ### Requirement: Runtime Upgrade Facts
 
@@ -110,7 +111,7 @@ deploy and upgrade planning.
 
 ### Requirement: Upgrade-Aware Desired State
 
-The deployment runtime SHALL keep deployment desired-state versioning separate
+The deployment runtime SHALL keep deployment desired-state projection separate
 from runtime upgrade metadata while allowing CLI workflows to display both.
 
 #### Scenario: Desired state remains provider intent
@@ -165,177 +166,116 @@ configuration for deployed public action forms that require Turnstile.
 - THEN the deployer binds the site key to `FORMLESS_TURNSTILE_SITE_KEY`
 - AND binds the verification secret to `FORMLESS_TURNSTILE_SECRET_KEY` as a
   Worker secret
-- AND deployment desired state, result writeback, status, metadata, and public
+- AND deployment desired state, observation cache, status, metadata, and public
   artifacts do not include raw Turnstile secret values
 
-### Requirement: Deployment Attempts
+### Requirement: Deployment Observation Cache
 
-The system SHALL record deployment attempts against one exact desired-state
-version and target.
+The system SHALL store latest display-safe deployment observation on the target
+`deployment-config` record instead of runtime attempt, lease, evidence, or drift
+tables.
 
-#### Scenario: Start attempt
+#### Scenario: Successful observation
 
-- WHEN a deployer starts an attempt with target id, desired-state version id,
-  desired-state hash, actor, mode, and idempotency key
-- THEN the runtime records an attempt with status `started`
-- AND replaying the same idempotency key for the same target and desired
-  version returns the existing attempt
-
-#### Scenario: Reject stale start
-
-- WHEN a deployer starts an attempt with a desired-state version id or hash that
-  does not match the runtime's stored latest version
-- THEN the runtime rejects the attempt
-- AND no deployment lease is acquired
-
-#### Scenario: Complete exact version
-
-- WHEN an attempt completes successfully
-- THEN the result is recorded for the exact desired-state version and target
-- AND the latest successful desired-state version is advanced only when the
-  completed version is still the target's latest desired version
-
-#### Scenario: Complete older version
-
-- WHEN an older desired-state version completes after a newer desired-state
-  version exists
-- THEN the attempt remains historical evidence
-- AND latest deployment status still reports desired changes pending
-
-### Requirement: Deployment Lease
-
-The system SHALL serialize mutating deployment attempts with a target-scoped
-lease.
-
-#### Scenario: Acquire lease for apply or destroy
-
-- WHEN an apply or destroy attempt starts for a deployment target
-- THEN the runtime acquires a lease with a lease id, token, acquired time, and
-  expiry time
-- AND another mutating attempt for the same target is rejected while the lease is
-  active
-
-#### Scenario: Plan attempts do not acquire leases
-
-- WHEN a plan attempt starts for a deployment target
-- THEN the runtime records the attempt without acquiring a deployment lease
-- AND active mutating lease serialization remains scoped to apply and destroy
-  attempts
-
-#### Scenario: Heartbeat lease
-
-- WHEN the actor holding a lease sends a valid heartbeat before expiry
-- THEN the runtime extends the lease expiry
-- AND the attempt status remains active
-
-#### Scenario: Complete requires lease token
-
-- WHEN a mutating attempt writes success or failure
-- THEN the runtime requires the matching lease token
-- AND a mismatched or expired lease token is rejected
-
-### Requirement: Deployment Result Writeback
-
-The system SHALL store deployment results, resource evidence summaries, and
-errors without duplicating Alchemy's resource-state store.
-
-#### Scenario: Plan writeback
-
-- WHEN a deployer writes a plan result for an attempt
-- THEN the runtime stores plan summary counts, blockers, warnings, and display
-  text for that attempt
-- AND full provider current state is not required in the writeback
-
-#### Scenario: Success writeback
-
-- WHEN a deployer writes a successful apply or destroy result
-- THEN the runtime stores Alchemy app/stage/scope pointers, resource evidence
-  summaries, provider ids needed for audit or cleanup, runner id, and completion
-  time
+- WHEN a deployer successfully applies deployment intent
+- THEN it may patch the target deployment config with latest status, observed
+  time, desired-state hash, summary, and runner
 - AND Alchemy remains the owner of canonical provider resource state
-- AND evidence can include created, updated, no-change, adopted, or deleted
-  resource summaries from the tracked provider reconciliation
+- AND full provider current state is not stored in the observation cache
 
-#### Scenario: Failure writeback
+#### Scenario: Failed observation
 
-- WHEN a deployer writes a failed result
-- THEN the runtime stores the error code, display message, optional details,
-  actor, runner id, and failed desired-state version
-- AND the failure does not update the latest successful desired-state version
+- WHEN a deployer fails while applying deployment intent
+- THEN it may patch the target deployment config with failed status,
+  desired-state hash, observed time, display-safe error, and runner
+- AND provider credentials, raw provider state, raw operation tokens, and full
+  execution logs are not stored
+
+#### Scenario: Observation replacement
+
+- WHEN a newer deploy or explicit refresh writes an observation
+- THEN it replaces the previous observation fields on the deployment config
+- AND the runtime does not append deployment history records
 
 ### Requirement: Deployment Status
 
-The system SHALL derive display-friendly deployment status from desired-state
-versions, attempts, leases, results, and drift reports.
+The system SHALL derive display-friendly deployment status from the current
+desired-state projection and the target deployment config's latest observation
+cache.
 
 #### Scenario: No target state
 
-- WHEN no desired-state version has been recorded for a target
+- WHEN no enabled deployment config exists for a target
 - THEN latest deployment status reports `no-target`
 
 #### Scenario: Pending changes
 
-- WHEN the latest desired-state version differs from the latest successful
-  desired-state version
+- WHEN the current desired-state hash differs from the deployment config's last
+  observed successful hash
 - THEN latest deployment status reports desired changes pending
 
 #### Scenario: Deployed current version
 
-- WHEN the latest successful attempt matches the latest desired-state version
+- WHEN the deployment config's last observed successful hash matches the current
+  desired-state hash
 - THEN latest deployment status reports the target deployed
-- AND the deployed status includes the successful attempt id and deployed time
+- AND the deployed status includes the latest observed time and runner when
+  available
 
 #### Scenario: Failed current version
 
-- WHEN the latest desired-state version has a failed attempt and no later success
-  for that version
-- THEN latest deployment status reports that the current desired version failed
+- WHEN the deployment config's latest failed observation hash matches the
+  current desired-state hash
+- THEN latest deployment status reports that the current desired state failed
 - AND the last error details are available for display
 
-#### Scenario: Failed older version
+#### Scenario: Stale failure
 
-- WHEN the last failed attempt belongs to an older desired-state version
-- THEN latest deployment status reports the old failure separately from the
-  current desired version
+- WHEN the deployment config's latest failed observation hash differs from the
+  current desired-state hash
+- THEN latest deployment status reports desired changes pending and may show the
+  stale failure separately
 
-#### Scenario: Active attempt
+#### Scenario: Local active operation
 
-- WHEN a deployment lease or plan attempt is active for a target
-- THEN latest deployment status reports deploy in progress with actor, attempt
-  id, started time, mode, and desired-state version
+- WHEN a local workspace gateway operation is actively deploying a target
+- THEN browser UI may show in-progress state from gateway operation status
+- AND the deployment config observation cache is updated only when deploy or
+  refresh writes an observation
 
-### Requirement: Drift Reports
+### Requirement: Drift Observations
 
-The system SHALL accept runner-supplied drift summaries without treating them as
-canonical provider truth.
+The system SHALL allow deployers or refresh workflows to record latest
+display-safe drift observation without treating it as canonical provider truth.
 
-#### Scenario: Record drift report
+#### Scenario: Record drift observation
 
-- WHEN a deployer compares desired state with Alchemy/provider state and writes a
-  drift report
-- THEN the runtime stores drift status, summary counts, affected logical ids,
-  actor, and reported time
-- AND the report is associated with the desired-state version and target
+- WHEN a deployer compares desired state with Alchemy/provider state and
+  persists the observation
+- THEN it patches the deployment config with drift status, display-safe summary,
+  desired-state hash, runner, and observed time
+- AND full provider current state is not stored on the deployment config
 
 #### Scenario: Drift does not mutate desired state
 
-- WHEN a drift report is recorded
-- THEN user intent and desired-state versions are not changed
-- AND future deploy attempts still bind to explicit desired-state versions
+- WHEN a drift observation is recorded
+- THEN user intent and desired-state projection are not changed
+- AND future deploys still project provider resources from current schema-owned
+  intent records
 
 ### Requirement: Deployer Protocol Boundary
 
-The system SHALL keep deployer execution outside the runtime while making
-provider mutation, writeback, repair cleanup, and audit behavior exact.
+The system SHALL keep deployer execution outside the runtime while exposing
+read-only deployment projection and display status.
 
 #### Scenario: External deployer apply
 
 - **WHEN** a CLI, browser workspace gateway, CI job, or trusted deploy node
   applies desired state
-- **THEN** it fetches the desired-state version, resolves provider context and
-  secrets outside the runtime desired-state response, declares the exact desired
-  graph in tracked Alchemy state or another provider reconciler, and writes back
-  the result for the exact desired-state version
+- **THEN** it fetches the desired-state projection, resolves provider context
+  and secrets outside the runtime desired-state response, declares the desired
+  graph in tracked Alchemy state or another provider reconciler, and may patch
+  the latest deployment observation cache
 - **AND** Worker, R2, DNS, custom-domain, redirect, and other projected
   provider resources use the same deployer protocol boundary
 
@@ -344,7 +284,7 @@ provider mutation, writeback, repair cleanup, and audit behavior exact.
 - **WHEN** route intent is disabled or deleted
 - **THEN** the route write changes desired deployment state only
 - **AND** provider resources are created, updated, or deleted only when a
-  deployer reconciles an exact desired-state version
+  deployer reconciles the projected desired state
 
 #### Scenario: Runtime does not expose mutation secrets
 
@@ -355,17 +295,17 @@ provider mutation, writeback, repair cleanup, and audit behavior exact.
 
 #### Scenario: Repair cleanup stays selected
 
-- **GIVEN** recorded provider evidence requires repair cleanup outside normal
-  deploy reconciliation
-- **WHEN** a cleanup workflow writes result evidence
-- **THEN** the writeback identifies the selected resource or evidence row
+- **GIVEN** provider evidence requires repair cleanup outside normal deploy
+  reconciliation
+- **WHEN** a cleanup workflow writes a display-safe cleanup observation
+- **THEN** the observation identifies the selected resource or evidence summary
 - **AND** the runtime does not treat repair cleanup as the normal route-removal
   path
 
 ### Requirement: Deployment Runtime API
 
-The system SHALL expose instance deployment runtime reads and writeback through
-the `/api/formless/deployments` API family.
+The system SHALL expose instance deployment runtime reads through the
+`/api/formless/deployments` API family.
 
 #### Scenario: Read deployment state
 
@@ -374,20 +314,23 @@ the `/api/formless/deployments` API family.
 - THEN the runtime reads the requested supported target
 - AND the desired-state projection may be materialized from schema-owned
   control-plane records when that target supports them
+- AND status reads derive from desired-state projection and the target
+  deployment config observation cache
 - AND the response uses `Cache-Control: no-store`
 
-#### Scenario: Mutating writeback requires instance write authorization
+#### Scenario: Runtime deployment API is read-only
 
-- WHEN a client starts an attempt, heartbeats a lease, writes plan/success/failure
-  results, or writes drift through the deployment API
-- THEN the runtime requires instance owner or admin write authorization
-- AND the write is validated against the exact desired-state version reference
+- WHEN a client sends attempt, lease, plan, success, failure, or drift mutation
+  requests through the deployment API
+- THEN the runtime rejects the request
+- AND persisted deployment observations must be written as authorized
+  deployment-config cache field patches instead of runtime table writes
 
 ### Requirement: Local Gateway Deployment Operations
 
 The deployment runtime SHALL allow local workspace gateway sidecar deploy
-operations to plan and apply deployment state while preserving exact-version
-and credential boundaries.
+operations to plan and apply deployment state while preserving projection and
+credential boundaries.
 
 #### Scenario: Browser starts credential setup
 
@@ -408,7 +351,7 @@ and credential boundaries.
   proxy
 - **THEN** the local gateway sidecar reads schema-owned deployment intent
   records, resolves local credential context outside browser-visible responses,
-  and reads the exact desired-state version
+  and reads the current desired-state projection
 - **AND** the browser receives display-safe plan output without provider API
   tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens, or runtime
   secrets
@@ -420,12 +363,12 @@ and credential boundaries.
 - **WHEN** a browser starts deploy apply through the local workspace gateway
   proxy
 - **THEN** the local gateway sidecar applies provider mutations as a trusted
-  local deployer and writes deployment attempt, success, failure, evidence, or
-  drift results for the exact desired-state version
-- **AND** the deployment runtime rejects stale desired-state version or hash
-  writeback
-- **AND** the gateway returns display-safe attempt, evidence, drift, cleanup,
-  and writeback summaries through operation status or completion responses
+  local deployer and patches the target deployment config's latest observation
+  cache after deploy or failure
+- **AND** the local gateway rejects stale desired-state observations before
+  patching the cache when the current projection hash changed during deploy
+- **AND** the gateway returns display-safe operation, evidence, drift, cleanup,
+  and observation summaries through operation status or completion responses
 - **AND** deployment execution history is not written as schema-owned workspace
   source records
 - **AND** Worker runtime code does not perform provider mutation for local
@@ -434,7 +377,7 @@ and credential boundaries.
 ### Requirement: Workspace Deploy Source Boundary
 
 The deployment runtime SHALL keep deployment intent reviewable as schema-owned
-record source and deployment execution state display-safe but outside
+record source and deployment observation cache display-safe but outside
 reviewable source.
 
 #### Scenario: Save deployment intent
@@ -451,6 +394,8 @@ reviewable source.
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
   `deploy-drift-report`, cleanup audit summaries, raw leases, and provider
   state payloads are not written as workspace source
+- **AND** deployment config observation cache fields are not written as
+  workspace source
 
 #### Scenario: Worker name source
 
@@ -469,12 +414,12 @@ reviewable source.
   lease tokens, and runtime secrets are not returned
 - **AND** display-safe secret references and operation summaries may be returned
 
-#### Scenario: Gateway returns execution summaries
+#### Scenario: Gateway returns operation summaries
 
 - **WHEN** browser clients inspect local deploy plan, apply, cleanup, or drift
   operation status through the workspace gateway
-- **THEN** responses may include display-safe attempt ids, desired-state
-  versions, plan counts, evidence counts, affected logical ids, cleanup results,
+- **THEN** responses may include display-safe operation ids, desired-state
+  hashes, plan counts, evidence counts, affected logical ids, cleanup results,
   drift counts, runner ids, timestamps, and user-facing errors
 - **AND** those responses do not require `deploy-attempt`,
   `deploy-evidence-summary`, or `deploy-drift-report` control-plane records

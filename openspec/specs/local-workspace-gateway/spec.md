@@ -213,8 +213,8 @@ The system SHALL track local workspace operations with display-safe progress.
 
 - **WHEN** a browser reads progress for deploy plan, deploy apply, cleanup, or
   drift operations
-- **THEN** the gateway may return display-safe attempt ids, desired-state
-  versions, plan counts, evidence counts, affected logical ids, cleanup results,
+- **THEN** the gateway may return display-safe operation ids, desired-state
+  hashes, plan counts, evidence counts, affected logical ids, cleanup results,
   drift counts, runner ids, timestamps, and user-facing errors
 - **AND** those summaries are operation/runtime data, not workspace record
   source
@@ -343,11 +343,28 @@ responses and reviewable source.
   workspace secret state
 - **AND** existing deployed instance targets are resolved from enabled
   `deployment-config.targetUrl` workspace record source
-- **AND** the browser receives only display-safe plan, attempt, health check,
-  restore, and writeback summaries
-- **AND** deployment attempts, evidence summaries, drift reports, and cleanup
-  audit summaries are returned through gateway operation status/results rather
-  than reviewable workspace source
+- **AND** the browser receives only display-safe plan, operation, health check,
+  restore, and observation summaries
+- **AND** deploy apply patches the target deployment config's latest
+  display-safe observation cache after deploy or failure
+- **AND** deployment operation evidence summaries, drift reports, cleanup audit
+  summaries, and deployment observation cache fields are returned through
+  gateway operation status/results rather than reviewable workspace source
+
+#### Scenario: Check stays read-only
+
+- **WHEN** a browser starts a check operation through the gateway
+- **THEN** the gateway reports fresh deployment and drift observations through
+  operation status/results
+- **AND** it does not patch deployment config observation cache fields
+
+#### Scenario: Refresh persists observation
+
+- **WHEN** a browser starts an explicit deployment refresh operation through the
+  gateway
+- **THEN** the gateway may persist the latest display-safe deployment
+  observation by patching the target deployment config cache fields
+- **AND** source intent fields remain unchanged
 
 #### Scenario: Secret rejection
 

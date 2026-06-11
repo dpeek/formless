@@ -32,15 +32,6 @@ import {
   type InstanceDomainProviderRedirectIntent,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
-import type {
-  DeploymentActor,
-  DeploymentAlchemyStatePointer,
-  DeploymentAttempt,
-  DeploymentDesiredStateVersionRef,
-  DeploymentLeaseToken,
-  DeploymentResourceEvidenceSummary,
-  DeploymentTarget,
-} from "../shared/deployment-runtime.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
   DomainProviderCustomDomainResource,
@@ -72,17 +63,9 @@ import {
   readInstanceDomainMappings,
 } from "./instance-domain-mappings-state.ts";
 import {
-  INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-  materializeDeploymentDesiredStateVersion,
-  startDeploymentAttempt,
-  writeDeploymentAttemptFailure,
-  writeDeploymentAttemptSuccess,
-} from "./deployment-runtime-state.ts";
-import {
   readControlPlaneRecords,
   syncDomainIntentToControlPlane,
 } from "./deployment-control-plane-client.ts";
-import { buildPrimaryInstanceDeploymentDesiredStateProjection } from "./deployment-runtime-projection.ts";
 import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
@@ -100,11 +83,6 @@ import {
 export { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 
 const providerMutationLockId = "domain-provider-mutation";
-const primaryInstanceDeploymentTarget = {
-  kind: "instance",
-  label: "Primary instance target",
-  targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-} satisfies DeploymentTarget;
 const providerMutationLockTableSql = `
   CREATE TABLE IF NOT EXISTS instance_domain_provider_mutation_lock (
     lock_id TEXT PRIMARY KEY CHECK (lock_id = '${providerMutationLockId}'),
@@ -249,26 +227,6 @@ type DomainProviderDeleteOptions = {
   kind?: DomainProviderResourceKind;
   logicalId?: string;
 };
-
-type DomainProviderDeploymentJobLink = {
-  attemptId: string;
-  desiredState: DeploymentDesiredStateVersionRef;
-  leaseToken: DeploymentLeaseToken;
-};
-
-type DomainProviderDeploymentAttemptStartResult =
-  | {
-      actor: DeploymentActor;
-      attempt: DeploymentAttempt;
-      desiredState: DeploymentDesiredStateVersionRef;
-      leaseToken: DeploymentLeaseToken;
-      ok: true;
-    }
-  | {
-      error: string;
-      ok: false;
-      status: 409;
-    };
 
 type DomainProviderDeleteJobRow = {
   deployment_attempt_id: string | null;
@@ -599,128 +557,6 @@ async function handleForgetRedirectIntentRequest(
   } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
-async function startDomainProviderDeleteDeploymentAttempt(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    jobId: string;
-    now: string;
-    requestUrl: string;
-    runnerId?: string;
-  },
-): Promise<DomainProviderDeploymentAttemptStartResult> {
-  return startDomainProviderDeploymentAttempt(storage, {
-    actor: domainProviderDeleteDeploymentActor(input.runnerId),
-    env: input.env,
-    idempotencyKey: `domain-provider-delete:${input.jobId}`,
-    mode: "destroy",
-    now: input.now,
-    requestUrl: input.requestUrl,
-  });
-}
-
-async function startDomainProviderDeploymentAttempt(
-  storage: DurableObjectStorage,
-  input: {
-    actor: DeploymentActor;
-    env: DurableObjectDomainProviderEnv;
-    idempotencyKey: string;
-    mode: "apply" | "destroy";
-    now: string;
-    requestUrl: string;
-  },
-): Promise<DomainProviderDeploymentAttemptStartResult> {
-  const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
-    env: input.env,
-    now: input.now,
-    requestUrl: input.requestUrl,
-    target: primaryInstanceDeploymentTarget,
-    targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-  });
-  const desiredState = await materializeDeploymentDesiredStateVersion(storage, {
-    now: input.now,
-    resourceGraph: projection.resourceGraph,
-    source: projection.source,
-    targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-    title: "Primary instance target",
-  });
-  const desiredStateRef: DeploymentDesiredStateVersionRef = {
-    hash: desiredState.hash,
-    revision: desiredState.revision,
-    targetId: desiredState.targetId,
-    versionId: desiredState.versionId,
-  };
-  const started = startDeploymentAttempt(storage, {
-    actor: input.actor,
-    desiredState: desiredStateRef,
-    idempotencyKey: input.idempotencyKey,
-    mode: input.mode,
-    now: input.now,
-  });
-
-  if (!started.ok) {
-    return {
-      error: started.error,
-      ok: false,
-      status: started.status,
-    };
-  }
-
-  if (!started.lease) {
-    return {
-      error: `Domain provider ${input.mode} did not acquire a deployment lease.`,
-      ok: false,
-      status: 409,
-    };
-  }
-
-  return {
-    actor: input.actor,
-    attempt: started.attempt,
-    desiredState: desiredStateRef,
-    leaseToken: started.lease.token,
-    ok: true,
-  };
-}
-
-function domainProviderDeleteDeploymentActor(runnerId: string | undefined): DeploymentActor {
-  return {
-    actorId: "domain-provider.delete",
-    displayName: "Domain provider cleanup",
-    kind: "runner",
-    ...(runnerId === undefined ? {} : { runnerId }),
-  };
-}
-
-async function failDomainProviderDeploymentAttempt(
-  storage: DurableObjectStorage,
-  input: {
-    actor: DeploymentActor;
-    attemptId: DeploymentAttempt["attemptId"];
-    code: string;
-    desiredState: DeploymentDesiredStateVersionRef;
-    displayMessage: string;
-    env: DurableObjectDomainProviderEnv;
-    leaseToken: DeploymentLeaseToken;
-    now: string;
-    requestUrl: string;
-    runnerId?: string;
-  },
-) {
-  writeDeploymentAttemptFailure(storage, {
-    actor: input.actor,
-    attemptId: input.attemptId,
-    desiredState: input.desiredState,
-    leaseToken: input.leaseToken,
-    now: input.now,
-    runnerId: input.runnerId,
-    summary: {
-      code: input.code,
-      displayMessage: input.displayMessage,
-    },
-  });
-}
-
 async function deleteWithAuthorization(
   request: Request,
   storage: DurableObjectStorage,
@@ -779,34 +615,10 @@ async function deleteWithAuthorization(
   }
 
   const jobId = `domain-provider-delete-${crypto.randomUUID()}`;
-  const deploymentAttempt = await startDomainProviderDeleteDeploymentAttempt(storage, {
-    env,
-    jobId,
-    now,
-    requestUrl: request.url,
-    runnerId: deleteRequest.request.runnerId,
-  });
-
-  if (!deploymentAttempt.ok) {
-    releaseDomainProviderMutationLock(storage);
-    return deleteBlockedResponse(
-      "domain-provider-delete-running",
-      deploymentAttempt.error,
-      config,
-      deletePlan,
-      deploymentAttempt.status,
-    );
-  }
-
   let job: InstanceDomainProviderDeleteJob;
 
   try {
     job = writeDeleteJob(storage, {
-      deployment: {
-        attemptId: deploymentAttempt.attempt.attemptId,
-        desiredState: deploymentAttempt.desiredState,
-        leaseToken: deploymentAttempt.leaseToken,
-      },
       jobId,
       now,
       plan: deletePlan.plan,
@@ -815,18 +627,6 @@ async function deleteWithAuthorization(
     });
   } catch (error) {
     releaseDomainProviderMutationLock(storage);
-    await failDomainProviderDeploymentAttempt(storage, {
-      actor: deploymentAttempt.actor,
-      attemptId: deploymentAttempt.attempt.attemptId,
-      code: "domain-provider-delete-job-write-failed",
-      desiredState: deploymentAttempt.desiredState,
-      displayMessage: "Domain provider cleanup job could not be recorded.",
-      env,
-      leaseToken: deploymentAttempt.leaseToken,
-      now,
-      requestUrl: request.url,
-      runnerId: deleteRequest.request.runnerId,
-    });
     throw error;
   }
 
@@ -1845,7 +1645,6 @@ function redirectIntentForPlan(
 function writeDeleteJob(
   storage: DurableObjectStorage,
   input: {
-    deployment: DomainProviderDeploymentJobLink;
     jobId: string;
     now: string;
     plan: DomainProviderPlan;
@@ -1881,12 +1680,12 @@ function writeDeleteJob(
     input.runnerId ?? null,
     JSON.stringify(input.plan),
     JSON.stringify(input.targets),
-    input.deployment.attemptId,
-    input.deployment.desiredState.targetId,
-    input.deployment.desiredState.versionId,
-    input.deployment.desiredState.revision,
-    input.deployment.desiredState.hash,
-    input.deployment.leaseToken,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
     input.now,
     input.now,
   );
@@ -1935,19 +1734,6 @@ async function completeDeleteJob(
   }
 
   if (input.result.status === "failed") {
-    const deploymentWriteback = await writeDomainProviderDeleteDeploymentFailure(storage, {
-      env: input.env,
-      error: input.result.error,
-      job,
-      now: input.now,
-      requestUrl: input.requestUrl,
-      runnerId: input.result.runnerId,
-    });
-
-    if (!deploymentWriteback.ok) {
-      return deploymentWriteback;
-    }
-
     return finishDeleteJob(storage, {
       error: input.result.error,
       job,
@@ -1993,19 +1779,6 @@ async function completeDeleteJob(
     });
   }
 
-  const deploymentWriteback = await writeDomainProviderDeleteDeploymentSuccess(storage, {
-    env: input.env,
-    job,
-    now: input.now,
-    requestUrl: input.requestUrl,
-    resources: input.result.resources,
-    runnerId: input.result.runnerId,
-  });
-
-  if (!deploymentWriteback.ok) {
-    return deploymentWriteback;
-  }
-
   return finishDeleteJob(storage, {
     job,
     now: input.now,
@@ -2013,136 +1786,6 @@ async function completeDeleteJob(
     runnerId: input.result.runnerId,
     status: "succeeded",
   });
-}
-
-async function writeDomainProviderDeleteDeploymentFailure(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    error: string;
-    job: InstanceDomainProviderDeleteJob;
-    now: string;
-    requestUrl: string;
-    runnerId?: string;
-  },
-): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const deployment = readDeleteJobDeploymentLink(storage, input.job.jobId);
-
-  if (!deployment) {
-    return { ok: true };
-  }
-
-  const result = writeDeploymentAttemptFailure(storage, {
-    actor: domainProviderDeleteDeploymentActor(input.runnerId ?? input.job.runnerId),
-    attemptId: deployment.attemptId,
-    desiredState: deployment.desiredState,
-    leaseToken: deployment.leaseToken,
-    now: input.now,
-    runnerId: input.runnerId ?? input.job.runnerId,
-    summary: {
-      code: "domain-provider-delete-failed",
-      displayMessage: input.error,
-    },
-  });
-
-  return deploymentWritebackResult(result);
-}
-
-async function writeDomainProviderDeleteDeploymentSuccess(
-  storage: DurableObjectStorage,
-  input: {
-    env: DurableObjectDomainProviderEnv;
-    job: InstanceDomainProviderDeleteJob;
-    now: string;
-    requestUrl: string;
-    resources: readonly InstanceDomainProviderDeleteJobResourceEvidence[];
-    runnerId?: string;
-  },
-): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const deployment = readDeleteJobDeploymentLink(storage, input.job.jobId);
-
-  if (!deployment) {
-    return { ok: true };
-  }
-
-  const targets = new Map(input.job.targets.map((target) => [target.logicalId, target]));
-  const evidence: DeploymentResourceEvidenceSummary[] = [];
-
-  for (const resource of input.resources) {
-    const target = targets.get(resource.logicalId);
-
-    if (!target) {
-      return {
-        ok: false,
-        error: `Domain provider delete evidence resource "${resource.logicalId}" was not in the job.`,
-        status: 400,
-      };
-    }
-
-    evidence.push(
-      deploymentEvidenceSummaryFromDeleteTarget(target, deployment.desiredState.targetId),
-    );
-  }
-
-  const result = writeDeploymentAttemptSuccess(storage, {
-    alchemy: domainProviderDeploymentAlchemyPointer(input.job.plan),
-    attemptId: deployment.attemptId,
-    desiredState: deployment.desiredState,
-    evidence,
-    leaseToken: deployment.leaseToken,
-    now: input.now,
-    runnerId: input.runnerId ?? input.job.runnerId,
-  });
-
-  return deploymentWritebackResult(result);
-}
-
-function deploymentWritebackResult(
-  result:
-    | { ok: true }
-    | {
-        ok: false;
-        error: string;
-        status: number;
-      },
-): { ok: true } | { ok: false; error: string; status: number } {
-  return result.ok ? { ok: true } : { ok: false, error: result.error, status: result.status };
-}
-
-function domainProviderDeploymentAlchemyPointer(
-  plan: DomainProviderPlan,
-): DeploymentAlchemyStatePointer {
-  return {
-    app: `formless-domain-${plan.instanceId}`,
-    scope: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-    stage: "production",
-  };
-}
-
-function deploymentEvidenceSummaryFromDeleteTarget(
-  target: InstanceDomainProviderDeleteTarget,
-  targetId: DeploymentDesiredStateVersionRef["targetId"],
-): DeploymentResourceEvidenceSummary {
-  return {
-    action: "deleted",
-    ...(target.alchemyResourceId === undefined
-      ? {}
-      : { alchemyResourceId: target.alchemyResourceId }),
-    displayName: target.host,
-    kind: target.kind,
-    logicalId: target.logicalId,
-    providerFamily: "cloudflare",
-    providerResourceIds: providerResourceIdsFromDeleteTarget(target),
-    targetId,
-  };
-}
-
-function providerResourceIdsFromDeleteTarget(target: InstanceDomainProviderDeleteTarget): string[] {
-  if (target.kind === "cloudflare-dns-records") {
-    return target.resourceId.split(",").filter((resourceId) => resourceId.length > 0);
-  }
-
-  return [target.resourceId];
 }
 
 function finishDeleteJob(
@@ -2510,76 +2153,6 @@ function readDeleteJob(
   }
 
   return undefined;
-}
-
-function readDeleteJobDeploymentLink(
-  storage: DurableObjectStorage,
-  jobId: string,
-): DomainProviderDeploymentJobLink | undefined {
-  ensureDomainProviderDeleteJobsTable(storage);
-
-  for (const row of storage.sql.exec<DomainProviderDeleteJobRow>(
-    `
-      SELECT
-        job_id,
-        status,
-        runner_id,
-        plan_json,
-        targets_json,
-        deployment_attempt_id,
-        deployment_target_id,
-        deployment_desired_state_version_id,
-        deployment_desired_state_revision,
-        deployment_desired_state_hash,
-        deployment_lease_token,
-        result_json,
-        error,
-        created_at,
-        updated_at
-      FROM instance_domain_provider_delete_jobs
-      WHERE job_id = ?
-      LIMIT 1
-    `,
-    jobId,
-  )) {
-    return deploymentJobLinkFromRow(row);
-  }
-
-  return undefined;
-}
-
-function deploymentJobLinkFromRow(
-  row: Pick<
-    DomainProviderDeleteJobRow,
-    | "deployment_attempt_id"
-    | "deployment_desired_state_hash"
-    | "deployment_desired_state_revision"
-    | "deployment_desired_state_version_id"
-    | "deployment_lease_token"
-    | "deployment_target_id"
-  >,
-): DomainProviderDeploymentJobLink | undefined {
-  if (
-    row.deployment_attempt_id === null ||
-    row.deployment_desired_state_hash === null ||
-    row.deployment_desired_state_revision === null ||
-    row.deployment_desired_state_version_id === null ||
-    row.deployment_lease_token === null ||
-    row.deployment_target_id === null
-  ) {
-    return undefined;
-  }
-
-  return {
-    attemptId: row.deployment_attempt_id,
-    desiredState: {
-      hash: row.deployment_desired_state_hash,
-      revision: row.deployment_desired_state_revision,
-      targetId: row.deployment_target_id,
-      versionId: row.deployment_desired_state_version_id,
-    },
-    leaseToken: row.deployment_lease_token,
-  };
 }
 
 function deleteJobFromRow(row: DomainProviderDeleteJobRow): InstanceDomainProviderDeleteJob {

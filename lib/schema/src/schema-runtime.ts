@@ -67,6 +67,17 @@ export function isRuntimeControlPlaneSecretReferenceField(
   );
 }
 
+export function isRuntimeControlPlaneObservedField(
+  schema: AppSchema,
+  entityName: string,
+  fieldName: string,
+) {
+  return (
+    runtimeControlPlaneEntityMetadata(schema, entityName)?.observedFields?.includes(fieldName) ??
+    false
+  );
+}
+
 function parseRuntimeBuilderPolicy(value: unknown): RuntimeSchemaMetadata["builder"] {
   if (!isRecord(value)) {
     throw new Error("Schema runtime builder policy must be an object.");
@@ -131,12 +142,17 @@ function parseControlPlaneEntityMetadata(
     context,
     value,
     [],
-    ["history", "immutableFields", "routeValidation", "secretReferenceFields"],
+    ["history", "immutableFields", "observedFields", "routeValidation", "secretReferenceFields"],
   );
 
   const immutableFields = parseKnownFieldNames(
     `${context} immutableFields`,
     value.immutableFields,
+    entity,
+  );
+  const observedFields = parseKnownFieldNames(
+    `${context} observedFields`,
+    value.observedFields,
     entity,
   );
   const secretReferenceFields = parseSecretReferenceFieldNames(
@@ -153,6 +169,7 @@ function parseControlPlaneEntityMetadata(
 
   if (
     immutableFields === undefined &&
+    observedFields === undefined &&
     secretReferenceFields === undefined &&
     routeValidation === undefined &&
     history === undefined
@@ -162,6 +179,7 @@ function parseControlPlaneEntityMetadata(
 
   return {
     ...(immutableFields === undefined ? {} : { immutableFields }),
+    ...(observedFields === undefined ? {} : { observedFields }),
     ...(secretReferenceFields === undefined ? {} : { secretReferenceFields }),
     ...(routeValidation === undefined ? {} : { routeValidation }),
     ...(history === undefined ? {} : { history }),

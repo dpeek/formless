@@ -344,8 +344,8 @@ entity keys and render clean human labels for those entities.
 ### Requirement: Schema-Driven Instance Management UI
 
 The system SHALL render instance management in the instance shell from
-schema-owned app install, route, deployment config, provider evidence, view,
-screen, read model, and action models.
+schema-owned app install, route, deployment config, deployment observation
+cache, provider evidence, view, screen, read model, and action models.
 
 #### Scenario: Instance management surface
 
@@ -353,8 +353,10 @@ screen, read model, and action models.
 - **WHEN** control-plane records are available
 - **THEN** app installs, routes, and deployment configs come from the instance
   control-plane schema
-- **AND** attempt status, evidence summaries, and drift summaries come from the
-  deployment runtime or local gateway operation state
+- **AND** latest deployment status comes from deployment config observation
+  cache fields and read-only deployment projection
+- **AND** active local operation progress, evidence summaries, and drift
+  summaries may come from local gateway operation state
 - **AND** custom-domain desired route state and provider applied evidence remain
   visually separate
 
@@ -408,12 +410,13 @@ kinds.
 - THEN it renders only actions exposed to owner or admin browser actors
 - AND CLI deployer or runner actions are hidden from the browser surface
 
-#### Scenario: Read-only history
+#### Scenario: Read-only deployment observation
 
-- GIVEN deployment attempt, evidence, or drift history records render
-- WHEN the schema marks those records as append-only or action-created
-- THEN generated UI treats the history as read-only unless the schema exposes a
-  specific browser action for that record
+- GIVEN deployment config observation cache fields render
+- WHEN generated UI displays deployment state
+- THEN generated UI treats those fields as read-only runtime-observed cache
+- AND generated UI does not require `deploy-attempt`,
+  `deploy-evidence-summary`, or `deploy-drift-report` collection views
 
 ### Requirement: Routes Editor
 
@@ -456,6 +459,8 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **THEN** desired route fields remain visually separate from provider evidence
   and cleanup state
 - **AND** route edits do not imply provider mutation
+- **AND** deployment config observation cache fields may be displayed for status
+  but are not editable route intent
 
 ### Requirement: Browser Workspace Operation Controls
 
@@ -543,6 +548,8 @@ behavior for onboarding steps that write schema records.
   starts deploy plan/apply
 - **THEN** the step invokes the workspace gateway operation model and renders
   operation progress
+- **AND** deploy apply completion may refresh displayed deployment config
+  observation cache fields after the authorized cache patch commits
 - **AND** schema field controls are used only for schema-record inputs, not for
   arbitrary filesystem paths, credentials, raw provider state, or shell output
 - **AND** local dev browser onboarding does not present a workspace

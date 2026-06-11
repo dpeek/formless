@@ -53,6 +53,7 @@ export type FormlessCliCommand =
       workspacePath: string;
     }
   | { kind: "instanceStatus"; targetAlias: string | null; workspacePath: string }
+  | { kind: "instanceDeploymentRefresh"; targetAlias: string | null; workspacePath: string }
   | { kind: "instancePull"; targetAlias: string | null; workspacePath: string }
   | { kind: "instanceCheck"; targetAlias: string | null; workspacePath: string }
   | {
@@ -184,7 +185,7 @@ export function formlessCliUsage(): string {
     "       [--label <label>]",
     "  instance init-workspace [--workspace <path>] [--name <name>]",
     "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
-    "  instance status|pull|check [--workspace <path>] [--target <alias>]",
+    "  instance status|refresh|pull|check [--workspace <path>] [--target <alias>]",
     "  instance push [--workspace <path>] [--target <alias>]",
     "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
     "  instance dev|reset-local [--workspace <path>]",
@@ -511,6 +512,12 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
       return parseInstanceInitWorkspaceArgs(rest);
     case "status":
       return parseInstanceTargetCommandArgs(rest, "formless instance status", "instanceStatus");
+    case "refresh":
+      return parseInstanceTargetCommandArgs(
+        rest,
+        "formless instance refresh",
+        "instanceDeploymentRefresh",
+      );
     case "pull":
       return parseInstanceTargetCommandArgs(rest, "formless instance pull", "instancePull");
     case "check":
@@ -537,7 +544,7 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
       return parseInstanceOwnerArgs(rest);
     default:
       throw new Error(
-        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
+        "Usage: formless instance <init-workspace|status|refresh|pull|check|push|dev|reset-local|deploy|destroy|domains|token|owner>",
       );
   }
 }
@@ -609,7 +616,7 @@ function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
 }
 
 function parseInstanceTargetCommandArgs<
-  TKind extends "instanceCheck" | "instancePull" | "instanceStatus",
+  TKind extends "instanceCheck" | "instanceDeploymentRefresh" | "instancePull" | "instanceStatus",
 >(args: string[], usage: string, kind: TKind): Extract<FormlessCliCommand, { kind: TKind }> {
   const options = parseInstanceTargetOptions(args, usage);
 
