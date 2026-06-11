@@ -181,6 +181,7 @@ export type PublicOperationResponse = {
         response: {
           actionId: string;
           cursor: number;
+          recordPlan?: RecordPlanResponse;
         };
       }
     | {
@@ -335,10 +336,23 @@ export type MutationResponse = {
   mutationId: string;
 };
 
+export type RecordPlanStepResponse = {
+  name: string;
+  kind: "create" | "patch" | "delete" | "tombstone";
+  entity: EntityName;
+  recordId: string;
+  changeId: string;
+};
+
+export type RecordPlanResponse = {
+  steps: RecordPlanStepResponse[];
+};
+
 export type ActionResponse = {
   actionId: string;
   changes: ChangeRow[];
   cursor: number;
+  recordPlan?: RecordPlanResponse;
 };
 
 export type SchemaResponse = {

@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+  AppSchema,
+  EntityOperationSchema,
+  RecordPlanStepSchema,
+} from "@dpeek/formless-schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type {
@@ -9,9 +14,12 @@ import type {
   ChangeRow,
   MutationResponse,
   PublicOperationResponse,
+  SchemaResponse,
+  SchemaUpdateResponse,
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
@@ -30,6 +38,7 @@ const turnstileSiteKey = "test-turnstile-site-key";
 const turnstileSecret = "test-turnstile-secret";
 const mappedHost = "subscribe.example.com";
 const installId = "personal";
+const recordPlanInstallId = "public-intake";
 
 let harness: Harness;
 let publicOperationHarness: Harness;
@@ -252,6 +261,394 @@ describe("public operation runtime", () => {
         secret: turnstileSecret,
         response: "token-ok",
         idempotency_key: "contact-create-exec",
+      },
+    ]);
+  });
+
+  it("executes and rejects schema-key public record-plan command operations", async () => {
+    await installPublicRecordPlanSchema("/api/tasks");
+
+    const before = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+    const accepted = await postPublicAction(
+      "/api/tasks/public/operations/task/submitPublicPlan",
+      publicRecordPlanBody({ idempotencyKey: "record-plan-schema-key" }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const after = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+
+    expect(accepted.status).toBe(200);
+    expect(body).toMatchObject({
+      invocationId: "operation:task.submitPublicPlan:record-plan-schema-key",
+      operation: {
+        entityName: "task",
+        operationName: "submitPublicPlan",
+        canonicalKey: "task.submitPublicPlan",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        cursor: after.cursor,
+        response: {
+          actionId: "operation:task.submitPublicPlan:record-plan-schema-key",
+          cursor: after.cursor,
+          recordPlan: {
+            steps: [
+              { name: "createTask", kind: "create", entity: "task" },
+              { name: "createLog", kind: "create", entity: "task-log" },
+              { name: "touchTask", kind: "patch", entity: "task" },
+            ],
+          },
+        },
+      },
+      status: "committed",
+    });
+    if (body.output.type !== "command") {
+      throw new Error("Expected command output.");
+    }
+    const steps = body.output.response.recordPlan?.steps ?? [];
+    const records = taskRecordPlanRecords(after.records);
+    const taskId = steps[0]?.recordId;
+    const task = records.tasks.find((record) => record.id === taskId);
+    const log = records.logs.find((record) => record.values.task === taskId);
+
+    expect(body.output).not.toHaveProperty("changes");
+    expect(body.output.affectedChangeIds).toHaveLength(3);
+    expect(steps.map((step) => step.changeId)).toEqual(body.output.affectedChangeIds);
+    expect(after.records.length).toBe(before.records.length + 2);
+    expect(task?.values).toMatchObject({
+      title: "Public plan task",
+      done: false,
+      priority: "normal",
+    });
+    expect(log?.values).toMatchObject({
+      task: taskId,
+      label: "Created from public plan",
+      actorMode: "anonymous",
+      sourcePath: "/api/tasks/public/operations/task/submitPublicPlan",
+    });
+    expect(JSON.stringify(body)).not.toContain("token-ok");
+    expect(JSON.stringify(body)).not.toContain(turnstileSecret);
+    expect(JSON.stringify(body)).not.toContain("Public plan task");
+    expect(JSON.stringify(body)).not.toContain("Created from public plan");
+
+    const beforeRejected = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+    const rejected = await postPublicAction(
+      "/api/tasks/public/operations/task/submitPublicPlan",
+      publicRecordPlanBody({
+        idempotencyKey: "record-plan-schema-key-rejected",
+        input: {
+          title: "Rejected task",
+          note: "Rejected note",
+          admin: true,
+        },
+      }),
+    );
+    const afterRejected = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: 'Public operation input includes undeclared field "admin".',
+    });
+    expect(afterRejected.records).toEqual(beforeRejected.records);
+    expect(afterRejected.cursor).toBe(beforeRejected.cursor);
+    expect(turnstileRequests).toEqual([
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+        idempotency_key: "record-plan-schema-key",
+      },
+    ]);
+  });
+
+  it("executes and rejects installed app public record-plan command operations", async () => {
+    await resetInstalledApp("tasks", recordPlanInstallId);
+    await installPublicRecordPlanSchema(`/api/app-installs/tasks/${recordPlanInstallId}`);
+
+    const route = `/api/app-installs/tasks/${recordPlanInstallId}/public/operations/task/submitPublicPlan`;
+    const accepted = await postPublicAction(
+      route,
+      publicRecordPlanBody({ idempotencyKey: "record-plan-installed" }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const after = await getJson<BootstrapResponse>(
+      `/api/app-installs/tasks/${recordPlanInstallId}/bootstrap`,
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(body).toMatchObject({
+      invocationId: "operation:task.submitPublicPlan:record-plan-installed",
+      operation: {
+        entityName: "task",
+        operationName: "submitPublicPlan",
+        canonicalKey: "task.submitPublicPlan",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        response: {
+          actionId: "operation:task.submitPublicPlan:record-plan-installed",
+          recordPlan: {
+            steps: [
+              { name: "createTask", kind: "create", entity: "task" },
+              { name: "createLog", kind: "create", entity: "task-log" },
+              { name: "touchTask", kind: "patch", entity: "task" },
+            ],
+          },
+        },
+      },
+      status: "committed",
+    });
+    if (body.output.type !== "command") {
+      throw new Error("Expected command output.");
+    }
+    const steps = body.output.response.recordPlan?.steps ?? [];
+    const records = taskRecordPlanRecords(after.records);
+    const taskId = steps[0]?.recordId;
+
+    expect(body.output).not.toHaveProperty("changes");
+    expect(body.output.affectedChangeIds).toHaveLength(3);
+    expect(records.tasks.some((record) => record.id === taskId)).toBe(true);
+    expect(records.logs).toEqual([
+      expect.objectContaining({
+        values: expect.objectContaining({
+          task: taskId,
+          actorMode: "anonymous",
+          sourcePath: route,
+        }),
+      }),
+    ]);
+
+    const beforeRejected = await getJson<BootstrapResponse>(
+      `/api/app-installs/tasks/${recordPlanInstallId}/bootstrap`,
+    );
+    const rejected = await postPublicAction(
+      route,
+      publicRecordPlanBody({
+        idempotencyKey: "record-plan-installed-rejected",
+        input: {
+          title: "Rejected installed task",
+          note: "Rejected installed note",
+          providerSecret: "not-public",
+        },
+      }),
+    );
+    const afterRejected = await getJson<BootstrapResponse>(
+      `/api/app-installs/tasks/${recordPlanInstallId}/bootstrap`,
+    );
+
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: 'Public operation input includes undeclared field "providerSecret".',
+    });
+    expect(afterRejected.records).toEqual(beforeRejected.records);
+    expect(afterRejected.cursor).toBe(beforeRejected.cursor);
+    expect(turnstileRequests).toEqual([
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+        idempotency_key: "record-plan-installed",
+      },
+    ]);
+  });
+
+  it("executes ClearTrace public intake record plans and leaves staff lifecycle continuation protected", async () => {
+    await resetSchemaApp("cleartrace");
+
+    const route = "/api/cleartrace/public/operations/order/submit-public-intake";
+    const before = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+    const accepted = await postPublicAction(
+      route,
+      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-intake" }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const after = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+
+    expect(accepted.status).toBe(200);
+    expect(body).toMatchObject({
+      invocationId: "operation:order.submit-public-intake:cleartrace-intake",
+      operation: {
+        entityName: "order",
+        operationName: "submit-public-intake",
+        canonicalKey: "order.submit-public-intake",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        cursor: after.cursor,
+        response: {
+          actionId: "operation:order.submit-public-intake:cleartrace-intake",
+          recordPlan: {
+            steps: [
+              { name: "createCustomer", kind: "create", entity: "customer" },
+              { name: "createOrder", kind: "create", entity: "order" },
+              { name: "createSample", kind: "create", entity: "sample" },
+              { name: "createOrderLine", kind: "create", entity: "order-line" },
+              { name: "createTestRequest", kind: "create", entity: "test-request" },
+              { name: "createWorkItem", kind: "create", entity: "work-item" },
+              { name: "createAuditEvent", kind: "create", entity: "audit-event" },
+            ],
+          },
+        },
+      },
+      status: "committed",
+    });
+    if (body.output.type !== "command") {
+      throw new Error("Expected command output.");
+    }
+
+    const steps = body.output.response.recordPlan?.steps ?? [];
+    const customer = requiredPlanRecord(after.records, steps, "createCustomer", "customer");
+    const order = requiredPlanRecord(after.records, steps, "createOrder", "order");
+    const sample = requiredPlanRecord(after.records, steps, "createSample", "sample");
+    const orderLine = requiredPlanRecord(after.records, steps, "createOrderLine", "order-line");
+    const request = requiredPlanRecord(after.records, steps, "createTestRequest", "test-request");
+    const workItem = requiredPlanRecord(after.records, steps, "createWorkItem", "work-item");
+    const auditEvent = requiredPlanRecord(after.records, steps, "createAuditEvent", "audit-event");
+
+    expect(body.output).not.toHaveProperty("changes");
+    expect(body.output.affectedChangeIds).toHaveLength(7);
+    expect(steps.map((step) => step.changeId)).toEqual(body.output.affectedChangeIds);
+    expect(after.records.length).toBe(before.records.length + 7);
+    expect(customer.values).toMatchObject({
+      label: "Public Intake Labs",
+      email: "cleartrace-intake@example.com",
+      status: "active",
+    });
+    expect(order.values).toMatchObject({
+      customer: customer.id,
+      status: "awaitingPayment",
+      paymentStatus: "manualPending",
+      total: 0,
+      currency: "AUD",
+      termsAccepted: true,
+    });
+    expect(String(order.values.orderNumber)).toMatch(/^CT_/);
+    expect(sample.values).toMatchObject({
+      order: order.id,
+      customer: customer.id,
+      analyte: "rec_cleartrace_analyte_peptide_a",
+      status: "expected",
+      form: "vial",
+      customerNotes: "Customer submitted intake notes.",
+    });
+    expect(String(sample.values.sampleCode)).toMatch(/^CT-S_/);
+    expect(orderLine.values).toMatchObject({
+      order: order.id,
+      catalogItem: "rec_cleartrace_catalog_identity",
+      description: sample.values.sampleCode,
+      quantity: 1,
+      unitPrice: 0,
+      total: 0,
+      sample: sample.id,
+    });
+    expect(request.values).toMatchObject({
+      order: order.id,
+      sample: sample.id,
+      testPackage: "rec_cleartrace_package_standard",
+      status: "pendingReview",
+      priority: "normal",
+      assignedTo: "Lab intake",
+    });
+    expect(workItem.values).toMatchObject({
+      label: sample.values.sampleCode,
+      type: "intake",
+      status: "open",
+      priority: "normal",
+      relatedRecordId: sample.id,
+      assignedTo: "Lab intake",
+    });
+    expect(auditEvent.values).toMatchObject({
+      label: "Submitted public intake",
+      actorType: "customer",
+      actionKey: "submit-public-intake",
+      recordType: "order",
+      recordId: order.id,
+      previousState: "none",
+      nextState: "awaitingPayment",
+      actorMode: "anonymous",
+      occurredAt: "2026-06-11",
+      sourceHost: "example.com",
+      sourcePath: route,
+    });
+    expect(auditEvent.values.operationReceivedAt).toEqual(expect.any(String));
+    expect(JSON.stringify(body)).not.toContain("token-ok");
+    expect(JSON.stringify(body)).not.toContain(turnstileSecret);
+    expect(JSON.stringify(body)).not.toContain("Customer submitted intake notes.");
+
+    const replay = await postPublicAction(
+      route,
+      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-intake" }),
+    );
+    const replayBody = (await replay.json()) as PublicOperationResponse;
+    const afterReplay = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+
+    expect(replay.status).toBe(200);
+    expect(replayBody.status).toBe("replayed");
+    expect(afterReplay.records).toEqual(after.records);
+    expect(afterReplay.cursor).toBe(after.cursor);
+
+    const anonymousTransition = await postPublicAction(
+      "/api/cleartrace/public/operations/sample/receiveSample",
+      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-public-transition" }),
+    );
+    expect(anonymousTransition.status).toBe(404);
+
+    const beforeRejected = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+    const rejected = await postPublicAction(
+      route,
+      publicCleartraceIntakeBody({
+        idempotencyKey: "cleartrace-intake-rejected",
+        input: {
+          ...publicCleartraceIntakeInput("cleartrace-intake-rejected"),
+          catalogItemId: "missing-catalog-item",
+        },
+      }),
+    );
+    const afterRejected = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error:
+        'Field "catalogItem" references unknown service-catalog-item record "missing-catalog-item".',
+    });
+    expect(afterRejected.records).toEqual(beforeRejected.records);
+    expect(afterRejected.cursor).toBe(beforeRejected.cursor);
+
+    await postAdminJson<OperationInvocationResponse>(
+      "/api/cleartrace/operations/sample/receiveSample",
+      {
+        idempotencyKey: "cleartrace-staff-receive-sample",
+        input: { recordId: sample.id },
+      },
+    );
+    await postAdminJson<OperationInvocationResponse>(
+      "/api/cleartrace/operations/sample/accessionSample",
+      {
+        idempotencyKey: "cleartrace-staff-accession-sample",
+        input: { recordId: sample.id },
+      },
+    );
+    await postAdminJson<OperationInvocationResponse>(
+      "/api/cleartrace/operations/test-request/acceptTestRequest",
+      {
+        idempotencyKey: "cleartrace-staff-accept-request",
+        input: { recordId: request.id },
+      },
+    );
+    const afterStaff = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
+
+    expect(recordById(afterStaff.records, sample.id)?.values.status).toBe("accessioned");
+    expect(recordById(afterStaff.records, request.id)?.values.status).toBe("accepted");
+    expect(turnstileRequests).toEqual([
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+        idempotency_key: "cleartrace-intake",
+      },
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+        idempotency_key: "cleartrace-intake-rejected",
       },
     ]);
   });
@@ -1026,7 +1423,10 @@ async function turnstileVerifyResponse(request: Request) {
   return Response.json(turnstileResponse);
 }
 
-async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = harness) {
+async function resetSchemaApp(
+  schemaKey: "cleartrace" | "tasks" | "site",
+  target: Harness = harness,
+) {
   const response = await target.fetch(`/api/${schemaKey}/reset/seed`, {
     body: "{}",
     headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -1036,7 +1436,7 @@ async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = har
   expect(response.status).toBe(200);
 }
 
-async function resetInstalledApp(packageAppKey: "site", appInstallId: string) {
+async function resetInstalledApp(packageAppKey: "site" | "tasks", appInstallId: string) {
   const response = await harness.fetch(
     `/api/app-installs/${packageAppKey}/${appInstallId}/reset/seed`,
     {
@@ -1079,6 +1479,166 @@ function publicContactMessageBody(input: {
   };
 }
 
+async function installPublicRecordPlanSchema(apiPrefix: string) {
+  const current = await getJson<SchemaResponse>(`${apiPrefix}/schema`);
+  const schema = schemaWithPublicRecordPlanOperation(current.schema);
+
+  await postAdminJson<SchemaUpdateResponse>(`${apiPrefix}/schema`, { schema });
+}
+
+function publicRecordPlanBody(input: {
+  idempotencyKey: string;
+  input?: Record<string, unknown>;
+  token?: string;
+}) {
+  return {
+    input: input.input ?? {
+      title: "Public plan task",
+      note: "Created from public plan",
+    },
+    proof: { turnstileToken: input.token ?? "token-ok" },
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+function publicCleartraceIntakeBody(input: {
+  idempotencyKey: string;
+  input?: Record<string, unknown>;
+  token?: string;
+}) {
+  return {
+    input: input.input ?? publicCleartraceIntakeInput(input.idempotencyKey),
+    proof: { turnstileToken: input.token ?? "token-ok" },
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+function publicCleartraceIntakeInput(idempotencyKey: string) {
+  return {
+    customerName: "Public Intake Labs",
+    customerEmail: `${idempotencyKey}@example.com`,
+    catalogItemId: "rec_cleartrace_catalog_identity",
+    testPackageId: "rec_cleartrace_package_standard",
+    analyteId: "rec_cleartrace_analyte_peptide_a",
+    sampleForm: "vial",
+    sampleNotes: "Customer submitted intake notes.",
+    termsAcceptance: "accepted",
+  };
+}
+
+function schemaWithPublicRecordPlanOperation(sourceSchema: AppSchema): AppSchema {
+  const schema = structuredClone(sourceSchema);
+  const taskEntity = schema.entities.task;
+
+  if (!taskEntity) {
+    throw new Error("Expected task entity.");
+  }
+
+  schema.entities["task-log"] = taskLogEntity();
+  schema.entities.task = {
+    ...taskEntity,
+    operations: {
+      ...taskEntity.operations,
+      submitPublicPlan: publicRecordPlanOperation(),
+    },
+  };
+
+  return schema;
+}
+
+function publicRecordPlanOperation(): EntityOperationSchema {
+  return {
+    label: "Submit public plan",
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        title: { type: "text", required: true, label: "Title" },
+        note: { type: "text", required: true, label: "Note" },
+      },
+    },
+    effect: {
+      type: "recordPlan",
+      steps: publicRecordPlanSteps(),
+    },
+    output: { type: "command" },
+    policy: {
+      actors: ["anonymous"],
+      access: {
+        actor: "anonymous",
+        challenge: { kind: "turnstile" },
+        origin: { kind: "same-origin" },
+      },
+    },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
+}
+
+function publicRecordPlanSteps(): RecordPlanStepSchema[] {
+  return [
+    {
+      name: "createTask",
+      kind: "create",
+      entity: "task",
+      recordId: { kind: "generatedId", prefix: "task-public" },
+      values: {
+        title: { kind: "input", field: "title" },
+        done: { kind: "literal", value: false },
+      },
+    },
+    {
+      name: "createLog",
+      kind: "create",
+      entity: "task-log",
+      values: {
+        task: {
+          kind: "reference",
+          entity: "task",
+          id: { kind: "stepOutput", step: "createTask", output: "id" },
+        },
+        label: { kind: "input", field: "note" },
+        actorMode: { kind: "actor", field: "mode" },
+        sourcePath: { kind: "source", field: "path" },
+        occurredAt: { kind: "generatedTimestamp" },
+      },
+    },
+    {
+      name: "touchTask",
+      kind: "patch",
+      entity: "task",
+      recordId: { kind: "stepOutput", step: "createTask", output: "id" },
+      values: {
+        title: { kind: "stepOutput", step: "createTask", output: "field", field: "title" },
+      },
+    },
+  ];
+}
+
+function taskLogEntity(): AppSchema["entities"][string] {
+  return {
+    label: "Task log",
+    fields: {
+      task: {
+        type: "reference",
+        required: true,
+        label: "Task",
+        to: "task",
+        displayField: "title",
+      },
+      label: { type: "text", required: true, label: "Label" },
+      actorMode: { type: "text", required: true, label: "Actor mode" },
+      sourcePath: { type: "text", required: false, label: "Source path" },
+      occurredAt: { type: "text", required: true, label: "Occurred at" },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: false },
+      delete: { enabled: false },
+    },
+  };
+}
+
 function contactSubscriptionRecords(records: StoredRecord[]) {
   return {
     contacts: records.filter((record) => record.entity === "contact"),
@@ -1090,6 +1650,33 @@ function contactSubscriptionRecords(records: StoredRecord[]) {
 
 function contactMessageRecords(records: StoredRecord[]) {
   return records.filter((record) => record.entity === "contact-message");
+}
+
+function taskRecordPlanRecords(records: StoredRecord[]) {
+  return {
+    tasks: records.filter((record) => record.entity === "task"),
+    logs: records.filter((record) => record.entity === "task-log"),
+  };
+}
+
+function requiredPlanRecord(
+  records: StoredRecord[],
+  steps: { entity: string; name: string; recordId: string }[],
+  stepName: string,
+  entity: string,
+) {
+  const step = steps.find((candidate) => candidate.name === stepName);
+  const record = step ? recordById(records, step.recordId) : undefined;
+
+  if (!step || record?.entity !== entity) {
+    throw new Error(`Missing record-plan step "${stepName}" for "${entity}".`);
+  }
+
+  return record;
+}
+
+function recordById(records: StoredRecord[], recordId: string) {
+  return records.find((record) => record.id === recordId);
 }
 
 async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {

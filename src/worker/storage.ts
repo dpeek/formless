@@ -239,16 +239,25 @@ export type ActionRecordWriteValues =
   | RecordValues
   | ((writtenRecords: StoredRecord[]) => RecordValues);
 
+export type ActionRecordWriteTarget =
+  | StoredRecord
+  | ((writtenRecords: StoredRecord[]) => StoredRecord);
+
 export type ActionRecordWritePlan =
   | {
       kind: "create";
       entity: string;
+      id?: string;
       values: ActionRecordWriteValues;
     }
   | {
       kind: "patch";
-      record: StoredRecord;
+      record: ActionRecordWriteTarget;
       values: ActionRecordWriteValues;
+    }
+  | {
+      kind: "delete" | "tombstone";
+      record: ActionRecordWriteTarget;
     };
 
 export type AppliedPackageAppMigration = {
@@ -2008,14 +2017,14 @@ function materializeActionRecordWrites(
   const writtenRecords: StoredRecord[] = [];
 
   for (const plan of plans) {
-    const values =
-      typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
-
     if (plan.kind === "create") {
+      const values =
+        typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
       const record = materializeCreatedActionRecord(
         storage,
         {
           entity: plan.entity,
+          id: plan.id,
           values,
           createdAt: changedAt,
         },
@@ -2026,12 +2035,29 @@ function materializeActionRecordWrites(
       continue;
     }
 
-    writtenRecords.push(
-      materializePatchedActionRecord(storage, plan.record, values, validateConstraints),
-    );
+    const record = resolveActionRecordWriteTarget(plan.record, writtenRecords);
+
+    if (plan.kind === "patch") {
+      const values =
+        typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
+
+      writtenRecords.push(
+        materializePatchedActionRecord(storage, record, values, validateConstraints),
+      );
+      continue;
+    }
+
+    writtenRecords.push(materializeActionTombstoneRecord(storage, record, changedAt));
   }
 
   return writtenRecords;
+}
+
+function resolveActionRecordWriteTarget(
+  target: ActionRecordWriteTarget,
+  writtenRecords: StoredRecord[],
+) {
+  return typeof target === "function" ? target([...writtenRecords]) : target;
 }
 
 function materializePatchedActionRecord(

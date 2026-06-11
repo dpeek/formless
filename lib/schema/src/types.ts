@@ -991,11 +991,120 @@ export type RunActionKindEntityOperationEffectSchema = {
   query?: string;
 };
 
+export type RecordPlanStepKind = "create" | "patch" | "delete" | "tombstone";
+
+export type RecordPlanActorContextField = "mode";
+
+export type RecordPlanSourceContextField = "protocol" | "route" | "host" | "path";
+
+export type RecordPlanInputValueExpressionSchema = {
+  kind: "input";
+  field: string;
+};
+
+export type RecordPlanLiteralValueExpressionSchema = {
+  kind: "literal";
+  value: FieldValue;
+};
+
+export type RecordPlanGeneratedIdExpressionSchema = {
+  kind: "generatedId";
+  prefix?: string;
+};
+
+export type RecordPlanGeneratedTimestampExpressionSchema = {
+  kind: "generatedTimestamp";
+};
+
+export type RecordPlanActorContextExpressionSchema = {
+  kind: "actor";
+  field: RecordPlanActorContextField;
+};
+
+export type RecordPlanSourceContextExpressionSchema = {
+  kind: "source";
+  field: RecordPlanSourceContextField;
+};
+
+export type RecordPlanStepIdOutputExpressionSchema = {
+  kind: "stepOutput";
+  step: string;
+  output: "id";
+};
+
+export type RecordPlanStepFieldOutputExpressionSchema = {
+  kind: "stepOutput";
+  step: string;
+  output: "field";
+  field: string;
+};
+
+export type RecordPlanStepOutputExpressionSchema =
+  | RecordPlanStepIdOutputExpressionSchema
+  | RecordPlanStepFieldOutputExpressionSchema;
+
+export type RecordPlanRecordIdExpressionSchema =
+  | RecordPlanInputValueExpressionSchema
+  | RecordPlanLiteralValueExpressionSchema
+  | RecordPlanGeneratedIdExpressionSchema
+  | RecordPlanStepIdOutputExpressionSchema;
+
+export type RecordPlanScalarValueExpressionSchema =
+  | RecordPlanRecordIdExpressionSchema
+  | RecordPlanGeneratedTimestampExpressionSchema
+  | RecordPlanActorContextExpressionSchema
+  | RecordPlanSourceContextExpressionSchema
+  | RecordPlanStepFieldOutputExpressionSchema;
+
+export type RecordPlanReferenceValueExpressionSchema = {
+  kind: "reference";
+  entity: string;
+  id: RecordPlanRecordIdExpressionSchema;
+};
+
+export type RecordPlanValueExpressionSchema =
+  | RecordPlanScalarValueExpressionSchema
+  | RecordPlanReferenceValueExpressionSchema;
+
+export type RecordPlanCreateStepSchema = {
+  name: string;
+  kind: "create";
+  entity: string;
+  recordId?: RecordPlanRecordIdExpressionSchema;
+  values: Record<string, RecordPlanValueExpressionSchema>;
+};
+
+export type RecordPlanPatchStepSchema = {
+  name: string;
+  kind: "patch";
+  entity: string;
+  recordId: RecordPlanRecordIdExpressionSchema;
+  values: Record<string, RecordPlanValueExpressionSchema>;
+};
+
+export type RecordPlanDeleteStepSchema = {
+  name: string;
+  kind: "delete" | "tombstone";
+  entity: string;
+  recordId: RecordPlanRecordIdExpressionSchema;
+};
+
+export type RecordPlanStepSchema =
+  | RecordPlanCreateStepSchema
+  | RecordPlanPatchStepSchema
+  | RecordPlanDeleteStepSchema;
+
+export type RecordPlanEntityOperationEffectSchema = {
+  type: "recordPlan";
+  steps: RecordPlanStepSchema[];
+};
+
 export type EntityOperationEffectSchema =
   | CreateRecordEntityOperationEffectSchema
   | PatchRecordEntityOperationEffectSchema
   | DeleteRecordEntityOperationEffectSchema
-  | RunActionKindEntityOperationEffectSchema;
+  | RunActionKindEntityOperationEffectSchema
+  | RecordPlanEntityOperationEffectSchema;
 
 export type EntityOperationOutputContractSchema =
   | {

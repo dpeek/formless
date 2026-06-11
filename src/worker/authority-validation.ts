@@ -41,10 +41,15 @@ export type ValidatedMutation =
       outcome: WriteOutcome<MutationResponse>;
     };
 
+type MutationValidationOptions = {
+  additionalRecords?: StoredRecord[];
+};
+
 export function validateMutationRequest(
   value: unknown,
   schema: AppSchema,
   storage: DurableObjectStorage,
+  options: MutationValidationOptions = {},
 ): ValidatedMutation {
   if (!isRecord(value)) {
     throw new BadRequestError("Mutation must be an object.");
@@ -95,7 +100,11 @@ export function validateMutationRequest(
       throw new BadRequestError("Delete mutation must include a recordId.");
     }
 
-    const existingRecord = getStoredRecord(storage, value.recordId);
+    const existingRecord = getStoredRecordForValidation(
+      storage,
+      value.recordId,
+      options.additionalRecords,
+    );
     if (!existingRecord) {
       throw new BadRequestError(`Unknown record "${value.recordId}".`);
     }
@@ -108,7 +117,7 @@ export function validateMutationRequest(
       throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
     }
 
-    assertNoActiveInboundReferences(existingRecord, schema, storage);
+    assertNoActiveInboundReferences(existingRecord, schema, storage, options.additionalRecords);
 
     return {
       mutation: {
@@ -129,13 +138,21 @@ export function validateMutationRequest(
       throw new BadRequestError("Patch mutation must include a recordId.");
     }
 
-    const existingRecord = getStoredRecord(storage, value.recordId);
+    const existingRecord = getStoredRecordForValidation(
+      storage,
+      value.recordId,
+      options.additionalRecords,
+    );
     if (!existingRecord) {
       throw new BadRequestError(`Unknown record "${value.recordId}".`);
     }
 
     if (existingRecord.entity !== value.entity) {
       throw new BadRequestError("Patch entity must match the stored record entity.");
+    }
+
+    if (existingRecord.deletedAt) {
+      throw new BadRequestError(`Cannot patch tombstoned record "${value.recordId}".`);
     }
 
     const patchValues = validatePatchValues(value.values, entity);
@@ -146,6 +163,7 @@ export function validateMutationRequest(
       entity,
       storage,
       {
+        additionalRecords: options.additionalRecords,
         entityName: value.entity,
         existingRecordId: value.recordId,
         schema,
@@ -174,6 +192,7 @@ export function validateMutationRequest(
         entity,
         storage,
         {
+          additionalRecords: options.additionalRecords,
           entityName: value.entity,
           schema,
         },
@@ -477,17 +496,22 @@ function getStoredRecordForValidation(
   recordId: string,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  return (
-    additionalRecords?.find((record) => record.id === recordId && !record.deletedAt) ??
-    getStoredRecord(storage, recordId)
-  );
+  const additionalRecord = additionalRecords?.find((record) => record.id === recordId);
+
+  return additionalRecord ?? getStoredRecord(storage, recordId);
 }
 
 function getBootstrapRecordsForValidation(
   storage: DurableObjectStorage,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  return [...getBootstrapRecords(storage), ...(additionalRecords ?? [])];
+  const recordsById = new Map(getBootstrapRecords(storage).map((record) => [record.id, record]));
+
+  for (const record of additionalRecords ?? []) {
+    recordsById.set(record.id, record);
+  }
+
+  return [...recordsById.values()];
 }
 
 function assertRuntimeHistoryAllowsGenericMutation(
@@ -1236,8 +1260,9 @@ function assertNoActiveInboundReferences(
   targetRecord: StoredRecord,
   schema: AppSchema,
   storage: DurableObjectStorage,
+  additionalRecords: StoredRecord[] | undefined,
 ) {
-  for (const record of getBootstrapRecords(storage)) {
+  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
     if (record.deletedAt) {
       continue;
     }

@@ -61,6 +61,21 @@ through an explicit actor policy and public binding.
 - AND Turnstile proof values are not stored in the created record or returned in
   the public response
 
+#### Scenario: Execute public record-plan command operation
+
+- GIVEN a non-Site app declares an anonymous public command operation with a
+  `recordPlan` effect
+- WHEN a visitor posts declared input and proof data to the target-scoped public
+  operation route
+- THEN the executor validates the operation input contract before challenge
+  verification or record materialization
+- AND successful execution commits only the flat records declared by the
+  operation record plan for that target app storage identity
+- AND the public response exposes only the command output fields, record ids, or
+  metadata allowed by the operation policy
+- AND challenge proof values, provider secrets, and protected internal fields
+  are not stored in committed app records or returned in the public response
+
 ### Requirement: Target-Scoped Public Operation API
 
 The system SHALL expose public operation execution through target-scoped public

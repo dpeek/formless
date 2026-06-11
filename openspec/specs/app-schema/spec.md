@@ -380,11 +380,36 @@ public forms, automation, audit, and authorization.
 
 - GIVEN an entity operation declares an effect
 - WHEN the schema is parsed
-- THEN first-pass effects are limited to create one record, patch one record,
-  delete or tombstone one record, or dispatch one registered schema action kind
+- THEN first-pass effects support creating one record, patching one record,
+  deleting or tombstoning one record, dispatching one registered schema action
+  kind, or executing a declarative record plan
 - AND create, update, and delete effects target the containing entity
 - AND command effects can reference schema action kinds and schema queries
   declared for the same schema
+
+#### Scenario: Validate command record plan
+
+- GIVEN a command operation declares effect type `recordPlan`
+- WHEN the schema is parsed
+- THEN the effect is valid only for command operations
+- AND the plan contains an ordered list of named steps
+- AND the effect declares steps under `steps[]` with step `name`, step `kind`,
+  target `entity`, create or patch `values`, and patch, delete, or tombstone
+  `recordId` expressions
+- AND each step creates, patches, deletes, or tombstones one flat record in a
+  declared entity from the same schema
+- AND step values may reference operation input fields, literal scalar values,
+  generated ids, generated timestamps, actor/source context, and outputs from
+  earlier steps
+- AND record id expressions use input, literal scalar, generated id, or earlier
+  step id output expressions
+- AND field values target declared fields on the step entity
+- AND reference field values use a reference expression whose entity matches the
+  declared reference target and whose id resolves to a flat record id
+- AND references to earlier steps resolve through flat record ids, not nested
+  record values
+- AND plans that include loops, arbitrary code, provider calls, cross-app
+  writes, or undeclared entity/field targets are rejected
 
 #### Scenario: Validate operation output contract
 

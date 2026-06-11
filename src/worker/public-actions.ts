@@ -245,8 +245,8 @@ function selectPublicOperation(
 
   const publicCommand =
     operation.kind === "command" &&
-    operation.effect?.type === "runActionKind" &&
-    Boolean(operation.effect.action);
+    ((operation.effect?.type === "runActionKind" && Boolean(operation.effect.action)) ||
+      operation.effect?.type === "recordPlan");
   const publicCreate =
     operation.kind === "create" &&
     operation.scope === "collection" &&
@@ -320,6 +320,7 @@ function parsePublicOperationRequest(
     input: validateEntityOperationInputContract({
       context: "Public operation input",
       entityName: selected.entityName,
+      mapToInputNames: selected.operation.effect?.type === "recordPlan",
       operation: selected.operation,
       operationName: selected.operationName,
       rawInput: envelopeFields.input,
@@ -512,6 +513,9 @@ function publicOperationResult(response: OperationInvocationResponse): PublicAct
         response: {
           actionId: response.output.response.actionId,
           cursor: response.output.response.cursor,
+          ...(response.output.response.recordPlan === undefined
+            ? {}
+            : { recordPlan: response.output.response.recordPlan }),
         },
       },
       status: response.status === "replayed" ? "replayed" : "committed",

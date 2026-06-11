@@ -78,22 +78,83 @@ The ClearTrace source schema SHALL define generated screens and views for owner 
 - **THEN** owner or staff users can inspect and maintain analytes, service catalog items, test packages, package items, compliance statements, and app configuration records
 - **AND** implementation-only identifiers, source metadata, and raw provider state are not primary workflow controls
 
+### Requirement: ClearTrace Public Intake Operation
+
+The ClearTrace source schema SHALL declare one anonymous public intake operation
+that proves customer-facing request creation through generic operation
+primitives while keeping lab records flat.
+
+#### Scenario: Submit public intake request
+
+- **GIVEN** the ClearTrace source schema declares collection-scoped command
+  operation `order.submit-public-intake`
+- **WHEN** an anonymous public caller submits valid customer contact, terms
+  acceptance, catalog or package selection, analyte selection, sample form, and
+  sample notes through the target-scoped public operation route
+- **THEN** the operation is evaluated through the normal public operation
+  envelope with anonymous actor policy, public input validation, challenge
+  policy, idempotency, and audit
+- **AND** the operation commits a declarative record plan that creates flat
+  `customer`, `order`, `order-line`, `sample`, `test-request`, intake
+  `work-item`, and `audit-event` records
+- **AND** the created records link through normal reference fields or scalar
+  related-record ids, not nested objects
+- **AND** generated order numbers, sample codes, record ids, timestamps, actor
+  mode, and source route context are materialized by the record plan rather than
+  accepted as trusted public input
+- **AND** the created order uses manual payment state, the created sample starts
+  in `expected`, the created test request starts in a staff-review state, and
+  the created work item starts open for intake follow-up
+- **AND** the public response returns only display-safe record-plan metadata
+  such as created-record ids, while generated order numbers and sample codes are
+  materialized on the created flat records rather than accepted as trusted
+  public input
+
+#### Scenario: Reject invalid public intake request
+
+- **GIVEN** a public intake request references inactive, missing, or mismatched
+  catalog, package, or analyte records, omits required customer or terms input,
+  fails challenge policy, or violates a storage constraint
+- **WHEN** the operation is evaluated
+- **THEN** no `customer`, `order`, `order-line`, `sample`, `test-request`,
+  `work-item`, `audit-event`, tombstone, or sync change row is committed
+- **AND** protected generic mutation, action, and operation routes remain
+  unavailable to the anonymous caller
+- **AND** the rejected attempt is auditable through the operation invocation
+  audit boundary without exposing challenge proofs or protected field values
+
+#### Scenario: Continue intake through staff workflow
+
+- **GIVEN** public intake created an expected sample and pending staff work
+- **WHEN** staff receive and accession the physical sample
+- **THEN** existing owner or staff transition operations move `sample.status`
+  and `test-request.status`
+- **AND** public intake does not grant anonymous callers direct lifecycle
+  transition, result entry, report release, or verification rights
+
 ### Requirement: ClearTrace Public And Provider Boundaries
 
-ClearTrace SHALL keep customer-facing public flows and provider-backed behavior
-behind later reviewed changes.
+ClearTrace SHALL keep customer-facing behavior beyond reviewed intake and all
+provider-backed behavior behind later reviewed changes.
 
-#### Scenario: No public customer workflow
+#### Scenario: No public checkout or delivery workflow
 
 - **WHEN** the ClearTrace package app is installed
-- **THEN** ClearTrace does not expose a public configure-test page, checkout page, customer portal, report download page, or public verification route
+- **THEN** ClearTrace exposes only the reviewed public intake operation for
+  anonymous customer request creation
+- **AND** ClearTrace does not expose a checkout page, customer portal, report
+  download page, or public verification route
 - **AND** generic ClearTrace mutation and action writes remain protected by existing owner or admin authorization
 
 #### Scenario: No generic action primitive
 
 - **WHEN** the ClearTrace source schema is parsed
 - **THEN** transition-state actions may be used only for schema-declared lifecycle movement
-- **AND** this source app does not add generic guarded action execution, action-scoped wizards, arbitrary multi-record transaction declarations, or public record creation actions
+- **AND** the public intake workflow uses the reviewed operation record-plan
+  primitive, not ClearTrace-specific arbitrary action code
+- **AND** this source app does not add generic guarded action execution,
+  action-scoped wizards, provider-backed commands, or unreviewed public record
+  creation actions
 
 #### Scenario: No provider execution
 

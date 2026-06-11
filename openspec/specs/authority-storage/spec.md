@@ -231,6 +231,42 @@ materialization.
   ids
 - AND replayed write or command operations return the original stored output
 
+### Requirement: Operation Record Plan Materialization
+
+The system SHALL materialize declarative command record plans through the same
+Authority validation, idempotency, and write-log boundary as other operation
+writes.
+
+#### Scenario: Commit record plan atomically
+
+- GIVEN an accepted command operation invocation has effect type `recordPlan`
+- WHEN Authority materializes the plan
+- THEN each plan step is validated against the active app schema before any
+  step is committed
+- AND create, patch, delete, and tombstone steps reuse the same field,
+  reference, unique constraint, mutation, and state-machine write protections as
+  the equivalent single-record operation effects
+- AND later steps can reference ids and scalar outputs from earlier successful
+  steps in the same plan
+- AND all committed steps share the invocation id, app storage identity, actor,
+  source context, and idempotency key from the operation envelope
+- AND if any step fails validation or materialization, no plan step writes an
+  app record, tombstone, action execution row, or sync change row
+
+#### Scenario: Return record plan outcome
+
+- GIVEN a command record plan commits
+- WHEN Authority records the operation outcome
+- THEN one sync change row is appended for each committed app-record change
+- AND the command response includes affected change ids and declared
+  display-safe record identifiers or metadata for created plan steps
+- AND operation invocation audit remains the semantic root for the multi-record
+  write
+- AND replaying the same operation for the same app storage identity and
+  idempotency key returns the stored command response without duplicate app
+  records, tombstones, action execution rows, operation invocation rows, or sync
+  change rows
+
 ### Requirement: Operation Invocation Audit
 
 The system SHALL store operation invocation rows as Authority-owned system rows

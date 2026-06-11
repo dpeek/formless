@@ -213,6 +213,271 @@ describe("schema entity operations", () => {
     ]);
   });
 
+  it("parses command record-plan effects with ordered named steps", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskLogOperations({
+        submitIntake: recordPlanOperation(),
+      }),
+    );
+    const effect = schema.entities.task?.operations?.submitIntake.effect;
+
+    expect(effect).toEqual({
+      type: "recordPlan",
+      steps: [
+        {
+          name: "createTask",
+          kind: "create",
+          entity: "task",
+          recordId: { kind: "generatedId", prefix: "task" },
+          values: {
+            title: { kind: "input", field: "title" },
+            done: { kind: "literal", value: false },
+            dueDate: { kind: "generatedTimestamp" },
+          },
+        },
+        {
+          name: "createLog",
+          kind: "create",
+          entity: "task-log",
+          values: {
+            task: {
+              kind: "reference",
+              entity: "task",
+              id: { kind: "stepOutput", step: "createTask", output: "id" },
+            },
+            label: { kind: "input", field: "note" },
+            actorMode: { kind: "actor", field: "mode" },
+            sourcePath: { kind: "source", field: "path" },
+            occurredAt: { kind: "generatedTimestamp" },
+          },
+        },
+        {
+          name: "touchTask",
+          kind: "patch",
+          entity: "task",
+          recordId: { kind: "stepOutput", step: "createTask", output: "id" },
+          values: {
+            title: { kind: "stepOutput", step: "createTask", output: "field", field: "title" },
+          },
+        },
+      ],
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects invalid command record-plan declarations", () => {
+    const invalidCases = [
+      {
+        operations: {
+          submitIntake: {
+            kind: "create",
+            scope: "collection",
+            input: { fields: { title: { field: "title" } } },
+            effect: recordPlanEffect(),
+          },
+        },
+        message: "type is only valid for command operations",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({ effect: recordPlanEffect({ provider: "mail" }) }),
+        },
+        message: 'has unsupported key "provider"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [{ ...createTaskStep(), entity: "crm:task" }],
+            }),
+          }),
+        },
+        message: "must target an entity from the same schema",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [{ ...createTaskStep(), entity: "missing" }],
+            }),
+          }),
+        },
+        message: 'references unknown entity "missing"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { missing: { kind: "literal", value: "x" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: 'references unknown field "missing"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { title: { kind: "input", field: "missing" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: 'references unknown operation input field "missing"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                createTaskStep(),
+                {
+                  ...createLogStep(),
+                  values: {
+                    ...createLogStep().values,
+                    task: { kind: "stepOutput", step: "createTask", output: "id" },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "must use a reference expression",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                createTaskStep(),
+                {
+                  ...createLogStep(),
+                  values: {
+                    ...createLogStep().values,
+                    task: {
+                      kind: "reference",
+                      entity: "task-log",
+                      id: { kind: "stepOutput", step: "createTask", output: "id" },
+                    },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message: 'reference entity must target "task"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { title: { kind: "literal", value: { nested: true } } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "value must be a string, boolean, or finite number",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { title: { kind: "actor", field: "id" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "field must be mode",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { title: { kind: "source", field: "query" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "field must be protocol, route, host, or path",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createLogStep(),
+                  values: {
+                    ...createLogStep().values,
+                    task: {
+                      kind: "reference",
+                      entity: "task",
+                      id: { kind: "stepOutput", step: "createTask", output: "id" },
+                    },
+                  },
+                },
+                createTaskStep(),
+              ],
+            }),
+          }),
+        },
+        message: 'references unknown earlier step "createTask"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [{ ...createTaskStep(), loop: { over: "items" } }],
+            }),
+          }),
+        },
+        message: 'has unsupported key "loop"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: { title: { kind: "code", body: "return input.title" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: 'has unsupported expression kind "code"',
+      },
+    ];
+
+    for (const invalidCase of invalidCases) {
+      expect(() => parseAppSchema(schemaWithTaskLogOperations(invalidCase.operations))).toThrow(
+        invalidCase.message,
+      );
+    }
+  });
+
   it("rejects invalid operation declarations", () => {
     const invalidCases = [
       {
@@ -324,6 +589,115 @@ function schemaWithTaskOperations(operations: Record<string, unknown>) {
       },
     },
   });
+}
+
+function schemaWithTaskLogOperations(operations: Record<string, unknown>) {
+  return baseTaskSchema({
+    entities: {
+      task: {
+        ...taskEntity(),
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: true },
+        },
+        operations,
+      },
+      "task-log": taskLogEntity(),
+    },
+  });
+}
+
+function recordPlanOperation(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        title: { type: "text", required: true, label: "Title" },
+        note: { type: "text", required: false, label: "Note" },
+      },
+    },
+    effect: recordPlanEffect(),
+    ...overrides,
+  };
+}
+
+function recordPlanEffect(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "recordPlan",
+    steps: [createTaskStep(), createLogStep(), touchTaskStep()],
+    ...overrides,
+  };
+}
+
+function createTaskStep() {
+  return {
+    name: "createTask",
+    kind: "create",
+    entity: "task",
+    recordId: { kind: "generatedId", prefix: "task" },
+    values: {
+      title: { kind: "input", field: "title" },
+      done: { kind: "literal", value: false },
+      dueDate: { kind: "generatedTimestamp" },
+    },
+  };
+}
+
+function createLogStep() {
+  return {
+    name: "createLog",
+    kind: "create",
+    entity: "task-log",
+    values: {
+      task: {
+        kind: "reference",
+        entity: "task",
+        id: { kind: "stepOutput", step: "createTask", output: "id" },
+      },
+      label: { kind: "input", field: "note" },
+      actorMode: { kind: "actor", field: "mode" },
+      sourcePath: { kind: "source", field: "path" },
+      occurredAt: { kind: "generatedTimestamp" },
+    },
+  };
+}
+
+function touchTaskStep() {
+  return {
+    name: "touchTask",
+    kind: "patch",
+    entity: "task",
+    recordId: { kind: "stepOutput", step: "createTask", output: "id" },
+    values: {
+      title: { kind: "stepOutput", step: "createTask", output: "field", field: "title" },
+    },
+  };
+}
+
+function taskLogEntity() {
+  return {
+    label: "Task log",
+    fields: {
+      task: {
+        type: "reference",
+        required: true,
+        label: "Task",
+        to: "task",
+        displayField: "title",
+      },
+      label: { type: "text", required: true, label: "Label" },
+      actorMode: { type: "text", required: true, label: "Actor mode" },
+      sourcePath: { type: "text", required: false, label: "Source path" },
+      occurredAt: { type: "date", required: true, label: "Occurred at" },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: false },
+      delete: { enabled: false },
+    },
+  };
 }
 
 function baseTaskSchema(overrides: Record<string, unknown> = {}) {

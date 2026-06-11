@@ -1,6 +1,7 @@
 import { assertSchemaLocalEntityKey } from "./entity-names.ts";
 import {
   assertExactKeys,
+  isFiniteNumber,
   isRecord,
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
@@ -29,7 +30,16 @@ import type {
   EntityOperationTargetSchema,
   EntitySchema,
   EnumValueSchema,
+  FieldSchema,
   PatchRecordEntityOperationEffectSchema,
+  RecordPlanActorContextField,
+  RecordPlanEntityOperationEffectSchema,
+  RecordPlanRecordIdExpressionSchema,
+  RecordPlanSourceContextField,
+  RecordPlanStepKind,
+  RecordPlanStepOutputExpressionSchema,
+  RecordPlanStepSchema,
+  RecordPlanValueExpressionSchema,
   RunActionKindEntityOperationEffectSchema,
 } from "./types.ts";
 
@@ -73,9 +83,32 @@ const entityOperationAuditInputPolicies = [
   "snapshot",
 ] as const satisfies readonly EntityOperationAuditInputPolicy[];
 
+const recordPlanStepKinds = [
+  "create",
+  "patch",
+  "delete",
+  "tombstone",
+] as const satisfies readonly RecordPlanStepKind[];
+
+const recordPlanActorContextFields = [
+  "mode",
+] as const satisfies readonly RecordPlanActorContextField[];
+
+const recordPlanSourceContextFields = [
+  "protocol",
+  "route",
+  "host",
+  "path",
+] as const satisfies readonly RecordPlanSourceContextField[];
+
 type ParsedEntityOperationKey = {
   entityKey: string;
   operationKey: string;
+};
+
+type ParsedRecordPlanStep = {
+  entity: string;
+  kind: RecordPlanStepKind;
 };
 
 export function formatEntityOperationKey(input: ParsedEntityOperationKey): string {
@@ -129,8 +162,13 @@ export function parseEntityOperationsForEntities(
   return Object.fromEntries(
     Object.entries(entities).map(([entityName, entity]) => {
       const operations =
-        parseEntityOperations(entityName, operationInputsByEntity[entityName], entity, queries) ??
-        {};
+        parseEntityOperations(
+          entityName,
+          operationInputsByEntity[entityName],
+          entity,
+          entities,
+          queries,
+        ) ?? {};
 
       return [entityName, Object.keys(operations).length > 0 ? { ...entity, operations } : entity];
     }),
@@ -141,6 +179,7 @@ function parseEntityOperations(
   entityName: string,
   value: unknown,
   entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
 ): Record<string, EntityOperationSchema> | undefined {
   if (value === undefined) {
@@ -165,7 +204,7 @@ function parseEntityOperations(
 
       return [
         operationName,
-        parseEntityOperation(entityName, operationName, operation, entity, queries),
+        parseEntityOperation(entityName, operationName, operation, entity, entities, queries),
       ];
     }),
   );
@@ -176,6 +215,7 @@ function parseEntityOperation(
   operationName: string,
   value: unknown,
   entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
 ): EntityOperationSchema {
   const context = `Entity operation "${formatEntityOperationKey({
@@ -213,9 +253,11 @@ function parseEntityOperation(
     `${context} effect`,
     value.effect,
     kind,
+    input,
     target,
     entityName,
     entity,
+    entities,
     queries,
   );
   const idempotency = parseOperationIdempotency(`${context} idempotency`, value.idempotency, kind);
@@ -577,9 +619,11 @@ function parseOperationEffect(
   context: string,
   value: unknown,
   kind: EntityOperationKind,
+  input: EntityOperationInputContractSchema | undefined,
   target: EntityOperationTargetSchema | undefined,
   entityName: string,
   entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
 ): EntityOperationEffectSchema | undefined {
   if (value === undefined) {
@@ -625,6 +669,12 @@ function parseOperationEffect(
     assertExactKeys(context, value, ["type", "kind"], ["action", "query"]);
     validateOperationEffectKind(context, kind, "command");
     return parseRunActionKindEffect(context, value, target, entityName, entity, queries);
+  }
+
+  if (value.type === "recordPlan") {
+    assertExactKeys(context, value, ["type", "steps"]);
+    validateOperationEffectKind(context, kind, "command");
+    return parseRecordPlanEffect(context, value, input, entities);
   }
 
   throw new Error(`${context} has unsupported type "${String(value.type)}".`);
@@ -725,6 +775,470 @@ function parseRunActionKindEffect(
     ...(actionName === undefined ? {} : { action: actionName }),
     ...(queryName === undefined ? {} : { query: queryName }),
   };
+}
+
+function parseRecordPlanEffect(
+  context: string,
+  value: Record<string, unknown>,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+): RecordPlanEntityOperationEffectSchema {
+  if (!Array.isArray(value.steps) || value.steps.length === 0) {
+    throw new Error(`${context} steps must be a non-empty array.`);
+  }
+
+  const previousSteps = new Map<string, ParsedRecordPlanStep>();
+  const steps = value.steps.map((step, index) => {
+    const parsedStep = parseRecordPlanStep(
+      `${context} steps[${index}]`,
+      step,
+      input,
+      entities,
+      previousSteps,
+    );
+
+    previousSteps.set(parsedStep.name, {
+      entity: parsedStep.entity,
+      kind: parsedStep.kind,
+    });
+
+    return parsedStep;
+  });
+
+  return { type: "recordPlan", steps };
+}
+
+function parseRecordPlanStep(
+  context: string,
+  value: unknown,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): RecordPlanStepSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const kind = parseRecordPlanStepKind(`${context} kind`, value.kind);
+  if (kind === "create") {
+    assertExactKeys(context, value, ["name", "kind", "entity", "values"], ["recordId"]);
+  } else if (kind === "patch") {
+    assertExactKeys(context, value, ["name", "kind", "entity", "recordId", "values"]);
+  } else {
+    assertExactKeys(context, value, ["name", "kind", "entity", "recordId"]);
+  }
+
+  const name = parseRecordPlanStepName(`${context} name`, value.name, previousSteps);
+  const entityName = parseRecordPlanEntityReference(`${context} entity`, value.entity, entities);
+  const entity = entities[entityName];
+  if (!entity) {
+    throw new Error(`${context} entity references unknown entity "${entityName}".`);
+  }
+
+  if (kind === "create") {
+    const recordId =
+      value.recordId === undefined
+        ? undefined
+        : parseRecordPlanRecordIdExpression(
+            `${context} recordId`,
+            value.recordId,
+            input,
+            entities,
+            previousSteps,
+          );
+    const values = parseRecordPlanValues(
+      `${context} values`,
+      value.values,
+      entity,
+      input,
+      entities,
+      previousSteps,
+    );
+
+    return {
+      name,
+      kind,
+      entity: entityName,
+      ...(recordId === undefined ? {} : { recordId }),
+      values,
+    };
+  }
+
+  const recordId = parseRecordPlanRecordIdExpression(
+    `${context} recordId`,
+    value.recordId,
+    input,
+    entities,
+    previousSteps,
+  );
+
+  if (kind === "patch") {
+    return {
+      name,
+      kind,
+      entity: entityName,
+      recordId,
+      values: parseRecordPlanValues(
+        `${context} values`,
+        value.values,
+        entity,
+        input,
+        entities,
+        previousSteps,
+      ),
+    };
+  }
+
+  return { name, kind, entity: entityName, recordId };
+}
+
+function parseRecordPlanStepKind(context: string, value: unknown): RecordPlanStepKind {
+  if (!recordPlanStepKinds.includes(value as RecordPlanStepKind)) {
+    throw new Error(`${context} must be create, patch, delete, or tombstone.`);
+  }
+
+  return value as RecordPlanStepKind;
+}
+
+function parseRecordPlanStepName(
+  context: string,
+  value: unknown,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): string {
+  const name = parseRequiredNonEmptyString(context, value);
+
+  if (
+    name.trim() !== name ||
+    name.includes(".") ||
+    name.includes("/") ||
+    name.includes(":") ||
+    /\s/.test(name)
+  ) {
+    throw new Error(`${context} must not contain whitespace, dots, slashes, or colons.`);
+  }
+
+  if (previousSteps.has(name)) {
+    throw new Error(`${context} must be unique.`);
+  }
+
+  return name;
+}
+
+function parseRecordPlanEntityReference(
+  context: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): string {
+  const entityName = parseRequiredNonEmptyString(context, value);
+
+  if (entityName.includes(":")) {
+    throw new Error(`${context} must target an entity from the same schema.`);
+  }
+
+  assertSchemaLocalEntityKey(`${context} "${entityName}"`, entityName);
+
+  if (!entities[entityName]) {
+    throw new Error(`${context} references unknown entity "${entityName}".`);
+  }
+
+  return entityName;
+}
+
+function parseRecordPlanValues(
+  context: string,
+  value: unknown,
+  entity: EntitySchema,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): Record<string, RecordPlanValueExpressionSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([fieldName, expression]) => {
+      const field = entity.fields[fieldName];
+      if (!field) {
+        throw new Error(`${context}.${fieldName} references unknown field "${fieldName}".`);
+      }
+
+      const parsedExpression = parseRecordPlanValueExpression(
+        `${context}.${fieldName}`,
+        expression,
+        input,
+        entities,
+        previousSteps,
+      );
+
+      validateRecordPlanFieldExpression(
+        `${context}.${fieldName}`,
+        field,
+        parsedExpression,
+        previousSteps,
+      );
+
+      return [fieldName, parsedExpression];
+    }),
+  );
+}
+
+function parseRecordPlanValueExpression(
+  context: string,
+  value: unknown,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): RecordPlanValueExpressionSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an expression object.`);
+  }
+
+  if (value.kind === "input") {
+    return parseRecordPlanInputExpression(context, value, input);
+  }
+
+  if (value.kind === "literal") {
+    return parseRecordPlanLiteralExpression(context, value);
+  }
+
+  if (value.kind === "generatedId") {
+    return parseRecordPlanGeneratedIdExpression(context, value);
+  }
+
+  if (value.kind === "generatedTimestamp") {
+    assertExactKeys(context, value, ["kind"]);
+    return { kind: "generatedTimestamp" };
+  }
+
+  if (value.kind === "actor") {
+    return parseRecordPlanActorExpression(context, value);
+  }
+
+  if (value.kind === "source") {
+    return parseRecordPlanSourceExpression(context, value);
+  }
+
+  if (value.kind === "stepOutput") {
+    return parseRecordPlanStepOutputExpression(context, value, entities, previousSteps, {
+      allowFieldOutput: true,
+    });
+  }
+
+  if (value.kind === "reference") {
+    return parseRecordPlanReferenceExpression(context, value, input, entities, previousSteps);
+  }
+
+  throw new Error(`${context} has unsupported expression kind "${String(value.kind)}".`);
+}
+
+function parseRecordPlanRecordIdExpression(
+  context: string,
+  value: unknown,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): RecordPlanRecordIdExpressionSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an expression object.`);
+  }
+
+  if (value.kind === "input") {
+    return parseRecordPlanInputExpression(context, value, input);
+  }
+
+  if (value.kind === "literal") {
+    return parseRecordPlanLiteralExpression(context, value);
+  }
+
+  if (value.kind === "generatedId") {
+    return parseRecordPlanGeneratedIdExpression(context, value);
+  }
+
+  if (value.kind === "stepOutput") {
+    const stepOutput = parseRecordPlanStepOutputExpression(
+      context,
+      value,
+      entities,
+      previousSteps,
+      {
+        allowFieldOutput: false,
+      },
+    );
+
+    if (stepOutput.output !== "id") {
+      throw new Error(`${context} field output is not valid for record ids.`);
+    }
+
+    return stepOutput;
+  }
+
+  throw new Error(`${context} has unsupported record id expression kind "${String(value.kind)}".`);
+}
+
+function parseRecordPlanInputExpression(
+  context: string,
+  value: Record<string, unknown>,
+  input: EntityOperationInputContractSchema | undefined,
+): RecordPlanRecordIdExpressionSchema {
+  assertExactKeys(context, value, ["kind", "field"]);
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  if (!input?.fields[fieldName]) {
+    throw new Error(`${context} field references unknown operation input field "${fieldName}".`);
+  }
+
+  return { kind: "input", field: fieldName };
+}
+
+function parseRecordPlanLiteralExpression(
+  context: string,
+  value: Record<string, unknown>,
+): RecordPlanRecordIdExpressionSchema {
+  assertExactKeys(context, value, ["kind", "value"]);
+
+  if (!isRecordPlanLiteralValue(value.value)) {
+    throw new Error(`${context} value must be a string, boolean, or finite number.`);
+  }
+
+  return { kind: "literal", value: value.value };
+}
+
+function parseRecordPlanGeneratedIdExpression(
+  context: string,
+  value: Record<string, unknown>,
+): RecordPlanRecordIdExpressionSchema {
+  assertExactKeys(context, value, ["kind"], ["prefix"]);
+
+  const prefix = parseOptionalNonEmptyString(`${context} prefix`, value.prefix);
+  return { kind: "generatedId", ...(prefix === undefined ? {} : { prefix }) };
+}
+
+function parseRecordPlanActorExpression(
+  context: string,
+  value: Record<string, unknown>,
+): RecordPlanValueExpressionSchema {
+  assertExactKeys(context, value, ["kind", "field"]);
+
+  if (!recordPlanActorContextFields.includes(value.field as RecordPlanActorContextField)) {
+    throw new Error(`${context} field must be mode.`);
+  }
+
+  return { kind: "actor", field: value.field as RecordPlanActorContextField };
+}
+
+function parseRecordPlanSourceExpression(
+  context: string,
+  value: Record<string, unknown>,
+): RecordPlanValueExpressionSchema {
+  assertExactKeys(context, value, ["kind", "field"]);
+
+  if (!recordPlanSourceContextFields.includes(value.field as RecordPlanSourceContextField)) {
+    throw new Error(`${context} field must be protocol, route, host, or path.`);
+  }
+
+  return { kind: "source", field: value.field as RecordPlanSourceContextField };
+}
+
+function parseRecordPlanStepOutputExpression(
+  context: string,
+  value: Record<string, unknown>,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+  options: { allowFieldOutput: boolean },
+): RecordPlanStepOutputExpressionSchema {
+  const output = parseRequiredNonEmptyString(`${context} output`, value.output);
+  if (output === "id") {
+    assertExactKeys(context, value, ["kind", "step", "output"]);
+  } else if (output === "field") {
+    assertExactKeys(context, value, ["kind", "step", "output", "field"]);
+  } else {
+    throw new Error(`${context} output must be id or field.`);
+  }
+
+  const stepName = parseRequiredNonEmptyString(`${context} step`, value.step);
+  const step = previousSteps.get(stepName);
+  if (!step) {
+    throw new Error(`${context} step references unknown earlier step "${stepName}".`);
+  }
+
+  if (output === "id") {
+    return { kind: "stepOutput", step: stepName, output };
+  }
+
+  if (!options.allowFieldOutput) {
+    throw new Error(`${context} field output is not valid for record ids.`);
+  }
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  if (!entities[step.entity]?.fields[fieldName]) {
+    throw new Error(`${context} field references unknown field "${step.entity}.${fieldName}".`);
+  }
+
+  return { kind: "stepOutput", step: stepName, output, field: fieldName };
+}
+
+function parseRecordPlanReferenceExpression(
+  context: string,
+  value: Record<string, unknown>,
+  input: EntityOperationInputContractSchema | undefined,
+  entities: Record<string, EntitySchema>,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+): RecordPlanValueExpressionSchema {
+  assertExactKeys(context, value, ["kind", "entity", "id"]);
+
+  return {
+    kind: "reference",
+    entity: parseRecordPlanEntityReference(`${context} entity`, value.entity, entities),
+    id: parseRecordPlanRecordIdExpression(
+      `${context} id`,
+      value.id,
+      input,
+      entities,
+      previousSteps,
+    ),
+  };
+}
+
+function validateRecordPlanFieldExpression(
+  context: string,
+  field: FieldSchema,
+  expression: RecordPlanValueExpressionSchema,
+  previousSteps: Map<string, ParsedRecordPlanStep>,
+) {
+  if (field.type !== "reference") {
+    if (expression.kind === "reference") {
+      throw new Error(`${context} reference expression is only valid for reference fields.`);
+    }
+
+    return;
+  }
+
+  if (expression.kind !== "reference") {
+    throw new Error(`${context} must use a reference expression.`);
+  }
+
+  if (expression.entity !== field.to) {
+    throw new Error(`${context} reference entity must target "${field.to}".`);
+  }
+
+  if (expression.id.kind === "stepOutput") {
+    const step = previousSteps.get(expression.id.step);
+    if (step !== undefined && step.entity !== expression.entity) {
+      throw new Error(
+        `${context} reference step "${expression.id.step}" creates "${step.entity}" but reference entity is "${expression.entity}".`,
+      );
+    }
+  }
+}
+
+function isRecordPlanLiteralValue(value: unknown): value is string | boolean | number {
+  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
 }
 
 function parseOperationIdempotency(

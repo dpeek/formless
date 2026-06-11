@@ -79,6 +79,42 @@ describe("worker schema app definitions", () => {
       type: "text",
       required: true,
     });
+    expect(
+      cleartrace.sourceSchema.entities.order?.operations?.["submit-public-intake"],
+    ).toMatchObject({
+      kind: "command",
+      scope: "collection",
+      input: {
+        fields: {
+          customerName: { type: "text", required: true },
+          catalogItemId: { type: "text", required: true },
+          termsAcceptance: { type: "enum", required: true },
+        },
+      },
+      effect: {
+        type: "recordPlan",
+        steps: [
+          { name: "createCustomer", entity: "customer" },
+          { name: "createOrder", entity: "order" },
+          { name: "createSample", entity: "sample" },
+          { name: "createOrderLine", entity: "order-line" },
+          { name: "createTestRequest", entity: "test-request" },
+          { name: "createWorkItem", entity: "work-item" },
+          { name: "createAuditEvent", entity: "audit-event" },
+        ],
+      },
+      policy: {
+        actors: ["anonymous"],
+        visible: false,
+        access: {
+          actor: "anonymous",
+          challenge: { kind: "turnstile" },
+          origin: { kind: "same-origin" },
+        },
+      },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    });
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
     expect(site.sourceSchema.entities["block-placement"]?.label).toBe("Placement");
     expect(site.sourceSchema.entities.site?.mutations.create.enabled).toBe(false);

@@ -13,7 +13,11 @@ import {
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import type { AppSchema } from "@dpeek/formless-schema";
+import type {
+  AppSchema,
+  EntityOperationSchema,
+  RecordPlanStepSchema,
+} from "@dpeek/formless-schema";
 import {
   selectAuthorityOperation,
   type AuthorityOperationKind,
@@ -563,6 +567,208 @@ describe("authority operation execution", () => {
     expect(JSON.stringify(commandRow?.auditInput)).not.toContain("secret-challenge");
   });
 
+  it("materializes record-plan command operations through operation writes", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithRecordPlanOperation(
+      bootstrap.body.result.body.schema,
+      "submitPlan",
+      successfulRecordPlanSteps(),
+    );
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const committed = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/submitPlan",
+      body: {
+        idempotencyKey: "record-plan-success",
+        input: {
+          title: "Record-plan task",
+          note: "Created by plan",
+        },
+        source: {
+          protocol: "generated-ui",
+          path: "/intake",
+        },
+      },
+    });
+    const output = committed.body.result.body.output;
+
+    if (output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
+    expect(output.changes.map((change) => change.entity)).toEqual(["task", "task-log", "task"]);
+    expect(output.response).toMatchObject({
+      actionId: "operation:task.submitPlan:record-plan-success",
+      recordPlan: {
+        steps: [
+          { name: "createTask", kind: "create", entity: "task" },
+          { name: "createLog", kind: "create", entity: "task-log" },
+          { name: "touchTask", kind: "patch", entity: "task" },
+        ],
+      },
+    });
+
+    const taskId = output.response.recordPlan?.steps[0]?.recordId;
+    const log = output.changes[1]?.payload;
+
+    expect(taskId).toMatch(/^task_/);
+    expect(output.response.recordPlan?.steps.map((step) => step.changeId)).toEqual(
+      output.affectedChangeIds,
+    );
+    expect(output.changes[0]?.payload).toMatchObject({
+      id: taskId,
+      entity: "task",
+      values: {
+        title: "Record-plan task",
+        done: false,
+        priority: "normal",
+      },
+    });
+    expect(log).toMatchObject({
+      entity: "task-log",
+      values: {
+        task: taskId,
+        label: "Created by plan",
+        actorMode: "owner",
+        sourcePath: "/intake",
+      },
+    });
+    expect(output.changes[2]?.payload).toMatchObject({
+      id: taskId,
+      entity: "task",
+      values: {
+        title: "Record-plan task",
+      },
+    });
+  });
+
+  it("rejects record-plan validation failures without partial writes", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithRecordPlanOperation(
+      bootstrap.body.result.body.schema,
+      "submitBrokenPlan",
+      brokenRecordPlanSteps(),
+    );
+    const beforeCursor = bootstrap.body.result.body.cursor;
+    const schemaUpdatedAt = bootstrap.body.result.body.schemaUpdatedAt;
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const failed = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/submitBrokenPlan",
+      body: {
+        idempotencyKey: "record-plan-broken",
+        input: {
+          title: "Should roll back",
+          note: "Invalid reference",
+        },
+      },
+    });
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${beforeCursor}&schemaUpdatedAt=${encodeURIComponent(schemaUpdatedAt)}`,
+    });
+    const snapshot = await executeOperation<StoreSnapshot>({
+      method: "GET",
+      path: "/snapshot",
+    });
+    const rows = await readOperationInvocations();
+
+    expect(failed.response.status).toBe(400);
+    expect(failed.body).toEqual({
+      error: 'Field "task" references unknown task record "missing-task".',
+      writes: [],
+    });
+    expect(sync.body.result.body.changes).toEqual([]);
+    expect(snapshot.body.result.body.records).not.toContainEqual(
+      expect.objectContaining({
+        values: expect.objectContaining({ title: "Should roll back" }),
+      }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      affectedChangeIds: [],
+      errorMessage: 'Field "task" references unknown task record "missing-task".',
+      operationKey: "task.submitBrokenPlan",
+      status: "failed",
+    });
+  });
+
+  it("replays record-plan command operations without duplicate writes", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithRecordPlanOperation(
+      bootstrap.body.result.body.schema,
+      "submitReplayPlan",
+      successfulRecordPlanSteps(),
+    );
+    const beforeCursor = bootstrap.body.result.body.cursor;
+    const schemaUpdatedAt = bootstrap.body.result.body.schemaUpdatedAt;
+    const body = {
+      idempotencyKey: "record-plan-replay",
+      input: {
+        title: "Replay record-plan task",
+        note: "Replay note",
+      },
+    };
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const first = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/submitReplayPlan",
+      body,
+    });
+    const replay = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/submitReplayPlan",
+      body,
+    });
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${beforeCursor}&schemaUpdatedAt=${encodeURIComponent(schemaUpdatedAt)}`,
+    });
+
+    expect(first.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
+    expect(replay.body.result.body.status).toBe("replayed");
+    expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
+
+    if (first.body.result.body.output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    expect(sync.body.result.body.changes).toEqual(first.body.result.body.output.changes);
+  });
+
   it("preserves list and get operation reads without idempotency", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
@@ -835,6 +1041,140 @@ function selectOperation(method: string, path: string, searchParams = new URLSea
 
 function cloneSchema(schema: AppSchema): AppSchema {
   return JSON.parse(JSON.stringify(schema)) as AppSchema;
+}
+
+function schemaWithRecordPlanOperation(
+  sourceSchema: AppSchema,
+  operationName: string,
+  steps: RecordPlanStepSchema[],
+): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = schema.entities.task;
+
+  if (!taskEntity) {
+    throw new Error("Expected task entity.");
+  }
+
+  schema.entities["task-log"] = taskLogEntity();
+  schema.entities.task = {
+    ...taskEntity,
+    operations: {
+      ...taskEntity.operations,
+      [operationName]: recordPlanOperation(steps),
+    },
+  };
+
+  return schema;
+}
+
+function taskLogEntity(): AppSchema["entities"][string] {
+  return {
+    label: "Task log",
+    fields: {
+      task: {
+        type: "reference",
+        required: true,
+        label: "Task",
+        to: "task",
+        displayField: "title",
+      },
+      label: { type: "text", required: true, label: "Label" },
+      actorMode: { type: "text", required: true, label: "Actor mode" },
+      sourcePath: { type: "text", required: false, label: "Source path" },
+      occurredAt: { type: "text", required: true, label: "Occurred at" },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: false },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function recordPlanOperation(steps: RecordPlanStepSchema[]): EntityOperationSchema {
+  return {
+    label: "Submit plan",
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        title: { type: "text", required: true, label: "Title" },
+        note: { type: "text", required: true, label: "Note" },
+      },
+    },
+    effect: {
+      type: "recordPlan",
+      steps,
+    },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
+}
+
+function successfulRecordPlanSteps(): RecordPlanStepSchema[] {
+  return [
+    createTaskRecordPlanStep(),
+    {
+      name: "createLog",
+      kind: "create",
+      entity: "task-log",
+      values: {
+        task: {
+          kind: "reference",
+          entity: "task",
+          id: { kind: "stepOutput", step: "createTask", output: "id" },
+        },
+        label: { kind: "input", field: "note" },
+        actorMode: { kind: "actor", field: "mode" },
+        sourcePath: { kind: "source", field: "path" },
+        occurredAt: { kind: "generatedTimestamp" },
+      },
+    },
+    {
+      name: "touchTask",
+      kind: "patch",
+      entity: "task",
+      recordId: { kind: "stepOutput", step: "createTask", output: "id" },
+      values: {
+        title: { kind: "stepOutput", step: "createTask", output: "field", field: "title" },
+      },
+    },
+  ];
+}
+
+function createTaskRecordPlanStep(): RecordPlanStepSchema {
+  return {
+    name: "createTask",
+    kind: "create",
+    entity: "task",
+    recordId: { kind: "generatedId", prefix: "task" },
+    values: {
+      title: { kind: "input", field: "title" },
+      done: { kind: "literal", value: false },
+    },
+  };
+}
+
+function brokenRecordPlanSteps(): RecordPlanStepSchema[] {
+  return [
+    createTaskRecordPlanStep(),
+    {
+      name: "createBrokenLog",
+      kind: "create",
+      entity: "task-log",
+      values: {
+        task: {
+          kind: "reference",
+          entity: "task",
+          id: { kind: "literal", value: "missing-task" },
+        },
+        label: { kind: "input", field: "note" },
+        actorMode: { kind: "actor", field: "mode" },
+        occurredAt: { kind: "generatedTimestamp" },
+      },
+    },
+  ];
 }
 
 async function executeOperation<TBody>(input: ExecuteOperationInput) {

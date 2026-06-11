@@ -895,6 +895,422 @@
           "audit": {
             "input": "summary"
           }
+        },
+        "submit-public-intake": {
+          "label": "Submit public intake",
+          "kind": "command",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "customerName": {
+                "type": "text",
+                "required": true,
+                "label": "Customer name"
+              },
+              "customerEmail": {
+                "type": "text",
+                "required": true,
+                "label": "Customer email"
+              },
+              "catalogItemId": {
+                "type": "text",
+                "required": true,
+                "label": "Catalog item"
+              },
+              "testPackageId": {
+                "type": "text",
+                "required": true,
+                "label": "Test package"
+              },
+              "analyteId": {
+                "type": "text",
+                "required": true,
+                "label": "Analyte"
+              },
+              "sampleForm": {
+                "type": "enum",
+                "required": true,
+                "label": "Sample form",
+                "values": {
+                  "vial": {
+                    "label": "Vial"
+                  },
+                  "powder": {
+                    "label": "Powder"
+                  },
+                  "liquid": {
+                    "label": "Liquid"
+                  },
+                  "other": {
+                    "label": "Other"
+                  }
+                }
+              },
+              "sampleNotes": {
+                "type": "text",
+                "required": false,
+                "label": "Sample notes"
+              },
+              "termsAcceptance": {
+                "type": "enum",
+                "required": true,
+                "label": "Terms acceptance",
+                "values": {
+                  "accepted": {
+                    "label": "Accepted"
+                  }
+                }
+              }
+            }
+          },
+          "effect": {
+            "type": "recordPlan",
+            "steps": [
+              {
+                "name": "createCustomer",
+                "kind": "create",
+                "entity": "customer",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_customer"
+                },
+                "values": {
+                  "label": {
+                    "kind": "input",
+                    "field": "customerName"
+                  },
+                  "email": {
+                    "kind": "input",
+                    "field": "customerEmail"
+                  },
+                  "status": {
+                    "kind": "literal",
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "name": "createOrder",
+                "kind": "create",
+                "entity": "order",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_order"
+                },
+                "values": {
+                  "orderNumber": {
+                    "kind": "generatedId",
+                    "prefix": "CT"
+                  },
+                  "customer": {
+                    "kind": "reference",
+                    "entity": "customer",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createCustomer",
+                      "output": "id"
+                    }
+                  },
+                  "status": {
+                    "kind": "literal",
+                    "value": "awaitingPayment"
+                  },
+                  "paymentStatus": {
+                    "kind": "literal",
+                    "value": "manualPending"
+                  },
+                  "total": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "currency": {
+                    "kind": "literal",
+                    "value": "AUD"
+                  },
+                  "termsAccepted": {
+                    "kind": "literal",
+                    "value": true
+                  }
+                }
+              },
+              {
+                "name": "createSample",
+                "kind": "create",
+                "entity": "sample",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_sample"
+                },
+                "values": {
+                  "sampleCode": {
+                    "kind": "generatedId",
+                    "prefix": "CT-S"
+                  },
+                  "order": {
+                    "kind": "reference",
+                    "entity": "order",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createOrder",
+                      "output": "id"
+                    }
+                  },
+                  "customer": {
+                    "kind": "reference",
+                    "entity": "customer",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createCustomer",
+                      "output": "id"
+                    }
+                  },
+                  "analyte": {
+                    "kind": "reference",
+                    "entity": "analyte",
+                    "id": {
+                      "kind": "input",
+                      "field": "analyteId"
+                    }
+                  },
+                  "status": {
+                    "kind": "literal",
+                    "value": "expected"
+                  },
+                  "form": {
+                    "kind": "input",
+                    "field": "sampleForm"
+                  },
+                  "customerNotes": {
+                    "kind": "input",
+                    "field": "sampleNotes"
+                  }
+                }
+              },
+              {
+                "name": "createOrderLine",
+                "kind": "create",
+                "entity": "order-line",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_order_line"
+                },
+                "values": {
+                  "order": {
+                    "kind": "reference",
+                    "entity": "order",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createOrder",
+                      "output": "id"
+                    }
+                  },
+                  "catalogItem": {
+                    "kind": "reference",
+                    "entity": "service-catalog-item",
+                    "id": {
+                      "kind": "input",
+                      "field": "catalogItemId"
+                    }
+                  },
+                  "description": {
+                    "kind": "stepOutput",
+                    "step": "createSample",
+                    "output": "field",
+                    "field": "sampleCode"
+                  },
+                  "quantity": {
+                    "kind": "literal",
+                    "value": 1
+                  },
+                  "unitPrice": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "total": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "sample": {
+                    "kind": "reference",
+                    "entity": "sample",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createSample",
+                      "output": "id"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "createTestRequest",
+                "kind": "create",
+                "entity": "test-request",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_request"
+                },
+                "values": {
+                  "order": {
+                    "kind": "reference",
+                    "entity": "order",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createOrder",
+                      "output": "id"
+                    }
+                  },
+                  "sample": {
+                    "kind": "reference",
+                    "entity": "sample",
+                    "id": {
+                      "kind": "stepOutput",
+                      "step": "createSample",
+                      "output": "id"
+                    }
+                  },
+                  "testPackage": {
+                    "kind": "reference",
+                    "entity": "test-package",
+                    "id": {
+                      "kind": "input",
+                      "field": "testPackageId"
+                    }
+                  },
+                  "status": {
+                    "kind": "literal",
+                    "value": "pendingReview"
+                  },
+                  "priority": {
+                    "kind": "literal",
+                    "value": "normal"
+                  },
+                  "assignedTo": {
+                    "kind": "literal",
+                    "value": "Lab intake"
+                  }
+                }
+              },
+              {
+                "name": "createWorkItem",
+                "kind": "create",
+                "entity": "work-item",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_work"
+                },
+                "values": {
+                  "label": {
+                    "kind": "stepOutput",
+                    "step": "createSample",
+                    "output": "field",
+                    "field": "sampleCode"
+                  },
+                  "type": {
+                    "kind": "literal",
+                    "value": "intake"
+                  },
+                  "status": {
+                    "kind": "literal",
+                    "value": "open"
+                  },
+                  "priority": {
+                    "kind": "literal",
+                    "value": "normal"
+                  },
+                  "relatedRecordId": {
+                    "kind": "stepOutput",
+                    "step": "createSample",
+                    "output": "id"
+                  },
+                  "assignedTo": {
+                    "kind": "literal",
+                    "value": "Lab intake"
+                  }
+                }
+              },
+              {
+                "name": "createAuditEvent",
+                "kind": "create",
+                "entity": "audit-event",
+                "recordId": {
+                  "kind": "generatedId",
+                  "prefix": "rec_cleartrace_audit"
+                },
+                "values": {
+                  "label": {
+                    "kind": "literal",
+                    "value": "Submitted public intake"
+                  },
+                  "actorType": {
+                    "kind": "literal",
+                    "value": "customer"
+                  },
+                  "actionKey": {
+                    "kind": "literal",
+                    "value": "submit-public-intake"
+                  },
+                  "recordType": {
+                    "kind": "literal",
+                    "value": "order"
+                  },
+                  "recordId": {
+                    "kind": "stepOutput",
+                    "step": "createOrder",
+                    "output": "id"
+                  },
+                  "previousState": {
+                    "kind": "literal",
+                    "value": "none"
+                  },
+                  "nextState": {
+                    "kind": "literal",
+                    "value": "awaitingPayment"
+                  },
+                  "actorMode": {
+                    "kind": "actor",
+                    "field": "mode"
+                  },
+                  "occurredAt": {
+                    "kind": "literal",
+                    "value": "2026-06-11"
+                  },
+                  "operationReceivedAt": {
+                    "kind": "generatedTimestamp"
+                  },
+                  "sourceHost": {
+                    "kind": "source",
+                    "field": "host"
+                  },
+                  "sourcePath": {
+                    "kind": "source",
+                    "field": "path"
+                  }
+                }
+              }
+            ]
+          },
+          "output": {
+            "type": "command"
+          },
+          "policy": {
+            "actors": ["anonymous"],
+            "visible": false,
+            "access": {
+              "actor": "anonymous",
+              "challenge": {
+                "kind": "turnstile"
+              },
+              "origin": {
+                "kind": "same-origin"
+              }
+            }
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -3146,6 +3562,21 @@
           "type": "date",
           "required": true,
           "label": "Occurred at"
+        },
+        "operationReceivedAt": {
+          "type": "text",
+          "required": false,
+          "label": "Operation received at"
+        },
+        "sourceHost": {
+          "type": "text",
+          "required": false,
+          "label": "Source host"
+        },
+        "sourcePath": {
+          "type": "text",
+          "required": false,
+          "label": "Source path"
         },
         "notes": {
           "type": "text",
