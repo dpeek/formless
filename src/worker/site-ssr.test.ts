@@ -4,6 +4,7 @@ import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../app/site-renderer/initial-tree.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
@@ -432,8 +433,9 @@ async function headDocumentWithoutFollowingRedirect(path: string) {
 }
 
 async function postAdminJson(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",
   });

@@ -14,6 +14,12 @@ import type {
   StoreSnapshot,
 } from "../shared/protocol.ts";
 import type {
+  OperationInvocationEnvelope,
+  OperationInvocationInput,
+  OperationInvocationOutput,
+  OperationInvocationStatus,
+} from "../shared/operation-invocation.ts";
+import type {
   AppSchema,
   EntitySchema,
   FieldSchema,
@@ -81,8 +87,45 @@ type PackageAppStateRow = {
   updated_at: string;
 };
 
+type OperationInvocationRow = {
+  invocation_id: string;
+  operation_key: string;
+  operation_kind: string;
+  entity: string;
+  operation_name: string;
+  actor_kind: string;
+  auth_decision: OperationInvocationAuthDecision;
+  source_protocol: string;
+  source_json: string;
+  app_storage_identity_json: string;
+  input_hash: string;
+  input_audit_json: string;
+  affected_change_ids_json: string;
+  idempotency_json: string;
+  output_json: string | null;
+  status: OperationInvocationStatus;
+  status_history_json: string;
+  error_message: string | null;
+  received_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
 const authoritySqlMigrationFamily = storageSqlMigrationFamily("authority-storage");
-const authoritySqlMigrations = createSqlStorageMigrationRegistry([]);
+const operationInvocationsTableName = "operation_invocations";
+const authoritySqlMigrations = createSqlStorageMigrationRegistry([
+  {
+    id: "2026-06-11-authority-operation-invocations",
+    owner: "formless",
+    family: authoritySqlMigrationFamily,
+    checksum: "sha256:3e5f55d719d3d8fd4d99902632e1f9f2c3e9f948a954f0d4dbbb2c0f6c8bc111",
+    safety: "auto-safe",
+    summary: "Create Authority operation invocation audit rows.",
+    apply(storage) {
+      ensureOperationInvocationTables(storage);
+    },
+  },
+]);
 const appliedPackageAppMigrationsTableName = "formless_applied_package_app_migrations";
 const packageAppStateTableName = "formless_package_app_state";
 
@@ -100,6 +143,62 @@ export type WriteOutcome<T> =
       kind: "replay";
       response: T;
     };
+
+export type OperationInvocationAuthDecision = "allowed" | "denied";
+
+export type OperationInvocationAuditInput =
+  | {
+      kind: "none";
+    }
+  | {
+      kind: "hash";
+    }
+  | {
+      kind: "summary";
+      summary: OperationInvocationInputSummary;
+    }
+  | {
+      kind: "snapshot";
+      snapshot: unknown;
+    };
+
+export type OperationInvocationInputSummary = {
+  type: OperationInvocationInput["type"];
+  fieldNames?: string[];
+  inputFields?: string[];
+  inputType?: string;
+  recordId?: string;
+  valuesType?: string;
+};
+
+export type OperationInvocationStatusHistoryEntry = {
+  status: OperationInvocationStatus;
+  at: string;
+};
+
+export type StoredOperationInvocation = {
+  invocationId: string;
+  operationKey: string;
+  operationKind: string;
+  entity: string;
+  operationName: string;
+  actorKind: string;
+  authDecision: OperationInvocationAuthDecision;
+  sourceProtocol: string;
+  source: OperationInvocationEnvelope["source"];
+  appStorageIdentity: OperationInvocationEnvelope["appStorageIdentity"];
+  inputHash: string;
+  auditInput: OperationInvocationAuditInput;
+  affectedChangeIds: string[];
+  idempotency: OperationInvocationEnvelope["idempotency"];
+  output?: OperationInvocationOutput;
+  status: OperationInvocationStatus;
+  statusHistory: OperationInvocationStatusHistoryEntry[];
+  errorMessage?: string;
+  receivedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
 
 export type StorageResetSeed = {
   schema: AppSchema;
@@ -253,6 +352,7 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
     family: authoritySqlMigrationFamily,
     migrations: authoritySqlMigrations,
   });
+  ensureOperationInvocationTables(storage);
 
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS records (
@@ -289,6 +389,40 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
   `);
 
   ensurePackageAppMigrationTables(storage);
+}
+
+export function ensureOperationInvocationTables(storage: DurableObjectStorage) {
+  storage.sql.exec(`
+    CREATE TABLE IF NOT EXISTS ${operationInvocationsTableName} (
+      invocation_id TEXT PRIMARY KEY,
+      operation_key TEXT NOT NULL,
+      operation_kind TEXT NOT NULL,
+      entity TEXT NOT NULL,
+      operation_name TEXT NOT NULL,
+      actor_kind TEXT NOT NULL,
+      auth_decision TEXT NOT NULL CHECK (auth_decision IN ('allowed', 'denied')),
+      source_protocol TEXT NOT NULL,
+      source_json TEXT NOT NULL,
+      app_storage_identity_json TEXT NOT NULL,
+      input_hash TEXT NOT NULL,
+      input_audit_json TEXT NOT NULL,
+      affected_change_ids_json TEXT NOT NULL,
+      idempotency_json TEXT NOT NULL,
+      output_json TEXT,
+      status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'committed', 'replayed', 'failed', 'resumed')),
+      status_history_json TEXT NOT NULL,
+      error_message TEXT,
+      received_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_operation_invocations_operation_key
+      ON ${operationInvocationsTableName} (operation_key, updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_operation_invocations_status
+      ON ${operationInvocationsTableName} (status, updated_at);
+  `);
 }
 
 export function ensurePackageAppMigrationTables(storage: DurableObjectStorage) {
@@ -684,6 +818,7 @@ function clearStorageForSourceSeedReset(storage: DurableObjectStorage) {
   storage.sql.exec("DELETE FROM changes");
   storage.sql.exec("DELETE FROM records");
   storage.sql.exec("DELETE FROM action_executions");
+  storage.sql.exec(`DELETE FROM ${operationInvocationsTableName}`);
   storage.sql.exec("DELETE FROM app_schema");
   storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
 }
@@ -1269,6 +1404,151 @@ export function getCurrentCursor(storage: DurableObjectStorage) {
 
 export function getChangesAfter(storage: DurableObjectStorage, after: number): ChangeRow[] {
   return readWriteLogChangesAfter(storage, after);
+}
+
+export function readOperationInvocations(
+  storage: DurableObjectStorage,
+): StoredOperationInvocation[] {
+  ensureOperationInvocationTables(storage);
+
+  return storage.sql
+    .exec<OperationInvocationRow>(
+      `
+        SELECT
+          invocation_id,
+          operation_key,
+          operation_kind,
+          entity,
+          operation_name,
+          actor_kind,
+          auth_decision,
+          source_protocol,
+          source_json,
+          app_storage_identity_json,
+          input_hash,
+          input_audit_json,
+          affected_change_ids_json,
+          idempotency_json,
+          output_json,
+          status,
+          status_history_json,
+          error_message,
+          received_at,
+          updated_at,
+          completed_at
+        FROM ${operationInvocationsTableName}
+        ORDER BY received_at ASC, invocation_id ASC
+      `,
+    )
+    .toArray()
+    .map(operationInvocationFromRow);
+}
+
+export function getOperationInvocationById(
+  storage: DurableObjectStorage,
+  invocationId: string,
+): StoredOperationInvocation | undefined {
+  ensureOperationInvocationTables(storage);
+
+  const row = storage.sql
+    .exec<OperationInvocationRow>(
+      `
+        SELECT
+          invocation_id,
+          operation_key,
+          operation_kind,
+          entity,
+          operation_name,
+          actor_kind,
+          auth_decision,
+          source_protocol,
+          source_json,
+          app_storage_identity_json,
+          input_hash,
+          input_audit_json,
+          affected_change_ids_json,
+          idempotency_json,
+          output_json,
+          status,
+          status_history_json,
+          error_message,
+          received_at,
+          updated_at,
+          completed_at
+        FROM ${operationInvocationsTableName}
+        WHERE invocation_id = ?
+      `,
+      invocationId,
+    )
+    .next();
+
+  return row.done ? undefined : operationInvocationFromRow(row.value);
+}
+
+export function recordOperationInvocationAccepted(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+) {
+  const existing = getOperationInvocationById(storage, envelope.invocationId);
+
+  if (!existing) {
+    upsertOperationInvocation(storage, {
+      authDecision: "allowed",
+      envelope,
+      status: "accepted",
+    });
+    return;
+  }
+
+  if (existing.status === "accepted" || existing.status === "failed") {
+    upsertOperationInvocation(storage, {
+      authDecision: existing.authDecision,
+      envelope,
+      status: "resumed",
+    });
+  }
+}
+
+export function recordOperationInvocationRejected(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+  error: unknown,
+) {
+  upsertOperationInvocation(storage, {
+    authDecision: "denied",
+    envelope,
+    errorMessage: errorMessage(error),
+    status: "rejected",
+  });
+}
+
+export function recordOperationInvocationFailed(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+  error: unknown,
+) {
+  upsertOperationInvocation(storage, {
+    authDecision: "allowed",
+    envelope,
+    errorMessage: errorMessage(error),
+    status: "failed",
+  });
+}
+
+export function recordOperationInvocationOutcome(
+  storage: DurableObjectStorage,
+  input: {
+    envelope: OperationInvocationEnvelope;
+    output?: OperationInvocationOutput;
+    status: OperationInvocationStatus;
+  },
+) {
+  upsertOperationInvocation(storage, {
+    authDecision: "allowed",
+    envelope: input.envelope,
+    output: input.output,
+    status: input.status,
+  });
 }
 
 export function createStoredRecord(
@@ -2142,6 +2422,313 @@ function packageAppStateFromRow(row: PackageAppStateRow): PackageAppMigrationSta
     sourceSchemaHash: row.source_schema_hash,
     updatedAt: row.updated_at,
   };
+}
+
+function upsertOperationInvocation(
+  storage: DurableObjectStorage,
+  input: {
+    authDecision: OperationInvocationAuthDecision;
+    envelope: OperationInvocationEnvelope;
+    errorMessage?: string;
+    output?: OperationInvocationOutput;
+    status: OperationInvocationStatus;
+  },
+) {
+  ensureOperationInvocationTables(storage);
+
+  const existing = getOperationInvocationById(storage, input.envelope.invocationId);
+  const updatedAt = nowIsoString();
+  const completedAt = operationInvocationStatusIsTerminal(input.status) ? updatedAt : undefined;
+  const affectedChangeIds = input.output ? operationInvocationAffectedChangeIds(input.output) : [];
+  const statusHistory = appendOperationInvocationStatusHistory(
+    existing?.statusHistory ?? [],
+    input.status,
+    updatedAt,
+  );
+  const auditInput = operationInvocationAuditInput(input.envelope);
+
+  storage.sql.exec(
+    `
+      INSERT INTO ${operationInvocationsTableName} (
+        invocation_id,
+        operation_key,
+        operation_kind,
+        entity,
+        operation_name,
+        actor_kind,
+        auth_decision,
+        source_protocol,
+        source_json,
+        app_storage_identity_json,
+        input_hash,
+        input_audit_json,
+        affected_change_ids_json,
+        idempotency_json,
+        output_json,
+        status,
+        status_history_json,
+        error_message,
+        received_at,
+        updated_at,
+        completed_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(invocation_id) DO UPDATE SET
+        operation_key = excluded.operation_key,
+        operation_kind = excluded.operation_kind,
+        entity = excluded.entity,
+        operation_name = excluded.operation_name,
+        actor_kind = excluded.actor_kind,
+        auth_decision = excluded.auth_decision,
+        source_protocol = excluded.source_protocol,
+        source_json = excluded.source_json,
+        app_storage_identity_json = excluded.app_storage_identity_json,
+        input_hash = excluded.input_hash,
+        input_audit_json = excluded.input_audit_json,
+        affected_change_ids_json = excluded.affected_change_ids_json,
+        idempotency_json = excluded.idempotency_json,
+        output_json = COALESCE(excluded.output_json, ${operationInvocationsTableName}.output_json),
+        status = excluded.status,
+        status_history_json = excluded.status_history_json,
+        error_message = excluded.error_message,
+        updated_at = excluded.updated_at,
+        completed_at = COALESCE(excluded.completed_at, ${operationInvocationsTableName}.completed_at)
+    `,
+    input.envelope.invocationId,
+    input.envelope.operation.canonicalKey,
+    input.envelope.operation.kind,
+    input.envelope.operation.entityName,
+    input.envelope.operation.operationName,
+    input.envelope.actor.kind,
+    input.authDecision,
+    input.envelope.source.protocol,
+    JSON.stringify(input.envelope.source),
+    JSON.stringify(input.envelope.appStorageIdentity),
+    hashOperationInvocationInput(input.envelope.input),
+    JSON.stringify(auditInput),
+    JSON.stringify(affectedChangeIds),
+    JSON.stringify(input.envelope.idempotency),
+    input.output === undefined ? null : JSON.stringify(input.output),
+    input.status,
+    JSON.stringify(statusHistory),
+    input.errorMessage ?? null,
+    input.envelope.receivedAt,
+    updatedAt,
+    completedAt ?? null,
+  );
+}
+
+function operationInvocationFromRow(row: OperationInvocationRow): StoredOperationInvocation {
+  return {
+    invocationId: row.invocation_id,
+    operationKey: row.operation_key,
+    operationKind: row.operation_kind,
+    entity: row.entity,
+    operationName: row.operation_name,
+    actorKind: row.actor_kind,
+    authDecision: row.auth_decision,
+    sourceProtocol: row.source_protocol,
+    source: JSON.parse(row.source_json) as OperationInvocationEnvelope["source"],
+    appStorageIdentity: JSON.parse(
+      row.app_storage_identity_json,
+    ) as OperationInvocationEnvelope["appStorageIdentity"],
+    inputHash: row.input_hash,
+    auditInput: JSON.parse(row.input_audit_json) as OperationInvocationAuditInput,
+    affectedChangeIds: JSON.parse(row.affected_change_ids_json) as string[],
+    idempotency: JSON.parse(row.idempotency_json) as OperationInvocationEnvelope["idempotency"],
+    ...(row.output_json === null
+      ? {}
+      : { output: JSON.parse(row.output_json) as OperationInvocationOutput }),
+    status: row.status,
+    statusHistory: JSON.parse(row.status_history_json) as OperationInvocationStatusHistoryEntry[],
+    ...(row.error_message === null ? {} : { errorMessage: row.error_message }),
+    receivedAt: row.received_at,
+    updatedAt: row.updated_at,
+    ...(row.completed_at === null ? {} : { completedAt: row.completed_at }),
+  };
+}
+
+function appendOperationInvocationStatusHistory(
+  history: OperationInvocationStatusHistoryEntry[],
+  status: OperationInvocationStatus,
+  at: string,
+): OperationInvocationStatusHistoryEntry[] {
+  if (history.at(-1)?.status === status) {
+    return history;
+  }
+
+  return [...history, { status, at }];
+}
+
+function operationInvocationStatusIsTerminal(status: OperationInvocationStatus) {
+  return (
+    status === "rejected" || status === "committed" || status === "replayed" || status === "failed"
+  );
+}
+
+function operationInvocationAffectedChangeIds(output: OperationInvocationOutput): string[] {
+  if (output.type === "list" || output.type === "get") {
+    return [];
+  }
+
+  return output.affectedChangeIds;
+}
+
+function operationInvocationAuditInput(
+  envelope: OperationInvocationEnvelope,
+): OperationInvocationAuditInput {
+  const policy = envelope.schemaOperation.audit.input;
+
+  if (policy === "none") {
+    return { kind: "none" };
+  }
+
+  if (policy === "hash") {
+    return { kind: "hash" };
+  }
+
+  if (policy === "snapshot") {
+    return {
+      kind: "snapshot",
+      snapshot: redactUnsafeAuditValue(envelope.input),
+    };
+  }
+
+  return {
+    kind: "summary",
+    summary: summarizeOperationInvocationInput(envelope.input),
+  };
+}
+
+function summarizeOperationInvocationInput(
+  input: OperationInvocationInput,
+): OperationInvocationInputSummary {
+  if (input.type === "list") {
+    return { type: "list" };
+  }
+
+  if (input.type === "get" || input.type === "delete") {
+    return { type: input.type, recordId: input.recordId };
+  }
+
+  if (input.type === "create") {
+    return {
+      type: "create",
+      fieldNames: recordFieldNames(input.values),
+      valuesType: auditValueType(input.values),
+    };
+  }
+
+  if (input.type === "update") {
+    return {
+      type: "update",
+      fieldNames: recordFieldNames(input.values),
+      recordId: input.recordId,
+      valuesType: auditValueType(input.values),
+    };
+  }
+
+  return {
+    type: "command",
+    inputFields: recordFieldNames(input.input),
+    inputType: auditValueType(input.input),
+  };
+}
+
+function recordFieldNames(value: unknown): string[] | undefined {
+  if (!isJsonObject(value)) {
+    return undefined;
+  }
+
+  return Object.keys(value).sort();
+}
+
+function auditValueType(value: unknown): string {
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  if (value === null) {
+    return "null";
+  }
+
+  return typeof value;
+}
+
+function redactUnsafeAuditValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactUnsafeAuditValue);
+  }
+
+  if (!isJsonObject(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      isUnsafeAuditInputKey(key) ? "[redacted]" : redactUnsafeAuditValue(nestedValue),
+    ]),
+  );
+}
+
+function isUnsafeAuditInputKey(key: string) {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  return (
+    normalized.includes("secret") ||
+    normalized.includes("token") ||
+    normalized.includes("password") ||
+    normalized.includes("proof") ||
+    normalized.includes("challenge") ||
+    normalized.includes("credential") ||
+    normalized.includes("apikey")
+  );
+}
+
+function hashOperationInvocationInput(input: OperationInvocationInput) {
+  return `fnv1a64:${fnv1a64(stableJsonStringify(input))}`;
+}
+
+function fnv1a64(value: string) {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index));
+    hash = (hash * prime) & mask;
+  }
+
+  return hash.toString(16).padStart(16, "0");
+}
+
+function stableJsonStringify(value: unknown) {
+  return JSON.stringify(stableJsonValue(value));
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableJsonValue);
+  }
+
+  if (!isJsonObject(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nestedValue]) => [key, stableJsonValue(nestedValue)]),
+  );
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown operation invocation error.";
 }
 
 function schemasEqual(left: AppSchema, right: AppSchema) {

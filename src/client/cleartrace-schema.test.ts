@@ -73,14 +73,14 @@ describe("cleartrace source generated admin schema", () => {
       itemViewName: "orderItem",
     });
     expect(orderLines.collection.queries.defaultQueryName).toBe("orderLinesForSelectedOrder");
-    expect(createActionDefaults(orderLines)).toEqual([
+    expect(createOperationDefaults(orderLines)).toEqual([
       ["order", { kind: "context", name: "order" }],
     ]);
 
     expect(orderSamples.collection.context?.relatedCollection?.relationshipName).toBe(
       "orderSamples",
     );
-    expect(createActionDefaults(orderSamples)).toEqual([
+    expect(createOperationDefaults(orderSamples)).toEqual([
       ["order", { kind: "context", name: "order" }],
     ]);
 
@@ -93,21 +93,21 @@ describe("cleartrace source generated admin schema", () => {
       },
       itemViewName: "sampleItem",
     });
-    expect(createActionDefaults(sampleRequests)).toEqual([
+    expect(createOperationDefaults(sampleRequests)).toEqual([
       ["sample", { kind: "context", name: "sample" }],
     ]);
 
     expect(reportVersions.collection.context?.relatedCollection?.relationshipName).toBe(
       "reportVersions",
     );
-    expect(createActionDefaults(reportVersions)).toEqual([
+    expect(createOperationDefaults(reportVersions)).toEqual([
       ["report", { kind: "context", name: "report" }],
     ]);
 
     expect(packageItems.collection.context?.relatedCollection?.relationshipName).toBe(
       "packageItems",
     );
-    expect(createActionDefaults(packageItems)).toEqual([
+    expect(createOperationDefaults(packageItems)).toEqual([
       ["testPackage", { kind: "context", name: "testPackage" }],
     ]);
   });
@@ -154,8 +154,8 @@ function requiredCollectionModel(viewName: string) {
   return model;
 }
 
-function createActionDefaults(model: ReturnType<typeof requiredCollectionModel>) {
-  const action = model.collection.actions[0];
+function createOperationDefaults(model: ReturnType<typeof requiredCollectionModel>) {
+  const action = model.collection.operations[0];
 
   if (action?.type !== "create") {
     throw new Error(`Missing create action for "${model.viewName}".`);

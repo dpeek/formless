@@ -17,6 +17,7 @@ describe("collection result model", () => {
     const result = selectListResultModel(
       taskSourceSchema,
       view.result,
+      "task",
       taskSourceSchema.entities.task,
     );
 
@@ -90,6 +91,7 @@ describe("collection result model", () => {
     const result = selectTreeResultModel(
       siteSourceSchema,
       view.result,
+      "block-placement",
       siteSourceSchema.entities["block-placement"],
     );
 

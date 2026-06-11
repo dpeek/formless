@@ -327,7 +327,7 @@ function RecordEditDialog({
         ) : (
           <p className="text-sm text-slate-600">Record unavailable.</p>
         )}
-        {!action.editView.entity.mutations.patch.enabled ? (
+        {!action.editView.updateOperation ? (
           <p className="text-sm text-slate-600">
             Editing is disabled for {action.editView.entity.label}.
           </p>
@@ -361,11 +361,11 @@ export function EditViewFields({
           key={recordFieldEditorKey(editView.entityName, targetRecordId, fieldConfig.fieldName)}
         >
           <RecordFieldEditor
-            canPatch={editView.entity.mutations.patch.enabled}
             entityName={editView.entityName}
             fieldConfig={fieldConfig}
             recordId={targetRecordId}
             showLabel={true}
+            updateOperation={editView.updateOperation}
           />
         </div>
       ))}

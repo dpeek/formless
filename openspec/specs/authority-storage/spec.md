@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Authority storage owns committed app data, active schemas, write invariants, and server API contracts for each app storage identity. It is the durable source of truth that browser replicas, snapshots, archives, and installed apps read from or write through.
+Authority storage owns committed app data, active schemas, operation invocations, write invariants, and server API contracts for each app storage identity. It is the durable source of truth that browser replicas, snapshots, archives, and installed apps read from or write through.
 
 ## Requirements
 
@@ -14,14 +14,16 @@ The system SHALL isolate Authority storage by app storage identity.
 
 - GIVEN a schema-key app such as `tasks`, `estii`, or `site`
 - WHEN the app uses its schema-key API prefix
-- THEN committed records, changes, schema, and action executions belong to the Authority for that schema key
+- THEN committed records, changes, schema, operation invocations, and action
+  executions belong to the Authority for that schema key
 - AND writes for another schema key are not visible in this app storage identity
 
 #### Scenario: Installed app identity
 
 - GIVEN an installed app with an app install id
 - WHEN the app uses the installed app API prefix for its package app key and install id
-- THEN committed records, changes, schema, and action executions belong to `app:<installId>` storage
+- THEN committed records, changes, schema, operation invocations, and action
+  executions belong to `app:<installId>` storage
 - AND the installed app storage is separate from package-level schema-key storage
 
 ### Requirement: App Storage API
@@ -31,7 +33,8 @@ The system SHALL expose app storage operations through schema-key and installed-
 #### Scenario: Shared app API paths
 
 - GIVEN a valid app storage identity
-- WHEN a client calls app storage API paths for bootstrap, schema, tree reads, sync, mutations, actions, reset schema, or reset seed
+- WHEN a client calls app storage API paths for bootstrap, schema, tree reads,
+  sync, operations, reset schema, or reset seed
 - THEN the system resolves the operation for that app storage identity
 - AND read and write responses use the same durable Authority state for that identity
 
@@ -72,8 +75,8 @@ while consuming Media package Worker adapters through public subpaths.
 
 #### Scenario: App storage avoids media internals
 
-- GIVEN Authority storage handles bootstrap, schema, sync, mutations, actions,
-  reset, snapshot, or record restore
+- GIVEN Authority storage handles bootstrap, schema, sync, operations, reset,
+  snapshot, or record restore
 - WHEN storage code needs media object handling
 - THEN it does not deep-import Media package internals
 - AND media object handling stays behind public Media package Worker/runtime
@@ -130,7 +133,8 @@ The system MUST commit writes only when Authority validation succeeds.
 
 #### Scenario: Mutation replay
 
-- GIVEN a mutation or action write was already committed with a client-provided identity
+- GIVEN an operation, mutation, or action write was already committed with a
+  client-provided identity
 - WHEN the same write is replayed
 - THEN the stored response is returned
 - AND duplicate changes are not inserted
@@ -171,12 +175,91 @@ The system MUST commit writes only when Authority validation succeeds.
 - AND no partial record patch, event record, write-log change, or action
   execution is stored
 
+### Requirement: Operation Invocation Boundary
+
+The system SHALL normalize operation calls into one invocation envelope before
+authorization, validation, execution, replay classification, audit, or
+materialization.
+
+#### Scenario: Build operation invocation envelope
+
+- GIVEN generated UI, protocol, public, automation, CLI, or runner callers invoke
+  an entity operation
+- WHEN Authority accepts the request for evaluation
+- THEN the envelope includes invocation id, canonical operation key, app storage
+  identity, entity, record id or selection when relevant, actor, source
+  protocol, source route or UI surface when relevant, input, idempotency key
+  when required, and received timestamp
+- AND generic mutation and action protocol routes do not select Authority write
+  operations after the operation migration
+
+#### Scenario: Authorize operation before materialization
+
+- GIVEN an operation invocation envelope has been built
+- WHEN Authority evaluates the invocation
+- THEN operation actor policy is evaluated before field validation and storage
+  materialization
+- AND rejected invocations do not create, patch, delete, tombstone, or dispatch
+  action effects
+- AND operation policy becomes the primary authorization boundary for operation
+  execution
+
+#### Scenario: Operation idempotency
+
+- GIVEN a create, update, delete, or command operation is invoked
+- WHEN the request is evaluated
+- THEN an idempotency key is required unless a trusted runtime actor supplies an
+  explicit runtime-generated write identity
+- AND replaying the same operation for the same app storage identity and
+  idempotency key returns the stored outcome without duplicate change rows,
+  action execution rows, or operation invocation rows
+- AND list and get operations do not require idempotency keys
+
+#### Scenario: Return operation output
+
+- GIVEN an operation invocation is accepted
+- WHEN Authority returns the operation result
+- THEN list operations return records selected by the referenced query
+- AND get operations return one active record selected by record id
+- AND create operations return the created record plus affected change ids
+- AND update operations return the updated record plus affected change ids
+- AND delete operations return the tombstoned record id plus affected change ids
+- AND command operations return a typed command response plus affected change
+  ids
+- AND replayed write or command operations return the original stored output
+
+### Requirement: Operation Invocation Audit
+
+The system SHALL store operation invocation rows as Authority-owned system rows
+separate from stored app records and sync change rows.
+
+#### Scenario: Store operation invocation row
+
+- GIVEN an operation invocation is accepted, rejected, committed, replayed,
+  failed, or resumed
+- WHEN Authority records the invocation outcome
+- THEN the row stores operation key and kind, actor and auth decision, source
+  protocol and route context, target app storage identity, input hash, safe
+  input summary or explicitly allowed safe snapshot, affected change ids,
+  idempotency facts, status, and timestamps
+- AND secret field values, challenge proofs, provider secrets, and runtime
+  secrets are not stored in full input snapshots
+- AND operation invocation rows are not emitted as browser replica sync changes
+
+#### Scenario: Change rows remain materialization log
+
+- GIVEN an operation commits record effects
+- WHEN sync clients read committed changes
+- THEN clients receive change rows from the existing write log
+- AND the operation invocation row remains the semantic audit and replay root
+  for that operation
+
 ### Requirement: Storage Write Log Boundary
 
 The system SHALL keep committed Authority write facts behind a storage
-write-log boundary that owns write outcome classification, mutation and action
-idempotency, change-row append, cursor calculation, and committed change
-readback.
+write-log boundary that owns write outcome classification, operation, mutation,
+and action idempotency, change-row append, cursor calculation, and committed
+change readback.
 
 #### Scenario: Committed write facts
 
@@ -188,7 +271,7 @@ readback.
 
 #### Scenario: Replayed write facts
 
-- WHEN a mutation or action with a previously committed client-provided
+- WHEN an operation, mutation, or action with a previously committed client-provided
   identity is replayed
 - THEN the storage write outcome identifies the result as replayed
 - AND the original stored response is returned

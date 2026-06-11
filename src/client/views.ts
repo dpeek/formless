@@ -28,9 +28,9 @@ import type {
 } from "@dpeek/formless-schema";
 import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import type {
-  HomeActionConfig,
   HomeCollectionShellConfig,
   HomeContextConfig,
+  HomeOperationConfig,
   HomeQueryTabConfig,
   HomeSummarySlotConfig,
 } from "./collection-shell-model.ts";
@@ -39,6 +39,7 @@ import {
   type ResultOrderingConfig,
   type ResultOrderingScopeConfig,
 } from "./result-ordering-model.ts";
+import type { EntityOperationPresentationConfig } from "./operation-presentation-model.ts";
 import type {
   StateMachineFieldConfig,
   TransitionStateActionConfig,
@@ -48,13 +49,13 @@ export { selectRelatedCollectionModels } from "./collection-shell-model.ts";
 export type {
   EntityActionTargetCountConfig,
   EntityActionUiConfig,
-  HomeActionConfig,
   HomeCollectionShellConfig,
   HomeContextConfig,
   HomeContextNavigationConfig,
   HomeContextNavigationGroupConfig,
   HomeQueriesConfig,
   HomeQueryTabConfig,
+  HomeOperationConfig,
   HomeSummarySlotConfig,
   RelatedCollectionConfig,
 } from "./collection-shell-model.ts";
@@ -97,6 +98,7 @@ export type FieldTableColumnConfig = RecordFieldConfig &
       entityName: string;
       entity: EntitySchema;
       recordFields: RecordFieldConfig[];
+      updateOperation?: EntityOperationPresentationConfig;
       recordUnion?: RecordUnionPresentationConfig;
     };
   };
@@ -107,6 +109,7 @@ export type ReferenceFieldTableColumnConfig = RecordFieldConfig &
     sourceReferenceFieldName: string;
     referencedEntityName: string;
     referencedEntity: EntitySchema;
+    referencedUpdateOperation?: EntityOperationPresentationConfig;
   };
 
 export type ComputedTableColumnConfig = TableColumnBaseConfig & {
@@ -153,6 +156,7 @@ export type EditViewConfig = {
   viewName: string;
   entityName: string;
   entity: EntitySchema;
+  updateOperation?: EntityOperationPresentationConfig;
   fields: RecordFieldConfig[];
   transitionActions: TransitionStateActionConfig[];
   union?: RecordUnionPresentationConfig;
@@ -292,10 +296,14 @@ export type TreeBranchPolicyConfig = {
 export type TreeCompositionActionConfig = {
   create?: {
     actionName: string;
+    operationName: string;
+    operation: EntityOperationPresentationConfig;
     action: Extract<EntityActionSchema, { kind: "create-tree-child" }>;
   };
   remove?: {
     actionName: string;
+    operationName: string;
+    operation: EntityOperationPresentationConfig;
     action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>;
   };
 };
@@ -305,6 +313,8 @@ export type HomeResultConfig =
       type: "list";
       itemViewName: string;
       recordFields: RecordFieldConfig[];
+      updateOperation?: EntityOperationPresentationConfig;
+      deleteOperation?: EntityOperationPresentationConfig;
       transitionActions: TransitionStateActionConfig[];
       recordUnion?: RecordUnionPresentationConfig;
       ordering?: ResultOrderingConfig;
@@ -313,6 +323,8 @@ export type HomeResultConfig =
       type: "record";
       itemViewName: string;
       recordFields: RecordFieldConfig[];
+      updateOperation?: EntityOperationPresentationConfig;
+      deleteOperation?: EntityOperationPresentationConfig;
       transitionActions: TransitionStateActionConfig[];
       recordUnion?: RecordUnionPresentationConfig;
     }
@@ -320,6 +332,8 @@ export type HomeResultConfig =
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
+      updateOperation?: EntityOperationPresentationConfig;
+      deleteOperation?: EntityOperationPresentationConfig;
       transitionActions: TransitionStateActionConfig[];
       ordering?: ResultOrderingConfig;
       footer?: TableFooterSlotConfig[];
@@ -332,12 +346,14 @@ export type HomeResultConfig =
       childField: Extract<FieldSchema, { type: "reference" }>;
       childEntityName: string;
       childEntity: EntitySchema;
+      childUpdateOperation?: EntityOperationPresentationConfig;
       childItemViewName: string;
       childRecordFields: RecordFieldConfig[];
       childRecordUnion?: RecordUnionPresentationConfig;
       placementItemViewName?: string;
       placementRecordFields?: RecordFieldConfig[];
       placementRecordUnion?: RecordUnionPresentationConfig;
+      placementUpdateOperation?: EntityOperationPresentationConfig;
       ordering?: ResultOrderingConfig;
       branches?: TreeBranchPolicyConfig;
       composition?: TreeCompositionActionConfig;
@@ -359,7 +375,7 @@ export type HomeViewModel = {
   queryTabs: HomeQueryTabConfig[];
   defaultQueryName: string;
   result: HomeResultConfig;
-  actions: HomeActionConfig[];
+  operations: HomeOperationConfig[];
 };
 
 export type HomeScreenCollectionSectionModel = {
@@ -446,7 +462,7 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
       queryTabs: collection.queries.tabs,
       defaultQueryName: collection.queries.defaultQueryName,
       result: collection.result,
-      actions: collection.actions,
+      operations: collection.operations,
     };
   });
 }

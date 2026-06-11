@@ -120,9 +120,9 @@ describe("crm source schema", () => {
       type: "collection",
       entity: "delivery-event",
     });
-    expect(deliveryEventHome?.type === "collection" ? deliveryEventHome.actions : "missing").toBe(
-      undefined,
-    );
+    expect(
+      deliveryEventHome?.type === "collection" ? deliveryEventHome.operations : "missing",
+    ).toBe(undefined);
 
     expect(
       selectPrimaryScreenModels(crmSchema).map((screen) => ({

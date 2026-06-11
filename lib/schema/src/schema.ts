@@ -1,5 +1,6 @@
 import { parseEntityActionsForEntities } from "./schema-actions.ts";
 import { parseEntities } from "./schema-fields.ts";
+import { parseEntityOperationsForEntities } from "./schema-operations.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
 import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
@@ -40,13 +41,23 @@ export function parseAppSchema(value: unknown): AppSchema {
     queries,
     relationships,
   );
-  const readModels = parseReadModels(value.readModels, entities, queries);
-  const unions = parseUnions(value.unions, entities);
-  const itemViews = parseItemViews(value.itemViews, entities, unions);
-  const tableViews = parseTableViews(value.tableViews, entities, itemViews, readModels);
+  const entitiesWithOperations = parseEntityOperationsForEntities(
+    entities,
+    parsedEntities.operationInputsByEntity,
+    queries,
+  );
+  const readModels = parseReadModels(value.readModels, entitiesWithOperations, queries);
+  const unions = parseUnions(value.unions, entitiesWithOperations);
+  const itemViews = parseItemViews(value.itemViews, entitiesWithOperations, unions);
+  const tableViews = parseTableViews(
+    value.tableViews,
+    entitiesWithOperations,
+    itemViews,
+    readModels,
+  );
   const views = parseViews(
     value.views,
-    entities,
+    entitiesWithOperations,
     queries,
     itemViews,
     tableViews,
@@ -55,11 +66,11 @@ export function parseAppSchema(value: unknown): AppSchema {
     unions,
   );
   const screens = parseScreens(value.screens, views);
-  const runtime = parseRuntimeMetadata(value.runtime, entities);
+  const runtime = parseRuntimeMetadata(value.runtime, entitiesWithOperations);
 
   return {
     version,
-    entities,
+    entities: entitiesWithOperations,
     ...(relationships === undefined ? {} : { relationships }),
     queries,
     ...(readModels === undefined ? {} : { readModels }),

@@ -66,6 +66,68 @@
         "delete": {
           "enabled": false
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Resource",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "kind": {
+                "field": "kind"
+              },
+              "unit": {
+                "field": "unit"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Resource",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "kind": {
+                "field": "kind"
+              },
+              "unit": {
+                "field": "unit"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "card": {
@@ -119,6 +181,80 @@
         },
         "delete": {
           "enabled": false
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Rate card",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "isDefault": {
+                "field": "isDefault"
+              },
+              "marginMin": {
+                "field": "marginMin"
+              },
+              "marginMed": {
+                "field": "marginMed"
+              },
+              "marginMax": {
+                "field": "marginMax"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Rate card",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "isDefault": {
+                "field": "isDefault"
+              },
+              "marginMin": {
+                "field": "marginMin"
+              },
+              "marginMed": {
+                "field": "marginMed"
+              },
+              "marginMax": {
+                "field": "marginMax"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -227,6 +363,111 @@
               "field": "card",
               "query": "cardAll"
             }
+          }
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Rate",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "resource": {
+                "field": "resource"
+              },
+              "card": {
+                "field": "card"
+              },
+              "cost": {
+                "field": "cost"
+              },
+              "costUnit": {
+                "field": "costUnit"
+              },
+              "price": {
+                "field": "price"
+              },
+              "priceSet": {
+                "field": "priceSet"
+              },
+              "currency": {
+                "field": "currency"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Rate",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "resource": {
+                "field": "resource"
+              },
+              "card": {
+                "field": "card"
+              },
+              "cost": {
+                "field": "cost"
+              },
+              "costUnit": {
+                "field": "costUnit"
+              },
+              "price": {
+                "field": "price"
+              },
+              "priceSet": {
+                "field": "priceSet"
+              },
+              "currency": {
+                "field": "currency"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "regenerateMissingRates": {
+          "label": "Regenerate missing rates",
+          "kind": "command",
+          "scope": "collection",
+          "effect": {
+            "type": "runActionKind",
+            "kind": "create-missing-join-records",
+            "action": "regenerateMissingRates"
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
           }
         }
       }
@@ -568,9 +809,9 @@
         "type": "list",
         "itemView": "resourceListItem"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "resource.create",
           "createView": "resourceCreate"
         }
       ]
@@ -592,9 +833,9 @@
         "type": "list",
         "itemView": "cardListItem"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "card.create",
           "createView": "cardCreate"
         }
       ]
@@ -649,9 +890,9 @@
           }
         ]
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "resource.create",
           "createView": "resourceCreate"
         }
       ]

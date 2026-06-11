@@ -404,7 +404,7 @@ describe("Formless instance target control-plane client", () => {
     ]);
   });
 
-  it("patches deployment-config observed fields through the control-plane mutation API", async () => {
+  it("patches deployment-config observed fields through the control-plane operation API", async () => {
     const requests: Array<{
       body: BodyInit | null | undefined;
       headers: Record<string, string>;
@@ -448,15 +448,21 @@ describe("Formless instance target control-plane client", () => {
           }
 
           return Response.json({
-            changes: [],
-            cursor: 4,
-            mutationId: "observe:instance.primary",
-            record: {
-              entity: "deployment-config",
-              id: "instance.primary",
-              values: JSON.parse(request.body).values,
+            invocation: {
+              operation: { canonicalKey: "deployment-config.update" },
             },
-            status: "accepted",
+            output: {
+              affectedChangeIds: [],
+              changes: [],
+              cursor: 4,
+              record: {
+                entity: "deployment-config",
+                id: "instance.primary",
+                values: JSON.parse(request.body).input,
+              },
+              type: "update",
+            },
+            status: "committed",
           });
         },
       },
@@ -470,24 +476,27 @@ describe("Formless instance target control-plane client", () => {
         "content-type": "application/json",
       },
       method: "POST",
-      url: "https://instance.example/api/formless/control-plane/mutations",
+      url: "https://instance.example/api/formless/control-plane/operations/deployment-config/update",
     });
     const requestBody = requests[0]?.body;
 
     expect(typeof requestBody).toBe("string");
     expect(JSON.parse(requestBody as string)).toMatchObject({
-      entity: "deployment-config",
-      mutationId: "observe:instance.primary",
-      op: "patch",
+      idempotencyKey: "observe:instance.primary",
       recordId: "instance.primary",
-      values: {
+      input: {
         observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
         observedStatus: "deployed",
         observedSummary: "1 deployment resource applied from workspace source.",
       },
     });
-    expect(patched.record.id).toBe("instance.primary");
-    expect(patched.record.values.observedStatus).toBe("deployed");
+    expect(patched.output.type).toBe("update");
+    expect(patched.output.type === "update" ? patched.output.record.id : undefined).toBe(
+      "instance.primary",
+    );
+    expect(
+      patched.output.type === "update" ? patched.output.record.values.observedStatus : undefined,
+    ).toBe("deployed");
   });
 });
 

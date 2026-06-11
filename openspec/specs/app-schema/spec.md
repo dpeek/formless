@@ -2,7 +2,7 @@
 
 ## Purpose
 
-App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, actions, state machines, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
+App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, operations, actions, state machines, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
 
 ## Requirements
 
@@ -84,7 +84,8 @@ pure helpers through the Schema package slice.
   migrations, tests, or other package slices need App schema types, parse
   behavior, stringify behavior, schema-local entity key helpers, qualified
   entity name helpers, field behavior, query helpers, read model helpers,
-  create-default helpers, runtime metadata helpers, or action capability facts
+  create-default helpers, runtime metadata helpers, operation capability facts,
+  or action capability facts
 - **THEN** they import those contracts and helpers from
   `@dpeek/formless-schema`
 - **AND** they do not import package-owned schema behavior from old
@@ -129,7 +130,7 @@ identifiers.
 #### Scenario: Leave other schema keys unchanged
 
 - WHEN an app schema declares fields, queries, read models, views, screens,
-  actions, or mutations
+  operations, actions, or mutations
 - THEN this entity-key grammar does not rename or normalize those keys
 - AND existing validation for those schema sections remains separately owned by
   their current parser rules
@@ -305,7 +306,7 @@ preserves advanced source-owned schema sections.
 
 - GIVEN a user creates an entity in Builder mode
 - WHEN the draft is saved
-- THEN the emitted schema enables create and patch mutations for the entity
+- THEN the emitted schema declares create and update operations for the entity
 - AND the entity receives a simple generated surface with all-records query,
   item view, create view, collection view, and workspace screen
 
@@ -317,16 +318,10 @@ preserves advanced source-owned schema sections.
 - AND saved entity keys, field keys, field types, and reference targets remain
   locked in Builder
 
-### Requirement: Mutations And Actions
+### Requirement: Action Kinds
 
-The system SHALL declare generic mutations and schema action kinds as data-owned commands over flat records.
-
-#### Scenario: Submit delete mutation
-
-- GIVEN an entity has delete mutations enabled
-- WHEN a delete mutation is submitted for a record
-- THEN the request carries `mutationId`, `entity`, `op: "delete"`, and `recordId`
-- AND the request does not require field values
+The system SHALL declare schema action kinds as data-owned command effect
+targets over flat records.
 
 #### Scenario: Compose tree child
 
@@ -342,6 +337,77 @@ The system SHALL declare generic mutations and schema action kinds as data-owned
 - THEN shared action kind capability facts drive runtime eligibility and UI
   input facts
 - AND action writes remain schema-declared commands over flat records
+
+### Requirement: Entity Operations
+
+The system SHALL let app schemas declare entity-local operations as the shared
+interaction contract for generated UI, Authority execution, protocol bindings,
+public forms, automation, audit, and authorization.
+
+#### Scenario: Parse entity-local operation
+
+- GIVEN an entity declares operations under `entities.<entityKey>.operations`
+- WHEN the schema is parsed
+- THEN each operation key is scoped to that containing entity
+- AND the runtime derives a canonical operation key as
+  `<entityKey>.<operationKey>`
+- AND top-level or cross-entity operation declarations are rejected until a
+  later schema contract introduces them
+
+#### Scenario: Validate operation kind and scope
+
+- GIVEN an entity operation is declared
+- WHEN the schema is parsed
+- THEN the operation kind is `list`, `get`, `create`, `update`, `delete`, or
+  `command`
+- AND the operation scope is `collection` or `record`
+- AND `public` is rejected as an operation scope because public exposure is an
+  actor policy and binding
+- AND `selection` and `workflow` remain reserved until their contracts are
+  introduced
+
+#### Scenario: Reuse entity fields in operation input
+
+- GIVEN an operation input field references an entity field
+- WHEN the schema is parsed
+- THEN the referenced field must exist on the containing entity
+- AND field behavior, validation, labels, defaults, and generated editor facts
+  can be reused for that operation input
+- AND inline scalar input fields can be declared for command-only input that is
+  not stored directly on the target record
+
+#### Scenario: Validate operation effects
+
+- GIVEN an entity operation declares an effect
+- WHEN the schema is parsed
+- THEN first-pass effects are limited to create one record, patch one record,
+  delete or tombstone one record, or dispatch one registered schema action kind
+- AND create, update, and delete effects target the containing entity
+- AND command effects can reference schema action kinds and schema queries
+  declared for the same schema
+
+#### Scenario: Validate operation output contract
+
+- GIVEN an entity operation declares an output contract
+- WHEN the schema is parsed
+- THEN `list` operations return records selected by the referenced query
+- AND `get` operations return one active record selected by record id
+- AND `create` operations return the created record plus affected change ids
+- AND `update` operations return the updated record plus affected change ids
+- AND `delete` operations return the tombstoned record id plus affected change
+  ids
+- AND `command` operations return a typed command response plus affected change
+  ids
+
+#### Scenario: Require source-declared operations
+
+- GIVEN an entity relies on generated UI, Authority execution, or public
+  execution
+- WHEN runtime models are selected
+- THEN the runtime consumes source-declared entity operations
+- AND mutation policy or entity actions do not synthesize operation bindings
+- AND operation bindings use the same canonical operation key grammar as their
+  source-declared operations
 
 ### Requirement: State Machines
 
@@ -434,7 +500,7 @@ The system MUST only expose action kinds that are safe for public execution thro
 
 The system SHALL support runtime-owned control-plane app schemas that use normal
 schema entities, fields, relationships, queries, read models, views, screens,
-mutations, and actions.
+operations, mutations, and actions.
 
 #### Scenario: Parse control-plane schema
 

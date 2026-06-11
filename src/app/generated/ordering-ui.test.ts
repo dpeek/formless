@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import {
@@ -20,11 +21,11 @@ describe("generated result ordering helpers", () => {
       placementRecord("d", { parent: "page-1", order: 3000 }),
     ]);
     const context = selectResultOrderingContext({
-      canPatch: true,
       entityName: "block-placement",
       ordering: placementOrdering,
       recordIds: ["a", "b", "c", "d"],
       recordsById,
+      updateOperation: placementUpdateOperation,
     });
 
     if (!context) {
@@ -82,7 +83,6 @@ describe("generated result ordering helpers", () => {
       placementRecord("b", { parent: "page-1", order: 2000 }),
     ]);
     const context = selectResultOrderingContext({
-      canPatch: false,
       entityName: "block-placement",
       ordering: placementOrdering,
       recordIds: ["a", "b"],
@@ -122,6 +122,22 @@ const placementOrdering: ResultOrderingConfig = {
     },
   ],
   presentations: ["dragHandle", "moveMenu"],
+};
+
+const placementUpdateOperation: EntityOperationPresentationConfig = {
+  entityName: "block-placement",
+  operationName: "update",
+  canonicalKey: "block-placement.update",
+  label: "Update",
+  operation: {
+    kind: "update",
+    scope: "record",
+    input: { fields: {} },
+    effect: { type: "patchRecord" },
+    output: { type: "update" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  },
 };
 
 function recordsByIdFrom(records: StoredRecord[]) {

@@ -14,7 +14,7 @@ import {
   parseQualifiedEntityName,
   stringifySchema,
 } from "@dpeek/formless-schema";
-import type { EntityActionCapabilities, EntityActionKind } from "@dpeek/formless-schema";
+import type { AppSchema, EntityActionCapabilities, EntityActionKind } from "@dpeek/formless-schema";
 
 describe("schema mutation policies", () => {
   it("preserves delete policy through stringify", () => {
@@ -3266,7 +3266,7 @@ describe("schema table views", () => {
 });
 
 describe("schema collection views", () => {
-  it("parses query slots, defaults, results, and action slots", () => {
+  it("parses query slots, defaults, results, and operation bindings", () => {
     const schema = parseAppSchema(baseSchema());
 
     expect(schema.views.taskHome).toEqual({
@@ -3280,9 +3280,9 @@ describe("schema collection views", () => {
       ],
       defaultQuery: "taskAll",
       result: { type: "list", itemView: "taskListItem" },
-      actions: [
-        { type: "create", createView: "taskCreate" },
-        { type: "entityAction", action: "clearCompletedTasks", count: { type: "count" } },
+      operations: [
+        { operation: "task.create", createView: "taskCreate" },
+        { operation: "task.clearCompletedTasks", count: { type: "count" } },
       ],
     });
   });
@@ -3357,7 +3357,7 @@ describe("schema collection views", () => {
     ).toThrow('item view "noteListItem" must use entity "task"');
   });
 
-  it("allows collection create actions for other entities and validates entity action slots", () => {
+  it("allows collection create operations for other entities and validates operation bindings", () => {
     const schema = parseAppSchema(
       baseSchema({
         entities: {
@@ -3375,7 +3375,7 @@ describe("schema collection views", () => {
           },
           taskHome: {
             ...defaultCollectionView(),
-            actions: [{ type: "create", createView: "noteCreate" }],
+            operations: [{ operation: "note.create", createView: "noteCreate" }],
           },
         },
       }),
@@ -3383,7 +3383,7 @@ describe("schema collection views", () => {
 
     expect(schema.views.taskHome).toMatchObject({
       type: "collection",
-      actions: [{ type: "create", createView: "noteCreate" }],
+      operations: [{ operation: "note.create", createView: "noteCreate" }],
     });
 
     expect(() =>
@@ -3393,12 +3393,12 @@ describe("schema collection views", () => {
             ...defaultViews(),
             taskHome: {
               ...defaultCollectionView(),
-              actions: [{ type: "entityAction", action: "missing" }],
+              operations: [{ operation: "task.missing" }],
             },
           },
         }),
       ),
-    ).toThrow('references unknown action "missing"');
+    ).toThrow('references unknown operation "task.missing"');
   });
 
   it("validates collection primary navigation hints", () => {
@@ -3899,7 +3899,7 @@ describe("schema collection views", () => {
     ).toThrow('context relationship "cardRates" must target collection entity "resource"');
   });
 
-  it("validates context create views separately from collection create actions", () => {
+  it("validates context create views separately from collection create operations", () => {
     expect(() =>
       parseAppSchema(
         scopedRateSchema({
@@ -4157,7 +4157,7 @@ describe("schema collection views", () => {
     ).toThrow('target query "ratesForSelectedCard" must not require context');
   });
 
-  it("rejects context-default create actions without a matching collection context", () => {
+  it("rejects context-default create operations without a matching collection context", () => {
     const rateAllQuery = {
       label: "All rates",
       entity: "rate",
@@ -4178,7 +4178,7 @@ describe("schema collection views", () => {
           }),
         }),
       ),
-    ).toThrow('create action view "rateCreateForCard" requires context defaults');
+    ).toThrow('create operation view "rateCreateForCard" requires context defaults');
 
     expect(() =>
       parseAppSchema(
@@ -4477,7 +4477,7 @@ describe("rate-card sample schema", () => {
           },
         ],
       },
-      actions: [{ type: "create", createView: "resourceCreate" }],
+      operations: [{ operation: "resource.create", createView: "resourceCreate" }],
     });
     expect(
       ["resourceHome", "cardHome", "rateHome"].map((viewName) => {
@@ -4827,6 +4827,7 @@ describe("personal site sample schema", () => {
       "block",
       "block-placement",
       "contact",
+      "contact-message",
       "email-address",
       "audience",
       "subscription",
@@ -5026,6 +5027,30 @@ describe("personal site sample schema", () => {
         },
       },
     });
+    expect(schema.entities["contact-message"]?.operations?.submit).toMatchObject({
+      label: "Submit message",
+      kind: "create",
+      scope: "collection",
+      input: {
+        fields: {
+          name: { field: "name", required: true },
+          email: { field: "email", required: true },
+          message: { field: "message", required: true },
+        },
+      },
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+      policy: {
+        actors: ["anonymous"],
+        access: {
+          actor: "anonymous",
+          challenge: { kind: "turnstile" },
+          origin: { kind: "same-origin" },
+        },
+      },
+    });
     expect(schema.unions?.blockByType).toMatchObject({
       entity: "block",
       discriminator: "type",
@@ -5204,7 +5229,7 @@ describe("personal site sample schema", () => {
       entity: "block",
       navigation: { primary: false },
       result: { type: "table", tableView: "blockTable" },
-      actions: [{ type: "create", createView: "blockCreate" }],
+      operations: [{ operation: "block.create", createView: "blockCreate" }],
     });
     expect(schema.views.blockCreate).toMatchObject({
       type: "create",
@@ -5319,7 +5344,13 @@ describe("personal site sample schema", () => {
         itemView: "blockContextItem",
       },
       result: { type: "table", tableView: "blockPlacementTable" },
-      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
+      operations: [
+        {
+          operation: "block-placement.create",
+          createView: "blockPlacementCreate",
+          label: "Add placement",
+        },
+      ],
     });
     expect(schema.views.siteSettingsHome).toMatchObject({
       type: "collection",
@@ -5386,8 +5417,8 @@ describe("personal site sample schema", () => {
           presentations: ["dragHandle"],
         },
         composition: {
-          createAction: "addTreeChild",
-          removeAction: "removeTreePlacement",
+          createOperation: "block-placement.addTreeChild",
+          removeOperation: "block-placement.removeTreePlacement",
         },
         maxDepth: 8,
       },
@@ -5451,7 +5482,13 @@ describe("personal site sample schema", () => {
         query: "blockNavigationRoots",
         presentation: "listDetail",
       },
-      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
+      operations: [
+        {
+          operation: "block-placement.create",
+          createView: "blockPlacementCreate",
+          label: "Add placement",
+        },
+      ],
     });
     expect(schema.views.blockPlacementCreate).toMatchObject({
       type: "create",
@@ -5962,8 +5999,8 @@ describe("personal site sample schema", () => {
         },
       },
       composition: {
-        createAction: "addTreeChild",
-        removeAction: "removeTreePlacement",
+        createOperation: "block-placement.addTreeChild",
+        removeOperation: "block-placement.removeTreePlacement",
       },
     });
     expect(schema.itemViews.blockTreeNode.variants?.project).toMatchObject({
@@ -5974,7 +6011,7 @@ describe("personal site sample schema", () => {
         href: { editor: "href", commit: "field-commit" },
       },
     });
-    expect(siteCompositionHome.actions).toBeUndefined();
+    expect(siteCompositionHome.operations).toBeUndefined();
     expect(blockPlacementCreate).toMatchObject({
       type: "create",
       entity: "block-placement",
@@ -7215,6 +7252,55 @@ function defaultEntities() {
           target: { query: "taskCompleted" },
         },
       },
+      operations: {
+        create: {
+          label: "Create Task",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              title: { field: "title" },
+              done: { field: "done" },
+              dueDate: { field: "dueDate" },
+            },
+          },
+          effect: { type: "createRecord" },
+          output: { type: "create" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+        },
+        update: {
+          label: "Update Task",
+          kind: "update",
+          scope: "record",
+          input: {
+            fields: {
+              title: { field: "title" },
+              done: { field: "done" },
+              dueDate: { field: "dueDate" },
+            },
+          },
+          effect: { type: "patchRecord" },
+          output: { type: "update" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+        },
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "command",
+          scope: "collection",
+          target: { query: "taskCompleted" },
+          effect: {
+            type: "runActionKind",
+            kind: "clear-completed",
+            action: "clearCompletedTasks",
+            query: "taskCompleted",
+          },
+          output: { type: "command" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+        },
+      },
     },
   };
 }
@@ -7351,6 +7437,23 @@ function noteEntity() {
       patch: { enabled: true },
       delete: { enabled: false },
     },
+    operations: {
+      create: {
+        label: "Create Note",
+        kind: "create",
+        scope: "collection",
+        input: {
+          fields: {
+            title: { field: "title" },
+            done: { field: "done" },
+          },
+        },
+        effect: { type: "createRecord" },
+        output: { type: "create" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
+      },
+    },
   };
 }
 
@@ -7411,6 +7514,7 @@ function rateCardEntities(resourceField: Record<string, unknown> = resourceRefer
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: testWriteOperations("Rate", ["resource", "optionalResource", "price"]),
     },
     resource: {
       label: "Resource",
@@ -7422,6 +7526,7 @@ function rateCardEntities(resourceField: Record<string, unknown> = resourceRefer
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: testWriteOperations("Resource", ["name"]),
     },
   };
 }
@@ -7445,7 +7550,7 @@ function referenceViews() {
       queries: [{ query: "rateAll" }],
       defaultQuery: "rateAll",
       result: { type: "list", itemView: "rateListItem" },
-      actions: [{ type: "create", createView: "rateCreate" }],
+      operations: [{ operation: "rate.create", createView: "rateCreate" }],
     },
     rateCreate: {
       type: "create",
@@ -7506,6 +7611,7 @@ function scopedRateEntities() {
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: testWriteOperations("Resource", ["name", "kind", "unit"]),
     },
     card: {
       label: "Rate card",
@@ -7544,6 +7650,13 @@ function scopedRateEntities() {
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: testWriteOperations("Rate card", [
+        "name",
+        "isDefault",
+        "marginMin",
+        "marginMed",
+        "marginMax",
+      ]),
     },
     rate: {
       label: "Rate",
@@ -7589,6 +7702,15 @@ function scopedRateEntities() {
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: testWriteOperations("Rate", [
+        "resource",
+        "card",
+        "cost",
+        "costUnit",
+        "price",
+        "priceSet",
+        "currency",
+      ]),
     },
   };
 }
@@ -7796,7 +7918,7 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
       defaultQuery: "ratesForSelectedCard",
       result: { type: "list", itemView: "rateListItem" },
-      actions: [{ type: "create", createView: "rateCreateForCard" }],
+      operations: [{ operation: "rate.create", createView: "rateCreateForCard" }],
       ...rateHomeOverrides,
     },
     rateCreate: {
@@ -8066,9 +8188,38 @@ function defaultCollectionView() {
     ],
     defaultQuery: "taskAll",
     result: { type: "list", itemView: "taskListItem" },
-    actions: [
-      { type: "create", createView: "taskCreate" },
-      { type: "entityAction", action: "clearCompletedTasks", count: { type: "count" } },
+    operations: [
+      { operation: "task.create", createView: "taskCreate" },
+      { operation: "task.clearCompletedTasks", count: { type: "count" } },
     ],
   };
+}
+
+function testWriteOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  } satisfies NonNullable<AppSchema["entities"][string]["operations"]>;
 }

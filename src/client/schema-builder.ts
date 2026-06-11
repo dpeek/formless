@@ -89,6 +89,9 @@ export type SchemaBuilderKeyValidationResult =
       ok: false;
     };
 
+type EntityOperations = NonNullable<AppSchema["entities"][string]["operations"]>;
+type EntityOperation = EntityOperations[string];
+
 const builderKeyPattern = /^[A-Za-z][A-Za-z0-9]*$/;
 
 export function createSchemaBuilderDraft(schema: AppSchema): SchemaBuilderDraft {
@@ -233,16 +236,22 @@ function createEntity(
     throw new Error(`Entity key "${entityKey}" already exists.`);
   }
 
+  const label = cleanLabel(input.label ?? labelFromKey(entityKey), "Entity label");
+  const fields = {};
+
   schema.entities[entityKey] = {
-    label: cleanLabel(input.label ?? labelFromKey(entityKey), "Entity label"),
-    fields: {},
+    label,
+    fields,
     mutations: defaultMutationPolicy(),
+    operations: defaultBuilderOperations(label, fields),
   };
 }
 
 function updateEntityLabel(schema: AppSchema, entityKey: string, label: string) {
   const entity = getEntity(schema, entityKey);
+  const previousLabel = entity.label;
   entity.label = cleanLabel(label, `Entity "${entityKey}" label`);
+  syncDefaultOperationLabels(entity, previousLabel);
 }
 
 function addField(schema: AppSchema, input: Extract<SchemaBuilderIntent, { type: "addField" }>) {
@@ -255,6 +264,113 @@ function addField(schema: AppSchema, input: Extract<SchemaBuilderIntent, { type:
 
   const field = createField(schema, fieldKey, input.fieldType, input.metadata ?? {});
   entity.fields[fieldKey] = field;
+  syncDefaultOperationInputs(entity);
+}
+
+function defaultBuilderOperations(
+  label: string,
+  fields: AppSchema["entities"][string]["fields"],
+): EntityOperations {
+  const input = operationInputFromEntityFields(fields);
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
+
+function operationInputFromEntityFields(fields: AppSchema["entities"][string]["fields"]) {
+  return {
+    fields: Object.fromEntries(
+      Object.keys(fields).map((fieldName) => [fieldName, { field: fieldName }]),
+    ),
+  };
+}
+
+function syncDefaultOperationInputs(entity: AppSchema["entities"][string]) {
+  const operations = entity.operations;
+
+  if (operations === undefined) {
+    return;
+  }
+
+  const input = operationInputFromEntityFields(entity.fields);
+
+  if (isDefaultCreateOperation(operations.create)) {
+    operations.create = { ...operations.create, input };
+  }
+
+  if (isDefaultUpdateOperation(operations.update)) {
+    operations.update = { ...operations.update, input };
+  }
+}
+
+function syncDefaultOperationLabels(entity: AppSchema["entities"][string], previousLabel: string) {
+  const operations = entity.operations;
+
+  if (operations === undefined) {
+    return;
+  }
+
+  if (
+    isDefaultCreateOperation(operations.create) &&
+    operations.create.label === `Create ${previousLabel}`
+  ) {
+    operations.create = { ...operations.create, label: `Create ${entity.label}` };
+  }
+
+  if (
+    isDefaultUpdateOperation(operations.update) &&
+    operations.update.label === `Update ${previousLabel}`
+  ) {
+    operations.update = { ...operations.update, label: `Update ${entity.label}` };
+  }
+}
+
+function isDefaultCreateOperation(operation: EntityOperation | undefined) {
+  return (
+    operation?.kind === "create" &&
+    operation.scope === "collection" &&
+    operation.effect?.type === "createRecord" &&
+    operation.output.type === "create" &&
+    operation.idempotency.required &&
+    operation.idempotency.source === undefined &&
+    operation.audit.input === "summary" &&
+    operation.target === undefined &&
+    operation.policy === undefined
+  );
+}
+
+function isDefaultUpdateOperation(operation: EntityOperation | undefined) {
+  return (
+    operation?.kind === "update" &&
+    operation.scope === "record" &&
+    operation.effect?.type === "patchRecord" &&
+    operation.output.type === "update" &&
+    operation.idempotency.required &&
+    operation.idempotency.source === undefined &&
+    operation.audit.input === "summary" &&
+    operation.target === undefined &&
+    operation.policy === undefined
+  );
 }
 
 function updateFieldMetadata(

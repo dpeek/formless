@@ -16,12 +16,17 @@ import type {
   ToManyRelationshipSchema,
   ViewSchema,
 } from "@dpeek/formless-schema";
-import { isEntityActionVisibleToBrowser, type QueryExpression } from "@dpeek/formless-schema";
+import { type QueryExpression } from "@dpeek/formless-schema";
 import {
   selectEntityActionUi,
   type EntityActionTargetCountConfig,
   type EntityActionUiConfig,
 } from "./action-ui.ts";
+import {
+  selectAvailableEntityOperations,
+  selectEntityOperationByKind,
+  type EntityOperationPresentationConfig,
+} from "./operation-presentation-model.ts";
 import {
   selectCreateUnionPresentation,
   selectRecordUnionPresentation,
@@ -68,7 +73,7 @@ export type HomeContextNavigationGroupConfig = {
   label: string;
   queryName: string;
   query: QueryExpression;
-  createAction?: Extract<HomeActionConfig, { type: "create" }>;
+  createOperation?: Extract<HomeOperationConfig, { type: "create" }>;
 };
 
 export type HomeContextNavigationConfig = {
@@ -96,29 +101,35 @@ export type HomeContextConfig = {
   presentation: CollectionContextPresentation;
   navigation?: HomeContextNavigationConfig;
   relatedCollection?: RelatedCollectionConfig;
-  createAction?: Extract<HomeActionConfig, { type: "create" }>;
+  createOperation?: Extract<HomeOperationConfig, { type: "create" }>;
   itemViewName?: string;
   recordFields?: RecordFieldConfig[];
+  updateOperation?: EntityOperationPresentationConfig;
+  deleteOperation?: EntityOperationPresentationConfig;
   transitionActions: TransitionStateActionConfig[];
   recordUnion?: RecordUnionPresentationConfig;
 };
 
-export type HomeActionConfig =
+export type HomeOperationConfig =
   | {
       type: "create";
       label: string;
       entityName: string;
       entity: EntitySchema;
+      operationName: string;
+      operation: EntityOperationPresentationConfig;
       fields: CreateFieldConfig[];
       defaults: CreateDefaultConfig[];
       union?: CreateUnionPresentationConfig;
       enabled: boolean;
     }
   | {
-      type: "entity-action";
+      type: "command";
       label: string;
       entityName: string;
       actionName: string;
+      operationName: string;
+      operation: EntityOperationPresentationConfig;
       action: EntityActionSchema;
       ui: EntityActionUiConfig;
     };
@@ -128,7 +139,9 @@ export type HomeCollectionShellConfig = {
   entity: EntitySchema;
   context?: HomeContextConfig;
   queries: HomeQueriesConfig;
-  actions: HomeActionConfig[];
+  operations: HomeOperationConfig[];
+  updateOperation?: EntityOperationPresentationConfig;
+  deleteOperation?: EntityOperationPresentationConfig;
   summary?: HomeSummarySlotConfig[];
 };
 
@@ -142,6 +155,19 @@ export function selectHomeCollectionShell(
 ): HomeCollectionShellConfig {
   const queries = selectQueries(schema, collectionView);
   const summary = selectSummarySlots(schema, collectionView);
+  const updateOperation = selectEntityOperationByKind(
+    collectionView.entity,
+    entity,
+    "update",
+    "record",
+  );
+  const deleteOperation = selectEntityOperationByKind(
+    collectionView.entity,
+    entity,
+    "delete",
+    "record",
+  );
+  const operations = selectHomeOperations(schema, viewEntries, collectionView, entity);
 
   return {
     entityName: collectionView.entity,
@@ -150,7 +176,9 @@ export function selectHomeCollectionShell(
       ? {}
       : { context: selectContext(schema, viewEntries, collectionView) }),
     queries,
-    actions: selectHomeActions(schema, viewEntries, collectionView, entity),
+    operations,
+    ...(updateOperation === undefined ? {} : { updateOperation }),
+    ...(deleteOperation === undefined ? {} : { deleteOperation }),
     ...(summary.length === 0 ? {} : { summary }),
   };
 }
@@ -216,10 +244,10 @@ function selectContext(
     throw new Error(`Missing context query "${collectionView.context.query}".`);
   }
 
-  const createAction =
+  const createOperation =
     collectionView.context.createView === undefined
       ? undefined
-      : selectCreateAction(
+      : selectCreateOperation(
           schema,
           viewEntries,
           collectionView.context.createView,
@@ -238,6 +266,18 @@ function selectContext(
     itemView === undefined
       ? undefined
       : selectRecordUnionPresentation(schema, itemView, contextEntity);
+  const updateOperation = selectEntityOperationByKind(
+    collectionView.context.entity,
+    contextEntity,
+    "update",
+    "record",
+  );
+  const deleteOperation = selectEntityOperationByKind(
+    collectionView.context.entity,
+    contextEntity,
+    "delete",
+    "record",
+  );
 
   return {
     name: collectionView.context.name,
@@ -259,10 +299,10 @@ function selectContext(
               if (!query) {
                 throw new Error(`Missing context navigation query "${group.query}".`);
               }
-              const createAction =
+              const createOperation =
                 group.createView === undefined
                   ? undefined
-                  : selectCreateAction(
+                  : selectCreateOperation(
                       schema,
                       viewEntries,
                       group.createView,
@@ -273,14 +313,16 @@ function selectContext(
                 label: group.label,
                 queryName: group.query,
                 query: query.expression,
-                ...(createAction === undefined ? {} : { createAction }),
+                ...(createOperation === undefined ? {} : { createOperation }),
               };
             }),
           },
         }),
     ...(relatedCollection === undefined ? {} : { relatedCollection }),
-    ...(createAction === undefined ? {} : { createAction }),
-    transitionActions: selectTransitionStateActions(contextEntity),
+    ...(createOperation === undefined ? {} : { createOperation }),
+    ...(updateOperation === undefined ? {} : { updateOperation }),
+    ...(deleteOperation === undefined ? {} : { deleteOperation }),
+    transitionActions: selectTransitionStateActions(collectionView.context.entity, contextEntity),
     ...(itemViewName === undefined
       ? {}
       : {
@@ -344,43 +386,66 @@ function selectQueries(schema: AppSchema, collectionView: CollectionViewSchema):
   };
 }
 
-function selectHomeActions(
+function selectHomeOperations(
   schema: AppSchema,
   viewEntries: Array<[string, ViewSchema]>,
   collectionView: CollectionViewSchema,
-  entity: EntitySchema,
-): HomeActionConfig[] {
-  const actions: HomeActionConfig[] = [];
+  _entity: EntitySchema,
+): HomeOperationConfig[] {
+  const operations: HomeOperationConfig[] = [];
 
-  for (const slot of collectionView.actions ?? []) {
-    if (slot.type === "create") {
-      actions.push(selectCreateAction(schema, viewEntries, slot.createView, slot.label));
+  for (const binding of collectionView.operations ?? []) {
+    const operation = selectBoundCollectionOperation(schema, binding.operation);
+
+    if (operation === undefined) {
       continue;
     }
 
-    const action = entity.actions?.[slot.action];
+    if (operation.operation.kind === "create") {
+      const createOperation = selectCreateOperation(
+        schema,
+        viewEntries,
+        binding.createView,
+        binding.label,
+        operation,
+      );
+
+      if (createOperation !== undefined) {
+        operations.push(createOperation);
+      }
+      continue;
+    }
+
+    if (
+      operation.operation.kind !== "command" ||
+      operation.operation.effect?.type !== "runActionKind" ||
+      operation.operation.effect.action === undefined
+    ) {
+      continue;
+    }
+
+    const commandEntity = schema.entities[operation.entityName];
+    const action = commandEntity?.actions?.[operation.operation.effect.action];
 
     if (!action) {
-      throw new Error(`Missing entity action "${slot.action}".`);
-    }
-
-    if (!isEntityActionVisibleToBrowser(action)) {
       continue;
     }
 
-    const label = slot.label ?? action.label;
+    const label = binding.label ?? operation.label;
 
-    actions.push({
-      type: "entity-action",
+    operations.push({
+      type: "command",
       label,
-      entityName: collectionView.entity,
-      actionName: slot.action,
+      entityName: operation.entityName,
+      actionName: operation.operation.effect.action,
+      operationName: operation.operationName,
+      operation,
       action,
-      ui: selectEntityActionUi(schema, label, action, slot.count),
+      ui: selectEntityActionUi(schema, label, action, binding.count),
     });
   }
 
-  return actions;
+  return operations;
 }
 
 function selectSummarySlots(
@@ -432,12 +497,17 @@ export function selectAggregateSlot(
   };
 }
 
-function selectCreateAction(
+function selectCreateOperation(
   schema: AppSchema,
   viewEntries: Array<[string, ViewSchema]>,
-  createViewName: string,
+  createViewName: string | undefined,
   label?: string,
-): Extract<HomeActionConfig, { type: "create" }> {
+  operation?: EntityOperationPresentationConfig,
+): Extract<HomeOperationConfig, { type: "create" }> | undefined {
+  if (createViewName === undefined) {
+    throw new Error(`Missing create view for operation "${operation?.canonicalKey ?? "create"}".`);
+  }
+
   const createView = viewEntries.find(([viewName]) => viewName === createViewName)?.[1];
 
   if (!createView || createView.type !== "create") {
@@ -450,17 +520,56 @@ function selectCreateAction(
     throw new Error(`Missing create view entity "${createView.entity}".`);
   }
   const union = selectCreateUnionPresentation(schema, createView, entity);
+  const createOperation =
+    operation ?? selectEntityOperationByKind(createView.entity, entity, "create", "collection");
+
+  if (createOperation === undefined) {
+    return undefined;
+  }
+
+  if (
+    createOperation.entityName !== createView.entity ||
+    createOperation.operation.kind !== "create"
+  ) {
+    throw new Error(
+      `Create view "${createViewName}" must bind a create operation for entity "${createView.entity}".`,
+    );
+  }
 
   return {
     type: "create",
-    label: label ?? `Create ${entity.label}`,
+    label: label ?? createOperation.label,
     entityName: createView.entity,
     entity,
+    operationName: createOperation.operationName,
+    operation: createOperation,
     fields: selectCreateFields(createView, entity),
     defaults: selectCreateDefaults(createView, entity),
     ...(union === undefined ? {} : { union }),
-    enabled: entity.mutations.create.enabled,
+    enabled: true,
   };
+}
+
+function selectBoundCollectionOperation(
+  schema: AppSchema,
+  canonicalKey: string,
+): EntityOperationPresentationConfig | undefined {
+  const [entityName, operationName, extra] = canonicalKey.split(".");
+
+  if (!entityName || !operationName || extra !== undefined) {
+    throw new Error(`Invalid operation binding "${canonicalKey}".`);
+  }
+
+  const entity = schema.entities[entityName];
+  const operation = entity?.operations?.[operationName];
+
+  if (!entity || !operation) {
+    throw new Error(`Missing operation binding "${canonicalKey}".`);
+  }
+
+  return selectAvailableEntityOperations(entityName, entity, "collection").find(
+    (candidate) => candidate.operationName === operationName,
+  );
 }
 
 function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): CreateFieldConfig[] {

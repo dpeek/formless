@@ -14,9 +14,10 @@ import type {
   StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema, EntityMutationPolicy } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -83,14 +84,15 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/bootstrap?actorKind=runner`,
     );
     const ownerSchema = await getJson<{
-      schema: typeof instanceControlPlaneSchema;
+      schema: AppSchema;
       updatedAt: string;
     }>(`${controlPlaneApi}/schema`);
+    const parsedInstanceControlPlaneSchema = parseAppSchema(instanceControlPlaneSchema);
 
-    expect(runnerBootstrap.body.schema).toEqual(instanceControlPlaneSchema);
+    expect(runnerBootstrap.body.schema).toEqual(parsedInstanceControlPlaneSchema);
     expect(runnerBootstrap.body.records).toEqual([]);
     expect(runnerBootstrap.body.cursor).toBe(0);
-    expect(ownerSchema.body.schema).toEqual(instanceControlPlaneSchema);
+    expect(ownerSchema.body.schema).toEqual(parsedInstanceControlPlaneSchema);
     expect(ownerSchema.response.headers.get("Cache-Control")).toBe("no-store");
   });
 
@@ -511,8 +513,9 @@ async function postAdminJson<T>(path: string, body: unknown, options: { actorKin
 }
 
 async function postJson<T>(path: string, body: unknown, headers: Record<string, string> = {}) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: {
       ...headers,
       "Content-Type": "application/json",
@@ -521,7 +524,7 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
   });
 
   return {
-    body: (await response.json()) as T,
+    body: request.response(await response.json()) as T,
     response,
   };
 }

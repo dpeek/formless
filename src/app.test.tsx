@@ -29,6 +29,7 @@ import {
 } from "./client/store.ts";
 import type { TableCollectionResultModel } from "./client/collection-result-model.ts";
 import type { ListResultModel } from "./client/list-result-model.ts";
+import type { EntityOperationPresentationConfig } from "./client/operation-presentation-model.ts";
 import type { ClientAppTarget } from "./client/app-target.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
@@ -59,7 +60,7 @@ import {
   selectScreenModels,
   type CreateFieldConfig,
   type EditViewConfig,
-  type HomeActionConfig,
+  type HomeOperationConfig,
   type HomeScreenModel,
   type HomeQueryTabConfig,
   type HomeViewModel,
@@ -120,6 +121,7 @@ function listResult(
     type: "list",
     itemViewName: "testItem",
     recordFields,
+    updateOperation: testUpdateOperation("task"),
     transitionActions: [],
     ...options,
   };
@@ -133,6 +135,7 @@ function tableResult(
     type: "table",
     tableViewName: "testTable",
     columns,
+    updateOperation: testUpdateOperation("task"),
     transitionActions: [],
     ...options,
   };
@@ -3838,7 +3841,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="$900.00"');
   });
 
-  it("keeps collection actions below the current generated table result", () => {
+  it("keeps collection operations below the current generated table result", () => {
     const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
@@ -3962,7 +3965,7 @@ describe("generated collection home", () => {
     expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);
     expect(selectedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
 
-    const rateCreateAction = rateModel.actions.find(
+    const rateCreateAction = rateModel.operations.find(
       (action) => action.type === "create" && action.entityName === "rate",
     );
 
@@ -4293,7 +4296,7 @@ describe("generated collection home", () => {
 describe("generated forms and records", () => {
   it("renders the task create dialog with type-aware controls", () => {
     const task = appSchema.entities.task;
-    const action = createAction(task, ["title", "done", "dueDate"]);
+    const action = createOperation(task, ["title", "done", "dueDate"]);
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -4310,7 +4313,7 @@ describe("generated forms and records", () => {
 
   it("renders enum create controls with option labels", () => {
     const task = taskEntityWithKindEnum();
-    const action = createAction(task, ["kind"]);
+    const action = createOperation(task, ["kind"]);
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -4324,8 +4327,8 @@ describe("generated forms and records", () => {
   });
 
   it("renders create fields for the active union discriminator", () => {
-    const roleAction = requiredCreateAction(generatedDiscriminatedTaskSchema(), "taskHome");
-    const streamAction = requiredCreateAction(
+    const roleAction = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
+    const streamAction = requiredCreateOperation(
       generatedDiscriminatedTaskSchema({ defaultKind: "stream" }),
       "taskHome",
     );
@@ -4345,7 +4348,7 @@ describe("generated forms and records", () => {
   });
 
   it("renders fixed-discriminator create fields from literal defaults", () => {
-    const action = requiredCreateAction(
+    const action = requiredCreateOperation(
       generatedDiscriminatedTaskSchema({ fixedCreateKind: "stream" }),
       "taskHome",
     );
@@ -4365,9 +4368,9 @@ describe("generated forms and records", () => {
   });
 
   it("renders source site page, post and project root creates with fixed block types", () => {
-    const pageAction = requiredRootNavigationCreateAction("Pages");
-    const postAction = requiredRootNavigationCreateAction("Posts");
-    const projectAction = requiredRootNavigationCreateAction("Projects");
+    const pageAction = requiredRootNavigationCreateOperation("Pages");
+    const postAction = requiredRootNavigationCreateOperation("Posts");
+    const projectAction = requiredRootNavigationCreateOperation("Projects");
     const pageHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={pageAction} renderDialogCancel={false} />,
     );
@@ -4431,7 +4434,7 @@ describe("generated forms and records", () => {
   });
 
   it("renders source site link creates with mode-specific destination fields", () => {
-    const baseAction = requiredCreateAction(siteSourceSchema, "blockHome");
+    const baseAction = requiredCreateOperation(siteSourceSchema, "blockHome");
     const typeField = siteSourceSchema.entities.block.fields.type;
 
     if (typeField.type !== "enum") {
@@ -4755,11 +4758,14 @@ describe("generated forms and records", () => {
 
   it("renders markdown create controls as rich editors with hidden string inputs", () => {
     const task = taskEntityWithMarkdownBody();
-    const action: Extract<HomeActionConfig, { type: "create" }> = {
+    const operation = testCreateOperation("task");
+    const action: Extract<HomeOperationConfig, { type: "create" }> = {
       type: "create",
       label: "Create Task",
       entityName: "task",
       entity: task,
+      operationName: operation.operationName,
+      operation,
       fields: [
         {
           fieldName: "body",
@@ -5275,7 +5281,7 @@ describe("generated forms and records", () => {
 
   it("renders number create controls and inline editors with numeric constraints", () => {
     const task = taskEntityWithEstimateNumber();
-    const action = createAction(task, ["estimate"]);
+    const action = createOperation(task, ["estimate"]);
     const createHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -5377,7 +5383,7 @@ describe("generated forms and records", () => {
 
   it("renders reference create controls with target display labels", () => {
     const rate = rateEntity();
-    const action = createAction(rate, ["resource"], "rate");
+    const action = createOperation(rate, ["resource"], "rate");
 
     applyBootstrapResponse(
       bootstrap([resourceRecord("resource-1", "Designer"), resourceRecord("resource-2", "Lead")]),
@@ -5396,7 +5402,7 @@ describe("generated forms and records", () => {
 
   it("renders generated create controls for current editor hints", () => {
     const entity = fieldEditorCharacterizationEntity();
-    const action = fieldEditorCharacterizationCreateAction(entity);
+    const action = fieldEditorCharacterizationCreateOperation(entity);
 
     applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")]));
     const html = renderToStaticMarkup(
@@ -5577,12 +5583,12 @@ describe("generated forms and records", () => {
       return renderToStaticMarkup(
         <SchemaAppProvider schemaKey="tasks">
           <RecordFieldEditor
-            canPatch
             density="compact"
             entityName="editorCase"
             fieldConfig={recordFieldConfig(entity, fieldName, editor, commit)}
             recordId="record-editor-case-1"
             showLabel={showLabel}
+            updateOperation={testUpdateOperation("editorCase")}
           />
         </SchemaAppProvider>,
       );
@@ -5619,7 +5625,7 @@ describe("generated forms and records", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
+    const action = rateModel?.operations.find((candidate) => candidate.type === "create");
 
     if (!action || action.type !== "create") {
       throw new Error("Missing resource create action.");
@@ -5649,10 +5655,10 @@ describe("generated forms and records", () => {
     const models = selectCollectionModels(rateCardSchema);
     const resourceCreate = models
       .find((model) => model.viewName === "resourceHome")
-      ?.actions.find((action) => action.type === "create");
+      ?.operations.find((action) => action.type === "create");
     const cardCreate = models
       .find((model) => model.viewName === "cardHome")
-      ?.actions.find((action) => action.type === "create");
+      ?.operations.find((action) => action.type === "create");
 
     if (!resourceCreate || resourceCreate.type !== "create") {
       throw new Error("Missing resource create action.");
@@ -5685,7 +5691,7 @@ describe("generated forms and records", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
+    const action = rateModel?.operations.find((candidate) => candidate.type === "create");
 
     if (!action || action.type !== "create") {
       throw new Error("Missing resource create action.");
@@ -5701,7 +5707,7 @@ describe("generated forms and records", () => {
 
   it("resolves current visible create values by field type", () => {
     const entity = fieldBehaviorEntity();
-    const action = createAction(entity, [
+    const action = createOperation(entity, [
       "title",
       "done",
       "dueDate",
@@ -5740,7 +5746,7 @@ describe("generated forms and records", () => {
   });
 
   it("resolves create values from active union fields only", () => {
-    const action = requiredCreateAction(generatedDiscriminatedTaskSchema(), "taskHome");
+    const action = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
     const formData = new FormData();
 
     formData.set("kind", "stream");
@@ -5754,7 +5760,7 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source task create and edit flows wired through field behavior", () => {
-    const action = requiredCreateAction(appSchema, "taskHome");
+    const action = requiredCreateOperation(appSchema, "taskHome");
     const createHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -5782,7 +5788,7 @@ describe("generated forms and records", () => {
     const emptyDateFormData = new FormData();
     emptyDateFormData.set("dueDate", "");
     expect(
-      resolveCreateValues(emptyDateFormData, createAction(appSchema.entities.task, ["dueDate"])),
+      resolveCreateValues(emptyDateFormData, createOperation(appSchema.entities.task, ["dueDate"])),
     ).toEqual({
       dueDate: "",
     });
@@ -5819,7 +5825,7 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source rate-card create and edit flows wired through field behavior", () => {
-    const action = requiredCreateAction(rateCardSchema, "rateHome");
+    const action = requiredCreateOperation(rateCardSchema, "rateHome");
     const createHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -5865,7 +5871,7 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source site create and edit flows wired through field behavior", () => {
-    const action = requiredCreateAction(siteSourceSchema, "blockHome");
+    const action = requiredCreateOperation(siteSourceSchema, "blockHome");
     const formData = new FormData();
     formData.set("type", "post");
     formData.set("label", "Field behavior note");
@@ -5999,33 +6005,33 @@ describe("generated forms and records", () => {
     const imageHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="site">
         <RecordFieldEditor
-          canPatch
           entityName="block"
           fieldConfig={mediaAssetFieldConfig}
           recordId="block-image"
           showLabel
+          updateOperation={testUpdateOperation("block")}
         />
       </SchemaAppProvider>,
     );
     const hrefHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="site">
         <RecordFieldEditor
-          canPatch
           entityName="block"
           fieldConfig={hrefFieldConfig}
           recordId="block-image"
           showLabel
+          updateOperation={testUpdateOperation("block")}
         />
       </SchemaAppProvider>,
     );
     const emptyHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="site">
         <RecordFieldEditor
-          canPatch
           entityName="block"
           fieldConfig={mediaAssetFieldConfig}
           recordId="block-empty-image"
           showLabel
+          updateOperation={testUpdateOperation("block")}
         />
       </SchemaAppProvider>,
     );
@@ -6089,22 +6095,22 @@ describe("generated forms and records", () => {
     const validHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="tasks">
         <RecordFieldEditor
-          canPatch
           entityName="mediaAssetCase"
           fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
           recordId="media-asset-case-1"
           showLabel
+          updateOperation={testUpdateOperation("mediaAssetCase")}
         />
       </SchemaAppProvider>,
     );
     const brokenHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="tasks">
         <RecordFieldEditor
-          canPatch
           entityName="mediaAssetCase"
           fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
           recordId="media-asset-case-2"
           showLabel
+          updateOperation={testUpdateOperation("mediaAssetCase")}
         />
       </SchemaAppProvider>,
     );
@@ -6134,11 +6140,14 @@ describe("generated forms and records", () => {
         delete: { enabled: false },
       },
     };
-    const action: Extract<HomeActionConfig, { type: "create" }> = {
+    const operation = testCreateOperation("media");
+    const action: Extract<HomeOperationConfig, { type: "create" }> = {
       type: "create",
       label: "Create Media",
       entityName: "media",
       entity,
+      operationName: operation.operationName,
+      operation,
       fields: [createFieldConfig(entity, "href", "media")],
       defaults: [],
       enabled: entity.mutations.create.enabled,
@@ -6159,11 +6168,11 @@ describe("generated forms and records", () => {
     const editHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="tasks">
         <RecordFieldEditor
-          canPatch
           entityName="media"
           fieldConfig={recordFieldConfig(entity, "href", "media", "field-commit")}
           recordId="media-1"
           showLabel
+          updateOperation={testUpdateOperation("media")}
         />
       </SchemaAppProvider>,
     );
@@ -6184,7 +6193,7 @@ describe("generated forms and records", () => {
   });
 
   it("still resolves scoped create defaults for views that use them", () => {
-    const action = scopedRateCreateAction();
+    const action = scopedRateCreateOperation();
     const formData = new FormData();
     formData.set("resource", "resource-1");
     formData.set("cost", "325");
@@ -6207,7 +6216,7 @@ describe("generated forms and records", () => {
 
   it("resolves site scoped create defaults for block placements", () => {
     const collection = requiredSiteCollectionModel("pageCompositionHome");
-    const placementAction = collection.actions.find((action) => action.type === "create");
+    const placementAction = collection.operations.find((action) => action.type === "create");
 
     if (!placementAction || placementAction.type !== "create") {
       throw new Error("Missing placement create action.");
@@ -6244,7 +6253,7 @@ describe("generated forms and records", () => {
   });
 
   it("throws when create context defaults are unresolved", () => {
-    const action = scopedRateCreateAction();
+    const action = scopedRateCreateOperation();
 
     const formData = new FormData();
     formData.set("resource", "resource-1");
@@ -6291,7 +6300,7 @@ describe("generated forms and records", () => {
 
   it("renders only the fields declared by a create view in the dialog", () => {
     const task = appSchema.entities.task;
-    const action = createAction(task, ["title", "dueDate"]);
+    const action = createOperation(task, ["title", "dueDate"]);
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -6308,7 +6317,7 @@ describe("generated forms and records", () => {
     const task = withMutationPolicy(appSchema.entities.task, { create: false });
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm
-        action={createAction(task, ["title", "done", "dueDate"])}
+        action={createOperation(task, ["title", "done", "dueDate"])}
         renderDialogCancel={false}
       />,
     );
@@ -6361,7 +6370,7 @@ describe("generated forms and records", () => {
         entity={taskWithDelete}
         entityName="task"
         query={{ kind: "all" }}
-        result={listResult(recordFields)}
+        result={listResult(recordFields, { deleteOperation: testDeleteOperation("task") })}
       />,
     );
 
@@ -6401,7 +6410,7 @@ describe("generated forms and records", () => {
         entity={taskWithDelete}
         entityName="task"
         query={{ kind: "all" }}
-        result={tableResult(columns)}
+        result={tableResult(columns, { deleteOperation: testDeleteOperation("task") })}
       />,
     );
 
@@ -6438,49 +6447,95 @@ function createFields(entity: EntitySchema, fieldNames: string[]): CreateFieldCo
   })) as CreateFieldConfig[];
 }
 
-function createAction(
+function testCreateOperation(entityName: string): EntityOperationPresentationConfig {
+  return testOperation(entityName, "create", "collection");
+}
+
+function testUpdateOperation(entityName: string): EntityOperationPresentationConfig {
+  return testOperation(entityName, "update", "record");
+}
+
+function testDeleteOperation(entityName: string): EntityOperationPresentationConfig {
+  return testOperation(entityName, "delete", "record");
+}
+
+function testOperation(
+  entityName: string,
+  kind: "create" | "update" | "delete",
+  scope: "collection" | "record",
+): EntityOperationPresentationConfig {
+  const operationName = kind === "update" ? "update" : kind;
+  const effect =
+    kind === "create"
+      ? { type: "createRecord" as const }
+      : kind === "update"
+        ? { type: "patchRecord" as const }
+        : { type: "deleteRecord" as const };
+
+  return {
+    entityName,
+    operationName,
+    canonicalKey: `${entityName}.${operationName}`,
+    label: kind === "create" ? "Create" : kind === "update" ? "Update" : "Delete",
+    operation: {
+      kind,
+      scope,
+      input: { fields: {} },
+      effect,
+      output: { type: kind },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
+
+function createOperation(
   entity: EntitySchema,
   fieldNames: string[],
   entityName = "task",
-): Extract<HomeActionConfig, { type: "create" }> {
+): Extract<HomeOperationConfig, { type: "create" }> {
+  const operation = testCreateOperation(entityName);
+
   return {
     type: "create",
     label: `Create ${entity.label}`,
     entityName,
     entity,
+    operationName: operation.operationName,
+    operation,
     fields: createFields(entity, fieldNames),
     defaults: [],
     enabled: entity.mutations.create.enabled,
   };
 }
 
-function requiredCreateAction(
+function requiredCreateOperation(
   schema: AppSchema,
   viewName: string,
-): Extract<HomeActionConfig, { type: "create" }> {
-  const action = requiredCollectionModel(schema, viewName).actions.find(
+): Extract<HomeOperationConfig, { type: "create" }> {
+  const action = requiredCollectionModel(schema, viewName).operations.find(
     (candidate) => candidate.type === "create",
   );
 
   if (!action || action.type !== "create") {
-    throw new Error(`Missing create action for ${viewName}.`);
+    throw new Error(`Missing create operation for ${viewName}.`);
   }
 
   return action;
 }
 
-function requiredRootNavigationCreateAction(
+function requiredRootNavigationCreateOperation(
   groupLabel: string,
-): Extract<HomeActionConfig, { type: "create" }> {
+): Extract<HomeOperationConfig, { type: "create" }> {
   const group = requiredSiteCollectionModel("siteCompositionHome").context?.navigation?.groups.find(
     (candidate) => candidate.label === groupLabel,
   );
 
-  if (!group?.createAction) {
-    throw new Error(`Missing root navigation create action for ${groupLabel}.`);
+  if (!group?.createOperation) {
+    throw new Error(`Missing root navigation create operation for ${groupLabel}.`);
   }
 
-  return group.createAction;
+  return group.createOperation;
 }
 
 function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {
@@ -6660,7 +6715,7 @@ function generatedDiscriminatedTaskSchema(
         queries: [{ query: "taskAll" }],
         defaultQuery: "taskAll",
         result: { type: "list", itemView: "taskVariantItem" },
-        actions: [{ type: "create", createView: "taskCreate" }],
+        operations: [{ operation: "task.create", createView: "taskCreate" }],
       },
       taskEditHome: {
         type: "collection",
@@ -7042,14 +7097,17 @@ function rateStackScreenSchema(): AppSchema {
   };
 }
 
-function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }> {
+function scopedRateCreateOperation(): Extract<HomeOperationConfig, { type: "create" }> {
   const rate = rateCardSchema.entities.rate;
+  const operation = testCreateOperation("rate");
 
   return {
     type: "create",
     label: "Create Rate",
     entityName: "rate",
     entity: rate,
+    operationName: operation.operationName,
+    operation,
     fields: createFields(rate, ["resource", "cost", "costUnit", "price"]),
     defaults: [
       {
@@ -7062,14 +7120,18 @@ function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }>
   };
 }
 
-function fieldEditorCharacterizationCreateAction(
+function fieldEditorCharacterizationCreateOperation(
   entity: EntitySchema,
-): Extract<HomeActionConfig, { type: "create" }> {
+): Extract<HomeOperationConfig, { type: "create" }> {
+  const operation = testCreateOperation("editorCase");
+
   return {
     type: "create",
     label: `Create ${entity.label}`,
     entityName: "editorCase",
     entity,
+    operationName: operation.operationName,
+    operation,
     fields: [
       createFieldConfig(entity, "title", "text"),
       createFieldConfig(entity, "summary", "textarea"),
@@ -7423,9 +7485,9 @@ function rateCardSchemaWithListDetailQueryTabsAndScopedRateCreate(): AppSchema {
             count: { type: "count" },
           },
         ],
-        actions: [
+        operations: [
           {
-            type: "create",
+            operation: "rate.create",
             createView: "rateCreateForCard",
             label: "Create Rate",
           },
@@ -7722,13 +7784,35 @@ function withMutationPolicy(
   entity: EntitySchema,
   options: { create?: boolean; patch?: boolean; delete?: boolean },
 ): EntitySchema {
+  const mutations = {
+    create: { enabled: options.create ?? entity.mutations.create.enabled },
+    patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
+    delete: { enabled: options.delete ?? entity.mutations.delete.enabled },
+  };
+  const operations = { ...entity.operations };
+
+  if (mutations.create.enabled) {
+    operations.create ??= testCreateOperation("entity").operation;
+  } else {
+    delete operations.create;
+  }
+
+  if (mutations.patch.enabled) {
+    operations.update ??= testUpdateOperation("entity").operation;
+  } else {
+    delete operations.update;
+  }
+
+  if (mutations.delete.enabled) {
+    operations.delete ??= testDeleteOperation("entity").operation;
+  } else {
+    delete operations.delete;
+  }
+
   return {
     ...entity,
-    mutations: {
-      create: { enabled: options.create ?? entity.mutations.create.enabled },
-      patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
-      delete: { enabled: options.delete ?? entity.mutations.delete.enabled },
-    },
+    mutations,
+    operations,
   };
 }
 

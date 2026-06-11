@@ -240,10 +240,11 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
   const idempotencyKey = useRef(createSiteSubscribeIdempotencyKey(block.id));
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [error, setError] = useState<string | undefined>();
-  const action = block.publicAction;
-  const siteKey = action?.challenge.kind === "turnstile" ? action.challenge.siteKey : undefined;
+  const operation = block.publicOperation;
+  const siteKey =
+    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
 
-  if (!action || !siteKey) {
+  if (!operation || !siteKey) {
     return (
       <section className="max-w-xl space-y-3" data-block-type={block.type}>
         <SubscribeFormHeading block={block} />
@@ -252,7 +253,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
     );
   }
 
-  const publicAction = action;
+  const publicOperation = operation;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -274,7 +275,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
       await submitSiteSubscribeForm({
         email,
         idempotencyKey: idempotencyKey.current,
-        route: publicAction.route,
+        route: publicOperation.route,
         siteBlockId: block.id,
         turnstileToken,
       });
@@ -291,10 +292,10 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
     <section className="max-w-xl space-y-4" data-block-type={block.type}>
       <SubscribeFormHeading block={block} />
       <form
-        action={publicAction.route}
+        action={publicOperation.route}
         className="space-y-3"
         data-site-subscribe-form={block.id}
-        data-site-subscribe-route={publicAction.route}
+        data-site-subscribe-route={publicOperation.route}
         method="post"
         onSubmit={onSubmit}
       >

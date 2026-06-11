@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { siteSubscribeFormRequestBody, submitSiteSubscribeForm } from "./subscribe-form.ts";
 
 describe("public Site subscribe form submit helpers", () => {
-  it("builds the public action body from email, source block id, idempotency key, and Turnstile token", () => {
+  it("builds the public operation body from email, source block id, idempotency key, and Turnstile token", () => {
     expect(
       siteSubscribeFormRequestBody({
         email: "reader@example.com",
@@ -25,15 +25,29 @@ describe("public Site subscribe form submit helpers", () => {
     });
   });
 
-  it("posts subscribe form submissions to the projected public action route", async () => {
+  it("posts subscribe form submissions to the projected public operation route", async () => {
     const requests: { url: string; init: RequestInit | undefined }[] = [];
     const fetcher: typeof fetch = async (url, init) => {
       requests.push({ url: requestUrlString(url), init });
 
       return Response.json({
-        actionId: "action-1",
-        cursor: 12,
-        status: "accepted",
+        invocationId: "operation-1",
+        operation: {
+          entityName: "subscription",
+          operationName: "subscribe",
+          canonicalKey: "subscription.subscribe",
+          kind: "command",
+        },
+        output: {
+          type: "command",
+          affectedChangeIds: ["10"],
+          cursor: 12,
+          response: {
+            actionId: "operation:subscription.subscribe:key-1",
+            cursor: 12,
+          },
+        },
+        status: "committed",
       });
     };
 
@@ -42,18 +56,32 @@ describe("public Site subscribe form submit helpers", () => {
         email: "reader@example.com",
         fetcher,
         idempotencyKey: "site-subscribe:block-1:key-1",
-        route: "/api/site/public/actions/subscribe",
+        route: "/api/site/public/operations/subscription/subscribe",
         siteBlockId: "block-1",
         turnstileToken: "token-ok",
       }),
     ).resolves.toEqual({
-      actionId: "action-1",
-      cursor: 12,
-      status: "accepted",
+      invocationId: "operation-1",
+      operation: {
+        entityName: "subscription",
+        operationName: "subscribe",
+        canonicalKey: "subscription.subscribe",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        affectedChangeIds: ["10"],
+        cursor: 12,
+        response: {
+          actionId: "operation:subscription.subscribe:key-1",
+          cursor: 12,
+        },
+      },
+      status: "committed",
     });
     expect(requests).toEqual([
       {
-        url: "/api/site/public/actions/subscribe",
+        url: "/api/site/public/operations/subscription/subscribe",
         init: {
           body: JSON.stringify({
             input: {
@@ -77,20 +105,20 @@ describe("public Site subscribe form submit helpers", () => {
     ]);
   });
 
-  it("surfaces public-safe action errors", async () => {
+  it("surfaces public-safe operation errors", async () => {
     const fetcher: typeof fetch = async () =>
-      Response.json({ error: "Public action challenge failed." }, { status: 403 });
+      Response.json({ error: "Public operation challenge failed." }, { status: 403 });
 
     await expect(
       submitSiteSubscribeForm({
         email: "reader@example.com",
         fetcher,
         idempotencyKey: "site-subscribe:block-1:key-1",
-        route: "/api/site/public/actions/subscribe",
+        route: "/api/site/public/operations/subscription/subscribe",
         siteBlockId: "block-1",
         turnstileToken: "bad-token",
       }),
-    ).rejects.toThrow("Public action challenge failed.");
+    ).rejects.toThrow("Public operation challenge failed.");
   });
 });
 

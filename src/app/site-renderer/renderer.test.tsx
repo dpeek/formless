@@ -132,7 +132,7 @@ describe("public Site renderer characterization", () => {
     expect(html).not.toContain("Unsupported block");
   });
 
-  it("renders subscribe forms with public action route and Turnstile widget facts", () => {
+  it("renders subscribe forms with public operation route and Turnstile widget facts", () => {
     const html = renderSite(
       pageNode("home", [
         placement(
@@ -140,9 +140,10 @@ describe("public Site renderer characterization", () => {
           blockNode("subscribe-block", "subscribeForm", "Join the list", {
             body: "Get **product notes**.",
             buttonLabel: "Join",
-            publicAction: {
-              actionName: "subscribe",
-              route: "/api/site/public/actions/subscribe",
+            publicOperation: {
+              entityName: "subscription",
+              operationName: "subscribe",
+              route: "/api/site/public/operations/subscription/subscribe",
               challenge: {
                 kind: "turnstile",
                 siteKey: "public-site-key",
@@ -155,8 +156,10 @@ describe("public Site renderer characterization", () => {
 
     expect(html).toContain('data-block-type="subscribeForm"');
     expect(html).toContain('data-site-subscribe-form="subscribe-block"');
-    expect(html).toContain('data-site-subscribe-route="/api/site/public/actions/subscribe"');
-    expect(html).toContain('action="/api/site/public/actions/subscribe"');
+    expect(html).toContain(
+      'data-site-subscribe-route="/api/site/public/operations/subscription/subscribe"',
+    );
+    expect(html).toContain('action="/api/site/public/operations/subscription/subscribe"');
     expect(html).toContain('name="email"');
     expect(html).toContain('type="email"');
     expect(html).toContain("Join");
@@ -169,7 +172,7 @@ describe("public Site renderer characterization", () => {
     expect(html).not.toContain("reader@example.com");
   });
 
-  it("does not render a working subscribe form without projected public action facts", () => {
+  it("does not render a working subscribe form without projected public operation facts", () => {
     const html = renderSite(
       pageNode("home", [
         placement(

@@ -154,17 +154,19 @@ describe("client db", () => {
   });
 
   it("updates the cached schema without replacing records", async () => {
+    const fields = {
+      ...appSchema.entities.task.fields,
+      notes: { type: "text", required: false },
+    } satisfies AppSchema["entities"][string]["fields"];
     const nextSchema = {
       version: 1,
       entities: {
         task: {
           label: "Planner task",
-          fields: {
-            ...appSchema.entities.task.fields,
-            notes: { type: "text", required: false },
-          },
+          fields,
           mutations: defaultMutations(),
           actions: appSchema.entities.task.actions,
+          operations: taskOperations("Planner task", fields),
         },
       },
       queries: appSchema.queries,
@@ -318,6 +320,40 @@ function recordWithEstimate(id: string, title: string, estimate: number): Stored
   return {
     ...record(id, title),
     values: { title, done: false, estimate },
+  };
+}
+
+function taskOperations(
+  label: string,
+  fields: AppSchema["entities"][string]["fields"],
+): NonNullable<AppSchema["entities"][string]["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+  const clearCompletedTasks = appSchema.entities.task.operations?.clearCompletedTasks;
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(clearCompletedTasks === undefined ? {} : { clearCompletedTasks }),
   };
 }
 

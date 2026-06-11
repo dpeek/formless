@@ -21,10 +21,7 @@ import {
   restoreStoreSnapshot,
   saveActiveSchema,
   startPushSync,
-  submitAction,
-  submitCreateMutation,
-  submitDeleteMutation,
-  submitPatchMutation,
+  submitOperation,
   syncClient,
 } from "./sync.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
@@ -39,10 +36,8 @@ import {
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type {
-  ActionResponse,
   BootstrapResponse,
   ChangeRow,
-  MutationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
   StoreSnapshot,
@@ -51,6 +46,7 @@ import type {
   SyncSocketServerMessage,
   SyncResponse,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import {
   rateSourceSchema as rateCardSchema,
@@ -258,7 +254,7 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
-  it("sends browser replica compatibility facts with mutation writes", async () => {
+  it("sends browser replica compatibility facts with operation writes", async () => {
     await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
@@ -266,14 +262,15 @@ describe("client sync", () => {
       cursor: 0,
     });
 
-    await submitCreateMutation(
+    await submitOperation(
       "tasks",
       "task",
-      { title: "Headers", done: false },
+      "create",
+      { input: { title: "Headers", done: false } },
       async (input, init) => {
         const headers = new Headers(init?.headers);
 
-        expect(input).toBe("/api/tasks/mutations");
+        expect(input).toBe("/api/tasks/operations/task/create");
         expect(headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
           String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
         );
@@ -285,12 +282,17 @@ describe("client sync", () => {
           /^sha256:[a-f0-9]{64}$/,
         );
 
-        return Response.json({
-          mutationId: "mutation-response",
-          record: record("record-1", "Headers"),
-          changes: [change(1, "record-1", "Headers")],
-          cursor: 1,
-        } satisfies MutationResponse);
+        const changes = [change(1, "record-1", "Headers")];
+
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: record("record-1", "Headers"),
+          }),
+        );
       },
     );
   });
@@ -656,77 +658,90 @@ describe("client sync", () => {
     expect(sockets.instances[0]?.readyState).toBe(3);
   });
 
-  it("merges accepted create mutations into local state", async () => {
+  it("merges accepted create operations into local state", async () => {
     const acceptedRecord = record("record-1", "First");
 
-    const response = await submitCreateMutation(
+    const response = await submitOperation(
       "tasks",
       "task",
-      { title: "First", done: false },
+      "create",
+      { input: { title: "First", done: false } },
       async (input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(1, operation.idempotencyKey, acceptedRecord, "create")];
 
-        expect(input).toBe("/api/tasks/mutations");
+        expect(input).toBe("/api/tasks/operations/task/create");
         expect(init?.method).toBe("POST");
-        expect(mutation).toMatchObject({
-          entity: "task",
-          op: "create",
-          values: { title: "First", done: false },
+        expect(operation).toMatchObject({
+          input: { title: "First", done: false },
+          source: { protocol: "generated-ui" },
         });
 
-        return Response.json({
-          record: acceptedRecord,
-          changes: [mutationChange(1, mutation.mutationId, acceptedRecord, "create")],
-          cursor: 1,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: acceptedRecord,
+          }),
+        );
       },
     );
 
     const snapshot = await readLocalSnapshot("tasks");
 
-    expect(response.record).toEqual(acceptedRecord);
+    expect(response.output.type).toBe("create");
+    expect(response.output.type === "create" ? response.output.record : undefined).toEqual(
+      acceptedRecord,
+    );
     expect(snapshot.records).toEqual([acceptedRecord]);
     expect(snapshot.cursor).toBe(1);
   });
 
-  it("posts patch mutations and merges accepted records", async () => {
+  it("posts update operations and merges accepted records", async () => {
     const acceptedRecord = record("record-1", "First", true);
 
-    const response = await submitPatchMutation(
+    const response = await submitOperation(
       "tasks",
       "task",
-      "record-1",
-      { done: true },
+      "update",
+      { input: { done: true }, recordId: "record-1" },
       async (input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(2, operation.idempotencyKey, acceptedRecord, "patch")];
 
-        expect(input).toBe("/api/tasks/mutations");
+        expect(input).toBe("/api/tasks/operations/task/update");
         expect(init?.method).toBe("POST");
-        expect(mutation).toMatchObject({
-          entity: "task",
-          op: "patch",
+        expect(operation).toMatchObject({
+          input: { done: true },
           recordId: "record-1",
-          values: { done: true },
+          source: { protocol: "generated-ui" },
         });
 
-        return Response.json({
-          record: acceptedRecord,
-          changes: [mutationChange(2, mutation.mutationId, acceptedRecord, "patch")],
-          cursor: 2,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "update",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 2,
+            record: acceptedRecord,
+          }),
+        );
       },
     );
 
     const snapshot = await readLocalSnapshot("tasks");
 
-    expect(response.record).toEqual(acceptedRecord);
+    expect(response.output.type).toBe("update");
+    expect(response.output.type === "update" ? response.output.record : undefined).toEqual(
+      acceptedRecord,
+    );
     expect(snapshot.records).toEqual([acceptedRecord]);
     expect(snapshot.cursor).toBe(2);
   });
 
-  it("posts delete mutations and merges accepted tombstones", async () => {
+  it("posts delete operations and merges accepted tombstones", async () => {
     const activeRecord = record("record-1", "First", false);
     const tombstone = {
       ...activeRecord,
@@ -741,61 +756,73 @@ describe("client sync", () => {
     });
     await refreshClientStoreFromDb("tasks");
 
-    const response = await submitDeleteMutation(
+    const response = await submitOperation(
       "tasks",
       "task",
-      "record-1",
+      "delete",
+      { recordId: "record-1" },
       async (input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(2, operation.idempotencyKey, tombstone, "delete")];
 
-        expect(input).toBe("/api/tasks/mutations");
+        expect(input).toBe("/api/tasks/operations/task/delete");
         expect(init?.method).toBe("POST");
-        expect(mutation).toMatchObject({
-          entity: "task",
-          op: "delete",
+        expect(operation).toMatchObject({
           recordId: "record-1",
+          source: { protocol: "generated-ui" },
         });
-        expect(mutation).not.toHaveProperty("values");
+        expect(operation).not.toHaveProperty("input");
 
-        return Response.json({
-          record: tombstone,
-          changes: [mutationChange(2, mutation.mutationId, tombstone, "delete")],
-          cursor: 2,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "delete",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 2,
+            recordId: tombstone.id,
+          }),
+        );
       },
     );
 
     const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
-    expect(response.record).toEqual(tombstone);
+    expect(response.output.type).toBe("delete");
+    expect(response.output.type === "delete" ? response.output.recordId : undefined).toBe(
+      tombstone.id,
+    );
     expect(snapshot.records).toEqual([tombstone]);
     expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
     expect(storeSnapshot.recordIdsByEntity.task ?? []).toEqual([]);
     expect(snapshot.cursor).toBe(2);
   });
 
-  it("merges all records returned by an accepted create mutation before advancing cursor", async () => {
+  it("merges all records returned by an accepted create operation before advancing cursor", async () => {
     const primaryRecord = record("record-1", "First");
     const lifecycleRecord = record("record-2", "Lifecycle");
 
-    await submitCreateMutation(
+    await submitOperation(
       "tasks",
       "task",
-      { title: "First", done: false },
+      "create",
+      { input: { title: "First", done: false } },
       async (_input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [
+          mutationChange(1, operation.idempotencyKey, primaryRecord, "create"),
+          mutationChange(2, operation.idempotencyKey, lifecycleRecord, "action"),
+        ];
 
-        return Response.json({
-          record: primaryRecord,
-          changes: [
-            mutationChange(1, mutation.mutationId, primaryRecord, "create"),
-            mutationChange(2, mutation.mutationId, lifecycleRecord, "action"),
-          ],
-          cursor: 2,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 2,
+            record: primaryRecord,
+          }),
+        );
       },
     );
 
@@ -865,7 +892,7 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(4);
   });
 
-  it("submits actions and merges tombstones into local state", async () => {
+  it("submits command operations and merges tombstones into local state", async () => {
     const tombstone = {
       ...record("record-1", "Done", true),
       deletedAt: "2026-04-28T00:01:00.000Z",
@@ -879,39 +906,50 @@ describe("client sync", () => {
     });
     await refreshClientStoreFromDb("tasks");
 
-    const response = await submitAction(
+    const response = await submitOperation(
       "tasks",
       "task",
       "clearCompletedTasks",
+      {},
       async (input, init) => {
-        const action = parseActionRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [actionChange(2, tombstone, operation.idempotencyKey)];
 
-        expect(input).toBe("/api/tasks/actions");
+        expect(input).toBe("/api/tasks/operations/task/clearCompletedTasks");
         expect(init?.method).toBe("POST");
-        expect(action).toMatchObject({
-          entity: "task",
-          action: "clearCompletedTasks",
+        expect(operation).toMatchObject({
+          source: { protocol: "generated-ui" },
         });
 
-        return Response.json({
-          actionId: action.actionId,
-          changes: [actionChange(2, tombstone, action.actionId)],
-          cursor: 2,
-        } satisfies ActionResponse);
+        return Response.json(
+          operationResponse({
+            type: "command",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 2,
+            response: {
+              actionId: operation.idempotencyKey,
+              changes,
+              cursor: 2,
+            },
+          }),
+        );
       },
     );
 
     const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
-    expect(response.changes[0]?.payload).toEqual(tombstone);
+    expect(
+      response.output.type === "command" ? response.output.changes[0]?.payload : undefined,
+    ).toEqual(tombstone);
     expect(snapshot.records).toEqual([tombstone]);
     expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
     expect(storeSnapshot.recordIdsByEntity.task ?? []).toEqual([]);
     expect(storeSnapshot.cursor).toBe(2);
   });
 
-  it("uses installed Tasks API paths for sync, writes, actions, snapshots, and resets", async () => {
+  it("uses installed Tasks API paths for sync, operation writes, snapshots, and resets", async () => {
     const work = installedTasksIdentity("work");
     const createdRecord = record("record-2", "Created in work");
     const tombstone = {
@@ -939,36 +977,50 @@ describe("client sync", () => {
       ),
     );
 
-    await submitCreateMutation(
+    await submitOperation(
       work,
       "task",
-      { title: "Created in work", done: false },
+      "create",
+      { input: { title: "Created in work", done: false } },
       async (input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(3, operation.idempotencyKey, createdRecord, "create")];
 
-        expect(input).toBe("/api/app-installs/tasks/work/mutations");
+        expect(input).toBe("/api/app-installs/tasks/work/operations/task/create");
         expect(init?.method).toBe("POST");
 
-        return Response.json({
-          record: createdRecord,
-          changes: [mutationChange(3, mutation.mutationId, createdRecord, "create")],
-          cursor: 3,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 3,
+            record: createdRecord,
+          }),
+        );
       },
     );
 
-    await submitAction(work, "task", "clearCompletedTasks", async (input, init) => {
-      const action = parseActionRequestBody(init?.body);
+    await submitOperation(work, "task", "clearCompletedTasks", {}, async (input, init) => {
+      const operation = parseOperationRequestBody(init?.body);
+      const changes = [actionChange(4, tombstone, operation.idempotencyKey)];
 
-      expect(input).toBe("/api/app-installs/tasks/work/actions");
+      expect(input).toBe("/api/app-installs/tasks/work/operations/task/clearCompletedTasks");
       expect(init?.method).toBe("POST");
 
-      return Response.json({
-        actionId: action.actionId,
-        changes: [actionChange(4, tombstone, action.actionId)],
-        cursor: 4,
-      } satisfies ActionResponse);
+      return Response.json(
+        operationResponse({
+          type: "command",
+          affectedChangeIds: changes.map((change) => String(change.seq)),
+          changes,
+          cursor: 4,
+          response: {
+            actionId: operation.idempotencyKey,
+            changes,
+            cursor: 4,
+          },
+        }),
+      );
     });
 
     const exported = await exportStoreSnapshot(
@@ -1026,7 +1078,7 @@ describe("client sync", () => {
     });
   });
 
-  it("uses installed Estii API paths for sync, writes, actions, snapshots, and resets", async () => {
+  it("uses installed Estii API paths for sync, operation writes, snapshots, and resets", async () => {
     const rates = installedEstiiIdentity("rates");
     const existingRate = rateRecord("rate-1", "resource-1", "card-1");
     const syncedRate = rateRecord("rate-2", "resource-2", "card-1");
@@ -1053,40 +1105,50 @@ describe("client sync", () => {
       ),
     );
 
-    await submitCreateMutation(
+    await submitOperation(
       rates,
       "resource",
-      { name: "Writer", kind: "role", unit: "day" },
+      "create",
+      { input: { name: "Writer", kind: "role", unit: "day" } },
       async (input, init) => {
-        const mutation = parseRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(3, operation.idempotencyKey, createdResource, "create")];
 
-        expect(input).toBe("/api/app-installs/estii/rates/mutations");
+        expect(input).toBe("/api/app-installs/estii/rates/operations/resource/create");
         expect(init?.method).toBe("POST");
 
-        return Response.json({
-          record: createdResource,
-          changes: [mutationChange(3, mutation.mutationId, createdResource, "create")],
-          cursor: 3,
-          mutationId: mutation.mutationId,
-        } satisfies MutationResponse);
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 3,
+            record: createdResource,
+          }),
+        );
       },
     );
 
-    await submitAction(rates, "rate", "regenerateMissingRates", async (input, init) => {
-      const action = parseActionRequestBody(init?.body);
+    await submitOperation(rates, "rate", "regenerateMissingRates", {}, async (input, init) => {
+      const operation = parseOperationRequestBody(init?.body);
+      const changes = [actionChange(4, actionRate, operation.idempotencyKey)];
 
-      expect(input).toBe("/api/app-installs/estii/rates/actions");
+      expect(input).toBe("/api/app-installs/estii/rates/operations/rate/regenerateMissingRates");
       expect(init?.method).toBe("POST");
-      expect(action).toMatchObject({
-        entity: "rate",
-        action: "regenerateMissingRates",
-      });
 
-      return Response.json({
-        actionId: action.actionId,
-        changes: [actionChange(4, actionRate, action.actionId)],
-        cursor: 4,
-      } satisfies ActionResponse);
+      return Response.json(
+        operationResponse({
+          type: "command",
+          affectedChangeIds: changes.map((change) => String(change.seq)),
+          changes,
+          cursor: 4,
+          response: {
+            actionId: operation.idempotencyKey,
+            changes,
+            cursor: 4,
+          },
+        }),
+      );
     });
 
     const exported = await exportStoreSnapshot(
@@ -1156,7 +1218,7 @@ describe("client sync", () => {
     });
   });
 
-  it("submits rate-card actions to the Estii API and merges created rates", async () => {
+  it("submits rate-card command operations to the Estii API and merges created rates", async () => {
     const createdRate = rateRecord("rate-1", "resource-1", "card-1");
 
     await saveBootstrapResponse("estii", {
@@ -1167,26 +1229,34 @@ describe("client sync", () => {
     });
     await refreshClientStoreFromDb("estii");
 
-    const response = await submitAction(
+    const response = await submitOperation(
       "estii",
       "rate",
       "regenerateMissingRates",
+      {},
       async (input, init) => {
-        const action = parseActionRequestBody(init?.body);
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [actionChange(1, createdRate, operation.idempotencyKey)];
 
-        expect(input).toBe("/api/estii/actions");
+        expect(input).toBe("/api/estii/operations/rate/regenerateMissingRates");
         expect(init?.method).toBe("POST");
-        expect(action).toMatchObject({
-          entity: "rate",
-          action: "regenerateMissingRates",
+        expect(operation).toMatchObject({
+          source: { protocol: "generated-ui" },
         });
-        expect(action).not.toHaveProperty("input");
 
-        return Response.json({
-          actionId: action.actionId,
-          changes: [actionChange(1, createdRate, action.actionId)],
-          cursor: 1,
-        } satisfies ActionResponse);
+        return Response.json(
+          operationResponse({
+            type: "command",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            response: {
+              actionId: operation.idempotencyKey,
+              changes,
+              cursor: 1,
+            },
+          }),
+        );
       },
     );
 
@@ -1194,7 +1264,9 @@ describe("client sync", () => {
     const rateSnapshot = await readLocalSnapshot("estii");
     const storeSnapshot = getClientStoreSnapshot();
 
-    expect(response.changes[0]?.payload).toEqual(createdRate);
+    expect(
+      response.output.type === "command" ? response.output.changes[0]?.payload : undefined,
+    ).toEqual(createdRate);
     expect(taskSnapshot.records).toEqual([]);
     expect(rateSnapshot.records).toEqual([createdRate]);
     expect(storeSnapshot.recordsById[createdRate.id]).toEqual(createdRate);
@@ -1704,7 +1776,7 @@ function createUnsafeLegacyReplica(name: string): Promise<void> {
   });
 }
 
-function parseRequestBody(body: BodyInit | null | undefined) {
+function parseOperationRequestBody(body: BodyInit | null | undefined) {
   if (typeof body !== "string") {
     throw new Error("Expected a string request body.");
   }
@@ -1713,27 +1785,27 @@ function parseRequestBody(body: BodyInit | null | undefined) {
 
   expect(parsed).toEqual(
     expect.objectContaining({
-      mutationId: expect.any(String),
+      idempotencyKey: expect.any(String),
+      source: expect.objectContaining({ protocol: "generated-ui" }),
     }),
   );
 
-  return parsed as { mutationId: string };
+  return parsed as {
+    idempotencyKey: string;
+    input?: unknown;
+    recordId?: string;
+    source?: { protocol?: string };
+  };
 }
 
-function parseActionRequestBody(body: BodyInit | null | undefined) {
-  if (typeof body !== "string") {
-    throw new Error("Expected a string request body.");
-  }
-
-  const parsed = JSON.parse(body) as unknown;
-
-  expect(parsed).toEqual(
-    expect.objectContaining({
-      actionId: expect.any(String),
-    }),
-  );
-
-  return parsed as { actionId: string; entity: string; action: string };
+function operationResponse(
+  output: OperationInvocationResponse["output"],
+): OperationInvocationResponse {
+  return {
+    invocation: {} as OperationInvocationResponse["invocation"],
+    output,
+    status: "committed",
+  };
 }
 
 function parsePlainRequestBody(body: BodyInit | null | undefined) {
@@ -1745,17 +1817,20 @@ function parsePlainRequestBody(body: BodyInit | null | undefined) {
 }
 
 function schemaWithSummary() {
+  const fields = {
+    ...appSchema.entities.task.fields,
+    notes: { type: "text", required: false },
+  } satisfies AppSchema["entities"][string]["fields"];
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Planner task",
-        fields: {
-          ...appSchema.entities.task.fields,
-          notes: { type: "text", required: false },
-        },
+        fields,
         mutations: defaultMutations(),
         actions: appSchema.entities.task.actions,
+        operations: taskOperations("Planner task", fields),
       },
     },
     queries: appSchema.queries,
@@ -1763,6 +1838,40 @@ function schemaWithSummary() {
     tableViews: appSchema.tableViews,
     views: appSchema.views,
   } satisfies AppSchema;
+}
+
+function taskOperations(
+  label: string,
+  fields: AppSchema["entities"][string]["fields"],
+): NonNullable<AppSchema["entities"][string]["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+  const clearCompletedTasks = appSchema.entities.task.operations?.clearCompletedTasks;
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(clearCompletedTasks === undefined ? {} : { clearCompletedTasks }),
+  };
 }
 
 function defaultMutations(): AppSchema["entities"][string]["mutations"] {

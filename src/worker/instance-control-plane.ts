@@ -48,6 +48,7 @@ import {
 } from "../shared/upgrade-migrations.ts";
 import {
   authorizeAuthorityOperation,
+  authorizeInstanceWrite,
   authorizeOwnerManagementRead,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
@@ -213,7 +214,7 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
       );
     }
 
-    if (operation.metadata.mode === "write" && operation.kind !== "action") {
+    if (operation.metadata.mode === "write") {
       assertBrowserControlPlaneWriteActor(actorKind, operation);
     }
 
@@ -441,19 +442,7 @@ async function handleCreateAppInstallAction(
   const actorKind = controlPlaneActorKindFromRequest(request, new URL(request.url));
   assertBrowserControlPlaneActionActor(actorKind, createAppInstallControlPlaneAction);
 
-  const authorization = await authorizeAuthorityOperation(
-    request,
-    {
-      kind: "action",
-      metadata: {
-        kind: "action",
-        method: request.method,
-        mode: "write",
-        path: `/actions/${createAppInstallControlPlaneAction}`,
-      },
-    },
-    env,
-  );
+  const authorization = await authorizeInstanceWrite(request, env);
 
   if (!authorization.authorized) {
     return jsonResponse(

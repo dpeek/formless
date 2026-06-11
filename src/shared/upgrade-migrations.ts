@@ -132,11 +132,11 @@ export type UpgradeMigrationRegistryValidationResult =
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
 
 export const bundledSourceSchemaHashFixtures = {
-  tasks: "sha256:3015ff35861179dd8b3752b2af904fe8f85f644718e56276d894c016a0d15c21",
-  estii: "sha256:4f57b43a88fe9127c52c4cde74504f16467a7cc193ee02fcbb34874047436854",
-  site: "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
-  crm: "sha256:6c3ae2a42fdae882af7aac84cc60c49b73823e26bb1f8dfcb61bb321d91ac420",
-  cleartrace: "sha256:97c7a87c70a27de6797a1c21f35c3b80a11010aee0008cff67f737a6cac53af9",
+  tasks: "sha256:f84be0cc344dfc105c2e92b10dc783943b7d9117457907979df832d7e5c136d9",
+  estii: "sha256:c3ccb68c4325e03d23a7747ae00ebd5883f6d4d26049a4b1cac3df32097eeb67",
+  site: "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
+  crm: "sha256:94098ce6d435d5a308303c0174aa78d0399a2fd189988a66c4d9e66d573abc8d",
+  cleartrace: "sha256:537ed490ba09930febe10352b188d9dc287097f1757d989f4788d28ca9fa9f92",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 
 export function sourceSchemaCanonicalJson(schema: unknown): string {

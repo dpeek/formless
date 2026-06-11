@@ -316,7 +316,7 @@ function AppRootRecordNavigationGroup({
   });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  if (groupFacts.isEmpty && !group.createAction) {
+  if (groupFacts.isEmpty && !group.createOperation) {
     return null;
   }
 
@@ -325,13 +325,13 @@ function AppRootRecordNavigationGroup({
       aria-label={`${group.label} roots`}
       label={group.label}
       action={
-        group.createAction ? (
+        group.createOperation ? (
           <Button
-            aria-label={group.createAction.label}
+            aria-label={group.createOperation.label}
             className="ms-auto"
             data-slot="control"
             intent="plain"
-            isDisabled={!group.createAction.enabled}
+            isDisabled={!group.createOperation.enabled}
             onPress={() => setCreateDialogOpen(true)}
             size="sq-xs"
             type="button"
@@ -352,9 +352,9 @@ function AppRootRecordNavigationGroup({
               option={option}
             />
           ))}
-      {group.createAction && createDialogOpen ? (
+      {group.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={group.createAction}
+          action={group.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={onSelectRecord}
           open={true}

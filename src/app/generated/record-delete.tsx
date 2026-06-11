@@ -10,7 +10,8 @@ import {
 } from "@dpeek/formless-ui/modal";
 import { useRecord } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitDeleteMutation } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
@@ -24,6 +25,7 @@ export function DeleteRecordButton({
   ariaLabel,
   buttonLabel = "Delete",
   className,
+  deleteOperation,
   entityLabel,
   entityName,
   labelFields = [],
@@ -35,6 +37,7 @@ export function DeleteRecordButton({
   ariaLabel?: string;
   buttonLabel?: string;
   className?: string;
+  deleteOperation: EntityOperationPresentationConfig;
   entityLabel: string;
   entityName: string;
   labelFields?: RecordLabelFieldConfig[];
@@ -58,7 +61,7 @@ export function DeleteRecordButton({
     setSyncStatus({ state: "syncing", message: `Deleting ${recordLabel}...` });
 
     try {
-      await submitDeleteMutation(appTarget, entityName, recordId);
+      await submitOperation(appTarget, entityName, deleteOperation.operationName, { recordId });
       setOpen(false);
       onDeleted?.();
       setSyncStatus({ state: "idle", message: `Deleted ${recordLabel}.` });

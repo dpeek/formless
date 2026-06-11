@@ -27,6 +27,7 @@ import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-ru
 import { INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID } from "./deployment-runtime-state.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -671,8 +672,9 @@ async function patchControlPlaneRecord(
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: {
       Authorization: `Bearer ${adminToken}`,
       "Content-Type": "application/json",
@@ -681,7 +683,7 @@ async function postAdminJson<T>(path: string, body: unknown) {
   });
 
   return {
-    body: (await response.json()) as T,
+    body: request.response(await response.json()) as T,
     response,
   };
 }

@@ -1,5 +1,4 @@
 import {
-  isEntityActionVisibleToBrowser,
   type EntityActionSchema,
   type EntitySchema,
   type FieldSchema,
@@ -7,6 +6,10 @@ import {
   type StateMachineTransitionSchema,
 } from "@dpeek/formless-schema";
 import type { FieldValue } from "../shared/protocol.ts";
+import {
+  selectAvailableEntityOperations,
+  type EntityOperationPresentationConfig,
+} from "./operation-presentation-model.ts";
 
 export type StateMachineFieldConfig = {
   fieldName: string;
@@ -17,7 +20,8 @@ export type StateMachineFieldConfig = {
 };
 
 export type TransitionStateActionConfig = {
-  actionName: string;
+  operationName: string;
+  operation: EntityOperationPresentationConfig;
   label: string;
   action: Extract<EntityActionSchema, { kind: "transition-state" }>;
   machineName: string;
@@ -54,9 +58,24 @@ export function selectStateMachineField(
   return undefined;
 }
 
-export function selectTransitionStateActions(entity: EntitySchema): TransitionStateActionConfig[] {
-  return Object.entries(entity.actions ?? {}).flatMap(([actionName, action]) => {
-    if (action.kind !== "transition-state" || !isEntityActionVisibleToBrowser(action)) {
+export function selectTransitionStateActions(
+  entityName: string,
+  entity: EntitySchema,
+): TransitionStateActionConfig[] {
+  return selectAvailableEntityOperations(entityName, entity, "record").flatMap((operation) => {
+    if (
+      operation.operation.kind !== "command" ||
+      operation.operation.effect?.type !== "runActionKind" ||
+      operation.operation.effect.kind !== "transition-state" ||
+      operation.operation.effect.action === undefined
+    ) {
+      return [];
+    }
+
+    const actionName = operation.operation.effect.action;
+    const action = entity.actions?.[actionName];
+
+    if (action?.kind !== "transition-state") {
       return [];
     }
 
@@ -70,7 +89,8 @@ export function selectTransitionStateActions(entity: EntitySchema): TransitionSt
 
     return [
       {
-        actionName,
+        operationName: operation.operationName,
+        operation,
         label: action.label,
         action,
         machineName: action.machine,

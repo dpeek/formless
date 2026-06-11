@@ -263,7 +263,7 @@ export default {
       const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
-      return authority.fetch(request);
+      return authority.fetch(authorityRequestWithOriginalUrlFacts(request));
     }
 
     const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env, {
@@ -379,6 +379,19 @@ function notFoundResponse(json: boolean): Response {
   return json
     ? Response.json({ error: "Not found." }, { status: 404 })
     : new Response(null, { status: 404 });
+}
+
+const FORMLESS_ORIGINAL_REQUEST_HOST_HEADER = "x-formless-original-request-host";
+const FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER = "x-formless-original-request-origin";
+
+function authorityRequestWithOriginalUrlFacts(request: Request): Request {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+
+  headers.set(FORMLESS_ORIGINAL_REQUEST_HOST_HEADER, url.host);
+  headers.set(FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER, url.origin);
+
+  return new Request(request, { headers });
 }
 
 async function readOwnerSetupStatus(

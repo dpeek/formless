@@ -74,10 +74,10 @@ import type {
 } from "../shared/instance-domain-mappings.ts";
 import type {
   AppInstallsResponse,
-  MutationResponse,
   OwnerSetupStatusResponse,
   RecordValues,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import {
   isSourceSchemaHash,
   isUpgradeMigrationChecksum,
@@ -809,27 +809,28 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
     targetUrl: string;
   },
   dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<MutationResponse> {
+): Promise<OperationInvocationResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
-  const mutationUrl = apiUrl(targetUrl, `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`);
+  const operationUrl = apiUrl(
+    targetUrl,
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/deployment-config/update`,
+  );
   const values = deploymentObservationPatchValues(input.observation);
-  const mutationId =
+  const idempotencyKey =
     input.mutationId ??
     `deployment-observation:${input.targetId}:${input.observation.observedDesiredStateHash}:${input.observation.observedStatus}:${input.observation.observedAt}`;
 
-  return parseMutationResponse(
-    await postJson(dependencies.fetch, mutationUrl, {
+  return parseOperationInvocationResponse(
+    await postJson(dependencies.fetch, operationUrl, {
       body: JSON.stringify({
-        entity: "deployment-config",
-        mutationId,
-        op: "patch",
+        idempotencyKey,
+        input: values,
         recordId: input.targetId,
-        values,
       }),
       headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
-    mutationUrl,
+    operationUrl,
   );
 }
 
@@ -1694,18 +1695,20 @@ function parseControlPlaneRecord(value: unknown, context: string): DeployControl
   };
 }
 
-function parseMutationResponse(value: unknown, context: string): MutationResponse {
+function parseOperationInvocationResponse(
+  value: unknown,
+  context: string,
+): OperationInvocationResponse {
   if (
     !isRecord(value) ||
-    typeof value.mutationId !== "string" ||
-    typeof value.cursor !== "number" ||
-    !isRecord(value.record) ||
-    !Array.isArray(value.changes)
+    !isRecord(value.invocation) ||
+    !isRecord(value.output) ||
+    typeof value.status !== "string"
   ) {
-    throw new Error(`${context} failed: mutation response is invalid.`);
+    throw new Error(`${context} failed: operation response is invalid.`);
   }
 
-  return value as MutationResponse;
+  return value as OperationInvocationResponse;
 }
 
 function controlPlaneRecordsByEntity(

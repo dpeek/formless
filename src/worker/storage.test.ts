@@ -55,18 +55,20 @@ describe("storage", () => {
   });
 
   it("persists schema updates", async () => {
+    const fields = {
+      title: { type: "text", required: true },
+      done: { type: "boolean", required: true, default: false },
+      dueDate: { type: "date", required: false },
+      notes: { type: "text", required: false },
+    } satisfies AppSchema["entities"][string]["fields"];
     const nextSchema = {
       version: 1,
       entities: {
         task: {
           label: "Planner task",
-          fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
-            dueDate: { type: "date", required: false },
-            notes: { type: "text", required: false },
-          },
+          fields,
           mutations: defaultMutations(),
+          operations: taskOperations("Planner task", fields),
         },
       },
       queries: defaultQueries(),
@@ -84,18 +86,20 @@ describe("storage", () => {
   });
 
   it("resets schema, records, and changes", async () => {
+    const fields = {
+      title: { type: "text", required: true },
+      done: { type: "boolean", required: true, default: false },
+      dueDate: { type: "date", required: false },
+      notes: { type: "text", required: false },
+    } satisfies AppSchema["entities"][string]["fields"];
     const nextSchema = {
       version: 1,
       entities: {
         task: {
           label: "Planner task",
-          fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
-            dueDate: { type: "date", required: false },
-            notes: { type: "text", required: false },
-          },
+          fields,
           mutations: defaultMutations(),
+          operations: taskOperations("Planner task", fields),
         },
       },
       queries: defaultQueries(),
@@ -886,28 +890,31 @@ function snapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
 }
 
 function taskSchema(): AppSchema {
+  const fields = {
+    title: { type: "text", required: true },
+    done: { type: "boolean", required: true, default: false },
+    dueDate: { type: "date", required: false },
+    estimate: { type: "number", required: false, integer: true, min: 0 },
+    priority: {
+      type: "enum",
+      required: false,
+      values: {
+        low: { label: "Low" },
+        normal: { label: "Normal" },
+        high: { label: "High" },
+      },
+      default: "normal",
+    },
+  } satisfies AppSchema["entities"][string]["fields"];
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: {
-          title: { type: "text", required: true },
-          done: { type: "boolean", required: true, default: false },
-          dueDate: { type: "date", required: false },
-          estimate: { type: "number", required: false, integer: true, min: 0 },
-          priority: {
-            type: "enum",
-            required: false,
-            values: {
-              low: { label: "Low" },
-              normal: { label: "Normal" },
-              high: { label: "High" },
-            },
-            default: "normal",
-          },
-        },
+        fields,
         mutations: defaultMutations(),
+        operations: taskOperations("Task", fields),
       },
     },
     queries: defaultQueries(),
@@ -915,6 +922,38 @@ function taskSchema(): AppSchema {
     tableViews: {},
     views: defaultViews(),
     screens: defaultScreens(),
+  };
+}
+
+function taskOperations(
+  label: string,
+  fields: AppSchema["entities"][string]["fields"],
+): NonNullable<AppSchema["entities"][string]["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
   };
 }
 

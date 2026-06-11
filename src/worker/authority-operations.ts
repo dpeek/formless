@@ -4,16 +4,18 @@ import {
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
-  type ActionResponse,
   type BrowserReplicaUpgradeFacts,
   type BootstrapResponse,
-  type MutationResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
   type SitePageTreeResponse,
   type StoreSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
+import type {
+  OperationInvocationEnvelope,
+  OperationInvocationResponse,
+} from "../shared/operation-invocation.ts";
 import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
@@ -27,37 +29,36 @@ import {
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
 import {
-  executeCreateAfterCreateHooks,
-  executeEntityActionOutcome,
-  filterEntityActionResponseForActor,
-  validateEntityActionRequest,
-} from "./actions.ts";
+  assertOperationInvocationAuthorized,
+  buildProtocolOperationInvocationEnvelope,
+  executeReadOperationInvocation,
+  executeWriteOperationInvocation,
+  parseEntityOperationRoute,
+} from "./entity-operations.ts";
 import {
-  validateMutationRequest,
   validateSchemaUpdateRequest,
   validateSourceSchemaReset,
   validateStoreSnapshotRestore,
 } from "./authority-validation.ts";
-import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
 import {
-  createStoredRecordOutcome,
-  deleteStoredRecordOutcome,
   exportStorageSnapshot,
   getBootstrapRecords,
   getChangesAfter,
   getCurrentCursor,
   initializeStorageFromSource,
   mapWriteOutcome,
-  patchStoredRecordOutcome,
   applyPackageAppMigrationsOutcome,
   resetStorageSchemaToSourceOutcome,
   resetStorageToSourceSeedOutcome,
   restoreStorageSnapshotOutcome,
   readCurrentStoredSchema,
   readPackageAppMigrationState,
+  recordOperationInvocationAccepted,
+  recordOperationInvocationFailed,
+  recordOperationInvocationRejected,
   type ApplyPackageAppMigrationsResponse,
   type StorageSource,
   type WriteOutcome,
@@ -78,8 +79,7 @@ export type AuthorityOperationKind =
   | "sync"
   | "writeSchema"
   | "restoreSnapshot"
-  | "mutation"
-  | "action"
+  | "entityOperation"
   | "resetSchema"
   | "resetSeed"
   | "applyPackageMigrations";
@@ -114,6 +114,7 @@ export type ReadAuthorityOperation =
   | ReadOperation<"readSchema">
   | ReadOperation<"exportSnapshot">
   | ReadOperation<"siteTree">
+  | (ReadOperation<"entityOperation"> & EntityOperationRoute)
   | (ReadOperation<"sync"> & {
       after: number;
       clientSchemaUpdatedAt: string | null;
@@ -122,8 +123,7 @@ export type ReadAuthorityOperation =
 export type WriteAuthorityOperation =
   | WriteOperation<"writeSchema">
   | WriteOperation<"restoreSnapshot">
-  | WriteOperation<"mutation">
-  | WriteOperation<"action">
+  | (WriteOperation<"entityOperation"> & EntityOperationRoute)
   | WriteOperation<"resetSchema">
   | WriteOperation<"resetSeed">
   | WriteOperation<"applyPackageMigrations">;
@@ -139,11 +139,10 @@ type AuthorityErrorResponse = {
 };
 
 export type AuthorityOperationResponseBody =
-  | ActionResponse
   | ApplyPackageAppMigrationsResponse
   | AuthorityErrorResponse
   | BootstrapResponse
-  | MutationResponse
+  | OperationInvocationResponse
   | SchemaResponse
   | SchemaUpdateResponse
   | SitePageTreeResponse
@@ -160,6 +159,12 @@ type AuthorityOperationSelectionInput = {
   method: string;
   path: string;
   searchParams: URLSearchParams;
+};
+
+type EntityOperationRoute = {
+  entityName: string;
+  operationName: string;
+  recordId?: string;
 };
 
 type AuthorityOperationExecutionInput = {
@@ -216,12 +221,21 @@ export function selectAuthorityOperation(
     return { kind: "restoreSnapshot", metadata: metadata("restoreSnapshot", "write") };
   }
 
-  if (input.method === "POST" && input.path === "/mutations") {
-    return { kind: "mutation", metadata: metadata("mutation", "write") };
-  }
+  const entityOperationRoute = parseEntityOperationRoute(input);
+  if (entityOperationRoute) {
+    if (input.method === "GET") {
+      return {
+        kind: "entityOperation",
+        metadata: metadata("entityOperation", "read"),
+        ...entityOperationRoute,
+      };
+    }
 
-  if (input.method === "POST" && input.path === "/actions") {
-    return { kind: "action", metadata: metadata("action", "write") };
+    return {
+      kind: "entityOperation",
+      metadata: metadata("entityOperation", "write"),
+      ...entityOperationRoute,
+    };
   }
 
   if (input.method === "POST" && input.path === "/reset/schema") {
@@ -339,73 +353,44 @@ export function executeAuthorityOperation(
       );
     }
 
-    case "mutation": {
-      assertBrowserReplicaWriteCompatible(input);
-
+    case "entityOperation": {
       const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const validatedMutation = validateMutationRequest(input.body, schema, input.storage);
+      const envelope = buildProtocolOperationInvocationEnvelope({
+        actorKind: input.actorKind,
+        body: input.body,
+        identity: input.identity,
+        method: operation.metadata.method,
+        path: operation.metadata.path,
+        route: {
+          entityName: operation.entityName,
+          operationName: operation.operationName,
+          ...(operation.recordId === undefined ? {} : { recordId: operation.recordId }),
+        },
+        schema,
+      });
 
-      if ("outcome" in validatedMutation) {
-        return writeOperationResult(input.writes.apply(() => validatedMutation.outcome));
+      assertOperationInvocationAllowed(input.storage, envelope);
+
+      if (envelope.operation.kind === "list" || envelope.operation.kind === "get") {
+        return {
+          body: executeReadOperationInvocation({
+            envelope,
+            schema,
+            storage: input.storage,
+          }),
+        };
       }
 
-      const mutation = validatedMutation.mutation;
+      assertBrowserReplicaWriteCompatibleForOperation(input, envelope);
 
-      if (mutation.op === "create") {
-        return writeOperationResult(
-          input.writes.apply(() =>
-            createStoredRecordOutcome(
-              input.storage,
-              mutation,
-              (context) => {
-                executeCreateAfterCreateHooks(
-                  context.storage,
-                  context.mutation,
-                  schema,
-                  context.createRecords,
-                );
-              },
-              (entity, values, options) => {
-                assertUniqueConstraints(input.storage, schema, entity, values, options);
-              },
-            ),
-          ),
-        );
-      }
-
-      if (mutation.op === "delete") {
-        return writeOperationResult(
-          input.writes.apply(() => deleteStoredRecordOutcome(input.storage, mutation)),
-        );
-      }
-
-      return writeOperationResult(
-        input.writes.apply(() =>
-          patchStoredRecordOutcome(
-            input.storage,
-            mutation,
-            "recordValues" in mutation ? mutation.recordValues : undefined,
-            (entity, values, options) => {
-              assertUniqueConstraints(input.storage, schema, entity, values, options);
-            },
-          ),
-        ),
-      );
-    }
-
-    case "action": {
-      assertBrowserReplicaWriteCompatible(input);
-
-      const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const actorKind = input.actorKind ?? "owner";
-      const action = validateEntityActionRequest(input.body, schema, { actorKind });
-
-      return writeOperationResult(
-        mapWriteOutcome(
-          input.writes.apply(() => executeEntityActionOutcome(input.storage, action, schema)),
-          (response) => filterEntityActionResponseForActor(response, schema, action, actorKind),
-        ),
-      );
+      return {
+        body: executeWriteOperationInvocation({
+          envelope,
+          schema,
+          storage: input.storage,
+          writes: input.writes,
+        }),
+      };
     }
 
     case "resetSchema": {
@@ -465,6 +450,31 @@ function writeOperationResult<T extends AuthorityOperationResponseBody>(
   outcome: WriteOutcome<T>,
 ): AuthorityOperationResult {
   return { body: outcome.response };
+}
+
+function assertOperationInvocationAllowed(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+) {
+  try {
+    assertOperationInvocationAuthorized(envelope);
+  } catch (error) {
+    recordOperationInvocationRejected(storage, envelope, error);
+    throw error;
+  }
+}
+
+function assertBrowserReplicaWriteCompatibleForOperation(
+  input: AuthorityOperationExecutionInput,
+  envelope: OperationInvocationEnvelope,
+) {
+  try {
+    assertBrowserReplicaWriteCompatible(input);
+  } catch (error) {
+    recordOperationInvocationAccepted(input.storage, envelope);
+    recordOperationInvocationFailed(input.storage, envelope, error);
+    throw error;
+  }
 }
 
 function assertBrowserReplicaWriteCompatible(input: AuthorityOperationExecutionInput) {

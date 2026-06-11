@@ -6,7 +6,8 @@ import {
 } from "@dpeek/formless-media/client";
 import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitPatchMutation } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
@@ -25,13 +26,13 @@ import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 type RecordFieldEditorProps = {
-  canPatch: boolean;
   density?: "default" | "compact";
   entityName: string;
   fieldConfig: RecordFieldConfig;
   presentation?: "default" | "heading";
   recordId: string;
   showLabel?: boolean;
+  updateOperation?: EntityOperationPresentationConfig;
 };
 
 export function RecordFieldEditor(props: RecordFieldEditorProps) {
@@ -43,13 +44,13 @@ export function RecordFieldEditor(props: RecordFieldEditorProps) {
 }
 
 function EditableRecordFieldEditor({
-  canPatch,
   density = "default",
   entityName,
   fieldConfig,
   presentation = "default",
   recordId,
   showLabel = false,
+  updateOperation,
 }: RecordFieldEditorProps) {
   const appTarget = useSchemaAppTarget();
   const { field, fieldName } = fieldConfig;
@@ -134,7 +135,7 @@ function EditableRecordFieldEditor({
   ): Promise<boolean> {
     const managePending = options.managePending ?? true;
 
-    if (!canPatch || (isPending && !options.allowWhilePending)) {
+    if (updateOperation === undefined || (isPending && !options.allowWhilePending)) {
       return false;
     }
 
@@ -156,7 +157,10 @@ function EditableRecordFieldEditor({
     setSyncStatus({ state: "syncing", message: `Updating ${patchFieldNames.join(", ")}...` });
 
     try {
-      await submitPatchMutation(appTarget, entityName, recordId, patchValues);
+      await submitOperation(appTarget, entityName, updateOperation.operationName, {
+        recordId,
+        input: patchValues,
+      });
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
       return true;
@@ -229,7 +233,7 @@ function EditableRecordFieldEditor({
   }
 
   async function handleImageUpload(file: File | undefined) {
-    if (!file || !canPatch || isPending) {
+    if (!file || updateOperation === undefined || isPending) {
       return;
     }
 
@@ -286,7 +290,7 @@ function EditableRecordFieldEditor({
 
   return (
     <GeneratedRecordFieldControl
-      canPatch={canPatch}
+      canPatch={updateOperation !== undefined}
       density={density}
       draft={draft}
       error={error}

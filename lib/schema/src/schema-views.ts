@@ -19,6 +19,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { parseEntityOperationKey } from "./schema-operations.ts";
 import {
   assertTableActionEditViews,
   parseOptionalTableColumnFormat,
@@ -35,9 +36,9 @@ import {
 } from "./schema-union-presentations.ts";
 import type {
   AggregateSchema,
-  CollectionActionSlotSchema,
   CollectionContextSchema,
   CollectionNavigationSchema,
+  CollectionOperationBindingSchema,
   CollectionQuerySchema,
   CollectionSummarySlotSchema,
   CollectionViewQuerySlotSchema,
@@ -230,27 +231,27 @@ function assertCollectionViews(
       continue;
     }
 
-    for (const actionSlot of view.actions ?? []) {
-      if (actionSlot.type !== "create") {
+    for (const operationBinding of view.operations ?? []) {
+      if (operationBinding.createView === undefined) {
         continue;
       }
 
-      const createView = views[actionSlot.createView];
+      const createView = views[operationBinding.createView];
       if (!createView) {
         throw new Error(
-          `Collection view "${viewName}" create action references unknown view "${actionSlot.createView}".`,
+          `Collection view "${viewName}" create operation references unknown view "${operationBinding.createView}".`,
         );
       }
 
       if (createView.type !== "create") {
         throw new Error(
-          `Collection view "${viewName}" create action must reference a create view.`,
+          `Collection view "${viewName}" create operation must reference a create view.`,
         );
       }
 
-      validateCreateActionContextDefaults(
+      validateCreateOperationContextDefaults(
         viewName,
-        actionSlot.createView,
+        operationBinding.createView,
         createView,
         entities,
         view.context,
@@ -322,7 +323,7 @@ function validateContextCreateView(
   }
 }
 
-function validateCreateActionContextDefaults(
+function validateCreateOperationContextDefaults(
   collectionViewName: string,
   createViewName: string,
   createView: CreateViewSchema,
@@ -335,7 +336,7 @@ function validateCreateActionContextDefaults(
   }
 
   const contextDefaults = createViewContextDefaultEntries(createView);
-  const context = `Collection view "${collectionViewName}" create action view "${createViewName}"`;
+  const context = `Collection view "${collectionViewName}" create operation view "${createViewName}"`;
 
   if (!collectionContext) {
     throw new Error(`${context} requires context defaults but the collection has no context.`);
@@ -509,7 +510,7 @@ function parseCollectionView(
     `Collection view "${viewName}"`,
     value,
     ["type", "label", "entity", "queries", "defaultQuery", "result"],
-    ["navigation", "context", "actions", "summary"],
+    ["navigation", "context", "operations", "summary"],
   );
 
   if (typeof value.label !== "string" || value.label.trim() === "") {
@@ -569,7 +570,7 @@ function parseCollectionView(
     readModels?.aggregates ?? {},
     unions,
   );
-  const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
+  const operations = parseCollectionOperationBindings(viewName, value.operations, entities);
   const summary = parseCollectionSummarySlots(
     viewName,
     value.entity,
@@ -587,7 +588,7 @@ function parseCollectionView(
     queries: querySlots,
     defaultQuery: value.defaultQuery,
     result,
-    ...(actions ? { actions } : {}),
+    ...(operations ? { operations } : {}),
     ...(summary ? { summary } : {}),
   };
 }
@@ -615,82 +616,75 @@ function parseCollectionNavigation(
   return { primary: value.primary };
 }
 
-function parseCollectionActionSlots(
+function parseCollectionOperationBindings(
   viewName: string,
-  entityName: string,
-  entity: EntitySchema,
   value: unknown,
-): CollectionActionSlotSchema[] | undefined {
+  entities: Record<string, EntitySchema>,
+): CollectionOperationBindingSchema[] | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   if (!Array.isArray(value)) {
-    throw new Error(`Collection view "${viewName}" actions must be an array.`);
+    throw new Error(`Collection view "${viewName}" operations must be an array.`);
   }
 
-  const actions = value.map((slot, index) =>
-    parseCollectionActionSlot(viewName, entityName, entity, index, slot),
+  const operations = value.map((slot, index) =>
+    parseCollectionOperationBinding(viewName, index, slot, entities),
   );
 
-  return actions.length > 0 ? actions : undefined;
+  return operations.length > 0 ? operations : undefined;
 }
 
-function parseCollectionActionSlot(
+function parseCollectionOperationBinding(
   viewName: string,
-  entityName: string,
-  entity: EntitySchema,
   index: number,
   value: unknown,
-): CollectionActionSlotSchema {
-  const context = `Collection view "${viewName}" action slot ${index}`;
+  entities: Record<string, EntitySchema>,
+): CollectionOperationBindingSchema {
+  const context = `Collection view "${viewName}" operation binding ${index}`;
 
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }
 
-  if (value.type === "create") {
-    assertExactKeys(context, value, ["type", "createView"], ["label"]);
+  assertExactKeys(context, value, ["operation"], ["label", "createView", "count"]);
 
-    if (typeof value.createView !== "string" || value.createView.trim() === "") {
-      throw new Error(`${context} createView must be a non-empty string.`);
-    }
+  const operationKey = parseEntityOperationKey(`${context} operation`, value.operation);
+  const entity = entities[operationKey.entityKey];
+  const operation = entity?.operations?.[operationKey.operationKey];
 
-    const label = parseOptionalNonEmptyString(`${context} label`, value.label);
-
-    return {
-      type: "create",
-      createView: value.createView,
-      ...(label === undefined ? {} : { label }),
-    };
+  if (!entity || !operation) {
+    throw new Error(`${context} references unknown operation "${String(value.operation)}".`);
   }
 
-  if (value.type === "entityAction") {
-    assertExactKeys(context, value, ["type", "action"], ["label", "count"]);
-
-    if (typeof value.action !== "string" || value.action.trim() === "") {
-      throw new Error(`${context} action must be a non-empty string.`);
-    }
-
-    if (!entity.actions?.[value.action]) {
-      throw new Error(
-        `${context} references unknown action "${value.action}" for entity "${entityName}".`,
-      );
-    }
-
-    const label = parseOptionalNonEmptyString(`${context} label`, value.label);
-    const count =
-      value.count === undefined ? undefined : parseCountDisplay(`${context} count`, value.count);
-
-    return {
-      type: "entityAction",
-      action: value.action,
-      ...(label === undefined ? {} : { label }),
-      ...(count === undefined ? {} : { count }),
-    };
+  if (operation.scope !== "collection") {
+    throw new Error(`${context} operation must use collection scope.`);
   }
 
-  throw new Error(`${context} type must be "create" or "entityAction".`);
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const createView = parseOptionalNonEmptyString(`${context} createView`, value.createView);
+  const count =
+    value.count === undefined ? undefined : parseCountDisplay(`${context} count`, value.count);
+
+  if (operation.kind === "create") {
+    if (createView === undefined) {
+      throw new Error(`${context} create operation requires createView.`);
+    }
+  } else if (createView !== undefined) {
+    throw new Error(`${context} createView is only valid for create operations.`);
+  }
+
+  if (count !== undefined && operation.kind !== "command") {
+    throw new Error(`${context} count is only valid for command operations.`);
+  }
+
+  return {
+    operation: `${operationKey.entityKey}.${operationKey.operationKey}`,
+    ...(label === undefined ? {} : { label }),
+    ...(createView === undefined ? {} : { createView }),
+    ...(count === undefined ? {} : { count }),
+  };
 }
 
 function parseCollectionSummarySlots(

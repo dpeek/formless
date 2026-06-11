@@ -17,22 +17,19 @@ import {
   resetClientStore,
 } from "./store.ts";
 import { setSyncStatus } from "./sync-status.ts";
-import { createActionId, createMutationId } from "../shared/ids.ts";
+import { createOperationId } from "../shared/ids.ts";
+import type {
+  OperationInvocationRequest,
+  OperationInvocationResponse,
+} from "../shared/operation-invocation.ts";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
   isSyncSocketServerMessage,
-  type ActionRequest,
-  type ActionResponse,
   type BootstrapResponse,
-  type CreateMutation,
-  type DeleteMutation,
   type EntityName,
-  type MutationResponse,
-  type PatchMutation,
-  type RecordValues,
   type SchemaResponse,
   type SchemaUpdateResponse,
   type StoreSnapshot,
@@ -165,116 +162,36 @@ export async function restoreStoreSnapshot(
   return response;
 }
 
-export async function submitCreateMutation(
+export async function submitOperation(
   target: ClientAppTarget,
   entity: EntityName,
-  values: RecordValues,
+  operationName: string,
+  request: OperationInvocationRequest = {},
   fetcher: typeof fetch = fetch,
 ) {
   const identity = appStorageIdentityForClientTarget(target);
-  const mutation: CreateMutation = {
-    mutationId: createMutationId(),
-    entity,
-    op: "create",
-    values,
-  };
-
-  const response = await postJson<MutationResponse>(
+  const response = await postJson<OperationInvocationResponse>(
     fetcher,
-    apiPath(identity, "mutations"),
-    mutation,
+    apiPath(
+      identity,
+      `operations/${encodeURIComponent(entity)}/${encodeURIComponent(operationName)}`,
+    ),
+    {
+      ...request,
+      idempotencyKey: request.idempotencyKey ?? createOperationId(),
+      source: {
+        ...request.source,
+        protocol: "generated-ui",
+      },
+    },
     { writeCompatibilityTarget: identity },
   );
 
-  await mergeChanges(identity, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, identity);
-  notifyLocalDataChanged(identity);
-
-  return response;
-}
-
-export async function submitPatchMutation(
-  target: ClientAppTarget,
-  entity: EntityName,
-  recordId: string,
-  values: Partial<RecordValues>,
-  fetcher: typeof fetch = fetch,
-) {
-  const identity = appStorageIdentityForClientTarget(target);
-  const mutation: PatchMutation = {
-    mutationId: createMutationId(),
-    entity,
-    op: "patch",
-    recordId,
-    values,
-  };
-
-  const response = await postJson<MutationResponse>(
-    fetcher,
-    apiPath(identity, "mutations"),
-    mutation,
-    { writeCompatibilityTarget: identity },
-  );
-
-  await mergeChanges(identity, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, identity);
-  notifyLocalDataChanged(identity);
-
-  return response;
-}
-
-export async function submitDeleteMutation(
-  target: ClientAppTarget,
-  entity: EntityName,
-  recordId: string,
-  fetcher: typeof fetch = fetch,
-) {
-  const identity = appStorageIdentityForClientTarget(target);
-  const mutation: DeleteMutation = {
-    mutationId: createMutationId(),
-    entity,
-    op: "delete",
-    recordId,
-  };
-
-  const response = await postJson<MutationResponse>(
-    fetcher,
-    apiPath(identity, "mutations"),
-    mutation,
-    { writeCompatibilityTarget: identity },
-  );
-
-  await mergeChanges(identity, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, identity);
-  notifyLocalDataChanged(identity);
-
-  return response;
-}
-
-export async function submitAction(
-  target: ClientAppTarget,
-  entity: EntityName,
-  actionName: string,
-  inputOrFetcher?: ActionRequest["input"] | typeof fetch,
-  maybeFetcher?: typeof fetch,
-) {
-  const identity = appStorageIdentityForClientTarget(target);
-  const input = typeof inputOrFetcher === "function" ? undefined : inputOrFetcher;
-  const fetcher = typeof inputOrFetcher === "function" ? inputOrFetcher : (maybeFetcher ?? fetch);
-  const action: ActionRequest = {
-    actionId: createActionId(),
-    entity,
-    action: actionName,
-    ...(input === undefined ? {} : { input }),
-  };
-
-  const response = await postJson<ActionResponse>(fetcher, apiPath(identity, "actions"), action, {
-    writeCompatibilityTarget: identity,
-  });
-
-  await mergeChanges(identity, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, identity);
-  notifyLocalDataChanged(identity);
+  if ("changes" in response.output) {
+    await mergeChanges(identity, response.output.changes, response.output.cursor);
+    applyChanges(response.output.changes, response.output.cursor, identity);
+    notifyLocalDataChanged(identity);
+  }
 
   return response;
 }

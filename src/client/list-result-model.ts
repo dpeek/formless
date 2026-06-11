@@ -1,5 +1,6 @@
 import type { AppSchema, CollectionViewSchema, EntitySchema } from "@dpeek/formless-schema";
 import { selectRecordFields } from "./collection-shell-model.ts";
+import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectTransitionStateActions } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
@@ -11,6 +12,7 @@ export type RecordResultModel = Extract<HomeResultConfig, { type: "record" }>;
 export function selectListResultModel(
   schema: AppSchema,
   result: Extract<CollectionViewSchema["result"], { type: "list" }>,
+  entityName: string,
   entity: EntitySchema,
 ): ListResultModel {
   const itemView = schema.itemViews[result.itemView];
@@ -20,12 +22,16 @@ export function selectListResultModel(
   }
   const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
   const ordering = selectResultOrderingConfig(result.ordering, entity);
+  const updateOperation = selectEntityOperationByKind(entityName, entity, "update", "record");
+  const deleteOperation = selectEntityOperationByKind(entityName, entity, "delete", "record");
 
   return {
     type: "list",
     itemViewName: result.itemView,
     recordFields: selectRecordFields(itemView, entity),
-    transitionActions: selectTransitionStateActions(entity),
+    ...(updateOperation === undefined ? {} : { updateOperation }),
+    ...(deleteOperation === undefined ? {} : { deleteOperation }),
+    transitionActions: selectTransitionStateActions(entityName, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
     ...(ordering === undefined ? {} : { ordering }),
   };
@@ -34,6 +40,7 @@ export function selectListResultModel(
 export function selectRecordResultModel(
   schema: AppSchema,
   result: Extract<CollectionViewSchema["result"], { type: "record" }>,
+  entityName: string,
   entity: EntitySchema,
 ): RecordResultModel {
   const itemView = schema.itemViews[result.itemView];
@@ -42,12 +49,16 @@ export function selectRecordResultModel(
     throw new Error(`Missing item view "${result.itemView}".`);
   }
   const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
+  const updateOperation = selectEntityOperationByKind(entityName, entity, "update", "record");
+  const deleteOperation = selectEntityOperationByKind(entityName, entity, "delete", "record");
 
   return {
     type: "record",
     itemViewName: result.itemView,
     recordFields: selectRecordFields(itemView, entity),
-    transitionActions: selectTransitionStateActions(entity),
+    ...(updateOperation === undefined ? {} : { updateOperation }),
+    ...(deleteOperation === undefined ? {} : { deleteOperation }),
+    transitionActions: selectTransitionStateActions(entityName, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }

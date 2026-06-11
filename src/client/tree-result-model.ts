@@ -11,6 +11,11 @@ import type {
   TreeBranchVariantPolicySchema,
 } from "@dpeek/formless-schema";
 import { selectRecordFields, selectToManyRelationship } from "./collection-shell-model.ts";
+import {
+  selectAvailableEntityOperations,
+  type EntityOperationPresentationConfig,
+  selectEntityOperationByKind,
+} from "./operation-presentation-model.ts";
 import type { ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
@@ -37,10 +42,14 @@ export type TreeBranchPolicyConfig = {
 export type TreeCompositionActionConfig = {
   create?: {
     actionName: string;
+    operationName: string;
+    operation: EntityOperationPresentationConfig;
     action: Extract<EntityActionSchema, { kind: "create-tree-child" }>;
   };
   remove?: {
     actionName: string;
+    operationName: string;
+    operation: EntityOperationPresentationConfig;
     action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>;
   };
 };
@@ -50,6 +59,7 @@ export type TreeResultModel = Extract<HomeResultConfig, { type: "tree" }>;
 export function selectTreeResultModel(
   schema: AppSchema,
   result: Extract<CollectionViewSchema["result"], { type: "tree" }>,
+  entityName: string,
   entity: EntitySchema,
 ): TreeResultModel {
   const relationship = selectToManyRelationship(schema, result.relationship);
@@ -87,7 +97,19 @@ export function selectTreeResultModel(
       ? undefined
       : selectRecordUnionPresentation(schema, placementItemView, entity);
   const branches = selectTreeBranchPolicyConfig(result.branches, childRecordUnion);
-  const composition = selectTreeCompositionActionConfig(result.composition, entity);
+  const composition = selectTreeCompositionActionConfig(result.composition, entityName, entity);
+  const childUpdateOperation = selectEntityOperationByKind(
+    childField.to,
+    childEntity,
+    "update",
+    "record",
+  );
+  const placementUpdateOperation = selectEntityOperationByKind(
+    entityName,
+    entity,
+    "update",
+    "record",
+  );
 
   return {
     type: "tree",
@@ -97,6 +119,7 @@ export function selectTreeResultModel(
     childField,
     childEntityName: childField.to,
     childEntity,
+    ...(childUpdateOperation === undefined ? {} : { childUpdateOperation }),
     childItemViewName: result.childItemView,
     childRecordFields: selectRecordFields(childItemView, childEntity),
     ...(childRecordUnion === undefined ? {} : { childRecordUnion }),
@@ -107,6 +130,7 @@ export function selectTreeResultModel(
           placementRecordFields: selectRecordFields(placementItemView, entity),
           ...(placementRecordUnion === undefined ? {} : { placementRecordUnion }),
         }),
+    ...(placementUpdateOperation === undefined ? {} : { placementUpdateOperation }),
     ...(ordering === undefined ? {} : { ordering }),
     ...(branches === undefined ? {} : { branches }),
     ...(composition === undefined ? {} : { composition }),
@@ -192,30 +216,56 @@ function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): b
 
 function selectTreeCompositionActionConfig(
   composition: Extract<CollectionViewSchema["result"], { type: "tree" }>["composition"],
+  entityName: string,
   entity: EntitySchema,
 ): TreeCompositionActionConfig | undefined {
   if (composition === undefined) {
     return undefined;
   }
 
+  const recordOperations = selectAvailableEntityOperations(entityName, entity, "record");
+  const createOperation =
+    composition.createOperation === undefined
+      ? undefined
+      : recordOperations.find(
+          (operation) => operation.canonicalKey === composition.createOperation,
+        );
+  const removeOperation =
+    composition.removeOperation === undefined
+      ? undefined
+      : recordOperations.find(
+          (operation) => operation.canonicalKey === composition.removeOperation,
+        );
+  const createActionName =
+    createOperation?.operation.effect?.type === "runActionKind"
+      ? createOperation.operation.effect.action
+      : undefined;
+  const removeActionName =
+    removeOperation?.operation.effect?.type === "runActionKind"
+      ? removeOperation.operation.effect.action
+      : undefined;
   const createAction =
-    composition.createAction === undefined ? undefined : entity.actions?.[composition.createAction];
+    createActionName === undefined ? undefined : entity.actions?.[createActionName];
   const removeAction =
-    composition.removeAction === undefined ? undefined : entity.actions?.[composition.removeAction];
+    removeActionName === undefined ? undefined : entity.actions?.[removeActionName];
 
   return {
-    ...(composition.createAction !== undefined && createAction?.kind === "create-tree-child"
+    ...(createOperation !== undefined && createAction?.kind === "create-tree-child"
       ? {
           create: {
-            actionName: composition.createAction,
+            actionName: createOperation.operationName,
+            operationName: createOperation.operationName,
+            operation: createOperation,
             action: createAction,
           },
         }
       : {}),
-    ...(composition.removeAction !== undefined && removeAction?.kind === "remove-tree-placement"
+    ...(removeOperation !== undefined && removeAction?.kind === "remove-tree-placement"
       ? {
           remove: {
-            actionName: composition.removeAction,
+            actionName: removeOperation.operationName,
+            operationName: removeOperation.operationName,
+            operation: removeOperation,
             action: removeAction,
           },
         }

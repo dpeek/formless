@@ -18,6 +18,7 @@ import {
   taskSeedRecords,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
@@ -582,14 +583,15 @@ async function getOwnerJson<T>(path: string) {
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",
   });
 
   return {
-    body: (await response.json()) as T,
+    body: request.response(await response.json()) as T,
     response,
   };
 }

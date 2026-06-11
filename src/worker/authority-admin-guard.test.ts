@@ -9,6 +9,7 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -184,20 +185,22 @@ async function getJson<T>(path: string) {
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",
   });
 
   expect(response.status).toBe(200);
 
-  return (await response.json()) as T;
+  return request.response(await response.json()) as T;
 }
 
 async function postOwnerJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: {
       ...(await ownerSessionHeaders()),
       "Content-Type": "application/json",
@@ -207,7 +210,7 @@ async function postOwnerJson<T>(path: string, body: unknown) {
 
   expect(response.status).toBe(200);
 
-  return (await response.json()) as T;
+  return request.response(await response.json()) as T;
 }
 
 function adminHeaders() {

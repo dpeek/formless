@@ -22,13 +22,25 @@ export function selectHomeResultModel(
       throw new Error(`Missing table view "${result.tableView}".`);
     }
     const resultOrdering = selectResultOrderingConfig(result.ordering, entity);
-    const tableResult = selectTableResultModel(schema, tableView, entity, resultOrdering);
+    const tableResult = selectTableResultModel(
+      schema,
+      tableView,
+      collectionView.entity,
+      entity,
+      resultOrdering,
+    );
     const footer = selectTableFooterSlots(schema, result.footer ?? [], tableResult.columns);
 
     return {
       type: "table",
       tableViewName: result.tableView,
       columns: tableResult.columns,
+      ...(tableResult.updateOperation === undefined
+        ? {}
+        : { updateOperation: tableResult.updateOperation }),
+      ...(tableResult.deleteOperation === undefined
+        ? {}
+        : { deleteOperation: tableResult.deleteOperation }),
       transitionActions: tableResult.transitionActions,
       ...(tableResult.ordering === undefined ? {} : { ordering: tableResult.ordering }),
       ...(footer.length === 0 ? {} : { footer }),
@@ -36,12 +48,12 @@ export function selectHomeResultModel(
   }
 
   if (result.type === "tree") {
-    return selectTreeResultModel(schema, result, entity);
+    return selectTreeResultModel(schema, result, collectionView.entity, entity);
   }
 
   if (result.type === "record") {
-    return selectRecordResultModel(schema, result, entity);
+    return selectRecordResultModel(schema, result, collectionView.entity, entity);
   }
 
-  return selectListResultModel(schema, result, entity);
+  return selectListResultModel(schema, result, collectionView.entity, entity);
 }

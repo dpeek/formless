@@ -69,6 +69,97 @@
             "query": "taskCompleted"
           }
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Task",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "title": {
+                "field": "title"
+              },
+              "done": {
+                "field": "done"
+              },
+              "dueDate": {
+                "field": "dueDate"
+              },
+              "priority": {
+                "field": "priority"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Task",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "title": {
+                "field": "title"
+              },
+              "done": {
+                "field": "done"
+              },
+              "dueDate": {
+                "field": "dueDate"
+              },
+              "priority": {
+                "field": "priority"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "clearCompletedTasks": {
+          "label": "Clear completed",
+          "kind": "command",
+          "scope": "collection",
+          "target": {
+            "query": "taskCompleted"
+          },
+          "effect": {
+            "type": "runActionKind",
+            "kind": "clear-completed",
+            "action": "clearCompletedTasks",
+            "query": "taskCompleted"
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     }
   },
@@ -207,14 +298,13 @@
         "type": "list",
         "itemView": "taskListItem"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "task.create",
           "createView": "taskCreate"
         },
         {
-          "type": "entityAction",
-          "action": "clearCompletedTasks",
+          "operation": "task.clearCompletedTasks",
           "count": {
             "type": "count"
           }

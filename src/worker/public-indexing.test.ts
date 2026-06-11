@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
 
@@ -172,8 +173,9 @@ async function resetSchemaApp(schemaKey: SchemaKey) {
 }
 
 async function postAdminJson(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",
   });

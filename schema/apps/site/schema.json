@@ -55,6 +55,47 @@
           "kind": "unique",
           "fields": ["key"]
         }
+      },
+      "operations": {
+        "update": {
+          "label": "Update Site",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "key": {
+                "field": "key"
+              },
+              "label": {
+                "field": "label"
+              },
+              "description": {
+                "field": "description"
+              },
+              "icon": {
+                "field": "icon"
+              },
+              "accentColor": {
+                "field": "accentColor"
+              },
+              "backgroundColor": {
+                "field": "backgroundColor"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "block": {
@@ -228,6 +269,157 @@
         "delete": {
           "enabled": true
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Block",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "type": {
+                "field": "type"
+              },
+              "label": {
+                "field": "label"
+              },
+              "body": {
+                "field": "body"
+              },
+              "actionName": {
+                "field": "actionName"
+              },
+              "buttonLabel": {
+                "field": "buttonLabel"
+              },
+              "href": {
+                "field": "href"
+              },
+              "mediaAssetId": {
+                "field": "mediaAssetId"
+              },
+              "date": {
+                "field": "date"
+              },
+              "linkTargetMode": {
+                "field": "linkTargetMode"
+              },
+              "linkTargetBlock": {
+                "field": "linkTargetBlock"
+              },
+              "icon": {
+                "field": "icon"
+              },
+              "color": {
+                "field": "color"
+              },
+              "alignment": {
+                "field": "alignment"
+              },
+              "width": {
+                "field": "width"
+              },
+              "height": {
+                "field": "height"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Block",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "type": {
+                "field": "type"
+              },
+              "label": {
+                "field": "label"
+              },
+              "body": {
+                "field": "body"
+              },
+              "actionName": {
+                "field": "actionName"
+              },
+              "buttonLabel": {
+                "field": "buttonLabel"
+              },
+              "href": {
+                "field": "href"
+              },
+              "mediaAssetId": {
+                "field": "mediaAssetId"
+              },
+              "date": {
+                "field": "date"
+              },
+              "linkTargetMode": {
+                "field": "linkTargetMode"
+              },
+              "linkTargetBlock": {
+                "field": "linkTargetBlock"
+              },
+              "icon": {
+                "field": "icon"
+              },
+              "color": {
+                "field": "color"
+              },
+              "alignment": {
+                "field": "alignment"
+              },
+              "width": {
+                "field": "width"
+              },
+              "height": {
+                "field": "height"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "delete": {
+          "label": "Delete Block",
+          "kind": "delete",
+          "scope": "record",
+          "effect": {
+            "type": "deleteRecord"
+          },
+          "output": {
+            "type": "delete"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "block-placement": {
@@ -289,6 +481,118 @@
           "kind": "remove-tree-placement",
           "relationship": "blockPlacements"
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Placement",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "parent": {
+                "field": "parent"
+              },
+              "block": {
+                "field": "block"
+              },
+              "order": {
+                "field": "order"
+              },
+              "label": {
+                "field": "label"
+              },
+              "slot": {
+                "field": "slot"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Placement",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "parent": {
+                "field": "parent"
+              },
+              "block": {
+                "field": "block"
+              },
+              "order": {
+                "field": "order"
+              },
+              "label": {
+                "field": "label"
+              },
+              "slot": {
+                "field": "slot"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "addTreeChild": {
+          "label": "Add child",
+          "kind": "command",
+          "scope": "record",
+          "effect": {
+            "type": "runActionKind",
+            "kind": "create-tree-child",
+            "action": "addTreeChild"
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "removeTreePlacement": {
+          "label": "Remove child",
+          "kind": "command",
+          "scope": "record",
+          "effect": {
+            "type": "runActionKind",
+            "kind": "remove-tree-placement",
+            "action": "removeTreePlacement"
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "contact": {
@@ -309,6 +613,111 @@
         },
         "delete": {
           "enabled": false
+        }
+      },
+      "operations": {
+        "update": {
+          "label": "Update Contact",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
+      }
+    },
+    "contact-message": {
+      "label": "Contact message",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "email": {
+          "type": "text",
+          "required": true,
+          "label": "Email"
+        },
+        "message": {
+          "type": "text",
+          "required": true,
+          "label": "Message",
+          "format": "longText"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": false
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "operations": {
+        "submit": {
+          "label": "Submit message",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name",
+                "required": true
+              },
+              "email": {
+                "field": "email",
+                "required": true
+              },
+              "message": {
+                "field": "message",
+                "required": true
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          },
+          "policy": {
+            "actors": ["anonymous"],
+            "access": {
+              "actor": "anonymous",
+              "challenge": {
+                "kind": "turnstile"
+              },
+              "origin": {
+                "kind": "same-origin"
+              }
+            }
+          }
         }
       }
     },
@@ -349,6 +758,38 @@
           "kind": "unique",
           "fields": ["normalizedAddress"]
         }
+      },
+      "operations": {
+        "update": {
+          "label": "Update Email address",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "contact": {
+                "field": "contact"
+              },
+              "address": {
+                "field": "address"
+              },
+              "normalizedAddress": {
+                "field": "normalizedAddress"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "audience": {
@@ -380,6 +821,35 @@
         "uniqueAudienceKey": {
           "kind": "unique",
           "fields": ["key"]
+        }
+      },
+      "operations": {
+        "update": {
+          "label": "Update Audience",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "key": {
+                "field": "key"
+              },
+              "label": {
+                "field": "label"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -520,6 +990,111 @@
                 "type": "text",
                 "required": true,
                 "label": "Email"
+              }
+            }
+          }
+        }
+      },
+      "operations": {
+        "update": {
+          "label": "Update Subscription",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "emailAddress": {
+                "field": "emailAddress"
+              },
+              "audience": {
+                "field": "audience"
+              },
+              "status": {
+                "field": "status"
+              },
+              "consentedAt": {
+                "field": "consentedAt"
+              },
+              "sourceKind": {
+                "field": "sourceKind"
+              },
+              "sourceTargetKind": {
+                "field": "sourceTargetKind"
+              },
+              "sourcePackageAppKey": {
+                "field": "sourcePackageAppKey"
+              },
+              "sourceSchemaKey": {
+                "field": "sourceSchemaKey"
+              },
+              "sourceInstallId": {
+                "field": "sourceInstallId"
+              },
+              "sourceApiRoutePrefix": {
+                "field": "sourceApiRoutePrefix"
+              },
+              "sourceActionName": {
+                "field": "sourceActionName"
+              },
+              "sourceHost": {
+                "field": "sourceHost"
+              },
+              "sourcePath": {
+                "field": "sourcePath"
+              },
+              "sourceSiteBlockId": {
+                "field": "sourceSiteBlockId"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "subscribe": {
+          "label": "Subscribe",
+          "kind": "command",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "email": {
+                "type": "text",
+                "required": true,
+                "label": "Email"
+              }
+            }
+          },
+          "effect": {
+            "type": "runActionKind",
+            "kind": "subscribe",
+            "action": "subscribe"
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          },
+          "policy": {
+            "actors": ["anonymous"],
+            "access": {
+              "actor": "anonymous",
+              "challenge": {
+                "kind": "turnstile"
+              },
+              "origin": {
+                "kind": "same-origin"
               }
             }
           }
@@ -1618,9 +2193,9 @@
         "type": "table",
         "tableView": "blockTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "block.create",
           "createView": "blockCreate"
         }
       ]
@@ -1839,8 +2414,8 @@
           }
         },
         "composition": {
-          "createAction": "addTreeChild",
-          "removeAction": "removeTreePlacement"
+          "createOperation": "block-placement.addTreeChild",
+          "removeOperation": "block-placement.removeTreePlacement"
         },
         "ordering": {
           "field": "order",
@@ -1888,9 +2463,9 @@
         "type": "table",
         "tableView": "blockPlacementTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "block-placement.create",
           "createView": "blockPlacementCreate",
           "label": "Add placement"
         }
@@ -1925,9 +2500,9 @@
         "type": "table",
         "tableView": "blockPlacementTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "block-placement.create",
           "createView": "blockPlacementCreate",
           "label": "Add placement"
         }
@@ -2325,9 +2900,9 @@
         "type": "table",
         "tableView": "blockPlacementTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "block-placement.create",
           "createView": "blockPlacementCreate",
           "label": "Add placement"
         }

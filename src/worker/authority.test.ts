@@ -34,6 +34,7 @@ import {
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import {
   createAuthorityWriteHelpers,
+  operationWriteRequest,
   type AuthorityWriteHelpers,
 } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -143,12 +144,10 @@ describe("authority", () => {
     try {
       await primeSyncSocket(socket, before.cursor, before.schemaUpdatedAt);
       const capture = captureSyncSocketMessages(socket);
-      const response = await harness.fetch(apiPath("/api/mutations"), {
+      const response = await harness.fetch(apiPath("/api/operations/task/create"), {
         body: JSON.stringify({
-          mutationId: "mutation-stale-client-rejected",
-          entity: "task",
-          op: "create",
-          values: {
+          idempotencyKey: "operation-stale-client-rejected",
+          input: {
             title: "Stale client write",
             done: false,
           },
@@ -684,7 +683,7 @@ describe("authority", () => {
     );
   });
 
-  it("rejects invalid collection action references through the schema route", async () => {
+  it("rejects invalid collection operation references through the schema route", async () => {
     await expectError(
       "/api/schema",
       {
@@ -692,11 +691,11 @@ describe("authority", () => {
           ...defaultViews(),
           taskHome: {
             ...defaultCollectionView(),
-            actions: [{ type: "entityAction", action: "missing" }],
+            operations: [{ operation: "task.missing" }],
           },
         }),
       },
-      'references unknown action "missing"',
+      'references unknown operation "task.missing"',
     );
   });
 
@@ -1992,12 +1991,15 @@ describe("authority", () => {
         },
       };
       const committedMessage = readSyncSocketMessage(socket);
-      const committedResponse = await harness.fetch(apiPath("/api/mutations"), {
-        body: JSON.stringify(mutation),
+      const committedRequest = operationWriteRequest("/api/mutations", mutation);
+      const committedResponse = await harness.fetch(apiPath(committedRequest.path), {
+        body: JSON.stringify(committedRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const committed = (await committedResponse.json()) as MutationResponse;
+      const committed = committedRequest.response(
+        await committedResponse.json(),
+      ) as MutationResponse;
 
       expect(committedResponse.status).toBe(200);
       expect(committedResponse.headers.get("Cache-Control")).toBe("no-store");
@@ -2012,26 +2014,30 @@ describe("authority", () => {
       });
 
       const replayCapture = captureSyncSocketMessages(socket);
-      const replayResponse = await harness.fetch(apiPath("/api/mutations"), {
-        body: JSON.stringify(mutation),
+      const replayRequest = operationWriteRequest("/api/mutations", mutation);
+      const replayResponse = await harness.fetch(apiPath(replayRequest.path), {
+        body: JSON.stringify(replayRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
 
       expect(replayResponse.status).toBe(200);
       expect(replayResponse.headers.get("Cache-Control")).toBe("no-store");
-      expect((await replayResponse.json()) as MutationResponse).toEqual(committed);
+      expect(replayRequest.response(await replayResponse.json()) as MutationResponse).toEqual(
+        committed,
+      );
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
 
       const invalidCapture = captureSyncSocketMessages(socket);
-      const invalidResponse = await harness.fetch(apiPath("/api/mutations"), {
-        body: JSON.stringify({
-          mutationId: "mutation-authority-invalid-no-broadcast",
-          entity: "missing",
-          op: "create",
-          values: {},
-        }),
+      const invalidRequest = operationWriteRequest("/api/mutations", {
+        mutationId: "mutation-authority-invalid-no-broadcast",
+        entity: "missing",
+        op: "create",
+        values: {},
+      });
+      const invalidResponse = await harness.fetch(apiPath(invalidRequest.path), {
+        body: JSON.stringify(invalidRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -2300,13 +2306,14 @@ describe("authority", () => {
       await primeSyncSocket(socket, existing.cursor, schemaResponse.updatedAt);
 
       const invalidCapture = captureSyncSocketMessages(socket);
-      const invalid = await harness.fetch(apiPath("/api/mutations"), {
-        body: JSON.stringify({
-          mutationId: "mutation-invalid-no-broadcast",
-          entity: "task",
-          op: "create",
-          values: { title: "   " },
-        }),
+      const invalidRequest = operationWriteRequest("/api/mutations", {
+        mutationId: "mutation-invalid-no-broadcast",
+        entity: "task",
+        op: "create",
+        values: { title: "   " },
+      });
+      const invalid = await harness.fetch(apiPath(invalidRequest.path), {
+        body: JSON.stringify(invalidRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -2316,13 +2323,14 @@ describe("authority", () => {
       invalidCapture.stop();
 
       const constraintCapture = captureSyncSocketMessages(socket);
-      const constraintFailure = await harness.fetch(apiPath("/api/mutations"), {
-        body: JSON.stringify({
-          mutationId: "mutation-constraint-no-broadcast",
-          entity: "task",
-          op: "create",
-          values: { title: "Constraint source", done: false },
-        }),
+      const constraintRequest = operationWriteRequest("/api/mutations", {
+        mutationId: "mutation-constraint-no-broadcast",
+        entity: "task",
+        op: "create",
+        values: { title: "Constraint source", done: false },
+      });
+      const constraintFailure = await harness.fetch(apiPath(constraintRequest.path), {
+        body: JSON.stringify(constraintRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -2438,12 +2446,13 @@ describe("authority", () => {
       schemaCapture.stop();
 
       const actionCapture = captureSyncSocketMessages(socket);
-      const invalidAction = await harness.fetch(apiPath("/api/actions"), {
-        body: JSON.stringify({
-          actionId: "action-invalid-no-broadcast",
-          entity: "task",
-          action: "missing",
-        }),
+      const invalidActionRequest = operationWriteRequest("/api/actions", {
+        actionId: "action-invalid-no-broadcast",
+        entity: "task",
+        action: "missing",
+      });
+      const invalidAction = await harness.fetch(apiPath(invalidActionRequest.path), {
+        body: JSON.stringify(invalidActionRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -3781,8 +3790,9 @@ describe("authority", () => {
     });
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+    const parsedNextSchema = parseAppSchema(nextSchema);
 
-    expect(update.schema).toEqual(nextSchema);
+    expect(update.schema).toEqual(parsedNextSchema);
   });
 
   it("rejects malformed item and create views in schema updates", async () => {
@@ -4017,7 +4027,7 @@ describe("authority", () => {
   });
 
   it("rejects bad JSON request bodies", async () => {
-    const response = await harness.fetch(apiPath("/api/mutations"), {
+    const response = await harness.fetch(apiPath("/api/operations/task/create"), {
       body: "{",
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -4116,6 +4126,9 @@ function schemaWithSelectedTaskProjectJoinAction(): AppSchema {
           name: { type: "text", required: true, label: "Name" },
         },
         mutations: defaultMutations(),
+        operations: taskOperations("Project", {
+          name: { type: "text", required: true, label: "Name" },
+        }),
       },
       assignment: {
         label: "Assignment",
@@ -4136,6 +4149,32 @@ function schemaWithSelectedTaskProjectJoinAction(): AppSchema {
           },
         },
         mutations: defaultMutations(),
+        operations: taskOperations(
+          "Assignment",
+          {
+            task: {
+              type: "reference",
+              required: true,
+              label: "Task",
+              to: "task",
+              displayField: "title",
+            },
+            project: {
+              type: "reference",
+              required: true,
+              label: "Project",
+              to: "project",
+              displayField: "name",
+            },
+          },
+          {
+            addSelectedProject: {
+              label: "Add selected project",
+              kind: "create-selected-join-record",
+              relationship: "taskProjects",
+            },
+          },
+        ),
         constraints: {
           uniqueAssignmentPair: {
             kind: "unique",
@@ -4263,17 +4302,19 @@ function schemaWithPriorityEnum(
     ...currentPriorityField,
     ...enumOverrides,
   };
+  const fields = {
+    ...appSchema.entities.task.fields,
+    priority: priorityField,
+  };
 
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: {
-          ...appSchema.entities.task.fields,
-          priority: priorityField,
-        },
+        fields,
         mutations: defaultMutations(),
+        operations: taskOperations("Task", fields),
       },
     },
     queries: defaultQueries(),
@@ -4354,6 +4395,22 @@ function schemaWithPriorityStateMachine({
         transition: "raise",
       },
     },
+    operations: taskOperations(
+      "Task",
+      {
+        ...task.fields,
+        priority: priorityFieldForMachine,
+      },
+      {
+        ...task.actions,
+        raisePriority: {
+          label: "Raise priority",
+          kind: "transition-state",
+          machine: "priorityFlow",
+          transition: "raise",
+        },
+      },
+    ),
   };
 
   return {
@@ -4410,19 +4467,26 @@ function schemaWithTaskNotesField(): AppSchema {
           ...appSchema.entities.task.fields,
           notes: { type: "text", required: false, label: "Notes" },
         },
+        operations: taskOperations("Task", {
+          ...appSchema.entities.task.fields,
+          notes: { type: "text", required: false, label: "Notes" },
+        }),
       },
     },
   };
 }
 
 function schemaWithMutations(mutations: unknown) {
+  const fields = appSchema.entities.task.fields;
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: appSchema.entities.task.fields,
+        fields,
         mutations,
+        operations: taskOperations("Task", fields),
       },
     },
     queries: defaultQueries(),
@@ -4433,6 +4497,63 @@ function schemaWithMutations(mutations: unknown) {
   };
 }
 
+function taskOperations(
+  label: string,
+  fields: Record<string, unknown>,
+  actions?: EntitySchema["actions"],
+): NonNullable<AppSchema["entities"][string]["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+  const commandOperations = Object.fromEntries(
+    Object.entries(actions ?? {}).map(([actionName, action]) => [
+      actionName,
+      {
+        label: action.label ?? actionName,
+        kind: "command",
+        scope: "collection",
+        effect: { type: "runActionKind", kind: action.kind, action: actionName },
+        output: { type: "command" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
+      },
+    ]),
+  );
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    delete: {
+      label: `Delete ${label}`,
+      kind: "delete",
+      scope: "record",
+      effect: { type: "tombstoneRecord" },
+      output: { type: "delete" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...commandOperations,
+  };
+}
+
 function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
   return {
     ...appSchema,
@@ -4440,6 +4561,11 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
       task: {
         ...appSchema.entities.task,
         mutations: deleteEnabledMutations(),
+        operations: taskOperations(
+          "Task",
+          appSchema.entities.task.fields,
+          appSchema.entities.task.actions,
+        ),
       },
       project: {
         label: "Project",
@@ -4447,6 +4573,9 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
           name: { type: "text", required: true },
         },
         mutations: deleteEnabledMutations(),
+        operations: taskOperations("Project", {
+          name: { type: "text", required: true },
+        }),
       },
     },
   };
@@ -4467,30 +4596,34 @@ function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
       project: {
         ...project,
         mutations: deleteEnabledMutations(),
+        operations: taskOperations("Project", project.fields),
       },
     },
   };
 }
 
 function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {}) {
+  const fields = {
+    ...appSchema.entities.task.fields,
+    estimate: {
+      type: "number",
+      required: false,
+      label: "Estimate",
+      min: 0,
+      integer: true,
+      ...numberOverrides,
+    },
+  };
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: {
-          ...appSchema.entities.task.fields,
-          estimate: {
-            type: "number",
-            required: false,
-            label: "Estimate",
-            min: 0,
-            integer: true,
-            ...numberOverrides,
-          },
-        },
+        fields,
         mutations: defaultMutations(),
         actions: appSchema.entities.task.actions,
+        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
     queries: appSchema.queries,
@@ -4509,22 +4642,24 @@ function schemaWithRequiredScore() {
   if (taskCreate.type !== "create") {
     throw new Error("Expected taskCreate to be a create view.");
   }
+  const fields = {
+    ...schema.entities.task.fields,
+    score: {
+      type: "number",
+      required: true,
+      label: "Score",
+    },
+  };
 
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: {
-          ...schema.entities.task.fields,
-          score: {
-            type: "number",
-            required: true,
-            label: "Score",
-          },
-        },
+        fields,
         mutations: defaultMutations(),
         actions: appSchema.entities.task.actions,
+        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
     queries: defaultQueries(),
@@ -4559,6 +4694,9 @@ function schemaWithRateReferences({
           name: { type: "text", required: true, label: "Name" },
         },
         mutations: defaultMutations(),
+        operations: taskOperations("Resource", {
+          name: { type: "text", required: true, label: "Name" },
+        }),
       },
       card: {
         label: "Rate card",
@@ -4566,6 +4704,9 @@ function schemaWithRateReferences({
           name: { type: "text", required: true, label: "Name" },
         },
         mutations: defaultMutations(),
+        operations: taskOperations("Rate card", {
+          name: { type: "text", required: true, label: "Name" },
+        }),
       },
       rate: {
         label: "Rate",
@@ -4594,6 +4735,30 @@ function schemaWithRateReferences({
           price: { type: "number", required: false, label: "Price", min: 0 },
         },
         mutations: defaultMutations(),
+        operations: taskOperations("Rate", {
+          resource: {
+            type: "reference",
+            required: true,
+            label: "Resource",
+            to: "resource",
+            displayField: "name",
+          },
+          card: {
+            type: "reference",
+            required: true,
+            label: "Card",
+            to: "card",
+            displayField: "name",
+          },
+          backupResource: {
+            type: "reference",
+            required: false,
+            label: "Backup resource",
+            to: "resource",
+            displayField: "name",
+          },
+          price: { type: "number", required: false, label: "Price", min: 0 },
+        }),
         ...(constraints === undefined ? {} : { constraints }),
       },
     },
@@ -4606,15 +4771,18 @@ function schemaWithRateReferences({
 }
 
 function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
+  const fields = appSchema.entities.task.fields;
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: appSchema.entities.task.fields,
+        fields,
         mutations: defaultMutations(),
         constraints,
         actions: appSchema.entities.task.actions,
+        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
     queries: defaultQueries(),
@@ -4677,22 +4845,24 @@ function schemaWithTaskProjectReference({
   if (taskCreate.type !== "create") {
     throw new Error("Expected taskCreate to be a create view.");
   }
+  const taskFields = {
+    ...appSchema.entities.task.fields,
+    project: {
+      type: "reference" as const,
+      required,
+      label: "Project",
+      to,
+      displayField,
+    },
+  };
 
   const entities: Record<string, EntitySchema> = {
     task: {
       label: "Task",
-      fields: {
-        ...appSchema.entities.task.fields,
-        project: {
-          type: "reference",
-          required,
-          label: "Project",
-          to,
-          displayField,
-        },
-      },
+      fields: taskFields,
       mutations: defaultMutations(),
       actions: appSchema.entities.task.actions,
+      operations: taskOperations("Task", taskFields, appSchema.entities.task.actions),
     },
     project: {
       label: "Project",
@@ -4701,6 +4871,10 @@ function schemaWithTaskProjectReference({
         code: { type: "text", required: true, label: "Code" },
       },
       mutations: defaultMutations(),
+      operations: taskOperations("Project", {
+        name: { type: "text", required: true, label: "Name" },
+        code: { type: "text", required: true, label: "Code" },
+      }),
     },
   };
 
@@ -4711,6 +4885,9 @@ function schemaWithTaskProjectReference({
         name: { type: "text", required: true, label: "Name" },
       },
       mutations: defaultMutations(),
+      operations: taskOperations("Milestone", {
+        name: { type: "text", required: true, label: "Name" },
+      }),
     };
   }
 
@@ -4735,13 +4912,16 @@ function schemaWithTaskProjectReference({
 }
 
 function schemaWithViews(views: unknown = defaultViews()) {
+  const fields = appSchema.entities.task.fields;
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
-        fields: appSchema.entities.task.fields,
+        fields,
         mutations: defaultMutations(),
+        operations: taskOperations("Task", fields),
       },
     },
     queries: defaultQueries(),
@@ -4895,15 +5075,19 @@ async function postInstalledAppJson<T>(
   path: string,
   body: unknown,
 ) {
-  const response = await harness.fetch(installedAppApiPath(packageAppKey, installId, path), {
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(
+    installedAppApiPath(packageAppKey, installId, request.path),
+    {
+      body: JSON.stringify(request.body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 
-  return (await response.json()) as T;
+  return request.response(await response.json()) as T;
 }
 
 async function resetInstalledApp(packageAppKey: string, installId: string) {

@@ -577,9 +577,9 @@ export type TreeBranchPolicySchema = {
   variants: Record<string, TreeBranchVariantPolicySchema>;
 };
 
-export type TreeCompositionActionSchema = {
-  createAction?: string;
-  removeAction?: string;
+export type TreeCompositionOperationSchema = {
+  createOperation?: string;
+  removeOperation?: string;
 };
 
 export type CollectionResultSchema =
@@ -606,7 +606,7 @@ export type CollectionResultSchema =
       placementItemView?: string;
       ordering?: ResultOrderingSchema;
       branches?: TreeBranchPolicySchema;
-      composition?: TreeCompositionActionSchema;
+      composition?: TreeCompositionOperationSchema;
       maxDepth?: number;
     };
 
@@ -648,18 +648,12 @@ export type CollectionContextSchema = {
   itemView?: string;
 };
 
-export type CollectionActionSlotSchema =
-  | {
-      type: "create";
-      createView: string;
-      label?: string;
-    }
-  | {
-      type: "entityAction";
-      action: string;
-      label?: string;
-      count?: CountDisplaySchema;
-    };
+export type CollectionOperationBindingSchema = {
+  operation: string;
+  label?: string;
+  createView?: string;
+  count?: CountDisplaySchema;
+};
 
 export type CollectionSummarySlotSchema = {
   type: "aggregate";
@@ -678,7 +672,7 @@ export type CollectionViewSchema = {
   queries: CollectionViewQuerySlotSchema[];
   defaultQuery: string;
   result: CollectionResultSchema;
-  actions?: CollectionActionSlotSchema[];
+  operations?: CollectionOperationBindingSchema[];
   summary?: CollectionSummarySlotSchema[];
 };
 
@@ -949,6 +943,112 @@ export type EntityActionSchemaForKind<Kind extends EntityActionKind> =
 
 export type EntityActionSchema = EntityActionSchemaByKind[EntityActionKind];
 
+export type EntityOperationKind = "list" | "get" | "create" | "update" | "delete" | "command";
+
+export type EntityOperationScope = "collection" | "record";
+
+export type EntityOperationActorKind = SchemaActionActorKind | "anonymous";
+
+export type EntityOperationFieldInputSchema = {
+  field: string;
+  required?: boolean;
+  label?: string;
+};
+
+export type EntityOperationInlineInputFieldSchema = PublicActionInputFieldSchema;
+
+export type EntityOperationInputFieldSchema =
+  | EntityOperationFieldInputSchema
+  | EntityOperationInlineInputFieldSchema;
+
+export type EntityOperationInputContractSchema = {
+  fields: Record<string, EntityOperationInputFieldSchema>;
+};
+
+export type EntityOperationTargetSchema = {
+  query: string;
+};
+
+export type CreateRecordEntityOperationEffectSchema = {
+  type: "createRecord";
+  entity?: string;
+};
+
+export type PatchRecordEntityOperationEffectSchema = {
+  type: "patchRecord";
+  entity?: string;
+};
+
+export type DeleteRecordEntityOperationEffectSchema = {
+  type: "deleteRecord" | "tombstoneRecord";
+  entity?: string;
+};
+
+export type RunActionKindEntityOperationEffectSchema = {
+  type: "runActionKind";
+  kind: EntityActionKind;
+  action?: string;
+  query?: string;
+};
+
+export type EntityOperationEffectSchema =
+  | CreateRecordEntityOperationEffectSchema
+  | PatchRecordEntityOperationEffectSchema
+  | DeleteRecordEntityOperationEffectSchema
+  | RunActionKindEntityOperationEffectSchema;
+
+export type EntityOperationOutputContractSchema =
+  | {
+      type: "list";
+      query: string;
+    }
+  | {
+      type: "get";
+    }
+  | {
+      type: "create";
+    }
+  | {
+      type: "update";
+    }
+  | {
+      type: "delete";
+    }
+  | {
+      type: "command";
+    };
+
+export type EntityOperationIdempotencySchema = {
+  required: boolean;
+  source?: "caller" | "runtime";
+};
+
+export type EntityOperationAuditInputPolicy = "none" | "hash" | "summary" | "snapshot";
+
+export type EntityOperationAuditSchema = {
+  input: EntityOperationAuditInputPolicy;
+};
+
+export type EntityOperationPolicySchema = {
+  actors: EntityOperationActorKind[];
+  access?: ActionAccessPolicySchema;
+  responseFields?: Partial<Record<EntityOperationActorKind, string[]>>;
+  visible?: boolean;
+};
+
+export type EntityOperationSchema = {
+  label?: string;
+  kind: EntityOperationKind;
+  scope: EntityOperationScope;
+  input?: EntityOperationInputContractSchema;
+  target?: EntityOperationTargetSchema;
+  effect?: EntityOperationEffectSchema;
+  output: EntityOperationOutputContractSchema;
+  idempotency: EntityOperationIdempotencySchema;
+  audit: EntityOperationAuditSchema;
+  policy?: EntityOperationPolicySchema;
+};
+
 export type UniqueConstraintSchema = {
   kind: "unique";
   fields: string[];
@@ -963,6 +1063,7 @@ export type EntitySchema = {
   constraints?: Record<string, EntityConstraintSchema>;
   stateMachines?: Record<string, StateMachineSchema>;
   actions?: Record<string, EntityActionSchema>;
+  operations?: Record<string, EntityOperationSchema>;
 };
 
 export type RuntimeSchemaRouteValidationSchema = {

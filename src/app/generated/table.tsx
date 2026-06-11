@@ -90,18 +90,18 @@ export function RecordTable({
   result: TableCollectionResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
-  const canPatch = entity.mutations.patch.enabled;
-  const canDelete = entity.mutations.delete.enabled;
+  const canPatch = result.updateOperation !== undefined;
+  const canDelete = result.deleteOperation !== undefined;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const { columns, ordering } = result;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();
   const orderingContext = selectResultOrderingContext({
-    canPatch,
     entityName,
     ordering,
     recordIds,
     recordsById,
+    updateOperation: result.updateOperation,
   });
   const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
   const orderingDragFacts = selectOrderingDragFacts(orderingContext);
@@ -112,7 +112,7 @@ export function RecordTable({
     footer: result.footer ?? [],
     orderedRecordIds,
     orderingDragFacts,
-    orderingDragPatchEnabled: orderingContext?.canPatch,
+    orderingDragPatchEnabled: orderingContext?.updateOperation !== undefined,
     pendingDragRecordId,
     query,
     queryName,
@@ -202,23 +202,25 @@ export function RecordTable({
           : presentation.rows.map((row) =>
               row.ordering.type === "drag" ? (
                 <SortableRecordTableRows
-                  canPatch={canPatch}
+                  deleteOperation={result.deleteOperation}
                   deleteLabelFields={presentation.delete?.labelFields ?? []}
                   entity={entity}
                   entityName={entityName}
                   key={row.key}
                   orderingContext={orderingContext}
                   recordRow={row}
+                  updateOperation={result.updateOperation}
                 />
               ) : (
                 <StaticRecordTableRows
-                  canPatch={canPatch}
+                  deleteOperation={result.deleteOperation}
                   deleteLabelFields={presentation.delete?.labelFields ?? []}
                   entity={entity}
                   entityName={entityName}
                   key={row.key}
                   orderingContext={orderingContext}
                   recordRow={row}
+                  updateOperation={result.updateOperation}
                 />
               ),
             )}
@@ -249,19 +251,21 @@ export function RecordTable({
 }
 
 function StaticRecordTableRows({
-  canPatch,
+  deleteOperation,
   deleteLabelFields,
   entity,
   entityName,
   orderingContext,
   recordRow,
+  updateOperation,
 }: {
-  canPatch: boolean;
+  deleteOperation?: TableCollectionResultModel["deleteOperation"];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   orderingContext?: ResultOrderingContext;
   recordRow: GeneratedTableRowPresentation;
+  updateOperation?: TableCollectionResultModel["updateOperation"];
 }) {
   return (
     <Fragment>
@@ -272,12 +276,13 @@ function StaticRecordTableRows({
         textValue={recordRow.recordId}
       >
         <RecordTableCells
-          canPatch={canPatch}
+          deleteOperation={deleteOperation}
           deleteLabelFields={deleteLabelFields}
           entity={entity}
           entityName={entityName}
           orderingContext={orderingContext}
           recordRow={recordRow}
+          updateOperation={updateOperation}
         />
       </TableRow>
       <ReadinessWarningTableRow warning={recordRow.readinessWarning} />
@@ -286,29 +291,32 @@ function StaticRecordTableRows({
 }
 
 function SortableRecordTableRows({
-  canPatch,
+  deleteOperation,
   deleteLabelFields,
   entity,
   entityName,
   orderingContext,
   recordRow,
+  updateOperation,
 }: {
-  canPatch: boolean;
+  deleteOperation?: TableCollectionResultModel["deleteOperation"];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   orderingContext?: ResultOrderingContext;
   recordRow: GeneratedTableRowPresentation;
+  updateOperation?: TableCollectionResultModel["updateOperation"];
 }) {
   if (recordRow.ordering.type !== "drag") {
     return (
       <StaticRecordTableRows
-        canPatch={canPatch}
+        deleteOperation={deleteOperation}
         deleteLabelFields={deleteLabelFields}
         entity={entity}
         entityName={entityName}
         orderingContext={orderingContext}
         recordRow={recordRow}
+        updateOperation={updateOperation}
       />
     );
   }
@@ -351,7 +359,7 @@ function SortableRecordTableRows({
         textValue={recordRow.recordId}
       >
         <RecordTableCells
-          canPatch={canPatch}
+          deleteOperation={deleteOperation}
           deleteLabelFields={deleteLabelFields}
           entity={entity}
           entityName={entityName}
@@ -359,6 +367,7 @@ function SortableRecordTableRows({
           orderingHandleDisabled={disabled}
           orderingHandleRef={handleRef}
           recordRow={recordRow}
+          updateOperation={updateOperation}
         />
       </TableRow>
       <ReadinessWarningTableRow warning={recordRow.readinessWarning} />
@@ -367,7 +376,7 @@ function SortableRecordTableRows({
 }
 
 function RecordTableCells({
-  canPatch,
+  deleteOperation,
   deleteLabelFields,
   entity,
   entityName,
@@ -375,8 +384,9 @@ function RecordTableCells({
   orderingHandleDisabled,
   orderingHandleRef,
   recordRow,
+  updateOperation,
 }: {
-  canPatch: boolean;
+  deleteOperation?: TableCollectionResultModel["deleteOperation"];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
@@ -384,13 +394,14 @@ function RecordTableCells({
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
   recordRow: GeneratedTableRowPresentation;
+  updateOperation?: TableCollectionResultModel["updateOperation"];
 }) {
   return (
     <>
       {recordRow.cells.map((cell) => (
         <TableCell className={tableCellClassForPresentationColumn(cell.column)} key={cell.key}>
           <RecordTableCellContent
-            canPatch={canPatch}
+            deleteOperation={deleteOperation}
             cell={cell}
             deleteLabelFields={deleteLabelFields}
             entity={entity}
@@ -398,6 +409,7 @@ function RecordTableCells({
             orderingContext={orderingContext}
             orderingHandleDisabled={orderingHandleDisabled}
             orderingHandleRef={orderingHandleRef}
+            updateOperation={updateOperation}
           />
         </TableCell>
       ))}
@@ -406,27 +418,34 @@ function RecordTableCells({
 }
 
 function RecordTableCellContent({
-  canPatch,
   cell,
+  deleteOperation,
   deleteLabelFields,
   entity,
   entityName,
   orderingContext,
   orderingHandleDisabled,
   orderingHandleRef,
+  updateOperation,
 }: {
-  canPatch: boolean;
   cell: GeneratedTableCellPresentation;
+  deleteOperation?: TableCollectionResultModel["deleteOperation"];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   orderingContext?: ResultOrderingContext;
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
+  updateOperation?: TableCollectionResultModel["updateOperation"];
 }) {
   if (cell.column.type === "delete") {
+    if (!deleteOperation) {
+      return null;
+    }
+
     return (
       <DeleteRecordButton
+        deleteOperation={deleteOperation}
         entityLabel={entity.label}
         entityName={entityName}
         labelFields={deleteLabelFields}
@@ -448,13 +467,13 @@ function RecordTableCellContent({
 
   return (
     <RecordTableCell
-      canPatch={canPatch}
       entityName={entityName}
       column={cell.column.column}
       orderingContext={orderingContext}
       orderingHandleDisabled={orderingHandleDisabled}
       orderingHandleRef={orderingHandleRef}
       recordId={cell.recordId}
+      updateOperation={updateOperation}
     />
   );
 }
@@ -599,21 +618,21 @@ function ReadinessWarningTableRow({
 }
 
 function RecordTableCell({
-  canPatch,
   column,
   entityName,
   orderingContext,
   orderingHandleDisabled,
   orderingHandleRef,
   recordId,
+  updateOperation,
 }: {
-  canPatch: boolean;
   column: TableColumnConfig;
   entityName: string;
   orderingContext?: ResultOrderingContext;
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
   recordId: string;
+  updateOperation?: TableCollectionResultModel["updateOperation"];
 }) {
   const justifyClass = tableCellJustifyClass(column);
 
@@ -671,12 +690,12 @@ function RecordTableCell({
   return (
     <div className={`flex items-center gap-1 ${justifyClass}`}>
       <RecordFieldEditor
-        canPatch={canPatch}
         density="compact"
         entityName={entityName}
         fieldConfig={column}
         key={recordFieldEditorKey(entityName, recordId, column.fieldName)}
         recordId={recordId}
+        updateOperation={updateOperation}
       />
       {column.suffix ? (
         <span className="shrink-0 text-xs text-slate-500">{column.suffix}</span>
@@ -830,12 +849,12 @@ function ResolvedReferenceFieldTableCell({
   return (
     <div className={`flex items-center gap-1 ${justifyClass}`}>
       <RecordFieldEditor
-        canPatch={column.referencedEntity.mutations.patch.enabled}
         density="compact"
         entityName={column.referencedEntityName}
         fieldConfig={column}
         key={recordFieldEditorKey(column.referencedEntityName, referenceRecordId, column.fieldName)}
         recordId={referenceRecordId}
+        updateOperation={column.referencedUpdateOperation}
       />
       {column.suffix ? (
         <span className="shrink-0 text-xs text-slate-500">{column.suffix}</span>
@@ -889,7 +908,7 @@ export function ReferencedRecordEditorDialog({
           referenceItem={referenceItem}
           referenceRecordId={referenceRecordId}
         />
-        {!referenceItem.entity.mutations.patch.enabled ? (
+        {!referenceItem.updateOperation ? (
           <p className="text-sm text-slate-600">
             Editing is disabled for {referenceItem.entity.label}.
           </p>
@@ -922,7 +941,6 @@ export function ReferencedRecordEditorFields({
     <div className="flex flex-wrap items-end gap-3">
       {visibleFields.map((fieldConfig) => (
         <RecordFieldEditor
-          canPatch={referenceItem.entity.mutations.patch.enabled}
           entityName={referenceItem.entityName}
           fieldConfig={fieldConfig}
           key={recordFieldEditorKey(
@@ -932,6 +950,7 @@ export function ReferencedRecordEditorFields({
           )}
           recordId={referenceRecordId}
           showLabel={true}
+          updateOperation={referenceItem.updateOperation}
         />
       ))}
     </div>

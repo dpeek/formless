@@ -7,7 +7,7 @@ import {
 } from "../../client/state-machine-model.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitAction } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
 import type { StateMachineFieldConfig, TransitionStateActionConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import { enumValuePresentation, GeneratedFieldPresentationIcon } from "./field-presentation.tsx";
@@ -75,11 +75,11 @@ export function RecordTransitionActionControls({
       return;
     }
 
-    setPendingActionName(action.actionName);
+    setPendingActionName(action.operationName);
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      await submitTransitionStateAction(appTarget, entityName, action.actionName, recordId);
+      await submitTransitionStateAction(appTarget, entityName, action.operationName, recordId);
       setSyncStatus({ state: "idle", message: `${action.label} synced.` });
     } catch (error) {
       setSyncStatus({
@@ -105,7 +105,7 @@ export function RecordTransitionActionControls({
           currentValue,
           field: action.field,
         });
-        const pending = pendingActionName === action.actionName;
+        const pending = pendingActionName === action.operationName;
         const disabled = pendingActionName !== null || !availability.valid;
         const label = pending ? `${action.label}...` : action.label;
 
@@ -116,13 +116,13 @@ export function RecordTransitionActionControls({
                 ? action.label
                 : `${action.label}: ${availability.disabledReason ?? "Unavailable"}`
             }
-            data-formless-transition-action={action.actionName}
+            data-formless-transition-action={action.operationName}
             data-formless-transition-disabled-reason={availability.disabledReason}
             data-formless-transition-machine={action.machineName}
             data-formless-transition-state-valid={availability.valid ? "true" : "false"}
             data-formless-transition-target-state={action.transition.to}
             isDisabled={disabled}
-            key={action.actionName}
+            key={action.operationName}
             onPress={() => {
               if (availability.valid) {
                 void runAction(action);
@@ -143,11 +143,11 @@ export function RecordTransitionActionControls({
 export async function submitTransitionStateAction(
   target: ClientAppTarget,
   entityName: string,
-  actionName: string,
+  operationName: string,
   recordId: string,
   fetcher: typeof fetch = fetch,
 ) {
-  return submitAction(target, entityName, actionName, { recordId }, fetcher);
+  return submitOperation(target, entityName, operationName, { recordId }, fetcher);
 }
 
 function badgeIntentForPresentation(

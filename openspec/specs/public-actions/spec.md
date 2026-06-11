@@ -2,96 +2,131 @@
 
 ## Purpose
 
-Public actions execute schema-declared actions for public callers through narrow target-scoped routes while preserving protected generic write APIs.
+Public operation bindings execute schema-declared entity operations for public
+callers through narrow target-scoped routes while preserving protected generic
+write APIs.
 
 ## Requirements
 
-### Requirement: Action Access Policy
+### Requirement: Public Operation Policy
 
-The system SHALL let schema-declared actions opt in to public execution through an explicit access policy.
+The system SHALL let schema-declared operations opt in to public execution
+through an explicit actor policy and public binding.
 
-#### Scenario: Reject action without public policy
+#### Scenario: Reject operation without public policy
 
-- GIVEN an anonymous request targets a schema action that has no public access policy
-- WHEN the public action executor evaluates the request
+- GIVEN an anonymous request targets a schema operation that has no public
+  actor policy or public binding
+- WHEN the public operation executor evaluates the request
 - THEN the request is rejected
-- AND no action effects are committed
+- AND no operation effects are committed
 
-#### Scenario: Anonymous action is eligible
+#### Scenario: Anonymous operation is eligible
 
-- GIVEN a schema action access policy allows anonymous public execution
-- WHEN an anonymous request targets that action
-- THEN the public action executor evaluates the request through the public action path
-- AND the executor does not require owner session or admin bearer authorization for that request
+- GIVEN a schema operation policy allows anonymous public execution
+- WHEN an anonymous request targets that operation
+- THEN the public operation executor evaluates the request through the public
+  operation path
+- AND the executor does not require owner session or admin bearer authorization
+  for that request
 
-### Requirement: Target-Scoped Public Action API
+#### Scenario: Execute public operations
 
-The system SHALL expose public action execution through target-scoped public action endpoints instead of generic mutation or action endpoints.
+- GIVEN an entity operation declares anonymous public policy
+- WHEN public execution models are selected
+- THEN public execution invokes the operation envelope and policy model
+- AND entity action metadata does not synthesize public operation bindings
 
-#### Scenario: Installed app public action route
+#### Scenario: Execute public create operation
 
-- GIVEN a visitor posts to `/api/app-installs/:packageAppKey/:installId/public/actions/:actionName`
+- GIVEN the Site schema declares `contact-message.submit` as an anonymous
+  Turnstile-protected create operation
+- WHEN a visitor posts declared contact message input to the target-scoped
+  public operation route
+- THEN the executor validates `operation.input.fields` before Turnstile
+  verification
+- AND successful execution commits one flat `contact-message` record
+- AND the public response returns create-shaped operation output
+- AND Turnstile proof values are not stored in the created record or returned in
+  the public response
+
+### Requirement: Target-Scoped Public Operation API
+
+The system SHALL expose public operation execution through target-scoped public
+operation endpoints instead of generic mutation or action endpoints.
+
+#### Scenario: Installed app public operation route
+
+- GIVEN a visitor posts to `/api/app-installs/:packageAppKey/:installId/public/operations/:entityKey/:operationKey`
 - WHEN the route resolves
 - THEN the runtime resolves the matching installed app storage identity
-- AND public action effects are committed only to that app storage identity
+- AND public operation effects are committed only to that app storage identity
 
-#### Scenario: Schema-key public action route
+#### Scenario: Schema-key public operation route
 
-- GIVEN a visitor posts to `/api/:schemaKey/public/actions/:actionName`
+- GIVEN a visitor posts to `/api/:schemaKey/public/operations/:entityKey/:operationKey`
 - WHEN the route resolves
 - THEN the runtime resolves the matching schema-key storage identity
-- AND public action effects are committed only to that schema-key storage identity
+- AND public operation effects are committed only to that schema-key storage identity
 
 #### Scenario: Generic write routes stay protected
 
 - GIVEN a visitor lacks owner session or admin bearer authorization
-- WHEN the visitor posts to generic `/mutations` or `/actions`
-- THEN the request is rejected by the write guard
-- AND public action policy is not evaluated through those generic routes
+- WHEN the visitor posts outside a target-scoped public operation route
+- THEN the request does not evaluate public operation policy through retired
+  mutation or action routes
 
-### Requirement: Public Action Execution Envelope
+### Requirement: Public Operation Execution Envelope
 
-The system SHALL normalize each public action request into an execution envelope before validating input or committing effects.
+The system SHALL normalize each public operation request into an operation
+invocation envelope before validating input or committing effects.
 
 #### Scenario: Anonymous execution envelope
 
-- GIVEN an anonymous public action request is accepted for evaluation
-- WHEN the public action executor builds the envelope
-- THEN the envelope includes actor mode `anonymous`, target app storage identity, action name, request host, request path, source block id when supplied, public input, proof data, idempotency key, and received timestamp
+- GIVEN an anonymous public operation request is accepted for evaluation
+- WHEN the public operation executor builds the envelope
+- THEN the envelope includes actor mode `anonymous`, target app storage identity,
+  canonical operation key, request host, request path, source block id when
+  supplied, public input, proof data, idempotency key, and received timestamp
 
 #### Scenario: Source context is preserved
 
-- GIVEN a public action commits records
-- WHEN action effects are written
-- THEN committed records or action response metadata include enough source context to identify the action, target app storage identity, host, path, and Site block that caused the write
+- GIVEN a public operation commits records
+- WHEN operation effects are written
+- THEN committed records or operation response metadata include enough source
+  context to identify the operation, target app storage identity, host, path,
+  and Site block that caused the write
 
 ### Requirement: Public Input Validation
 
-The system MUST validate public action input against the action's public input contract before challenge verification commits records.
+The system MUST validate public operation input against the operation's public
+input contract before challenge verification commits records.
 
 #### Scenario: Unknown public input field
 
-- GIVEN a public action request includes a field not declared by the action public input contract
+- GIVEN a public operation request includes a field not declared by the
+  operation public input contract
 - WHEN input is validated
 - THEN the request is rejected
-- AND no action effects are committed
+- AND no operation effects are committed
 
 #### Scenario: Invalid public input field
 
-- GIVEN a public action request includes a declared field with an invalid value
+- GIVEN a public operation request includes a declared field with an invalid value
 - WHEN input is validated
 - THEN the request is rejected with a public-safe validation error
-- AND no action effects are committed
+- AND no operation effects are committed
 
 ### Requirement: Turnstile Challenge
 
-The system SHALL support Turnstile as an anonymous public action challenge.
+The system SHALL support Turnstile as an anonymous public operation challenge.
 
 #### Scenario: Verify Turnstile before write
 
-- GIVEN a public action access policy requires Turnstile
-- WHEN a public action request is evaluated
-- THEN the executor validates the submitted Turnstile token server-side before committing action effects
+- GIVEN a public operation access policy requires Turnstile
+- WHEN a public operation request is evaluated
+- THEN the executor validates the submitted Turnstile token server-side before
+  committing operation effects
 - AND failed, missing, expired, or replayed verification rejects the request without committing records
 
 #### Scenario: Keep Turnstile secrets server-side
@@ -103,44 +138,47 @@ The system SHALL support Turnstile as an anonymous public action challenge.
 
 ### Requirement: Turnstile Configuration
 
-The system SHALL use separate runtime configuration for public Turnstile widget keys and server-side verification secrets.
+The system SHALL use separate runtime configuration for public Turnstile widget
+keys and server-side verification secrets.
 
 #### Scenario: Deployment-provided challenge configuration
 
-- GIVEN a deployed instance provisions a Turnstile widget for public actions
+- GIVEN a deployed instance provisions a Turnstile widget for public operations
 - WHEN runtime bindings are configured
 - THEN `FORMLESS_TURNSTILE_SITE_KEY` contains the public widget site key
 - AND `FORMLESS_TURNSTILE_SECRET_KEY` contains the server-side verification
   secret
-- AND public action APIs, Site trees, snapshots, archives, and bootstrap data do
+- AND public operation APIs, Site trees, snapshots, archives, and bootstrap data do
   not expose the verification secret
 
 #### Scenario: Public site key reaches renderer
 
 - GIVEN `FORMLESS_TURNSTILE_SITE_KEY` is configured
-- WHEN a public Site tree projects a Turnstile-protected action
+- WHEN a public Site tree projects a Turnstile-protected operation
 - THEN the public widget site key may be included for browser rendering
 - AND the secret key is not included
 
 #### Scenario: Missing challenge configuration fails closed
 
-- GIVEN a public action requires Turnstile
+- GIVEN a public operation requires Turnstile
 - WHEN the public site key or secret key configuration is missing or blank
-- THEN public rendering omits a working action binding or public execution fails closed before records are written
+- THEN public rendering omits a working operation binding or public execution
+  fails closed before records are written
 
-### Requirement: Public Action Idempotency
+### Requirement: Public Operation Idempotency
 
-The system SHALL make public action execution replay-safe for client retries.
+The system SHALL make public operation execution replay-safe for client retries.
 
 #### Scenario: Replay same idempotency key
 
-- GIVEN the same public action request is replayed with the same idempotency key for the same target storage identity and action
+- GIVEN the same public operation request is replayed with the same idempotency
+  key for the same target storage identity and operation
 - WHEN the replay is accepted
 - THEN the runtime returns the existing accepted outcome
 - AND duplicate records are not created
 
 #### Scenario: Failed request does not reserve successful outcome
 
-- GIVEN a public action request fails input validation or challenge validation
+- GIVEN a public operation request fails input validation or challenge validation
 - WHEN a later valid request uses the same visitor input
 - THEN the later request can still commit normally

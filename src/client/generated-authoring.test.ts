@@ -131,8 +131,8 @@ describe("generated authoring root navigation", () => {
       facts?.groups.map((group) => [
         group.label,
         group.queryName,
-        group.createAction?.label ?? null,
-        group.createAction?.defaults.map((defaultValue) => [
+        group.createOperation?.label ?? null,
+        group.createOperation?.defaults.map((defaultValue) => [
           defaultValue.fieldName,
           defaultValue.value,
         ]) ?? [],

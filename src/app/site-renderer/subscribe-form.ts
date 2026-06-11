@@ -1,4 +1,4 @@
-import type { PublicActionRequest, PublicActionResponse } from "../../shared/protocol.ts";
+import type { PublicOperationRequest, PublicOperationResponse } from "../../shared/protocol.ts";
 
 export const TURNSTILE_RESPONSE_FIELD_NAME = "cf-turnstile-response";
 
@@ -16,7 +16,7 @@ export type SubmitSiteSubscribeFormInput = SiteSubscribeFormRequestInput & {
 
 export function siteSubscribeFormRequestBody(
   input: SiteSubscribeFormRequestInput,
-): PublicActionRequest {
+): PublicOperationRequest {
   return {
     input: {
       email: input.email,
@@ -33,7 +33,7 @@ export function siteSubscribeFormRequestBody(
 
 export async function submitSiteSubscribeForm(
   input: SubmitSiteSubscribeFormInput,
-): Promise<PublicActionResponse> {
+): Promise<PublicOperationResponse> {
   const fetcher = input.fetcher ?? fetch;
   const response = await fetcher(input.route, {
     body: JSON.stringify(siteSubscribeFormRequestBody(input)),
@@ -46,10 +46,10 @@ export async function submitSiteSubscribeForm(
   const body = (await response.json()) as unknown;
 
   if (!response.ok) {
-    throw new Error(publicActionErrorMessage(body) ?? "Subscribe request failed.");
+    throw new Error(publicOperationErrorMessage(body) ?? "Subscribe request failed.");
   }
 
-  if (!isPublicActionResponse(body)) {
+  if (!isPublicOperationResponse(body)) {
     throw new Error("Subscribe request returned an invalid response.");
   }
 
@@ -62,16 +62,22 @@ export function createSiteSubscribeIdempotencyKey(blockId: string): string {
   return `site-subscribe:${blockId}:${randomId}`;
 }
 
-function publicActionErrorMessage(value: unknown): string | undefined {
+function publicOperationErrorMessage(value: unknown): string | undefined {
   return isRecord(value) && typeof value.error === "string" ? value.error : undefined;
 }
 
-function isPublicActionResponse(value: unknown): value is PublicActionResponse {
+function isPublicOperationResponse(value: unknown): value is PublicOperationResponse {
   return (
     isRecord(value) &&
-    typeof value.actionId === "string" &&
-    typeof value.cursor === "number" &&
-    value.status === "accepted"
+    typeof value.invocationId === "string" &&
+    (value.status === "committed" || value.status === "replayed") &&
+    isRecord(value.operation) &&
+    value.operation.kind === "command" &&
+    isRecord(value.output) &&
+    value.output.type === "command" &&
+    typeof value.output.cursor === "number" &&
+    isRecord(value.output.response) &&
+    typeof value.output.response.actionId === "string"
   );
 }
 

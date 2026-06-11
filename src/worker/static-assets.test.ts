@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "../site/site-icon-source.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "./site-cache.ts";
 
@@ -151,14 +152,15 @@ async function resetSiteSeed() {
 }
 
 async function patchSiteIcon(mutationId: string, icon: string) {
-  const response = await harness.fetch("/api/site/mutations", {
-    body: JSON.stringify({
-      mutationId,
-      entity: "site",
-      op: "patch",
-      recordId: "rec_site_settings_primary",
-      values: { icon },
-    }),
+  const request = operationWriteRequest("/api/site/mutations", {
+    mutationId,
+    entity: "site",
+    op: "patch",
+    recordId: "rec_site_settings_primary",
+    values: { icon },
+  });
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",
   });

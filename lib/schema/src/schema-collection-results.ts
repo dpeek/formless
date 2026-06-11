@@ -5,6 +5,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { parseEntityOperationKey } from "./schema-operations.ts";
 import { parseOptionalTableColumnFormat, tableFooterColumnName } from "./schema-table-views.ts";
 import { parseFieldVisibilityValue } from "./schema-view-fields.ts";
 import type {
@@ -23,7 +24,7 @@ import type {
   TreeBranchChildVariantSchema,
   TreeBranchPolicySchema,
   TreeBranchVariantPolicySchema,
-  TreeCompositionActionSchema,
+  TreeCompositionOperationSchema,
 } from "./types.ts";
 
 export function parseCollectionResult(
@@ -301,6 +302,7 @@ export function parseCollectionResult(
     const composition = parseOptionalTreeCompositionActions(
       `Collection view "${viewName}" result composition`,
       value.composition,
+      entityName,
       entity,
       relationshipName,
       childFieldName,
@@ -611,10 +613,11 @@ function parseOptionalTreeBranchChildPlacementValues(
 function parseOptionalTreeCompositionActions(
   context: string,
   value: unknown,
+  entityName: string,
   entity: EntitySchema,
   relationshipName: string,
   childFieldName: string,
-): TreeCompositionActionSchema | undefined {
+): TreeCompositionOperationSchema | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -623,60 +626,76 @@ function parseOptionalTreeCompositionActions(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, [], ["createAction", "removeAction"]);
+  assertExactKeys(context, value, [], ["createOperation", "removeOperation"]);
 
-  const createActionName = parseOptionalNonEmptyString(
-    `${context} createAction`,
-    value.createAction,
+  const createOperationName = parseOptionalNonEmptyString(
+    `${context} createOperation`,
+    value.createOperation,
   );
-  const removeActionName = parseOptionalNonEmptyString(
-    `${context} removeAction`,
-    value.removeAction,
+  const removeOperationName = parseOptionalNonEmptyString(
+    `${context} removeOperation`,
+    value.removeOperation,
   );
 
-  if (createActionName === undefined && removeActionName === undefined) {
-    throw new Error(`${context} must include createAction or removeAction.`);
+  if (createOperationName === undefined && removeOperationName === undefined) {
+    throw new Error(`${context} must include createOperation or removeOperation.`);
   }
 
-  if (createActionName !== undefined) {
-    const action = entity.actions?.[createActionName];
+  if (createOperationName !== undefined) {
+    const operationKey = parseEntityOperationKey(`${context} createOperation`, createOperationName);
+    if (operationKey.entityKey !== entityName) {
+      throw new Error(`${context} createOperation must use entity "${entityName}".`);
+    }
 
-    if (!action) {
-      throw new Error(`${context} createAction references unknown action "${createActionName}".`);
+    const operation = entity.operations?.[operationKey.operationKey];
+    const actionName =
+      operation?.effect?.type === "runActionKind" ? operation.effect.action : undefined;
+    const action = actionName === undefined ? undefined : entity.actions?.[actionName];
+
+    if (!operation || operation.scope !== "record" || operation.kind !== "command" || !action) {
+      throw new Error(`${context} createOperation must use a record command operation.`);
     }
 
     if (action.kind !== "create-tree-child") {
-      throw new Error(`${context} createAction must use kind "create-tree-child".`);
+      throw new Error(`${context} createOperation must use kind "create-tree-child".`);
     }
 
     if (action.relationship !== relationshipName) {
-      throw new Error(`${context} createAction must use relationship "${relationshipName}".`);
+      throw new Error(`${context} createOperation must use relationship "${relationshipName}".`);
     }
 
     if (action.childField !== childFieldName) {
-      throw new Error(`${context} createAction must use childField "${childFieldName}".`);
+      throw new Error(`${context} createOperation must use childField "${childFieldName}".`);
     }
   }
 
-  if (removeActionName !== undefined) {
-    const action = entity.actions?.[removeActionName];
+  if (removeOperationName !== undefined) {
+    const operationKey = parseEntityOperationKey(`${context} removeOperation`, removeOperationName);
+    if (operationKey.entityKey !== entityName) {
+      throw new Error(`${context} removeOperation must use entity "${entityName}".`);
+    }
 
-    if (!action) {
-      throw new Error(`${context} removeAction references unknown action "${removeActionName}".`);
+    const operation = entity.operations?.[operationKey.operationKey];
+    const actionName =
+      operation?.effect?.type === "runActionKind" ? operation.effect.action : undefined;
+    const action = actionName === undefined ? undefined : entity.actions?.[actionName];
+
+    if (!operation || operation.scope !== "record" || operation.kind !== "command" || !action) {
+      throw new Error(`${context} removeOperation must use a record command operation.`);
     }
 
     if (action.kind !== "remove-tree-placement") {
-      throw new Error(`${context} removeAction must use kind "remove-tree-placement".`);
+      throw new Error(`${context} removeOperation must use kind "remove-tree-placement".`);
     }
 
     if (action.relationship !== relationshipName) {
-      throw new Error(`${context} removeAction must use relationship "${relationshipName}".`);
+      throw new Error(`${context} removeOperation must use relationship "${relationshipName}".`);
     }
   }
 
   return {
-    ...(createActionName === undefined ? {} : { createAction: createActionName }),
-    ...(removeActionName === undefined ? {} : { removeAction: removeActionName }),
+    ...(createOperationName === undefined ? {} : { createOperation: createOperationName }),
+    ...(removeOperationName === undefined ? {} : { removeOperation: removeOperationName }),
   };
 }
 

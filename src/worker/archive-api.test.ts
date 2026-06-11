@@ -22,6 +22,7 @@ import type {
 } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH } from "./instance-app-installs.ts";
@@ -198,7 +199,7 @@ describe("instance archive restore API", () => {
     expect(secondAction.changes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          mutationId: "action-archive-clear",
+          mutationId: "operation:task.clearCompletedTasks:action-archive-clear",
           op: "action",
           recordId: replacementRecord.id,
           payload: expect.objectContaining({
@@ -516,8 +517,9 @@ async function getJson<T>(path: string) {
 }
 
 async function postInstalledAppJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: {
       Authorization: `Bearer ${adminToken}`,
       "Content-Type": "application/json",
@@ -527,7 +529,7 @@ async function postInstalledAppJson<T>(path: string, body: unknown) {
 
   expect(response.status).toBe(200);
 
-  return (await response.json()) as T;
+  return request.response(await response.json()) as T;
 }
 
 function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {

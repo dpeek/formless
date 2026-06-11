@@ -275,13 +275,13 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.views.appInstallList?.type === "collection").toBe(true);
     expect(
       schema.views.appInstallList?.type === "collection"
-        ? schema.views.appInstallList.actions
+        ? schema.views.appInstallList.operations
         : undefined,
     ).toBeUndefined();
     expect(schema.views.routeList?.type === "collection").toBe(true);
     expect(
-      schema.views.routeList?.type === "collection" ? schema.views.routeList.actions : undefined,
-    ).toEqual([{ type: "create", createView: "routeCreate" }]);
+      schema.views.routeList?.type === "collection" ? schema.views.routeList.operations : undefined,
+    ).toEqual([{ operation: "route.create", createView: "routeCreate" }]);
     expect(
       schema.views.routeList?.type === "collection"
         ? schema.views.routeList.queries.map((slot) => slot.query)
@@ -370,9 +370,9 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.views.deploymentConfigList?.type === "collection").toBe(true);
     expect(
       schema.views.deploymentConfigList?.type === "collection"
-        ? schema.views.deploymentConfigList.actions
+        ? schema.views.deploymentConfigList.operations
         : undefined,
-    ).toEqual([{ type: "create", createView: "deploymentConfigCreate" }]);
+    ).toEqual([{ operation: "deployment-config.create", createView: "deploymentConfigCreate" }]);
     expect(schema.views.deployAttemptList).toBeUndefined();
     expect(schema.views.deployEvidenceSummaryList).toBeUndefined();
     expect(schema.views.deployDriftReportList).toBeUndefined();

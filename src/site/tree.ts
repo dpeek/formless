@@ -4,18 +4,14 @@ import type {
   SiteMediaNode,
   SitePageFrame,
   SiteSettingsNode,
-  SitePublicActionNode,
+  SitePublicOperationNode,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import {
-  getEntityActionKindCapabilities,
-  type AppSchema,
-  type EntityActionSchema,
-} from "@dpeek/formless-schema";
+import { type AppSchema, type EntityOperationSchema } from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
   resolveSiteRoute,
@@ -50,7 +46,7 @@ type SiteTreeIndexes = {
 type SiteTreeBuildContext = {
   schema: AppSchema;
   indexes: SiteTreeIndexes;
-  publicActionApiRoutePrefix: `/${string}`;
+  publicOperationApiRoutePrefix: `/${string}`;
   turnstileSiteKey?: string;
   warnings: SiteTreeWarning[];
   maxDepth: number;
@@ -93,7 +89,7 @@ export function buildSitePageTree(
   const context = {
     schema,
     indexes,
-    publicActionApiRoutePrefix:
+    publicOperationApiRoutePrefix:
       options.target?.apiRoutePrefix ?? DEFAULT_SITE_PUBLIC_API_ROUTE_PREFIX,
     ...(options.turnstileSiteKey === undefined
       ? {}
@@ -355,7 +351,7 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
   const type = stringValue(record.values.type) ?? "";
   const linkProjection = projectedLinkFields(record, type, context);
   const mediaProjection = projectedMediaFields(record, type, context);
-  const publicActionProjection = projectedPublicActionFields(record, type, context);
+  const publicOperationProjection = projectedPublicOperationFields(record, type, context);
 
   return {
     id: record.id,
@@ -382,23 +378,23 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     ...(mediaProjection ? { media: mediaProjection } : {}),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
-    ...(publicActionProjection ? { publicAction: publicActionProjection } : {}),
+    ...(publicOperationProjection ? { publicOperation: publicOperationProjection } : {}),
     placements: [],
   };
 }
 
-function projectedPublicActionFields(
+function projectedPublicOperationFields(
   record: StoredRecord,
   type: string,
   context: SiteTreeBuildContext,
-): SitePublicActionNode | undefined {
+): SitePublicOperationNode | undefined {
   if (type !== "subscribeForm") {
     return undefined;
   }
 
-  const actionName = stringValue(record.values.actionName);
+  const operationName = stringValue(record.values.actionName);
 
-  if (!actionName) {
+  if (!operationName) {
     context.warnings.push({
       code: "missing-public-action",
       recordId: record.id,
@@ -407,13 +403,13 @@ function projectedPublicActionFields(
     return undefined;
   }
 
-  const action = selectPublicSubscribeAction(context.schema, actionName);
+  const operation = selectPublicSubscribeOperation(context.schema, operationName);
 
-  if (action.kind !== "available") {
+  if (operation.kind !== "available") {
     context.warnings.push({
-      code: action.code,
+      code: operation.code,
       recordId: record.id,
-      message: action.message,
+      message: operation.message,
     });
     return undefined;
   }
@@ -422,14 +418,17 @@ function projectedPublicActionFields(
     context.warnings.push({
       code: "missing-public-action-challenge-config",
       recordId: record.id,
-      message: `Subscribe form action "${actionName}" requires Turnstile site key configuration.`,
+      message: `Subscribe form operation "${operationName}" requires Turnstile site key configuration.`,
     });
     return undefined;
   }
 
   return {
-    actionName,
-    route: `${context.publicActionApiRoutePrefix}/public/actions/${encodeURIComponent(actionName)}`,
+    entityName: operation.entityName,
+    operationName,
+    route: `${context.publicOperationApiRoutePrefix}/public/operations/${encodeURIComponent(
+      operation.entityName,
+    )}/${encodeURIComponent(operationName)}`,
     challenge: {
       kind: "turnstile",
       siteKey: context.turnstileSiteKey,
@@ -437,43 +436,61 @@ function projectedPublicActionFields(
   };
 }
 
-function selectPublicSubscribeAction(
+function selectPublicSubscribeOperation(
   schema: AppSchema,
-  actionName: string,
-): { kind: "available" } | { kind: "unavailable"; code: string; message: string } {
-  const candidates = Object.values(schema.entities)
-    .map((entity) => entity.actions?.[actionName])
-    .filter((action): action is EntityActionSchema => action !== undefined);
+  operationName: string,
+):
+  | { kind: "available"; entityName: string }
+  | { kind: "unavailable"; code: string; message: string } {
+  const candidates = Object.entries(schema.entities)
+    .map(([entityName, entity]) => {
+      const operation = entity.operations?.[operationName];
+
+      return operation ? { entityName, operation } : undefined;
+    })
+    .filter(
+      (candidate): candidate is { entityName: string; operation: EntityOperationSchema } =>
+        candidate !== undefined,
+    );
 
   if (candidates.length === 0) {
     return {
       kind: "unavailable",
       code: "missing-public-action",
-      message: `Subscribe form action "${actionName}" does not exist.`,
+      message: `Subscribe form operation "${operationName}" does not exist.`,
     };
   }
 
-  const publicSubscribeActions = candidates.filter((action) => {
-    const capabilities = getEntityActionKindCapabilities(action.kind);
+  const publicSubscribeOperations = candidates.filter(({ operation }) => {
+    const access = operation.policy?.access;
 
     return (
-      action.kind === "subscribe" &&
-      action.access?.actor === "anonymous" &&
-      action.access?.challenge.kind === "turnstile" &&
-      action.access?.origin.kind === "same-origin" &&
-      capabilities.publicExecution
+      operation.kind === "command" &&
+      operation.effect?.type === "runActionKind" &&
+      operation.effect.kind === "subscribe" &&
+      operation.effect.action === operationName &&
+      operation.policy?.actors.includes("anonymous") &&
+      access?.actor === "anonymous" &&
+      access.challenge.kind === "turnstile" &&
+      access.origin.kind === "same-origin"
     );
   });
 
-  if (publicSubscribeActions.length !== 1) {
+  if (publicSubscribeOperations.length !== 1) {
     return {
       kind: "unavailable",
       code: "invalid-public-action",
-      message: `Subscribe form action "${actionName}" is not publicly executable.`,
+      message: `Subscribe form operation "${operationName}" is not publicly executable.`,
     };
   }
 
-  return { kind: "available" };
+  const publicOperation = publicSubscribeOperations[0];
+
+  if (!publicOperation) {
+    throw new Error("Public subscribe operation selection was empty after validation.");
+  }
+
+  return { kind: "available", entityName: publicOperation.entityName };
 }
 
 function projectedMediaFields(

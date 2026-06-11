@@ -9,6 +9,7 @@ describe("table model", () => {
     const result = selectTableResultModel(
       rateSourceSchema,
       rateSourceSchema.tableViews.rateTable,
+      "rate",
       rateSourceSchema.entities.rate,
     );
 
@@ -34,6 +35,7 @@ describe("table model", () => {
     const result = selectTableResultModel(
       rateSourceSchema,
       rateTable,
+      "rate",
       rateSourceSchema.entities.rate,
     );
     const costUnitColumn = result.columns.find(
@@ -52,6 +54,7 @@ describe("table model", () => {
     const result = selectTableResultModel(
       siteSourceSchema,
       siteSourceSchema.tableViews.blockPlacementTable,
+      "block-placement",
       siteSourceSchema.entities["block-placement"],
     );
     const actionsColumn = result.columns.find((column) => column.type === "invokeAction");

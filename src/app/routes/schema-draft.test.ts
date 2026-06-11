@@ -91,6 +91,14 @@ describe("schema route draft state", () => {
     expect(fieldResult.state.sourceError).toBeNull();
     expect(fieldResult.state.sourceText).toContain('"project"');
     expect(fieldResult.state.sourceText).toContain('"title"');
+    expect(fieldResult.state.sourceText).toContain('"operations"');
+    expect(fieldResult.state.sourceText).toContain('"patchRecord"');
+    expect(fieldResult.state.draft.schema.entities.project?.operations?.create?.input).toEqual({
+      fields: { title: { field: "title" } },
+    });
+    expect(fieldResult.state.draft.schema.entities.project?.operations?.update?.input).toEqual({
+      fields: { title: { field: "title" } },
+    });
     expect(isSchemaRouteDraftDirty(fieldResult.state)).toBe(true);
     expect(saveResult).toMatchObject({
       ok: true,

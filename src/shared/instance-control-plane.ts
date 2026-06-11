@@ -225,6 +225,17 @@ export const instanceControlPlaneSchema = {
         updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
+      operations: writeOperations("App install", [
+        "installId",
+        "packageAppKey",
+        "packageRevision",
+        "sourceSchemaHash",
+        "label",
+        "status",
+        "storageIdentity",
+        "createdAt",
+        "updatedAt",
+      ]),
       constraints: {
         uniqueInstallId: { kind: "unique", fields: ["installId"] },
         uniqueStorageIdentity: { kind: "unique", fields: ["storageIdentity"] },
@@ -272,6 +283,25 @@ export const instanceControlPlaneSchema = {
         updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
+      operations: writeOperations("Route", [
+        "enabled",
+        "matchHost",
+        "matchPath",
+        "matchPrefix",
+        "kind",
+        "targetProfile",
+        "appInstall",
+        "surface",
+        "access",
+        "deploymentConfig",
+        "toHost",
+        "toUrl",
+        "statusCode",
+        "preservePath",
+        "preserveQueryString",
+        "createdAt",
+        "updatedAt",
+      ]),
     },
     "deployment-config": {
       label: "Deployment config",
@@ -301,6 +331,43 @@ export const instanceControlPlaneSchema = {
         updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
+      operations: writeOperations(
+        "Deployment config",
+        [
+          "targetId",
+          "targetKind",
+          "label",
+          "enabled",
+          "targetUrl",
+          "providerFamily",
+          "accountId",
+          "workerName",
+          "credentialRef",
+          "createdAt",
+          "updatedAt",
+        ],
+        {
+          updateFields: [
+            "targetId",
+            "targetKind",
+            "label",
+            "enabled",
+            "targetUrl",
+            "providerFamily",
+            "accountId",
+            "workerName",
+            "credentialRef",
+            "observedStatus",
+            "observedAt",
+            "observedDesiredStateHash",
+            "observedSummary",
+            "observedError",
+            "observedRunnerId",
+            "createdAt",
+            "updatedAt",
+          ],
+        },
+      ),
       constraints: {
         uniqueTargetId: { kind: "unique", fields: ["targetId"] },
       },
@@ -1014,8 +1081,44 @@ function collectionView(
     },
     ...(options.createView === undefined
       ? {}
-      : { actions: [{ type: "create", createView: options.createView }] }),
+      : { operations: [{ operation: `${entity}.create`, createView: options.createView }] }),
   } satisfies AppSchema["views"][string];
+}
+
+function writeOperations(
+  label: string,
+  fields: string[],
+  options: { updateFields?: string[] } = {},
+) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+  const updateInput = {
+    fields: Object.fromEntries((options.updateFields ?? fields).map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input: updateInput,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  } satisfies NonNullable<AppSchema["entities"][string]["operations"]>;
 }
 
 function viewField(editor: FieldEditor) {

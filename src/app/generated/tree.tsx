@@ -7,7 +7,7 @@ import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formles
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@dpeek/formless-ui/menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitAction } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
 import type {
   CreateDefaultConfig,
   CreateFieldConfig,
@@ -20,15 +20,10 @@ import type {
   TreeResultModel,
 } from "../../client/tree-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type {
-  ActionResponse,
-  FieldValue,
-  RecordValues,
-  StoredRecord,
-} from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues, StoredRecord } from "../../shared/protocol.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntitySchema } from "@dpeek/formless-schema";
-import { GeneratedCreateDialogForm, type CreateHomeActionConfig } from "./create.tsx";
+import { GeneratedCreateDialogForm, type CreateHomeOperationConfig } from "./create.tsx";
 import {
   ORDERING_DND_TYPE,
   calculateOrderingDragMovePlanForContext,
@@ -53,7 +48,6 @@ import {
 type TreeResultConfig = TreeResultModel;
 
 export function RecordTree({
-  entity,
   entityName,
   context,
   onSelectContext,
@@ -70,7 +64,6 @@ export function RecordTree({
   selectableContextRecordIds?: Set<string>;
 }) {
   const recordsById = useRecordsById();
-  const canPatch = entity?.mutations.patch.enabled ?? true;
   const placementEntityName = entityName ?? result.relationship.to.entity;
   const parentRecordId = context ? stringValue(queryContext?.values?.[context.name]) : undefined;
 
@@ -95,7 +88,6 @@ export function RecordTree({
         <>
           <PlacementSiblingList
             ancestors={new Set([parentRecordId])}
-            canPatch={canPatch}
             className="space-y-3"
             context={context}
             depth={0}
@@ -114,7 +106,6 @@ export function RecordTree({
 
 function PlacementSiblingList({
   ancestors,
-  canPatch,
   className,
   context,
   depth,
@@ -125,7 +116,6 @@ function PlacementSiblingList({
   selectableContextRecordIds,
 }: {
   ancestors: Set<string>;
-  canPatch: boolean;
   className: string;
   context: HomeContextConfig | undefined;
   depth: number;
@@ -140,11 +130,11 @@ function PlacementSiblingList({
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = placements.map((placement) => placement.id);
   const orderingContext = selectResultOrderingContext({
-    canPatch,
     entityName,
     ordering: result.ordering,
     recordIds,
     recordsById,
+    updateOperation: result.placementUpdateOperation,
   });
   const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
   const orderedPlacements = orderedRecordIds
@@ -214,7 +204,6 @@ function PlacementSiblingList({
         orderingContext && orderingDragFacts ? (
           <SortablePlacementTreeItem
             ancestors={ancestors}
-            canPatch={canPatch}
             context={context}
             depth={depth}
             dragFact={orderingDragFacts.get(placement.id)}
@@ -232,7 +221,6 @@ function PlacementSiblingList({
         ) : (
           <PlacementTreeItem
             ancestors={ancestors}
-            canPatch={canPatch}
             context={context}
             depth={depth}
             entityName={entityName}
@@ -259,7 +247,6 @@ function PlacementSiblingList({
 
 function SortablePlacementTreeItem({
   ancestors,
-  canPatch,
   context,
   depth,
   dragFact,
@@ -274,7 +261,6 @@ function SortablePlacementTreeItem({
   siblingCount,
 }: {
   ancestors: Set<string>;
-  canPatch: boolean;
   context: HomeContextConfig | undefined;
   depth: number;
   dragFact: ResultOrderingDragFact | undefined;
@@ -288,7 +274,7 @@ function SortablePlacementTreeItem({
   selectableContextRecordIds?: Set<string>;
   siblingCount: number;
 }) {
-  const disabled = !dragFact || !orderingContext.canPatch || pendingDragRecordId !== null;
+  const disabled = !dragFact || !orderingContext.updateOperation || pendingDragRecordId !== null;
   const { handleRef, isDragSource, isDropTarget, ref } = useSortable<ResultOrderingDragData>({
     id: `tree-ordering:${placement.id}`,
     data: {
@@ -314,7 +300,6 @@ function SortablePlacementTreeItem({
   return (
     <PlacementTreeItem
       ancestors={ancestors}
-      canPatch={canPatch}
       context={context}
       depth={depth}
       entityName={entityName}
@@ -335,7 +320,6 @@ function SortablePlacementTreeItem({
 
 function PlacementTreeItem({
   ancestors,
-  canPatch,
   context,
   depth,
   entityName,
@@ -352,7 +336,6 @@ function PlacementTreeItem({
   siblingCount,
 }: {
   ancestors: Set<string>;
-  canPatch: boolean;
   context: HomeContextConfig | undefined;
   depth: number;
   entityName: string;
@@ -408,7 +391,7 @@ function PlacementTreeItem({
             />
             <div className="min-w-0 flex-1 space-y-3">
               <TreePlacementSlotBadge placement={placement} />
-              <PlacementRecordFields canPatch={canPatch} placement={placement} result={result} />
+              <PlacementRecordFields placement={placement} result={result} />
               {childRecord ? (
                 <ChildRecordEditor
                   childRecord={childRecord}
@@ -433,7 +416,6 @@ function PlacementTreeItem({
       {childPlacements.length > 0 ? (
         <PlacementSiblingList
           ancestors={nextAncestors}
-          canPatch={canPatch}
           className="ml-5 space-y-3 border-l border-slate-200 pl-4"
           context={context}
           depth={depth + 1}
@@ -593,14 +575,14 @@ function TreePlacementRemoveButton({
 }) {
   const appTarget = useSchemaAppTarget();
   const [isRemoving, setIsRemoving] = useState(false);
-  const removeAction = result.composition?.remove;
+  const removeOperation = result.composition?.remove;
 
-  if (!removeAction) {
+  if (!removeOperation) {
     return null;
   }
 
   async function removePlacement() {
-    if (isRemoving || !removeAction) {
+    if (isRemoving || !removeOperation) {
       return;
     }
 
@@ -608,8 +590,10 @@ function TreePlacementRemoveButton({
     setSyncStatus({ state: "syncing", message: "Removing placement..." });
 
     try {
-      await submitAction(appTarget, entityName, removeAction.actionName, {
-        placementId: placement.id,
+      await submitOperation(appTarget, entityName, removeOperation.operationName, {
+        input: {
+          placementId: placement.id,
+        },
       });
       setSyncStatus({ state: "idle", message: "Placement removed and synced." });
     } catch (error) {
@@ -724,11 +708,9 @@ function PlacementOrderingControls({
 }
 
 function PlacementRecordFields({
-  canPatch,
   placement,
   result,
 }: {
-  canPatch: boolean;
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
@@ -746,7 +728,6 @@ function PlacementRecordFields({
     <div className="group/record-row grid min-w-0 gap-2">
       {recordFields.map((fieldConfig) => (
         <RecordFieldEditor
-          canPatch={canPatch}
           density="compact"
           entityName={result.relationship.to.entity}
           fieldConfig={fieldConfig}
@@ -756,6 +737,7 @@ function PlacementRecordFields({
             fieldConfig.fieldName,
           )}
           recordId={placement.id}
+          updateOperation={result.placementUpdateOperation}
         />
       ))}
     </div>
@@ -804,7 +786,6 @@ function ChildRecordEditor({
 
         return (
           <RecordFieldEditor
-            canPatch={result.childEntity.mutations.patch.enabled}
             density={
               renderAsInlineStack || (!isHeading && !isRichMarkdownRecordField(fieldConfig))
                 ? "compact"
@@ -820,6 +801,7 @@ function ChildRecordEditor({
             presentation={isHeading ? "heading" : "default"}
             recordId={childRecord.id}
             showLabel={!renderAsInlineStack && !isHeading}
+            updateOperation={result.childUpdateOperation}
           />
         );
       })}
@@ -919,7 +901,7 @@ function selectAllowedTreeChildVariants(
 function createTreeChildCreateAction(
   result: TreeResultConfig,
   variant: TreeAllowedChildVariantConfig,
-): CreateHomeActionConfig | undefined {
+): CreateHomeOperationConfig | undefined {
   const createAction = result.composition?.create;
   const discriminatorFieldName = result.branches?.variants.discriminatorFieldName;
   const discriminatorField = result.branches?.variants.discriminatorField;
@@ -948,9 +930,11 @@ function createTreeChildCreateAction(
     label: `Add ${variant.label}`,
     entityName: result.childEntityName,
     entity: result.childEntity,
+    operationName: createAction.operationName,
+    operation: createAction.operation,
     fields,
     defaults,
-    enabled: result.childEntity.mutations.create.enabled,
+    enabled: true,
   };
 }
 
@@ -1003,14 +987,16 @@ async function submitTreeChildCreateAction(
     throw new Error("Tree child creation is not configured.");
   }
 
-  const response = await submitAction(
+  const response = await submitOperation(
     target,
     result.relationship.to.entity,
-    createAction.actionName,
+    createAction.operationName,
     {
-      parentRecordId: parentRecord.id,
-      childValues,
-      ...(placementValues === undefined ? {} : { placementValues }),
+      input: {
+        parentRecordId: parentRecord.id,
+        childValues,
+        ...(placementValues === undefined ? {} : { placementValues }),
+      },
     },
   );
   const childRecord = selectCreatedTreeChildRecord(response, result.childEntityName);
@@ -1019,10 +1005,14 @@ async function submitTreeChildCreateAction(
 }
 
 function selectCreatedTreeChildRecord(
-  response: ActionResponse,
+  response: Awaited<ReturnType<typeof submitOperation>>,
   childEntityName: string,
 ): StoredRecord {
-  const record = response.changes.find(
+  if (response.output.type !== "command") {
+    throw new Error("Tree child operation did not return a command response.");
+  }
+
+  const record = response.output.changes.find(
     (change) => change.payload.entity === childEntityName && !change.payload.deletedAt,
   )?.payload;
 

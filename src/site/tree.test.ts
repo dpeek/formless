@@ -955,7 +955,7 @@ describe("site page tree projection", () => {
     ]);
   });
 
-  it("projects subscribe form action facts without subscriber data or secrets", () => {
+  it("projects subscribe form operation facts without subscriber data or secrets", () => {
     const target = installedAppStorageIdentity({ packageAppKey: "site", installId: "site" });
 
     if (!target) {
@@ -1023,9 +1023,10 @@ describe("site page tree projection", () => {
       body: "Get product notes.",
       actionName: "subscribe",
       buttonLabel: "Join",
-      publicAction: {
-        actionName: "subscribe",
-        route: "/api/app-installs/site/site/public/actions/subscribe",
+      publicOperation: {
+        entityName: "subscription",
+        operationName: "subscribe",
+        route: "/api/app-installs/site/site/public/operations/subscription/subscribe",
         challenge: {
           kind: "turnstile",
           siteKey: "public-site-key",
@@ -1036,7 +1037,7 @@ describe("site page tree projection", () => {
     expect(JSON.stringify(tree)).not.toContain("reader@example.com");
   });
 
-  it("warns and omits working subscribe form actions when Turnstile site key config is missing", () => {
+  it("warns and omits working subscribe form operations when Turnstile site key config is missing", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_subscribe", {
@@ -1059,7 +1060,7 @@ describe("site page tree projection", () => {
     const tree = requireTree(result);
     const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
 
-    expect(subscribeForm.publicAction).toBeUndefined();
+    expect(subscribeForm.publicOperation).toBeUndefined();
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1070,7 +1071,7 @@ describe("site page tree projection", () => {
     );
   });
 
-  it("warns and omits working subscribe form actions when action bindings are missing or not public", () => {
+  it("warns and omits working subscribe form operations when bindings are missing or not public", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_missing_subscribe", {
@@ -1105,8 +1106,8 @@ describe("site page tree projection", () => {
     const missing = childForPlacement(tree.page, "rec_site_place_home_missing_subscribe");
     const privateAction = childForPlacement(tree.page, "rec_site_place_home_private_subscribe");
 
-    expect(missing.publicAction).toBeUndefined();
-    expect(privateAction.publicAction).toBeUndefined();
+    expect(missing.publicOperation).toBeUndefined();
+    expect(privateAction.publicOperation).toBeUndefined();
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

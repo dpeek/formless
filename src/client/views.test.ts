@@ -15,7 +15,7 @@ import {
   selectScreenModelByPath,
   selectScreenModels,
   type FieldTableColumnConfig,
-  type HomeActionConfig,
+  type HomeOperationConfig,
   type HomeScreenModel,
   type HomeViewModel,
   type TableColumnConfig,
@@ -62,8 +62,8 @@ describe("home view model collections", () => {
     const schema = taskSchemaWithFieldPresentations();
     const model = selectPrimaryCollectionModels(schema)[0];
     const fields = model?.result.type === "list" ? model.result.recordFields : [];
-    const createAction = model?.actions.find((action) => action.type === "create");
-    const createFields = createAction?.type === "create" ? createAction.fields : [];
+    const createOperation = model?.operations.find((action) => action.type === "create");
+    const createFields = createOperation?.type === "create" ? createOperation.fields : [];
     const priority = fields.find((field) => field.fieldName === "priority");
 
     expect(
@@ -97,7 +97,7 @@ describe("home view model collections", () => {
     const listModel = requiredCollectionModel(schema, "taskHome");
     const recordModel = requiredCollectionModel(schema, "taskRecordHome");
     const tableModel = requiredCollectionModel(schema, "taskTableHome");
-    const createAction = listModel.actions.find((action) => action.type === "create");
+    const createOperation = listModel.operations.find((action) => action.type === "create");
     const listStatus =
       listModel.result.type === "list"
         ? listModel.result.recordFields.find((field) => field.fieldName === "status")
@@ -152,8 +152,8 @@ describe("home view model collections", () => {
       tableModel.result.type === "table" ? tableModel.result.transitionActions : [],
     ).toHaveLength(2);
     expect(
-      createAction?.type === "create"
-        ? createAction.fields.find((field) => field.fieldName === "status")?.stateMachine
+      createOperation?.type === "create"
+        ? createOperation.fields.find((field) => field.fieldName === "status")?.stateMachine
             ?.initialState
         : undefined,
     ).toBe("todo");
@@ -166,7 +166,7 @@ describe("home view model collections", () => {
     const schema = discriminatedTaskSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
     const editModel = requiredCollectionModel(schema, "taskEditHome");
-    const createAction = listModel.actions.find((action) => action.type === "create");
+    const createOperation = listModel.operations.find((action) => action.type === "create");
     const editColumn =
       editModel.result.type === "table"
         ? editModel.result.columns.find((column) => column.type === "invokeAction")
@@ -208,7 +208,7 @@ describe("home view model collections", () => {
         },
       },
     });
-    expect(createAction?.type === "create" ? createAction.union : undefined).toMatchObject({
+    expect(createOperation?.type === "create" ? createOperation.union : undefined).toMatchObject({
       unionName: "taskByKind",
       discriminatorFieldName: "kind",
       variants: [
@@ -256,21 +256,21 @@ describe("home view model collections", () => {
       discriminatedTaskSchema({ fixedCreateKind: "stream" }),
       "taskHome",
     );
-    const createAction = model.actions.find((action) => action.type === "create");
+    const createOperation = model.operations.find((action) => action.type === "create");
 
-    expect(createAction?.type === "create" ? createAction.fields : []).toMatchObject([
+    expect(createOperation?.type === "create" ? createOperation.fields : []).toMatchObject([
       {
         fieldName: "title",
         editor: "text",
       },
     ]);
-    expect(createAction?.type === "create" ? createAction.defaults : []).toMatchObject([
+    expect(createOperation?.type === "create" ? createOperation.defaults : []).toMatchObject([
       {
         fieldName: "kind",
         value: { kind: "literal", value: "stream" },
       },
     ]);
-    expect(createAction?.type === "create" ? createAction.union : undefined).toMatchObject({
+    expect(createOperation?.type === "create" ? createOperation.union : undefined).toMatchObject({
       discriminatorFieldName: "kind",
       variants: [
         {
@@ -291,16 +291,16 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves collection actions and clear-completed target query", () => {
+  it("resolves collection operations and clear-completed target query", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
-    expect(model?.actions.map((action) => action.label)).toEqual([
+    expect(model?.operations.map((action) => action.label)).toEqual([
       "Create Task",
       "Clear completed",
     ]);
 
-    const create = model?.actions[0];
-    const clearCompleted = model?.actions[1];
+    const create = model?.operations[0];
+    const clearCompleted = model?.operations[1];
 
     expect(create).toMatchObject({
       type: "create",
@@ -313,7 +313,7 @@ describe("home view model collections", () => {
     ]);
     expect(create?.type === "create" ? create.defaults : []).toEqual([]);
     expect(clearCompleted).toMatchObject({
-      type: "entity-action",
+      type: "command",
       actionName: "clearCompletedTasks",
       ui: {
         showAffectedCountOnSuccess: true,
@@ -339,10 +339,9 @@ describe("home view model collections", () => {
         ...rateCardSchema.views,
         rateHome: {
           ...rateHome,
-          actions: [
+          operations: [
             {
-              type: "entityAction",
-              action: "regenerateMissingRates",
+              operation: "rate.regenerateMissingRates",
               count: { type: "count" },
             },
           ],
@@ -350,10 +349,10 @@ describe("home view model collections", () => {
       },
     };
     const model = requiredCollectionModel(schema, "rateHome");
-    const action = model.actions[0];
+    const action = model.operations[0];
 
     expect(action).toMatchObject({
-      type: "entity-action",
+      type: "command",
       label: "Regenerate missing rates",
       entityName: "rate",
       actionName: "regenerateMissingRates",
@@ -364,10 +363,10 @@ describe("home view model collections", () => {
         showAffectedCountOnSuccess: true,
       },
     });
-    expect(action?.type === "entity-action" ? action.ui.targetCount : undefined).toBeUndefined();
+    expect(action?.type === "command" ? action.ui.targetCount : undefined).toBeUndefined();
   });
 
-  it("hides generated entity actions that are not exposed to browser actors", () => {
+  it("filters bound collection operations through browser visibility", () => {
     const taskHome = appSchema.views.taskHome;
     const task = appSchema.entities.task;
 
@@ -395,6 +394,12 @@ describe("home view model collections", () => {
               target: { query: "taskCompleted" },
               exposure: { actors: ["cliDeployer"] },
             },
+            hiddenReview: {
+              label: "Hidden review",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+              exposure: { actors: ["owner"] },
+            },
             ownerReview: {
               label: "Owner review",
               kind: "clear-completed",
@@ -407,6 +412,104 @@ describe("home view model collections", () => {
               target: { query: "taskCompleted" },
               exposure: { actors: ["admin"] },
             },
+            anonymousReview: {
+              label: "Anonymous review",
+              kind: "clear-completed",
+              target: { query: "taskCompleted" },
+            },
+          },
+          operations: {
+            ...task.operations,
+            runnerApply: {
+              label: "Runner apply",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "runnerApply",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["runner"] },
+            },
+            cliDeploy: {
+              label: "CLI deploy",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "cliDeploy",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["cliDeployer"] },
+            },
+            hiddenReview: {
+              label: "Hidden review",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "hiddenReview",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["owner"], visible: false },
+            },
+            ownerReview: {
+              label: "Owner review",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "ownerReview",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["owner"] },
+            },
+            adminReview: {
+              label: "Admin review",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "adminReview",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["admin"] },
+            },
+            anonymousReview: {
+              label: "Anonymous review",
+              kind: "command",
+              scope: "collection",
+              effect: {
+                type: "runActionKind",
+                kind: "clear-completed",
+                action: "anonymousReview",
+                query: "taskCompleted",
+              },
+              output: { type: "command" },
+              idempotency: { required: true },
+              audit: { input: "summary" },
+              policy: { actors: ["anonymous"] },
+            },
           },
         },
       },
@@ -414,23 +517,26 @@ describe("home view model collections", () => {
         ...appSchema.views,
         taskHome: {
           ...taskHome,
-          actions: [
-            ...(taskHome.actions ?? []),
-            { type: "entityAction", action: "runnerApply" },
-            { type: "entityAction", action: "cliDeploy" },
-            { type: "entityAction", action: "ownerReview" },
-            { type: "entityAction", action: "adminReview" },
+          operations: [
+            ...(taskHome.operations ?? []),
+            { operation: "task.runnerApply" },
+            { operation: "task.cliDeploy" },
+            { operation: "task.hiddenReview" },
+            { operation: "task.ownerReview" },
+            { operation: "task.adminReview" },
+            { operation: "task.anonymousReview" },
           ],
         },
       },
     });
     const model = requiredCollectionModel(schema, "taskHome");
 
-    expect(model.actions.map((action) => action.label)).toEqual([
+    expect(model.operations.map((action) => action.label)).toEqual([
       "Create Task",
       "Clear completed",
       "Owner review",
       "Admin review",
+      "Anonymous review",
     ]);
   });
 
@@ -464,7 +570,7 @@ describe("home view model collections", () => {
         itemViewName: "taskListItem",
         fields: ["title", "dueDate", "priority", "done"],
       },
-      actions: [
+      operations: [
         {
           type: "create",
           label: "Create Task",
@@ -474,7 +580,7 @@ describe("home view model collections", () => {
           enabled: true,
         },
         {
-          type: "entity-action",
+          type: "command",
           label: "Clear completed",
           entityName: "task",
           actionName: "clearCompletedTasks",
@@ -542,12 +648,12 @@ describe("home view model collections", () => {
           },
         ],
       },
-      actions: [{ type: "create", entityName: "resource" }],
+      operations: [{ type: "create", entityName: "resource" }],
     });
     expect(model?.collection.context).toBe(model?.context);
     expect(model?.collection.queries.tabs).toBe(model?.queryTabs);
     expect(model?.collection.result).toBe(model?.result);
-    expect(model?.collection.actions).toBe(model?.actions);
+    expect(model?.collection.operations).toBe(model?.operations);
   });
 
   it("selects collection shell facts separately from result-kind facts", () => {
@@ -587,7 +693,7 @@ describe("home view model collections", () => {
           count: { type: "count" },
         },
       },
-      actions: [{ type: "create", entityName: "resource" }],
+      operations: [{ type: "create", entityName: "resource" }],
       summary: [
         { aggregateName: "selectedCardCostTotal", label: "Cost total" },
         { aggregateName: "selectedCardAverageMargin", label: "Average margin" },
@@ -628,7 +734,7 @@ describe("home view model collections", () => {
     expect(models.map((model) => model.viewName)).toEqual(["resourceHome", "cardHome", "rateHome"]);
     expect(models.map((model) => model.label)).toEqual(["Resources", "Rate cards", "Rates"]);
     expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
-    expect(models.map((model) => model.actions[0]?.label)).toEqual([
+    expect(models.map((model) => model.operations[0]?.label)).toEqual([
       "Create Resource",
       "Create Rate card",
       "Create Resource",
@@ -714,7 +820,7 @@ describe("home view model collections", () => {
           itemViewName: "resourceListItem",
           fields: ["name", "kind", "unit"],
         },
-        actions: [
+        operations: [
           {
             type: "create",
             label: "Create Resource",
@@ -738,7 +844,7 @@ describe("home view model collections", () => {
           itemViewName: "cardListItem",
           fields: ["name", "isDefault", "marginMin", "marginMed", "marginMax"],
         },
-        actions: [
+        operations: [
           {
             type: "create",
             label: "Create Rate card",
@@ -850,7 +956,7 @@ describe("home view model collections", () => {
       width: "xs",
       display: "readOnly",
       presentation: "button",
-      actions: [
+      operations: [
         {
           actionName: "inspectRate",
           label: "Inspect rate",
@@ -865,7 +971,7 @@ describe("home view model collections", () => {
       label: "Rate actions",
       headerLabel: "Rate actions",
       presentation: "dropdown",
-      actions: [
+      operations: [
         {
           actionName: "inspectRate",
           label: "Inspect rate",
@@ -1546,7 +1652,7 @@ describe("home view model collections", () => {
         { fieldName: "marginMed" },
         { fieldName: "marginMax" },
       ],
-      createAction: {
+      createOperation: {
         type: "create",
         label: "Create Rate card",
         entityName: "card",
@@ -1566,7 +1672,7 @@ describe("home view model collections", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const create = rateModel?.actions.find((action) => action.type === "create");
+    const create = rateModel?.operations.find((action) => action.type === "create");
 
     expect(create).toMatchObject({
       type: "create",
@@ -1582,8 +1688,8 @@ describe("home view model collections", () => {
       (model) => model.viewName === "rateHome",
     );
 
-    expect(rateModel?.actions.map((candidate) => candidate.label)).toEqual(["Create Resource"]);
-    expect(rateModel?.actions.some((candidate) => candidate.type === "entity-action")).toBe(false);
+    expect(rateModel?.operations.map((candidate) => candidate.label)).toEqual(["Create Resource"]);
+    expect(rateModel?.operations.some((candidate) => candidate.type === "command")).toBe(false);
   });
 
   it("characterizes the rate-card primary home model contract", () => {
@@ -1605,7 +1711,7 @@ describe("home view model collections", () => {
         labelField: "name",
         presentation: "tabs",
         relatedCollection: null,
-        createAction: {
+        createOperation: {
           type: "create",
           label: "Create Rate card",
           entityName: "card",
@@ -1683,8 +1789,10 @@ describe("home view model collections", () => {
         model.context?.navigation?.groups.map((group) => ({
           label: group.label,
           queryName: group.queryName,
-          createAction:
-            group.createAction === undefined ? null : summarizeHomeAction(group.createAction),
+          createOperation:
+            group.createOperation === undefined
+              ? null
+              : summarizeHomeOperation(group.createOperation),
         })),
       ),
     ).toEqual([
@@ -1692,7 +1800,7 @@ describe("home view model collections", () => {
         {
           label: "Pages",
           queryName: "blockPages",
-          createAction: {
+          createOperation: {
             type: "create",
             label: "Create Page",
             entityName: "block",
@@ -1704,7 +1812,7 @@ describe("home view model collections", () => {
         {
           label: "Posts",
           queryName: "blockPosts",
-          createAction: {
+          createOperation: {
             type: "create",
             label: "Create Post",
             entityName: "block",
@@ -1716,7 +1824,7 @@ describe("home view model collections", () => {
         {
           label: "Projects",
           queryName: "blockProjects",
-          createAction: {
+          createOperation: {
             type: "create",
             label: "Create Project",
             entityName: "block",
@@ -1725,7 +1833,7 @@ describe("home view model collections", () => {
             enabled: true,
           },
         },
-        { label: "Navigation", queryName: "blockNavigationRoots", createAction: null },
+        { label: "Navigation", queryName: "blockNavigationRoots", createOperation: null },
       ],
     ]);
     expect(models.map((model) => model.result.type)).toEqual(["tree"]);
@@ -1750,7 +1858,7 @@ describe("home view model collections", () => {
     expect(settingsModel.navigation.primary).toBe(false);
     expect(settingsModel.context).toBeUndefined();
     expect(settingsModel.defaultQueryName).toBe("sitePrimary");
-    expect(settingsModel.actions).toEqual([]);
+    expect(settingsModel.operations).toEqual([]);
     expect(settingsModel.result.type).toBe("record");
     expect(settingsModel.result.type === "record" ? settingsModel.result.itemViewName : null).toBe(
       "siteSettingsForm",
@@ -1806,7 +1914,7 @@ describe("home view model collections", () => {
             entityName: "block-placement",
             referenceFieldName: "parent",
           },
-          createAction: null,
+          createOperation: null,
           itemViewName: "blockRootDetail",
           recordFields: ["label"],
         },
@@ -1831,7 +1939,7 @@ describe("home view model collections", () => {
           orderingPresentations: ["dragHandle"],
           maxDepth: 8,
         },
-        actions: [],
+        operations: [],
       },
     ]);
   });
@@ -1928,7 +2036,7 @@ describe("home view model collections", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
-    const create = contentModel?.actions.find((action) => action.type === "create");
+    const create = contentModel?.operations.find((action) => action.type === "create");
     const createVariantFields = Object.fromEntries(
       create?.type === "create"
         ? (create.union?.variants.map((variant) => [
@@ -1999,7 +2107,7 @@ describe("home view model collections", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
-    const create = contentModel?.actions.find((action) => action.type === "create");
+    const create = contentModel?.operations.find((action) => action.type === "create");
     const createEditors =
       create?.type === "create"
         ? Object.fromEntries(create.fields.map((field) => [field.fieldName, field.editor]))
@@ -2082,7 +2190,7 @@ describe("home view model collections", () => {
       itemViewName: "blockContextItem",
       recordFields: [{ fieldName: "label" }],
     });
-    expect(compositionModel?.actions[0]).toMatchObject({
+    expect(compositionModel?.operations[0]).toMatchObject({
       type: "create",
       label: "Add placement",
       entityName: "block-placement",
@@ -2195,7 +2303,7 @@ describe("home view model collections", () => {
       collection: {
         entityName: "resource",
         queries: { defaultQueryName: "resourceAll" },
-        actions: [{ type: "create", entityName: "resource" }],
+        operations: [{ type: "create", entityName: "resource" }],
       },
     });
   });
@@ -2803,7 +2911,7 @@ function discriminatedTaskSchema(
         queries: [{ query: "taskAll" }],
         defaultQuery: "taskAll",
         result: { type: "list", itemView: "taskVariantItem" },
-        actions: [{ type: "create", createView: "taskCreate" }],
+        operations: [{ operation: "task.create", createView: "taskCreate" }],
       },
       taskEditHome: {
         type: "collection",
@@ -2951,8 +3059,8 @@ function summarizeHomeModel(model: HomeViewModel) {
                 referenceFieldName: collection.context.relatedCollection.referenceFieldName,
               }
             : null,
-          createAction: collection.context.createAction
-            ? summarizeHomeAction(collection.context.createAction)
+          createOperation: collection.context.createOperation
+            ? summarizeHomeOperation(collection.context.createOperation)
             : null,
           itemViewName: collection.context.itemViewName ?? null,
           recordFields: collection.context.recordFields?.map((field) => field.fieldName) ?? [],
@@ -3002,7 +3110,7 @@ function summarizeHomeModel(model: HomeViewModel) {
                   label: slot.label,
                 })),
               },
-    actions: collection.actions.map(summarizeHomeAction),
+    operations: collection.operations.map(summarizeHomeOperation),
   };
 }
 
@@ -3105,7 +3213,7 @@ function lifecycleTaskSchema() {
         queries: [{ query: "taskAll" }],
         defaultQuery: "taskAll",
         result: { type: "list", itemView: "taskItem" },
-        actions: [{ type: "create", createView: "taskCreate" }],
+        operations: [{ operation: "task.create", createView: "taskCreate" }],
       },
       taskRecordHome: {
         type: "collection",
@@ -3169,7 +3277,7 @@ function summarizeScreenModel(model: HomeScreenModel) {
   };
 }
 
-function summarizeHomeAction(action: HomeActionConfig) {
+function summarizeHomeOperation(action: HomeOperationConfig) {
   if (action.type === "create") {
     return {
       type: action.type,

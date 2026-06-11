@@ -15,6 +15,7 @@ export * from "./schema-collection-results.ts";
 export * from "./schema-count-display.ts";
 export * from "./schema-fields.ts";
 export * from "./schema-mutations.ts";
+export * from "./schema-operations.ts";
 export * from "./schema-ordering.ts";
 export * from "./schema-parse-helpers.ts";
 export * from "./schema-read-models.ts";

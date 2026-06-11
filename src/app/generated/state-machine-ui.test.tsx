@@ -12,7 +12,8 @@ import {
   selectStateMachineField,
   selectTransitionStateActions,
 } from "../../client/state-machine-model.ts";
-import type { ActionResponse, ChangeRow, StoredRecord } from "../../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
+import type { ChangeRow, StoredRecord } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
@@ -56,7 +57,7 @@ describe("generated state-machine UI", () => {
 
   it("renders valid and invalid transition controls with schema-derived reasons", () => {
     const schema = lifecycleSchema();
-    const actions = selectTransitionStateActions(schema.entities.task);
+    const actions = selectTransitionStateActions("task", schema.entities.task);
     const html = renderToStaticMarkup(
       <RecordTransitionActionControls
         actions={actions}
@@ -94,7 +95,6 @@ describe("generated state-machine UI", () => {
 
     const html = renderToStaticMarkup(
       <RecordFieldEditor
-        canPatch={true}
         entityName="task"
         fieldConfig={{
           fieldName: "status",
@@ -143,10 +143,14 @@ describe("generated state-machine UI", () => {
     expect(html).not.toContain("<select");
   });
 
-  it("submits transition actions through the normal action endpoint with recordId input", async () => {
+  it("submits transition actions through the generated operation endpoint with recordId input", async () => {
     const schema = lifecycleSchema();
     const changed = taskRecord("task-1", "doing");
-    let submittedAction: { actionId: string; entity: string; action: string; input?: unknown };
+    let submittedOperation: {
+      idempotencyKey: string;
+      recordId?: string;
+      source?: { protocol?: string };
+    };
 
     await saveBootstrapResponse("tasks", {
       schema,
@@ -162,21 +166,32 @@ describe("generated state-machine UI", () => {
       "startTask",
       "task-1",
       async (input, init) => {
-        submittedAction = parseActionRequestBody(init?.body);
+        submittedOperation = parseOperationRequestBody(init?.body);
 
-        expect(input).toBe("/api/tasks/actions");
+        expect(input).toBe("/api/tasks/operations/task/startTask");
         expect(init?.method).toBe("POST");
-        expect(submittedAction).toMatchObject({
-          entity: "task",
-          action: "startTask",
-          input: { recordId: "task-1" },
+        expect(submittedOperation).toMatchObject({
+          idempotencyKey: expect.any(String),
+          recordId: "task-1",
+          source: { protocol: "generated-ui" },
         });
+        const changes = [actionChange(2, changed, submittedOperation.idempotencyKey)];
 
         return Response.json({
-          actionId: submittedAction.actionId,
-          changes: [actionChange(2, changed, submittedAction.actionId)],
-          cursor: 2,
-        } satisfies ActionResponse);
+          invocation: {} as OperationInvocationResponse["invocation"],
+          output: {
+            type: "command",
+            affectedChangeIds: [submittedOperation.idempotencyKey],
+            changes,
+            cursor: 2,
+            response: {
+              actionId: submittedOperation.idempotencyKey,
+              changes,
+              cursor: 2,
+            },
+          },
+          status: "committed",
+        } satisfies OperationInvocationResponse);
       },
     );
 
@@ -296,7 +311,7 @@ function actionChange(seq: number, payload: StoredRecord, actionId: string): Cha
   };
 }
 
-function parseActionRequestBody(body: BodyInit | null | undefined) {
+function parseOperationRequestBody(body: BodyInit | null | undefined) {
   if (typeof body !== "string") {
     throw new Error("Expected a string request body.");
   }
@@ -305,9 +320,13 @@ function parseActionRequestBody(body: BodyInit | null | undefined) {
 
   expect(parsed).toEqual(
     expect.objectContaining({
-      actionId: expect.any(String),
+      idempotencyKey: expect.any(String),
     }),
   );
 
-  return parsed as { actionId: string; entity: string; action: string; input?: unknown };
+  return parsed as {
+    idempotencyKey: string;
+    recordId?: string;
+    source?: { protocol?: string };
+  };
 }

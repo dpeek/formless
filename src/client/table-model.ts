@@ -24,6 +24,7 @@ import type {
   ValueUnitFieldConfig,
 } from "./views.ts";
 import { selectAggregateSlot } from "./collection-shell-model.ts";
+import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectStateMachineField, selectTransitionStateActions } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
@@ -31,6 +32,8 @@ import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
 
 export type TableResultModel = {
   columns: TableColumnConfig[];
+  updateOperation?: EditViewConfig["updateOperation"];
+  deleteOperation?: EditViewConfig["updateOperation"];
   transitionActions: TransitionStateActionConfig[];
   ordering?: ResultOrderingConfig;
 };
@@ -57,15 +60,20 @@ export function selectTableFooterSlots(
 export function selectTableResultModel(
   schema: AppSchema,
   tableView: TableViewSchema,
+  entityName: string,
   entity: EntitySchema,
   resultOrdering?: ResultOrderingConfig,
 ): TableResultModel {
   const ordering = resultOrdering ?? selectResultOrderingConfig(tableView.ordering, entity);
   const columns = selectTableColumns(schema, tableView, entity, ordering);
+  const updateOperation = selectEntityOperationByKind(entityName, entity, "update", "record");
+  const deleteOperation = selectEntityOperationByKind(entityName, entity, "delete", "record");
 
   return {
     columns,
-    transitionActions: selectTransitionStateActions(entity),
+    ...(updateOperation === undefined ? {} : { updateOperation }),
+    ...(deleteOperation === undefined ? {} : { deleteOperation }),
+    transitionActions: selectTransitionStateActions(entityName, entity),
     ...(ordering === undefined ? {} : { ordering }),
   };
 }
@@ -113,6 +121,12 @@ function selectTableColumns(
 
       const referencedEntity = schema.entities[sourceReferenceField.to] as EntitySchema;
       const field = referencedEntity.fields[column.field] as FieldSchema;
+      const referencedUpdateOperation = selectEntityOperationByKind(
+        sourceReferenceField.to,
+        referencedEntity,
+        "update",
+        "record",
+      );
 
       return {
         type: "referenceField",
@@ -120,6 +134,7 @@ function selectTableColumns(
         sourceReferenceFieldName: column.referenceField,
         referencedEntityName: sourceReferenceField.to,
         referencedEntity,
+        ...(referencedUpdateOperation === undefined ? {} : { referencedUpdateOperation }),
         fieldName: column.field,
         field,
         editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
@@ -359,13 +374,15 @@ function selectEditViewConfig(schema: AppSchema, editViewName: string): EditView
     throw new Error(`Missing edit view entity "${view.entity}".`);
   }
   const union = selectRecordUnionPresentation(schema, view, entity);
+  const updateOperation = selectEntityOperationByKind(view.entity, entity, "update", "record");
 
   return {
     viewName: editViewName,
     entityName: view.entity,
     entity,
+    ...(updateOperation === undefined ? {} : { updateOperation }),
     fields: selectEditFields(view, entity),
-    transitionActions: selectTransitionStateActions(entity),
+    transitionActions: selectTransitionStateActions(view.entity, entity),
     ...(union === undefined ? {} : { union }),
   };
 }
@@ -446,12 +463,14 @@ function selectReferenceItem(
     return undefined;
   }
   const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
+  const updateOperation = selectEntityOperationByKind(field.to, entity, "update", "record");
 
   return {
     itemViewName,
     entityName: field.to,
     entity,
     recordFields: selectRecordFields(itemView, entity),
+    ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }

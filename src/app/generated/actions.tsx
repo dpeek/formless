@@ -3,40 +3,42 @@ import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitAction } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
 import type { EntityActionTargetCountConfig } from "../../client/action-ui.ts";
-import type { HomeActionConfig } from "../../client/views.ts";
+import type { HomeOperationConfig } from "../../client/views.ts";
 import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateDialog } from "./create.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
-type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
-type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
+type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
+type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
 
-export function HomeActionRow({
-  actions,
+export function HomeOperationRow({
   ariaLabel,
+  operations,
   queryContext,
 }: {
-  actions: HomeActionConfig[];
   ariaLabel: string;
+  operations: HomeOperationConfig[];
   queryContext: QueryEvaluationContext;
 }) {
   const appTarget = useSchemaAppTarget();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const [createDialogAction, setCreateDialogAction] = useState<CreateHomeActionConfig | null>(null);
+  const [createDialogAction, setCreateDialogAction] = useState<CreateHomeOperationConfig | null>(
+    null,
+  );
 
-  async function runAction(action: Extract<HomeActionConfig, { type: "entity-action" }>) {
+  async function runAction(action: CommandHomeOperationConfig) {
     if (pendingAction) {
       return;
     }
 
-    setPendingAction(action.actionName);
+    setPendingAction(action.operationName);
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      const response = await submitAction(appTarget, action.entityName, action.actionName);
-      const affected = response.changes.length;
+      const response = await submitOperation(appTarget, action.entityName, action.operationName);
+      const affected = "changes" in response.output ? response.output.changes.length : 0;
       const message = action.ui.showAffectedCountOnSuccess
         ? `${action.label} synced. ${affected} affected.`
         : `${action.label} synced.`;
@@ -54,7 +56,7 @@ export function HomeActionRow({
 
   return (
     <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
-      {actions.map((action) => {
+      {operations.map((action) => {
         if (action.type === "create") {
           const canOpen =
             action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
@@ -79,9 +81,9 @@ export function HomeActionRow({
           <HomeEntityActionButton
             action={action}
             disabled={pendingAction !== null}
-            key={`${action.type}:${action.actionName}`}
+            key={`${action.type}:${action.operationName}`}
             onRun={runAction}
-            pending={pendingAction === action.actionName}
+            pending={pendingAction === action.operationName}
             queryContext={queryContext}
           />
         );
@@ -109,9 +111,9 @@ function HomeEntityActionButton({
   pending,
   queryContext,
 }: {
-  action: EntityHomeActionConfig;
+  action: CommandHomeOperationConfig;
   disabled: boolean;
-  onRun: (action: EntityHomeActionConfig) => Promise<void>;
+  onRun: (action: CommandHomeOperationConfig) => Promise<void>;
   pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
@@ -148,9 +150,9 @@ function CountedHomeEntityActionButton({
   queryContext,
   targetCount,
 }: {
-  action: EntityHomeActionConfig;
+  action: CommandHomeOperationConfig;
   disabled: boolean;
-  onRun: (action: EntityHomeActionConfig) => Promise<void>;
+  onRun: (action: CommandHomeOperationConfig) => Promise<void>;
   pending: boolean;
   queryContext: QueryEvaluationContext;
   targetCount: EntityActionTargetCountConfig;

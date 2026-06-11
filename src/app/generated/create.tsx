@@ -10,12 +10,13 @@ import {
 } from "@dpeek/formless-ui/modal";
 import { Fieldset } from "@dpeek/formless-ui/field";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitCreateMutation } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
+import { selectEntityOperationByKind } from "../../client/operation-presentation-model.ts";
 import {
   type CreateDefaultConfig,
   type CreateFieldConfig,
   type CreateUnionPresentationConfig,
-  type HomeActionConfig,
+  type HomeOperationConfig,
 } from "../../client/views.ts";
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
@@ -29,7 +30,7 @@ import {
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
-export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
+export type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
 
 export function GeneratedCreateForm({
   createFields,
@@ -49,7 +50,8 @@ export function GeneratedCreateForm({
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({ defaults, union }),
   );
-  const canCreate = entity.mutations.create.enabled;
+  const createOperation = selectEntityOperationByKind(entityName, entity, "create", "collection");
+  const canCreate = createOperation !== undefined;
   const authoring = selectGeneratedCreateFieldAuthoring({
     defaults,
     enabled: canCreate,
@@ -82,7 +84,13 @@ export function GeneratedCreateForm({
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
-      await submitCreateMutation(appTarget, entityName, values);
+      if (createOperation === undefined) {
+        throw new Error(`Create operation is unavailable for ${entity.label}.`);
+      }
+
+      await submitOperation(appTarget, entityName, createOperation.operationName, {
+        input: values,
+      });
       form.reset();
       setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
       setSyncStatus({ state: "idle", message: "Saved and synced." });
@@ -137,7 +145,7 @@ export function GeneratedCreateDialog({
   open,
   queryContext,
 }: {
-  action: CreateHomeActionConfig;
+  action: CreateHomeOperationConfig;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (recordId: string) => void;
   open: boolean;
@@ -169,7 +177,7 @@ export function GeneratedCreateDialogForm({
   renderDialogCancel = true,
   submitValues,
 }: {
-  action: CreateHomeActionConfig;
+  action: CreateHomeOperationConfig;
   onSuccess?: (recordId: string) => void;
   queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
@@ -222,8 +230,11 @@ export function GeneratedCreateDialogForm({
       const response =
         submitValues === undefined
           ? {
-              recordId: (await submitCreateMutation(appTarget, action.entityName, values)).record
-                .id,
+              recordId: selectCreatedOperationRecordId(
+                await submitOperation(appTarget, action.entityName, action.operationName, {
+                  input: values,
+                }),
+              ),
             }
           : await submitValues(values);
       form.reset();
@@ -290,7 +301,7 @@ export function GeneratedCreateDialogForm({
 
 export function resolveCreateValues(
   formData: FormData,
-  action: CreateHomeActionConfig,
+  action: CreateHomeOperationConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
   return resolveGeneratedCreateValues({
@@ -300,4 +311,12 @@ export function resolveCreateValues(
     defaults: action.defaults,
     queryContext,
   });
+}
+
+function selectCreatedOperationRecordId(response: Awaited<ReturnType<typeof submitOperation>>) {
+  if (response.output.type !== "create") {
+    throw new Error("Create operation did not return a created record.");
+  }
+
+  return response.output.record.id;
 }

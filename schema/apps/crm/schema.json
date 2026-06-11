@@ -58,6 +58,74 @@
           "kind": "unique",
           "fields": ["name"]
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Company",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "website": {
+                "field": "website"
+              },
+              "status": {
+                "field": "status"
+              },
+              "notes": {
+                "field": "notes"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Company",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "website": {
+                "field": "website"
+              },
+              "status": {
+                "field": "status"
+              },
+              "notes": {
+                "field": "notes"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "contact": {
@@ -137,6 +205,86 @@
         "delete": {
           "enabled": false
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Contact",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "company": {
+                "field": "company"
+              },
+              "role": {
+                "field": "role"
+              },
+              "lifecycle": {
+                "field": "lifecycle"
+              },
+              "source": {
+                "field": "source"
+              },
+              "notes": {
+                "field": "notes"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Contact",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "company": {
+                "field": "company"
+              },
+              "role": {
+                "field": "role"
+              },
+              "lifecycle": {
+                "field": "lifecycle"
+              },
+              "source": {
+                "field": "source"
+              },
+              "notes": {
+                "field": "notes"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "email-address": {
@@ -199,6 +347,80 @@
           "kind": "unique",
           "fields": ["normalizedAddress"]
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Email address",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "contact": {
+                "field": "contact"
+              },
+              "address": {
+                "field": "address"
+              },
+              "normalizedAddress": {
+                "field": "normalizedAddress"
+              },
+              "status": {
+                "field": "status"
+              },
+              "primary": {
+                "field": "primary"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Email address",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "contact": {
+                "field": "contact"
+              },
+              "address": {
+                "field": "address"
+              },
+              "normalizedAddress": {
+                "field": "normalizedAddress"
+              },
+              "status": {
+                "field": "status"
+              },
+              "primary": {
+                "field": "primary"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "audience": {
@@ -250,6 +472,74 @@
         "uniqueAudienceKey": {
           "kind": "unique",
           "fields": ["key"]
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Audience",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "key": {
+                "field": "key"
+              },
+              "label": {
+                "field": "label"
+              },
+              "description": {
+                "field": "description"
+              },
+              "status": {
+                "field": "status"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Audience",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "key": {
+                "field": "key"
+              },
+              "label": {
+                "field": "label"
+              },
+              "description": {
+                "field": "description"
+              },
+              "status": {
+                "field": "status"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -334,6 +624,86 @@
           "kind": "unique",
           "fields": ["emailAddress", "audience"]
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Subscription",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "emailAddress": {
+                "field": "emailAddress"
+              },
+              "audience": {
+                "field": "audience"
+              },
+              "status": {
+                "field": "status"
+              },
+              "consentedAt": {
+                "field": "consentedAt"
+              },
+              "sourceKind": {
+                "field": "sourceKind"
+              },
+              "sourceLabel": {
+                "field": "sourceLabel"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Subscription",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "emailAddress": {
+                "field": "emailAddress"
+              },
+              "audience": {
+                "field": "audience"
+              },
+              "status": {
+                "field": "status"
+              },
+              "consentedAt": {
+                "field": "consentedAt"
+              },
+              "sourceKind": {
+                "field": "sourceKind"
+              },
+              "sourceLabel": {
+                "field": "sourceLabel"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "campaign": {
@@ -382,6 +752,74 @@
         },
         "delete": {
           "enabled": false
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Campaign",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "status": {
+                "field": "status"
+              },
+              "objective": {
+                "field": "objective"
+              },
+              "startsOn": {
+                "field": "startsOn"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Campaign",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "name": {
+                "field": "name"
+              },
+              "status": {
+                "field": "status"
+              },
+              "objective": {
+                "field": "objective"
+              },
+              "startsOn": {
+                "field": "startsOn"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -438,6 +876,80 @@
         },
         "delete": {
           "enabled": false
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Campaign message",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "campaign": {
+                "field": "campaign"
+              },
+              "subject": {
+                "field": "subject"
+              },
+              "preview": {
+                "field": "preview"
+              },
+              "body": {
+                "field": "body"
+              },
+              "status": {
+                "field": "status"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Campaign message",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "campaign": {
+                "field": "campaign"
+              },
+              "subject": {
+                "field": "subject"
+              },
+              "preview": {
+                "field": "preview"
+              },
+              "body": {
+                "field": "body"
+              },
+              "status": {
+                "field": "status"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -514,6 +1026,92 @@
         "delete": {
           "enabled": false
         }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Broadcast",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "campaign": {
+                "field": "campaign"
+              },
+              "message": {
+                "field": "message"
+              },
+              "audience": {
+                "field": "audience"
+              },
+              "status": {
+                "field": "status"
+              },
+              "scheduledDate": {
+                "field": "scheduledDate"
+              },
+              "sentAt": {
+                "field": "sentAt"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Broadcast",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "campaign": {
+                "field": "campaign"
+              },
+              "message": {
+                "field": "message"
+              },
+              "audience": {
+                "field": "audience"
+              },
+              "status": {
+                "field": "status"
+              },
+              "scheduledDate": {
+                "field": "scheduledDate"
+              },
+              "sentAt": {
+                "field": "sentAt"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        }
       }
     },
     "broadcast-recipient": {
@@ -588,6 +1186,86 @@
         "uniqueBroadcastEmail": {
           "kind": "unique",
           "fields": ["broadcast", "emailAddress"]
+        }
+      },
+      "operations": {
+        "create": {
+          "label": "Create Broadcast recipient",
+          "kind": "create",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "broadcast": {
+                "field": "broadcast"
+              },
+              "emailAddress": {
+                "field": "emailAddress"
+              },
+              "subscription": {
+                "field": "subscription"
+              },
+              "status": {
+                "field": "status"
+              },
+              "lastEventAt": {
+                "field": "lastEventAt"
+              }
+            }
+          },
+          "effect": {
+            "type": "createRecord"
+          },
+          "output": {
+            "type": "create"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
+        },
+        "update": {
+          "label": "Update Broadcast recipient",
+          "kind": "update",
+          "scope": "record",
+          "input": {
+            "fields": {
+              "label": {
+                "field": "label"
+              },
+              "broadcast": {
+                "field": "broadcast"
+              },
+              "emailAddress": {
+                "field": "emailAddress"
+              },
+              "subscription": {
+                "field": "subscription"
+              },
+              "status": {
+                "field": "status"
+              },
+              "lastEventAt": {
+                "field": "lastEventAt"
+              }
+            }
+          },
+          "effect": {
+            "type": "patchRecord"
+          },
+          "output": {
+            "type": "update"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          }
         }
       }
     },
@@ -1743,9 +2421,9 @@
         "type": "table",
         "tableView": "companyTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "company.create",
           "createView": "companyCreate"
         }
       ]
@@ -1779,9 +2457,9 @@
         "type": "table",
         "tableView": "contactTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "contact.create",
           "createView": "contactCreate"
         }
       ]
@@ -1809,9 +2487,9 @@
         "type": "table",
         "tableView": "emailAddressTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "email-address.create",
           "createView": "emailAddressCreate"
         }
       ]
@@ -1839,9 +2517,9 @@
         "type": "table",
         "tableView": "audienceTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "audience.create",
           "createView": "audienceCreate"
         }
       ]
@@ -1875,9 +2553,9 @@
         "type": "table",
         "tableView": "subscriptionTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "subscription.create",
           "createView": "subscriptionCreate"
         }
       ]
@@ -1911,9 +2589,9 @@
         "type": "table",
         "tableView": "campaignTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "campaign.create",
           "createView": "campaignCreate"
         }
       ]
@@ -1941,9 +2619,9 @@
         "type": "table",
         "tableView": "campaignMessageTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "campaign-message.create",
           "createView": "campaignMessageCreate"
         }
       ]
@@ -1983,9 +2661,9 @@
         "type": "table",
         "tableView": "broadcastTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "broadcast.create",
           "createView": "broadcastCreate"
         }
       ]
@@ -2025,9 +2703,9 @@
         "type": "table",
         "tableView": "broadcastRecipientTable"
       },
-      "actions": [
+      "operations": [
         {
-          "type": "create",
+          "operation": "broadcast-recipient.create",
           "createView": "broadcastRecipientCreate"
         }
       ]

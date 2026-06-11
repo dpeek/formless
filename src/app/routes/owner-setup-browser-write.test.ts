@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { deleteClientDb, readLocalSnapshot } from "../../client/db.ts";
 import { getClientStoreSnapshot, resetClientStore } from "../../client/store.ts";
-import { submitAction, submitCreateMutation, submitPatchMutation } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
+import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
 import type { BootstrapResponse, OwnerSetupCompleteResponse } from "../../shared/protocol.ts";
 import { createWorkerHarness } from "../../worker/miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "../../worker/owner-session.ts";
@@ -42,43 +43,47 @@ describe("owner setup browser writes", () => {
 
     const browser = createBrowserSessionFetcher();
     const completed = await completeOwnerSetupForBrowserWrite(browser.fetch);
-    const created = await submitCreateMutation(
+    const created = await submitOperation(
       "tasks",
       "task",
-      { done: false, title: "Owner setup browser write" },
+      "create",
+      { input: { done: false, title: "Owner setup browser write" } },
       browser.fetch,
     );
-    const patched = await submitPatchMutation(
+    const createdRecord = expectOperationOutput(created, "create").record;
+    const patched = await submitOperation(
       "tasks",
       "task",
-      created.record.id,
-      { done: true },
+      "update",
+      { input: { done: true }, recordId: createdRecord.id },
       browser.fetch,
     );
-    const action = await submitAction("tasks", "task", "clearCompletedTasks", browser.fetch);
+    const patchedRecord = expectOperationOutput(patched, "update").record;
+    const action = await submitOperation("tasks", "task", "clearCompletedTasks", {}, browser.fetch);
+    const commandOutput = expectOperationOutput(action, "command");
     const localSnapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
     const remoteSnapshot = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
     const localCreatedRecord = localSnapshot.records.find(
-      (record) => record.id === created.record.id,
+      (record) => record.id === createdRecord.id,
     );
     const remoteCreatedRecord = remoteSnapshot.records.find(
-      (record) => record.id === created.record.id,
+      (record) => record.id === createdRecord.id,
     );
 
     expect(completed.owner).toMatchObject({
       email: "ada@example.com",
       name: "Ada Owner",
     });
-    expect(created.record.values).toMatchObject({
+    expect(createdRecord.values).toMatchObject({
       done: false,
       title: "Owner setup browser write",
     });
-    expect(patched.record.values.done).toBe(true);
-    expect(action.changes.some((change) => change.recordId === created.record.id)).toBe(true);
+    expect(patchedRecord.values.done).toBe(true);
+    expect(commandOutput.changes.some((change) => change.recordId === createdRecord.id)).toBe(true);
     expect(localCreatedRecord?.deletedAt).toEqual(expect.any(String));
     expect(remoteCreatedRecord?.deletedAt).toEqual(expect.any(String));
-    expect(storeSnapshot.recordIdsByEntity.task ?? []).not.toContain(created.record.id);
+    expect(storeSnapshot.recordIdsByEntity.task ?? []).not.toContain(createdRecord.id);
     expect(browser.cookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(browser.calls.map(({ authorization }) => authorization)).toEqual([
       null,
@@ -96,24 +101,33 @@ describe("owner setup browser writes", () => {
       expect.objectContaining({
         cookie: expect.stringContaining(`${OWNER_SESSION_COOKIE_NAME}=`),
         credentials: "same-origin",
-        input: "/api/tasks/mutations",
+        input: "/api/tasks/operations/task/create",
         method: "POST",
       }),
       expect.objectContaining({
         cookie: expect.stringContaining(`${OWNER_SESSION_COOKIE_NAME}=`),
         credentials: "same-origin",
-        input: "/api/tasks/mutations",
+        input: "/api/tasks/operations/task/update",
         method: "POST",
       }),
       expect.objectContaining({
         cookie: expect.stringContaining(`${OWNER_SESSION_COOKIE_NAME}=`),
         credentials: "same-origin",
-        input: "/api/tasks/actions",
+        input: "/api/tasks/operations/task/clearCompletedTasks",
         method: "POST",
       }),
     ]);
   });
 });
+
+function expectOperationOutput<K extends OperationInvocationResponse["output"]["type"]>(
+  response: OperationInvocationResponse,
+  type: K,
+): Extract<OperationInvocationResponse["output"], { type: K }> {
+  expect(response.output.type).toBe(type);
+
+  return response.output as Extract<OperationInvocationResponse["output"], { type: K }>;
+}
 
 async function resetSchemaApp(schemaKey: string) {
   const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {

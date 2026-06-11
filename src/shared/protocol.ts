@@ -81,13 +81,6 @@ export type ActionRequest = {
   actorKind?: SchemaActionActorKind;
 };
 
-export type PublicActionRequest = {
-  input: RecordValues;
-  proof: PublicActionProofInput;
-  source?: PublicActionRequestSource;
-  idempotencyKey?: string;
-};
-
 export type PublicActionProofInput = {
   turnstileToken: string;
 };
@@ -165,10 +158,39 @@ export type PublicActionExecutionResult = {
   audit: PublicActionAuditFacts;
 };
 
-export type PublicActionResponse = {
-  actionId: string;
-  cursor: number;
-  status: "accepted";
+export type PublicOperationRequest = {
+  input: RecordValues;
+  proof: PublicActionProofInput;
+  source?: PublicActionRequestSource;
+  idempotencyKey?: string;
+};
+
+export type PublicOperationResponse = {
+  invocationId: string;
+  operation: {
+    entityName: string;
+    operationName: string;
+    canonicalKey: string;
+    kind: "command" | "create";
+  };
+  output:
+    | {
+        type: "command";
+        affectedChangeIds: string[];
+        cursor: number;
+        response: {
+          actionId: string;
+          cursor: number;
+        };
+      }
+    | {
+        type: "create";
+        affectedChangeIds: string[];
+        changes: ChangeRow[];
+        cursor: number;
+        record: StoredRecord;
+      };
+  status: "committed" | "replayed";
 };
 
 export type ChangeRow = {
@@ -364,15 +386,16 @@ export type SiteMediaNode = {
   kind: "image";
 };
 
-export type SitePublicActionNode = {
-  actionName: string;
-  route: string;
-  challenge: SitePublicActionChallengeNode;
-};
-
 export type SitePublicActionChallengeNode = {
   kind: "turnstile";
   siteKey?: string;
+};
+
+export type SitePublicOperationNode = {
+  entityName: string;
+  operationName: string;
+  route: string;
+  challenge: SitePublicActionChallengeNode;
 };
 
 export type SiteTreeRoute =
@@ -416,7 +439,7 @@ export type SiteBlockNode = {
     key: string;
     items: SiteBlockNode[];
   };
-  publicAction?: SitePublicActionNode;
+  publicOperation?: SitePublicOperationNode;
 };
 
 export type SitePlacementNode = {

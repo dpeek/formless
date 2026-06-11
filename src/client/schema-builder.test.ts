@@ -31,9 +31,16 @@ describe("schema builder draft intents", () => {
       },
     );
 
+    expect(draft.schema.entities.project?.operations?.create?.input).toEqual({
+      fields: { name: { field: "name" } },
+    });
+    expect(draft.schema.entities.project?.operations?.update?.input).toEqual({
+      fields: { name: { field: "name" } },
+    });
+
     const schema = serializeSchemaBuilderDraft(draft);
 
-    expect(schema.entities.project).toEqual({
+    expect(schema.entities.project).toMatchObject({
       label: "Project",
       fields: {
         name: {
@@ -47,12 +54,46 @@ describe("schema builder draft intents", () => {
         patch: { enabled: true },
         delete: { enabled: false },
       },
+      operations: {
+        create: {
+          label: "Create Project",
+          kind: "create",
+          scope: "collection",
+          input: { fields: { name: { field: "name" } } },
+          effect: { type: "createRecord" },
+          output: { type: "create" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+        },
+        update: {
+          label: "Update Project",
+          kind: "update",
+          scope: "record",
+          input: { fields: { name: { field: "name" } } },
+          effect: { type: "patchRecord" },
+          output: { type: "update" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+        },
+      },
     });
+    expect(schema.entities.project?.operations?.delete).toBeUndefined();
     expect(schema.queries.projectAll).toBeUndefined();
     expect(schema.itemViews.projectItem).toBeUndefined();
     expect(schema.views.projectCreate).toBeUndefined();
     expect(schema.views.projectHome).toBeUndefined();
     expect(schema.screens?.projectScreen).toBeUndefined();
+  });
+
+  it("keeps builder-owned operation labels aligned with entity labels", () => {
+    const draft = applyIntents(
+      createSchemaBuilderDraft(sourceLikeTaskSchema()),
+      { type: "createEntity", key: "project", label: "Project" },
+      { type: "updateEntityLabel", entityKey: "project", label: "Initiative" },
+    );
+
+    expect(draft.schema.entities.project?.operations?.create?.label).toBe("Create Initiative");
+    expect(draft.schema.entities.project?.operations?.update?.label).toBe("Update Initiative");
   });
 
   it("creates kebab-case entities with clean labels", () => {

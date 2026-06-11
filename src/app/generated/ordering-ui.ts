@@ -1,6 +1,7 @@
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
-import { submitPatchMutation } from "../../client/sync.ts";
+import { submitOperation } from "../../client/sync.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import {
   calculateOrderingDragMovePlan,
@@ -15,11 +16,11 @@ import {
 export type { OrderingMoveDirection };
 
 export type ResultOrderingContext = {
-  canPatch: boolean;
   entityName: string;
   orderedRecordIds: string[];
   ordering: ResultOrderingConfig;
   recordsById: Record<string, StoredRecord>;
+  updateOperation?: EntityOperationPresentationConfig;
 };
 
 export type OrderingMoveMenuItem = {
@@ -61,28 +62,28 @@ export function selectOrderedResultRecordIds(
 }
 
 export function selectResultOrderingContext({
-  canPatch,
   entityName,
   ordering,
   recordIds,
   recordsById,
+  updateOperation,
 }: {
-  canPatch: boolean;
   entityName: string;
   ordering: ResultOrderingConfig | undefined;
   recordIds: string[];
   recordsById: Record<string, StoredRecord>;
+  updateOperation?: EntityOperationPresentationConfig;
 }): ResultOrderingContext | undefined {
   if (!ordering) {
     return undefined;
   }
 
   return {
-    canPatch,
     entityName,
     orderedRecordIds: selectOrderedResultRecordIds(recordIds, recordsById, ordering),
     ordering,
     recordsById,
+    updateOperation,
   };
 }
 
@@ -182,7 +183,11 @@ export function selectOrderingMoveMenuItems({
       scopeFields: orderingContext.ordering.scope.map((field) => field.fieldName),
       rankOptions: orderingRankOptions(orderingContext.ordering),
     });
-    const disabledReason = orderingMoveDisabledReason(direction, plan, orderingContext.canPatch);
+    const disabledReason = orderingMoveDisabledReason(
+      direction,
+      plan,
+      orderingContext.updateOperation !== undefined,
+    );
 
     return {
       direction,
@@ -240,9 +245,21 @@ export async function submitOrderingPatch(
   orderingContext: ResultOrderingContext,
   plan: OrderingMovePatchPlan,
 ) {
-  await submitPatchMutation(target, orderingContext.entityName, plan.recordId, {
-    [orderingContext.ordering.fieldName]: plan.rank,
-  });
+  if (orderingContext.updateOperation === undefined) {
+    throw new Error("Update operation is unavailable for ordering.");
+  }
+
+  await submitOperation(
+    target,
+    orderingContext.entityName,
+    orderingContext.updateOperation.operationName,
+    {
+      recordId: plan.recordId,
+      input: {
+        [orderingContext.ordering.fieldName]: plan.rank,
+      },
+    },
+  );
 }
 
 function orderingRankOptions(ordering: ResultOrderingConfig): OrderingRankOptions {

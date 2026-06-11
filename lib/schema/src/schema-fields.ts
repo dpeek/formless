@@ -36,6 +36,7 @@ const textFieldFormats = [
 export type ParsedEntityCatalog = {
   entities: Record<string, EntitySchema>;
   actionInputsByEntity: Record<string, unknown>;
+  operationInputsByEntity: Record<string, unknown>;
 };
 
 export function parseEntities(value: unknown): ParsedEntityCatalog {
@@ -45,16 +46,24 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
 
   const entities: Record<string, EntitySchema> = {};
   const actionInputsByEntity: Record<string, unknown> = {};
+  const operationInputsByEntity: Record<string, unknown> = {};
   const stateMachineInputsByEntity: Record<string, unknown> = {};
 
   for (const [entityName, entityValue] of Object.entries(value)) {
     assertSchemaLocalEntityKey(`Schema entity key "${entityName}"`, entityName);
 
-    const { actionsInput, entity, stateMachinesInput } = parseEntityBase(entityName, entityValue);
+    const { actionsInput, entity, operationsInput, stateMachinesInput } = parseEntityBase(
+      entityName,
+      entityValue,
+    );
     entities[entityName] = entity;
 
     if (actionsInput !== undefined) {
       actionInputsByEntity[entityName] = actionsInput;
+    }
+
+    if (operationsInput !== undefined) {
+      operationInputsByEntity[entityName] = operationsInput;
     }
 
     if (stateMachinesInput !== undefined) {
@@ -68,7 +77,7 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
     stateMachineInputsByEntity,
   );
 
-  return { entities: entitiesWithStateMachines, actionInputsByEntity };
+  return { entities: entitiesWithStateMachines, actionInputsByEntity, operationInputsByEntity };
 }
 
 function validateReferenceFields(entities: Record<string, EntitySchema>) {
@@ -132,7 +141,12 @@ function requireLocalEntityReference(
 function parseEntityBase(
   entityName: string,
   value: unknown,
-): { entity: EntitySchema; actionsInput: unknown; stateMachinesInput: unknown } {
+): {
+  entity: EntitySchema;
+  actionsInput: unknown;
+  operationsInput: unknown;
+  stateMachinesInput: unknown;
+} {
   if (!isRecord(value)) {
     throw new Error(`Entity "${entityName}" must be an object.`);
   }
@@ -144,6 +158,7 @@ function parseEntityBase(
     "constraints",
     "stateMachines",
     "actions",
+    "operations",
   ]);
 
   const label = value.label;
@@ -167,6 +182,7 @@ function parseEntityBase(
       ...(constraints === undefined ? {} : { constraints }),
     },
     actionsInput: value.actions,
+    operationsInput: value.operations,
     stateMachinesInput: value.stateMachines,
   };
 }

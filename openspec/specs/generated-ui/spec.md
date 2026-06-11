@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Generated UI renders React app surfaces selected from app schema models and runtime profiles. It turns screens, views, fields, read models, actions, and app storage identity into browser behavior for records without requiring custom app code.
+Generated UI renders React app surfaces selected from app schema models and runtime profiles. It turns screens, views, fields, read models, operations, actions, and app storage identity into browser behavior for records without requiring custom app code.
 
 ## Requirements
 
@@ -101,20 +101,23 @@ The system SHALL render generated screens from screen models and collection sect
 - GIVEN a generated app route has effective access `anonymous`
 - WHEN an anonymous browser navigates to that route
 - THEN generated UI can render the selected screen without an owner session
-- AND mutation, action, or management controls still use their existing write
-  and action authorization contracts
+- AND operation, mutation, action, or management controls still use their
+  existing write and authorization contracts
 
 ### Requirement: Collection Rendering
 
-The system SHALL render collection views with query tabs, context selection, summary slots, actions, and schema-declared result types.
+The system SHALL render collection views with query tabs, context selection,
+summary slots, operation controls, and schema-declared result types.
 
 #### Scenario: Collection model selection
 
 - GIVEN collection models are selected in `src/client/views.ts`
 - WHEN `HomeViewModel.collection` builds a `HomeCollectionConfig`
-- THEN the model selects entity, context, query tabs, default query, result, actions, and summaries before rendering
+- THEN the model selects entity, context, query tabs, default query, result,
+  operation controls, and summaries before rendering
 - AND it composes shell facts from `src/client/collection-shell-model.ts` with result facts from `src/client/collection-result-model.ts`
-- AND shell selection owns query tabs, default query, context, summaries, actions, related collections, and create facts
+- AND shell selection owns query tabs, default query, context, summaries,
+  operation controls, related collections, and create facts
 
 #### Scenario: Result model ownership
 
@@ -229,9 +232,45 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 - THEN delete controls can render with destructive confirmation
 - AND tree placement removal stays separate from child record deletion
 
-### Requirement: Actions And Tree Composition
+### Requirement: Operation Presentation
 
-The system SHALL render schema actions through generated action UI and SHALL use relationship context and readiness facts to shape command inputs.
+The system SHALL render generated record and collection controls from available
+entity operations and view operation bindings.
+
+#### Scenario: Select available operations for surface scope
+
+- GIVEN a generated collection, list, table, tree, record, or detail surface
+  renders an entity
+- WHEN the surface model is selected
+- THEN generated UI asks for available operations for the entity and current
+  scope
+- AND collection-scoped operations can render in collection toolbars
+- AND record-scoped operations can render in record menus, table row controls,
+  list rows, tree nodes, or detail operation controls
+- AND operations hidden from the browser actor are not rendered as controls
+
+#### Scenario: Bind operation placement from view schema
+
+- GIVEN a collection view declares operation bindings
+- WHEN generated UI selects the collection model
+- THEN each binding references a canonical operation key such as `task.create`
+  or `task.clearCompletedTasks`
+- AND the binding can provide placement and ordering hints without redefining
+  the operation input, effect, policy, or audit behavior
+
+#### Scenario: Do not project legacy view actions
+
+- GIVEN a collection view omits operation bindings
+- WHEN generated UI selects presentation models
+- THEN the generated collection controls do not synthesize controls from
+  mutation policy or entity action slots
+- AND generated controls invoke source-declared operations as the primary
+  browser interaction model
+
+### Requirement: Operations And Tree Composition
+
+The system SHALL render schema operations through generated operation UI and
+SHALL use relationship context and readiness facts to shape command inputs.
 
 #### Scenario: Many-to-many selection action
 
@@ -251,7 +290,7 @@ The system SHALL render schema actions through generated action UI and SHALL use
 ### Requirement: State Machine Controls
 
 The system SHALL render state-machine lifecycle facts from schema models and
-shall invoke transition actions instead of directly patching machine-owned
+shall invoke transition operations instead of directly patching machine-owned
 status fields.
 
 #### Scenario: Render state badges
@@ -265,12 +304,13 @@ status fields.
 
 #### Scenario: Render valid transition controls
 
-- GIVEN a generated surface renders a record with transition-state actions
+- GIVEN a generated surface renders a record with transition-state operations
 - WHEN the record's current state allows one or more transitions
-- THEN generated UI renders controls for the valid transition actions
-- AND invalid transition actions are hidden or disabled with schema-derived
+- THEN generated UI renders controls for the valid transition operations
+- AND invalid transition operations are hidden or disabled with schema-derived
   reasons
-- AND submitting a transition calls the normal Authority action endpoint
+- AND submitting a transition invokes the matching operation through the normal
+  Authority operation boundary
 
 #### Scenario: Protect machine-owned field editors
 
@@ -400,17 +440,17 @@ records that matches current table-driven install management behavior.
 - **AND** install identity, package app key, storage identity, and package
   source initialization facts render as read-only
 
-### Requirement: Actor-Safe Deployment Actions
+### Requirement: Actor-Safe Deployment Operations
 
-Generated UI SHALL render only deployment actions exposed to browser actor
+Generated UI SHALL render only deployment operations exposed to browser actor
 kinds.
 
-#### Scenario: Browser-visible actions
+#### Scenario: Browser-visible operations
 
 - GIVEN an owner or admin views deployment configuration
-- WHEN generated UI renders actions
-- THEN it renders only actions exposed to owner or admin browser actors
-- AND CLI deployer or runner actions are hidden from the browser surface
+- WHEN generated UI renders operations
+- THEN it renders only operations exposed to owner or admin browser actors
+- AND CLI deployer or runner operations are hidden from the browser surface
 
 #### Scenario: Read-only deployment observation
 
@@ -580,7 +620,7 @@ local workspace from the browser.
 - **WHEN** the browser opens a fresh local workspace runtime after CLI-owned
   workspace bootstrap
 - **THEN** the UI can create package app installs through Authority-backed app
-  install actions
+  install operations
 - **AND** the UI does not invoke workspace initialization through the gateway
 
 #### Scenario: Save after browser edits
@@ -603,8 +643,8 @@ behavior for onboarding steps that write schema records.
 - **THEN** field rendering reuses generated create/edit field controls, field
   editor selection, defaults, `visibleWhen`, and union variant behavior where
   the step is backed by schema view facts
-- **AND** submit behavior writes through Authority-backed mutations or actions
-  so Authority validation remains the source of record validation
+- **AND** submit behavior writes through Authority-backed operations so
+  Authority validation remains the source of record validation
 - **AND** onboarding-specific React code does not duplicate schema field
   validation rules
 

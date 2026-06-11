@@ -41,9 +41,9 @@ import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deploymen
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
-  executePublicActionRequest,
+  executePublicOperationRequest,
   PublicActionError,
-  selectPublicActionRoute,
+  selectPublicOperationRoute,
 } from "./public-actions.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 import {
@@ -237,21 +237,21 @@ export class FormlessAuthority extends DurableObject<Env> {
         path: route.path,
         searchParams: url.searchParams,
       });
-      const publicActionRoute = selectPublicActionRoute({
+      const publicOperationRoute = selectPublicOperationRoute({
         method: request.method,
         path: route.path,
       });
 
-      if (publicActionRoute) {
+      if (publicOperationRoute) {
         const body = await readJson(request);
         ensureStorageTables(this.ctx.storage);
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
-        const result = await executePublicActionRequest({
+        const result = await executePublicOperationRequest({
           body,
           env: this.bindings,
           identity: route.identity,
           request,
-          route: publicActionRoute,
+          route: publicOperationRoute,
           schema,
           storage: this.ctx.storage,
           writes,

@@ -1,9 +1,5 @@
-export function createMutationId() {
-  return createId("mutation");
-}
-
-export function createActionId() {
-  return createId("action");
+export function createOperationId() {
+  return createId("operation");
 }
 
 export function createRecordId() {

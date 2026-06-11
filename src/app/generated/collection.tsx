@@ -36,7 +36,7 @@ import type { ListResultModel, RecordResultModel } from "../../client/list-resul
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import type { EntitySchema } from "@dpeek/formless-schema";
-import { HomeActionRow } from "./actions.tsx";
+import { HomeOperationRow } from "./actions.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
 import {
@@ -72,7 +72,7 @@ export function HomeCollection({
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
-  const { actions, context, entity, entityName, queries, result, summary } = collection;
+  const { context, entity, entityName, operations, queries, result, summary } = collection;
   const queryTabs = queries.tabs;
 
   if (context) {
@@ -132,10 +132,10 @@ export function HomeCollection({
         result={result}
       />
 
-      {actions.length > 0 ? (
-        <HomeActionRow
-          actions={actions}
-          ariaLabel={`${entity.label} actions`}
+      {operations.length > 0 ? (
+        <HomeOperationRow
+          operations={operations}
+          ariaLabel={`${entity.label} operations`}
           queryContext={queryContext}
         />
       ) : null}
@@ -160,7 +160,7 @@ function ScopedHomeCollection({
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
-  const { actions, entity, entityName, queries, result, summary } = collection;
+  const { entity, entityName, operations, queries, result, summary } = collection;
   const queryTabs = queries.tabs;
   const contextOptions = useEntityRecordOptionsMatchingQuery(
     context.entityName,
@@ -184,7 +184,7 @@ function ScopedHomeCollection({
   if (context.presentation === "listDetail") {
     return (
       <ListDetailScopedHomeCollection
-        actions={actions}
+        operations={operations}
         context={context}
         contextOptions={contextOptions}
         contextSelection={contextSelection}
@@ -254,10 +254,10 @@ function ScopedHomeCollection({
         </>
       ) : null}
 
-      {actions.length > 0 ? (
-        <HomeActionRow
-          actions={actions}
-          ariaLabel={`${entity.label} actions`}
+      {operations.length > 0 ? (
+        <HomeOperationRow
+          operations={operations}
+          ariaLabel={`${entity.label} operations`}
           queryContext={contextSelection.actionQueryContext}
         />
       ) : null}
@@ -266,7 +266,6 @@ function ScopedHomeCollection({
 }
 
 function ListDetailScopedHomeCollection({
-  actions,
   context,
   contextOptions,
   contextSelection,
@@ -274,12 +273,12 @@ function ListDetailScopedHomeCollection({
   entityName,
   onSelectContext,
   onSelectQuery,
+  operations,
   queryTabs,
   result,
   selectedQuery,
   summary,
 }: {
-  actions: HomeCollectionConfig["actions"];
   context: HomeContextConfig;
   contextOptions: Array<{ id: string; label: string }>;
   contextSelection: GeneratedContextSelectionFacts;
@@ -287,6 +286,7 @@ function ListDetailScopedHomeCollection({
   entityName: string;
   onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
+  operations: HomeCollectionConfig["operations"];
   queryTabs: HomeQueryTabConfig[];
   result: CollectionResultModel;
   selectedQuery: HomeQueryTabConfig;
@@ -385,10 +385,10 @@ function ListDetailScopedHomeCollection({
           <p className="text-sm text-slate-600">No {context.label.toLowerCase()} selected.</p>
         ) : null}
 
-        {actions.length > 0 ? (
-          <HomeActionRow
-            actions={actions}
-            ariaLabel={`${entity.label} actions`}
+        {operations.length > 0 ? (
+          <HomeOperationRow
+            operations={operations}
+            ariaLabel={`${entity.label} operations`}
             queryContext={actionQueryContext}
           />
         ) : null}
@@ -414,10 +414,10 @@ function ContextListDetailSelector({
     <aside className="min-w-0 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-900">{context.label}</h2>
-        {context.createAction ? (
+        {context.createOperation ? (
           <Button
-            aria-label={context.createAction.label}
-            isDisabled={!context.createAction.enabled}
+            aria-label={context.createOperation.label}
+            isDisabled={!context.createOperation.enabled}
             onPress={() => setCreateDialogOpen(true)}
             size="sq-xs"
             type="button"
@@ -445,9 +445,9 @@ function ContextListDetailSelector({
         </ul>
       )}
 
-      {context.createAction && createDialogOpen ? (
+      {context.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={context.createAction}
+          action={context.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={(recordId) => {
             onSelectContext?.(recordId);
@@ -524,10 +524,10 @@ function ContextSelector({
           </TabList>
         </Tabs>
 
-        {context.createAction ? (
+        {context.createOperation ? (
           <Button
-            aria-label={context.createAction.label}
-            isDisabled={!context.createAction.enabled}
+            aria-label={context.createOperation.label}
+            isDisabled={!context.createOperation.enabled}
             onPress={() => setCreateDialogOpen(true)}
             size="sq-xs"
             type="button"
@@ -545,9 +545,9 @@ function ContextSelector({
         onDeleted={() => onSelectContext?.(null)}
         recordId={selectedContextRecordId}
       />
-      {context.createAction && createDialogOpen ? (
+      {context.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={context.createAction}
+          action={context.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={(recordId) => {
             onSelectContext?.(recordId);
@@ -623,7 +623,6 @@ function ContextRecordEditor({
   }
 
   const visibleFields = selectRecordFieldsForActiveUnion(recordFields, context.recordUnion, record);
-  const canDelete = context.entity.mutations.delete.enabled;
 
   return (
     <div
@@ -638,7 +637,6 @@ function ContextRecordEditor({
 
         return (
           <RecordFieldEditor
-            canPatch={context.entity.mutations.patch.enabled}
             density={isHeading || isRichMarkdownRecordField(fieldConfig) ? "default" : density}
             entityName={context.entityName}
             fieldConfig={fieldConfig}
@@ -646,6 +644,7 @@ function ContextRecordEditor({
             presentation={isHeading ? "heading" : "default"}
             recordId={recordId}
             showLabel={!isHeading}
+            updateOperation={context.updateOperation}
           />
         );
       })}
@@ -659,9 +658,10 @@ function ContextRecordEditor({
           />
         </div>
       ) : null}
-      {canDelete ? (
+      {context.deleteOperation ? (
         <div className={density === "compact" ? "pt-1" : "self-end"}>
           <DeleteRecordButton
+            deleteOperation={context.deleteOperation}
             entityLabel={context.entity.label}
             entityName={context.entityName}
             labelFields={visibleFields}
@@ -885,8 +885,6 @@ function RecordDetail({
   queryContext?: QueryEvaluationContext;
   result: RecordResultModel;
 }) {
-  const canPatch = entity.mutations.patch.enabled;
-  const canDelete = entity.mutations.delete.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordId = recordIds[0] ?? null;
   const record = useRecord(recordId ?? "");
@@ -911,12 +909,12 @@ function RecordDetail({
       <div className="grid min-w-0 gap-4">
         {visibleFields.map((fieldConfig) => (
           <RecordFieldEditor
-            canPatch={canPatch}
             entityName={entityName}
             fieldConfig={fieldConfig}
             key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
             recordId={recordId}
             showLabel={true}
+            updateOperation={result.updateOperation}
           />
         ))}
         {result.transitionActions.length > 0 ? (
@@ -927,9 +925,10 @@ function RecordDetail({
             values={record?.values}
           />
         ) : null}
-        {canDelete ? (
+        {result.deleteOperation ? (
           <div>
             <DeleteRecordButton
+              deleteOperation={result.deleteOperation}
               entityLabel={entity.label}
               entityName={entityName}
               labelFields={visibleFields}
@@ -962,18 +961,16 @@ export function RecordList({
   result: ListResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
-  const canPatch = entity.mutations.patch.enabled;
-  const canDelete = entity.mutations.delete.enabled;
   const { ordering, recordFields, recordUnion } = result;
   const [pendingOrderingRecordId, setPendingOrderingRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();
   const orderingContext = selectResultOrderingContext({
-    canPatch,
     entityName,
     ordering,
     recordIds,
     recordsById,
+    updateOperation: result.updateOperation,
   });
   const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
   const orderingDragFacts = selectOrderingDragFacts(orderingContext);
@@ -1032,7 +1029,7 @@ export function RecordList({
     const sourceFact = orderingDragFacts.get(recordId);
     const targetFact = orderingDragFacts.get(targetRecordId);
 
-    if (!sourceFact || !targetFact || !orderingContext.canPatch) {
+    if (!sourceFact || !targetFact || !orderingContext.updateOperation) {
       return;
     }
 
@@ -1095,7 +1092,7 @@ export function RecordList({
 
   return (
     <section className="space-y-3">
-      {!canPatch && recordIds.length > 0 ? (
+      {!result.updateOperation && recordIds.length > 0 ? (
         <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
       ) : null}
 
@@ -1119,8 +1116,7 @@ export function RecordList({
         label={`${entity.label} records`}
         renderItem={({ item }) => (
           <RecordRow
-            canDelete={canDelete}
-            canPatch={canPatch}
+            deleteOperation={result.deleteOperation}
             entity={entity}
             entityName={entityName}
             recordFields={recordFields}
@@ -1128,17 +1124,18 @@ export function RecordList({
             recordId={item.recordId}
             showOrderingHandle={hasDragOrdering}
             transitionActions={result.transitionActions}
+            updateOperation={result.updateOperation}
           />
         )}
         reorder={
           orderingContext && orderingDragFacts
             ? {
                 label: "Drag record",
-                disabled: !orderingContext.canPatch || pendingOrderingRecordId !== null,
+                disabled: !orderingContext.updateOperation || pendingOrderingRecordId !== null,
                 disabledReason:
                   pendingOrderingRecordId !== null
                     ? "Move already pending"
-                    : !orderingContext.canPatch
+                    : !orderingContext.updateOperation
                       ? "Editing is disabled"
                       : undefined,
                 dragHandleDataAttributes: { "data-formless-ordering-handle": "true" },
@@ -1204,8 +1201,7 @@ function recordListTextValue({
 }
 
 function RecordRow({
-  canDelete,
-  canPatch,
+  deleteOperation,
   entity,
   entityName,
   recordFields,
@@ -1213,9 +1209,9 @@ function RecordRow({
   recordId,
   showOrderingHandle = false,
   transitionActions,
+  updateOperation,
 }: {
-  canDelete: boolean;
-  canPatch: boolean;
+  deleteOperation?: ListResultModel["deleteOperation"];
   entity: EntitySchema;
   entityName: string;
   recordFields: RecordFieldConfig[];
@@ -1223,6 +1219,7 @@ function RecordRow({
   recordId: string;
   showOrderingHandle?: boolean;
   transitionActions: ListResultModel["transitionActions"];
+  updateOperation?: ListResultModel["updateOperation"];
 }) {
   const record = useRecord(recordId);
   const warnings = useRecordReadinessWarnings(recordId);
@@ -1237,11 +1234,11 @@ function RecordRow({
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {visibleFields.map((fieldConfig) => (
             <RecordFieldEditor
-              canPatch={canPatch}
               entityName={entityName}
               fieldConfig={fieldConfig}
               key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
               recordId={recordId}
+              updateOperation={updateOperation}
             />
           ))}
         </div>
@@ -1254,9 +1251,10 @@ function RecordRow({
             values={record?.values}
           />
         ) : null}
-        {canDelete ? (
+        {deleteOperation ? (
           <DeleteRecordButton
             className="shrink-0"
+            deleteOperation={deleteOperation}
             entityLabel={entity.label}
             entityName={entityName}
             labelFields={visibleFields}
