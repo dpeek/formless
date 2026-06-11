@@ -287,6 +287,71 @@ describe("authority operation execution", () => {
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
   });
 
+  it("runs record command operations with top-level recordId request input", async () => {
+    const sampleId = "rec_cleartrace_sample_1001_a";
+    const committed = await executeOperation<OperationInvocationResponse>({
+      appKey: "cleartrace",
+      method: "POST",
+      path: "/operations/sample/accessionSample",
+      body: {
+        recordId: sampleId,
+        idempotencyKey: "operation-cleartrace-accession",
+        source: { protocol: "generated-ui" },
+      },
+    });
+    const rows = await readOperationInvocations();
+    const output = committed.body.result.body.output;
+
+    if (output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(committed.body.result.body).toMatchObject({
+      invocation: {
+        input: {
+          recordId: sampleId,
+          type: "command",
+        },
+        operation: {
+          canonicalKey: "sample.accessionSample",
+          kind: "command",
+          scope: "record",
+        },
+        source: {
+          protocol: "generated-ui",
+          route: "/operations/sample/accessionSample",
+        },
+      },
+      status: "committed",
+    });
+    expect(output.changes).toHaveLength(2);
+    expect(output.changes.find((change) => change.entity === "sample")?.payload).toMatchObject({
+      id: sampleId,
+      values: { status: "accessioned" },
+    });
+    expect(
+      output.changes.find((change) => change.entity === "audit-event")?.payload.values,
+    ).toMatchObject({
+      actionKey: "accessionSample",
+      recordId: sampleId,
+      recordType: "sample",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      auditInput: {
+        kind: "summary",
+        summary: {
+          recordId: sampleId,
+          type: "command",
+        },
+      },
+      operationKey: "sample.accessionSample",
+      status: "committed",
+    });
+  });
+
   it("stores committed and replayed operation invocation rows outside sync and snapshots", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",

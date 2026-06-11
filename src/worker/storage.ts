@@ -2662,6 +2662,7 @@ function summarizeOperationInvocationInput(
     type: "command",
     inputFields: recordFieldNames(input.input),
     inputType: auditValueType(input.input),
+    ...(input.recordId === undefined ? {} : { recordId: input.recordId }),
   };
 }
 

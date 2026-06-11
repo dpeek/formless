@@ -124,6 +124,7 @@ import type { FormlessInstanceDeploymentObservationPatch } from "./instance-targ
 import {
   requireSiteCliTargetContext,
   resolveSiteCliTargetContext,
+  siteCliTargetFetchHeaders,
   siteCliWorkspaceStatusSecretStateLabel,
 } from "./instance-target-context.ts";
 import {
@@ -1403,7 +1404,7 @@ export async function runFormlessInstanceWorkspaceDev(
   dependencies: DevFormlessInstanceWorkspaceDependencies,
 ): Promise<void> {
   const devBootstrap = await ensureFormlessInstanceWorkspaceDevBootstrap(input, dependencies);
-  const { localStateRoot, manifest, workspaceRoot } = devBootstrap;
+  const { localDevSecrets, localStateRoot, manifest, workspaceRoot } = devBootstrap;
   const candidateOrigins = new Set<string>();
 
   const localSessionBootstrapToken = requiredGeneratedToken(createLocalDevSecret(dependencies));
@@ -1426,7 +1427,7 @@ export async function runFormlessInstanceWorkspaceDev(
         manifest,
         sidecar,
         {
-          localDevSecrets: devBootstrap.localDevSecrets,
+          localDevSecrets,
           localSessionBootstrapToken,
         },
       ),
@@ -1435,9 +1436,15 @@ export async function runFormlessInstanceWorkspaceDev(
 
     forwardDevOutput(child, dependencies.log, candidateOrigins);
 
-    const source = await waitForInstanceDevServer(child, dependencies.fetch, candidateOrigins);
+    const source = await waitForInstanceDevServer(
+      child,
+      dependencies.fetch,
+      candidateOrigins,
+      localDevSecrets.adminToken,
+    );
     const bootstrap = await bootstrapWorkspaceLocalInstance(
       {
+        adminToken: localDevSecrets.adminToken,
         manifest,
         source,
         workspaceRoot,
@@ -2042,19 +2049,30 @@ export async function planDeployLocalFormlessWorkspace(
     workspaceRoot,
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
-  const existingSelectedTarget =
+  const configuredSelectedTarget =
     deploymentSource.deploymentConfig === undefined
       ? undefined
       : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "deploy");
-  const preflight = existingSelectedTarget
-    ? await checkFormlessInstanceWorkspace(
+  let existingSelectedTarget = configuredSelectedTarget;
+  let preflight: CheckFormlessInstanceWorkspaceResult | undefined;
+
+  if (configuredSelectedTarget) {
+    try {
+      preflight = await checkFormlessInstanceWorkspace(
         {
-          targetAlias: existingSelectedTarget.alias,
+          targetAlias: configuredSelectedTarget.alias,
           workspacePath: workspaceRoot,
         },
         dependencies,
-      )
-    : undefined;
+      );
+    } catch (error) {
+      if (!isMissingWorkersDevScriptError(error)) {
+        throw error;
+      }
+
+      existingSelectedTarget = undefined;
+    }
+  }
 
   if (preflight?.drift.status === "drift") {
     throw new Error(
@@ -2090,6 +2108,15 @@ export async function planDeployLocalFormlessWorkspace(
     ...(preflight === undefined ? {} : { preflight }),
     workspaceRoot,
   };
+}
+
+function isMissingWorkersDevScriptError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  return (
+    message.includes("workers_dev_script_not_found") ||
+    (message.includes("error 1042") && message.includes("no workers script"))
+  );
 }
 
 export async function deployFormlessInstanceWorkspace(
@@ -2676,6 +2703,7 @@ const WORKSPACE_DEFAULT_LOCAL_SOURCE = "http://localhost:5173";
 
 async function bootstrapWorkspaceLocalInstance(
   input: {
+    adminToken: string;
     manifest: FormlessInstanceWorkspaceManifest;
     source: string;
     workspaceRoot: string;
@@ -2685,6 +2713,7 @@ async function bootstrapWorkspaceLocalInstance(
   const registry = await fetchWorkspaceJson<AppInstallsResponse>(
     dependencies.fetch,
     instanceAppInstallsUrl(input.source),
+    { adminToken: input.adminToken },
   );
   const installIds = registry.installs
     .map((install) => install.installId)
@@ -2713,7 +2742,7 @@ async function bootstrapWorkspaceLocalInstance(
 
     const restore = await restorePortableArchive(
       {
-        adminToken: null,
+        adminToken: input.adminToken,
         apply: true,
         archiveDir: sourceArchive.archiveRoot,
         replace: false,
@@ -2721,7 +2750,7 @@ async function bootstrapWorkspaceLocalInstance(
       },
       {
         cwd: dependencies.cwd,
-        env: withoutAdminToken(dependencies.env),
+        env: dependencies.env,
         fetch: dependencies.fetch,
         now: dependencies.now,
       },
@@ -5382,6 +5411,7 @@ async function waitForInstanceDevServer(
   child: ChildProcessWithoutNullStreams,
   fetcher: typeof fetch,
   candidateOrigins: Set<string>,
+  adminToken: string,
 ): Promise<string> {
   const startedAt = Date.now();
   let spawnError: Error | null = null;
@@ -5400,7 +5430,7 @@ async function waitForInstanceDevServer(
     }
 
     for (const origin of candidateOrigins) {
-      if (await isInstanceDevServerReady(fetcher, origin)) {
+      if (await isInstanceDevServerReady(fetcher, origin, adminToken)) {
         return origin;
       }
     }
@@ -5411,12 +5441,14 @@ async function waitForInstanceDevServer(
   throw new Error("Timed out waiting for the Formless instance dev server.");
 }
 
-async function isInstanceDevServerReady(fetcher: typeof fetch, origin: string): Promise<boolean> {
+async function isInstanceDevServerReady(
+  fetcher: typeof fetch,
+  origin: string,
+  adminToken: string,
+): Promise<boolean> {
   try {
     const response = await fetcher(instanceAppInstallsUrl(origin), {
-      headers: {
-        accept: "application/json",
-      },
+      headers: siteCliTargetFetchHeaders({ accept: "application/json", adminToken }),
     });
 
     return response.ok;
@@ -5468,8 +5500,17 @@ function settleChildExit(code: number | null, signal: NodeJS.Signals | null): Pr
   );
 }
 
-async function fetchWorkspaceJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
-  const response = await fetcher(url, { headers: { accept: "application/json" } });
+async function fetchWorkspaceJson<T>(
+  fetcher: typeof fetch,
+  url: string,
+  options: { adminToken?: string | null } = {},
+): Promise<T> {
+  const response = await fetcher(url, {
+    headers: siteCliTargetFetchHeaders({
+      accept: "application/json",
+      adminToken: options.adminToken,
+    }),
+  });
   const text = await response.text();
 
   if (!response.ok) {
@@ -5489,13 +5530,6 @@ function instanceAppInstallsUrl(origin: string): string {
 
 function restoreErrors(restore: RestorePortableArchiveResult): string {
   return restore.remote.errors?.map((error) => error.message).join("; ") || "unknown error";
-}
-
-function withoutAdminToken(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
-  const nextEnv = { ...env };
-
-  delete nextEnv.FORMLESS_ADMIN_TOKEN;
-  return nextEnv;
 }
 
 function relativeDependencyPath(cwd: string, filePath: string): string {

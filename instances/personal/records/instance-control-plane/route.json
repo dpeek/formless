@@ -2,7 +2,7 @@
   "kind": "formless.instanceControlPlaneRecordSource",
   "version": 1,
   "schemaKey": "instance-control-plane",
-  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "schemaUpdatedAt": "2026-06-11T15:29:38.845Z",
   "entity": "instance:route",
   "records": [
     {

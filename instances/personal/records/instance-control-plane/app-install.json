@@ -2,7 +2,7 @@
   "kind": "formless.instanceControlPlaneRecordSource",
   "version": 1,
   "schemaKey": "instance-control-plane",
-  "schemaUpdatedAt": "2026-06-09T06:48:19.663Z",
+  "schemaUpdatedAt": "2026-06-11T15:29:38.845Z",
   "entity": "instance:app-install",
   "records": [
     {
@@ -14,7 +14,7 @@
         "label": "David Peek",
         "packageAppKey": "site",
         "packageRevision": 1,
-        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "sourceSchemaHash": "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
         "status": "installed",
         "storageIdentity": "app:david",
         "updatedAt": "2026-05-24T23:44:20.123Z"
@@ -30,7 +30,7 @@
         "label": "Dominic De Lorenzo",
         "packageAppKey": "site",
         "packageRevision": 1,
-        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "sourceSchemaHash": "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
         "status": "installed",
         "storageIdentity": "app:dom",
         "updatedAt": "2026-05-24T23:44:20.188Z"
@@ -46,7 +46,7 @@
         "label": "James Peek",
         "packageAppKey": "site",
         "packageRevision": 1,
-        "sourceSchemaHash": "sha256:2c7c63f085caea915594c832e78783c3c667f7204c4a405f6363d8f574c36451",
+        "sourceSchemaHash": "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
         "status": "installed",
         "storageIdentity": "app:james",
         "updatedAt": "2026-05-24T23:44:20.235Z"

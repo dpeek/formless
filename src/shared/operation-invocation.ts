@@ -57,6 +57,7 @@ export type OperationInvocationInput =
     }
   | {
       type: "command";
+      recordId?: string;
       input?: unknown;
     };
 

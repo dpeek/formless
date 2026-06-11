@@ -22,7 +22,7 @@ export type AlchemyDomainProviderPhase = "destroy" | "read" | "up";
 
 export type AlchemyDomainProviderRunOptions = Pick<
   AlchemyOptions,
-  "noTrack" | "password" | "phase" | "quiet" | "rootDir" | "stage" | "stateStore"
+  "adopt" | "noTrack" | "password" | "phase" | "quiet" | "rootDir" | "stage" | "stateStore"
 >;
 
 export type AlchemyDomainProviderRunner = <T>(
@@ -59,6 +59,7 @@ export type RunAlchemyDomainProviderPlanInput = {
 };
 
 export type RunAlchemyDeployResourceGraphInput = {
+  adopt?: boolean;
   appName?: string;
   factories: AlchemyDomainProviderFactories;
   password?: string;
@@ -144,6 +145,7 @@ export async function runAlchemyDeployResourceGraph(
   return input.runner(
     appName,
     {
+      ...(input.adopt === undefined ? {} : { adopt: input.adopt }),
       ...(input.password === undefined ? {} : { password: input.password }),
       phase: input.phase ?? "up",
       quiet: true,
@@ -155,6 +157,7 @@ export async function runAlchemyDeployResourceGraph(
       appName,
       ...(await applyAlchemyDeployResourceGraph({
         factories: input.factories,
+        adopt: input.adopt,
         resolveZoneIdForHost: input.resolveZoneIdForHost,
         resourceGraph: input.resourceGraph,
       })),
@@ -165,6 +168,7 @@ export async function runAlchemyDeployResourceGraph(
 }
 
 export async function applyAlchemyDeployResourceGraph(input: {
+  adopt?: boolean;
   factories: AlchemyDomainProviderFactories;
   resolveZoneIdForHost?: AlchemyDeployResourceZoneResolver;
   resourceGraph: DeployResourceGraph;
@@ -250,6 +254,7 @@ function applyDnsRecordsResource(
 async function applyDeployResourceGraphResource(
   resource: DeployResource,
   input: {
+    adopt?: boolean;
     factories: AlchemyDomainProviderFactories;
     resolveZoneIdForHost?: AlchemyDeployResourceZoneResolver;
   },
@@ -258,7 +263,7 @@ async function applyDeployResourceGraphResource(
     case "cloudflare-worker-custom-domain":
       return input.factories.CustomDomain(
         resource.logicalId,
-        customDomainPropsFromDeployResource(resource),
+        customDomainPropsFromDeployResource(resource, input.adopt),
       );
     case "cloudflare-dns-records":
       return input.factories.DnsRecords(
@@ -273,13 +278,16 @@ async function applyDeployResourceGraphResource(
   }
 }
 
-function customDomainPropsFromDeployResource(resource: DeployResource): CustomDomainProps {
+function customDomainPropsFromDeployResource(
+  resource: DeployResource,
+  adoptOverride: boolean | undefined,
+): CustomDomainProps {
   const name = requiredStringInput(resource, "name", optionalStringInput(resource, "host"));
   const workerName = requiredStringInput(resource, "workerName");
   const zoneId = optionalStringInput(resource, "zoneId");
 
   return {
-    adopt: booleanInput(resource, "adopt", false),
+    adopt: adoptOverride ?? booleanInput(resource, "adopt", false),
     name,
     overrideExistingOrigin: booleanInput(resource, "overrideExistingOrigin", false),
     workerName,

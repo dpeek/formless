@@ -494,6 +494,103 @@ describe("Formless workspace operations", () => {
     expect(JSON.stringify(state)).not.toContain("lease:local-gateway");
   });
 
+  it("treats a missing workers.dev script as a fresh deploy target", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const requests: CapturedRequest[] = [];
+    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
+      [];
+    let deployed = false;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot);
+    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+
+    const runtimeFetch = deployApplyFetch(requests);
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "deployApply",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        deploymentAdapter: {
+          deploy: async (input) => {
+            deployed = true;
+            deployInputs.push(input);
+
+            return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+          },
+        },
+        fetch: async (url, init) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          const parsedUrl = new URL(requestUrl);
+
+          if (!deployed && parsedUrl.pathname === "/api/formless/app-installs") {
+            requests.push({
+              body: typeof init?.body === "string" ? init.body : undefined,
+              headers: normalizeHeaders(init?.headers),
+              method: init?.method ?? "GET",
+              url: requestUrl,
+            });
+
+            return Response.json(
+              {
+                error_code: 1042,
+                error_name: "workers_dev_script_not_found",
+                title: "Error 1042: Cloudflare Error",
+              },
+              { status: 404 },
+            );
+          }
+
+          return runtimeFetch(url, init);
+        },
+        operationIds: ["op_deploy_apply_00000001"],
+        packageRoot: "/package",
+        packageVersion: packageJson.version,
+        randomTokens: ["generated-admin-token", setupToken],
+        setupInputs,
+        timestamps: [
+          "2026-06-02T00:04:00.000Z",
+          "2026-06-02T00:04:01.000Z",
+          "2026-06-02T00:04:02.000Z",
+          "2026-06-02T00:04:03.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    if (state.status !== "succeeded") {
+      throw new Error(JSON.stringify(state.summary.fields));
+    }
+
+    expect(deployInputs).toHaveLength(1);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "generated-admin-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
+      expect.arrayContaining([
+        "GET /api/formless/app-installs",
+        "POST /api/formless/archive/restore",
+      ]),
+    );
+    expect(state.summary.title).toBe("Deploy applied");
+  });
+
   it("refreshes deployment observation through an explicit write operation", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");

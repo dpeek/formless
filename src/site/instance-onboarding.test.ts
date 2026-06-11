@@ -921,6 +921,7 @@ describe("Alchemy Formless instance deployment", () => {
       {
         name: "formless-instance",
         options: {
+          adopt: false,
           phase: "up",
           password: "alchemy-password",
           profile: "personal",
@@ -1217,6 +1218,7 @@ describe("Alchemy Formless instance deployment", () => {
       zone: "zone-1",
     });
     expect(routeResourceCalls[2]?.props).toMatchObject({
+      adopt: false,
       apiToken: { index: 1, type: "secret" },
       name: "app.example.com",
       workerName: "brother-instance",
@@ -1249,18 +1251,45 @@ describe("Alchemy Formless instance deployment", () => {
     expect(finalized).toBe(1);
   });
 
-  it("marks Worker and media resources for adoption when deploying an existing instance", async () => {
+  it("marks Alchemy resources for adoption when deploying an existing instance", async () => {
+    const apps: Array<{ options: AlchemyFormlessInstanceDeploymentAppOptions }> = [];
     const buckets: Array<{ props: unknown }> = [];
+    const customDomains: Array<{ props: unknown }> = [];
     const turnstiles: Array<{ props: unknown }> = [];
     const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
-      createApp: async () => ({
-        finalize: async () => {},
-      }),
+      createApp: async (_name, options) => {
+        apps.push({ options });
+
+        return {
+          finalize: async () => {},
+        };
+      },
+      createCustomDomain: async (_id, props) => {
+        customDomains.push({ props });
+
+        return {
+          ...props,
+          createdAt: 1,
+          environment: "production",
+          id: "custom-domain-output",
+          updatedAt: 2,
+        } as Awaited<
+          ReturnType<
+            NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createCustomDomain"]>
+          >
+        >;
+      },
       createDurableObjectNamespace: () => ({}),
+      createDnsRecords: async () => {
+        throw new Error("DNS records are outside this test.");
+      },
       createR2Bucket: async (_id, props) => {
         buckets.push({ props });
         return {};
+      },
+      createRedirectRule: async () => {
+        throw new Error("redirect rules are outside this test.");
       },
       createSecret: () => ({}),
       createTurnstileWidget: async (_id, props) => {
@@ -1286,10 +1315,31 @@ describe("Alchemy Formless instance deployment", () => {
       migrationPolicy: "existing",
       packageVersion: "0.1.8",
     });
+    const deploymentResourceGraph: DeployResourceGraph = {
+      targetId: "instance.brother-instance",
+      resources: [
+        {
+          dependencies: [],
+          inputs: {
+            adopt: false,
+            host: "app.example.com",
+            name: "app.example.com",
+            profile: "publicSite",
+            workerName: plan.resources.worker.name,
+            zoneId: "zone-1",
+          },
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "brother-instance-custom-domain-app-example-com-publicsite-site",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+      ],
+    };
 
     await deployFormlessInstanceWithAlchemy(
       {
         credentialProfile: null,
+        deploymentResourceGraph,
         packageRoot: "/package",
         plan,
         secrets: {
@@ -1301,6 +1351,7 @@ describe("Alchemy Formless instance deployment", () => {
       dependencies,
     );
 
+    expect(apps[0]?.options).toMatchObject({ adopt: true });
     expect(plan).toMatchObject({
       migrationPolicy: "existing",
       resources: {
@@ -1318,6 +1369,7 @@ describe("Alchemy Formless instance deployment", () => {
       },
     });
     expect(buckets[0]?.props).toMatchObject({ adopt: true });
+    expect(customDomains[0]?.props).toMatchObject({ adopt: true });
     expect(turnstiles[0]?.props).toMatchObject({ adopt: true });
     expect(workers[0]?.props).toMatchObject({ adopt: true });
   });
@@ -1538,6 +1590,7 @@ describe("Alchemy Formless instance deployment", () => {
       {
         name: FORMLESS_ALCHEMY_APP_NAME,
         options: {
+          adopt: false,
           phase: "destroy",
           password: "alchemy-password",
           profile: "personal",
@@ -1579,6 +1632,7 @@ describe("Alchemy Formless instance deployment", () => {
       zone: "zone-1",
     });
     expect(routeResourceCalls[2]?.props).toMatchObject({
+      adopt: false,
       apiToken: { index: 1, type: "secret" },
       name: "app.example.com",
       workerName: "brother-instance",

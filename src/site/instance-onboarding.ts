@@ -266,6 +266,7 @@ export type WriteFormlessInstanceStateDependencies = {
 };
 
 export type AlchemyFormlessInstanceDeploymentAppOptions = {
+  adopt: boolean;
   phase: "destroy" | "up";
   password: string;
   profile?: string;
@@ -814,6 +815,7 @@ export async function deployFormlessInstanceWithAlchemy(
   };
   const adoptExistingDeployment = plan.migrationPolicy === "existing";
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
+    adopt: adoptExistingDeployment,
     phase: "up",
     password: alchemyPassword,
     ...profileOptions,
@@ -892,6 +894,7 @@ export async function deployFormlessInstanceWithAlchemy(
 
     resourceEvidence = (
       await applyAlchemyDeployResourceGraph({
+        adopt: adoptExistingDeployment,
         factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
         resolveZoneIdForHost: deploymentResourceZoneResolver(
           resolvedDependencies,
@@ -928,6 +931,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
+  const adoptExistingDeployment = plan.migrationPolicy === "existing";
   let cloudflareApiTokenSecret: unknown;
   const secretCloudflareApiToken = (): unknown => {
     if (cloudflareApiToken === undefined) {
@@ -943,6 +947,7 @@ export async function destroyFormlessInstanceWithAlchemy(
 
   try {
     const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
+      adopt: adoptExistingDeployment,
       phase: "destroy",
       password: alchemyPassword,
       ...profileOptions,
@@ -950,7 +955,7 @@ export async function destroyFormlessInstanceWithAlchemy(
       stage: plan.instanceName,
     });
     const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
-      adopt: plan.migrationPolicy === "existing",
+      adopt: adoptExistingDeployment,
       accountId: plan.account.id,
       empty: true,
       ...profileOptions,
@@ -962,7 +967,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     });
 
     await resolvedDependencies.createTurnstileWidget("turnstile", {
-      adopt: plan.migrationPolicy === "existing",
+      adopt: adoptExistingDeployment,
       ...turnstileCloudflareResourceOptions({
         accountId: plan.account.id,
         apiToken: secretCloudflareApiToken(),
@@ -977,7 +982,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     });
 
     await resolvedDependencies.deployViteWorker("worker", {
-      adopt: plan.migrationPolicy === "existing",
+      adopt: adoptExistingDeployment,
       accountId: plan.account.id,
       assets: formlessInstanceAlchemyAssets(),
       bindings: {
@@ -1020,6 +1025,7 @@ export async function destroyFormlessInstanceWithAlchemy(
       });
 
       await applyAlchemyDeployResourceGraph({
+        adopt: adoptExistingDeployment,
         factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
         resolveZoneIdForHost: deploymentResourceZoneResolver(
           resolvedDependencies,

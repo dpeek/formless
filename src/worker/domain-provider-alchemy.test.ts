@@ -231,6 +231,7 @@ describe("Alchemy domain provider adapter", () => {
     };
 
     const result = await runAlchemyDeployResourceGraph({
+      adopt: true,
       factories,
       password: "alchemy-password",
       resolveZoneIdForHost: ({ host }) =>
@@ -245,6 +246,7 @@ describe("Alchemy domain provider adapter", () => {
       {
         appName: "formless-deployment-instance-primary",
         options: {
+          adopt: true,
           password: "alchemy-password",
           phase: "up",
           quiet: true,
@@ -262,6 +264,7 @@ describe("Alchemy domain provider adapter", () => {
     expect(calls[0]?.props).toMatchObject({ zoneId: "zone-example" });
     expect(calls[1]?.props).toMatchObject({ zone: "zone-example", statusCode: 308 });
     expect(calls[2]?.props).toMatchObject({
+      adopt: true,
       name: "app.example.com",
       workerName: "formless-prod",
     });

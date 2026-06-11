@@ -2823,6 +2823,10 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4443/api/formless/app-installs",
       "GET http://localhost:4443/api/formless/app-installs",
     ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
+    ]);
     expect(openedUrls).toEqual([]);
     expect(
       parseFormlessInstanceWorkspaceManifestJson(
@@ -2911,6 +2915,10 @@ describe("Formless Site CLI", () => {
     expect(spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN).toBe("generated-token");
     expect(spawnCalls[0]?.env?.[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).toBe("local-session-token");
     expect(openedUrls[0]).not.toContain("generated-token");
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
+    ]);
   });
 
   it("opens the local session bootstrap URL on the child-advertised dev origin", async () => {
@@ -2951,6 +2959,10 @@ describe("Formless Site CLI", () => {
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5174/api/formless/app-installs",
       "GET http://localhost:5174/api/formless/app-installs",
+    ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
     ]);
   });
 
@@ -3032,6 +3044,10 @@ describe("Formless Site CLI", () => {
       PORT: "4443",
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     });
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
+    ]);
     expect(
       parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
@@ -3214,6 +3230,11 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4444/api/formless/app-installs",
       "POST http://localhost:4444/api/formless/archive/restore",
     ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer persisted-local-admin",
+      "Bearer persisted-local-admin",
+      "Bearer persisted-local-admin",
+    ]);
 
     const restoreRequest = requests.at(-1);
     const restoreBody = capturedRequestJson<{
@@ -3221,7 +3242,7 @@ describe("Formless Site CLI", () => {
       mediaFiles: { bytesBase64: string }[];
     }>(restoreRequest);
 
-    expect(restoreRequest?.headers.authorization).toBeUndefined();
+    expect(restoreRequest?.headers.authorization).toBe("Bearer persisted-local-admin");
     expect(restoreBody.archive.restorePolicy).toEqual({
       dryRun: false,
       installCollisions: "reject",
@@ -3277,6 +3298,10 @@ describe("Formless Site CLI", () => {
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4447/api/formless/app-installs",
       "GET http://localhost:4447/api/formless/app-installs",
+    ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
     ]);
   });
 
@@ -3468,6 +3493,10 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4446/api/formless/app-installs",
       "GET http://localhost:4446/api/formless/app-installs",
     ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
+    ]);
     expect(withoutFakeCliDevLogs(logs)).toEqual([
       "Instance shell: http://localhost:4446/",
       "Local bootstrap entry: complete workspace setup in the browser.",
@@ -3508,6 +3537,10 @@ describe("Formless Site CLI", () => {
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4445/api/formless/app-installs",
       "GET http://localhost:4445/api/formless/app-installs",
+    ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
     ]);
     expect(logs.at(-1)).toBe(
       "Workspace archive restore skipped: local installs already exist (david).",
@@ -3794,6 +3827,11 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:4450/api/formless/app-installs",
       "GET http://localhost:4450/api/formless/app-installs",
       "POST http://localhost:4450/api/formless/archive/restore",
+    ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer generated-token",
+      "Bearer generated-token",
+      "Bearer generated-token",
     ]);
     await expect(
       stat(path.join(workspaceRoot, ".formless/local/wrangler/state.txt")),

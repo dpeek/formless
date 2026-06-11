@@ -157,7 +157,7 @@ export function buildProtocolOperationInvocationEnvelope(
   const body = parseOptionalRecord("Operation request", input.body);
   assertOperationMethod(input.method, operation.kind);
 
-  const invocationInput = operationInvocationInput(operation.kind, body, input.route.recordId);
+  const invocationInput = operationInvocationInput(operation, body, input.route.recordId);
   assertOperationInputIsDeclared(operation, body);
   const source = operationRequestSource(body.source, {
     protocol: sourceProtocolForActor(actorKind),
@@ -1035,11 +1035,29 @@ function privateCommandOperationInput(
     );
   }
 
-  if (!envelope.schemaOperation.input) {
-    return envelope.input.input;
+  const commandInput = envelope.schemaOperation.input
+    ? validateOperationInputContract(envelope, envelope.input.input ?? {}, schema, storage)
+    : envelope.input.input;
+
+  return commandInputWithRecordId(envelope, commandInput);
+}
+
+function commandInputWithRecordId(envelope: OperationInvocationEnvelope, input: unknown): unknown {
+  if (envelope.input.type !== "command" || envelope.input.recordId === undefined) {
+    return input;
   }
 
-  return validateOperationInputContract(envelope, envelope.input.input ?? {}, schema, storage);
+  if (input === undefined) {
+    return { recordId: envelope.input.recordId };
+  }
+
+  const values = parseRecord("Operation command input", input);
+
+  if (Object.hasOwn(values, "recordId")) {
+    return values;
+  }
+
+  return { ...values, recordId: envelope.input.recordId };
 }
 
 function publicCommandOperationPayload(envelope: OperationInvocationEnvelope): {
@@ -1524,10 +1542,12 @@ function requireOperation(
 }
 
 function operationInvocationInput(
-  kind: EntityOperationKind,
+  operation: EntityOperationSchema,
   body: Record<string, unknown>,
   routeRecordId: string | undefined,
 ): OperationInvocationInput {
+  const kind = operation.kind;
+
   if (kind === "list") {
     return { type: "list" };
   }
@@ -1558,7 +1578,16 @@ function operationInvocationInput(
     };
   }
 
-  return body.input === undefined ? { type: "command" } : { type: "command", input: body.input };
+  const recordId =
+    operation.scope === "record"
+      ? parseOptionalNonEmptyString("Operation request recordId", body.recordId ?? routeRecordId)
+      : undefined;
+
+  return {
+    type: "command",
+    ...(recordId === undefined ? {} : { recordId }),
+    ...(body.input === undefined ? {} : { input: body.input }),
+  };
 }
 
 function assertOperationInputIsDeclared(
