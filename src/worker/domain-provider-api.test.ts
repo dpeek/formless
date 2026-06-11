@@ -193,17 +193,15 @@ describe("instance domain provider API routes", () => {
         const cleanupStatus = await getJson<InstanceDeploymentStatusResponse>(
           INSTANCE_DEPLOYMENT_STATUS_API_PATH,
         );
+        const pendingJob = await getJson<InstanceDomainProviderDeleteJobResponse>(
+          `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}`,
+        );
 
-        expect(cleanupStatus.body.status).toMatchObject({
-          actor: {
-            actorId: "domain-provider.delete",
-            kind: "runner",
-            runnerId: "runner-delete",
-          },
-          mode: "destroy",
-          state: "in-progress",
-          targetId: "instance.primary",
+        expect(pendingJob.body.job).toMatchObject({
+          runnerId: "runner-delete",
+          status: "ready",
         });
+        expect(cleanupStatus.body.status).toMatchObject({ state: "no-target" });
 
         const completion = await postAdminJson<InstanceDomainProviderDeleteJobResponse>(
           `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}/result`,
@@ -235,13 +233,7 @@ describe("instance domain provider API routes", () => {
         ]);
         expect(after.body.appliedStates).toEqual([]);
         expect(after.body.auditEvents.map((event) => event.action)).toEqual(["created", "deleted"]);
-        expect(cleanupDeployed.body.status).toMatchObject({
-          latestDesiredState: {
-            targetId: "instance.primary",
-          },
-          state: "deployed",
-          targetId: "instance.primary",
-        });
+        expect(cleanupDeployed.body.status).toMatchObject({ state: "no-target" });
         expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
           routeAndAppIntentSnapshot(intentBeforeCleanup.body),
         );

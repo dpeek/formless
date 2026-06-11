@@ -926,6 +926,20 @@ function authorityExportFetch(
       return Response.json({ mappings: [] });
     }
 
+    if (parsedUrl.pathname === "/api/formless/deployments/status") {
+      const desiredState = deploymentDesiredStateRef();
+
+      return Response.json({
+        status: {
+          checkedAt: "2026-06-02T00:04:02.000Z",
+          latestDesiredState: desiredState,
+          state: "pending-changes",
+          targetId: desiredState.targetId,
+        },
+        target: { kind: "instance", targetId: desiredState.targetId },
+      });
+    }
+
     const snapshotMatch = parsedUrl.pathname.match(
       /^\/api\/app-installs\/([^/]+)\/([^/]+)\/snapshot$/,
     );
