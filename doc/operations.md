@@ -8,6 +8,44 @@ for UI, APIs, public forms, automation, audit, auth, and workflows.
 This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
 
+## Domain Conventions
+
+Operations are the domain contract for what can happen. Bindings are the
+surface contract for where and how that operation is exposed.
+
+Names use different casing by purpose:
+
+- target keys use kebab-case or a single lower-case word;
+- entity keys use singular kebab-case;
+- operation key segments use kebab-case;
+- field keys use lower camelCase because record values are consumed directly in
+  TypeScript;
+- cross-schema entity boundaries use `<schema-key>:<entity-key>`.
+
+First-pass platform targets are:
+
+- `app`: app entity records in Authority;
+- `instance`: installs, routes, domain intent, and deploy intent;
+- `workspace`: local sidecar and file source operations;
+- `deployment`: desired state, attempts, leases, and observation;
+- `provider`: provider resources and cleanup;
+- `archive`: app and instance export and restore;
+- `auth`: owner setup, login, and session bootstrap.
+
+App-related nouns stay separate:
+
+- `package-app`: bundled or reusable app package metadata, source schema key,
+  seed records key, package revision, source schema hash, and default install
+  facts;
+- `app-install`: instance-local installation metadata that binds an install id
+  to a package app, label, status, storage identity, and routes;
+- `app`: the running app storage target containing entity records, schema,
+  changes, snapshots, sync state, and app-local operation invocations.
+
+`package-app` is installed as an `app-install`; an `app-install` points to one
+app storage identity. The app storage identity owns records. The install record
+does not embed app data.
+
 ## Problem
 
 Formless already models entities, fields, relationships, queries, read models,
@@ -59,24 +97,28 @@ the storage or UI contract changes.
 An operation should declare:
 
 - key and label;
-- containing entity as its target entity;
+- target;
 - kind;
-- scope: collection or record;
+- scope, when the target supports scoped operations;
 - input contract;
 - output contract;
 - effect model;
 - idempotency policy;
 - actor and permission policy;
-- audit policy;
-- optional UI binding hints;
-- optional protocol binding hints.
+- audit policy.
 
 Public access is not an operation scope. It is an actor policy and binding on a
 collection, record, or command operation. Selection and workflow operations are
 reserved until their contracts are introduced.
 
-Protocol and UI placement should not define the domain operation. They should
-bind to it.
+Protocol, CLI, and UI placement do not define the domain operation. They bind
+to it from separate binding declarations.
+
+Entity-local operations use the current app-schema shape:
+`entities.<entityKey>.operations.<operationKey>`. Runtime platform operations
+should use a target-prefixed canonical key such as
+`instance.app-install.create`, `workspace.source.save`, or
+`deployment.desired-state.apply`.
 
 ## Schema Direction
 
@@ -177,6 +219,14 @@ This envelope becomes the root fact for execution, replay, audit, and workflow
 state.
 
 ## Bindings
+
+Bindings are external declarations that reference operation keys. They compose
+operations into generated UI, CLI, API, public forms, hooks, workflow triggers,
+and automation entry points.
+
+A binding may define route, command, placement, form, output formatting, and
+surface-specific availability. It must not redefine operation input, output,
+effect, actor policy, idempotency, or audit behavior.
 
 ### Generated UI
 
