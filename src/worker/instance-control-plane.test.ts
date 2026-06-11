@@ -522,9 +522,10 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
     },
     method: "POST",
   });
+  const bodyJson = await response.json();
 
   return {
-    body: request.response(await response.json()) as T,
+    body: (response.ok ? request.response(bodyJson) : bodyJson) as T,
     response,
   };
 }

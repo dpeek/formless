@@ -570,7 +570,7 @@ describe("home view model collections", () => {
         itemViewName: "taskListItem",
         fields: ["title", "dueDate", "priority", "done"],
       },
-      operations: [
+      actions: [
         {
           type: "create",
           label: "Create Task",
@@ -956,7 +956,7 @@ describe("home view model collections", () => {
       width: "xs",
       display: "readOnly",
       presentation: "button",
-      operations: [
+      actions: [
         {
           actionName: "inspectRate",
           label: "Inspect rate",
@@ -1028,7 +1028,7 @@ describe("home view model collections", () => {
 
     expect(actionColumn).toMatchObject({
       type: "invokeAction",
-      actions: [
+      operations: [
         {
           type: "editRecord",
           actionName: "editResource",
@@ -2829,6 +2829,7 @@ function discriminatedTaskSchema(
           patch: { enabled: true },
           delete: { enabled: false },
         },
+        operations: testWriteOperations("Task", ["title", "done", "kind"]),
       },
     },
     unions: {
@@ -3173,6 +3174,27 @@ function lifecycleTaskSchema() {
           patch: { enabled: true },
           delete: { enabled: false },
         },
+        operations: {
+          ...testWriteOperations("Task", ["title", "status"]),
+          startTask: {
+            label: "Start",
+            kind: "command",
+            scope: "record",
+            effect: { type: "runActionKind", kind: "transition-state", action: "startTask" },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+          completeTask: {
+            label: "Complete",
+            kind: "command",
+            scope: "record",
+            effect: { type: "runActionKind", kind: "transition-state", action: "completeTask" },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        },
       },
     },
     queries: {
@@ -3299,4 +3321,33 @@ function summarizeHomeOperation(action: HomeOperationConfig) {
     targetCountQueryKind: action.ui.targetCount?.query.kind ?? null,
     targetCountDisplay: action.ui.targetCount?.display.type ?? null,
   };
+}
+
+function testWriteOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  } satisfies NonNullable<AppSchema["entities"][string]["operations"]>;
 }

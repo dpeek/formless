@@ -2861,7 +2861,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Active");
     expect(html).toContain("Completed");
     expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="Task actions"');
+    expect(html).toContain('aria-label="Task operations"');
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Collection summary"');
@@ -2877,7 +2877,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Active");
     expect(html).toContain("Completed");
     expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="Task actions"');
+    expect(html).toContain('aria-label="Task operations"');
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Screens"');
@@ -3387,8 +3387,8 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Placement actions"');
-    expect(html).not.toContain('aria-label="Task actions"');
+    expect(html).toContain('aria-label="Placement operations"');
+    expect(html).not.toContain('aria-label="Task operations"');
   });
 
   it("renders query tab counts from each resolved query", () => {
@@ -3670,10 +3670,10 @@ describe("generated collection home", () => {
     };
 
     const html = renderRecordTableHtml({
-      columns: contentTable.columns,
       entity: contentTable.entity,
       entityName: contentTable.entityName,
       records: [incompletePost],
+      result: contentTable.result,
       schema: siteSourceSchema,
       schemaKey: "site",
     });
@@ -3859,7 +3859,7 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
     const tableIndex = html.indexOf('data-slot="table"');
-    const actionRowIndex = html.indexOf('aria-label="Rate actions"');
+    const actionRowIndex = html.indexOf('aria-label="Rate operations"');
 
     expect(tableIndex).toBeGreaterThanOrEqual(0);
     expect(actionRowIndex).toBeGreaterThan(tableIndex);
@@ -6604,6 +6604,40 @@ function generatedDiscriminatedTaskSchema(
           create: { enabled: true },
           patch: { enabled: true },
           delete: { enabled: false },
+        },
+        operations: {
+          create: {
+            label: "Create Task",
+            kind: "create",
+            scope: "collection",
+            input: {
+              fields: {
+                kind: { field: "kind" },
+                title: { field: "title" },
+                done: { field: "done" },
+              },
+            },
+            effect: { type: "createRecord" },
+            output: { type: "create" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+          update: {
+            label: "Update Task",
+            kind: "update",
+            scope: "record",
+            input: {
+              fields: {
+                kind: { field: "kind" },
+                title: { field: "title" },
+                done: { field: "done" },
+              },
+            },
+            effect: { type: "patchRecord" },
+            output: { type: "update" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
         },
       },
       "task-placement": {

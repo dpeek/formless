@@ -799,10 +799,10 @@ describe("local workspace gateway", () => {
       ],
     });
     expect(
-      capturedRequestJson<{ recordId: string; values: { observedStatus: string } }>(
-        requestByPath(requests, "/api/formless/control-plane/mutations"),
+      capturedRequestJson<{ input: { observedStatus: string }; recordId: string }>(
+        requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"),
       ),
-    ).toMatchObject({ recordId: "instance.primary", values: { observedStatus: "deployed" } });
+    ).toMatchObject({ recordId: "instance.primary", input: { observedStatus: "deployed" } });
     const requestCountAfterApply = requests.length;
     const read = await gatewayJson(
       new Request(
@@ -903,7 +903,7 @@ describe("local workspace gateway", () => {
       [
         "GET /api/formless/deployments/desired-state",
         "GET /api/formless/deployments/status",
-        "POST /api/formless/control-plane/mutations",
+        "POST /api/formless/control-plane/operations/deployment-config/update",
       ],
     );
   });
@@ -1341,36 +1341,41 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/control-plane/mutations") {
+    if (parsedUrl.pathname === "/api/formless/control-plane/operations/deployment-config/update") {
       const body = parseCapturedBody<{
-        mutationId: string;
+        idempotencyKey: string;
+        input: Record<string, unknown>;
         recordId: string;
-        values: Record<string, unknown>;
       }>(init);
+      const record = {
+        createdAt: "2026-05-26T00:00:00.000Z",
+        entity: "deployment-config",
+        id: body.recordId,
+        values: {
+          accountId: "account-123",
+          createdAt: "2026-05-26T00:00:00.000Z",
+          enabled: true,
+          label: "Primary instance",
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+          targetKind: "instance",
+          targetUrl: "https://personal.dpeek.workers.dev",
+          updatedAt: "2026-05-26T00:00:00.000Z",
+          workerName: "personal",
+          ...body.input,
+        },
+      };
 
       return Response.json({
-        changes: [],
-        cursor: 2,
-        mutationId: body.mutationId,
-        record: {
-          createdAt: "2026-05-26T00:00:00.000Z",
-          entity: "deployment-config",
-          id: body.recordId,
-          values: {
-            accountId: "account-123",
-            createdAt: "2026-05-26T00:00:00.000Z",
-            enabled: true,
-            label: "Primary instance",
-            providerFamily: "cloudflare",
-            targetId: "instance.primary",
-            targetKind: "instance",
-            targetUrl: "https://personal.dpeek.workers.dev",
-            updatedAt: "2026-05-26T00:00:00.000Z",
-            workerName: "personal",
-            ...body.values,
-          },
+        invocation: {},
+        output: {
+          affectedChangeIds: [],
+          changes: [],
+          cursor: 2,
+          record,
+          type: "update",
         },
-        status: "accepted",
+        status: "committed",
       });
     }
 

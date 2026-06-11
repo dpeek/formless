@@ -2217,7 +2217,7 @@ describe("local OpenSpec implementation prompt", () => {
       "Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.",
     );
     expect(prompt).toContain("Current green `devstate start` output can satisfy setup evidence");
-    expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
+    expect(prompt).toContain("Current clean `devstate check` output is required");
     expect(prompt).toContain(
       "read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs",
     );

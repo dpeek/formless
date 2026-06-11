@@ -21,7 +21,7 @@ import {
 } from "./storage.ts";
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { Env } from "./index.ts";
-import { authorizeAuthorityOperation } from "./authority-admin-guard.ts";
+import { authorizeAuthorityOperation, authorizeInstanceWrite } from "./authority-admin-guard.ts";
 import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -196,6 +196,20 @@ export class FormlessAuthority extends DurableObject<Env> {
     }
 
     try {
+      if (isRetiredWriteRoute(request.method, route.path)) {
+        const authorization = await authorizeInstanceWrite(request, this.bindings);
+
+        if (!authorization.authorized) {
+          return jsonResponse(
+            { error: authorization.error },
+            authorization.status,
+            authorization.headers,
+          );
+        }
+
+        return jsonResponse({ error: "Not found." }, 404);
+      }
+
       if (route.path === "/sync/ws") {
         return this.handleSyncWebSocketRequest(request, route.app);
       }
@@ -532,6 +546,10 @@ async function readJson(request: Request): Promise<unknown> {
   } catch {
     throw new BadRequestError("Request body must be valid JSON.");
   }
+}
+
+function isRetiredWriteRoute(method: string, path: string) {
+  return method === "POST" && (path === "/mutations" || path === "/actions");
 }
 
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {

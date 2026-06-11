@@ -63,7 +63,7 @@ describe("control-plane schema runtime validation", () => {
           label: "Attempt",
         },
       },
-      'Entity "deploy-attempt" history records must be created through schema actions.',
+      'Unknown operation "create" for entity "deploy-attempt".',
     );
 
     const install = await authority.postJson<MutationResponse>("/api/mutations", {

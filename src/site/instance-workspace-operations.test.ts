@@ -406,17 +406,16 @@ describe("Formless workspace operations", () => {
 
     const desiredState = deploymentDesiredStateRef();
     const observation = capturedRequestJson<{
-      entity: string;
-      op: string;
-      recordId: string;
-      values: {
+      idempotencyKey: string;
+      input: {
         observedDesiredStateHash: string;
         observedError: string;
         observedRunnerId: string;
         observedStatus: string;
         observedSummary: string;
       };
-    }>(requestByPath(requests, "/api/formless/control-plane/mutations"));
+      recordId: string;
+    }>(requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"));
 
     expect(state).toMatchObject({
       actor: "browser",
@@ -465,10 +464,9 @@ describe("Formless workspace operations", () => {
       status: "succeeded",
     });
     expect(observation).toMatchObject({
-      entity: "deployment-config",
-      op: "patch",
+      idempotencyKey: expect.any(String),
       recordId: "instance.primary",
-      values: {
+      input: {
         observedDesiredStateHash: desiredState.hash,
         observedError: "",
         observedRunnerId: "local-gateway",
@@ -523,14 +521,13 @@ describe("Formless workspace operations", () => {
     );
     const desiredState = deploymentDesiredStateRef();
     const observation = capturedRequestJson<{
-      entity: string;
-      op: string;
-      recordId: string;
-      values: {
+      idempotencyKey: string;
+      input: {
         observedDesiredStateHash: string;
         observedStatus: string;
       };
-    }>(requestByPath(requests, "/api/formless/control-plane/mutations"));
+      recordId: string;
+    }>(requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"));
 
     expect(state).toMatchObject({
       actor: "browser",
@@ -561,14 +558,13 @@ describe("Formless workspace operations", () => {
       [
         "GET /api/formless/deployments/desired-state",
         "GET /api/formless/deployments/status",
-        "POST /api/formless/control-plane/mutations",
+        "POST /api/formless/control-plane/operations/deployment-config/update",
       ],
     );
     expect(observation).toMatchObject({
-      entity: "deployment-config",
-      op: "patch",
+      idempotencyKey: expect.any(String),
       recordId: "instance.primary",
-      values: {
+      input: {
         observedDesiredStateHash: desiredState.hash,
         observedStatus: "unknown",
       },
@@ -1191,36 +1187,41 @@ function deployApplyFetch(
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/control-plane/mutations") {
+    if (parsedUrl.pathname === "/api/formless/control-plane/operations/deployment-config/update") {
       const body = parseCapturedBody<{
-        mutationId: string;
+        idempotencyKey: string;
+        input: Record<string, unknown>;
         recordId: string;
-        values: Record<string, unknown>;
       }>(init);
+      const record = {
+        createdAt: "2026-05-26T00:00:00.000Z",
+        entity: "deployment-config",
+        id: body.recordId,
+        values: {
+          accountId: "account-123",
+          createdAt: "2026-05-26T00:00:00.000Z",
+          enabled: true,
+          label: "Primary instance",
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+          targetKind: "instance",
+          targetUrl: "https://personal.dpeek.workers.dev",
+          updatedAt: "2026-05-26T00:00:00.000Z",
+          workerName: "personal",
+          ...body.input,
+        },
+      };
 
       return Response.json({
-        changes: [],
-        cursor: 2,
-        mutationId: body.mutationId,
-        record: {
-          createdAt: "2026-05-26T00:00:00.000Z",
-          entity: "deployment-config",
-          id: body.recordId,
-          values: {
-            accountId: "account-123",
-            createdAt: "2026-05-26T00:00:00.000Z",
-            enabled: true,
-            label: "Primary instance",
-            providerFamily: "cloudflare",
-            targetId: "instance.primary",
-            targetKind: "instance",
-            targetUrl: "https://personal.dpeek.workers.dev",
-            updatedAt: "2026-05-26T00:00:00.000Z",
-            workerName: "personal",
-            ...body.values,
-          },
+        invocation: {},
+        output: {
+          affectedChangeIds: [],
+          changes: [],
+          cursor: 2,
+          record,
+          type: "update",
         },
-        status: "accepted",
+        status: "committed",
       });
     }
 

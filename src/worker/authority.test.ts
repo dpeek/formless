@@ -575,7 +575,8 @@ describe("authority", () => {
     useSchemaApp("tasks");
     const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    expect(task.mutationId).toBe(resource.mutationId);
+    expect(task.mutationId).toBe(operationWriteId("task", "create", "mutation-shared"));
+    expect(resource.mutationId).toBe(operationWriteId("resource", "create", "mutation-shared"));
     expect(tasksBootstrap.schema).toEqual(appSchema);
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
     expect(ratesBootstrap.schema).toEqual(rateCardSchema);
@@ -1247,7 +1248,7 @@ describe("authority", () => {
     });
     expect(replay).toEqual(action);
     expect(noOp).toEqual({
-      actionId: "action-regenerate-rates-noop",
+      actionId: operationWriteId("rate", "regenerateMissingRates", "action-regenerate-rates-noop"),
       changes: [],
       cursor: action.cursor,
     });
@@ -1616,7 +1617,9 @@ describe("authority", () => {
     expect(createdRates.map((record) => record.values.card)).toEqual(
       Array.from({ length: 10 }, () => first.record.id),
     );
-    expect(sync.changes.filter((change) => change.mutationId === body.mutationId)).toHaveLength(11);
+    expect(sync.changes.filter((change) => change.mutationId === first.mutationId)).toHaveLength(
+      11,
+    );
     expect(countRecordsByEntity(bootstrap.records)).toEqual({
       card: 3,
       rate: 30,
@@ -1763,7 +1766,7 @@ describe("authority", () => {
     expect(body.cursor).toBe(taskSeedRecords.length + 2);
     expect(body.changes).toHaveLength(1);
     expect(body.changes[0]).toMatchObject({
-      mutationId: "mutation-2",
+      mutationId: second.mutationId,
       recordId: second.record.id,
       payload: second.record,
     });
@@ -1864,7 +1867,7 @@ describe("authority", () => {
       expect(httpSync.changes).toEqual([
         {
           seq: deleted.cursor,
-          mutationId: "mutation-sync-delete-catchup",
+          mutationId: deleted.mutationId,
           op: "delete",
           entity: "task",
           recordId: created.record.id,
@@ -2365,7 +2368,7 @@ describe("authority", () => {
 
       expect(replay).toEqual(created);
       expect(
-        sync.changes.filter((change) => change.mutationId === mutation.mutationId),
+        sync.changes.filter((change) => change.mutationId === created.mutationId),
       ).toHaveLength(1);
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
@@ -2738,7 +2741,7 @@ describe("authority", () => {
         op: "create",
         values: { resource: "", card: card.record.id },
       },
-      'Field "resource" cannot be empty.',
+      'Field "resource" is required.',
     );
     await expectError(
       "/api/mutations",
@@ -2888,7 +2891,7 @@ describe("authority", () => {
     });
     expect(sync.changes).toHaveLength(1);
     expect(sync.changes[0]).toMatchObject({
-      mutationId: "mutation-2",
+      mutationId: patched.mutationId,
       op: "patch",
       recordId: created.record.id,
       payload: patched.record,
@@ -2906,7 +2909,7 @@ describe("authority", () => {
         op: "delete",
         recordId: created.record.id,
       },
-      'Delete mutations are disabled for entity "task".',
+      'Unknown operation "delete" for entity "task".',
     );
 
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -2941,7 +2944,7 @@ describe("authority", () => {
       },
       changes: [
         {
-          mutationId: "mutation-delete-ready",
+          mutationId: deleted.mutationId,
           op: "delete",
           entity: "task",
           recordId: created.record.id,
@@ -2953,7 +2956,7 @@ describe("authority", () => {
         },
       ],
       cursor: created.cursor + 1,
-      mutationId: "mutation-delete-ready",
+      mutationId: deleted.mutationId,
     });
     expect(bootstrap.records.find((record) => record.id === created.record.id)).toEqual(
       deleted.record,
@@ -3155,7 +3158,7 @@ describe("authority", () => {
         recordId: created.record.id,
         values: { missing: "Second" },
       },
-      'Unknown field "missing".',
+      'Operation input includes undeclared field "missing".',
     );
     await expectError(
       "/api/mutations",
@@ -3198,7 +3201,7 @@ describe("authority", () => {
         entity: "task",
         action: "clearCompletedTasks",
       },
-      'Unknown action "clearCompletedTasks" for entity "task".',
+      'Unknown operation "clearCompletedTasks" for entity "task".',
     );
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: appSchema });
@@ -3209,7 +3212,7 @@ describe("authority", () => {
         entity: "task",
         action: "missing",
       },
-      'Unknown action "missing" for entity "task".',
+      'Unknown operation "missing" for entity "task".',
     );
   });
 
@@ -3222,13 +3225,13 @@ describe("authority", () => {
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
     const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 2}`);
 
-    expect(action.actionId).toBe("action-1");
+    expect(action.actionId).toBe(operationWriteId("task", "clearCompletedTasks", "action-1"));
     expect(action.cursor).toBe(taskSeedRecords.length + 4);
     expect(action.changes).toHaveLength(2);
     expect(action.changes.map((change) => change.recordId).sort()).toEqual(
       [seedCompleted.id, completed.record.id].sort(),
     );
-    expect(action.changes.every((change) => change.mutationId === "action-1")).toBe(true);
+    expect(action.changes.every((change) => change.mutationId === action.actionId)).toBe(true);
     expect(action.changes.every((change) => change.op === "action")).toBe(true);
     expect(bootstrap.records).toContainEqual(
       expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
@@ -3286,7 +3289,7 @@ describe("authority", () => {
     const replay = await postAction("action-1", "clearCompletedTasks");
 
     expect(first).toEqual({
-      actionId: "action-1",
+      actionId: operationWriteId("task", "clearCompletedTasks", "action-1"),
       changes: [],
       cursor: beforeNoOp.cursor,
     });
@@ -3320,9 +3323,7 @@ describe("authority", () => {
 
     expect(created.record.values.priority).toBe("normal");
     expect(first.changes).toHaveLength(2);
-    expect(
-      first.changes.every((change) => change.mutationId === "action-transition-priority"),
-    ).toBe(true);
+    expect(first.changes.every((change) => change.mutationId === first.actionId)).toBe(true);
     expect(first.changes.every((change) => change.op === "action")).toBe(true);
     expect(taskChange?.payload).toMatchObject({
       id: created.record.id,
@@ -3347,9 +3348,7 @@ describe("authority", () => {
     expect(bootstrap.records.filter((record) => record.entity === "priority-event")).toHaveLength(
       1,
     );
-    expect(
-      sync.changes.filter((change) => change.mutationId === "action-transition-priority"),
-    ).toHaveLength(2);
+    expect(sync.changes.filter((change) => change.mutationId === first.actionId)).toHaveLength(2);
   });
 
   it("rejects transition actions for incompatible and tombstoned target records", async () => {
@@ -4091,25 +4090,28 @@ function rateCardSchemaWithSelectedJoinActions(): AppSchema {
     throw new Error("Rate-card schema must include a rate entity.");
   }
 
+  const actions = {
+    ...rate.actions,
+    addSelectedRate: {
+      label: "Add selected rate",
+      kind: "create-selected-join-record",
+      relationship: "cardResources",
+    },
+    removeSelectedRates: {
+      label: "Remove selected rates",
+      kind: "remove-selected-join-records",
+      relationship: "cardResources",
+    },
+  } satisfies NonNullable<EntitySchema["actions"]>;
+
   return {
     ...schema,
     entities: {
       ...schema.entities,
       rate: {
         ...rate,
-        actions: {
-          ...rate.actions,
-          addSelectedRate: {
-            label: "Add selected rate",
-            kind: "create-selected-join-record",
-            relationship: "cardResources",
-          },
-          removeSelectedRates: {
-            label: "Remove selected rates",
-            kind: "remove-selected-join-records",
-            relationship: "cardResources",
-          },
-        },
+        actions,
+        operations: taskOperations(rate.label, rate.fields, actions),
       },
     },
   } satisfies AppSchema;
@@ -4216,6 +4218,10 @@ function countRecordsByEntity(records: Array<{ entity: string }>) {
     counts[record.entity] = (counts[record.entity] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function operationWriteId(entity: string, operation: string, idempotencyKey: string) {
+  return `operation:${entity}.${operation}:${idempotencyKey}`;
 }
 
 function getSeedCompletedTask() {
@@ -4819,6 +4825,15 @@ function schemaWithAssignmentReference() {
           },
         },
         mutations: defaultMutations(),
+        operations: taskOperations("Assignment", {
+          task: {
+            type: "reference",
+            required: true,
+            label: "Task",
+            to: "task",
+            displayField: "title",
+          },
+        }),
       },
     },
     queries: appSchema.queries,

@@ -975,26 +975,24 @@ describe("Formless Site CLI", () => {
       [
         "GET /api/formless/deployments/desired-state",
         "GET /api/formless/deployments/status",
-        "POST /api/formless/control-plane/mutations",
+        "POST /api/formless/control-plane/operations/deployment-config/update",
       ],
     );
     expect(requests.map((request) => request.headers.authorization ?? "")).toEqual([
-      "",
-      "",
+      "Bearer secret",
+      "Bearer secret",
       "Bearer secret",
     ]);
     expect(
       capturedRequestJson<{
-        entity: string;
-        op: string;
+        idempotencyKey: string;
+        input: { observedStatus: string };
         recordId: string;
-        values: { observedStatus: string };
       }>(requests.at(-1)),
     ).toMatchObject({
-      entity: "deployment-config",
-      op: "patch",
+      idempotencyKey: expect.any(String),
       recordId: "instance.primary",
-      values: {
+      input: {
         observedStatus: "unknown",
       },
     });
@@ -4323,22 +4321,23 @@ describe("Formless Site CLI", () => {
 
       return (
         pathname.startsWith("/api/formless/deployments/") ||
-        pathname === "/api/formless/control-plane/mutations"
+        pathname === "/api/formless/control-plane/operations/deployment-config/update"
       );
     });
     const desiredState = deploymentDesiredStateRef();
     const observationRequest = capturedRequestJson<{
-      entity: string;
-      op: string;
-      recordId: string;
-      values: {
+      idempotencyKey: string;
+      input: {
         observedDesiredStateHash: string;
         observedStatus: string;
         observedSummary: string;
       };
+      recordId: string;
     }>(
       deploymentRequests.find(
-        (request) => new URL(request.url).pathname === "/api/formless/control-plane/mutations",
+        (request) =>
+          new URL(request.url).pathname ===
+          "/api/formless/control-plane/operations/deployment-config/update",
       ),
     );
 
@@ -4426,17 +4425,16 @@ describe("Formless Site CLI", () => {
       deploymentRequests.map((request) => `${request.method} ${new URL(request.url).pathname}`),
     ).toEqual([
       "GET /api/formless/deployments/desired-state",
-      "POST /api/formless/control-plane/mutations",
+      "POST /api/formless/control-plane/operations/deployment-config/update",
     ]);
     expect(deploymentRequests.map((request) => request.headers.authorization ?? "")).toEqual([
-      "",
+      "Bearer generated-token",
       "Bearer generated-token",
     ]);
     expect(observationRequest).toMatchObject({
-      entity: "deployment-config",
-      op: "patch",
+      idempotencyKey: expect.any(String),
       recordId: "instance.primary",
-      values: {
+      input: {
         observedDesiredStateHash: desiredState.hash,
         observedStatus: "deployed",
         observedSummary: "3 deployment resources applied from workspace source.",
@@ -6329,7 +6327,7 @@ function deploymentApplyFetch(
 
     if (
       parsedUrl.pathname.startsWith("/api/formless/deployments/") ||
-      parsedUrl.pathname === "/api/formless/control-plane/mutations"
+      parsedUrl.pathname === "/api/formless/control-plane/operations/deployment-config/update"
     ) {
       requests.push({
         body: init?.body,
@@ -6369,36 +6367,41 @@ function deploymentApplyFetch(
       });
     }
 
-    if (parsedUrl.pathname === "/api/formless/control-plane/mutations") {
+    if (parsedUrl.pathname === "/api/formless/control-plane/operations/deployment-config/update") {
       const body = parseRequestBody<{
-        mutationId: string;
+        idempotencyKey: string;
+        input: Record<string, unknown>;
         recordId: string;
-        values: Record<string, unknown>;
       }>(init);
+      const record = {
+        createdAt: "2026-05-26T00:00:00.000Z",
+        entity: "deployment-config",
+        id: body.recordId,
+        values: {
+          accountId: "account-123",
+          createdAt: "2026-05-26T00:00:00.000Z",
+          enabled: true,
+          label: "Primary instance",
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+          targetKind: "instance",
+          targetUrl: "https://personal.dpeek.workers.dev",
+          updatedAt: "2026-05-26T00:00:00.000Z",
+          workerName: "personal",
+          ...body.input,
+        },
+      };
 
       return Response.json({
-        changes: [],
-        cursor: 2,
-        mutationId: body.mutationId,
-        record: {
-          createdAt: "2026-05-26T00:00:00.000Z",
-          entity: "deployment-config",
-          id: body.recordId,
-          values: {
-            accountId: "account-123",
-            createdAt: "2026-05-26T00:00:00.000Z",
-            enabled: true,
-            label: "Primary instance",
-            providerFamily: "cloudflare",
-            targetId: "instance.primary",
-            targetKind: "instance",
-            targetUrl: "https://personal.dpeek.workers.dev",
-            updatedAt: "2026-05-26T00:00:00.000Z",
-            workerName: "personal",
-            ...body.values,
-          },
+        invocation: {},
+        output: {
+          affectedChangeIds: [],
+          changes: [],
+          cursor: 2,
+          record,
+          type: "update",
         },
-        status: "accepted",
+        status: "committed",
       });
     }
 
