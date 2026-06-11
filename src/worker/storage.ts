@@ -1500,7 +1500,11 @@ export function recordOperationInvocationAccepted(
     return;
   }
 
-  if (existing.status === "accepted" || existing.status === "failed") {
+  if (existing.status === "accepted") {
+    return;
+  }
+
+  if (existing.status === "failed") {
     upsertOperationInvocation(storage, {
       authDecision: existing.authDecision,
       envelope,
@@ -2640,7 +2644,9 @@ function recordFieldNames(value: unknown): string[] | undefined {
     return undefined;
   }
 
-  return Object.keys(value).sort();
+  return Object.keys(value)
+    .filter((key) => !isUnsafeAuditInputKey(key))
+    .sort();
 }
 
 function auditValueType(value: unknown): string {
@@ -2728,7 +2734,11 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown operation invocation error.";
+  const message = error instanceof Error ? error.message : "Unknown operation invocation error.";
+
+  return message.replace(/"([^"]+)"/g, (match, key: string) =>
+    isUnsafeAuditInputKey(key) ? '"[redacted]"' : match,
+  );
 }
 
 function schemasEqual(left: AppSchema, right: AppSchema) {

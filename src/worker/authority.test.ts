@@ -3049,7 +3049,7 @@ describe("authority", () => {
         recordId: active.record.id,
         values: { title: "Ignored" },
       },
-      "Delete mutation must not include values.",
+      'Operation "delete" request must not include input fields.',
     );
     await expectError(
       "/api/mutations",
@@ -3127,6 +3127,9 @@ describe("authority", () => {
             name: { type: "text", required: true },
           },
           mutations: defaultMutations(),
+          operations: taskOperations("Project", {
+            name: { type: "text", required: true },
+          }),
         },
       },
       queries: defaultQueries(),
@@ -4473,10 +4476,14 @@ function schemaWithTaskNotesField(): AppSchema {
           ...appSchema.entities.task.fields,
           notes: { type: "text", required: false, label: "Notes" },
         },
-        operations: taskOperations("Task", {
-          ...appSchema.entities.task.fields,
-          notes: { type: "text", required: false, label: "Notes" },
-        }),
+        operations: taskOperations(
+          "Task",
+          {
+            ...appSchema.entities.task.fields,
+            notes: { type: "text", required: false, label: "Notes" },
+          },
+          appSchema.entities.task.actions,
+        ),
       },
     },
   };

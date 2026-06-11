@@ -420,7 +420,7 @@ describe("instance control-plane API routes", () => {
     expect(runner.body.error).toBe('Action "createAppInstall" is not exposed to actor "runner".');
     expect(runnerMutation.response.status).toBe(400);
     expect(runnerMutation.body.error).toBe(
-      'Control-plane mutation writes are not exposed to actor "runner".',
+      'Control-plane entityOperation writes are not exposed to actor "runner".',
     );
   });
 

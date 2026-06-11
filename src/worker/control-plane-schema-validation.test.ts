@@ -653,8 +653,80 @@ function redirectRouteValues(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function writeOperations(
+  label: string,
+  fields: AppSchema["entities"][string]["fields"],
+): NonNullable<AppSchema["entities"][string]["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    delete: {
+      label: `Delete ${label}`,
+      kind: "delete",
+      scope: "record",
+      effect: { type: "tombstoneRecord" },
+      output: { type: "delete" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
+
 function controlPlaneRuntimeSchema(): AppSchema {
   const task = taskSourceSchema.entities.task;
+  const appInstallFields = {
+    label: { type: "text", required: true, label: "Label" },
+  } satisfies AppSchema["entities"][string]["fields"];
+  const appRouteFields = {
+    appInstall: {
+      type: "reference",
+      required: true,
+      label: "App install",
+      to: "app-install",
+      displayField: "label",
+    },
+    routeKind: {
+      type: "enum",
+      required: true,
+      values: {
+        admin: { label: "Admin" },
+        publicSite: { label: "Public Site" },
+      },
+    },
+    path: { type: "text", required: true, label: "Path" },
+    prefix: { type: "text", required: false, label: "Prefix" },
+    packageCapability: {
+      type: "enum",
+      required: true,
+      values: {
+        generatedApp: { label: "Generated app" },
+        publicSite: { label: "Public Site" },
+      },
+    },
+    enabled: { type: "boolean", required: true, default: true },
+  } satisfies AppSchema["entities"][string]["fields"];
 
   return {
     ...taskSourceSchema,
@@ -677,50 +749,23 @@ function controlPlaneRuntimeSchema(): AppSchema {
       },
       "app-install": {
         label: "App install",
-        fields: {
-          label: { type: "text", required: true, label: "Label" },
-        },
+        fields: appInstallFields,
         mutations: {
           create: { enabled: true },
           patch: { enabled: true },
           delete: { enabled: false },
         },
+        operations: writeOperations("App install", appInstallFields),
       },
       "app-route": {
         label: "App route",
-        fields: {
-          appInstall: {
-            type: "reference",
-            required: true,
-            label: "App install",
-            to: "app-install",
-            displayField: "label",
-          },
-          routeKind: {
-            type: "enum",
-            required: true,
-            values: {
-              admin: { label: "Admin" },
-              publicSite: { label: "Public Site" },
-            },
-          },
-          path: { type: "text", required: true, label: "Path" },
-          prefix: { type: "text", required: false, label: "Prefix" },
-          packageCapability: {
-            type: "enum",
-            required: true,
-            values: {
-              generatedApp: { label: "Generated app" },
-              publicSite: { label: "Public Site" },
-            },
-          },
-          enabled: { type: "boolean", required: true, default: true },
-        },
+        fields: appRouteFields,
         mutations: {
           create: { enabled: true },
           patch: { enabled: true },
           delete: { enabled: false },
         },
+        operations: writeOperations("App route", appRouteFields),
       },
       "deploy-attempt": {
         label: "Deploy attempt",

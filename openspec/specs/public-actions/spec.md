@@ -20,6 +20,17 @@ through an explicit actor policy and public binding.
 - WHEN the public operation executor evaluates the request
 - THEN the request is rejected
 - AND no operation effects are committed
+- AND the rejection is recorded as an operation invocation only after the
+  target-scoped public operation route and declared operation are resolved
+
+#### Scenario: Reject legacy action-only public metadata
+
+- GIVEN an entity action or Site form still exposes legacy public action
+  metadata without a matching source-declared operation binding
+- WHEN public execution models are selected
+- THEN the metadata does not create a public execution route
+- AND anonymous callers cannot invoke the action through the public operation
+  executor
 
 #### Scenario: Anonymous operation is eligible
 
@@ -75,6 +86,21 @@ operation endpoints instead of generic mutation or action endpoints.
 - WHEN the visitor posts outside a target-scoped public operation route
 - THEN the request does not evaluate public operation policy through retired
   mutation or action routes
+- AND protected mutation, action, operation, schema reset, seed reset, snapshot
+  restore, and package migration write routes return the configured
+  unauthorized response before parsing JSON or initializing app storage
+- AND no public operation invocation row is recorded for those protected generic
+  write attempts
+
+#### Scenario: Public operation route stays narrow
+
+- GIVEN a visitor posts to a target-scoped public operation route
+- WHEN the route does not resolve a declared public operation on the target app
+  storage identity
+- THEN the runtime returns a public-safe unavailable response
+- AND no mutation, action, or operation effect is committed
+- AND the unavailable response does not expose whether a protected generic write
+  route exists for the same entity
 
 ### Requirement: Public Operation Execution Envelope
 
@@ -96,6 +122,17 @@ invocation envelope before validating input or committing effects.
 - THEN committed records or operation response metadata include enough source
   context to identify the operation, target app storage identity, host, path,
   and Site block that caused the write
+
+#### Scenario: Rejected public attempt is auditable
+
+- GIVEN a target-scoped public operation route resolves a declared operation
+- WHEN anonymous policy, input validation, origin validation, or challenge
+  validation rejects the request
+- THEN the operation invocation audit records anonymous actor, rejected or
+  failed status, target app storage identity, canonical operation key, source
+  host and path, idempotency facts when available, and safe input metadata
+- AND challenge proofs and Turnstile secret material are excluded from audit
+  snapshots and summaries
 
 ### Requirement: Public Input Validation
 

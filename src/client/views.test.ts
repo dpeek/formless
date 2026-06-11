@@ -133,13 +133,13 @@ describe("home view model collections", () => {
     );
     expect(listModel.result.type === "list" ? listModel.result.transitionActions : []).toEqual([
       expect.objectContaining({
-        actionName: "startTask",
+        operationName: "startTask",
         fieldName: "status",
         machineName: "statusFlow",
         transitionName: "start",
       }),
       expect.objectContaining({
-        actionName: "completeTask",
+        operationName: "completeTask",
         fieldName: "status",
         machineName: "statusFlow",
         transitionName: "complete",
@@ -570,7 +570,7 @@ describe("home view model collections", () => {
         itemViewName: "taskListItem",
         fields: ["title", "dueDate", "priority", "done"],
       },
-      actions: [
+      operations: [
         {
           type: "create",
           label: "Create Task",
@@ -971,7 +971,7 @@ describe("home view model collections", () => {
       label: "Rate actions",
       headerLabel: "Rate actions",
       presentation: "dropdown",
-      operations: [
+      actions: [
         {
           actionName: "inspectRate",
           label: "Inspect rate",
@@ -1028,7 +1028,7 @@ describe("home view model collections", () => {
 
     expect(actionColumn).toMatchObject({
       type: "invokeAction",
-      operations: [
+      actions: [
         {
           type: "editRecord",
           actionName: "editResource",
@@ -1759,7 +1759,7 @@ describe("home view model collections", () => {
           },
         ],
       },
-      actions: [
+      operations: [
         {
           type: "create",
           label: "Create Resource",

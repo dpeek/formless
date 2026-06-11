@@ -211,6 +211,7 @@ export function operationWriteRequest(
       return {
         body: {
           idempotencyKey: mutationId,
+          ...(request.values === undefined ? {} : { input: request.values }),
           recordId: request.recordId,
         },
         path: `${prefix}/operations/${entity}/delete`,

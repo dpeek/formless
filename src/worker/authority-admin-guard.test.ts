@@ -57,10 +57,12 @@ describe("authority admin guard", () => {
     const protectedRoutes = [
       "/api/tasks/schema",
       "/api/tasks/snapshot/restore",
+      "/api/tasks/operations/task/create",
       "/api/tasks/mutations",
       "/api/tasks/actions",
       "/api/tasks/reset/schema",
       "/api/tasks/reset/seed",
+      "/api/tasks/package-migrations/apply",
     ];
 
     for (const route of protectedRoutes) {

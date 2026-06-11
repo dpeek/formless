@@ -148,6 +148,7 @@ export function buildProtocolOperationInvocationEnvelope(
   assertOperationMethod(input.method, operation.kind);
 
   const invocationInput = operationInvocationInput(operation.kind, body, input.route.recordId);
+  assertOperationInputIsDeclared(operation, body);
   const source = operationRequestSource(body.source, {
     protocol: sourceProtocolForActor(actorKind),
     route: input.path,
@@ -180,7 +181,7 @@ export function buildPublicOperationInvocationEnvelope(
     idempotencyKey: string;
     operationName: string;
     path: string;
-    proof: PublicActionProof;
+    proof?: PublicActionProof;
     publicInput: unknown;
     siteBlockId?: string;
   },
@@ -219,7 +220,7 @@ export function buildPublicOperationInvocationEnvelope(
 function publicOperationInvocationInput(
   operation: EntityOperationSchema,
   publicInput: unknown,
-  proof: PublicActionProof,
+  proof: PublicActionProof | undefined,
 ): OperationInvocationInput {
   if (operation.kind === "create") {
     return {
@@ -230,10 +231,7 @@ function publicOperationInvocationInput(
 
   return {
     type: "command",
-    input: {
-      input: publicInput,
-      proof,
-    },
+    input: proof === undefined ? { input: publicInput } : { input: publicInput, proof },
   };
 }
 
@@ -1036,6 +1034,25 @@ function operationInvocationInput(
   }
 
   return body.input === undefined ? { type: "command" } : { type: "command", input: body.input };
+}
+
+function assertOperationInputIsDeclared(
+  operation: EntityOperationSchema,
+  body: Record<string, unknown>,
+) {
+  if (body.input === undefined || operation.kind === "create" || operation.kind === "update") {
+    return;
+  }
+
+  if (operation.kind === "command") {
+    return;
+  }
+
+  if (!operation.input) {
+    throw new BadRequestError(
+      `Operation "${operation.kind}" request must not include input fields.`,
+    );
+  }
 }
 
 function operationIdempotency(

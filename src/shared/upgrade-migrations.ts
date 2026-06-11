@@ -133,10 +133,10 @@ const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
 
 export const bundledSourceSchemaHashFixtures = {
   tasks: "sha256:a859c94790d5d96a61f7845db818dbdfe3467637e01d33a306e58c02d0397849",
-  estii: "sha256:c3ccb68c4325e03d23a7747ae00ebd5883f6d4d26049a4b1cac3df32097eeb67",
+  estii: "sha256:ac3758e421ae8aa3424caa5a5834fd403f568db32e4a8e41c6fa48db5b81c7cc",
   site: "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
-  crm: "sha256:94098ce6d435d5a308303c0174aa78d0399a2fd189988a66c4d9e66d573abc8d",
-  cleartrace: "sha256:537ed490ba09930febe10352b188d9dc287097f1757d989f4788d28ca9fa9f92",
+  crm: "sha256:4e6fd52a8278a8f315beae8fd45b493e454bf3d2f553a78aeac7c651e0d8aebf",
+  cleartrace: "sha256:2d7e823eb12738ab95a892f6afdffc53bd7d984312ceb3cd0420a5b87fea6957",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 
 export function sourceSchemaCanonicalJson(schema: unknown): string {

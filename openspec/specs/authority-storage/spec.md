@@ -192,6 +192,9 @@ materialization.
   when required, and received timestamp
 - AND generic mutation and action protocol routes do not select Authority write
   operations after the operation migration
+- AND anonymous public callers can build an operation invocation envelope only
+  through target-scoped public operation routes that resolve a declared entity
+  operation on the target app storage identity
 
 #### Scenario: Authorize operation before materialization
 
@@ -245,6 +248,19 @@ separate from stored app records and sync change rows.
 - AND secret field values, challenge proofs, provider secrets, and runtime
   secrets are not stored in full input snapshots
 - AND operation invocation rows are not emitted as browser replica sync changes
+
+#### Scenario: Audit rejected public operation attempt
+
+- GIVEN a target-scoped public operation route resolves a declared entity
+  operation for an anonymous caller
+- WHEN operation policy, public input validation, origin validation, or challenge
+  verification rejects the request
+- THEN Authority stores an operation invocation row with anonymous actor,
+  rejected or failed status, public source protocol, source host and path,
+  target app storage identity, canonical operation key, idempotency facts when
+  available, input hash, and safe input audit metadata
+- AND no sync change rows, action execution rows, stored app records, or
+  tombstones are written for the rejected attempt
 
 #### Scenario: Change rows remain materialization log
 
@@ -382,6 +398,18 @@ The system MUST guard writes when owner or admin protection is configured and SH
 - WHEN a request without a valid owner session cookie or admin bearer token attempts a write
 - THEN the response is `401`
 - AND JSON body parsing, storage setup, and operation execution do not run
+
+#### Scenario: Public operation route bypasses only the generic write guard
+
+- GIVEN write protection is configured
+- WHEN an anonymous request targets a target-scoped public operation route
+- THEN the owner or admin write guard does not reject the request before public
+  operation policy is evaluated
+- AND only declared operations with anonymous public policy and public bindings
+  can commit effects through that route
+- AND all other app storage write routes still return `401` before JSON body
+  parsing, storage setup, operation envelope construction, or write
+  materialization
 
 #### Scenario: Public read cache headers
 

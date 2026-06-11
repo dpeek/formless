@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import type {
   BootstrapResponse,
+  ChangeRow,
   MutationResponse,
   PublicOperationResponse,
   SitePageTreeResponse,
@@ -17,6 +18,12 @@ import type { StoredOperationInvocation } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
+type PublicOperationHarnessState = {
+  actionExecutionCount: number;
+  changes: ChangeRow[];
+  invocations: StoredOperationInvocation[];
+  records: StoredRecord[];
+};
 
 const adminToken = "test-admin-token";
 const turnstileSiteKey = "test-turnstile-site-key";
@@ -250,10 +257,12 @@ describe("public operation runtime", () => {
   });
 
   it("rejects undeclared public create input before challenge verification or idempotency reservation", async () => {
-    const rejected = await postPublicAction(
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarness(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({
         idempotencyKey: "contact-create-input-retry",
+        token: "secret-audit-token",
         input: {
           name: "Ada Lovelace",
           email: "ada@example.com",
@@ -262,7 +271,7 @@ describe("public operation runtime", () => {
         },
       }),
     );
-    const rejectedAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const rejectedAfter = await readPublicOperationHarnessState();
     const accepted = await postPublicAction(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-input-retry" }),
@@ -273,7 +282,49 @@ describe("public operation runtime", () => {
     expect((await rejected.json()) as { error: string }).toEqual({
       error: 'Public operation input includes undeclared field "turnstileToken".',
     });
-    expect(contactMessageRecords(rejectedAfter.records)).toHaveLength(0);
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toHaveLength(1);
+    expect(rejectedAfter.invocations[0]).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      appStorageIdentity: {
+        kind: "schemaKey",
+        sourceSchemaKey: "site",
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          fieldNames: ["email", "message", "name"],
+          type: "create",
+          valuesType: "object",
+        },
+      },
+      authDecision: "allowed",
+      errorMessage: 'Public operation input includes undeclared field "[redacted]".',
+      idempotency: {
+        key: "contact-create-input-retry",
+        source: "caller",
+        writeIdentity: "operation:contact-message.submit:contact-create-input-retry",
+      },
+      operationKey: "contact-message.submit",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/contact-message/submit",
+        protocol: "public",
+        siteBlockId: "rec_site_contact_form",
+      },
+      status: "failed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "failed" }),
+      ],
+    });
+    expect(rejectedAfter.invocations[0]?.output).toBeUndefined();
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("payload-token");
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("secret-audit-token");
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("turnstileToken");
     expect(accepted.status).toBe(200);
     expect(contactMessageRecords(acceptedAfter.records)).toHaveLength(1);
     expect(turnstileRequests).toHaveLength(1);
@@ -311,18 +362,50 @@ describe("public operation runtime", () => {
   it("fails closed before committing public create when Turnstile fails or config is missing", async () => {
     turnstileResponse = { success: false, "error-codes": ["invalid-input-response"] };
 
-    const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
-    const failed = await postPublicAction(
+    const beforeState = await readPublicOperationHarnessState();
+    const failed = await postPublicOperationHarness(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-failed-turnstile" }),
     );
-    const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const afterState = await readPublicOperationHarnessState();
 
     expect(failed.status).toBe(403);
     expect((await failed.json()) as { error: string }).toEqual({
       error: "Public operation challenge failed.",
     });
-    expect(contactMessageRecords(after.records)).toEqual(contactMessageRecords(before.records));
+    expect(afterState.records).toEqual(beforeState.records);
+    expect(afterState.changes).toEqual(beforeState.changes);
+    expect(afterState.actionExecutionCount).toBe(0);
+    expect(afterState.invocations).toHaveLength(1);
+    expect(afterState.invocations[0]).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      appStorageIdentity: {
+        kind: "schemaKey",
+        sourceSchemaKey: "site",
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          fieldNames: ["email", "message", "name"],
+          type: "create",
+          valuesType: "object",
+        },
+      },
+      authDecision: "allowed",
+      errorMessage: "Public operation challenge failed.",
+      operationKey: "contact-message.submit",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/contact-message/submit",
+        protocol: "public",
+        siteBlockId: "rec_site_contact_form",
+      },
+      status: "failed",
+    });
+    expect(afterState.invocations[0]?.output).toBeUndefined();
+    expect(JSON.stringify(afterState.invocations[0])).not.toContain("token-ok");
+    expect(JSON.stringify(afterState.invocations[0])).not.toContain(turnstileSecret);
 
     const missingConfigRequests: unknown[] = [];
     const missingConfigHarness = await createPublicActionHarness({
@@ -796,6 +879,7 @@ async function createPublicOperationHarness(input: {
       import { workerSchemaAppDefinitions } from "${process.cwd()}/src/worker/schema-apps.ts";
       import {
         ensureStorageTables,
+        getChangesAfter,
         getBootstrapRecords,
         initializeStorageFromSource,
         readOperationInvocations,
@@ -811,11 +895,24 @@ async function createPublicOperationHarness(input: {
         async fetch(request) {
           const url = new URL(request.url);
 
+          if (request.method === "GET" && url.pathname === "/state") {
+            initializeHarnessStorage(this.ctx.storage);
+
+            return Response.json({
+              actionExecutionCount: readActionExecutionCount(this.ctx.storage),
+              changes: getChangesAfter(this.ctx.storage, 0),
+              invocations: readOperationInvocations(this.ctx.storage),
+              records: getBootstrapRecords(this.ctx.storage),
+            });
+          }
+
           if (request.method === "GET" && url.pathname === "/operation-invocations") {
             return Response.json(readOperationInvocations(this.ctx.storage));
           }
 
           if (request.method === "GET" && url.pathname === "/records") {
+            initializeHarnessStorage(this.ctx.storage);
+
             return Response.json(getBootstrapRecords(this.ctx.storage));
           }
 
@@ -874,6 +971,26 @@ async function createPublicOperationHarness(input: {
             throw error;
           }
         }
+      }
+
+      function initializeHarnessStorage(storage) {
+        const app = workerSchemaAppDefinitions.site;
+
+        if (!app) {
+          throw new Error("Public operation harness requires the Site app schema.");
+        }
+
+        initializeStorageFromSource(storage, {
+          schema: app.sourceSchema,
+          records: app.seedRecords,
+          changeMutationPrefix: app.seedChangeMutationPrefix,
+        });
+      }
+
+      function readActionExecutionCount(storage) {
+        const row = storage.sql.exec("SELECT COUNT(*) AS count FROM action_executions").one();
+
+        return Number(row.count);
       }
 
       export default {
@@ -1054,6 +1171,18 @@ async function readPublicOperationInvocations() {
   expect(response.status).toBe(200);
 
   return (await response.json()) as StoredOperationInvocation[];
+}
+
+async function readPublicOperationHarnessState() {
+  const response = await publicOperationHarness.fetch("/state", {
+    headers: {
+      "x-public-operation-harness-name": publicOperationHarnessName,
+    },
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as PublicOperationHarnessState;
 }
 
 function fetchHost(target: Harness, host: string, path: string, init?: DispatchFetchInit) {
