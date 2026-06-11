@@ -37,6 +37,7 @@ export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
 export const runtimeTopologyRoutes = {
   appRouteBase: "/apps",
   clientShellAssetPath: "/index.html",
+  deploymentsRoute: "/deployments",
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
   instanceRootRoute: "/",
   loginRoute: "/login",
@@ -77,6 +78,7 @@ const publishedProfileClientRoutePrefixes = [
 ] as const;
 const instanceProfileClientRoutePaths = [
   runtimeTopologyRoutes.instanceRootRoute,
+  runtimeTopologyRoutes.deploymentsRoute,
   runtimeTopologyRoutes.loginRoute,
   runtimeTopologyRoutes.setupRoute,
 ] as const;

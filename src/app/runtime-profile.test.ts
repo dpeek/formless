@@ -90,6 +90,7 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceDeploymentsRoute: "/deployments",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppScreenRoutePattern: "/apps/:installId/*",
@@ -156,6 +157,7 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: true,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceDeploymentsRoute: "/deployments",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppSchemaRoutePattern: "/apps/:installId/schema",
@@ -288,6 +290,9 @@ describe("runtime profile resolver", () => {
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
     ).toBeUndefined();
     expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/", undefined)).toBe(true);
+    expect(
+      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/deployments", undefined),
+    ).toBe(true);
     expect(
       shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/apps/task-workspace", world, {
         appInstalls,

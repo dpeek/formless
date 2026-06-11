@@ -138,7 +138,9 @@ export function App({
   const activeScreenPath = routeWorld
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
-  const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
+  const isInstanceShellRoute =
+    normalizedLocation === browserRoutes.instanceShellRoute ||
+    normalizedLocation === browserRoutes.instanceDeploymentsRoute;
 
   if (
     shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
@@ -448,6 +450,13 @@ function AppRoutes({
       {browserRoutes.ownerLoginRoute ? (
         <Route path={browserRoutes.ownerLoginRoute}>
           <OwnerLoginRoute />
+        </Route>
+      ) : null}
+      {browserRoutes.instanceDeploymentsRoute ? (
+        <Route path={browserRoutes.instanceDeploymentsRoute}>
+          <OwnerRouteGuard access="owner">
+            <InstanceShellRoute />
+          </OwnerRouteGuard>
         </Route>
       ) : null}
       {browserRoutes.instanceShellRoute ? (

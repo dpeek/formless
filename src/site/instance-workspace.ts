@@ -614,6 +614,32 @@ export type DeployFormlessInstanceWorkspaceResult = {
   workspaceRoot: string;
 };
 
+export type DeployLocalFormlessWorkspaceFailureStepId = "health-check";
+
+export class DeployLocalFormlessWorkspaceStepError extends Error {
+  readonly evidence: Record<string, boolean | number | string | null>;
+  readonly expectedUrl: string;
+  readonly retryGuidance: string;
+  readonly stepId: DeployLocalFormlessWorkspaceFailureStepId;
+  readonly stepLabel: string;
+
+  constructor(input: {
+    evidence: Record<string, boolean | number | string | null>;
+    expectedUrl: string;
+    retryGuidance: string;
+    stepId: DeployLocalFormlessWorkspaceFailureStepId;
+    stepLabel: string;
+  }) {
+    super(`${input.stepLabel} failed for ${input.expectedUrl}.`);
+    this.name = "DeployLocalFormlessWorkspaceStepError";
+    this.evidence = input.evidence;
+    this.expectedUrl = input.expectedUrl;
+    this.retryGuidance = input.retryGuidance;
+    this.stepId = input.stepId;
+    this.stepLabel = input.stepLabel;
+  }
+}
+
 export type DestroyFormlessInstanceWorkspaceRouteProviderResources = {
   enabledHosts: string[];
   resourceGraph: DeployResourceGraph;
@@ -1589,9 +1615,11 @@ export async function deployLocalFormlessWorkspace(
       );
     }
 
-    const healthCheck = await dependencies.healthCheck.check({
-      expectedVersion: planned.plan.packageVersion,
-      url: deploymentUrl,
+    const healthCheck = await checkLocalWorkspaceDeploymentHealth({
+      dependencies,
+      deploymentUrl,
+      plan: planned.plan,
+      selectedTarget: planned.selectedTarget,
     });
 
     await writeLocalWorkspaceDeploymentConfigSource({
@@ -1758,6 +1786,37 @@ async function tryWriteLocalWorkspaceDeploymentFailureObservation(
     );
   } catch {
     // Preserve the original deploy failure; observation writes are best effort on failure paths.
+  }
+}
+
+async function checkLocalWorkspaceDeploymentHealth(input: {
+  dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "healthCheck">;
+  deploymentUrl: string;
+  plan: FormlessInstanceDeploymentPlan;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+}): Promise<CheckFormlessInstanceDeployMetadataResult> {
+  try {
+    return await input.dependencies.healthCheck.check({
+      expectedVersion: input.plan.packageVersion,
+      url: input.deploymentUrl,
+    });
+  } catch {
+    throw new DeployLocalFormlessWorkspaceStepError({
+      evidence: {
+        deploymentUrl: input.deploymentUrl,
+        expectedVersion: input.plan.packageVersion,
+        expectedUrl: input.plan.expectedUrl.url,
+        providerFamily: "cloudflare",
+        targetAlias: input.selectedTarget.alias,
+        targetKind: "workers.dev",
+        workerName: input.plan.resources.worker.name,
+      },
+      expectedUrl: input.plan.expectedUrl.url,
+      retryGuidance:
+        "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
+      stepId: "health-check",
+      stepLabel: "Health check",
+    });
   }
 }
 

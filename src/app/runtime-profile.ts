@@ -98,6 +98,7 @@ export type RuntimeRoutePolicy = {
 };
 
 export type RuntimeBrowserRoutePatterns = {
+  instanceDeploymentsRoute?: typeof runtimeTopologyRoutes.deploymentsRoute;
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
   installedAppSchemaRoutePattern?: `/${string}`;
@@ -238,7 +239,10 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
         }
       : {}),
     ...(profile.instanceShell && policy.instanceBrowserRoutes
-      ? { instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute }
+      ? {
+          instanceDeploymentsRoute: runtimeTopologyRoutes.deploymentsRoute,
+          instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
+        }
       : {}),
     ...(installedAppRoutes
       ? {
@@ -286,7 +290,10 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
     isRuntimePublicSiteRoute(profile, path, context) ||
     isInstalledSitePublicRoutePath(profile, path) ||
     profile.shell === "publishedSite" ||
-    (profile.shell === "instance" && (path === routes.instanceShellRoute || !routeWorld))
+    (profile.shell === "instance" &&
+      (path === routes.instanceShellRoute ||
+        path === routes.instanceDeploymentsRoute ||
+        !routeWorld))
   );
 }
 

@@ -58,6 +58,8 @@ export type {
   WorkspaceGatewayOperationLog,
   WorkspaceGatewayOperationPath,
   WorkspaceGatewayOperationResult,
+  WorkspaceGatewayOperationStep,
+  WorkspaceGatewayOperationStepStatus,
   WorkspaceGatewayOperationStatus,
   WorkspaceGatewayOperationSummary,
   WorkspaceGatewayPushStartInput,

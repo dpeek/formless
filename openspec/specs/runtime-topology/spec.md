@@ -53,9 +53,20 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 #### Scenario: Product instance browser routes
 
 - GIVEN the runtime profile is `instance`
-- WHEN a browser navigates to `/`, `/setup`, `/login`, `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
+- WHEN a browser navigates to `/`, `/deployments`, `/setup`, `/login`,
+  `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
 - THEN the request is eligible for the client shell
 - AND source schema routes such as `/tasks`, `/estii/setup`, `/site/schema`, and `/pages/home` are not eligible instance browser routes
+
+#### Scenario: Product instance deployment route
+
+- GIVEN the runtime profile is `instance`
+- WHEN a browser navigates to `/deployments`
+- THEN the client shell is eligible to render the instance deployment surface
+- AND the route is treated as an owner-only instance browser surface unless a
+  narrower route access policy explicitly allows anonymous access
+- AND installed app routing, public Site routing, owner setup, and owner login
+  routes remain separate route families
 
 #### Scenario: Product instance owner auth routes
 

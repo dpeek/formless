@@ -221,6 +221,21 @@ The system SHALL track local workspace operations with display-safe progress.
 - **AND** the response does not depend on `deploy-attempt`,
   `deploy-evidence-summary`, or `deploy-drift-report` schema-owned records
 
+#### Scenario: Read deployment step progress
+
+- **WHEN** a browser reads progress for a deploy plan or deploy apply operation
+- **THEN** the gateway can return ordered display-safe steps for credential
+  resolution, account selection, desired-state planning, Worker deployment,
+  health check, owner setup, workspace push or writeback, and deployment
+  observation refresh
+- **AND** each step includes a stable step id, display label, status, optional
+  timestamps, and optional display-safe summary or error
+- **AND** health check failures include expected target URL and retry-safe
+  diagnostic text without exposing provider credentials, admin tokens, raw
+  Alchemy state, or raw provider responses
+- **AND** operation logs remain display-safe summaries rather than raw adapter
+  stdout, stderr, or provider state payloads
+
 #### Scenario: Persist operation progress
 
 - **WHEN** a workspace operation starts, updates, or completes

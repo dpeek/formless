@@ -147,6 +147,22 @@ export type WorkspaceOperationError = {
   message: string;
 };
 
+export type WorkspaceOperationStepStatus =
+  | "failed"
+  | "pending"
+  | "running"
+  | "skipped"
+  | "succeeded";
+
+export type WorkspaceOperationStep = {
+  detail?: string;
+  error?: string;
+  fields?: WorkspaceOperationDisplayObject;
+  id: string;
+  label: string;
+  status: WorkspaceOperationStepStatus;
+};
+
 export type WorkspaceOperationExternalAuthorizationEvent = {
   at: string;
   id: string;
@@ -162,6 +178,7 @@ export type WorkspaceOperationEvent = WorkspaceOperationExternalAuthorizationEve
 export type WorkspaceOperationResult = {
   deployment?: WorkspaceOperationDisplayObject;
   details?: WorkspaceOperationDisplayObject;
+  steps?: WorkspaceOperationStep[];
   summary: WorkspaceOperationSummary;
 };
 
@@ -179,6 +196,7 @@ export type WorkspaceOperationState = {
   result?: WorkspaceOperationResult;
   startedAt?: string;
   status: WorkspaceOperationStatus;
+  steps?: WorkspaceOperationStep[];
   summary: WorkspaceOperationSummary;
   updatedAt: string;
   version: typeof WORKSPACE_OPERATION_STATE_FILE_VERSION;
@@ -346,6 +364,7 @@ export type UpdateWorkspaceOperationStateInput = {
   logs?: readonly Omit<WorkspaceOperationLog, "id">[];
   result?: WorkspaceOperationResult;
   status?: WorkspaceOperationStatus;
+  steps?: readonly WorkspaceOperationStep[];
   summary?: WorkspaceOperationSummary;
   workspaceRoot: string;
 };

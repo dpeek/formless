@@ -24,6 +24,8 @@ import type {
   WorkspaceOperationStartInput,
   WorkspaceOperationState,
   WorkspaceOperationStatus,
+  WorkspaceOperationStep,
+  WorkspaceOperationStepStatus,
   WorkspaceOperationSummary,
   WorkspaceOperationStatusStartInput,
 } from "@dpeek/formless-workspace";
@@ -64,6 +66,8 @@ export type WorkspaceGatewayOperationKind = WorkspaceBrowserOperationKind;
 
 export type WorkspaceGatewayOperationStatus = WorkspaceOperationStatus;
 
+export type WorkspaceGatewayOperationStepStatus = WorkspaceOperationStepStatus;
+
 export type WorkspaceGatewayActor = "automation" | "browser" | "cli" | "system";
 
 export type WorkspaceGatewayAuthorizationVia = "admin-bearer" | "bootstrap" | "owner-session";
@@ -89,6 +93,8 @@ export type WorkspaceGatewayExternalAuthorizationEvent =
 export type WorkspaceGatewayOperationEvent = WorkspaceOperationEvent;
 
 export type WorkspaceGatewayOperationResult = WorkspaceOperationResult;
+
+export type WorkspaceGatewayOperationStep = WorkspaceOperationStep;
 
 /**
  * Gateway transport alias for Workspace-owned display-safe operation state.

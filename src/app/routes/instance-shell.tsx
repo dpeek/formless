@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { useLocation } from "wouter";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
+import { Link, useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
@@ -31,6 +38,7 @@ import {
 } from "../../client/domain-provider.ts";
 import {
   DeploymentRuntimeApiError,
+  fetchInstanceDeploymentDesiredState,
   fetchInstanceDeploymentStatus,
 } from "../../client/deployment-runtime.ts";
 import { useRecordsById } from "../../client/store.ts";
@@ -52,11 +60,13 @@ import {
   type WorkspaceGatewayOperation,
   type WorkspaceGatewayOperationKind,
   type WorkspaceGatewayOperationLog,
+  type WorkspaceGatewayOperationStep,
   type WorkspaceGatewayResponse,
   type WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway/client";
 import {
   deploymentStatusDisplaySummary,
+  type InstanceDeploymentDesiredStateResponse,
   type InstanceDeploymentStatusResponse,
 } from "../../shared/deployment-runtime.ts";
 import {
@@ -71,6 +81,7 @@ import type {
   InstanceDomainProviderPlanResponse,
 } from "../../shared/domain-provider-api.ts";
 import type { InstanceDomainMappingAppliedState } from "../../shared/instance-domain-mappings.ts";
+import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { HomeRoute } from "./home.tsx";
 
 export type PackageInstallDraft = {
@@ -108,6 +119,7 @@ export type InstanceShellRouteState =
       domainProviderPlan?: InstanceDomainProviderPlanResponse;
       domainProviderPlanError?: string;
       domainProviderPlanLoading?: boolean;
+      deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
       deploymentStatus?: InstanceDeploymentStatusResponse;
       installError?: string;
       installErrorPackageAppKey?: PackageAppKey;
@@ -131,7 +143,7 @@ export type WorkspaceGatewayRouteState =
     };
 
 export function InstanceShellRoute() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
   const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
@@ -185,12 +197,14 @@ export function InstanceShellRoute() {
           domainResponse,
           redirectResponse,
           providerPlanResponse,
+          deploymentDesiredState,
           deploymentStatus,
         ] = await Promise.all([
           fetchInstanceAppInstalls({ signal: controller.signal }),
           fetchInstanceDomainMappings({ signal: controller.signal }),
           fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
           fetchInstanceDomainProviderPlan({ signal: controller.signal }),
+          fetchOptionalInstanceDeploymentDesiredState(controller.signal),
           fetchOptionalInstanceDeploymentStatus(controller.signal),
         ]);
 
@@ -204,6 +218,7 @@ export function InstanceShellRoute() {
           domainProviderDeletingKey: undefined,
           domainProviderPlan: providerPlanResponse,
           domainProviderPlanLoading: false,
+          ...(deploymentDesiredState === undefined ? {} : { deploymentDesiredState }),
           ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
           installing: false,
           installs: appResponse.installs,
@@ -252,6 +267,7 @@ export function InstanceShellRoute() {
         config: workspaceGatewayConfig,
         operationId,
         operationKind,
+        setInstanceShellState: setState,
         setWorkspaceGatewayState,
       });
     }, 1500);
@@ -306,6 +322,7 @@ export function InstanceShellRoute() {
         domainProviderPlan: state.domainProviderPlan,
         domainProviderPlanError: state.domainProviderPlanError,
         domainProviderPlanLoading: state.domainProviderPlanLoading,
+        deploymentDesiredState: state.deploymentDesiredState,
         deploymentStatus: state.deploymentStatus,
         installing: false,
         installs: response.installs,
@@ -366,6 +383,7 @@ export function InstanceShellRoute() {
           currentOperation: response.operation,
         }),
       );
+      await refreshDeploymentRuntimeAfterWorkspaceOperation(response.operation, setState);
     } catch (error) {
       const message =
         error instanceof WorkspaceGatewayApiError || error instanceof Error
@@ -387,6 +405,7 @@ export function InstanceShellRoute() {
       config: workspaceGatewayConfig,
       operationId,
       operationKind,
+      setInstanceShellState: setState,
       setWorkspaceGatewayState,
     });
   }
@@ -562,6 +581,7 @@ export function InstanceShellRoute() {
 
   return (
     <InstanceShellRouteView
+      currentPath={location}
       installDrafts={installDrafts}
       onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
       onMarkDomainProviderResourceManuallyRemoved={submitMarkDomainProviderResourceManuallyRemoved}
@@ -608,11 +628,13 @@ async function refreshWorkspaceGatewayOperation({
   config,
   operationId,
   operationKind,
+  setInstanceShellState,
   setWorkspaceGatewayState,
 }: {
   config?: WorkspaceGatewayConfig;
   operationId: string;
   operationKind?: WorkspaceGatewayOperationKind;
+  setInstanceShellState?: Dispatch<SetStateAction<InstanceShellRouteState>>;
   setWorkspaceGatewayState: Dispatch<SetStateAction<WorkspaceGatewayRouteState>>;
 }) {
   if (!config) {
@@ -635,6 +657,10 @@ async function refreshWorkspaceGatewayOperation({
         currentOperation: response.operation,
       }),
     );
+    await refreshDeploymentRuntimeAfterWorkspaceOperation(
+      response.operation,
+      setInstanceShellState,
+    );
   } catch (error) {
     const message =
       error instanceof WorkspaceGatewayApiError || error instanceof Error
@@ -650,6 +676,54 @@ async function refreshWorkspaceGatewayOperation({
         : current,
     );
   }
+}
+
+async function refreshDeploymentRuntimeAfterWorkspaceOperation(
+  operation: WorkspaceGatewayOperation,
+  setState?: Dispatch<SetStateAction<InstanceShellRouteState>>,
+): Promise<void> {
+  if (!setState || !workspaceOperationRefreshesDeploymentRuntime(operation)) {
+    return;
+  }
+
+  let deploymentDesiredState: InstanceDeploymentDesiredStateResponse | undefined;
+  let deploymentStatus: InstanceDeploymentStatusResponse | undefined;
+
+  try {
+    [deploymentDesiredState, deploymentStatus] = await Promise.all([
+      fetchOptionalInstanceDeploymentDesiredState(),
+      fetchOptionalInstanceDeploymentStatus(),
+    ]);
+  } catch {
+    return;
+  }
+
+  setState((current) => {
+    if (current.status !== "ready") {
+      return current;
+    }
+
+    const {
+      deploymentDesiredState: _previousDeploymentDesiredState,
+      deploymentStatus: _previousDeploymentStatus,
+      ...rest
+    } = current;
+
+    return {
+      ...rest,
+      ...(deploymentDesiredState === undefined ? {} : { deploymentDesiredState }),
+      ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
+    };
+  });
+}
+
+export function workspaceOperationRefreshesDeploymentRuntime(
+  operation: WorkspaceGatewayOperation,
+): boolean {
+  return (
+    operation.status === "succeeded" &&
+    (operation.operation === "deployApply" || operation.operation === "deploymentRefresh")
+  );
 }
 
 function workspaceGatewayReadyStateFromResponse(
@@ -683,11 +757,25 @@ export function operationPollsAutomatically(operation: WorkspaceGatewayOperation
   return operation.status === "queued" || operation.status === "running";
 }
 
+async function fetchOptionalInstanceDeploymentDesiredState(
+  signal?: AbortSignal,
+): Promise<InstanceDeploymentDesiredStateResponse | undefined> {
+  try {
+    return await fetchInstanceDeploymentDesiredState(signal ? { signal } : {});
+  } catch (error) {
+    if (error instanceof DeploymentRuntimeApiError && error.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 async function fetchOptionalInstanceDeploymentStatus(
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<InstanceDeploymentStatusResponse | undefined> {
   try {
-    return await fetchInstanceDeploymentStatus({ signal });
+    return await fetchInstanceDeploymentStatus(signal ? { signal } : {});
   } catch (error) {
     if (error instanceof DeploymentRuntimeApiError && error.status === 404) {
       return undefined;
@@ -698,6 +786,7 @@ async function fetchOptionalInstanceDeploymentStatus(
 }
 
 export function InstanceShellRouteView({
+  currentPath = runtimeTopologyRoutes.instanceRootRoute,
   installDrafts = {},
   onDeleteDomainProviderResource,
   onMarkDomainProviderResourceManuallyRemoved,
@@ -710,6 +799,7 @@ export function InstanceShellRouteView({
   state,
   workspaceGatewayState = { status: "unavailable" },
 }: {
+  currentPath?: string;
   installDrafts?: PackageInstallDrafts;
   onDeleteDomainProviderResource?: (input: DomainProviderDeleteActionInput) => void;
   onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
@@ -726,11 +816,13 @@ export function InstanceShellRouteView({
   workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const pathname = currentPath.split("?")[0] ?? currentPath;
+  const isDeploymentsRoute = pathname === runtimeTopologyRoutes.deploymentsRoute;
 
   if (state.status === "loading") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader />
+        <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-muted-fg">Loading installed apps...</p>
       </section>
     );
@@ -739,7 +831,7 @@ export function InstanceShellRouteView({
   if (state.status === "failed") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader />
+        <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-red-700" role="alert">
           {state.message}
         </p>
@@ -747,9 +839,24 @@ export function InstanceShellRouteView({
     );
   }
 
+  if (isDeploymentsRoute) {
+    return (
+      <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
+        <ShellHeader currentPath={currentPath} />
+        <GeneratedDeploymentManagementSection
+          deploymentDesiredState={state.deploymentDesiredState}
+          deploymentStatus={state.deploymentStatus}
+          onPollWorkspaceOperation={onPollWorkspaceOperation}
+          onStartWorkspaceOperation={onStartWorkspaceOperation}
+          workspaceGatewayState={workspaceGatewayState}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <ShellHeader />
+      <ShellHeader currentPath={currentPath} />
       <WorkspaceGatewayManagementSection
         installCount={state.installs.length}
         onInstallFirstApp={() => setInstallDialogOpen(true)}
@@ -768,10 +875,6 @@ export function InstanceShellRouteView({
         onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
         onRefreshPlan={onRefreshDomainProviderPlan}
         state={state}
-      />
-      <GeneratedDeploymentManagementSection
-        deploymentStatus={state.deploymentStatus}
-        workspaceGatewayState={workspaceGatewayState}
       />
       <InstallAppDialog
         installDrafts={installDrafts}
@@ -803,6 +906,14 @@ function WorkspaceGatewayManagementSection({
   }
 
   const operation = state.status === "ready" ? state.currentOperation : undefined;
+  const progressOperation =
+    state.status === "ready" ? workspaceManagementOperation(state) : undefined;
+  const progressError =
+    state.status === "ready"
+      ? deploymentWorkspaceOperation(state)
+        ? undefined
+        : state.error
+      : undefined;
   const initialized =
     state.status === "ready"
       ? workspaceInitialized(state.statusOperation ?? state.currentOperation ?? operation)
@@ -830,16 +941,20 @@ function WorkspaceGatewayManagementSection({
           </p>
         </div>
       </div>
-      <WorkspaceGatewayOperationControls onStartOperation={onStartOperation} state={state} />
+      <WorkspaceGatewayOperationControls
+        onStartOperation={onStartOperation}
+        operationGroup="workspace"
+        state={state}
+      />
       <WorkspaceOnboardingFlowSection
         installCount={installCount}
         onInstallFirstApp={onInstallFirstApp}
       />
       {state.status === "ready" ? (
         <WorkspaceOperationProgress
-          error={state.error}
+          error={progressError}
           onPollOperation={onPollOperation}
-          operation={operation ?? state.statusOperation}
+          operation={progressOperation ?? state.statusOperation}
         />
       ) : null}
     </section>
@@ -848,9 +963,11 @@ function WorkspaceGatewayManagementSection({
 
 function WorkspaceGatewayOperationControls({
   onStartOperation,
+  operationGroup = "all",
   state,
 }: {
   onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
+  operationGroup?: "all" | "deployment" | "workspace";
   state: WorkspaceGatewayRouteState;
 }) {
   const busy =
@@ -860,83 +977,93 @@ function WorkspaceGatewayOperationControls({
       operationPollsAutomatically(state.currentOperation));
   const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
   const canRunPostBootstrapOperation = canStart && Boolean(state.csrfToken);
+  const showDeploymentOperations = operationGroup === "all" || operationGroup === "deployment";
+  const showWorkspaceOperations = operationGroup === "all" || operationGroup === "workspace";
 
   return (
     <div
       className="flex flex-wrap items-center gap-2"
       data-formless-workspace-operation-controls="true"
     >
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ check: false, kind: "save" })}
-        size="sm"
-        type="button"
-      >
-        Save
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "check" })}
-        size="sm"
-        type="button"
-      >
-        Check
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "pull" })}
-        size="sm"
-        type="button"
-      >
-        Pull
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ apply: false, kind: "push" })}
-        size="sm"
-        type="button"
-      >
-        Push
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "deploymentRefresh" })}
-        size="sm"
-        type="button"
-      >
-        Refresh deploy
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "credentialSetup", provider: "cloudflare" })}
-        size="sm"
-        type="button"
-      >
-        Credentials
-      </Button>
-      <Button
-        intent="outline"
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "deployPlan" })}
-        size="sm"
-        type="button"
-      >
-        Plan deploy
-      </Button>
-      <Button
-        isDisabled={!canRunPostBootstrapOperation}
-        onPress={() => onStartOperation?.({ kind: "deployApply" })}
-        size="sm"
-        type="button"
-      >
-        Apply deploy
-      </Button>
+      {showWorkspaceOperations ? (
+        <>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ check: false, kind: "save" })}
+            size="sm"
+            type="button"
+          >
+            Save
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "check" })}
+            size="sm"
+            type="button"
+          >
+            Check
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "pull" })}
+            size="sm"
+            type="button"
+          >
+            Pull
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ apply: false, kind: "push" })}
+            size="sm"
+            type="button"
+          >
+            Push
+          </Button>
+        </>
+      ) : null}
+      {showDeploymentOperations ? (
+        <>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "deploymentRefresh" })}
+            size="sm"
+            type="button"
+          >
+            Refresh deploy
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "credentialSetup", provider: "cloudflare" })}
+            size="sm"
+            type="button"
+          >
+            Credentials
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "deployPlan" })}
+            size="sm"
+            type="button"
+          >
+            Plan deploy
+          </Button>
+          <Button
+            isDisabled={!canRunPostBootstrapOperation}
+            onPress={() => onStartOperation?.({ kind: "deployApply" })}
+            size="sm"
+            type="button"
+          >
+            Apply deploy
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -969,10 +1096,9 @@ function WorkspaceOnboardingFlowSection({
       </div>
       <div
         className="flex min-w-0 flex-wrap content-start gap-2 text-xs text-muted-fg"
-        data-formless-onboarding-generated-record-controls="routes deployment-config"
+        data-formless-onboarding-generated-record-controls="routes"
       >
         <span className="rounded border border-border px-2 py-1">Routes</span>
-        <span className="rounded border border-border px-2 py-1">Deployment config</span>
       </div>
     </div>
   );
@@ -1017,6 +1143,7 @@ export function WorkspaceOperationProgress({
           {operation.result?.details ? (
             <DisplaySafeObject fields={operation.result.details} heading="Details" />
           ) : null}
+          <WorkspaceOperationSteps steps={operation.steps ?? operation.result?.steps ?? []} />
           <WorkspaceOperationEvents
             events={operation.events}
             onPollOperation={(operationId) => onPollOperation?.(operationId, operation.operation)}
@@ -1032,6 +1159,43 @@ export function WorkspaceOperationProgress({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function WorkspaceOperationSteps({ steps }: { steps: readonly WorkspaceGatewayOperationStep[] }) {
+  if (steps.length === 0) {
+    return null;
+  }
+
+  return (
+    <ol className="grid gap-2 text-xs" data-formless-workspace-operation-steps="true">
+      {steps.map((step) => (
+        <li
+          className="min-w-0 rounded border border-border px-3 py-2"
+          data-formless-workspace-operation-step={step.id}
+          data-formless-workspace-operation-step-status={step.status}
+          key={step.id}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-fg">{displaySafeText(step.label)}</span>
+            <span className="text-muted-fg">{workspaceOperationStepStatusLabel(step.status)}</span>
+          </div>
+          {step.detail ? (
+            <p className="mt-1 text-muted-fg">{displaySafeText(step.detail)}</p>
+          ) : null}
+          {step.fields ? (
+            <div className="mt-2">
+              <DisplaySafeObject fields={step.fields} />
+            </div>
+          ) : null}
+          {step.error ? (
+            <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+              {displaySafeText(step.error)}
+            </p>
+          ) : null}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -1289,15 +1453,30 @@ function workspaceOperationLogLevelLabel(level: WorkspaceGatewayOperationLog["le
   return fieldKeyLabel(level);
 }
 
+function workspaceOperationStepStatusLabel(
+  status: WorkspaceGatewayOperationStep["status"],
+): string {
+  return fieldKeyLabel(status);
+}
+
 function workspaceProviderLabel(provider: "alchemy" | "cloudflare"): string {
   return provider === "cloudflare" ? "Cloudflare" : "Alchemy";
 }
 
 function GeneratedDeploymentManagementSection({
+  deploymentDesiredState,
   deploymentStatus,
+  onPollWorkspaceOperation,
+  onStartWorkspaceOperation,
   workspaceGatewayState,
 }: {
+  deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
   deploymentStatus?: InstanceDeploymentStatusResponse;
+  onPollWorkspaceOperation?: (
+    operationId: string,
+    operationKind?: WorkspaceGatewayOperationKind,
+  ) => void;
+  onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
   workspaceGatewayState: WorkspaceGatewayRouteState;
 }) {
   const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
@@ -1325,16 +1504,30 @@ function GeneratedDeploymentManagementSection({
       </div>
       <DeploymentSetupProgressSurface
         deploymentConfigs={deploymentConfigs}
+        deploymentDesiredState={deploymentDesiredState}
         deploymentStatus={deploymentStatus}
         workspaceGatewayState={workspaceGatewayState}
       />
-      <div data-formless-control-plane-screen="deployments">
-        <HomeRoute
-          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-          screenPath="/deployments"
-          target={controlPlaneTarget}
-        />
-      </div>
+      <DeploymentGatewayOperationSection
+        onPollOperation={onPollWorkspaceOperation}
+        onStartOperation={onStartWorkspaceOperation}
+        state={workspaceGatewayState}
+      />
+      <details
+        className="rounded-md border border-border bg-overlay p-4"
+        data-formless-deployment-config-management="secondary"
+      >
+        <summary className="cursor-pointer text-sm font-semibold">
+          Deployment config records
+        </summary>
+        <div className="mt-4" data-formless-control-plane-screen="deployments">
+          <HomeRoute
+            schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
+            screenPath="/deployments"
+            target={controlPlaneTarget}
+          />
+        </div>
+      </details>
     </section>
   );
 }
@@ -1377,10 +1570,12 @@ function compareDeploymentConfigRecords(
 
 function DeploymentSetupProgressSurface({
   deploymentConfigs,
+  deploymentDesiredState,
   deploymentStatus,
   workspaceGatewayState,
 }: {
   deploymentConfigs: DeploymentConfigStoredRecord[];
+  deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
   deploymentStatus?: InstanceDeploymentStatusResponse;
   workspaceGatewayState: WorkspaceGatewayRouteState;
 }) {
@@ -1395,7 +1590,7 @@ function DeploymentSetupProgressSurface({
 
   return (
     <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-2"
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4 lg:grid-cols-3"
       data-formless-deployment-setup-progress="true"
     >
       <div className="min-w-0 space-y-3" data-formless-deployment-config-summary="true">
@@ -1435,11 +1630,25 @@ function DeploymentSetupProgressSurface({
           </div>
         </dl>
       </div>
+      <div className="min-w-0 space-y-3" data-formless-deployment-desired-state="true">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">Desired state</h3>
+          <p className="text-xs text-muted-fg">
+            {deploymentDesiredState
+              ? (deploymentDesiredState.desiredState.display.title ??
+                `${deploymentDesiredState.desiredState.display.resourceCount} resources`)
+              : "Desired-state projection unavailable"}
+          </p>
+        </div>
+        <DeploymentDesiredStateFacts desiredState={deploymentDesiredState} />
+      </div>
     </div>
   );
 }
 
 function DeploymentConfigFacts({ config }: { config: DeploymentConfigStoredRecord }) {
+  const observationEntries = deploymentObservationEntries(config.values);
+
   return (
     <dl className="grid gap-2 text-xs text-muted-fg">
       <div className="min-w-0">
@@ -1465,8 +1674,155 @@ function DeploymentConfigFacts({ config }: { config: DeploymentConfigStoredRecor
           {config.values.workerName ? displaySafeText(config.values.workerName) : "Not set"}
         </dd>
       </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Credential ref</dt>
+        <dd className="break-words">
+          {config.values.credentialRef ? displaySafeText(config.values.credentialRef) : "Not set"}
+        </dd>
+      </div>
+      <div className="min-w-0" data-formless-deployment-observation-cache="true">
+        <dt className="font-medium text-fg">Latest observation</dt>
+        <dd className="break-words">
+          {observationEntries.length === 0
+            ? "No observation cache"
+            : observationEntries.map((entry) => `${entry.label} ${entry.value}`).join(" · ")}
+        </dd>
+      </div>
     </dl>
   );
+}
+
+function DeploymentDesiredStateFacts({
+  desiredState,
+}: {
+  desiredState?: InstanceDeploymentDesiredStateResponse;
+}) {
+  if (!desiredState) {
+    return (
+      <p className="text-xs text-muted-fg" data-formless-deployment-desired-state-empty="true">
+        No desired-state projection loaded.
+      </p>
+    );
+  }
+
+  const version = desiredState.desiredState;
+  const resourceKinds = Object.entries(version.display.resourcesByKind)
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return (
+    <dl className="grid gap-2 text-xs text-muted-fg">
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Target</dt>
+        <dd className="break-words">
+          {desiredState.target.label ?? "Deployment target"} ·{" "}
+          <code>{desiredState.target.targetId}</code>
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Version</dt>
+        <dd className="break-words">
+          Revision {version.revision} · <code>{version.versionId}</code>
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Desired-state hash</dt>
+        <dd className="break-words">
+          <code>{version.hash}</code>
+        </dd>
+      </div>
+      <div className="min-w-0">
+        <dt className="font-medium text-fg">Resources</dt>
+        <dd className="break-words">
+          {resourceKinds.length === 0
+            ? `${version.display.resourceCount} resources`
+            : resourceKinds.map(([kind, count]) => `${fieldKeyLabel(kind)} ${count}`).join(" · ")}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function DeploymentGatewayOperationSection({
+  onPollOperation,
+  onStartOperation,
+  state,
+}: {
+  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
+  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
+  state: WorkspaceGatewayRouteState;
+}) {
+  const operation = deploymentWorkspaceOperation(state);
+
+  return (
+    <div
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
+      data-formless-deployment-gateway="local"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-semibold">Local gateway</h3>
+          <p className="text-xs text-muted-fg">
+            {workspaceGatewayOperationSummary(state, operation)}
+          </p>
+        </div>
+      </div>
+      {state.status === "unavailable" ? (
+        <p className="text-xs text-muted-fg">Workspace gateway operations are unavailable.</p>
+      ) : (
+        <div data-formless-deployment-operation-controls="true">
+          <WorkspaceGatewayOperationControls
+            onStartOperation={onStartOperation}
+            operationGroup="deployment"
+            state={state}
+          />
+        </div>
+      )}
+      {state.status === "ready" ? (
+        <WorkspaceOperationProgress
+          error={state.error}
+          onPollOperation={onPollOperation}
+          operation={operation}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function deploymentObservationEntries(
+  values: InstanceControlPlaneDeploymentConfigValues,
+): Array<{ label: string; value: string }> {
+  return [
+    observationEntry("Status", values.observedStatus),
+    observationEntry("Observed at", values.observedAt),
+    observationEntry("Desired-state hash", values.observedDesiredStateHash),
+    observationEntry("Summary", values.observedSummary),
+    observationEntry("Error", values.observedError),
+    observationEntry("Runner", values.observedRunnerId),
+  ].filter((entry): entry is { label: string; value: string } => entry !== undefined);
+}
+
+function observationEntry(
+  label: string,
+  value: string | undefined,
+): { label: string; value: string } | undefined {
+  return value === undefined || value === "" ? undefined : { label, value: displaySafeText(value) };
+}
+
+function workspaceManagementOperation(
+  state: WorkspaceGatewayRouteState,
+): WorkspaceGatewayOperation | undefined {
+  if (state.status !== "ready") {
+    return undefined;
+  }
+
+  const operation = state.currentOperation;
+
+  if (!operation || isDeploymentWorkspaceOperationKind(operation.operation)) {
+    return undefined;
+  }
+
+  return operation;
 }
 
 function deploymentWorkspaceOperation(
@@ -1602,7 +1958,6 @@ function RouteProviderOperationsSection({
       </div>
       <DomainProviderControlPanel
         deleteJob={state.domainProviderDeleteJob}
-        deploymentStatus={state.deploymentStatus}
         onRefreshDeleteJob={onRefreshDeleteJob}
         onRefreshPlan={onRefreshPlan}
         plan={state.domainProviderPlan}
@@ -1665,7 +2020,6 @@ function RouteProviderOperationsSection({
 
 function DomainProviderControlPanel({
   deleteJob,
-  deploymentStatus,
   onRefreshDeleteJob,
   onRefreshPlan,
   plan,
@@ -1673,18 +2027,12 @@ function DomainProviderControlPanel({
   refreshError,
 }: {
   deleteJob?: InstanceDomainProviderDeleteJob;
-  deploymentStatus?: InstanceDeploymentStatusResponse;
   onRefreshDeleteJob?: () => void;
   onRefreshPlan?: () => void;
   plan?: InstanceDomainProviderPlanResponse;
   planLoading: boolean;
   refreshError?: string;
 }) {
-  const deploymentSummary =
-    deploymentStatus === undefined
-      ? undefined
-      : deploymentStatusDisplaySummary(deploymentStatus.status);
-
   return (
     <div className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-[minmax(0,1fr)_auto]">
       <div className="min-w-0 space-y-2">
@@ -1701,11 +2049,6 @@ function DomainProviderControlPanel({
             <p>{domainProviderBlockerSummary(plan)}</p>
             <p>{domainProviderIssueSummary(plan)}</p>
             <p>{domainProviderRunnerSummary(plan)}</p>
-            {deploymentSummary === undefined ? null : (
-              <p>
-                Deployment {deploymentSummary.label} · {deploymentSummary.detail}
-              </p>
-            )}
           </div>
         ) : (
           <p className="text-xs text-muted-fg">Provider plan unavailable.</p>
@@ -1882,12 +2225,57 @@ function AppliedProviderResourceRow({
   );
 }
 
-function ShellHeader() {
+function ShellHeader({ currentPath }: { currentPath: string }) {
+  const pathname = currentPath.split("?")[0] ?? currentPath;
+
   return (
-    <header className="space-y-1">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-      <h1 className="text-2xl font-semibold">Instance</h1>
+    <header className="space-y-3">
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
+        <h1 className="text-2xl font-semibold">Instance</h1>
+      </div>
+      <nav aria-label="Instance navigation" className="flex flex-wrap gap-2">
+        <InstanceNavigationLink
+          href={runtimeTopologyRoutes.instanceRootRoute}
+          isCurrent={pathname === runtimeTopologyRoutes.instanceRootRoute}
+        >
+          Overview
+        </InstanceNavigationLink>
+        <InstanceNavigationLink
+          href={runtimeTopologyRoutes.deploymentsRoute}
+          isCurrent={pathname === runtimeTopologyRoutes.deploymentsRoute}
+        >
+          Deployments
+        </InstanceNavigationLink>
+      </nav>
     </header>
+  );
+}
+
+function InstanceNavigationLink({
+  children,
+  href,
+  isCurrent,
+}: {
+  children: ReactNode;
+  href: `/${string}`;
+  isCurrent: boolean;
+}) {
+  const base =
+    "inline-flex h-8 items-center rounded border px-3 text-sm font-medium transition-colors";
+
+  return (
+    <Link
+      aria-current={isCurrent ? "page" : undefined}
+      className={
+        isCurrent
+          ? `${base} border-fg bg-fg text-bg`
+          : `${base} border-border text-muted-fg hover:border-fg hover:text-fg`
+      }
+      href={href}
+    >
+      {children}
+    </Link>
   );
 }
 

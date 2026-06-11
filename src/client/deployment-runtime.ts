@@ -1,5 +1,7 @@
 import {
+  INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
   INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+  type InstanceDeploymentDesiredStateResponse,
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
 
@@ -35,6 +37,22 @@ export async function fetchInstanceDeploymentStatus({
   });
 
   return readJsonResponse<InstanceDeploymentStatusResponse>(response);
+}
+
+export async function fetchInstanceDeploymentDesiredState({
+  fetcher = fetch,
+  signal,
+}: {
+  fetcher?: typeof fetch;
+  signal?: AbortSignal;
+} = {}): Promise<InstanceDeploymentDesiredStateResponse> {
+  const response = await fetcher(INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  return readJsonResponse<InstanceDeploymentDesiredStateResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

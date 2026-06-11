@@ -8,6 +8,7 @@ import {
   type WorkspaceOperationDisplayObject,
   type WorkspaceOperationResult,
   type WorkspaceOperationState,
+  type WorkspaceOperationStep,
 } from "@dpeek/formless-workspace";
 import {
   createWorkspaceOperationState,
@@ -17,6 +18,7 @@ import {
 import {
   checkLocalFormlessWorkspace,
   deployLocalFormlessWorkspace,
+  DeployLocalFormlessWorkspaceStepError,
   getFormlessInstanceWorkspaceStatus,
   initLocalFormlessWorkspaceOnboarding,
   planDeployLocalFormlessWorkspace,
@@ -74,19 +76,22 @@ export async function runFormlessWorkspaceOperation(
     return updateWorkspaceOperationState(state.id, {
       logs: [{ at: dependencies.now(), level: "info", message: `${input.kind} completed.` }],
       result,
+      ...(result.steps === undefined ? {} : { steps: result.steps }),
       status: "succeeded",
       summary: result.summary,
       workspaceRoot,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const failureSteps = failureWorkspaceOperationSteps(input, error);
 
     return updateWorkspaceOperationState(state.id, {
       errors: [{ message }],
       logs: [{ at: dependencies.now(), level: "error", message }],
       status: "failed",
+      ...(failureSteps === undefined ? {} : { steps: failureSteps }),
       summary: {
-        fields: { error: message },
+        fields: failureWorkspaceOperationSummaryFields(message, error),
         title: "Operation failed",
       },
       workspaceRoot,
@@ -431,6 +436,7 @@ function summarizeDeploymentRefreshResult(
       },
       title: "Deployment observation refreshed",
     },
+    steps: deploymentRefreshOperationSteps(result),
   };
 }
 
@@ -490,6 +496,7 @@ function summarizeDeployPlanResult(
       },
       title: "Deploy planned",
     },
+    steps: deployPlanOperationSteps(result),
   };
 }
 
@@ -550,7 +557,281 @@ function summarizeDeployApplyResult(
       },
       title: "Deploy applied",
     },
+    steps: deployApplyOperationSteps(result),
   };
+}
+
+type DeploymentOperationStepId =
+  | "account-selection"
+  | "credentials"
+  | "desired-state-plan"
+  | "health-check"
+  | "observation-refresh"
+  | "owner-setup"
+  | "worker-deploy"
+  | "workspace-push-writeback";
+
+type DeploymentOperationStepInput = Omit<WorkspaceOperationStep, "id" | "label">;
+
+const deploymentOperationStepLabels = {
+  "account-selection": "Account selection",
+  credentials: "Credentials",
+  "desired-state-plan": "Desired-state plan",
+  "health-check": "Health check",
+  "observation-refresh": "Observation refresh",
+  "owner-setup": "Owner setup",
+  "worker-deploy": "Worker deploy",
+  "workspace-push-writeback": "Workspace push/writeback",
+} satisfies Record<DeploymentOperationStepId, string>;
+
+const deploymentOperationStepOrder = [
+  "credentials",
+  "account-selection",
+  "desired-state-plan",
+  "worker-deploy",
+  "health-check",
+  "owner-setup",
+  "workspace-push-writeback",
+  "observation-refresh",
+] satisfies DeploymentOperationStepId[];
+
+function deployPlanOperationSteps(
+  result: PlanDeployLocalFormlessWorkspaceResult,
+): WorkspaceOperationStep[] {
+  return deploymentOperationSteps({
+    "account-selection": {
+      fields: {
+        cloudflareAccountId: result.plan.account.id,
+        cloudflareAccountName: result.plan.account.name ?? null,
+      },
+      status: "succeeded",
+    },
+    credentials: {
+      fields: {
+        profile: result.credentialProfile ?? "default",
+        source: result.credentialProfileFromConfig ? "deployment-config" : "local",
+      },
+      status: "succeeded",
+    },
+    "desired-state-plan": {
+      fields: {
+        expectedUrl: result.plan.expectedUrl.url,
+        resourceCount: result.desiredState.resourceCount,
+        routeTargetCount: result.desiredState.routeTargetCount,
+        targetId: result.desiredState.targetId,
+        workerName: result.plan.resources.worker.name,
+      },
+      status: "succeeded",
+    },
+    "health-check": {
+      detail: "Health check runs during deploy apply.",
+      status: "skipped",
+    },
+    "observation-refresh": {
+      detail: "Observation refresh runs after deploy apply.",
+      status: "skipped",
+    },
+    "owner-setup": {
+      detail: "Owner setup runs during first deploy apply.",
+      status: "skipped",
+    },
+    "worker-deploy": {
+      detail: "Worker deploy runs during deploy apply.",
+      status: "skipped",
+    },
+    "workspace-push-writeback": {
+      detail: "Workspace push/writeback runs during deploy apply.",
+      status: "skipped",
+    },
+  });
+}
+
+function deployApplyOperationSteps(
+  result: DeployFormlessInstanceWorkspaceResult,
+): WorkspaceOperationStep[] {
+  return deploymentOperationSteps({
+    "account-selection": {
+      fields: {
+        cloudflareAccountId: result.plan.account.id,
+        cloudflareAccountName: result.plan.account.name ?? null,
+      },
+      status: "succeeded",
+    },
+    credentials: {
+      fields: {
+        source: "local workspace",
+      },
+      status: "succeeded",
+    },
+    "desired-state-plan": {
+      fields: {
+        expectedUrl: result.plan.expectedUrl.url,
+        migrationPolicy: result.migrationPolicy,
+        target: result.selectedTarget.alias,
+        workerName: result.plan.resources.worker.name,
+      },
+      status: "succeeded",
+    },
+    "health-check": {
+      fields: {
+        expectedUrl: result.plan.expectedUrl.url,
+        metadataUrl: result.healthCheck.metadataUrl,
+        version: result.healthCheck.version,
+      },
+      status: "succeeded",
+    },
+    "observation-refresh": result.deploymentObservation
+      ? {
+          fields: {
+            observedAt: result.deploymentObservation.observedAt,
+            observedStatus: result.deploymentObservation.observedStatus,
+            runnerId: result.deploymentObservation.runnerId,
+          },
+          status: "succeeded",
+        }
+      : {
+          detail: "No deployment observation was persisted.",
+          status: "skipped",
+        },
+    "owner-setup": result.ownerSetup
+      ? {
+          fields: { ownerSetupUrl: result.ownerSetup.url },
+          status: "succeeded",
+        }
+      : {
+          detail: "Existing owner setup reused.",
+          status: "skipped",
+        },
+    "worker-deploy": {
+      fields: {
+        evidenceCount: result.deployment.resourceEvidence?.length ?? 0,
+        url: result.deployment.url,
+        workerName: result.plan.resources.worker.name,
+      },
+      status: "succeeded",
+    },
+    "workspace-push-writeback": result.push
+      ? {
+          fields: {
+            drift: result.push.drift.status,
+            mode: result.push.mode,
+            target: result.selectedTarget.alias,
+          },
+          status: "succeeded",
+        }
+      : {
+          detail: "Workspace push/writeback was not required.",
+          status: "skipped",
+        },
+  });
+}
+
+function deploymentRefreshOperationSteps(
+  result: RefreshFormlessInstanceDeploymentObservationResult,
+): WorkspaceOperationStep[] {
+  return deploymentOperationSteps({
+    "account-selection": {
+      detail: "Account selection is not required for observation refresh.",
+      status: "skipped",
+    },
+    credentials: {
+      detail: "Credentials were resolved from local workspace state.",
+      status: "succeeded",
+    },
+    "desired-state-plan": {
+      fields: {
+        desiredStateVersion: result.observation.desiredState.versionId,
+        target: result.selectedTarget.alias,
+      },
+      status: "succeeded",
+    },
+    "health-check": {
+      detail: "Health check is not required for observation refresh.",
+      status: "skipped",
+    },
+    "observation-refresh": {
+      fields: {
+        observedAt: result.observation.observedAt,
+        observedStatus: result.observation.observedStatus,
+        status: result.deploymentStatus.state,
+      },
+      status: "succeeded",
+    },
+    "owner-setup": {
+      detail: "Owner setup is not required for observation refresh.",
+      status: "skipped",
+    },
+    "worker-deploy": {
+      detail: "Worker deploy is not required for observation refresh.",
+      status: "skipped",
+    },
+    "workspace-push-writeback": {
+      detail: "Workspace push/writeback is not required for observation refresh.",
+      status: "skipped",
+    },
+  });
+}
+
+function failureWorkspaceOperationSteps(
+  input: RunnableWorkspaceOperationInput,
+  error: unknown,
+): WorkspaceOperationStep[] | undefined {
+  if (input.kind !== "deployApply" || !(error instanceof DeployLocalFormlessWorkspaceStepError)) {
+    return undefined;
+  }
+
+  return deploymentOperationSteps({
+    "account-selection": { status: "succeeded" },
+    credentials: { status: "succeeded" },
+    "desired-state-plan": { status: "succeeded" },
+    "health-check": {
+      error: error.message,
+      fields: {
+        ...error.evidence,
+        retryGuidance: error.retryGuidance,
+      },
+      status: "failed",
+    },
+    "observation-refresh": {
+      detail: "Skipped because deploy apply failed.",
+      status: "skipped",
+    },
+    "owner-setup": {
+      detail: "Skipped because health check failed.",
+      status: "skipped",
+    },
+    "worker-deploy": { status: "succeeded" },
+    "workspace-push-writeback": {
+      detail: "Skipped because health check failed.",
+      status: "skipped",
+    },
+  });
+}
+
+function failureWorkspaceOperationSummaryFields(
+  message: string,
+  error: unknown,
+): WorkspaceOperationDisplayObject {
+  if (!(error instanceof DeployLocalFormlessWorkspaceStepError)) {
+    return { error: message };
+  }
+
+  return {
+    currentStep: error.stepLabel,
+    error: message,
+    expectedUrl: error.expectedUrl,
+    retryGuidance: error.retryGuidance,
+  };
+}
+
+function deploymentOperationSteps(
+  steps: Record<DeploymentOperationStepId, DeploymentOperationStepInput>,
+): WorkspaceOperationStep[] {
+  return deploymentOperationStepOrder.map((id) => ({
+    id,
+    label: deploymentOperationStepLabels[id],
+    ...steps[id],
+  }));
 }
 
 function emptyDeploymentEvidenceSummary(): WorkspaceOperationDisplayObject {

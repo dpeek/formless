@@ -118,6 +118,7 @@ describe("runtime topology", () => {
 
   it("owns installed route bases and public Site route constants", () => {
     expect(runtimeTopologyRoutes.appRouteBase).toBe("/apps");
+    expect(runtimeTopologyRoutes.deploymentsRoute).toBe("/deployments");
     expect(runtimeTopologyRoutes.siteRouteBase).toBe("/sites");
     expect(runtimeTopologyRoutes.publicSiteHomeSlug).toBe("home");
     expect(runtimeTopologyRoutes.publicSitePackageAppKey).toBe("site");
@@ -173,6 +174,7 @@ describe("runtime topology", () => {
     expect(isRuntimePublishedProfileClientShellRoute("/site")).toBe(false);
 
     expect(isRuntimeInstanceProfileClientShellRoute("/")).toBe(true);
+    expect(isRuntimeInstanceProfileClientShellRoute("/deployments")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/sites/personal")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/tasks")).toBe(false);

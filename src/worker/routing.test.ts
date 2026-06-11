@@ -8,6 +8,7 @@ import {
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
+  shouldBlockMappedSiteHostBrowserRoute,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
   shouldRedirectAnonymousOwnerBrowserRoute,
@@ -152,6 +153,9 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/login"), instanceProfile),
     ).toBe(true);
     expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/deployments"), instanceProfile),
+    ).toBe(true);
+    expect(
       shouldDeferToStaticAssets(
         documentRequest("http://example.com/apps/personal"),
         instanceProfile,
@@ -217,6 +221,12 @@ describe("Worker document routing", () => {
     ).toBe(true);
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/deployments"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
         new Request("http://example.com/apps/personal/schema", {
           headers: { Accept: "text/html" },
           method: "HEAD",
@@ -270,6 +280,12 @@ describe("Worker document routing", () => {
         anonymousAppRoute,
       ),
     ).toBe("anonymous");
+    expect(
+      ownerBrowserRouteAccessForRequest(
+        documentRequest("http://example.com/deployments"),
+        instanceProfile,
+      ),
+    ).toBe("owner");
   });
 
   it("answers schema-key route policy by runtime profile", () => {
@@ -405,6 +421,19 @@ describe("Worker document routing", () => {
         shouldDeferToStaticAssets(request, { profile: "publishedSite" }),
       ),
     ).toEqual(generatedAppRequests.map(() => false));
+  });
+
+  it("blocks instance deployment routes on mapped public Site hosts", () => {
+    expect(
+      shouldBlockMappedSiteHostBrowserRoute(documentRequest("http://example.com/deployments"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://example.com/deployments"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
   });
 
   it("treats the former rates path as a published Site document path", () => {

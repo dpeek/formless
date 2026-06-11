@@ -623,10 +623,26 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
     expect(html).toContain("Instance");
+    expect(html).toContain('aria-label="Instance navigation"');
+    expect(html).toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
     expect(html).toContain('href="/tasks"');
     expect(html).toContain('href="/site"');
     expect(html).not.toContain("Loading Tasks...");
+  });
+
+  it('renders the "/deployments" route as an owner instance shell route', () => {
+    const html = renderRoute("/deployments");
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="instance-shell"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
+    expect(html).toContain("Instance");
+    expect(html).toContain('aria-label="Instance navigation"');
+    expect(linkHtml(html, "/deployments")).toContain('aria-current="page"');
+    expect(html).toContain("Loading installed apps...");
   });
 
   it("does not mark app management current on unknown dev routes", () => {
@@ -788,6 +804,7 @@ describe("App smoke routes", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const shellHtml = renderRoute("/", instanceProfile);
+    const deploymentsHtml = renderRoute("/deployments", instanceProfile);
     const legacyHtml = renderRoute("/site", instanceProfile);
     const adminHtml = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
@@ -805,6 +822,11 @@ describe("App smoke routes", () => {
 
     expect(shellHtml).toContain("Instance");
     expect(shellHtml).toContain("Loading installed apps...");
+    expect(deploymentsHtml).toContain("Instance");
+    expect(deploymentsHtml).toContain("Loading installed apps...");
+    expect(deploymentsHtml).not.toContain('data-frame="workbench"');
+    expect(deploymentsHtml).not.toContain('aria-label="Runtime apps"');
+    expect(linkHtml(deploymentsHtml, "/deployments")).toContain('aria-current="page"');
     expect(shellHtml).not.toContain('data-frame="workbench"');
     expect(shellHtml).not.toContain('aria-label="Runtime apps"');
     expect(legacyHtml).toContain("Not found");
@@ -822,6 +844,8 @@ describe("App smoke routes", () => {
     );
     expectSyncStatusControl(adminHtml, "app:personal");
     expect(adminHtml).not.toContain('href="/apps/personal/schema"');
+    expect(adminHtml).not.toContain('aria-label="Instance navigation"');
+    expect(adminHtml).not.toContain('href="/deployments"');
     expect(adminHtml).not.toContain('data-frame="workbench"');
   });
 

@@ -44,6 +44,8 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **THEN** install controls support Site, Tasks, Estii, CRM, and ClearTrace packages
 - **AND** custom domain management shows desired route state and provider applied
   evidence separately
+- **AND** instance-level navigation includes a deployments destination that is
+  separate from app-local generated navigation
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
@@ -461,6 +463,70 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **AND** route edits do not imply provider mutation
 - **AND** deployment config observation cache fields may be displayed for status
   but are not editable route intent
+
+### Requirement: Instance Deployment Surface
+
+The product instance shell SHALL expose `/deployments` as the deployment setup,
+status, and progress surface for local onboarding and ongoing instance
+management.
+
+#### Scenario: Deployment route surface
+
+- **GIVEN** an owner opens `/deployments` on the product instance shell
+- **WHEN** deployment config records, deployment observation cache fields,
+  read-only desired-state projection, and local gateway status are available
+- **THEN** the page renders deployment target setup, current deployment status,
+  desired-state summary, local workspace operation controls, and recent
+  operation progress as one deployment workflow
+- **AND** raw generated `deployment-config` tables may be available behind
+  management affordances but are not the primary first-run deployment surface
+- **AND** app install management, route management, owner auth, and app-local
+  navigation remain outside the deployment workflow
+
+#### Scenario: App-less deployment entry
+
+- **GIVEN** a local workspace has no installed app records
+- **WHEN** the owner opens `/deployments`
+- **THEN** credential setup, deploy plan, and deploy apply entry points remain
+  available when the workspace gateway and required authorization are available
+- **AND** the page explains status through deployment config, desired-state, and
+  operation summaries rather than requiring a first app install
+- **AND** installing an app remains an optional separate action outside the
+  deployment workflow
+
+#### Scenario: Deployment setup
+
+- **GIVEN** no enabled deployment config exists
+- **WHEN** the owner starts deployment setup from `/deployments`
+- **THEN** the UI can create or update one primary deployment config with target
+  id, target URL when known, provider family, account id, worker name, and
+  display-safe credential reference
+- **AND** credential setup may auto-select existing local Alchemy credentials
+  when the gateway reports one usable profile/account
+- **AND** secret values, raw provider state, and filesystem paths are not
+  displayed or stored in schema records
+
+#### Scenario: Deployment progress steps
+
+- **WHEN** the owner starts deploy plan or deploy apply from `/deployments`
+- **THEN** progress is shown as named steps for credential/account resolution,
+  desired-state plan, Worker deploy, health check, owner setup when needed,
+  workspace push/writeback, and deployment observation refresh
+- **AND** each step can show pending, running, succeeded, failed, or skipped
+  state with display-safe details
+- **AND** a first deploy health check failure shows the expected URL, current
+  step, retry guidance, and display-safe provider/deployment evidence without
+  exposing secrets
+
+#### Scenario: Deployment observation refresh
+
+- **WHEN** deploy apply completes or an explicit refresh operation succeeds
+- **THEN** `/deployments` refreshes displayed deployment config observation
+  cache fields from Authority-backed state
+- **AND** check operations can display fresh operation results without
+  persisting observation fields
+- **AND** browser refreshes can recover active or recently completed operation
+  progress from local gateway state when the gateway is available
 
 ### Requirement: Browser Workspace Operation Controls
 

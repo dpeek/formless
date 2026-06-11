@@ -695,6 +695,18 @@ describe("local workspace gateway", () => {
       },
       status: "succeeded",
     });
+    expect(planned.body.operation).toMatchObject({
+      steps: [
+        { id: "credentials", status: "succeeded" },
+        { id: "account-selection", status: "succeeded" },
+        { id: "desired-state-plan", status: "succeeded" },
+        { id: "worker-deploy", status: "skipped" },
+        { id: "health-check", status: "skipped" },
+        { id: "owner-setup", status: "skipped" },
+        { id: "workspace-push-writeback", status: "skipped" },
+        { id: "observation-refresh", status: "skipped" },
+      ],
+    });
     expect(JSON.stringify(planned.body)).not.toContain("secret");
   });
 
@@ -773,6 +785,18 @@ describe("local workspace gateway", () => {
         },
       },
       status: "succeeded",
+    });
+    expect(applied.body.operation).toMatchObject({
+      steps: [
+        { id: "credentials", status: "succeeded" },
+        { id: "account-selection", status: "succeeded" },
+        { id: "desired-state-plan", status: "succeeded" },
+        { id: "worker-deploy", status: "succeeded" },
+        { id: "health-check", status: "succeeded" },
+        { id: "owner-setup", status: "skipped" },
+        { id: "workspace-push-writeback", status: "succeeded" },
+        { id: "observation-refresh", status: "succeeded" },
+      ],
     });
     expect(
       capturedRequestJson<{ recordId: string; values: { observedStatus: string } }>(
@@ -862,6 +886,18 @@ describe("local workspace gateway", () => {
         },
       },
       status: "succeeded",
+    });
+    expect(refreshed.body.operation).toMatchObject({
+      steps: [
+        { id: "credentials", status: "succeeded" },
+        { id: "account-selection", status: "skipped" },
+        { id: "desired-state-plan", status: "succeeded" },
+        { id: "worker-deploy", status: "skipped" },
+        { id: "health-check", status: "skipped" },
+        { id: "owner-setup", status: "skipped" },
+        { id: "workspace-push-writeback", status: "skipped" },
+        { id: "observation-refresh", status: "succeeded" },
+      ],
     });
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
       [

@@ -395,6 +395,19 @@ describe("workspace operation contracts", () => {
         },
       },
       status: "running",
+      steps: [
+        {
+          detail: `${workspaceRoot}/deploy output`,
+          error: "Health check failed with TOKEN=secret",
+          fields: {
+            expectedUrl: "https://personal.dpeek.workers.dev",
+            rawAdapterOutput: "TOKEN=secret",
+          },
+          id: "health-check",
+          label: "Health check",
+          status: "failed",
+        },
+      ],
       summary: {
         fields: {
           ownerSetupUrl,
@@ -425,6 +438,14 @@ describe("workspace operation contracts", () => {
     expect(updated.summary.fields.setupUrl).toBe(
       "https://personal.dpeek.workers.dev/setup?token=[redacted]",
     );
+    expect(updated.steps?.[0]).toMatchObject({
+      detail: "<workspace>/deploy output",
+      error: "Health check failed with TOKEN=[redacted]",
+      fields: {
+        expectedUrl: "https://personal.dpeek.workers.dev",
+        rawAdapterOutput: "[redacted]",
+      },
+    });
     expect(updated.events[0]?.url).toBe("https://dash.cloudflare.com/oauth2/authorize?account=123");
     expect(text).not.toContain(workspaceRoot);
     expect(text).not.toContain("secret-token");

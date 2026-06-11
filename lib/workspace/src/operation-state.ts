@@ -18,6 +18,7 @@ import type {
   WorkspaceOperationStartInput,
   WorkspaceOperationState,
   WorkspaceOperationStatus,
+  WorkspaceOperationStep,
   WorkspaceOperationSummary,
 } from "./types.ts";
 
@@ -94,6 +95,7 @@ export function nextWorkspaceOperationState(
   const status = input.status ?? current.status;
   const completedAt =
     status === "failed" || status === "succeeded" ? timestamp : current.completedAt;
+  const nextSteps = input.steps ?? input.result?.steps;
 
   return {
     ...current,
@@ -128,6 +130,9 @@ export function nextWorkspaceOperationState(
     startedAt:
       status === "running" && current.startedAt === undefined ? timestamp : current.startedAt,
     status,
+    ...(nextSteps === undefined
+      ? {}
+      : { steps: redactWorkspaceOperationSteps(nextSteps, input.workspaceRoot) }),
     summary:
       input.summary === undefined
         ? current.summary
@@ -232,6 +237,9 @@ export function redactWorkspaceOperationResult(
     ...(result.details === undefined
       ? {}
       : { details: redactWorkspaceOperationDisplayObject(result.details, workspaceRoot) }),
+    ...(result.steps === undefined
+      ? {}
+      : { steps: redactWorkspaceOperationSteps(result.steps, workspaceRoot) }),
     summary: redactWorkspaceOperationSummary(result.summary, workspaceRoot),
   };
 }
@@ -246,6 +254,26 @@ export function redactWorkspaceOperationSummary(
     }),
     title: redactWorkspaceOperationDisplayText(summary.title, workspaceRoot),
   };
+}
+
+export function redactWorkspaceOperationSteps(
+  steps: readonly WorkspaceOperationStep[],
+  workspaceRoot: string,
+): WorkspaceOperationStep[] {
+  return steps.map((step) => ({
+    ...(step.detail === undefined
+      ? {}
+      : { detail: redactWorkspaceOperationDisplayText(step.detail, workspaceRoot) }),
+    ...(step.error === undefined
+      ? {}
+      : { error: redactWorkspaceOperationDisplayText(step.error, workspaceRoot) }),
+    ...(step.fields === undefined
+      ? {}
+      : { fields: redactWorkspaceOperationDisplayObject(step.fields, workspaceRoot) }),
+    id: redactWorkspaceOperationDisplayText(step.id, workspaceRoot),
+    label: redactWorkspaceOperationDisplayText(step.label, workspaceRoot),
+    status: step.status,
+  }));
 }
 
 export function redactWorkspaceOperationEvent(

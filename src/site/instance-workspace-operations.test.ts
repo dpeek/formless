@@ -625,6 +625,16 @@ describe("Formless workspace operations", () => {
 
     expect(state.summary.fields).toMatchObject({ ownerSetupUrl });
     expect(state.result?.summary.fields).toMatchObject({ ownerSetupUrl });
+    expect(state.steps).toMatchObject([
+      { id: "credentials", status: "succeeded" },
+      { id: "account-selection", status: "succeeded" },
+      { id: "desired-state-plan", status: "succeeded" },
+      { id: "worker-deploy", status: "succeeded" },
+      { id: "health-check", status: "succeeded" },
+      { id: "owner-setup", status: "succeeded" },
+      { id: "workspace-push-writeback", status: "succeeded" },
+      { id: "observation-refresh", status: "succeeded" },
+    ]);
     expect(setupInputs).toEqual([
       {
         adminToken: "generated-admin-token",
@@ -636,6 +646,86 @@ describe("Formless workspace operations", () => {
     expect(JSON.stringify(state)).not.toContain("generated-admin-token");
     expect(JSON.stringify(state)).not.toContain("/setup/capability");
     expect(JSON.stringify(state)).not.toContain("capabilityCreated");
+  });
+
+  it("surfaces deploy health check failure step with retry-safe diagnostics", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployRecordSource(workspaceRoot, { includeDeployTarget: false });
+    await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "deployApply",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        deploymentAdapter: {
+          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+        },
+        fetch: deployApplyFetch(requests),
+        healthCheck: {
+          check: async () => {
+            throw new Error("raw provider response CF_API_TOKEN=secret-token");
+          },
+        },
+        packageRoot: "/package",
+        packageVersion: packageJson.version,
+        randomTokens: ["generated-admin-token"],
+        timestamps: [
+          "2026-06-02T00:06:00.000Z",
+          "2026-06-02T00:06:01.000Z",
+          "2026-06-02T00:06:02.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(state).toMatchObject({
+      operation: "deployApply",
+      status: "failed",
+      summary: {
+        fields: {
+          currentStep: "Health check",
+          expectedUrl: "https://personal-sites.dpeek.workers.dev",
+          retryGuidance:
+            "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
+        },
+      },
+    });
+    expect(state.steps).toMatchObject([
+      { id: "credentials", status: "succeeded" },
+      { id: "account-selection", status: "succeeded" },
+      { id: "desired-state-plan", status: "succeeded" },
+      { id: "worker-deploy", status: "succeeded" },
+      {
+        id: "health-check",
+        status: "failed",
+      },
+      { id: "owner-setup", status: "skipped" },
+      { id: "workspace-push-writeback", status: "skipped" },
+      { id: "observation-refresh", status: "skipped" },
+    ]);
+    expect(state.steps?.find((step) => step.id === "health-check")?.fields).toMatchObject({
+      expectedUrl: "https://personal-sites.dpeek.workers.dev",
+      providerFamily: "cloudflare",
+      retryGuidance:
+        "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
+      workerName: "personal-sites",
+    });
+    expect(JSON.stringify(state)).not.toContain("secret-token");
+    expect(JSON.stringify(state)).not.toContain("raw provider response");
   });
 
   it("persists display-safe deployment observation and cleanup summaries with secret redaction", async () => {
@@ -774,6 +864,7 @@ function operationDeps(
     };
     env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
+    healthCheck?: RunFormlessWorkspaceOperationDependencies["healthCheck"];
     packageRoot?: string;
     operationIds?: string[];
     packageVersion?: string;
@@ -796,7 +887,7 @@ function operationDeps(
       : { deploymentAdapter: options.deploymentAdapter }),
     ...(options.env === undefined ? {} : { env: options.env }),
     fetch: options.fetch ?? fetch,
-    healthCheck: {
+    healthCheck: options.healthCheck ?? {
       check: async (input: { expectedVersion: string; url: string }) => ({
         cacheControl: "no-store",
         metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),

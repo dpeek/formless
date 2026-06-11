@@ -25,6 +25,8 @@ export type {
   WorkspaceGatewayOperationKind,
   WorkspaceGatewayOperationLog,
   WorkspaceGatewayOperationResult,
+  WorkspaceGatewayOperationStep,
+  WorkspaceGatewayOperationStepStatus,
   WorkspaceGatewayOperationStatus,
   WorkspaceGatewayOperationSummary,
   WorkspaceGatewayResponse,

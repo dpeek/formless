@@ -66,8 +66,8 @@ path.
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
 before any Cloudflare account or deployment mutation, while the CLI owns fresh
-workspace bootstrap and browser onboarding owns local session bootstrap, first
-app install, credential setup, and deploy operations.
+workspace bootstrap and browser onboarding owns local session bootstrap,
+optional first app install, credential setup, and deploy operations.
 
 #### Scenario: Start local workspace runtime
 
@@ -94,9 +94,9 @@ app install, credential setup, and deploy operations.
 - **AND** before a local owner session is established, the browser can only read
   gateway status through bootstrap authorization and exchange a CLI-minted local
   session bootstrap token for an owner session
-- **AND** first app install, save, check, credential setup, deploy plan, and
-  deploy apply entry points are available through browser-owned local runtime
-  flows after local session bootstrap
+- **AND** app install, save, check, credential setup, deploy plan, and deploy
+  apply entry points are available through browser-owned local runtime flows
+  after local session bootstrap
 
 #### Scenario: Open authenticated local session
 
@@ -114,6 +114,16 @@ app install, credential setup, and deploy operations.
 - **THEN** the local Authority records schema-owned `app-install` and `route`
   records and initializes install-scoped app state
 - **AND** no Cloudflare resource is mutated
+
+#### Scenario: Deploy before installing an app
+
+- **WHEN** a local owner opens the deployment flow before any app install exists
+- **THEN** credential setup, deploy plan, and deploy apply remain available
+  through the browser-owned local runtime flow
+- **AND** the deployment can publish the instance runtime with zero
+  `app-install` records and no app archive payloads
+- **AND** app installation remains a separate optional local Authority write
+  before or after the first deploy
 
 ### Requirement: Workspace Save From Local Authority
 
@@ -313,6 +323,7 @@ provider mutation input for workspace-controlled deploy intent.
 - **WHEN** `formless deploy` runs with required provider credentials available
   to the CLI or trusted local deployer
 - **THEN** the deployment uses the instance runtime profile
+- **AND** the deployment does not require installed app records or app archives
 - **AND** deploy metadata is verified after upload
 - **AND** display-safe target facts are copied to ignored `.formless/` deploy
   state
