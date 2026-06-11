@@ -87,6 +87,8 @@ browser replica state.
 - THEN installed app registry state, app snapshots, and referenced core media
   are read from the target
 - AND archive media files are written at manifest archive paths
+- AND protected target reads use owner session or admin bearer authorization
+  supplied by the caller
 
 #### Scenario: App export
 
@@ -95,6 +97,8 @@ browser replica state.
 - THEN one app archive directory is written
 - AND referenced core image media objects are included when records reference
   them
+- AND protected target reads use owner session or admin bearer authorization
+  supplied by the caller
 
 ### Requirement: Restore Planning
 
@@ -328,6 +332,8 @@ workspace source.
 - **AND** deployment attempt, evidence, drift, cleanup, status summaries, and
   deployment config observation cache fields are treated as runtime observation
   state rather than source drift
+- **AND** protected remote target reads use the workspace's resolved admin
+  bearer authorization when no browser owner session is available to the CLI
 
 #### Scenario: Refuse stale push
 

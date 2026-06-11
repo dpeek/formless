@@ -63,6 +63,7 @@ import {
   type CliUpgradePlanningReport,
   type CliUpgradePlanTargetIdentity,
 } from "./upgrade-plan.ts";
+import { resolveSiteCliAdminToken, siteCliTargetFetchHeaders } from "./instance-target-context.ts";
 
 export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
@@ -388,6 +389,7 @@ async function readDryRunArchiveRestoreUpgradePlanning(
     archiveInput: PortableArchiveInputStatus;
     archivePath: string;
     input: {
+      adminToken?: string | null;
       apply: boolean;
       includeUpgradePlanning?: boolean;
       target: string;
@@ -402,6 +404,7 @@ async function readDryRunArchiveRestoreUpgradePlanning(
 
   const targetStatus = await readFormlessInstanceTargetStatus(
     {
+      adminToken: input.input.adminToken,
       archiveInput: input.archiveInput,
       targetUrl: input.input.target,
     },
@@ -686,18 +689,19 @@ type ArchiveExportAuth = {
 };
 
 function archiveExportRequestHeaders(auth: ArchiveExportAuth | undefined, accept: string): Headers {
-  const headers = new Headers({ accept });
-  const token = archiveExportAdminToken(auth);
-
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
-  }
-
-  return headers;
+  return siteCliTargetFetchHeaders({
+    accept,
+    adminToken: archiveExportAdminToken(auth),
+  });
 }
 
 function archiveExportAdminToken(auth: ArchiveExportAuth | undefined): string | undefined {
-  return auth?.adminToken?.trim() || auth?.env?.FORMLESS_ADMIN_TOKEN?.trim() || undefined;
+  return (
+    resolveSiteCliAdminToken({
+      env: auth?.env,
+      explicitAdminToken: auth?.adminToken,
+    }).token ?? undefined
+  );
 }
 
 async function postRemoteArchiveRestore(
@@ -729,14 +733,11 @@ function archiveRestoreRequestHeaders(
   adminToken: string | null | undefined,
   env: NodeJS.ProcessEnv | undefined,
 ): Headers {
-  const headers = new Headers({ accept: "application/json", "content-type": "application/json" });
-  const token = adminToken ?? env?.FORMLESS_ADMIN_TOKEN;
-
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
-  }
-
-  return headers;
+  return siteCliTargetFetchHeaders({
+    accept: "application/json",
+    adminToken: resolveSiteCliAdminToken({ env, explicitAdminToken: adminToken }).token,
+    contentType: "application/json",
+  });
 }
 
 function archiveRestoreRequestMediaFile(file: ArchiveDiskMediaFile) {

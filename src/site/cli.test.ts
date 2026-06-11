@@ -1001,7 +1001,7 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Workspace operation: deployment refresh (succeeded).");
   });
 
-  it("creates one owner setup URL for an incomplete target without logging admin token or capability details", async () => {
+  it("creates one owner setup URL with focused bootstrap reads and no secret logging", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -1013,12 +1013,7 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
 
-    responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: false });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
-    });
 
     await runFormlessCli(
       [
@@ -1038,11 +1033,9 @@ describe("Formless Site CLI", () => {
     );
 
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
-      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
     ]);
-    expect(requests.at(2)?.headers.authorization).toBe("Bearer explicit-admin-token");
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
     expect(setupInputs).toEqual([
       {
         adminToken: "explicit-admin-token",
@@ -1077,7 +1070,6 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
 
-    responses.queueJson({ version: packageJson.version });
     responses.queueJson({
       setupComplete: true,
       owner: {
@@ -1086,10 +1078,6 @@ describe("Formless Site CLI", () => {
         id: "owner-1",
         name: "David Peek",
       },
-    });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
     });
 
     await runFormlessCli(
@@ -1103,10 +1091,9 @@ describe("Formless Site CLI", () => {
     );
 
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
-      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
     ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
     expect(setupInputs).toEqual([]);
     expect(openedUrls).toEqual([]);
     expect(logs).toEqual([
@@ -1130,12 +1117,7 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
 
-    responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: false });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
-    });
 
     await expect(
       runFormlessCli(
@@ -1151,10 +1133,9 @@ describe("Formless Site CLI", () => {
     );
 
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
       "GET https://personal.dpeek.workers.dev/api/formless/setup",
-      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
     ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
     expect(setupInputs).toEqual([]);
     expect(openedUrls).toEqual([]);
   });
@@ -1177,12 +1158,7 @@ describe("Formless Site CLI", () => {
       "FORMLESS_ADMIN_TOKEN=local-admin-token\n",
     );
 
-    responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: false });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
-    });
 
     await runFormlessCli(
       ["instance", "owner", "setup", "--workspace", workspaceRoot, "--open"],
@@ -1194,7 +1170,10 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    expect(requests.at(2)?.headers.authorization).toBe("Bearer local-admin-token");
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+    ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
     expect(setupInputs).toEqual([
       {
         adminToken: "local-admin-token",
@@ -1230,6 +1209,11 @@ describe("Formless Site CLI", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=stored-archive-token\n",
+    );
 
     await runFormlessCli(
       ["instance", "pull", "--workspace", workspaceRoot],
@@ -1281,6 +1265,9 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
       "GET https://personal.dpeek.workers.dev/api/formless/domain-mappings",
     ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual(
+      requests.map(() => "Bearer stored-archive-token"),
+    );
     expect(logs).toEqual([
       [
         "Workspace operation: pull (succeeded).",
@@ -1295,6 +1282,11 @@ describe("Formless Site CLI", () => {
         "target: instance.primary.",
       ].join("\n"),
     ]);
+    expect(logs.join("\n")).not.toContain("stored-archive-token");
+    expect(JSON.stringify(pulledControlPlane)).not.toContain("stored-archive-token");
+    await expect(
+      readFile(path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE)),
+    ).resolves.not.toContain("stored-archive-token");
   });
 
   it("checks workspace archives against the control-plane target URL", async () => {
@@ -1316,6 +1308,11 @@ describe("Formless Site CLI", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=stored-check-token\n",
+    );
     await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localApp);
 
     await runFormlessCli(
@@ -1326,12 +1323,20 @@ describe("Formless Site CLI", () => {
     expect(requests.map((request) => request.url)).toContain(
       "https://personal.dpeek.workers.dev/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
     );
+    expect(requests.some((request) => request.method !== "GET")).toBe(false);
+    expect(requests.map((request) => request.headers.authorization)).toEqual(
+      requests.map(() => "Bearer stored-check-token"),
+    );
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain("Workspace operation: check (succeeded).");
     expect(logs[0]).toContain("mode: remote.");
     expect(logs[0]).toContain("drift: no-drift.");
     expect(logs[0]).toContain("target: instance.primary.");
     expect(logs[0]).not.toContain("remoteDrift: skipped.");
+    expect(logs[0]).not.toContain("stored-check-token");
+    await expect(
+      readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    ).resolves.not.toContain("stored-check-token");
   });
 
   it.skip("rejects secret-looking generated route source before reporting drift", async () => {
@@ -5467,6 +5472,23 @@ function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
   }
 
   return JSON.parse(request.body) as T;
+}
+
+function expectNoOwnerSetupProtectedBootstrapReads(requests: CapturedFetchRequest[]) {
+  const forbiddenPrefixes = [
+    "/api/formless/app-installs",
+    "/api/formless/archive",
+    "/api/formless/control-plane",
+    "/api/formless/deploy",
+    "/api/formless/deployments",
+    "/api/formless/session",
+  ];
+
+  expect(
+    requests
+      .map((request) => new URL(request.url).pathname)
+      .filter((pathname) => forbiddenPrefixes.some((prefix) => pathname.startsWith(prefix))),
+  ).toEqual([]);
 }
 
 function parseRequestBody<T>(init: RequestInit | undefined): T {

@@ -344,6 +344,7 @@ describe("Formless instance target control-plane client", () => {
     };
     const context = await readFormlessInstanceDeploymentCommandContext(
       {
+        adminToken: "runner-token",
         actorKind: "runner",
         targetUrl: "https://instance.example",
       },
@@ -396,6 +397,11 @@ describe("Formless instance target control-plane client", () => {
       "https://instance.example/api/formless/deployments/status",
     ]);
     expect(requests[0]?.headers["X-Formless-Control-Plane-Actor"]).toBe("runner");
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer runner-token",
+      "Bearer runner-token",
+      "Bearer runner-token",
+    ]);
   });
 
   it("patches deployment-config observed fields through the control-plane mutation API", async () => {

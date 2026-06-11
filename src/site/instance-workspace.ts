@@ -107,7 +107,6 @@ import {
   writeInstanceWorkspaceSecretState as writeFormlessInstanceWorkspaceSecretState,
   writeInstanceWorkspaceControlPlaneRecordSource,
   type InstanceWorkspaceLocalDevSecretState as FormlessInstanceWorkspaceLocalDevSecretState,
-  type InstanceWorkspaceSecretState as FormlessInstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
 import {
   deployDesiredStateVersionRef,
@@ -122,6 +121,11 @@ import {
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
 import type { FormlessInstanceDeploymentObservationPatch } from "./instance-target-client.ts";
+import {
+  requireSiteCliTargetContext,
+  resolveSiteCliTargetContext,
+  siteCliWorkspaceStatusSecretStateLabel,
+} from "./instance-target-context.ts";
 import {
   exportAppArchive,
   exportInstanceArchive,
@@ -684,6 +688,7 @@ export type PlanFormlessInstanceWorkspaceDomainsInput = {
 export type PlanFormlessInstanceWorkspaceDomainsDependencies = {
   cloudflareDomainClient: CloudflareDomainClient;
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
 };
 
@@ -868,39 +873,35 @@ export async function getFormlessInstanceWorkspaceStatus(
   input: FormlessInstanceWorkspaceStatusInput,
   dependencies: FormlessInstanceWorkspaceStatusDependencies,
 ): Promise<FormlessInstanceWorkspaceStatusResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = await resolveWorkspaceTarget({
-    commandName: "status",
-    manifest,
-    required: false,
-    targetAlias: input.targetAlias,
-    workspaceRoot,
-  });
-  const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
-  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
-    env: dependencies.env,
-    explicitAdminToken: input.adminToken,
-    secretState,
-  });
-  const remoteStatus = selectedTarget
+  const context = await resolveSiteCliTargetContext(
+    {
+      commandName: "status",
+      cwd: dependencies.cwd,
+      explicitAdminToken: input.adminToken,
+      requireTarget: false,
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    { env: dependencies.env },
+  );
+  const remoteStatus = context.selectedTarget
     ? await readFormlessInstanceTargetStatus(
         {
-          adminToken,
+          adminToken: context.adminToken,
           includeDeploymentStatus: input.includeDeploymentStatus,
-          targetUrl: selectedTarget.url,
+          targetUrl: context.selectedTarget.url,
         },
         dependencies,
       )
     : undefined;
 
   return {
-    manifest,
-    manifestPath,
+    manifest: context.manifest,
+    manifestPath: context.manifestPath,
     ...(remoteStatus === undefined ? {} : { remoteStatus }),
-    secretState: workspaceSecretStateLabel(secretState, dependencies.env),
-    ...(selectedTarget === undefined ? {} : { selectedTarget }),
-    workspaceRoot,
+    secretState: siteCliWorkspaceStatusSecretStateLabel(context),
+    ...(context.selectedTarget === undefined ? {} : { selectedTarget: context.selectedTarget }),
+    workspaceRoot: context.workspaceRoot,
   };
 }
 
@@ -908,15 +909,16 @@ export async function pullFormlessInstanceWorkspace(
   input: PullFormlessInstanceWorkspaceInput,
   dependencies: PullFormlessInstanceWorkspaceDependencies,
 ): Promise<PullFormlessInstanceWorkspaceResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = await requireWorkspaceTarget({
-    commandName: "pull",
-    manifest,
-    targetAlias: input.targetAlias,
-    workspaceRoot,
-  });
-  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
+  const context = await requireSiteCliTargetContext(
+    {
+      commandName: "pull",
+      cwd: dependencies.cwd,
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    { env: dependencies.env },
+  );
+  const { adminToken, manifest, manifestPath, selectedTarget, workspaceRoot } = context;
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "pull");
 
   try {
@@ -953,6 +955,7 @@ export async function pullFormlessInstanceWorkspace(
       const archive = await pullWorkspaceAppArchive(
         {
           archiveRoot,
+          adminToken,
           installId: app.app.installId,
           targetUrl: selectedTarget.url,
         },
@@ -962,7 +965,10 @@ export async function pullFormlessInstanceWorkspace(
       appArchives.push(archive);
     }
 
-    const domains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    const domains = await readLiveWorkspaceDomainIntents(
+      { adminToken, target: selectedTarget },
+      dependencies,
+    );
     await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(manifest));
 
     return {
@@ -981,15 +987,16 @@ export async function checkFormlessInstanceWorkspace(
   input: CheckFormlessInstanceWorkspaceInput,
   dependencies: CheckFormlessInstanceWorkspaceDependencies,
 ): Promise<CheckFormlessInstanceWorkspaceResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget = await requireWorkspaceTarget({
-    commandName: "check",
-    manifest,
-    targetAlias: input.targetAlias,
-    workspaceRoot,
-  });
-  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
+  const context = await requireSiteCliTargetContext(
+    {
+      commandName: "check",
+      cwd: dependencies.cwd,
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    { env: dependencies.env },
+  );
+  const { adminToken, manifest, selectedTarget, workspaceRoot } = context;
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "check");
 
   try {
@@ -1015,9 +1022,12 @@ export async function checkFormlessInstanceWorkspace(
       workspaceRoot,
     });
     const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
-    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    const liveDomains = await readLiveWorkspaceDomainIntents(
+      { adminToken, target: selectedTarget },
+      dependencies,
+    );
     const deploymentStatus = await readFormlessInstanceDeploymentStatus(
-      { targetUrl: selectedTarget.url },
+      { adminToken, targetUrl: selectedTarget.url },
       dependencies,
     );
     const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
@@ -1180,17 +1190,17 @@ export async function pushFormlessInstanceWorkspace(
   input: PushFormlessInstanceWorkspaceInput,
   dependencies: PushFormlessInstanceWorkspaceDependencies,
 ): Promise<PushFormlessInstanceWorkspaceResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
-  const selectedTarget =
-    input.targetOverride ??
-    (await requireWorkspaceTarget({
+  const context = await requireSiteCliTargetContext(
+    {
       commandName: "push",
-      manifest,
-      targetAlias: input.targetAlias,
-      workspaceRoot,
-    }));
-  const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
+      cwd: dependencies.cwd,
+      targetAlias: input.targetOverride?.alias ?? input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    { env: dependencies.env },
+  );
+  const { adminToken, manifest, workspaceRoot } = context;
+  const selectedTarget = input.targetOverride ?? context.selectedTarget;
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
 
@@ -1232,7 +1242,10 @@ export async function pushFormlessInstanceWorkspace(
       workspaceRoot,
     });
     const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
-    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+    const liveDomains = await readLiveWorkspaceDomainIntents(
+      { adminToken, target: selectedTarget },
+      dependencies,
+    );
     const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
       manifest,
       localDomainIntents,
@@ -1353,6 +1366,7 @@ export async function refreshFormlessInstanceDeploymentObservation(
 
   const desiredStateResponse = await readFormlessInstanceDeploymentDesiredState(
     {
+      adminToken,
       targetId: selectedTarget.alias,
       targetUrl: selectedTarget.url,
     },
@@ -1360,6 +1374,7 @@ export async function refreshFormlessInstanceDeploymentObservation(
   );
   const statusResponse = await readFormlessInstanceDeploymentStatus(
     {
+      adminToken,
       targetId: selectedTarget.alias,
       targetUrl: selectedTarget.url,
     },
@@ -1709,6 +1724,7 @@ async function writeLocalWorkspaceDeploymentObservation(
 ): Promise<DeployLocalFormlessWorkspaceObservation> {
   const runtimeDesiredState = await readFormlessInstanceDeploymentDesiredState(
     {
+      adminToken: input.adminToken,
       targetId: input.desiredState.targetId,
       targetUrl: input.targetUrl,
     },
@@ -2316,19 +2332,23 @@ export async function planFormlessInstanceWorkspaceDomains(
   input: PlanFormlessInstanceWorkspaceDomainsInput,
   dependencies: PlanFormlessInstanceWorkspaceDomainsDependencies,
 ): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
-  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
-  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const context = await requireSiteCliTargetContext(
+    {
+      commandName: "domains plan",
+      cwd: dependencies.cwd,
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    { env: dependencies.env },
+  );
+  const { adminToken, manifest, selectedTarget, workspaceRoot } = context;
   const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
     manifest,
     workspaceRoot,
   });
   const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
-  const selectedTarget =
-    deploymentSource.deploymentConfig === undefined
-      ? undefined
-      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "domains plan");
 
-  if (selectedTarget === undefined) {
+  if (deploymentSource.deploymentConfig === undefined) {
     throw new Error(
       "Formless instance domains plan requires an enabled instance deployment-config record.",
     );
@@ -2337,7 +2357,10 @@ export async function planFormlessInstanceWorkspaceDomains(
   const accountId = requireWorkspaceDeployAccountId(deploymentSource.deploymentConfig);
   const workerName = selectWorkspaceWorkerName(deploymentSource.deploymentConfig, selectedTarget);
   const workspaceDomains = workspaceDomainIntentsFromSource(manifest, controlPlane);
-  const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
+  const liveDomains = await readLiveWorkspaceDomainIntents(
+    { adminToken, target: selectedTarget },
+    dependencies,
+  );
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
   const enabledSourceDomains = (source === "workspace" ? workspaceDomains : liveDomains).filter(
     (domain) => domain.enabled,
@@ -2884,6 +2907,7 @@ function controlPlaneAppInstallRecords(
 
 async function pullWorkspaceAppArchive(
   input: {
+    adminToken?: string | null;
     archiveRoot: string;
     installId: string;
     targetUrl: string;
@@ -2894,6 +2918,7 @@ async function pullWorkspaceAppArchive(
 
   const write = await exportAppArchive(
     {
+      adminToken: input.adminToken,
       installId: input.installId,
       outDir: input.archiveRoot,
       target: input.targetUrl,
@@ -4509,11 +4534,14 @@ function selectWorkspaceWorkerName(
 }
 
 async function readLiveWorkspaceDomainIntents(
-  target: FormlessInstanceWorkspaceTarget,
+  input: {
+    adminToken?: string | null;
+    target: FormlessInstanceWorkspaceTarget;
+  },
   dependencies: { fetch: typeof fetch },
 ): Promise<FormlessInstanceWorkspaceDomainIntent[]> {
   const liveMappings = await readFormlessInstanceDomainMappings(
-    { targetUrl: target.url },
+    { adminToken: input.adminToken, targetUrl: input.target.url },
     dependencies,
   );
 
@@ -4700,17 +4728,6 @@ function workspaceDomainIntentsEqual(
     left.profile === right.profile &&
     left.targetInstallId === right.targetInstallId
   );
-}
-
-function workspaceSecretStateLabel(
-  secretState: FormlessInstanceWorkspaceSecretState,
-  env: NodeJS.ProcessEnv | undefined,
-): FormlessInstanceWorkspaceStatusResult["secretState"] {
-  if (resolveFormlessInstanceWorkspaceAdminToken({ env, secretState: {} })) {
-    return "env";
-  }
-
-  return secretState.adminToken ? "stored" : "missing";
 }
 
 async function readWorkspaceAdminToken(

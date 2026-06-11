@@ -113,7 +113,9 @@ import {
   forgetFormlessInstanceDomainProviderRedirect,
   markFormlessInstanceDomainProviderResourceManuallyRemoved,
   readFormlessInstanceDomainProviderPlan,
+  readFormlessInstanceOwnerSetupStatus,
 } from "./instance-target-client.ts";
+import { requireSiteCliTargetContext } from "./instance-target-context.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { formatCliUpgradePlanningReport } from "./upgrade-plan.ts";
 import {
@@ -1026,42 +1028,31 @@ export async function setupFormlessInstanceOwner(
     "cwd" | "env" | "fetch" | "openBrowser" | "randomToken" | "setupCapability"
   > = nodeFormlessCliDependencies(),
 ): Promise<SetupFormlessInstanceOwnerResult> {
-  const status = await getFormlessInstanceWorkspaceStatus(
+  const context = await requireSiteCliTargetContext(
     {
-      adminToken: input.adminToken,
+      commandName: "owner setup",
+      cwd: dependencies.cwd,
+      explicitAdminToken: input.adminToken,
       targetAlias: input.targetAlias,
       workspacePath: input.workspacePath,
     },
-    {
-      cwd: dependencies.cwd,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-    },
+    { env: dependencies.env },
   );
-
-  if (!status.selectedTarget || !status.remoteStatus) {
-    throw new Error("Formless instance owner setup requires a selected target.");
-  }
-
-  const setupStatus = status.remoteStatus.ownerSetup;
+  const setupStatus = await readFormlessInstanceOwnerSetupStatus(
+    { targetUrl: context.targetUrl },
+    { fetch: dependencies.fetch },
+  );
 
   if (setupStatus.setupComplete) {
     return {
       opened: false,
-      selectedTarget: status.selectedTarget,
+      selectedTarget: context.selectedTarget,
       setupStatus,
-      workspaceRoot: status.workspaceRoot,
+      workspaceRoot: context.workspaceRoot,
     };
   }
 
-  const secretState = await readFormlessInstanceWorkspaceSecretState(status.workspaceRoot);
-  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
-    env: dependencies.env,
-    explicitAdminToken: input.adminToken,
-    secretState,
-  });
-
-  if (!adminToken) {
+  if (!context.adminToken) {
     throw new Error(
       "Formless instance owner setup requires an admin token; run `formless instance token adopt` or pass --admin-token.",
     );
@@ -1070,13 +1061,13 @@ export async function setupFormlessInstanceOwner(
   const setupToken = generatedCliOwnerSetupToken(dependencies.randomToken);
 
   await dependencies.setupCapability.create({
-    adminToken,
-    deploymentUrl: status.selectedTarget.url,
+    adminToken: context.adminToken,
+    deploymentUrl: context.targetUrl,
     setupToken,
   });
 
   const setupUrl = formatFormlessOwnerSetupUrl({
-    deploymentUrl: status.selectedTarget.url,
+    deploymentUrl: context.targetUrl,
     setupToken,
   });
 
@@ -1086,10 +1077,10 @@ export async function setupFormlessInstanceOwner(
 
   return {
     opened: input.open === true,
-    selectedTarget: status.selectedTarget,
+    selectedTarget: context.selectedTarget,
     setupStatus,
     setupUrl,
-    workspaceRoot: status.workspaceRoot,
+    workspaceRoot: context.workspaceRoot,
   };
 }
 
@@ -1105,33 +1096,28 @@ export async function planFormlessInstanceDomainProviderFromWorkspace(
     "cwd" | "env" | "fetch"
   > = nodeFormlessCliDependencies(),
 ): Promise<PlanFormlessInstanceDomainProviderResult> {
-  const status = await getFormlessInstanceWorkspaceStatus(
+  const context = await requireSiteCliTargetContext(
     {
+      commandName: "domains remote-plan",
+      cwd: dependencies.cwd,
       targetAlias: input.targetAlias,
       workspacePath: input.workspacePath,
     },
-    {
-      cwd: dependencies.cwd,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-    },
+    { env: dependencies.env },
   );
-
-  if (!status.selectedTarget) {
-    throw new Error("Formless instance domains remote-plan requires a selected target.");
-  }
 
   return {
     plan: await readFormlessInstanceDomainProviderPlan(
       {
+        adminToken: context.adminToken,
         host: input.host,
         policy: input.policy,
-        targetUrl: status.selectedTarget.url,
+        targetUrl: context.targetUrl,
       },
       dependencies,
     ),
-    selectedTarget: status.selectedTarget,
-    workspaceRoot: status.workspaceRoot,
+    selectedTarget: context.selectedTarget,
+    workspaceRoot: context.workspaceRoot,
   };
 }
 
@@ -1144,12 +1130,13 @@ export async function planFormlessInstanceWorkspaceDomains(
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cloudflareDomainClient" | "cwd" | "fetch"
+    "cloudflareDomainClient" | "cwd" | "env" | "fetch"
   > = nodeFormlessCliDependencies(),
 ): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
   return planFormlessInstanceWorkspaceDomainsCommand(input, {
     cloudflareDomainClient: dependencies.cloudflareDomainClient(),
     cwd: dependencies.cwd,
+    env: dependencies.env,
     fetch: dependencies.fetch,
   });
 }

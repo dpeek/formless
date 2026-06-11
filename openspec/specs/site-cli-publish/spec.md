@@ -378,6 +378,26 @@ provider mutation input for workspace-controlled deploy intent.
 - **THEN** ignored workspace secret state stores the automation admin token
 - **AND** reviewable workspace source does not store the secret
 
+#### Scenario: Authenticated instance target context
+
+- **WHEN** CLI status, check, pull, push, deploy, owner setup, archive export,
+  or domain workflows contact a selected deployed instance target
+- **THEN** the CLI resolves one target context containing the normalized target
+  URL, ignored local secret state, environment overrides, and optional explicit
+  admin token
+- **AND** protected management reads and writes use that resolved admin bearer
+  authorization consistently
+- **AND** logs and reviewable workspace source do not include admin bearer
+  tokens, owner setup tokens, provider credentials, or other runtime secrets
+
+#### Scenario: Owner setup command uses focused bootstrap reads
+
+- **WHEN** owner setup is incomplete and the CLI prepares an owner setup URL
+- **THEN** the command reads only the selected target, owner setup status, and
+  resolved admin bearer authorization needed to create the setup capability
+- **AND** it does not require installed app registry, route, deployment status,
+  archive, or browser owner session reads before the first owner passkey exists
+
 ### Requirement: Provider Cleanup CLI
 
 The Site CLI SHALL keep explicit provider repair cleanup available for recorded

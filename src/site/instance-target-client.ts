@@ -93,6 +93,7 @@ import {
 } from "../shared/upgrade-status.ts";
 import type { PortableArchiveInputStatus } from "./archive-input-status.ts";
 import { normalizeInstanceWorkspaceTargetUrl } from "@dpeek/formless-workspace";
+import { siteCliTargetAcceptHeaders, siteCliTargetJsonHeaders } from "./instance-target-context.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
@@ -268,7 +269,10 @@ export async function readFormlessInstanceTargetStatus(
       dependencies,
     ),
     input.includeDeploymentStatus
-      ? readOptionalFormlessInstanceDeploymentStatus({ targetUrl }, dependencies)
+      ? readOptionalFormlessInstanceDeploymentStatus(
+          { adminToken: input.adminToken, targetUrl },
+          dependencies,
+        )
       : undefined,
   ]);
   const upgradeStatus = targetUpgradeStatus({
@@ -629,14 +633,9 @@ async function readFormlessInstanceAppRegistryResult(
 ): Promise<FormlessInstanceAppRegistryReadResult> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const registryUrl = apiUrl(targetUrl, APP_INSTALLS_API_PATH);
-  const headers: Record<string, string> = { accept: "application/json" };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   const value = await fetchJson(dependencies.fetch, registryUrl, {
-    headers,
+    headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
   });
   const appRegistry = parseAppRegistry(value, registryUrl);
 
@@ -647,20 +646,27 @@ async function readFormlessInstanceAppRegistryResult(
 }
 
 export async function readFormlessInstanceDomainMappings(
-  input: { targetUrl: string },
+  input: { adminToken?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainMappingsResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const mappingsUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_API_PATH);
 
   return parseDomainMappings(
-    await fetchJson(dependencies.fetch, mappingsUrl, { headers: { accept: "application/json" } }),
+    await fetchJson(dependencies.fetch, mappingsUrl, {
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
+    }),
     mappingsUrl,
   );
 }
 
 export async function readFormlessInstanceDomainProviderPlan(
-  input: { host?: string | null; policy?: DomainProviderPlanPolicy; targetUrl: string },
+  input: {
+    adminToken?: string | null;
+    host?: string | null;
+    policy?: DomainProviderPlanPolicy;
+    targetUrl: string;
+  },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderPlanResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -676,14 +682,14 @@ export async function readFormlessInstanceDomainProviderPlan(
 
   return parseDomainProviderPlan(
     await fetchJson(dependencies.fetch, providerUrl.toString(), {
-      headers: { accept: "application/json" },
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     providerUrl.toString(),
   );
 }
 
 export async function readFormlessInstanceDeploymentDesiredState(
-  input: { targetId?: string | null; targetUrl: string },
+  input: { adminToken?: string | null; targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentDesiredStateResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -695,14 +701,14 @@ export async function readFormlessInstanceDeploymentDesiredState(
 
   return parseDeploymentDesiredStateResponse(
     await fetchJson(dependencies.fetch, desiredStateUrl, {
-      headers: { accept: "application/json" },
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     desiredStateUrl,
   );
 }
 
 export async function readFormlessInstanceDeploymentStatus(
-  input: { targetId?: string | null; targetUrl: string },
+  input: { adminToken?: string | null; targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentStatusResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -714,7 +720,7 @@ export async function readFormlessInstanceDeploymentStatus(
 
   return parseDeploymentStatusResponse(
     await fetchJson(dependencies.fetch, statusUrl, {
-      headers: { accept: "application/json" },
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     statusUrl,
   );
@@ -731,18 +737,13 @@ export async function readFormlessInstanceControlPlaneRecords(
   const actorKind = input.actorKind ?? "cliDeployer";
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const controlPlaneUrl = apiUrl(targetUrl, deployControlPlaneBootstrapPath(actorKind));
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    ...deployControlPlaneActorHeaders(actorKind),
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   const bootstrap = parseControlPlaneBootstrapResponse(
     await fetchJson(dependencies.fetch, controlPlaneUrl, {
-      headers,
+      headers: siteCliTargetAcceptHeaders({
+        adminToken: input.adminToken,
+        headers: deployControlPlaneActorHeaders(actorKind),
+      }),
     }),
     controlPlaneUrl,
   );
@@ -771,6 +772,7 @@ export async function readOptionalFormlessInstanceControlPlaneRecords(
 
 export async function readFormlessInstanceDeploymentCommandContext(
   input: {
+    adminToken?: string | null;
     actorKind?: DeployControlPlaneProtocolActorKind;
     targetId?: string | null;
     targetUrl: string;
@@ -779,7 +781,11 @@ export async function readFormlessInstanceDeploymentCommandContext(
 ): Promise<FormlessInstanceDeploymentCommandContext> {
   const [controlPlane, desiredState, status] = await Promise.all([
     readOptionalFormlessInstanceControlPlaneRecords(
-      { actorKind: input.actorKind ?? "runner", targetUrl: input.targetUrl },
+      {
+        adminToken: input.adminToken,
+        actorKind: input.actorKind ?? "runner",
+        targetUrl: input.targetUrl,
+      },
       dependencies,
     ),
     readFormlessInstanceDeploymentDesiredState(input, dependencies),
@@ -810,14 +816,6 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
   const mutationId =
     input.mutationId ??
     `deployment-observation:${input.targetId}:${input.observation.observedDesiredStateHash}:${input.observation.observedStatus}:${input.observation.observedAt}`;
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return parseMutationResponse(
     await postJson(dependencies.fetch, mutationUrl, {
@@ -828,7 +826,7 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
         recordId: input.targetId,
         values,
       }),
-      headers,
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     mutationUrl,
@@ -836,7 +834,7 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
 }
 
 async function readOptionalFormlessInstanceDeploymentStatus(
-  input: { targetId?: string | null; targetUrl: string },
+  input: { adminToken?: string | null; targetId?: string | null; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentStatusResponse | undefined> {
   try {
@@ -988,19 +986,11 @@ export async function requestFormlessInstanceDomainProviderDelete(
 ): Promise<InstanceDomainProviderDeleteResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const deleteUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH);
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return parseDomainProviderDeleteResponse(
     await postJson(dependencies.fetch, deleteUrl, {
       body: JSON.stringify(input.request ?? {}),
-      headers,
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     deleteUrl,
@@ -1017,19 +1007,11 @@ export async function markFormlessInstanceDomainProviderResourceManuallyRemoved(
 ): Promise<InstanceDomainProviderManualCleanupResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const cleanupUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH);
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return parseDomainProviderManualCleanupResponse(
     await postJson(dependencies.fetch, cleanupUrl, {
       body: JSON.stringify(input.request),
-      headers,
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     cleanupUrl,
@@ -1050,19 +1032,11 @@ export async function completeFormlessInstanceDomainProviderDeleteJob(
     targetUrl,
     `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}/result`,
   );
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return parseDomainProviderDeleteJobResponse(
     await postJson(dependencies.fetch, resultUrl, {
       body: JSON.stringify(input.result),
-      headers,
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     resultUrl,
@@ -1079,7 +1053,6 @@ export async function forgetFormlessInstanceDomainMapping(
 ): Promise<ForgetInstanceDomainMappingResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const forgetUrl = new URL(apiUrl(targetUrl, DOMAIN_MAPPINGS_FORGET_API_PATH));
-  const headers: Record<string, string> = { accept: "application/json" };
 
   forgetUrl.searchParams.set("host", input.request.host);
 
@@ -1091,13 +1064,9 @@ export async function forgetFormlessInstanceDomainMapping(
     forgetUrl.searchParams.set("surface", input.request.surface);
   }
 
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
-
   return parseForgetDomainMappingResponse(
     await deleteJson(dependencies.fetch, forgetUrl.toString(), {
-      headers,
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
       method: "DELETE",
     }),
     forgetUrl.toString(),
@@ -1114,17 +1083,12 @@ export async function forgetFormlessInstanceDomainProviderRedirect(
 ): Promise<ForgetInstanceDomainProviderRedirectIntentResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const forgetUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH));
-  const headers: Record<string, string> = { accept: "application/json" };
 
   forgetUrl.searchParams.set("fromHost", input.request.fromHost);
 
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
-
   return parseForgetDomainProviderRedirectResponse(
     await deleteJson(dependencies.fetch, forgetUrl.toString(), {
-      headers,
+      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
       method: "DELETE",
     }),
     forgetUrl.toString(),
@@ -1141,19 +1105,11 @@ export async function recordFormlessInstanceDomainMappingApplyEvidence(
 ): Promise<RecordInstanceDomainMappingApplyEvidenceResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const evidenceUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH);
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return parseApplyEvidenceResponse(
     await postJson(dependencies.fetch, evidenceUrl, {
       body: JSON.stringify(input.evidence),
-      headers,
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     evidenceUrl,
@@ -1621,16 +1577,7 @@ function parseOptionalString(value: unknown, fallback: string, context: string):
 }
 
 function adminJsonHeaders(adminToken: string | null | undefined): Record<string, string> {
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (adminToken && adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${adminToken.trim()}`;
-  }
-
-  return headers;
+  return siteCliTargetJsonHeaders({ adminToken });
 }
 
 function parseRouteBase(value: unknown, fallback: BundledAppPackage["adminRouteBase"]): "/apps" {
@@ -1956,18 +1903,10 @@ async function postDeploymentJson(
 ): Promise<unknown> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const url = apiUrl(targetUrl, input.path);
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-  };
-
-  if (input.adminToken && input.adminToken.trim() !== "") {
-    headers.authorization = `Bearer ${input.adminToken.trim()}`;
-  }
 
   return postJson(dependencies.fetch, url, {
     body: JSON.stringify(input.body),
-    headers,
+    headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
     method: "POST",
   });
 }

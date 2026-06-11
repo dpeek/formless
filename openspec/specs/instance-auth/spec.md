@@ -188,6 +188,14 @@ login.
 - WHEN a protected write request supplies the valid admin bearer token
 - THEN the request is authorized without requiring a passkey owner session
 
+#### Scenario: Admin bearer authorizes protected management reads
+
+- GIVEN an admin bearer token is configured
+- WHEN a trusted CLI or automation request reads an owner-protected management
+  endpoint with the valid admin bearer token
+- THEN the request is authorized without requiring a passkey owner session
+- AND the token is not accepted as a browser owner-login credential
+
 #### Scenario: Admin bearer mints owner setup capability
 
 - GIVEN owner setup is incomplete and an admin bearer token is configured
@@ -199,6 +207,17 @@ login.
   response
 - AND if owner setup is already complete, the request reports the existing owner
   state and does not replace the existing owner or store a new setup capability
+
+#### Scenario: Owner setup bootstrap does not require owner-protected app state
+
+- GIVEN owner setup is incomplete and an admin bearer token is available to a
+  trusted CLI
+- WHEN the CLI prepares an owner setup URL
+- THEN it may read owner setup status and create the setup capability without
+  first reading installed app, route, deployment, archive, or browser session
+  state
+- AND protected management reads remain separately authorized by owner session
+  or admin bearer authorization
 
 #### Scenario: Browser login does not accept admin token
 
