@@ -379,6 +379,33 @@ describe("local workspace gateway", () => {
     }
   });
 
+  it("gates local gateway starts on required execution capability before execution", async () => {
+    const workspaceRoot = await makeTempDir();
+    const cookie = await ownerCookie();
+    let credentialSetupCalls = 0;
+    const rejected = await gatewayJson(
+      operationRequest(
+        { kind: "credentialSetup", provider: "cloudflare" },
+        browserHeaders({ cookie, csrf: true }),
+      ),
+      {
+        deps: gatewayDeps(workspaceRoot, {
+          credentialSetup: async () => {
+            credentialSetupCalls += 1;
+            throw new Error("Credential setup should not execute.");
+          },
+          operationCapabilities: ["workspace-read"],
+        }),
+      },
+    );
+
+    expect(rejected.response.status).toBe(403);
+    expect(rejected.body.error).toBe(
+      'Workspace operation "credentialSetup" requires execution capability "credential-setup".',
+    );
+    expect(credentialSetupCalls).toBe(0);
+  });
+
   it("requires same-origin owner session and CSRF proof for browser mutations", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
@@ -1097,6 +1124,7 @@ function gatewayDeps(
     };
     fetch?: typeof fetch;
     operationIds?: string[];
+    operationCapabilities?: WorkspaceGatewayRuntimeDependencies["operationCapabilities"];
     packageRoot?: string;
     packageVersion?: string;
     randomTokens?: string[];
@@ -1165,6 +1193,9 @@ function gatewayDeps(
       }),
     },
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T01:00:00.000Z"])),
+    ...(options.operationCapabilities === undefined
+      ? {}
+      : { operationCapabilities: options.operationCapabilities }),
     ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
     ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
     randomToken: () => randomTokens.shift() ?? "generated-token",

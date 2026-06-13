@@ -18,11 +18,14 @@ import {
   WorkspaceOperationProgress,
   displaySafeEntries,
   operationPollsAutomatically,
+  selectWorkspaceGatewayOperationControls,
+  workspaceGatewayStartInputFromDefinition,
   workspaceOperationRefreshesDeploymentRuntime,
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
 import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
+import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
 
 beforeEach(() => {
   resetClientStore();
@@ -166,7 +169,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Desired-state hash");
     expect(html).toContain("Cloudflare worker custom domain 1");
     expect(html).toContain("Gateway");
-    expect(html).toContain("Deploy plan · Running");
+    expect(html).toContain("Deployment plan · Running");
     expect(html).not.toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain('data-formless-control-plane-screen="routes"');
     expect(html).not.toContain("deploy-target");
@@ -198,14 +201,18 @@ describe("instance shell route view", () => {
 
     expect(html).toContain('data-formless-workspace-gateway="local"');
     expect(html).toContain('data-formless-workspace-operation-controls="true"');
-    expect(html).toContain("Save");
-    expect(html).toContain("Check");
-    expect(html).toContain("Pull");
-    expect(html).toContain("Push");
-    expect(html).not.toContain("Credentials");
-    expect(html).not.toContain("Refresh deploy");
-    expect(html).not.toContain("Plan deploy");
-    expect(html).not.toContain("Apply deploy");
+    expect(html).toContain('data-formless-workspace-operation-control="save"');
+    expect(html).toContain('data-formless-workspace-operation-control="check"');
+    expect(html).toContain('data-formless-workspace-operation-control="pull"');
+    expect(html).toContain('data-formless-workspace-operation-control="push"');
+    expect(html).toContain('data-formless-workspace-operation-input-fields="check"');
+    expect(html).toContain(
+      'data-formless-workspace-operation-input-fields="allowStale apply replace replaceInstallSet targetAlias"',
+    );
+    expect(html).not.toContain('data-formless-workspace-operation-control="credentialSetup"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="deploymentRefresh"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="deployPlan"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="deployApply"');
     expect(html).toContain('data-formless-workspace-onboarding="local"');
     expect(html).toContain('data-formless-onboarding-generated-record-controls="routes"');
     expect(html).toContain("No package apps are installed.");
@@ -215,6 +222,74 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain("workspacePath");
     expect(html).not.toContain("/Users/");
+  });
+
+  it("selects browser operation controls from gateway bindings and runtime capabilities", () => {
+    expect(selectWorkspaceGatewayOperationControls().map((control) => control.kind)).toEqual([
+      "check",
+      "credentialSetup",
+      "deploymentRefresh",
+      "deployApply",
+      "deployPlan",
+      "pull",
+      "push",
+      "save",
+    ]);
+    expect(
+      selectWorkspaceGatewayOperationControls({ operationGroup: "workspace" }).map(
+        (control) => control.kind,
+      ),
+    ).toEqual(["check", "pull", "push", "save"]);
+    expect(
+      selectWorkspaceGatewayOperationControls({ operationGroup: "deployment" }).map(
+        (control) => control.kind,
+      ),
+    ).toEqual(["credentialSetup", "deploymentRefresh", "deployApply", "deployPlan"]);
+    expect(
+      selectWorkspaceGatewayOperationControls({
+        runtime: { actor: "browser", capabilities: ["deployment-plan"] },
+      }).map((control) => control.kind),
+    ).toEqual(["deployPlan"]);
+  });
+
+  it("builds browser operation requests from definition-declared gateway fields", () => {
+    const controls = selectWorkspaceGatewayOperationControls();
+
+    expect(Object.fromEntries(controls.map((control) => [control.kind, control.input]))).toEqual({
+      check: { kind: "check" },
+      credentialSetup: { kind: "credentialSetup", provider: "cloudflare" },
+      deploymentRefresh: { kind: "deploymentRefresh" },
+      deployApply: { kind: "deployApply" },
+      deployPlan: { kind: "deployPlan" },
+      pull: { kind: "pull" },
+      push: {
+        allowStale: false,
+        apply: false,
+        kind: "push",
+        replace: false,
+        replaceInstallSet: false,
+      },
+      save: { check: false, kind: "save" },
+    });
+
+    for (const control of controls) {
+      const definition = workspaceOperationDefinitionForKind(control.kind);
+
+      if (!("gateway" in definition.bindings)) {
+        throw new Error(`Expected gateway binding for ${control.kind}.`);
+      }
+
+      const allowedFields = new Set(["kind", ...definition.bindings.gateway.inputFields]);
+
+      expect(Object.keys(control.input).every((key) => allowedFields.has(key))).toBe(true);
+      expect(control.inputFields).toEqual(definition.bindings.gateway.inputFields);
+      expect(Object.keys(control.input)).not.toContain("workspacePath");
+      expect(Object.keys(control.input)).not.toContain("source");
+    }
+
+    expect(
+      workspaceGatewayStartInputFromDefinition(workspaceOperationDefinitionForKind("save")),
+    ).toEqual({ check: false, kind: "save" });
   });
 
   it("keeps workspace gateway controls unavailable without proxy status", () => {
@@ -273,7 +348,7 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-deployment-operation-controls="true"');
     expect(html).toContain('data-formless-workspace-operation-progress="true"');
     expect(html).toContain("Deploy planning");
-    expect(html).toContain("Deploy plan");
+    expect(html).toContain("Deployment plan");
     expect(html).toContain("Running");
     expect(html).toContain("desired.instance.primary.3");
     expect(html).toContain("https://personal.dpeek.workers.dev");
@@ -309,10 +384,17 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain('data-formless-deployment-gateway="local"');
-    expect(html).toContain("Credentials");
-    expect(html).toContain("Refresh deploy");
-    expect(html).toContain("Plan deploy");
-    expect(html).toContain("Apply deploy");
+    expect(html).toContain('data-formless-workspace-operation-control="credentialSetup"');
+    expect(html).toContain('data-formless-workspace-operation-control="deploymentRefresh"');
+    expect(html).toContain('data-formless-workspace-operation-control="deployPlan"');
+    expect(html).toContain('data-formless-workspace-operation-control="deployApply"');
+    expect(html).toContain(
+      'data-formless-workspace-operation-required-capability="deployment-apply"',
+    );
+    expect(html).toContain("Credential setup");
+    expect(html).toContain("Deployment refresh");
+    expect(html).toContain("Deployment plan");
+    expect(html).toContain("Deployment apply");
     expect(html).toContain('data-formless-control-plane-screen="deployments"');
     expect(html).not.toContain("Install first app");
     expect(html).not.toContain('data-formless-control-plane-screen="apps"');

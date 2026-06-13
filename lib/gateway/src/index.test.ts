@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
 import {
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATION_KINDS,
@@ -41,6 +42,21 @@ describe("Gateway runtime-neutral contracts", () => {
         ok: true,
       },
     );
+    expect(parseWorkspaceGatewayStartInput({ kind: "save" })).toEqual({
+      input: { check: false, kind: "save" },
+      ok: true,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "push" })).toEqual({
+      input: {
+        allowStale: false,
+        apply: false,
+        kind: "push",
+        replace: false,
+        replaceInstallSet: false,
+        targetAlias: undefined,
+      },
+      ok: true,
+    });
     expect(
       parseWorkspaceGatewayStartInput({ kind: "credentialSetup", provider: "cloudflare" }),
     ).toEqual({
@@ -56,6 +72,10 @@ describe("Gateway runtime-neutral contracts", () => {
       input: { kind: "deploymentRefresh", targetAlias: undefined },
       ok: true,
     });
+    expect(parseWorkspaceGatewayStartInput({ kind: "status" })).toEqual({
+      input: { includeDeploymentStatus: false, kind: "status", targetAlias: undefined },
+      ok: true,
+    });
     expect(parseWorkspaceGatewayStartInput({ kind: "deployPlan", migrationPolicy: "old" })).toEqual(
       {
         error: 'Workspace gateway migrationPolicy must be "new" or "existing".',
@@ -68,10 +88,27 @@ describe("Gateway runtime-neutral contracts", () => {
       error: 'Workspace gateway request includes forbidden key "workspacePath".',
       ok: false,
     });
+    expect(
+      parseWorkspaceGatewayStartInput({ command: "rm -rf /tmp/workspace", kind: "status" }),
+    ).toEqual({
+      error: 'Workspace gateway request includes forbidden key "command".',
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "status", rawProviderState: "hidden" })).toEqual(
+      {
+        error: 'Workspace gateway request includes forbidden key "rawProviderState".',
+        ok: false,
+      },
+    );
     expect(parseWorkspaceGatewayStartInput({ kind: "status", name: "TOKEN=secret" })).toEqual({
       error: "Workspace gateway request.name includes secret-looking text.",
       ok: false,
     });
+    expect(parseWorkspaceGatewayStartInput({ kind: "save", source: "browser" })).toEqual({
+      error: 'Workspace gateway operation "save" does not allow field "source".',
+      ok: false,
+    });
+    expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
     expect(parseWorkspaceGatewayStartInput({ kind: "init", name: "workspace" })).toEqual({
       error: 'Workspace gateway operation "init" is not supported.',
       ok: false,
@@ -130,16 +167,19 @@ describe("Gateway runtime-neutral contracts", () => {
       bootstrapAllowed: true,
       mutating: false,
       operation: "status",
+      requiredCapability: "workspace-read",
     });
     expect(workspaceGatewayStartOperationIntent({ check: true, kind: "save" })).toEqual({
       bootstrapAllowed: false,
       mutating: true,
       operation: "save",
+      requiredCapability: "workspace-source-write",
     });
     expect(workspaceGatewayReadOperationIntent("status")).toEqual({
       bootstrapAllowed: true,
       mutating: false,
       operation: "status",
+      requiredCapability: "workspace-read",
     });
   });
 });

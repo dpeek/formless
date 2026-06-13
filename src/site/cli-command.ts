@@ -2,6 +2,9 @@ import {
   DEFAULT_INSTANCE_WORKSPACE_TARGET_ALIAS,
   normalizeInstanceWorkspaceTargetUrl,
   parseInstanceWorkspaceTargetAlias,
+  workspaceOperationDefinitionForCliCommand,
+  workspaceOperationInputFieldDefaultValue,
+  type WorkspaceOperationKind,
 } from "@dpeek/formless-workspace";
 import type { CloudflareDomainPreflightPolicy } from "./cloudflare-domain-client.ts";
 import type { DomainProviderResourceKind } from "../shared/domain-provider-protocol.ts";
@@ -244,6 +247,31 @@ export function normalizeSourceUrl(value: string): string {
   }
 }
 
+function requireWorkspaceCliOperation(commandName: string, operationKind: WorkspaceOperationKind) {
+  const definition = workspaceOperationDefinitionForCliCommand(commandName);
+
+  if (definition.kind !== operationKind) {
+    throw new Error(
+      `Workspace CLI command "${commandName}" is bound to operation "${definition.kind}", expected "${operationKind}".`,
+    );
+  }
+}
+
+function workspaceOperationBooleanDefault(
+  operationKind: WorkspaceOperationKind,
+  fieldKey: string,
+): boolean {
+  const defaultValue = workspaceOperationInputFieldDefaultValue(operationKind, fieldKey);
+
+  if (typeof defaultValue !== "boolean") {
+    throw new Error(
+      `Workspace operation "${operationKind}" input field "${fieldKey}" does not declare a boolean default.`,
+    );
+  }
+
+  return defaultValue;
+}
+
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
   const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>] [--open]");
   let open = false;
@@ -261,11 +289,12 @@ function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
 }
 
 function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless save", "save");
   const options = parseTopLevelWorkspaceOptions(
     args,
     "formless save [--workspace <path>] [--check]",
   );
-  let check = false;
+  let check = workspaceOperationBooleanDefault("save", "check");
 
   for (let index = 0; index < options.rest.length; index += 1) {
     const arg = options.rest[index];
@@ -282,6 +311,7 @@ function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
 }
 
 function parseWorkspaceCheckArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless check", "check");
   const options = parseTopLevelTargetOptions(
     args,
     "formless check [--workspace <path>] [--target <alias>]",
@@ -299,6 +329,7 @@ function parseWorkspaceCheckArgs(args: string[]): FormlessCliCommand {
 }
 
 function parseWorkspaceDeployArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless deploy", "deployApply");
   const options = parseTopLevelTargetOptions(
     args,
     "formless deploy [--workspace <path>] [--target <alias>] [--migration-policy <new|existing>]",
@@ -511,21 +542,32 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
     case "init-workspace":
       return parseInstanceInitWorkspaceArgs(rest);
     case "status":
-      return parseInstanceTargetCommandArgs(rest, "formless instance status", "instanceStatus");
+      return parseInstanceTargetCommandArgs(
+        rest,
+        "formless instance status",
+        "instanceStatus",
+        "status",
+      );
     case "refresh":
       return parseInstanceTargetCommandArgs(
         rest,
         "formless instance refresh",
         "instanceDeploymentRefresh",
+        "deploymentRefresh",
       );
     case "pull":
-      return parseInstanceTargetCommandArgs(rest, "formless instance pull", "instancePull");
+      return parseInstanceTargetCommandArgs(rest, "formless instance pull", "instancePull", "pull");
     case "check":
-      return parseInstanceTargetCommandArgs(rest, "formless instance check", "instanceCheck");
+      return parseInstanceTargetCommandArgs(
+        rest,
+        "formless instance check",
+        "instanceCheck",
+        "check",
+      );
     case "push":
       return parseInstancePushArgs(rest);
     case "dev":
-      return parseInstanceWorkspaceOnlyArgs(rest, "formless instance dev", "instanceDev");
+      return parseInstanceWorkspaceOnlyArgs(rest, "formless instance dev", "instanceDev", "status");
     case "reset-local":
       return parseInstanceWorkspaceOnlyArgs(
         rest,
@@ -550,6 +592,7 @@ function parseInstanceArgs(args: string[]): FormlessCliCommand {
 }
 
 function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless instance init-workspace", "init");
   const options = parseInstanceWorkspaceOptions(args, "formless instance init-workspace");
   let fromArchive: string | null = null;
   let fromRemote = false;
@@ -617,7 +660,13 @@ function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
 
 function parseInstanceTargetCommandArgs<
   TKind extends "instanceCheck" | "instanceDeploymentRefresh" | "instancePull" | "instanceStatus",
->(args: string[], usage: string, kind: TKind): Extract<FormlessCliCommand, { kind: TKind }> {
+>(
+  args: string[],
+  usage: string,
+  kind: TKind,
+  operationKind: WorkspaceOperationKind,
+): Extract<FormlessCliCommand, { kind: TKind }> {
+  requireWorkspaceCliOperation(usage, operationKind);
   const options = parseInstanceTargetOptions(args, usage);
 
   if (options.rest.length > 0) {
@@ -632,11 +681,12 @@ function parseInstanceTargetCommandArgs<
 }
 
 function parseInstancePushArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless instance push", "push");
   const options = parseInstanceTargetOptions(args, "formless instance push");
-  let allowStale = false;
-  let apply = false;
-  let replace = false;
-  let replaceInstallSet = false;
+  let allowStale = workspaceOperationBooleanDefault("push", "allowStale");
+  let apply = workspaceOperationBooleanDefault("push", "apply");
+  let replace = workspaceOperationBooleanDefault("push", "replace");
+  let replaceInstallSet = workspaceOperationBooleanDefault("push", "replaceInstallSet");
 
   for (const arg of options.rest) {
     if (arg === "--apply") {
@@ -682,7 +732,12 @@ function parseInstanceWorkspaceOnlyArgs<TKind extends "instanceDev" | "instanceR
   args: string[],
   usage: string,
   kind: TKind,
+  operationKind?: WorkspaceOperationKind,
 ): Extract<FormlessCliCommand, { kind: TKind }> {
+  if (operationKind !== undefined) {
+    requireWorkspaceCliOperation(usage, operationKind);
+  }
+
   const options = parseInstanceWorkspaceOptions(args, usage);
 
   if (options.rest.length > 0) {
@@ -696,6 +751,7 @@ function parseInstanceWorkspaceOnlyArgs<TKind extends "instanceDev" | "instanceR
 }
 
 function parseInstanceDeployArgs(args: string[]): FormlessCliCommand {
+  requireWorkspaceCliOperation("formless instance deploy", "deployApply");
   const options = parseInstanceTargetOptions(args, "formless instance deploy");
   let migrationPolicy: "existing" | "new" | null = null;
 

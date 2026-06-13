@@ -358,6 +358,20 @@ credential boundaries.
 - **AND** Worker runtime code does not read workspace source, ignored secret
   state, or provider credentials to produce the plan
 
+#### Scenario: Deploy operation execution capability
+
+- **WHEN** a CLI, browser workspace gateway, trusted deploy node, or future
+  automation runner considers a deploy plan, deploy apply, credential setup, or
+  deployment refresh operation
+- **THEN** the runtime matches the operation definition's required execution
+  capability and actor policy before starting execution
+- **AND** browser callers can only forward operations to an available gateway or
+  runner that advertises the required local workspace or provider capability
+- **AND** provider mutation, credential setup, and local filesystem access remain
+  unavailable to Worker runtime actors that do not advertise those capabilities
+- **AND** the operation result boundary remains display-safe operation state and
+  summaries, not raw provider output or runner secret state
+
 #### Scenario: Browser starts deploy apply
 
 - **WHEN** a browser starts deploy apply through the local workspace gateway

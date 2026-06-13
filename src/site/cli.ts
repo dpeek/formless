@@ -102,11 +102,16 @@ import {
   type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
 import { runFormlessWorkspaceOperation } from "./instance-workspace-operations.ts";
-import type {
-  RunnableWorkspaceOperationInput,
-  WorkspaceOperationDisplayObject,
-  WorkspaceOperationDisplayValue,
-  WorkspaceOperationState,
+import {
+  WORKSPACE_OPERATION_CAPABILITIES,
+  assertWorkspaceOperationExecutionAllowed,
+  workspaceOperationDefinitionForCliCommand,
+  workspaceOperationInputDefaults,
+  type RunnableWorkspaceOperationInput,
+  type WorkspaceCliCommandName,
+  type WorkspaceOperationDisplayObject,
+  type WorkspaceOperationDisplayValue,
+  type WorkspaceOperationState,
 } from "@dpeek/formless-workspace";
 import {
   forgetFormlessInstanceDomainMapping,
@@ -424,6 +429,7 @@ export async function runFormlessCli(
     }
     case "workspaceCheck": {
       const result = await runCliWorkspaceOperation(
+        "formless check",
         {
           kind: "check",
           targetAlias: command.targetAlias,
@@ -436,6 +442,7 @@ export async function runFormlessCli(
     }
     case "workspaceSave": {
       const result = await runCliWorkspaceOperation(
+        "formless save",
         {
           check: command.check,
           kind: "save",
@@ -448,6 +455,7 @@ export async function runFormlessCli(
     }
     case "workspaceDeploy": {
       const result = await runCliWorkspaceOperation(
+        "formless deploy",
         {
           kind: "deployApply",
           migrationPolicy: command.migrationPolicy,
@@ -527,6 +535,7 @@ export async function runFormlessCli(
     }
     case "instanceStatus": {
       const result = await runCliWorkspaceOperation(
+        "formless instance status",
         {
           includeDeploymentStatus: true,
           kind: "status",
@@ -540,6 +549,7 @@ export async function runFormlessCli(
     }
     case "instanceDeploymentRefresh": {
       const result = await runCliWorkspaceOperation(
+        "formless instance refresh",
         {
           kind: "deploymentRefresh",
           targetAlias: command.targetAlias,
@@ -552,6 +562,7 @@ export async function runFormlessCli(
     }
     case "instancePull": {
       const result = await runCliWorkspaceOperation(
+        "formless instance pull",
         {
           kind: "pull",
           targetAlias: command.targetAlias,
@@ -564,6 +575,7 @@ export async function runFormlessCli(
     }
     case "instanceCheck": {
       const result = await runCliWorkspaceOperation(
+        "formless instance check",
         {
           kind: "check",
           targetAlias: command.targetAlias,
@@ -576,6 +588,7 @@ export async function runFormlessCli(
     }
     case "instancePush": {
       const result = await runCliWorkspaceOperation(
+        "formless instance push",
         {
           allowStale: command.allowStale,
           apply: command.apply,
@@ -592,6 +605,7 @@ export async function runFormlessCli(
     }
     case "instanceDev":
       await runCliWorkspaceOperation(
+        "formless instance dev",
         {
           includeDeploymentStatus: false,
           kind: "status",
@@ -625,6 +639,7 @@ export async function runFormlessCli(
     }
     case "instanceDeploy": {
       const result = await runCliWorkspaceOperation(
+        "formless instance deploy",
         {
           kind: "deployApply",
           migrationPolicy: command.migrationPolicy,
@@ -681,16 +696,18 @@ export async function runFormlessCli(
 }
 
 async function runCliWorkspaceOperation(
+  commandName: WorkspaceCliCommandName,
   input: RunnableWorkspaceOperationInput,
   dependencies: FormlessCliDependencies,
 ): Promise<WorkspaceOperationState> {
+  const operationInput = workspaceOperationInputForCliCommand(commandName, input);
   const state = await runFormlessWorkspaceOperation(
-    input,
+    operationInput,
     {
       ...dependencies,
       packageVersion: packageJson.version,
     },
-    { actor: "cli" },
+    { actor: "cli", capabilities: WORKSPACE_OPERATION_CAPABILITIES },
   );
 
   if (state.status === "failed") {
@@ -698,6 +715,30 @@ async function runCliWorkspaceOperation(
   }
 
   return state;
+}
+
+function workspaceOperationInputForCliCommand(
+  commandName: WorkspaceCliCommandName,
+  input: RunnableWorkspaceOperationInput,
+): RunnableWorkspaceOperationInput {
+  const definition = workspaceOperationDefinitionForCliCommand(commandName);
+
+  if (definition.kind !== input.kind) {
+    throw new Error(
+      `Workspace CLI command "${commandName}" is bound to operation "${definition.kind}", expected "${input.kind}".`,
+    );
+  }
+
+  assertWorkspaceOperationExecutionAllowed({
+    actor: "cli",
+    capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+    kind: definition.kind,
+  });
+
+  return {
+    ...workspaceOperationInputDefaults(definition.kind),
+    ...input,
+  } as RunnableWorkspaceOperationInput;
 }
 
 export async function exportInstanceArchive(

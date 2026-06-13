@@ -1,11 +1,14 @@
 import path from "node:path";
 
 import {
+  WORKSPACE_OPERATION_CAPABILITIES,
+  assertWorkspaceOperationExecutionAllowed,
   workspaceOperationInputDisplay,
   type RunnableWorkspaceOperationInput,
   type StatusWorkspaceOperationInput,
   type WorkspaceOperationActor,
   type WorkspaceOperationDisplayObject,
+  type WorkspaceOperationRequiredCapability,
   type WorkspaceOperationResult,
   type WorkspaceOperationState,
   type WorkspaceOperationStep,
@@ -52,11 +55,22 @@ export type RunFormlessWorkspaceOperationDependencies = Pick<
 export async function runFormlessWorkspaceOperation(
   input: RunnableWorkspaceOperationInput,
   dependencies: RunFormlessWorkspaceOperationDependencies,
-  options: { actor?: WorkspaceOperationActor } = {},
+  options: {
+    actor?: WorkspaceOperationActor;
+    capabilities?: readonly WorkspaceOperationRequiredCapability[];
+  } = {},
 ): Promise<WorkspaceOperationState> {
+  const actor = options.actor ?? "system";
+
+  assertWorkspaceOperationExecutionAllowed({
+    actor,
+    capabilities: options.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+    kind: input.kind,
+  });
+
   const workspaceRoot = await resolveWorkspaceOperationRoot(input, dependencies);
   let state = await createWorkspaceOperationState({
-    actor: options.actor,
+    actor,
     id: dependencies.createOperationId?.(),
     input: workspaceOperationInputDisplay(input),
     now: dependencies.now,

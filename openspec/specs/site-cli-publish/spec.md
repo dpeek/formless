@@ -62,6 +62,60 @@ path.
 - **AND** the admin token is not displayed and the setup token is displayed only
   as part of the intended setup URL
 
+### Requirement: Workspace Operation Definitions
+
+The workspace package SHALL own runtime-neutral workspace operation definitions
+that describe the operation contract before any CLI, browser gateway, runner, or
+local execution binding handles it.
+
+#### Scenario: Operation definition source
+
+- **WHEN** the workspace package declares a workspace operation
+- **THEN** the definition includes a target-prefixed canonical key, label, input
+  fields, defaults, actor policy, read or write mode, bootstrap availability,
+  display-safe input summary, CLI binding, gateway binding, and required
+  execution capability
+- **AND** the definition includes a stable execution handler key that may match
+  the canonical operation key
+- **AND** operation kind allowlists, browser-visible operation sets, gateway
+  mutating intent, bootstrap intent, and display input summaries are derived from
+  the definitions
+- **AND** duplicated per-surface operation metadata is not maintained separately
+  in CLI, gateway, or instance shell code
+
+#### Scenario: Definition and handler boundary
+
+- **WHEN** a workspace operation is executed locally or through a gateway actor
+- **THEN** the operation definition remains the source of metadata, bindings,
+  input shape, actor policy, mode, and required execution capability
+- **AND** operation handler implementations remain grouped by execution domain
+  such as workspace status, workspace source sync, credential setup, and
+  deployment
+- **AND** the first implementation does not require moving all operation bodies
+  into one shared operation module
+
+#### Scenario: CLI binding from operation definition
+
+- **WHEN** the CLI exposes a workspace command for a defined operation
+- **THEN** command arguments and defaults are selected from the operation input
+  contract and CLI binding
+- **AND** the command invokes the operation through the local workspace
+  operation runner with actor `cli`
+- **AND** execution may continue to dispatch to existing local workspace
+  functions while the operation definition remains the source of command shape,
+  actor policy, and display-safe input facts
+
+#### Scenario: Gateway binding from operation definition
+
+- **WHEN** a browser or automation caller starts a workspace operation through
+  the same-origin gateway API
+- **THEN** the gateway parses allowed request fields, defaults, read/write mode,
+  bootstrap eligibility, and required actor policy from the operation definition
+- **AND** forbidden secret-looking, path-like, raw provider state, or shell
+  command inputs remain rejected before execution
+- **AND** unsupported operations are rejected because no browser gateway binding
+  is declared, not because a separate gateway-only enum omits them
+
 ### Requirement: Local First Onboarding
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`

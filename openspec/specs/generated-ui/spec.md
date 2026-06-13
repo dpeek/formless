@@ -580,10 +580,22 @@ workspace gateway proxy is available through the local runtime.
 - **THEN** the UI can start workspace save, check, pull, push, deploy
   credential setup, deploy plan, and deploy apply operations through the
   same-origin gateway API family
+- **AND** the available controls are selected from workspace operation
+  definitions that expose browser gateway bindings for the current actor and
+  runtime capability
 - **AND** the UI does not expose arbitrary filesystem path inputs or raw file
   read/write controls
 - **AND** the UI does not receive or render the sidecar loopback URL or internal
   proxy token
+
+#### Scenario: Workspace operation form facts
+
+- **WHEN** a browser workspace control needs caller input
+- **THEN** labels, defaults, required fields, option sets, and hidden
+  non-browser fields come from the workspace operation definition
+- **AND** the UI posts only the definition-declared gateway input fields
+- **AND** operation progress continues to render from display-safe workspace
+  operation state returned through the gateway
 
 #### Scenario: Operation status display
 

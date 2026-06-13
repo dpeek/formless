@@ -1,5 +1,8 @@
 import {
   WORKSPACE_BROWSER_OPERATION_KINDS,
+  WORKSPACE_CLI_OPERATION_COMMANDS,
+  WORKSPACE_CLI_OPERATION_KINDS,
+  WORKSPACE_OPERATION_DEFINITIONS,
   WORKSPACE_OPERATION_KINDS,
   WORKSPACE_OPERATION_STATE_FILE_KIND,
   WORKSPACE_OPERATION_STATE_FILE_VERSION,
@@ -8,12 +11,22 @@ import type {
   InitialWorkspaceOperationStateInput,
   UpdateWorkspaceOperationStateInput,
   WorkspaceBrowserOperationKind,
+  WorkspaceCliCommandName,
+  WorkspaceCliOperationDefinition,
+  WorkspaceCliOperationKind,
+  WorkspaceOperationDefinition,
+  WorkspaceOperationDefinitionKey,
   WorkspaceOperationDisplayObject,
   WorkspaceOperationDisplayValue,
   WorkspaceOperationEvent,
+  WorkspaceOperationExecutionDecision,
   WorkspaceOperationIdParseResult,
+  WorkspaceOperationInputFieldDefinition,
   WorkspaceOperationInput,
   WorkspaceOperationKind,
+  WorkspaceOperationMode,
+  WorkspaceOperationActor,
+  WorkspaceOperationRequiredCapability,
   WorkspaceOperationResult,
   WorkspaceOperationStartInput,
   WorkspaceOperationState,
@@ -25,6 +38,27 @@ import type {
 const operationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
 const workspaceOperationKindSet = new Set<string>(WORKSPACE_OPERATION_KINDS);
 const workspaceBrowserOperationKindSet = new Set<string>(WORKSPACE_BROWSER_OPERATION_KINDS);
+const workspaceCliOperationKindSet = new Set<string>(WORKSPACE_CLI_OPERATION_KINDS);
+const workspaceCliCommandSet = new Set<string>(WORKSPACE_CLI_OPERATION_COMMANDS);
+const workspaceOperationDefinitionsByKind = new Map<
+  WorkspaceOperationKind,
+  WorkspaceOperationDefinition
+>(WORKSPACE_OPERATION_DEFINITIONS.map((definition) => [definition.kind, definition]));
+const workspaceOperationDefinitionsByKey = new Map<
+  WorkspaceOperationDefinitionKey,
+  WorkspaceOperationDefinition
+>(WORKSPACE_OPERATION_DEFINITIONS.map((definition) => [definition.key, definition]));
+const workspaceCliOperationDefinitionsByCommand = new Map<string, WorkspaceCliOperationDefinition>(
+  WORKSPACE_OPERATION_DEFINITIONS.flatMap((definition) => {
+    if (!("cli" in definition.bindings)) {
+      return [];
+    }
+
+    const cliDefinition = definition as WorkspaceCliOperationDefinition;
+
+    return cliDefinition.bindings.cli.commands.map((command) => [command, cliDefinition] as const);
+  }),
+);
 
 export function isWorkspaceOperationKind(value: unknown): value is WorkspaceOperationKind {
   return typeof value === "string" && workspaceOperationKindSet.has(value);
@@ -34,6 +68,151 @@ export function isWorkspaceBrowserOperationKind(
   value: unknown,
 ): value is WorkspaceBrowserOperationKind {
   return typeof value === "string" && workspaceBrowserOperationKindSet.has(value);
+}
+
+export function isWorkspaceCliOperationKind(value: unknown): value is WorkspaceCliOperationKind {
+  return typeof value === "string" && workspaceCliOperationKindSet.has(value);
+}
+
+export function isWorkspaceCliCommandName(value: unknown): value is WorkspaceCliCommandName {
+  return typeof value === "string" && workspaceCliCommandSet.has(value);
+}
+
+export function workspaceOperationDefinitionForKind<TKind extends WorkspaceOperationKind>(
+  kind: TKind,
+): Extract<WorkspaceOperationDefinition, { readonly kind: TKind }> {
+  const definition = workspaceOperationDefinitionsByKind.get(kind);
+
+  if (!definition) {
+    throw new Error(`Workspace operation "${kind}" is not defined.`);
+  }
+
+  return definition as Extract<WorkspaceOperationDefinition, { readonly kind: TKind }>;
+}
+
+export function workspaceOperationDefinitionForKey<TKey extends WorkspaceOperationDefinitionKey>(
+  key: TKey,
+): Extract<WorkspaceOperationDefinition, { readonly key: TKey }> {
+  const definition = workspaceOperationDefinitionsByKey.get(key);
+
+  if (!definition) {
+    throw new Error(`Workspace operation "${key}" is not defined.`);
+  }
+
+  return definition as Extract<WorkspaceOperationDefinition, { readonly key: TKey }>;
+}
+
+export function workspaceOperationDefinitionForCliCommand(
+  command: string,
+): WorkspaceCliOperationDefinition {
+  const definition = workspaceCliOperationDefinitionsByCommand.get(command);
+
+  if (!definition) {
+    throw new Error(`Workspace CLI command "${command}" is not bound to an operation definition.`);
+  }
+
+  return definition;
+}
+
+export function workspaceOperationInputFieldDefinition(
+  kind: WorkspaceOperationKind,
+  fieldKey: string,
+): WorkspaceOperationInputFieldDefinition {
+  const field = workspaceOperationDefinitionForKind(kind).input.fields.find(
+    (candidate) => candidate.key === fieldKey,
+  );
+
+  if (!field) {
+    throw new Error(`Workspace operation "${kind}" does not define input field "${fieldKey}".`);
+  }
+
+  return field;
+}
+
+export function workspaceOperationInputFieldDefaultValue(
+  kind: WorkspaceOperationKind,
+  fieldKey: string,
+): boolean | null | string | undefined {
+  const field = workspaceOperationInputFieldDefinition(kind, fieldKey);
+
+  return "defaultValue" in field ? field.defaultValue : undefined;
+}
+
+export function workspaceOperationInputDefaults(
+  kind: WorkspaceOperationKind,
+): Record<string, boolean | null | string> {
+  return Object.fromEntries(
+    workspaceOperationDefinitionForKind(kind).input.fields.flatMap((field) =>
+      "defaultValue" in field ? [[field.key, field.defaultValue]] : [],
+    ),
+  );
+}
+
+export function workspaceOperationMode(kind: WorkspaceOperationKind): WorkspaceOperationMode {
+  return workspaceOperationDefinitionForKind(kind).mode;
+}
+
+export function workspaceOperationRequiredCapability(
+  kind: WorkspaceOperationKind,
+): WorkspaceOperationRequiredCapability {
+  return workspaceOperationDefinitionForKind(kind).requiredCapability;
+}
+
+export function workspaceOperationActorAllowed(
+  kind: WorkspaceOperationKind,
+  actor: WorkspaceOperationActor,
+): boolean {
+  return workspaceOperationDefinitionForKind(kind).actorPolicy.allowedActors.includes(actor);
+}
+
+export function workspaceOperationCapabilityAllowed(
+  kind: WorkspaceOperationKind,
+  capabilities: readonly WorkspaceOperationRequiredCapability[],
+): boolean {
+  return capabilities.includes(workspaceOperationRequiredCapability(kind));
+}
+
+export function workspaceOperationExecutionDecision(input: {
+  actor: WorkspaceOperationActor;
+  capabilities: readonly WorkspaceOperationRequiredCapability[];
+  kind: WorkspaceOperationKind;
+}): WorkspaceOperationExecutionDecision {
+  const definition = workspaceOperationDefinitionForKind(input.kind);
+
+  if (!definition.actorPolicy.allowedActors.includes(input.actor)) {
+    return {
+      error: `Workspace operation "${input.kind}" is not allowed for actor "${input.actor}".`,
+      ok: false,
+    };
+  }
+
+  if (!input.capabilities.includes(definition.requiredCapability)) {
+    return {
+      error: `Workspace operation "${input.kind}" requires execution capability "${definition.requiredCapability}".`,
+      ok: false,
+      requiredCapability: definition.requiredCapability,
+    };
+  }
+
+  return { ok: true };
+}
+
+export function assertWorkspaceOperationExecutionAllowed(input: {
+  actor: WorkspaceOperationActor;
+  capabilities: readonly WorkspaceOperationRequiredCapability[];
+  kind: WorkspaceOperationKind;
+}): void {
+  const decision = workspaceOperationExecutionDecision(input);
+
+  if (!decision.ok) {
+    throw new Error(decision.error);
+  }
+}
+
+export function workspaceOperationBootstrapAllowed(kind: WorkspaceOperationKind): boolean {
+  const definition = workspaceOperationDefinitionForKind(kind);
+
+  return "gateway" in definition.bindings && definition.bindings.gateway.bootstrap;
 }
 
 export function isWorkspaceOperationStatus(value: unknown): value is WorkspaceOperationStatus {
@@ -144,60 +323,25 @@ export function nextWorkspaceOperationState(
 export function workspaceOperationInputDisplay(
   input: WorkspaceOperationInput | WorkspaceOperationStartInput,
 ): WorkspaceOperationDisplayObject {
-  switch (input.kind) {
-    case "init":
-      return input.name === undefined || input.name === null ? {} : { name: input.name };
-    case "status":
-      return {
-        includeDeploymentStatus: input.includeDeploymentStatus ?? false,
-        ...(input.targetAlias === undefined || input.targetAlias === null
-          ? {}
-          : { targetAlias: input.targetAlias }),
-      };
-    case "save":
-      return {
-        check: input.check ?? false,
-        ...("source" in input && input.source !== undefined && input.source !== null
-          ? { source: input.source }
-          : {}),
-      };
-    case "check":
-    case "pull":
-    case "deploymentRefresh":
-      return input.targetAlias === undefined || input.targetAlias === null
-        ? {}
-        : { targetAlias: input.targetAlias };
-    case "push":
-      return {
-        allowStale: input.allowStale ?? false,
-        apply: input.apply ?? false,
-        replace: input.replace ?? false,
-        replaceInstallSet: input.replaceInstallSet ?? false,
-        ...(input.targetAlias === undefined || input.targetAlias === null
-          ? {}
-          : { targetAlias: input.targetAlias }),
-      };
-    case "deployPlan":
-    case "deployApply":
-      return {
-        ...(input.migrationPolicy === undefined || input.migrationPolicy === null
-          ? {}
-          : { migrationPolicy: input.migrationPolicy }),
-        ...(input.targetAlias === undefined || input.targetAlias === null
-          ? {}
-          : { targetAlias: input.targetAlias }),
-      };
-    case "credentialSetup":
-      return {
-        provider: input.provider,
-        ...(input.accountId === undefined || input.accountId === null
-          ? {}
-          : { accountId: input.accountId }),
-        ...(input.profileLabel === undefined || input.profileLabel === null
-          ? {}
-          : { profileLabel: input.profileLabel }),
-      };
-  }
+  const definition = workspaceOperationDefinitionForKind(input.kind);
+  const inputRecord = input as Record<string, WorkspaceOperationDisplayValue | undefined>;
+
+  return Object.fromEntries(
+    definition.input.fields.flatMap((field) => {
+      if (field.display === "never") {
+        return [];
+      }
+
+      const defaultValue = "defaultValue" in field ? field.defaultValue : undefined;
+      const value = inputRecord[field.key] ?? defaultValue;
+
+      if (value === undefined || value === null) {
+        return [];
+      }
+
+      return [[field.key, value]];
+    }),
+  ) as WorkspaceOperationDisplayObject;
 }
 
 export function parseWorkspaceOperationStateJson(contents: string): WorkspaceOperationState {

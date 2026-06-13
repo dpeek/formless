@@ -14,9 +14,12 @@ import type {
 } from "@dpeek/formless-gateway";
 import { isWorkspaceGatewayOperationKind } from "@dpeek/formless-gateway";
 import {
+  WORKSPACE_OPERATION_CAPABILITIES,
+  assertWorkspaceOperationExecutionAllowed,
   workspaceOperationInputDisplay,
   type RunnableWorkspaceOperationInput,
   type WorkspaceOperationEvent,
+  type WorkspaceOperationRequiredCapability,
   type WorkspaceOperationResult,
   type WorkspaceOperationState,
   type WorkspaceOperationStatus,
@@ -63,6 +66,7 @@ export type WorkspaceGatewayRuntimeDependencies = RunFormlessWorkspaceOperationD
   cwd: string;
   fetch: typeof fetch;
   now: () => string;
+  operationCapabilities?: readonly WorkspaceOperationRequiredCapability[];
   proxyFetch?: typeof fetch;
   readOwnerSetupStatus?: (request: Request) => Promise<{ setupComplete: boolean }>;
 };
@@ -103,7 +107,10 @@ export function createWorkspaceGatewayOperationHandlers(
           : await runFormlessWorkspaceOperation(
               withWorkspaceRoot(operationInput, workspaceRoot),
               operationDependencies(dependencies, workspaceRoot),
-              { actor: authorization.actor },
+              {
+                actor: authorization.actor,
+                capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
+              },
             ),
       ),
     status: async ({ authorization, workspaceRoot }) =>
@@ -115,7 +122,10 @@ export function createWorkspaceGatewayOperationHandlers(
             workspacePath: workspaceRoot,
           },
           operationDependencies(dependencies, workspaceRoot),
-          { actor: authorization.actor },
+          {
+            actor: authorization.actor,
+            capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
+          },
         ),
       ),
   };
@@ -126,6 +136,7 @@ export function createWorkspaceGatewayProxyDependencies(
   dependencies: WorkspaceGatewayRuntimeDependencies,
 ): WorkspaceGatewayLocalProxyDependencies {
   return {
+    capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
     proxyFetch: dependencies.proxyFetch ?? dependencies.fetch,
     readOwnerSetupStatus:
       dependencies.readOwnerSetupStatus ??
@@ -184,6 +195,12 @@ async function runCredentialSetupGatewayOperation(
   workspaceRoot: string,
   actor: WorkspaceGatewayActor,
 ) {
+  assertWorkspaceOperationExecutionAllowed({
+    actor,
+    capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
+    kind: input.kind,
+  });
+
   let operation = await createWorkspaceOperationState({
     actor,
     id: dependencies.createOperationId?.(),
@@ -374,6 +391,12 @@ function withWorkspaceRoot(
     ...input,
     workspacePath: workspaceRoot,
   } as RunnableWorkspaceOperationInput;
+}
+
+function workspaceGatewayRuntimeCapabilities(
+  dependencies: Pick<WorkspaceGatewayRuntimeDependencies, "operationCapabilities">,
+): readonly WorkspaceOperationRequiredCapability[] {
+  return dependencies.operationCapabilities ?? WORKSPACE_OPERATION_CAPABILITIES;
 }
 
 function workspaceGatewayOperationFromState(

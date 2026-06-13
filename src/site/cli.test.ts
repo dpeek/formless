@@ -69,6 +69,7 @@ import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-con
 import { formatSiteProjectRecords } from "./project-source.ts";
 import {
   instanceWorkspaceControlPlaneRecordSourcePath,
+  listWorkspaceOperationStates,
   readInstanceWorkspaceControlPlaneRecordSource,
   writeInstanceWorkspaceControlPlaneRecordSource,
 } from "@dpeek/formless-workspace/node";
@@ -3574,6 +3575,7 @@ describe("Formless Site CLI", () => {
       manifest,
       workspaceRoot,
     });
+    const operationStates = await listWorkspaceOperationStates(workspaceRoot);
     const appArchiveValue = parsePortableArchive(
       JSON.parse(
         await readFile(
@@ -3584,6 +3586,13 @@ describe("Formless Site CLI", () => {
     );
 
     expect(manifest).toEqual(layoutWorkspaceManifest("personal-sites"));
+    expect(operationStates).toHaveLength(1);
+    expect(operationStates[0]).toMatchObject({
+      actor: "cli",
+      input: { check: false },
+      operation: "save",
+      status: "succeeded",
+    });
     if (appArchiveValue.kind !== APP_ARCHIVE_KIND) {
       throw new Error("Expected saved app archive.");
     }

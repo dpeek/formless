@@ -5,7 +5,10 @@
  * authorization facts, and transport response wrappers here. Semantic
  * operation contracts come from the Workspace package.
  */
-import { WORKSPACE_BROWSER_OPERATION_KINDS } from "@dpeek/formless-workspace";
+import {
+  WORKSPACE_BOOTSTRAP_OPERATION_KINDS,
+  WORKSPACE_BROWSER_OPERATION_KINDS,
+} from "@dpeek/formless-workspace";
 import type {
   WorkspaceBrowserOperationKind,
   WorkspaceOperationCheckOrPullStartInput,
@@ -24,6 +27,7 @@ import type {
   WorkspaceOperationStartInput,
   WorkspaceOperationState,
   WorkspaceOperationStatus,
+  WorkspaceOperationRequiredCapability,
   WorkspaceOperationStep,
   WorkspaceOperationStepStatus,
   WorkspaceOperationSummary,
@@ -60,7 +64,7 @@ export const WORKSPACE_GATEWAY_OPERATION_KINDS = WORKSPACE_BROWSER_OPERATION_KIN
 /**
  * Operations allowed before owner setup through the local bootstrap capability.
  */
-export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = ["status"] as const;
+export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_BOOTSTRAP_OPERATION_KINDS;
 
 export type WorkspaceGatewayOperationKind = WorkspaceBrowserOperationKind;
 
@@ -130,6 +134,7 @@ export type WorkspaceGatewayOperationIntent = {
   bootstrapAllowed: boolean;
   mutating: boolean;
   operation: WorkspaceGatewayOperationKind;
+  requiredCapability: WorkspaceOperationRequiredCapability;
 };
 
 export type WorkspaceGatewayOperationPath = {

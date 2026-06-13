@@ -21,6 +21,7 @@ import {
   isWorkspaceGatewayPath,
   parseWorkspaceGatewayOperationId,
   parseWorkspaceGatewayStartInput,
+  workspaceGatewayOperationExecutionDecision,
   workspaceGatewayOperationPath,
   workspaceGatewayReadOperationIntent,
   workspaceGatewayStartOperationIntent,
@@ -34,6 +35,10 @@ import {
   type WorkspaceGatewayStartInput,
   type WorkspaceGatewayStartInputParseResult,
 } from "./index.ts";
+import {
+  WORKSPACE_OPERATION_CAPABILITIES,
+  type WorkspaceOperationRequiredCapability,
+} from "@dpeek/formless-workspace";
 
 export {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
@@ -114,6 +119,7 @@ export type WorkspaceGatewayOwnerSessionValidationResult =
   | { ok: false; reason?: string };
 
 export type WorkspaceGatewayLocalProxyDependencies = {
+  capabilities?: readonly WorkspaceOperationRequiredCapability[];
   proxyFetch?: typeof fetch;
   readOwnerSetupStatus?: (request: Request) => Promise<{ setupComplete: boolean }>;
   routeAvailable?: boolean | ((request: Request) => boolean);
@@ -488,7 +494,7 @@ function authorizeSidecarGatewayRequest(
     return proxied;
   }
 
-  return authorizeDirectSidecarAutomationRequest(request, env);
+  return authorizeDirectSidecarAutomationRequest(request, env, intent);
 }
 
 function authorizeSidecarGatewayReadOperationRequest(
@@ -532,15 +538,22 @@ function authorizeSidecarProxyRequest(
     };
   }
 
-  return actorFacts;
+  return intent === undefined
+    ? actorFacts
+    : authorizeGatewayOperationExecution(actorFacts, WORKSPACE_OPERATION_CAPABILITIES, intent);
 }
 
 function authorizeDirectSidecarAutomationRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
+  intent?: WorkspaceGatewayOperationIntent,
 ): GatewayAuthorization {
   if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return { actor: "automation", via: "admin-bearer" };
+    const authorization = { actor: "automation", via: "admin-bearer" } as const;
+
+    return intent === undefined
+      ? authorization
+      : authorizeGatewayOperationExecution(authorization, WORKSPACE_OPERATION_CAPABILITIES, intent);
   }
 
   return { error: "Workspace gateway proxy authorization is required.", status: 401 };
@@ -613,11 +626,19 @@ async function authorizeGatewayRequest(
       return { error: "Workspace bootstrap authorization has expired.", status: 403 };
     }
 
-    return { actor: "browser", via: "bootstrap" };
+    return authorizeGatewayOperationExecution(
+      { actor: "browser", via: "bootstrap" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+    );
   }
 
   if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return { actor: "automation", via: "admin-bearer" };
+    return authorizeGatewayOperationExecution(
+      { actor: "automation", via: "admin-bearer" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+    );
   }
 
   if (intent.mutating && !isSameOriginWithOrigin(request)) {
@@ -634,7 +655,11 @@ async function authorizeGatewayRequest(
       return { error: "Workspace gateway browser mutations require CSRF proof.", status: 403 };
     }
 
-    return { actor: "browser", via: "owner-session" };
+    return authorizeGatewayOperationExecution(
+      { actor: "browser", via: "owner-session" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+    );
   }
 
   return {
@@ -672,23 +697,57 @@ async function authorizeGatewayReadOperationRequest(
       return { error: "Workspace bootstrap authorization has expired.", status: 403 };
     }
 
-    return { actor: "browser", via: "bootstrap" };
+    return authorizeGatewayOperationExecution(
+      { actor: "browser", via: "bootstrap" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+    );
   }
 
   if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return { actor: "automation", via: "admin-bearer" };
+    return intent === undefined
+      ? { actor: "automation", via: "admin-bearer" }
+      : authorizeGatewayOperationExecution(
+          { actor: "automation", via: "admin-bearer" },
+          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+          intent,
+        );
   }
 
   const ownerSession = await validateOwnerSession(request, dependencies);
 
   if (ownerSession.ok) {
-    return { actor: "browser", via: "owner-session" };
+    return intent === undefined
+      ? { actor: "browser", via: "owner-session" }
+      : authorizeGatewayOperationExecution(
+          { actor: "browser", via: "owner-session" },
+          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+          intent,
+        );
   }
 
   return {
     error: "Workspace gateway authorization is required.",
     status: 401,
   };
+}
+
+function authorizeGatewayOperationExecution(
+  authorization: Exclude<GatewayAuthorization, { error: string }>,
+  capabilities: readonly WorkspaceOperationRequiredCapability[],
+  intent: WorkspaceGatewayOperationIntent,
+): GatewayAuthorization {
+  const decision = workspaceGatewayOperationExecutionDecision({
+    actor: authorization.actor,
+    capabilities,
+    intent,
+  });
+
+  if (!decision.ok) {
+    return { error: decision.error, status: 403 };
+  }
+
+  return authorization;
 }
 
 async function proxyWorkspaceGatewayRequest(

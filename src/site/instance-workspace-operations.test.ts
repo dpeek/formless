@@ -126,6 +126,25 @@ describe("Formless workspace operations", () => {
     expect(persistedText).not.toContain(tempDir);
   });
 
+  it("rejects deploy starts without required execution capability before workspace access", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "missing-workspace");
+
+    await expect(
+      runFormlessWorkspaceOperation(
+        {
+          kind: "deployApply",
+          workspacePath: workspaceRoot,
+        },
+        operationDeps(tempDir),
+        { actor: "browser", capabilities: ["deployment-plan"] },
+      ),
+    ).rejects.toThrow(
+      'Workspace operation "deployApply" requires execution capability "deployment-apply".',
+    );
+    await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("records stale save check failure without rewriting reviewable source", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");

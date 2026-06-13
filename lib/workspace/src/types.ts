@@ -52,30 +52,376 @@ export const WORKSPACE_OPERATION_STATE_FILE_KIND = "formless.workspaceOperation"
 export const WORKSPACE_OPERATION_STATE_FILE_VERSION = 1;
 export const WORKSPACE_OPERATION_STATE_ROOT = ".formless/operations";
 
-export const WORKSPACE_OPERATION_KINDS = [
-  "check",
-  "credentialSetup",
-  "deploymentRefresh",
-  "deployApply",
-  "deployPlan",
-  "init",
-  "pull",
-  "push",
-  "save",
-  "status",
-] as const;
+export type WorkspaceOperationActor = "automation" | "browser" | "cli" | "system";
 
-export const WORKSPACE_BROWSER_OPERATION_KINDS = [
-  "check",
-  "credentialSetup",
-  "deploymentRefresh",
-  "deployApply",
-  "deployPlan",
-  "pull",
-  "push",
-  "save",
-  "status",
-] as const;
+export type WorkspaceOperationActorPolicy = {
+  allowedActors: readonly WorkspaceOperationActor[];
+};
+
+export type WorkspaceOperationMode = "read" | "write";
+
+export type WorkspaceOperationRequiredCapability =
+  | "credential-setup"
+  | "deployment-apply"
+  | "deployment-observe"
+  | "deployment-plan"
+  | "workspace-read"
+  | "workspace-source-sync"
+  | "workspace-source-write";
+
+export const WORKSPACE_OPERATION_CAPABILITIES = [
+  "workspace-read",
+  "workspace-source-write",
+  "workspace-source-sync",
+  "credential-setup",
+  "deployment-plan",
+  "deployment-apply",
+  "deployment-observe",
+] as const satisfies readonly WorkspaceOperationRequiredCapability[];
+
+export type WorkspaceOperationInputFieldValueType = "boolean" | "enum" | "string";
+
+export type WorkspaceOperationInputDisplayPolicy = "always" | "never" | "when-present";
+
+export type WorkspaceOperationInputFieldDefinition = {
+  allowedValues?: readonly string[];
+  defaultValue?: boolean | null | string;
+  display: WorkspaceOperationInputDisplayPolicy;
+  key: string;
+  required?: boolean;
+  valueType: WorkspaceOperationInputFieldValueType;
+};
+
+export type WorkspaceOperationCliBindingDefinition = {
+  commands: readonly string[];
+};
+
+export type WorkspaceOperationGatewayBindingDefinition = {
+  bootstrap: boolean;
+  inputFields: readonly string[];
+  requestKind: string;
+};
+
+export type WorkspaceOperationDefinitionContract = {
+  actorPolicy: WorkspaceOperationActorPolicy;
+  bindings: {
+    cli?: WorkspaceOperationCliBindingDefinition;
+    gateway?: WorkspaceOperationGatewayBindingDefinition;
+  };
+  handlerKey: string;
+  input: {
+    fields: readonly WorkspaceOperationInputFieldDefinition[];
+  };
+  key: string;
+  kind: string;
+  label: string;
+  mode: WorkspaceOperationMode;
+  requiredCapability: WorkspaceOperationRequiredCapability;
+};
+
+export type WorkspaceOperationExecutionDecision =
+  | { ok: true }
+  | {
+      error: string;
+      ok: false;
+      requiredCapability?: WorkspaceOperationRequiredCapability;
+    };
+
+const allWorkspaceOperationActors = ["automation", "browser", "cli", "system"] as const;
+
+const targetAliasInputField = {
+  display: "when-present",
+  key: "targetAlias",
+  valueType: "string",
+} as const;
+
+const workspacePathInputField = {
+  display: "never",
+  key: "workspacePath",
+  valueType: "string",
+} as const;
+
+const migrationPolicyInputField = {
+  allowedValues: ["existing", "new"],
+  display: "when-present",
+  key: "migrationPolicy",
+  valueType: "enum",
+} as const;
+
+export const WORKSPACE_OPERATION_DEFINITIONS = [
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless check", "formless instance check"] },
+      gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "check" },
+    },
+    handlerKey: "workspace.source.check",
+    input: { fields: [targetAliasInputField, workspacePathInputField] },
+    key: "workspace.source.check",
+    kind: "check",
+    label: "Workspace source check",
+    mode: "write",
+    requiredCapability: "workspace-read",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      gateway: {
+        bootstrap: false,
+        inputFields: ["provider", "accountId", "profileLabel"],
+        requestKind: "credentialSetup",
+      },
+    },
+    handlerKey: "workspace.credentials.setup",
+    input: {
+      fields: [
+        {
+          allowedValues: ["cloudflare"],
+          display: "always",
+          key: "provider",
+          required: true,
+          valueType: "enum",
+        },
+        { display: "when-present", key: "accountId", valueType: "string" },
+        { display: "when-present", key: "profileLabel", valueType: "string" },
+        workspacePathInputField,
+      ],
+    },
+    key: "workspace.credentials.setup",
+    kind: "credentialSetup",
+    label: "Credential setup",
+    mode: "write",
+    requiredCapability: "credential-setup",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless instance refresh"] },
+      gateway: {
+        bootstrap: false,
+        inputFields: ["targetAlias"],
+        requestKind: "deploymentRefresh",
+      },
+    },
+    handlerKey: "deployment.refresh",
+    input: { fields: [targetAliasInputField, workspacePathInputField] },
+    key: "deployment.refresh",
+    kind: "deploymentRefresh",
+    label: "Deployment refresh",
+    mode: "write",
+    requiredCapability: "deployment-observe",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless deploy", "formless instance deploy"] },
+      gateway: {
+        bootstrap: false,
+        inputFields: ["migrationPolicy", "targetAlias"],
+        requestKind: "deployApply",
+      },
+    },
+    handlerKey: "deployment.apply",
+    input: { fields: [migrationPolicyInputField, targetAliasInputField, workspacePathInputField] },
+    key: "deployment.apply",
+    kind: "deployApply",
+    label: "Deployment apply",
+    mode: "write",
+    requiredCapability: "deployment-apply",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      gateway: {
+        bootstrap: false,
+        inputFields: ["migrationPolicy", "targetAlias"],
+        requestKind: "deployPlan",
+      },
+    },
+    handlerKey: "deployment.plan",
+    input: { fields: [migrationPolicyInputField, targetAliasInputField, workspacePathInputField] },
+    key: "deployment.plan",
+    kind: "deployPlan",
+    label: "Deployment plan",
+    mode: "write",
+    requiredCapability: "deployment-plan",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless instance init-workspace"] },
+    },
+    handlerKey: "workspace.init",
+    input: {
+      fields: [
+        { display: "when-present", key: "name", valueType: "string" },
+        workspacePathInputField,
+      ],
+    },
+    key: "workspace.init",
+    kind: "init",
+    label: "Workspace init",
+    mode: "write",
+    requiredCapability: "workspace-source-write",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless instance pull"] },
+      gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "pull" },
+    },
+    handlerKey: "workspace.source.pull",
+    input: { fields: [targetAliasInputField, workspacePathInputField] },
+    key: "workspace.source.pull",
+    kind: "pull",
+    label: "Workspace source pull",
+    mode: "write",
+    requiredCapability: "workspace-source-sync",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless instance push"] },
+      gateway: {
+        bootstrap: false,
+        inputFields: ["allowStale", "apply", "replace", "replaceInstallSet", "targetAlias"],
+        requestKind: "push",
+      },
+    },
+    handlerKey: "workspace.source.push",
+    input: {
+      fields: [
+        { defaultValue: false, display: "always", key: "allowStale", valueType: "boolean" },
+        { defaultValue: false, display: "always", key: "apply", valueType: "boolean" },
+        { defaultValue: false, display: "always", key: "replace", valueType: "boolean" },
+        {
+          defaultValue: false,
+          display: "always",
+          key: "replaceInstallSet",
+          valueType: "boolean",
+        },
+        targetAliasInputField,
+        workspacePathInputField,
+      ],
+    },
+    key: "workspace.source.push",
+    kind: "push",
+    label: "Workspace source push",
+    mode: "write",
+    requiredCapability: "workspace-source-sync",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless save"] },
+      gateway: { bootstrap: false, inputFields: ["check"], requestKind: "save" },
+    },
+    handlerKey: "workspace.source.save",
+    input: {
+      fields: [
+        { defaultValue: false, display: "always", key: "check", valueType: "boolean" },
+        { display: "when-present", key: "source", valueType: "string" },
+        workspacePathInputField,
+      ],
+    },
+    key: "workspace.source.save",
+    kind: "save",
+    label: "Workspace source save",
+    mode: "write",
+    requiredCapability: "workspace-source-write",
+  },
+  {
+    actorPolicy: { allowedActors: allWorkspaceOperationActors },
+    bindings: {
+      cli: { commands: ["formless instance dev", "formless instance status"] },
+      gateway: {
+        bootstrap: true,
+        inputFields: ["includeDeploymentStatus", "targetAlias"],
+        requestKind: "status",
+      },
+    },
+    handlerKey: "workspace.status",
+    input: {
+      fields: [
+        {
+          defaultValue: false,
+          display: "always",
+          key: "includeDeploymentStatus",
+          valueType: "boolean",
+        },
+        targetAliasInputField,
+        workspacePathInputField,
+      ],
+    },
+    key: "workspace.status",
+    kind: "status",
+    label: "Workspace status",
+    mode: "read",
+    requiredCapability: "workspace-read",
+  },
+] as const satisfies readonly WorkspaceOperationDefinitionContract[];
+
+export type WorkspaceOperationDefinition = (typeof WORKSPACE_OPERATION_DEFINITIONS)[number];
+
+export type WorkspaceOperationDefinitionKey = WorkspaceOperationDefinition["key"];
+
+export type WorkspaceOperationHandlerKey = WorkspaceOperationDefinition["handlerKey"];
+
+export type WorkspaceOperationKind = WorkspaceOperationDefinition["kind"];
+
+export type WorkspaceCliOperationDefinition = Extract<
+  WorkspaceOperationDefinition,
+  { readonly bindings: { readonly cli: unknown } }
+>;
+
+export type WorkspaceCliOperationKind = WorkspaceCliOperationDefinition["kind"];
+
+export type WorkspaceCliCommandName =
+  WorkspaceCliOperationDefinition["bindings"]["cli"]["commands"][number];
+
+export type WorkspaceBrowserOperationDefinition = Extract<
+  WorkspaceOperationDefinition,
+  { readonly bindings: { readonly gateway: unknown } }
+>;
+
+export type WorkspaceBrowserOperationKind = WorkspaceBrowserOperationDefinition["kind"];
+
+export const WORKSPACE_OPERATION_KEYS = WORKSPACE_OPERATION_DEFINITIONS.map(
+  (definition) => definition.key,
+) as WorkspaceOperationDefinitionKey[];
+
+export const WORKSPACE_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.map(
+  (definition) => definition.kind,
+) as WorkspaceOperationKind[];
+
+export const WORKSPACE_CLI_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+  hasWorkspaceCliBinding,
+).map((definition) => definition.kind) as WorkspaceCliOperationKind[];
+
+export const WORKSPACE_CLI_OPERATION_COMMANDS = WORKSPACE_OPERATION_DEFINITIONS.flatMap(
+  (definition) =>
+    hasWorkspaceCliBinding(definition) ? Array.from(definition.bindings.cli.commands) : [],
+) as WorkspaceCliCommandName[];
+
+export const WORKSPACE_BROWSER_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+  hasWorkspaceGatewayBinding,
+).map((definition) => definition.kind) as WorkspaceBrowserOperationKind[];
+
+export const WORKSPACE_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+  (definition) => hasWorkspaceGatewayBinding(definition) && definition.bindings.gateway.bootstrap,
+).map((definition) => definition.kind) as WorkspaceBrowserOperationKind[];
+
+function hasWorkspaceCliBinding(
+  definition: WorkspaceOperationDefinition,
+): definition is WorkspaceCliOperationDefinition {
+  return "cli" in definition.bindings;
+}
+
+function hasWorkspaceGatewayBinding(
+  definition: WorkspaceOperationDefinition,
+): definition is WorkspaceBrowserOperationDefinition {
+  return "gateway" in definition.bindings;
+}
 
 export type InstanceWorkspaceControlPlaneRecordSourceEntity =
   (typeof INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES)[number];
@@ -109,12 +455,6 @@ export type InstanceWorkspaceControlPlaneRecordSourceFile = {
   entity: string;
   records: InstanceWorkspaceStoredRecord[];
 };
-
-export type WorkspaceOperationKind = (typeof WORKSPACE_OPERATION_KINDS)[number];
-
-export type WorkspaceBrowserOperationKind = (typeof WORKSPACE_BROWSER_OPERATION_KINDS)[number];
-
-export type WorkspaceOperationActor = "automation" | "browser" | "cli" | "system";
 
 export type WorkspaceOperationStatus = "failed" | "queued" | "running" | "succeeded";
 

@@ -1,11 +1,23 @@
 import {
   WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
-  WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
 } from "./types.ts";
 import {
+  WORKSPACE_OPERATION_DEFINITIONS,
   isWorkspaceBrowserOperationKind,
   parseWorkspaceOperationId,
+  workspaceOperationExecutionDecision,
+  workspaceOperationBootstrapAllowed,
+  workspaceOperationMode,
+  workspaceOperationRequiredCapability,
+} from "@dpeek/formless-workspace";
+import type {
+  WorkspaceOperationActor,
+  WorkspaceBrowserOperationDefinition,
+  WorkspaceOperationDefinition,
+  WorkspaceOperationExecutionDecision,
+  WorkspaceOperationInputFieldDefinition,
+  WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
 import type {
   WorkspaceGatewayOperationIdParseResult,
@@ -70,8 +82,14 @@ export type {
   WorkspaceGatewayStatusStartInput,
 } from "./types.ts";
 
-const workspaceGatewayBootstrapOperationKindSet = new Set<string>(
-  WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
+const workspaceGatewayOperationDefinitionsByRequestKind = new Map<
+  string,
+  WorkspaceBrowserOperationDefinition
+>(
+  WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceGatewayBinding).map((definition) => [
+    definition.bindings.gateway.requestKind,
+    definition,
+  ]),
 );
 
 export function isWorkspaceGatewayPath(pathname: string): boolean {
@@ -137,21 +155,17 @@ export function isWorkspaceGatewayOperationKind(
 export function isWorkspaceGatewayBootstrapOperationKind(
   operation: WorkspaceGatewayOperationKind,
 ): boolean {
-  return workspaceGatewayBootstrapOperationKindSet.has(operation);
+  return workspaceOperationBootstrapAllowed(operation);
 }
 
 export function isWorkspaceGatewayMutatingStartOperationKind(
   operation: WorkspaceGatewayOperationKind,
 ): boolean {
-  return operation !== "status";
+  return workspaceOperationMode(operation) === "write";
 }
 
 export function workspaceGatewayStatusIntent(): WorkspaceGatewayOperationIntent {
-  return {
-    bootstrapAllowed: true,
-    mutating: false,
-    operation: "status",
-  };
+  return workspaceGatewayReadOperationIntent("status");
 }
 
 export function workspaceGatewayStartOperationIntent(
@@ -160,9 +174,10 @@ export function workspaceGatewayStartOperationIntent(
   const operation = typeof input === "string" ? input : input.kind;
 
   return {
-    bootstrapAllowed: isWorkspaceGatewayBootstrapOperationKind(operation),
-    mutating: isWorkspaceGatewayMutatingStartOperationKind(operation),
+    bootstrapAllowed: workspaceOperationBootstrapAllowed(operation),
+    mutating: workspaceOperationMode(operation) === "write",
     operation,
+    requiredCapability: workspaceOperationRequiredCapability(operation),
   };
 }
 
@@ -170,10 +185,23 @@ export function workspaceGatewayReadOperationIntent(
   operation: WorkspaceGatewayOperationKind,
 ): WorkspaceGatewayOperationIntent {
   return {
-    bootstrapAllowed: isWorkspaceGatewayBootstrapOperationKind(operation),
+    bootstrapAllowed: workspaceOperationBootstrapAllowed(operation),
     mutating: false,
     operation,
+    requiredCapability: workspaceOperationRequiredCapability(operation),
   };
+}
+
+export function workspaceGatewayOperationExecutionDecision(input: {
+  actor: WorkspaceOperationActor;
+  capabilities: readonly WorkspaceOperationRequiredCapability[];
+  intent: WorkspaceGatewayOperationIntent;
+}): WorkspaceOperationExecutionDecision {
+  return workspaceOperationExecutionDecision({
+    actor: input.actor,
+    capabilities: input.capabilities,
+    kind: input.intent.operation,
+  });
 }
 
 export function parseWorkspaceGatewayStartInput(
@@ -195,80 +223,38 @@ export function parseWorkspaceGatewayStartInput(
     return { error: 'Workspace gateway operation request must include "kind".', ok: false };
   }
 
+  const definition = workspaceGatewayOperationDefinitionsByRequestKind.get(kind);
+
+  if (!definition) {
+    return { error: `Workspace gateway operation "${kind}" is not supported.`, ok: false };
+  }
+
+  const unsupportedField = unsupportedWorkspaceGatewayRequestField(body, definition);
+
+  if (unsupportedField) {
+    return {
+      error: `Workspace gateway operation "${kind}" does not allow field "${unsupportedField}".`,
+      ok: false,
+    };
+  }
+
   try {
-    switch (kind) {
-      case "status":
-        return {
-          input: {
-            includeDeploymentStatus: optionalBoolean(body.includeDeploymentStatus),
-            kind,
-            targetAlias: optionalString(body.targetAlias),
-          },
-          ok: true,
-        };
-      case "save":
-        return { input: { check: optionalBoolean(body.check), kind }, ok: true };
-      case "check":
-      case "pull":
-      case "deploymentRefresh":
-        return { input: { kind, targetAlias: optionalString(body.targetAlias) }, ok: true };
-      case "push":
-        return {
-          input: {
-            allowStale: optionalBoolean(body.allowStale),
-            apply: optionalBoolean(body.apply),
-            kind,
-            replace: optionalBoolean(body.replace),
-            replaceInstallSet: optionalBoolean(body.replaceInstallSet),
-            targetAlias: optionalString(body.targetAlias),
-          },
-          ok: true,
-        };
-      case "deployPlan":
-      case "deployApply": {
-        const migrationPolicy = optionalString(body.migrationPolicy);
+    const fieldsByKey = new Map(definition.input.fields.map((field) => [field.key, field]));
+    const input: Record<string, unknown> = { kind: definition.kind };
 
-        if (
-          migrationPolicy !== undefined &&
-          migrationPolicy !== null &&
-          migrationPolicy !== "existing" &&
-          migrationPolicy !== "new"
-        ) {
-          return {
-            error: 'Workspace gateway migrationPolicy must be "new" or "existing".',
-            ok: false,
-          };
-        }
+    for (const fieldKey of definition.bindings.gateway.inputFields) {
+      const field = fieldsByKey.get(fieldKey);
 
-        return {
-          input: {
-            kind,
-            migrationPolicy,
-            targetAlias: optionalString(body.targetAlias),
-          },
-          ok: true,
-        };
+      if (!field) {
+        throw new Error(
+          `Workspace gateway operation "${kind}" declares unknown input field "${fieldKey}".`,
+        );
       }
-      case "credentialSetup": {
-        const provider = optionalString(body.provider);
 
-        if (provider !== "cloudflare") {
-          return { error: 'Workspace credential setup provider must be "cloudflare".', ok: false };
-        }
-
-        return {
-          input: {
-            accountId: optionalString(body.accountId),
-            kind,
-            profileLabel: optionalString(body.profileLabel),
-            provider,
-          },
-          ok: true,
-        };
-      }
-      default:
-        return { error: `Workspace gateway operation "${kind}" is not supported.`, ok: false };
+      input[field.key] = parseWorkspaceGatewayInputField(field, body[field.key]);
     }
+
+    return { input: input as WorkspaceGatewayStartInput, ok: true };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error), ok: false };
   }
@@ -319,6 +305,72 @@ export function forbiddenWorkspaceGatewayInput(
   }
 
   return undefined;
+}
+
+function hasWorkspaceGatewayBinding(
+  definition: WorkspaceOperationDefinition,
+): definition is WorkspaceBrowserOperationDefinition {
+  return "gateway" in definition.bindings;
+}
+
+function unsupportedWorkspaceGatewayRequestField(
+  body: Record<string, unknown>,
+  definition: WorkspaceBrowserOperationDefinition,
+): string | undefined {
+  const allowedFields = new Set<string>([
+    "kind",
+    "operation",
+    ...definition.bindings.gateway.inputFields,
+  ]);
+
+  return Object.keys(body).find((field) => !allowedFields.has(field));
+}
+
+function parseWorkspaceGatewayInputField(
+  field: WorkspaceOperationInputFieldDefinition,
+  value: unknown,
+): boolean | null | string | undefined {
+  if (value === undefined && "defaultValue" in field) {
+    return field.defaultValue;
+  }
+
+  switch (field.valueType) {
+    case "boolean":
+      return optionalBoolean(value);
+    case "enum": {
+      const parsed = optionalString(value);
+
+      if (parsed === undefined || parsed === null) {
+        if (field.required) {
+          throw new Error(invalidWorkspaceGatewayEnumFieldError(field));
+        }
+
+        return parsed;
+      }
+
+      if (field.allowedValues !== undefined && !field.allowedValues.includes(parsed)) {
+        throw new Error(invalidWorkspaceGatewayEnumFieldError(field));
+      }
+
+      return parsed;
+    }
+    case "string":
+      return optionalString(value);
+  }
+}
+
+function invalidWorkspaceGatewayEnumFieldError(
+  field: WorkspaceOperationInputFieldDefinition,
+): string {
+  if (field.key === "migrationPolicy") {
+    return 'Workspace gateway migrationPolicy must be "new" or "existing".';
+  }
+
+  if (field.key === "provider" && field.allowedValues?.length === 1) {
+    return `Workspace credential setup provider must be "${field.allowedValues[0]}".`;
+  }
+
+  return `Workspace gateway ${field.key} is invalid.`;
 }
 
 function trimWorkspaceGatewayApiBasePath(apiBasePath: string): string {

@@ -65,6 +65,14 @@ import {
   type WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway/client";
 import {
+  WORKSPACE_OPERATION_DEFINITIONS,
+  workspaceOperationDefinitionForKind,
+  type WorkspaceBrowserOperationDefinition,
+  type WorkspaceOperationActor,
+  type WorkspaceOperationInputFieldDefinition,
+  type WorkspaceOperationRequiredCapability,
+} from "@dpeek/formless-workspace";
+import {
   deploymentStatusDisplaySummary,
   type InstanceDeploymentDesiredStateResponse,
   type InstanceDeploymentStatusResponse,
@@ -141,6 +149,119 @@ export type WorkspaceGatewayRouteState =
       status: "ready";
       statusOperation?: WorkspaceGatewayOperation;
     };
+
+export type WorkspaceGatewayOperationControlGroup = "all" | "deployment" | "workspace";
+
+export type WorkspaceGatewayRuntimeCapabilityFacts = {
+  actor: WorkspaceOperationActor;
+  capabilities: readonly WorkspaceOperationRequiredCapability[];
+};
+
+export type WorkspaceGatewayOperationControl = {
+  group: Exclude<WorkspaceGatewayOperationControlGroup, "all">;
+  input: WorkspaceGatewayStartInput;
+  inputFields: readonly string[];
+  kind: WorkspaceGatewayOperationKind;
+  label: string;
+  requiredCapability: WorkspaceOperationRequiredCapability;
+  style: "primary" | "secondary";
+};
+
+const localBrowserWorkspaceGatewayRuntimeFacts = {
+  actor: "browser",
+  capabilities: [
+    "credential-setup",
+    "deployment-apply",
+    "deployment-observe",
+    "deployment-plan",
+    "workspace-read",
+    "workspace-source-sync",
+    "workspace-source-write",
+  ],
+} as const satisfies WorkspaceGatewayRuntimeCapabilityFacts;
+
+export function selectWorkspaceGatewayOperationControls({
+  operationGroup = "all",
+  runtime = localBrowserWorkspaceGatewayRuntimeFacts,
+}: {
+  operationGroup?: WorkspaceGatewayOperationControlGroup;
+  runtime?: WorkspaceGatewayRuntimeCapabilityFacts;
+} = {}): WorkspaceGatewayOperationControl[] {
+  const capabilities = new Set(runtime.capabilities);
+
+  return WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceBrowserGatewayBinding)
+    .filter((definition) => definition.mode === "write")
+    .filter((definition) => definition.actorPolicy.allowedActors.includes(runtime.actor))
+    .filter((definition) => capabilities.has(definition.requiredCapability))
+    .map(workspaceGatewayOperationControlFromDefinition)
+    .filter((control) => operationGroup === "all" || control.group === operationGroup);
+}
+
+function workspaceGatewayOperationControlFromDefinition(
+  definition: WorkspaceBrowserOperationDefinition,
+): WorkspaceGatewayOperationControl {
+  return {
+    group: workspaceGatewayOperationControlGroup(definition),
+    input: workspaceGatewayStartInputFromDefinition(definition),
+    inputFields: definition.bindings.gateway.inputFields,
+    kind: definition.kind,
+    label: definition.label,
+    requiredCapability: definition.requiredCapability,
+    style: definition.requiredCapability === "deployment-apply" ? "primary" : "secondary",
+  };
+}
+
+function workspaceGatewayOperationControlGroup(
+  definition: WorkspaceBrowserOperationDefinition,
+): WorkspaceGatewayOperationControl["group"] {
+  return definition.requiredCapability === "credential-setup" ||
+    definition.requiredCapability.startsWith("deployment-")
+    ? "deployment"
+    : "workspace";
+}
+
+export function workspaceGatewayStartInputFromDefinition(
+  definition: WorkspaceBrowserOperationDefinition,
+): WorkspaceGatewayStartInput {
+  const fieldsByKey = new Map(definition.input.fields.map((field) => [field.key, field]));
+  const input: Record<string, boolean | null | string | undefined> = { kind: definition.kind };
+
+  for (const fieldKey of definition.bindings.gateway.inputFields) {
+    const field = fieldsByKey.get(fieldKey);
+
+    if (!field) {
+      continue;
+    }
+
+    const value = workspaceGatewayControlDefaultValue(field);
+
+    if (value !== undefined) {
+      input[field.key] = value;
+    }
+  }
+
+  return input as WorkspaceGatewayStartInput;
+}
+
+function workspaceGatewayControlDefaultValue(
+  field: WorkspaceOperationInputFieldDefinition,
+): boolean | null | string | undefined {
+  if ("defaultValue" in field) {
+    return field.defaultValue;
+  }
+
+  if (field.required && field.valueType === "enum" && field.allowedValues?.length === 1) {
+    return field.allowedValues[0];
+  }
+
+  return undefined;
+}
+
+function hasWorkspaceBrowserGatewayBinding(
+  definition: (typeof WORKSPACE_OPERATION_DEFINITIONS)[number],
+): definition is WorkspaceBrowserOperationDefinition {
+  return "gateway" in definition.bindings;
+}
 
 export function InstanceShellRoute() {
   const [location, setLocation] = useLocation();
@@ -967,7 +1088,7 @@ function WorkspaceGatewayOperationControls({
   state,
 }: {
   onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
-  operationGroup?: "all" | "deployment" | "workspace";
+  operationGroup?: WorkspaceGatewayOperationControlGroup;
   state: WorkspaceGatewayRouteState;
 }) {
   const busy =
@@ -977,93 +1098,28 @@ function WorkspaceGatewayOperationControls({
       operationPollsAutomatically(state.currentOperation));
   const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
   const canRunPostBootstrapOperation = canStart && Boolean(state.csrfToken);
-  const showDeploymentOperations = operationGroup === "all" || operationGroup === "deployment";
-  const showWorkspaceOperations = operationGroup === "all" || operationGroup === "workspace";
+  const controls = selectWorkspaceGatewayOperationControls({ operationGroup });
 
   return (
     <div
       className="flex flex-wrap items-center gap-2"
       data-formless-workspace-operation-controls="true"
     >
-      {showWorkspaceOperations ? (
-        <>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ check: false, kind: "save" })}
-            size="sm"
-            type="button"
-          >
-            Save
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "check" })}
-            size="sm"
-            type="button"
-          >
-            Check
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "pull" })}
-            size="sm"
-            type="button"
-          >
-            Pull
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ apply: false, kind: "push" })}
-            size="sm"
-            type="button"
-          >
-            Push
-          </Button>
-        </>
-      ) : null}
-      {showDeploymentOperations ? (
-        <>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "deploymentRefresh" })}
-            size="sm"
-            type="button"
-          >
-            Refresh deploy
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "credentialSetup", provider: "cloudflare" })}
-            size="sm"
-            type="button"
-          >
-            Credentials
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "deployPlan" })}
-            size="sm"
-            type="button"
-          >
-            Plan deploy
-          </Button>
-          <Button
-            isDisabled={!canRunPostBootstrapOperation}
-            onPress={() => onStartOperation?.({ kind: "deployApply" })}
-            size="sm"
-            type="button"
-          >
-            Apply deploy
-          </Button>
-        </>
-      ) : null}
+      {controls.map((control) => (
+        <Button
+          data-formless-workspace-operation-control={control.kind}
+          data-formless-workspace-operation-input-fields={control.inputFields.join(" ")}
+          data-formless-workspace-operation-required-capability={control.requiredCapability}
+          intent={control.style === "secondary" ? "outline" : undefined}
+          isDisabled={!canRunPostBootstrapOperation}
+          key={control.kind}
+          onPress={() => onStartOperation?.(control.input)}
+          size="sm"
+          type="button"
+        >
+          {control.label}
+        </Button>
+      ))}
     </div>
   );
 }
@@ -1431,18 +1487,7 @@ function fieldKeyLabel(key: string): string {
 }
 
 function workspaceOperationKindLabel(kind: WorkspaceGatewayOperationKind): string {
-  switch (kind) {
-    case "credentialSetup":
-      return "Credential setup";
-    case "deploymentRefresh":
-      return "Deployment refresh";
-    case "deployApply":
-      return "Deploy apply";
-    case "deployPlan":
-      return "Deploy plan";
-    default:
-      return fieldKeyLabel(kind);
-  }
+  return workspaceOperationDefinitionForKind(kind).label;
 }
 
 function workspaceOperationStatusLabel(status: WorkspaceGatewayOperation["status"]): string {

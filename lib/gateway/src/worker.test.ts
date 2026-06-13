@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  WORKSPACE_OPERATION_CAPABILITIES,
+  workspaceOperationDefinitionForKind,
+} from "@dpeek/formless-workspace";
+import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
@@ -119,6 +123,37 @@ describe("Worker workspace gateway proxy", () => {
     }
   });
 
+  it("rejects known workspace operations without gateway bindings before forwarding", async () => {
+    let forwarded = false;
+    const response = await handleWorkspaceGatewayProxyRequest(
+      new Request("https://example.com/api/formless/workspace/operations", {
+        body: JSON.stringify({ kind: "init", name: "workspace" }),
+        headers: {
+          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+          "Content-Type": "application/json",
+          Origin: "https://example.com",
+        },
+        method: "POST",
+      }),
+      baseEnv,
+      {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+        fetch: async () => {
+          forwarded = true;
+          return Response.json({ operation: operation("status") });
+        },
+        validateOwnerSession,
+      },
+    );
+    const body = await jsonBody(response);
+
+    expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
+    expect(response?.status).toBe(400);
+    expect(body.error).toBe('Workspace gateway operation "init" is not supported.');
+    expect(forwarded).toBe(false);
+  });
+
   it("proxies owner-session browser mutations with internal authorization and display-safe actor facts", async () => {
     const calls: ProxyCall[] = [];
     const response = await handleWorkspaceGatewayProxyRequest(
@@ -138,6 +173,7 @@ describe("Worker workspace gateway proxy", () => {
       baseEnv,
       {
         fetch: captureProxyCalls(calls, operation("save")),
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
         validateOwnerSession,
       },
     );
@@ -231,6 +267,7 @@ describe("Worker workspace gateway proxy", () => {
       }),
       baseEnv,
       {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
         fetch: captureProxyCalls(statusCalls, operation("status")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       },
@@ -300,6 +337,7 @@ describe("Worker workspace gateway proxy", () => {
       }),
       baseEnv,
       {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
         fetch: captureProxyCalls(statusReadCalls, operation("status")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       },
@@ -341,6 +379,7 @@ describe("Worker workspace gateway proxy", () => {
       }),
       baseEnv,
       {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
         fetch: captureProxyCalls(calls, operation("deployPlan")),
       },
     );
@@ -352,6 +391,63 @@ describe("Worker workspace gateway proxy", () => {
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("automation");
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("admin-bearer");
     expect(calls[0]?.headers.get("Authorization")).toBeNull();
+  });
+
+  it("does not forward Worker runtime operations without advertised execution capabilities", async () => {
+    const cases: Array<{ expectedError: string; request: Request }> = [
+      {
+        expectedError:
+          'Workspace operation "status" requires execution capability "workspace-read".',
+        request: new Request("https://example.com/api/formless/workspace/status", {
+          headers: {
+            Cookie: ownerSessionCookie,
+          },
+        }),
+      },
+      {
+        expectedError:
+          'Workspace operation "credentialSetup" requires execution capability "credential-setup".',
+        request: new Request("https://example.com/api/formless/workspace/operations", {
+          body: JSON.stringify({ kind: "credentialSetup", provider: "cloudflare" }),
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        }),
+      },
+      {
+        expectedError:
+          'Workspace operation "deployApply" requires execution capability "deployment-apply".',
+        request: new Request("https://example.com/api/formless/workspace/operations", {
+          body: JSON.stringify({ kind: "deployApply" }),
+          headers: {
+            Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+            [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+            "Content-Type": "application/json",
+            Origin: "https://example.com",
+          },
+          method: "POST",
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      let forwarded = false;
+      const response = await handleWorkspaceGatewayProxyRequest(testCase.request, baseEnv, {
+        fetch: async () => {
+          forwarded = true;
+          return Response.json({ operation: operation("status") });
+        },
+        readOwnerSetupStatus: async () => ({ setupComplete: false }),
+        validateOwnerSession,
+      });
+      const body = await jsonBody(response);
+
+      expect(response?.status).toBe(403);
+      expect(body.error).toBe(testCase.expectedError);
+      expect(forwarded).toBe(false);
+    }
   });
 });
 
