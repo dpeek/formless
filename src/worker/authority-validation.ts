@@ -5,6 +5,7 @@ import {
   shouldValidateExistingFieldValue,
   validateAuthorityFieldValue,
 } from "@dpeek/formless-schema";
+import { findResolvedAppPackage } from "../shared/app-packages.ts";
 import { instanceControlPlaneReservedRoutePaths } from "../shared/instance-control-plane.ts";
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type {
@@ -1001,9 +1002,17 @@ function validateInstanceControlPlaneMountRoute(
     );
   }
 
-  if (install.values.packageAppKey !== "site") {
+  const packageAppKey = optionalStringRecordValue(install.values, "packageAppKey");
+  const packageApp =
+    packageAppKey === undefined ? undefined : findResolvedAppPackage(packageAppKey);
+
+  if (!packageApp) {
+    throw new BadRequestError(`Route app install "${appInstall}" uses unsupported package.`);
+  }
+
+  if (packageApp.publicRouteBase === undefined) {
     throw new BadRequestError(
-      `Field "appInstall" references app-install record "${appInstall}" without public Site capability.`,
+      `Package app "${packageApp.packageAppKey}" does not support public Site routes.`,
     );
   }
 

@@ -27,7 +27,8 @@ import {
   selectBrowserRuntimeProfileHint,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
-import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
+import type { AppInstall } from "../shared/app-installs.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 
 function appInstallFixture({
@@ -37,7 +38,7 @@ function appInstallFixture({
 }: {
   installId: string;
   label: string;
-  packageAppKey?: PackageAppKey;
+  packageAppKey?: SchemaKey;
 }): AppInstall {
   return {
     adminRoute: `/apps/${installId}`,

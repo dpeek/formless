@@ -5,6 +5,12 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
 import { listBundledAppPackages } from "../shared/app-installs.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  bundledAppPackageManifests,
+  createAppPackageResolver,
+} from "../shared/app-packages.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   patchFormlessInstanceDeploymentConfigObservation,
@@ -19,6 +25,9 @@ type CapturedTargetRequest = {
   headers: Record<string, string>;
   url: string;
 };
+
+const privateSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 
 describe("Formless instance target client", () => {
   it("parses deployed upgrade metadata facts", async () => {
@@ -247,6 +256,68 @@ describe("Formless instance target client", () => {
     expect(result.upgradeStatus.deployment?.status.state).toBe("deployed");
   });
 
+  it("compares deploy metadata against active resolved local package facts", async () => {
+    const resolver = createAppPackageResolver([
+      ...bundledAppPackageManifests,
+      privatePackageManifest(),
+    ]);
+    const result = await readFormlessInstanceTargetStatus(
+      {
+        packageResolver: resolver,
+        targetUrl: "https://instance.example",
+      },
+      {
+        fetch: async (url) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          const pathname = new URL(requestUrl).pathname;
+
+          if (pathname === "/api/formless/deploy") {
+            return Response.json(
+              {
+                packageApps: listBundledAppPackages().map((appPackage) => ({
+                  packageAppKey: appPackage.packageAppKey,
+                  packageRevision: appPackage.packageRevision,
+                  sourceSchemaHash: appPackage.sourceSchemaHash,
+                })),
+                packageVersion: "0.1.8",
+                runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+                storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+                version: "0.1.8",
+              },
+              { headers: { "Cache-Control": "no-store" } },
+            );
+          }
+
+          if (pathname === "/api/formless/setup") {
+            return Response.json({ setupComplete: true });
+          }
+
+          if (pathname === "/api/formless/app-installs") {
+            return Response.json({
+              packages: listBundledAppPackages(),
+              installs: [],
+            });
+          }
+
+          return Response.json({ error: "not found" }, { status: 404 });
+        },
+      },
+    );
+
+    expect(result.upgradeStatus.localPackages.at(-1)).toEqual({
+      packageAppKey: "private-labs",
+      packageRevision: 7,
+      sourceSchemaHash: privateSourceSchemaHash,
+    });
+    expect(result.upgradeStatus.verificationFailures).toContainEqual({
+      code: "deploy-metadata-package-app-missing",
+      message: 'Deployed metadata is missing package app "private-labs".',
+      packageAppKey: "private-labs",
+      source: "deployed-metadata",
+    });
+  });
+
   it("returns explicit upgrade verification failures for legacy target metadata", async () => {
     const result = await readFormlessInstanceTargetStatus(
       { includeDeploymentStatus: true, targetUrl: "https://instance.example" },
@@ -304,6 +375,40 @@ describe("Formless instance target client", () => {
     ]);
   });
 });
+
+function privatePackageManifest(): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/seed-records.json",
+    },
+    sourceSchemaHash: privateSourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      {
+        kind: "publicSite",
+        routeBase: "/sites",
+      },
+    ],
+  };
+}
 
 describe("Formless instance target control-plane client", () => {
   it("reads app, route, domain, and deployment records with a CLI deployer actor", async () => {

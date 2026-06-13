@@ -1,4 +1,5 @@
 import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "./app-packages.ts";
 import {
   CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
   type ControlPlaneDeploymentConfigObservedStatus,
@@ -205,13 +206,7 @@ export const instanceControlPlaneSchema = {
       label: "App install",
       fields: {
         installId: textField("Install id"),
-        packageAppKey: enumField("Package", {
-          cleartrace: "ClearTrace",
-          crm: "CRM",
-          estii: "Estii",
-          site: "Site",
-          tasks: "Tasks",
-        }),
+        packageAppKey: textField("Package"),
         packageRevision: optionalNumberField("Package revision"),
         sourceSchemaHash: optionalTextField("Source schema hash"),
         label: textField("Label"),
@@ -722,21 +717,25 @@ export function instanceControlPlaneAppRouteId(
 export function instanceControlPlaneDefaultRoutesForInstall(input: {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
+  packageResolver?: AppPackageResolver;
   now: string;
 }): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
+  const packageApp = findResolvedAppPackage(input.packageAppKey, input.packageResolver);
+  const adminRouteBase = packageApp?.adminRouteBase ?? "/apps";
+  const publicRouteBase = packageApp?.publicRouteBase;
   const routeInput = { install: { installId: input.installId }, now: input.now };
   const adminRoute = mountRouteRecord(routeInput, {
-    matchPath: `/apps/${input.installId}`,
+    matchPath: `${adminRouteBase}/${input.installId}`,
     surface: "admin",
     targetProfile: "app",
   });
   const schemaRoute = mountRouteRecord(routeInput, {
-    matchPath: `/apps/${input.installId}/schema`,
+    matchPath: `${adminRouteBase}/${input.installId}/schema`,
     surface: "schema",
     targetProfile: "app",
   });
 
-  if (input.packageAppKey !== "site") {
+  if (publicRouteBase === undefined) {
     return [adminRoute, schemaRoute];
   }
 
@@ -744,8 +743,8 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
     adminRoute,
     schemaRoute,
     mountRouteRecord(routeInput, {
-      matchPath: `/sites/${input.installId}`,
-      matchPrefix: `/sites/${input.installId}/`,
+      matchPath: `${publicRouteBase}/${input.installId}`,
+      matchPrefix: `${publicRouteBase}/${input.installId}/`,
       surface: "public-site",
       targetProfile: "public-site",
     }),
@@ -777,7 +776,7 @@ export function instanceControlPlaneRouteRecordsForAppInstall(input: {
     }),
   ];
 
-  if (input.install.packageAppKey === "site" && input.install.publicRoute !== undefined) {
+  if (input.install.publicRoute !== undefined) {
     records.push(
       mountRouteRecord(input, {
         matchPath: input.install.publicRoute,
@@ -1181,7 +1180,6 @@ function editorForField(field: string): FieldEditor {
   }
 
   if (
-    field === "packageAppKey" ||
     field === "status" ||
     field === "routeKind" ||
     field === "surface" ||

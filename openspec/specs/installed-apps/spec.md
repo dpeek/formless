@@ -2,7 +2,11 @@
 
 ## Purpose
 
-Installed apps define the product instance app shape: stable app install identity, package-backed initialization, install-scoped routes, and install-scoped storage/API behavior. They let one Formless instance host multiple Site, Tasks, Estii, CRM, and ClearTrace installs without mixing app data, browser replicas, public Site routes, or source schema-key storage.
+Installed apps define the product instance app shape: stable app install
+identity, package-backed initialization, install-scoped routes, and
+install-scoped storage/API behavior. They let one Formless instance host
+multiple resolved package app installs without mixing app data, browser
+replicas, public Site routes, or source schema-key storage.
 
 ## Requirements
 
@@ -24,21 +28,38 @@ The system SHALL treat an app install id as the stable instance-local identity f
 - THEN the request is rejected
 - AND existing app install registry state is not mutated
 
-### Requirement: Bundled Package Apps
+### Requirement: Resolved Package Apps
 
-The system MUST expose bundled Site, Tasks, Estii, CRM, and ClearTrace packages as installable package apps.
+The system MUST expose app packages through resolved package metadata before an
+app install can be created.
 
 #### Scenario: Package metadata
 
 - **GIVEN** the instance app install registry is read
-- **WHEN** bundled packages are listed
-- **THEN** Site, Tasks, Estii, CRM, and ClearTrace packages are returned with package app keys `site`, `tasks`, `estii`, `crm`, and `cleartrace`
-- **AND** each package declares its default install id, label, source schema key, seed records key, and admin route base
+- **WHEN** resolved packages are listed
+- **THEN** packages are returned with package app key, label, description,
+  default install id, multiple-install policy, source origin, source schema key,
+  seed records key, package revision, source schema hash, admin route base, and
+  optional public route capability
+- **AND** the default runtime resolver includes the bundled Site, Tasks, Estii,
+  CRM, and ClearTrace packages with package app keys `site`, `tasks`, `estii`,
+  `crm`, and `cleartrace`
+- **AND** package metadata comes from app package manifest facts, not from app
+  install records or instance control-plane route records
+
+#### Scenario: Private package availability
+
+- **GIVEN** a private app package such as ClearTrace is resolved from a
+  workspace-linked or deployment-linked package source
+- **WHEN** app packages are listed for that workspace or runtime
+- **THEN** the private package is installable only in that resolver scope
+- **AND** the package is not made globally bundled, public, discoverable, or
+  installable by unrelated workspaces
 
 #### Scenario: Unsupported package
 
 - **GIVEN** a create app install request names an unsupported package app key
-- **WHEN** the request is processed
+- **WHEN** the package key is absent from the active resolver
 - **THEN** the request is rejected
 - **AND** no app install metadata or initial app data is committed
 
@@ -63,7 +84,7 @@ instance `route` records.
 
 #### Scenario: Non-Site install routes
 
-- **GIVEN** a Tasks, Estii, CRM, or ClearTrace app install is created
+- **GIVEN** a package app install without public Site route capability is created
 - **WHEN** install metadata is returned
 - **THEN** the app install metadata stores package app key, label, and status
 - **AND** route records target the install for admin and schema routes under
@@ -77,7 +98,7 @@ installed package app without changing install identity.
 
 #### Scenario: Create install with package facts
 
-- WHEN a bundled package app install is created
+- WHEN a resolved package app install is created
 - THEN install metadata records the package app key, install id, package
   revision, and source schema hash used for initialization
 - AND admin, schema, API, Authority, browser replica, and broadcast identity
@@ -95,16 +116,17 @@ installed package app without changing install identity.
 The system SHALL report installed package app revision drift to CLI upgrade
 planning.
 
-#### Scenario: Installed app behind bundled package
+#### Scenario: Installed app behind resolved package
 
-- WHEN a CLI reads app install metadata and local bundled package metadata
+- WHEN a CLI reads app install metadata and local resolved package metadata
 - THEN it can identify installed apps whose package revision or schema hash
   differs from the local package facts
 - AND it can include required package app migrations in the upgrade plan
 
 ### Requirement: Package Source Initialization
 
-The system MUST initialize a created package app install from that package's source schema and source seed records.
+The system MUST initialize a created package app install from that resolved
+package's source schema and source seed records.
 
 #### Scenario: Tasks initialization
 
@@ -133,6 +155,18 @@ The system MUST initialize a created package app install from that package's sou
 - **WHEN** `/api/app-installs/cleartrace/cleartrace/bootstrap` is read
 - **THEN** the bootstrap response contains the bundled ClearTrace source schema and source seed records
 - **AND** the install metadata keeps label and route identity scoped to `cleartrace`
+
+#### Scenario: Private package initialization
+
+- **GIVEN** a private app package is available through the active package
+  resolver
+- **WHEN** an owner creates an app install from that package
+- **THEN** the installed app storage identity is initialized from the resolved
+  package source schema and seed records
+- **AND** install metadata stores the resolved package app key, package
+  revision, source schema hash, label, and install id
+- **AND** the source package path, repository URL, local link, or resolver
+  configuration is not stored in the `app-install` record
 
 ### Requirement: Launch Fixtures
 
@@ -204,8 +238,8 @@ control-plane records.
 - WHEN the runtime accepts the install
 - THEN it creates an `app-install` control-plane record with stable install
   identity, package app key, label, status, created time, and updated time
-- AND the install is initialized from the package source schema and source seed
-  records in the install-scoped app storage identity
+- AND the install is initialized from the resolved package source schema and
+  source seed records in the install-scoped app storage identity
 
 #### Scenario: Immutable install identity
 
@@ -231,7 +265,7 @@ schema-owned `route` records that target app install records.
 
 #### Scenario: Non-Site install route records
 
-- **GIVEN** a Tasks, Estii, CRM, or ClearTrace app install is created
+- **GIVEN** a package app install without public Site route capability is created
 - **WHEN** default route records are created
 - **THEN** route records target the app install for admin and schema routes
   under `/apps/<installId>`

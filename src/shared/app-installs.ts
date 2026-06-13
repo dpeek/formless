@@ -1,12 +1,16 @@
-import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
-import type { RuntimeRouteAccess } from "./runtime-topology.ts";
 import {
-  bundledSourceSchemaHashFixtures,
-  type PackageAppRevision,
-  type SourceSchemaHash,
-} from "./upgrade-migrations.ts";
+  type AppPackageKey,
+  type AppPackageResolver,
+  findResolvedAppPackage,
+  isBundledResolvedAppPackage,
+  listResolvedAppPackages,
+  type ResolvedAppPackage,
+} from "./app-packages.ts";
+import type { SchemaKey } from "./schema-apps.ts";
+import type { RuntimeRouteAccess } from "./runtime-topology.ts";
+import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
-export type PackageAppKey = SchemaKey;
+export type PackageAppKey = AppPackageKey;
 export type AppInstallId = string;
 export type AppInstallStatus = "installed";
 export type AppInstallRouteKind = "admin" | "publicSite" | "schema";
@@ -37,15 +41,18 @@ export type AppInstall = {
 };
 
 export type BundledAppPackage = {
-  packageAppKey: PackageAppKey;
+  packageAppKey: SchemaKey;
   packageRevision: PackageAppRevision;
   sourceSchemaHash: SourceSchemaHash;
   label: string;
   description: string;
   defaultInstallId: AppInstallId;
   supportsMultipleInstalls: boolean;
+  sourceOrigin: "bundled";
   sourceSchemaKey: SchemaKey;
   seedRecordsKey: SchemaKey;
+  sourceSchemaLocation: ResolvedAppPackage["sourceSchemaLocation"] & { kind: "bundled" };
+  seedRecordsLocation: ResolvedAppPackage["seedRecordsLocation"] & { kind: "bundled" };
   adminRouteBase: "/apps";
   publicRouteBase?: "/sites";
 };
@@ -53,8 +60,8 @@ export type BundledAppPackage = {
 export type AppInstallInitializationPlan = {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
-  sourceSchemaKey: SchemaKey;
-  seedRecordsKey: SchemaKey;
+  sourceSchemaKey: string;
+  seedRecordsKey: string;
 };
 
 export type AppInstallRegistryErrorCode =
@@ -86,6 +93,7 @@ export type CreateAppInstallInput = {
   label: string;
   now: string;
   packageAppKey: string;
+  packageResolver?: AppPackageResolver;
   validateInitialSource?: (
     context: AppInstallSourceValidationContext,
   ) => AppInstallRegistryError | undefined;
@@ -94,7 +102,7 @@ export type CreateAppInstallInput = {
 export type AppInstallSourceValidationContext = {
   install: AppInstall;
   initialization: AppInstallInitializationPlan;
-  packageApp: BundledAppPackage;
+  packageApp: ResolvedAppPackage;
 };
 
 export type CreateAppInstallResult =
@@ -129,87 +137,27 @@ const reservedInstallIds = new Set([
   "sitemap",
   "static",
 ]);
-const currentBundledPackageAppRevision = 1 satisfies PackageAppRevision;
-
-export const bundledAppPackages = [
-  {
-    packageAppKey: "site",
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
-    label: schemaAppDefinitions.site.label,
-    description: "Public website app backed by the bundled Site schema and starter records.",
-    defaultInstallId: "site",
-    supportsMultipleInstalls: true,
-    sourceSchemaKey: "site",
-    seedRecordsKey: "site",
-    adminRouteBase: "/apps",
-    publicRouteBase: "/sites",
-  },
-  {
-    packageAppKey: "tasks",
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
-    label: schemaAppDefinitions.tasks.label,
-    description: "Task tracking app backed by the bundled Tasks schema and starter records.",
-    defaultInstallId: "tasks",
-    supportsMultipleInstalls: true,
-    sourceSchemaKey: "tasks",
-    seedRecordsKey: "tasks",
-    adminRouteBase: "/apps",
-  },
-  {
-    packageAppKey: "estii",
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-    label: schemaAppDefinitions.estii.label,
-    description: "Rate-card app backed by the bundled Estii schema and starter records.",
-    defaultInstallId: "estii",
-    supportsMultipleInstalls: true,
-    sourceSchemaKey: "estii",
-    seedRecordsKey: "estii",
-    adminRouteBase: "/apps",
-  },
-  {
-    packageAppKey: "crm",
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
-    label: schemaAppDefinitions.crm.label,
-    description: "CRM app backed by the bundled CRM schema and demo records.",
-    defaultInstallId: "crm",
-    supportsMultipleInstalls: true,
-    sourceSchemaKey: "crm",
-    seedRecordsKey: "crm",
-    adminRouteBase: "/apps",
-  },
-  {
-    packageAppKey: "cleartrace",
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
-    label: schemaAppDefinitions.cleartrace.label,
-    description: "Lab operations app backed by the bundled ClearTrace schema and demo records.",
-    defaultInstallId: "cleartrace",
-    supportsMultipleInstalls: true,
-    sourceSchemaKey: "cleartrace",
-    seedRecordsKey: "cleartrace",
-    adminRouteBase: "/apps",
-  },
-] as const satisfies readonly BundledAppPackage[];
 
 export function listBundledAppPackages(): BundledAppPackage[] {
-  return [...bundledAppPackages];
+  return listResolvedAppPackages().map(toBundledAppPackage);
 }
 
 export function findBundledAppPackage(packageAppKey: string): BundledAppPackage | undefined {
-  return bundledAppPackages.find((appPackage) => appPackage.packageAppKey === packageAppKey);
+  const appPackage = findResolvedAppPackage(packageAppKey);
+
+  return appPackage ? toBundledAppPackage(appPackage) : undefined;
 }
 
-export function packageAppFactsForKey(packageAppKey: string):
+export function packageAppFactsForKey(
+  packageAppKey: string,
+  resolver?: AppPackageResolver,
+):
   | {
       packageRevision: PackageAppRevision;
       sourceSchemaHash: SourceSchemaHash;
     }
   | undefined {
-  const packageApp = findBundledAppPackage(packageAppKey);
+  const packageApp = findResolvedAppPackage(packageAppKey, resolver);
 
   return packageApp
     ? {
@@ -295,7 +243,7 @@ export function validateAppInstallId(value: string): AppInstallIdValidationResul
 }
 
 export function createAppInstall(input: CreateAppInstallInput): CreateAppInstallResult {
-  const packageApp = findBundledAppPackage(input.packageAppKey);
+  const packageApp = findResolvedAppPackage(input.packageAppKey, input.packageResolver);
 
   if (!packageApp) {
     return {
@@ -385,8 +333,11 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
   };
 }
 
-export function appInstallInitializationPlan(install: AppInstall): AppInstallInitializationPlan {
-  const packageApp = findBundledAppPackage(install.packageAppKey);
+export function appInstallInitializationPlan(
+  install: AppInstall,
+  resolver?: AppPackageResolver,
+): AppInstallInitializationPlan {
+  const packageApp = findResolvedAppPackage(install.packageAppKey, resolver);
 
   if (!packageApp) {
     throw new Error(`Package app "${install.packageAppKey}" is not installable.`);
@@ -411,7 +362,7 @@ function appInstallFromPackage(input: {
   installId: AppInstallId;
   label: string;
   now: string;
-  packageApp: BundledAppPackage;
+  packageApp: ResolvedAppPackage;
 }): AppInstall {
   return {
     installId: input.installId,
@@ -434,7 +385,7 @@ function appInstallFromPackage(input: {
 }
 
 function initializationPlanForInstall(
-  packageApp: BundledAppPackage,
+  packageApp: ResolvedAppPackage,
   install: AppInstall,
 ): AppInstallInitializationPlan {
   return {
@@ -442,5 +393,26 @@ function initializationPlanForInstall(
     packageAppKey: packageApp.packageAppKey,
     sourceSchemaKey: packageApp.sourceSchemaKey,
     seedRecordsKey: packageApp.seedRecordsKey,
+  };
+}
+
+function toBundledAppPackage(appPackage: ResolvedAppPackage): BundledAppPackage {
+  if (!isBundledResolvedAppPackage(appPackage)) {
+    throw new Error(`Package app "${appPackage.packageAppKey}" is not a bundled source app.`);
+  }
+
+  return {
+    ...appPackage,
+    packageAppKey: appPackage.packageAppKey,
+    sourceSchemaKey: appPackage.sourceSchemaKey,
+    seedRecordsKey: appPackage.seedRecordsKey,
+    sourceSchemaLocation: {
+      ...appPackage.sourceSchemaLocation,
+      kind: "bundled",
+    },
+    seedRecordsLocation: {
+      ...appPackage.seedRecordsLocation,
+      kind: "bundled",
+    },
   };
 }

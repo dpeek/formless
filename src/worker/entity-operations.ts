@@ -64,6 +64,7 @@ import {
   recordOperationInvocationOutcome,
   replayedWrite,
   type ActionRecordWritePlan,
+  type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForActionOutcome,
 } from "./storage.ts";
@@ -348,6 +349,7 @@ export function executeWriteOperationInvocation(input: {
   envelope: OperationInvocationEnvelope;
   schema: AppSchema;
   storage: DurableObjectStorage;
+  validateConstraints?: RecordConstraintValidator;
   writes: OperationWriteNotifier;
 }): OperationInvocationResponse {
   const outcome = input.writes.apply(() => {
@@ -358,6 +360,7 @@ export function executeWriteOperationInvocation(input: {
         input.storage,
         input.envelope,
         input.schema,
+        input.validateConstraints,
       );
       const response = operationInvocationResponseFromWriteOutcome(input.envelope, writeOutcome);
 
@@ -381,6 +384,7 @@ function executeWriteOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse | ActionResponse> {
   if (!isEntityOperationWriteKind(envelope.operation.kind)) {
     throw new BadRequestError(
@@ -389,17 +393,23 @@ function executeWriteOperationInvocationOutcome(
   }
 
   if (envelope.operation.kind === "command") {
-    return executeCommandOperationInvocationOutcome(storage, envelope, schema);
+    return executeCommandOperationInvocationOutcome(storage, envelope, schema, validateConstraints);
   }
 
-  return executeMutationOperationInvocationOutcome(storage, envelope, schema);
+  return executeMutationOperationInvocationOutcome(storage, envelope, schema, validateConstraints);
 }
 
 function executeMutationOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse> {
+  const validateRecordConstraints = operationRecordConstraintValidator(
+    storage,
+    schema,
+    validateConstraints,
+  );
   const validatedMutation = validateMutationRequest(
     operationMutationRequest(envelope, schema, storage),
     schema,
@@ -424,9 +434,7 @@ function executeMutationOperationInvocationOutcome(
           context.createRecords,
         );
       },
-      (entity, values, options) => {
-        assertUniqueConstraints(storage, schema, entity, values, options);
-      },
+      validateRecordConstraints,
     );
   }
 
@@ -438,9 +446,7 @@ function executeMutationOperationInvocationOutcome(
     storage,
     mutation,
     "recordValues" in mutation ? mutation.recordValues : undefined,
-    (entity, values, options) => {
-      assertUniqueConstraints(storage, schema, entity, values, options);
-    },
+    validateRecordConstraints,
   );
 }
 
@@ -448,6 +454,7 @@ function executeCommandOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   if (envelope.operation.effect?.type === "recordPlan") {
     return executeRecordPlanOperationInvocationOutcome(
@@ -455,6 +462,7 @@ function executeCommandOperationInvocationOutcome(
       envelope,
       schema,
       envelope.operation.effect,
+      validateConstraints,
     );
   }
 
@@ -531,6 +539,7 @@ function executeRecordPlanOperationInvocationOutcome(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   effect: RecordPlanEntityOperationEffectSchema,
+  validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   const actionId = requiredWriteIdentity(envelope);
   const replay = getActionResponseById(storage, actionId);
@@ -549,12 +558,21 @@ function executeRecordPlanOperationInvocationOutcome(
       envelope.operation.entityName,
       envelope.operation.operationName,
       plans,
-      (entity, recordValues, options) => {
-        assertUniqueConstraints(storage, schema, entity, recordValues, options);
-      },
+      operationRecordConstraintValidator(storage, schema, validateConstraints),
     ),
     (response) => recordPlanActionResponse(response, effect),
   );
+}
+
+function operationRecordConstraintValidator(
+  storage: DurableObjectStorage,
+  schema: AppSchema,
+  validateConstraints: RecordConstraintValidator | undefined,
+): RecordConstraintValidator {
+  return (entity, values, options) => {
+    validateConstraints?.(entity, values, options);
+    assertUniqueConstraints(storage, schema, entity, values, options);
+  };
 }
 
 type RecordPlanInputValues = Partial<Record<string, FieldValue>>;

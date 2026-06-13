@@ -531,6 +531,10 @@ function packageDriftBlockers(
     const localPackage = localPackages.get(install.packageAppKey);
 
     if (!localPackage) {
+      blockers.push({
+        code: "installed-app-package-resolver-drift",
+        message: `Installed app "${install.installId}" package "${install.packageAppKey}" is missing from active local package metadata.`,
+      });
       continue;
     }
 

@@ -3,13 +3,13 @@ import {
   appInstallRegistryError,
   createAppInstall,
   findAppInstall,
-  findBundledAppPackage,
   listAppInstalls,
   type AppInstall,
   type AppInstallId,
   type AppInstallRoute,
   type PackageAppKey,
 } from "../shared/app-installs.ts";
+import { findResolvedAppPackage } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -70,6 +70,7 @@ import {
   getStoredRecord,
   initializeStorageFromSource,
   patchStoredRecordOutcome,
+  type RecordConstraintValidator,
   type StorageSource,
 } from "./storage.ts";
 import {
@@ -228,6 +229,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
       operation,
       source: instanceControlPlaneSource,
       storage,
+      validateConstraints:
+        operation.metadata.mode === "write"
+          ? validateControlPlaneRecordConstraint(storage)
+          : undefined,
       writes: noopWriteNotifier,
     });
 
@@ -563,8 +568,82 @@ function validateControlPlaneRecordWrite(
       existingRecordId: recordOptions?.ignoreRecordId,
     });
 
+    validateControlPlanePackageBoundary(storage, entityName, validated, options);
     assertUniqueConstraints(storage, schema, entityName, validated, recordOptions);
   };
+}
+
+function validateControlPlaneRecordConstraint(
+  storage: DurableObjectStorage,
+): RecordConstraintValidator {
+  return (entityName, values) => {
+    validateControlPlanePackageBoundary(storage, entityName, values, {});
+  };
+}
+
+function validateControlPlanePackageBoundary(
+  storage: DurableObjectStorage,
+  entityName: string,
+  values: RecordValues,
+  options: { additionalRecords?: StoredRecord[] },
+) {
+  if (entityName === "app-install") {
+    const packageAppKey = parseRequiredString("packageAppKey", values.packageAppKey);
+
+    if (!findResolvedAppPackage(packageAppKey)) {
+      throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
+    }
+
+    return;
+  }
+
+  if (entityName !== "route" || values.kind !== "mount" || values.surface !== "public-site") {
+    return;
+  }
+
+  const installId = stringRecordValue(values.appInstall);
+
+  if (installId === undefined) {
+    return;
+  }
+
+  const appInstallRecord = findControlPlaneRecord(
+    storage,
+    "app-install",
+    installId,
+    options.additionalRecords,
+  );
+  const packageAppKey = stringRecordValue(appInstallRecord?.values.packageAppKey);
+  const packageApp = packageAppKey ? findResolvedAppPackage(packageAppKey) : undefined;
+
+  if (!packageApp) {
+    throw new BadRequestError(`Route app install "${installId}" uses unsupported package.`);
+  }
+
+  if (packageApp.publicRouteBase === undefined) {
+    throw new BadRequestError(
+      `Package app "${packageApp.packageAppKey}" does not support public Site routes.`,
+    );
+  }
+}
+
+function findControlPlaneRecord(
+  storage: DurableObjectStorage,
+  entity: string,
+  id: string,
+  additionalRecords: readonly StoredRecord[] | undefined,
+): StoredRecord | undefined {
+  const pending = additionalRecords?.find(
+    (record) => record.entity === entity && record.id === id && !record.deletedAt,
+  );
+
+  if (pending) {
+    return pending;
+  }
+
+  const stored = getStoredRecord(storage, id);
+
+  return stored?.entity === entity && !stored.deletedAt ? stored : undefined;
 }
 
 function parseCreateAppInstallActionRequest(value: unknown): ParsedCreateAppInstallActionRequest {
@@ -599,7 +678,7 @@ function appInstallFromControlPlaneValues(
   routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
 ): AppInstall {
   const packageAppKey = String(values.packageAppKey);
-  const packageApp = findBundledAppPackage(packageAppKey);
+  const packageApp = findResolvedAppPackage(packageAppKey);
 
   if (!packageApp) {
     throw new Error(`Stored app install "${String(values.installId)}" has unsupported package.`);
@@ -1208,7 +1287,7 @@ function parseInternalAppInstallPackageFactsUpdate(value: unknown): {
   }
 
   const packageAppKey = parseRequiredString("packageAppKey", value.packageAppKey);
-  const packageApp = findBundledAppPackage(packageAppKey);
+  const packageApp = findResolvedAppPackage(packageAppKey);
 
   if (!packageApp) {
     throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
@@ -1262,7 +1341,7 @@ function parseInternalBackfillAppInstall(value: unknown): AppInstall {
   }
 
   const packageAppKey = parseRequiredString("packageAppKey", value.packageAppKey);
-  const packageApp = findBundledAppPackage(packageAppKey);
+  const packageApp = findResolvedAppPackage(packageAppKey);
 
   if (!packageApp) {
     throw new BadRequestError(`Backfill app install package "${packageAppKey}" is unsupported.`);

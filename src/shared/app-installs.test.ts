@@ -10,9 +10,17 @@ import {
   type AppInstall,
   type CreateAppInstallResult,
 } from "./app-installs.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  bundledAppPackageManifests,
+  createAppPackageResolver,
+} from "./app-packages.ts";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 
 const now = "2026-05-22T08:00:00.000Z";
+const privateSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 
 type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
@@ -282,6 +290,102 @@ describe("app install registry", () => {
     });
   });
 
+  it("passes bundled resolved source metadata to initial source validation", () => {
+    for (const appPackage of listBundledAppPackages()) {
+      const result = expectSuccess(
+        createAppInstall({
+          existingInstalls: [],
+          installId: appPackage.defaultInstallId,
+          label: appPackage.label,
+          now,
+          packageAppKey: appPackage.packageAppKey,
+          validateInitialSource: (context) => {
+            expect(context.packageApp).toMatchObject({
+              packageAppKey: appPackage.packageAppKey,
+              seedRecordsKey: appPackage.seedRecordsKey,
+              sourceSchemaKey: appPackage.sourceSchemaKey,
+            });
+            expect(context.initialization).toEqual({
+              installId: appPackage.defaultInstallId,
+              packageAppKey: appPackage.packageAppKey,
+              seedRecordsKey: appPackage.seedRecordsKey,
+              sourceSchemaKey: appPackage.sourceSchemaKey,
+            });
+
+            return undefined;
+          },
+        }),
+      );
+
+      expect(result.initialization.sourceSchemaKey).toBe(appPackage.sourceSchemaKey);
+      expect(result.initialization.seedRecordsKey).toBe(appPackage.seedRecordsKey);
+    }
+  });
+
+  it("creates a private package install only through the active resolver", () => {
+    const resolver = createAppPackageResolver([
+      ...bundledAppPackageManifests,
+      privatePackageManifest(),
+    ]);
+    const unavailable = expectFailure(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "labs",
+        label: "Private Labs",
+        now,
+        packageAppKey: "private-labs",
+      }),
+    );
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "labs",
+        label: " Private Labs ",
+        now,
+        packageAppKey: "private-labs",
+        packageResolver: resolver,
+        validateInitialSource: (context) => {
+          expect(context.packageApp.sourceSchemaLocation).toEqual({
+            kind: "workspace",
+            key: "private-labs",
+            path: "packages/private-labs/schema.json",
+          });
+          expect(context.packageApp.seedRecordsLocation).toEqual({
+            kind: "workspace",
+            key: "private-labs",
+            path: "packages/private-labs/seed-records.json",
+          });
+          expect(context.initialization).toEqual({
+            installId: "labs",
+            packageAppKey: "private-labs",
+            seedRecordsKey: "private-labs",
+            sourceSchemaKey: "private-labs",
+          });
+
+          return undefined;
+        },
+      }),
+    );
+
+    expect(unavailable.error.code).toBe("unsupported-package");
+    expect(result.install).toEqual({
+      adminRoute: "/apps/labs",
+      createdAt: now,
+      installId: "labs",
+      label: "Private Labs",
+      packageAppKey: "private-labs",
+      packageRevision: 7,
+      publicRoute: "/sites/labs",
+      publicRoutePrefix: "/sites/labs/",
+      schemaRoute: "/apps/labs/schema",
+      sourceSchemaHash: privateSourceSchemaHash,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(JSON.stringify(result.install)).not.toContain("packages/private-labs");
+    expect(JSON.stringify(result.install)).not.toContain("workspace");
+  });
+
   it("lists and finds installed apps without mutating registry state", () => {
     const docs = siteInstallFixture({
       createdAt: "2026-05-22T08:02:00.000Z",
@@ -420,5 +524,39 @@ function siteInstallFixture(input: {
     sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     updatedAt: createdAt,
+  };
+}
+
+function privatePackageManifest(): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/seed-records.json",
+    },
+    sourceSchemaHash: privateSourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      {
+        kind: "publicSite",
+        routeBase: "/sites",
+      },
+    ],
   };
 }

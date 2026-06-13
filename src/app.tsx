@@ -44,7 +44,7 @@ import {
   clientTargetSourceSchemaKey,
   type ClientAppTarget,
 } from "./client/app-target.ts";
-import type { AppInstall } from "./shared/app-installs.ts";
+import type { AppInstall, PackageAppKey } from "./shared/app-installs.ts";
 import {
   ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,
@@ -350,7 +350,7 @@ export type RuntimeShellInstalledAppLink = {
   isCurrent: boolean;
   key: string;
   label: string;
-  packageAppKey: SchemaKey;
+  packageAppKey: PackageAppKey;
 };
 
 export function selectRuntimeShellInstalledAppLinks({

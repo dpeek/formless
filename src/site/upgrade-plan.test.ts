@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
+import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import { listBundledAppPackages } from "../shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
-import { formatCliUpgradePlan, type CliUpgradePlan } from "./upgrade-plan.ts";
+import {
+  buildCliUpgradePlanningReport,
+  formatCliUpgradePlan,
+  type CliUpgradePlan,
+} from "./upgrade-plan.ts";
+import type { FormlessInstanceTargetUpgradeStatus } from "./instance-target-client.ts";
 
 const checksum = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const privateSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 
 describe("CLI upgrade plan formatting", () => {
   it("formats upgrade steps with safety, evidence, identities, and pending or blocked reasons", () => {
@@ -270,3 +282,93 @@ Steps: 1.
 `);
   });
 });
+
+describe("CLI upgrade planning package drift", () => {
+  it("blocks installed apps missing from active local package metadata", () => {
+    const report = buildCliUpgradePlanningReport({
+      localPackageVersion: "0.1.9",
+      status: upgradeStatus({
+        installedApps: [
+          {
+            installId: "labs",
+            packageAppKey: "private-labs",
+            packageRevision: 7,
+            sourceSchemaHash: privateSourceSchemaHash,
+          },
+        ],
+      }),
+      target: { targetUrl: "https://live.example" },
+    });
+
+    expect(report.blockers).toContainEqual({
+      code: "installed-app-package-resolver-drift",
+      message:
+        'Installed app "labs" package "private-labs" is missing from active local package metadata.',
+    });
+    expect(report.plan.steps).toEqual([]);
+  });
+
+  it("preserves bundled package revision and source schema hash drift blockers", () => {
+    const report = buildCliUpgradePlanningReport({
+      localPackageVersion: "0.1.9",
+      status: upgradeStatus({
+        installedApps: [
+          {
+            installId: "site",
+            packageAppKey: "site",
+            packageRevision: 2,
+            sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+          },
+          {
+            installId: "tasks",
+            packageAppKey: "tasks",
+            packageRevision: 1,
+            sourceSchemaHash: privateSourceSchemaHash,
+          },
+        ],
+      }),
+      target: { targetUrl: "https://live.example" },
+    });
+
+    expect(report.blockers).toEqual([
+      {
+        code: "installed-app-package-revision-ahead",
+        message: 'Installed app "site" package revision 2 is ahead of local package revision 1.',
+      },
+      {
+        code: "installed-app-source-schema-hash-drift",
+        message:
+          'Installed app "tasks" source schema hash differs from local package facts at revision 1.',
+      },
+    ]);
+  });
+});
+
+function upgradeStatus(
+  overrides: Partial<FormlessInstanceTargetUpgradeStatus> = {},
+): FormlessInstanceTargetUpgradeStatus {
+  return {
+    archiveInput: { present: false },
+    deployedMetadata: {
+      cacheControl: "no-store",
+      metadataUrl: "https://live.example/api/formless/deploy",
+      packageApps: listBundledAppPackages().map((appPackage) => ({
+        packageAppKey: appPackage.packageAppKey,
+        packageRevision: appPackage.packageRevision,
+        sourceSchemaHash: appPackage.sourceSchemaHash,
+      })),
+      packageVersion: "0.1.9",
+      runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+      version: "0.1.9",
+    },
+    installedApps: [],
+    localPackages: listBundledAppPackages().map((appPackage) => ({
+      packageAppKey: appPackage.packageAppKey,
+      packageRevision: appPackage.packageRevision,
+      sourceSchemaHash: appPackage.sourceSchemaHash,
+    })),
+    verificationFailures: [],
+    ...overrides,
+  };
+}

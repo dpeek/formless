@@ -327,7 +327,7 @@ describe("control-plane schema runtime validation", () => {
           surface: "public-site",
         }),
       },
-      'Field "appInstall" references app-install record',
+      'Package app "tasks" does not support public Site routes.',
     );
 
     await authority.expectError(

@@ -17,7 +17,7 @@ compare before mutating a Formless instance.
 
 - WHEN a CLI reads deployed runtime metadata from a target instance
 - THEN the response includes package version, runtime protocol version, storage
-  migration set identity, and bundled package app revision/hash facts
+  migration set identity, and resolved package app revision/hash facts
 - AND the response uses `Cache-Control: no-store`
 - AND the response does not include provider credentials, admin tokens, Alchemy
   passwords, raw lease tokens, or storage secrets
@@ -27,6 +27,9 @@ compare before mutating a Formless instance.
 - WHEN a CLI has local package metadata and deployed runtime metadata
 - THEN it can derive whether code deploy, storage migration, package app
   migration, archive compatibility, or browser reload behavior is required
+- AND package app comparisons use resolved local package metadata for the
+  active workspace or runtime, including private packages available through the
+  active package resolver
 
 ### Requirement: Migration Registry
 

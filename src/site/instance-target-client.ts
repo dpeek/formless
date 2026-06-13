@@ -13,6 +13,7 @@ import {
   FORMLESS_DEPLOY_METADATA_PATH,
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
+  deployPackageAppMetadataFromResolver,
   type FormlessDeployMetadata,
   type FormlessDeployPackageAppMetadata,
 } from "../shared/deploy-metadata.ts";
@@ -65,6 +66,11 @@ import {
   type BundledAppPackage,
   type PackageAppKey,
 } from "../shared/app-installs.ts";
+import {
+  listResolvedAppPackages,
+  type AppPackageResolver,
+  type ResolvedAppPackage,
+} from "../shared/app-packages.ts";
 import type {
   DeleteInstanceDomainMappingRequest,
   ForgetInstanceDomainMappingResponse,
@@ -256,13 +262,17 @@ export async function readFormlessInstanceTargetStatus(
     adminToken?: string | null;
     archiveInput?: PortableArchiveInputStatus;
     includeDeploymentStatus?: boolean;
+    packageResolver?: AppPackageResolver;
     targetUrl: string;
   },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetStatus> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const [deployMetadataResult, ownerSetup, appRegistryResult, deployment] = await Promise.all([
-    readFormlessInstanceDeployMetadataResult({ targetUrl }, dependencies),
+    readFormlessInstanceDeployMetadataResult(
+      { packageResolver: input.packageResolver, targetUrl },
+      dependencies,
+    ),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
     readFormlessInstanceAppRegistryResult(
       { adminToken: input.adminToken, targetUrl },
@@ -282,6 +292,7 @@ export async function readFormlessInstanceTargetStatus(
     deployMetadata: deployMetadataResult.deployMetadata,
     deployMetadataFactPresence: deployMetadataResult.factPresence,
     deploymentStatusRequested: input.includeDeploymentStatus === true,
+    packageResolver: input.packageResolver,
     ...(deployment === undefined ? {} : { deployment }),
   });
 
@@ -303,8 +314,9 @@ function targetUpgradeStatus(input: {
   deployMetadataFactPresence: FormlessInstanceDeployMetadataFactPresence;
   deployment?: InstanceDeploymentStatusResponse;
   deploymentStatusRequested: boolean;
+  packageResolver?: AppPackageResolver;
 }): FormlessInstanceTargetUpgradeStatus {
-  const localPackages = listBundledAppPackages().map(packageUpgradeFacts);
+  const localPackages = listResolvedAppPackages(input.packageResolver).map(packageUpgradeFacts);
   const installedApps = input.appRegistry.installs.map(installedAppUpgradeFacts);
   const verificationFailures = upgradeVerificationFailures({
     appRegistryFactPresence: input.appRegistryFactPresence,
@@ -326,7 +338,7 @@ function targetUpgradeStatus(input: {
 }
 
 function packageUpgradeFacts(
-  appPackage: BundledAppPackage,
+  appPackage: Pick<ResolvedAppPackage, "packageAppKey" | "packageRevision" | "sourceSchemaHash">,
 ): FormlessInstanceTargetLocalPackageUpgradeFacts {
   return {
     packageAppKey: appPackage.packageAppKey,
@@ -511,14 +523,14 @@ function cacheControlIncludesNoStore(value: string): boolean {
 }
 
 export async function readFormlessInstanceDeployMetadata(
-  input: { targetUrl: string },
+  input: { packageResolver?: AppPackageResolver; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetDeployMetadata> {
   return (await readFormlessInstanceDeployMetadataResult(input, dependencies)).deployMetadata;
 }
 
 async function readFormlessInstanceDeployMetadataResult(
-  input: { targetUrl: string },
+  input: { packageResolver?: AppPackageResolver; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceDeployMetadataReadResult> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -527,7 +539,7 @@ async function readFormlessInstanceDeployMetadataResult(
     headers: { accept: "application/json" },
   });
   const value = await readJsonResponse(response, `GET ${metadataUrl}`);
-  const metadata = parseDeployMetadata(value, metadataUrl);
+  const metadata = parseDeployMetadata(value, metadataUrl, input.packageResolver);
   const deployMetadata = {
     cacheControl: response.headers.get("Cache-Control") ?? "",
     metadataUrl,
@@ -1155,7 +1167,11 @@ async function readJsonResponse(response: Response, context: string): Promise<un
   }
 }
 
-function parseDeployMetadata(value: unknown, context: string): FormlessDeployMetadata {
+function parseDeployMetadata(
+  value: unknown,
+  context: string,
+  packageResolver?: AppPackageResolver,
+): FormlessDeployMetadata {
   if (!isRecord(value)) {
     throw new Error(`${context} failed: deploy metadata must be an object.`);
   }
@@ -1175,7 +1191,7 @@ function parseDeployMetadata(value: unknown, context: string): FormlessDeployMet
   const version = value.version as string | null;
 
   return {
-    packageApps: parseDeployPackageApps(value.packageApps, context),
+    packageApps: parseDeployPackageApps(value.packageApps, context, packageResolver),
     packageVersion:
       "packageVersion" in value && value.packageVersion !== undefined
         ? (value.packageVersion as string | null)
@@ -1327,27 +1343,32 @@ function parsePackageAppMigrationAppliedState(
 function parseDeployPackageApps(
   value: unknown,
   context: string,
+  packageResolver?: AppPackageResolver,
 ): FormlessDeployPackageAppMetadata[] {
   const packageApps = Array.isArray(value)
     ? value
-    : listBundledAppPackages().map((appPackage) => ({
-        packageAppKey: appPackage.packageAppKey,
-        packageRevision: appPackage.packageRevision,
-        sourceSchemaHash: appPackage.sourceSchemaHash,
-      }));
+    : deployPackageAppMetadataFromResolver(packageResolver);
 
   return packageApps.map((appPackage, index) =>
-    parseDeployPackageApp(appPackage, `${context} packageApps[${index}]`),
+    parseDeployPackageApp(appPackage, `${context} packageApps[${index}]`, packageResolver),
   );
 }
 
-function parseDeployPackageApp(value: unknown, context: string): FormlessDeployPackageAppMetadata {
+function parseDeployPackageApp(
+  value: unknown,
+  context: string,
+  packageResolver?: AppPackageResolver,
+): FormlessDeployPackageAppMetadata {
   if (!isRecord(value)) {
     throw new Error(`${context} failed: deploy package app metadata must be an object.`);
   }
 
-  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
-  const facts = packageAppFactsForKey(packageAppKey);
+  const packageAppKey = parsePackageAppKey(
+    value.packageAppKey,
+    `${context} packageAppKey`,
+    packageResolver,
+  );
+  const facts = packageAppFactsForKey(packageAppKey, packageResolver);
 
   if (!facts) {
     throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
@@ -1386,9 +1407,19 @@ function parseBundledPackageApp(value: unknown, context: string): BundledAppPack
     value.publicRouteBase,
     localPackage.publicRouteBase,
   );
+  const sourceSchemaKey = parseRequiredBundledSchemaKey(
+    value.sourceSchemaKey,
+    localPackage.sourceSchemaKey,
+    `${context} sourceSchemaKey`,
+  );
+  const seedRecordsKey = parseRequiredBundledSchemaKey(
+    value.seedRecordsKey,
+    localPackage.seedRecordsKey,
+    `${context} seedRecordsKey`,
+  );
 
   return {
-    packageAppKey,
+    packageAppKey: localPackage.packageAppKey,
     packageRevision: parseOptionalPositiveInteger(
       value.packageRevision,
       localPackage.packageRevision,
@@ -1414,16 +1445,19 @@ function parseBundledPackageApp(value: unknown, context: string): BundledAppPack
       typeof value.supportsMultipleInstalls === "boolean"
         ? value.supportsMultipleInstalls
         : localPackage.supportsMultipleInstalls,
-    sourceSchemaKey: parseRequiredPackageAppKey(
-      value.sourceSchemaKey,
-      localPackage.sourceSchemaKey,
-      `${context} sourceSchemaKey`,
-    ),
-    seedRecordsKey: parseRequiredPackageAppKey(
-      value.seedRecordsKey,
-      localPackage.seedRecordsKey,
-      `${context} seedRecordsKey`,
-    ),
+    sourceOrigin: localPackage.sourceOrigin,
+    sourceSchemaKey,
+    seedRecordsKey,
+    sourceSchemaLocation: {
+      ...localPackage.sourceSchemaLocation,
+      key: sourceSchemaKey,
+      path: `schema/apps/${sourceSchemaKey}/schema.json`,
+    },
+    seedRecordsLocation: {
+      ...localPackage.seedRecordsLocation,
+      key: seedRecordsKey,
+      path: `schema/apps/${seedRecordsKey}/seed-records.json`,
+    },
     adminRouteBase: parseRouteBase(value.adminRouteBase, localPackage.adminRouteBase),
     ...(publicRouteBase === undefined ? {} : { publicRouteBase }),
   };
@@ -1497,20 +1531,33 @@ function parseAppInstall(
   };
 }
 
-function parsePackageAppKey(value: unknown, context: string): PackageAppKey {
-  if (typeof value !== "string" || !packageAppFactsForKey(value)) {
+function parsePackageAppKey(
+  value: unknown,
+  context: string,
+  packageResolver?: AppPackageResolver,
+): PackageAppKey {
+  if (typeof value !== "string" || !packageAppFactsForKey(value, packageResolver)) {
     throw new Error(`${context} failed: package app key is unsupported.`);
   }
 
   return value as PackageAppKey;
 }
 
-function parseRequiredPackageAppKey(
+function parseRequiredBundledSchemaKey(
   value: unknown,
-  fallback: PackageAppKey,
+  fallback: BundledAppPackage["sourceSchemaKey"],
   context: string,
-): PackageAppKey {
-  return value === undefined ? fallback : parsePackageAppKey(value, context);
+): BundledAppPackage["sourceSchemaKey"] {
+  const packageAppKey = value === undefined ? fallback : parsePackageAppKey(value, context);
+  const bundledPackage = listBundledAppPackages().find(
+    (candidate) => candidate.packageAppKey === packageAppKey,
+  );
+
+  if (!bundledPackage) {
+    throw new Error(`${context} failed: bundled schema key is unsupported.`);
+  }
+
+  return bundledPackage.packageAppKey;
 }
 
 function parseOptionalPositiveInteger(

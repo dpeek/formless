@@ -227,6 +227,61 @@ describe("instance control-plane API routes", () => {
     });
   });
 
+  it("validates app install package keys and route capabilities against resolved packages", async () => {
+    const now = "2026-05-28T00:00:00.000Z";
+    const missingPackage = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
+      mutationId: "mutation-missing-package-install",
+      entity: "app-install",
+      op: "create",
+      values: {
+        installId: "missing",
+        packageAppKey: "missing-package",
+        label: "Missing",
+        status: "installed",
+        storageIdentity: "app:missing",
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
+      actionId: "action-create-tasks",
+      input: {
+        packageAppKey: "tasks",
+        installId: "tasks",
+        label: "Tasks",
+      },
+    });
+
+    const unsupportedPublicRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/mutations`,
+      {
+        mutationId: "mutation-tasks-public-route",
+        entity: "route",
+        op: "create",
+        values: {
+          enabled: true,
+          matchPath: "/sites/tasks",
+          matchPrefix: "/sites/tasks/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "tasks",
+          surface: "public-site",
+          access: "anonymous",
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+    );
+
+    expect(missingPackage.response.status).toBe(400);
+    expect(missingPackage.body.error).toBe('App install package "missing-package" is unsupported.');
+    expect(unsupportedPublicRoute.response.status).toBe(400);
+    expect(unsupportedPublicRoute.body.error).toBe(
+      'Package app "tasks" does not support public Site routes.',
+    );
+  });
+
   it("backfills legacy route intent records without deployment execution history records", async () => {
     const now = "2026-06-02T00:00:00.000Z";
     const restored = await postAdminJson<BootstrapResponse>(

@@ -17,10 +17,43 @@ The system SHALL provide source schemas for the current bundled schema keys `tas
 - **THEN** the app schema is available for that schema key
 - **AND** seed records can initialize records without being interpreted as change rows
 
+### Requirement: App Package Source Manifests
+
+The system SHALL represent installable app package source metadata as app
+package manifest facts before exposing package metadata to install, upgrade,
+archive, or deploy workflows.
+
+#### Scenario: Parse app package manifest
+
+- GIVEN an app package manifest declares kind `formless.appPackage` and version
+  `1`
+- WHEN the package source is resolved
+- THEN the manifest declares a route-safe package app key, label, optional
+  description, default install id, multiple-install policy, package revision,
+  source schema location, seed records location, and runtime capabilities such
+  as generated admin and optional public Site routes
+- AND the manifest does not contain app install records, route records,
+  deployment config, app records, media payloads, provider credentials, or
+  workspace-local secrets
+- AND the referenced source schema parses as an app schema
+- AND referenced seed records validate as stored-record shaped data for that
+  source schema
+
+#### Scenario: Resolve bundled app packages from manifests
+
+- GIVEN the current bundled package app keys `site`, `tasks`, `estii`, `crm`,
+  and `cleartrace`
+- WHEN package metadata is listed or read
+- THEN each package is exposed as a resolved app package derived from app
+  package manifest facts
+- AND existing package app keys, labels, default install ids, package
+  revisions, source schema hashes, source schema keys, and seed record keys
+  remain stable unless the package source changes
+
 ### Requirement: Package App Revision Facts
 
-The system SHALL distinguish app schema language version from bundled package
-app revision and source schema hash.
+The system SHALL distinguish app schema language version from app package
+revision and source schema hash.
 
 #### Scenario: Parse schema language version
 
@@ -28,12 +61,12 @@ app revision and source schema hash.
 - **THEN** `schema.version` continues to represent the schema language version
 - **AND** package app revision is not read from `schema.version`
 
-#### Scenario: Describe bundled package app revision
+#### Scenario: Describe resolved package app revision
 
-- **WHEN** bundled Site, Tasks, Estii, CRM, or ClearTrace package metadata is read
-- **THEN** the package declares a monotonic package revision and deterministic
-  source schema hash
-- **AND** current bundled packages can start at package revision `1`
+- **WHEN** resolved app package metadata is read
+- **THEN** the package declares a monotonic package revision, deterministic
+  source schema hash, package app key, source origin, and source schema key
+- **AND** current bundled packages can remain at package revision `1`
 
 ### Requirement: Package App Schema Migrations
 
@@ -96,11 +129,11 @@ pure helpers through the Schema package slice.
 
 #### Scenario: Package does not own runtime app records
 
-- **WHEN** App schema behavior is used to load bundled source schemas, load
-  source seed records, render generated React surfaces, edit Builder drafts,
-  validate Authority writes, store active schemas, sync browser replicas, plan
-  or apply archives, compose Workspace record source, build instance
-  control-plane records, or apply package app migrations
+- **WHEN** App schema behavior is used to load bundled or resolved package
+  source schemas, load source seed records, render generated React surfaces,
+  edit Builder drafts, validate Authority writes, store active schemas, sync
+  browser replicas, plan or apply archives, compose Workspace record source,
+  build instance control-plane records, or apply package app migrations
 - **THEN** those runtime behaviors remain owned by app, client, Worker,
   archive, Workspace, instance control-plane, migration, or generated UI modules
 - **AND** the Schema package only owns runtime-neutral schema language

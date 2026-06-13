@@ -9,11 +9,19 @@ import {
   instanceControlPlaneEffectiveRouteAccess,
   instanceControlPlaneEntityNames,
   instanceControlPlaneImmutableFields,
+  instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
   isInstanceControlPlaneEntityName,
   isInstanceControlPlaneRouteSafePath,
   parseInstanceControlPlaneBoundaryEntityName,
 } from "./instance-control-plane.ts";
+import { createAppInstall, type CreateAppInstallResult } from "./app-installs.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  bundledAppPackageManifests,
+  createAppPackageResolver,
+} from "./app-packages.ts";
 import { parseAppSchema } from "@dpeek/formless-schema";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
@@ -21,6 +29,9 @@ import {
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
 } from "@dpeek/formless-schema";
+
+const privateSourceSchemaHash =
+  "sha256:3333333333333333333333333333333333333333333333333333333333333333";
 
 describe("instance control-plane schema contracts", () => {
   it("defines the runtime-owned flat record schema", () => {
@@ -47,14 +58,8 @@ describe("instance control-plane schema contracts", () => {
       to: { entity: "app-install" },
     });
     expect(schema.entities["app-install"]?.fields.packageAppKey).toMatchObject({
-      type: "enum",
-      values: {
-        cleartrace: { label: "ClearTrace" },
-        crm: { label: "CRM" },
-        estii: { label: "Estii" },
-        site: { label: "Site" },
-        tasks: { label: "Tasks" },
-      },
+      type: "text",
+      required: true,
     });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
@@ -507,6 +512,51 @@ describe("instance control-plane schema contracts", () => {
     ).toBe("owner");
   });
 
+  it("derives private package route records from resolved capabilities", () => {
+    const now = "2026-05-28T00:00:00.000Z";
+    const resolver = createAppPackageResolver([
+      ...bundledAppPackageManifests,
+      privatePackageManifest(),
+    ]);
+    const result = expectCreateAppInstallSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "labs",
+        label: "Private Labs",
+        now,
+        packageAppKey: "private-labs",
+        packageResolver: resolver,
+      }),
+    );
+    const records = instanceControlPlaneRecordsForAppInstall({
+      install: result.install,
+      now,
+    });
+
+    expect(records.map((record) => record.id)).toEqual([
+      "labs",
+      "route:labs:admin",
+      "route:labs:schema",
+      "route:labs:public-site",
+    ]);
+    expect(records.map((record) => record.entity)).toEqual([
+      "app-install",
+      "route",
+      "route",
+      "route",
+    ]);
+    expect(records.map((record) => record.values).slice(1)).toEqual(
+      instanceControlPlaneDefaultRoutesForInstall({
+        installId: "labs",
+        packageAppKey: "private-labs",
+        packageResolver: resolver,
+        now,
+      }).map((record) => record.values),
+    );
+    expect(JSON.stringify(records[0].values)).not.toContain("packages/private-labs");
+    expect(JSON.stringify(records[0].values)).not.toContain("workspace");
+  });
+
   it("keeps route paths static, app-relative, lowercase, and away from reserved roots", () => {
     expect(isInstanceControlPlaneRouteSafePath("/apps/personal")).toBe(true);
     expect(isInstanceControlPlaneRouteSafePath("/sites/personal")).toBe(true);
@@ -517,3 +567,49 @@ describe("instance control-plane schema contracts", () => {
     expect(isInstanceControlPlaneRouteSafePath("/api/jobs")).toBe(false);
   });
 });
+
+function expectCreateAppInstallSuccess(
+  result: CreateAppInstallResult,
+): Extract<CreateAppInstallResult, { ok: true }> {
+  expect(result.ok).toBe(true);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result;
+}
+
+function privatePackageManifest(): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "packages/private-labs/seed-records.json",
+    },
+    sourceSchemaHash: privateSourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      {
+        kind: "publicSite",
+        routeBase: "/sites",
+      },
+    ],
+  };
+}

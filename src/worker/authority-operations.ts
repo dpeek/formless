@@ -59,6 +59,7 @@ import {
   recordOperationInvocationAccepted,
   recordOperationInvocationFailed,
   recordOperationInvocationRejected,
+  type RecordConstraintValidator,
   type ApplyPackageAppMigrationsResponse,
   type StorageSource,
   type WriteOutcome,
@@ -177,6 +178,7 @@ type AuthorityOperationExecutionInput = {
   source: StorageSource;
   storage: DurableObjectStorage;
   turnstileSiteKey?: string;
+  validateConstraints?: RecordConstraintValidator;
   writes: AuthorityWriteNotifier;
 };
 
@@ -388,6 +390,7 @@ export function executeAuthorityOperation(
           envelope,
           schema,
           storage: input.storage,
+          validateConstraints: input.validateConstraints,
           writes: input.writes,
         }),
       };

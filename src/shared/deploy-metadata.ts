@@ -1,3 +1,8 @@
+import {
+  listResolvedAppPackages,
+  type AppPackageResolver,
+  type ResolvedAppPackage,
+} from "./app-packages.ts";
 import type { PackageAppKey } from "./app-installs.ts";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
@@ -18,3 +23,19 @@ export type FormlessDeployPackageAppMetadata = {
   packageRevision: PackageAppRevision;
   sourceSchemaHash: SourceSchemaHash;
 };
+
+export function deployPackageAppMetadataFromResolver(
+  resolver?: AppPackageResolver,
+): FormlessDeployPackageAppMetadata[] {
+  return listResolvedAppPackages(resolver).map(deployPackageAppMetadata);
+}
+
+function deployPackageAppMetadata(
+  appPackage: Pick<ResolvedAppPackage, "packageAppKey" | "packageRevision" | "sourceSchemaHash">,
+): FormlessDeployPackageAppMetadata {
+  return {
+    packageAppKey: appPackage.packageAppKey,
+    packageRevision: appPackage.packageRevision,
+    sourceSchemaHash: appPackage.sourceSchemaHash,
+  };
+}

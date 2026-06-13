@@ -2,11 +2,11 @@ import {
   appInstallRegistryError,
   createAppInstall,
   findAppInstall,
-  findBundledAppPackage,
   listAppInstalls,
   type AppInstall,
   type CreateAppInstallResult,
 } from "../shared/app-installs.ts";
+import { findResolvedAppPackage } from "../shared/app-packages.ts";
 import type { CreateAppInstallRequest } from "../shared/protocol.ts";
 import {
   bundledSourceSchemaHashFixtures,
@@ -320,7 +320,7 @@ function ensureInstanceAppInstallPackageFactColumns(storage: DurableObjectStorag
 }
 
 function appInstallFromRow(row: AppInstallRow): AppInstall {
-  const packageApp = findBundledAppPackage(row.package_app_key);
+  const packageApp = findResolvedAppPackage(row.package_app_key);
 
   if (!packageApp) {
     throw new Error(`Stored app install "${row.install_id}" has unsupported package.`);

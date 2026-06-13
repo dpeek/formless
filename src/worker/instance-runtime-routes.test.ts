@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
+import type { AppInstall } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { resolveInstanceRuntimeRouteFromRecords } from "./instance-runtime-routes.ts";
 
@@ -221,7 +222,7 @@ function routeRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   };
 }
 
-function appInstall(installId: string, packageAppKey: PackageAppKey): AppInstall {
+function appInstall(installId: string, packageAppKey: SchemaKey): AppInstall {
   return {
     adminRoute: `/apps/${installId}`,
     createdAt: "2026-06-02T00:00:00.000Z",
