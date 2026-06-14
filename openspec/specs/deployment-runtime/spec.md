@@ -68,11 +68,14 @@ supported deployment target.
 - **WHEN** a client reads desired deployment state for a target
 - **THEN** the response includes a stable hash, schema version, target id,
   resource graph, and display summary
-- **AND** targets backed by schema-owned control-plane records project the
-  resource graph from enabled route records, deployment config records, and
-  higher-level runtime intent for that target
+- **AND** instance targets project the resource graph from schema-owned
+  control-plane records and higher-level runtime intent for that target
 - **AND** host mount routes project custom-domain and DNS resources
 - **AND** redirect routes project redirect and redirect DNS resources
+- **AND** deployment runtime does not synthesize route-derived resources from
+  legacy domain-mapping or redirect-intent stores
+- **AND** if control-plane route records are absent, no route-derived provider
+  resources are included
 - **AND** raw desired resource rows are not schema-owned control-plane source
   records
 - **AND** the response does not include provider credentials, Alchemy
@@ -84,6 +87,8 @@ supported deployment target.
 - **WHEN** user intent has not changed
 - **THEN** repeated desired-state reads for the same target produce the same
   hash
+- **AND** route-derived resource graph hashes are based on the Deploy package
+  control-plane projection output
 - **AND** timestamps, attempt history, evidence summaries, cleanup history,
   drift reports, deployment config observation cache fields, and status display
   data do not change the desired-state hash

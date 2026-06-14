@@ -96,7 +96,7 @@ describe("instance deployment runtime API routes", () => {
       revision: 0,
       schemaVersion: 1,
       source: {
-        fingerprint: "intent:instance.primary.empty",
+        fingerprint: expect.stringMatching(/^control-plane:/),
         intentRevision: 0,
       },
       targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
@@ -208,7 +208,7 @@ describe("instance deployment runtime API routes", () => {
       },
     ]);
     expect(desired.body.desiredState.source).toMatchObject({
-      fingerprint: expect.stringMatching(/^intent:instance\.primary\.routes:/),
+      fingerprint: expect.stringMatching(/^control-plane:/),
       intentRevision: 3,
     });
     expect(serialized).not.toContain("disabled.example.com");
@@ -335,7 +335,7 @@ describe("instance deployment runtime API routes", () => {
       },
     ]);
     expect(desired.body.desiredState.source).toMatchObject({
-      fingerprint: expect.stringMatching(/^intent:instance\.primary\.routes:/),
+      fingerprint: expect.stringMatching(/^control-plane:/),
       intentRevision: 4,
     });
     expect(serialized).not.toContain("disabled.example.com");

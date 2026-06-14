@@ -71,7 +71,7 @@ schema-owned control-plane intent records.
 #### Scenario: Project desired state
 
 - **GIVEN** desired deployment state is read for a supported target
-- **WHEN** schema-owned control-plane records are available for that target
+- **WHEN** schema-owned control-plane records are read for that target
 - **THEN** the resource graph is projected from the current control-plane
   records
 - **AND** enabled `route` records provide app mount, custom-domain, DNS, and
@@ -79,6 +79,8 @@ schema-owned control-plane intent records.
 - **AND** `deployment-config` records provide the target URL, provider account,
   worker name, and credential reference needed to project provider-facing
   resources
+- **AND** deployment projection does not fall back to legacy domain-mapping or
+  redirect-intent storage when control-plane records are present or absent
 - **AND** no projected `DeploymentResourceGraph` resource is stored as
   schema-owned source intent
 - **AND** the desired-state hash is computed from canonical projected content
@@ -126,6 +128,19 @@ a deploy package slice.
 - WHEN they consume deploy capability behavior
 - THEN they import public declarations or helpers from `lib/deploy`
 - AND they do not redefine compatible deployment record shapes locally
+
+#### Scenario: Shared route projection module
+
+- GIVEN runtime, CLI, workspace, or tests need route-derived deployment
+  projection from control-plane records
+- WHEN app-install, route, and deployment-config records are projected for a
+  target
+- THEN the records are adapted into public Deploy package projection input
+- AND provider resource graphs, route target projections, source fingerprints,
+  stable logical ids, and canonical hash inputs derive from the Deploy package
+  projection helper
+- AND runtime code does not maintain a separate route-to-provider-resource
+  projection implementation
 
 ### Requirement: Route Records
 

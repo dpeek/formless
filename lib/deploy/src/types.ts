@@ -94,6 +94,21 @@ export type DeployDesiredStateProjectionInput = {
   workerName?: string;
 };
 
+export type ControlPlaneProjectionSourceRecord = {
+  createdAt?: string;
+  deletedAt?: string;
+  entity: string;
+  id: string;
+  values: Readonly<Record<string, unknown>>;
+};
+
+export type DeployControlPlaneRecordsProjectionInput = {
+  instanceId: string;
+  records: readonly ControlPlaneProjectionSourceRecord[];
+  targetId: string;
+  workerName?: string;
+};
+
 export type DeployRouteTargetProjection = {
   appInstallId: string;
   path: string;

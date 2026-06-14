@@ -3,8 +3,10 @@ import {
   type ControlPlaneAppInstallProjectionRecord,
   type ControlPlaneDomainMappingProfile,
   type ControlPlaneProviderConfigProjectionRecord,
+  type ControlPlaneProjectionSourceRecord,
   type ControlPlaneRedirectStatusCode,
   type ControlPlaneRouteProjectionRecord,
+  type DeployControlPlaneRecordsProjectionInput,
   type DeployDesiredStateProjection,
   type DeployDesiredStateProjectionInput,
   type DeployJsonValue,
@@ -27,6 +29,7 @@ export type {
   ControlPlaneDeploymentConfigObservedStatus,
   ControlPlaneDomainMappingProfile,
   ControlPlaneProviderConfigProjectionRecord,
+  ControlPlaneProjectionSourceRecord,
   ControlPlaneRedirectStatusCode,
   ControlPlaneRouteKind,
   ControlPlaneRouteProjectionRecord,
@@ -37,6 +40,7 @@ export type {
   DeployAttemptMode,
   DeployAttemptStatus,
   DeployAttemptSummary,
+  DeployControlPlaneRecordsProjectionInput,
   DeployControlPlaneActionId,
   DeployDesiredStateProjection,
   DeployDesiredStateProjectionInput,
@@ -62,6 +66,36 @@ const redirectPlaceholderDnsRecord = {
   ttl: 1,
   type: "AAAA",
 } as const;
+
+type DeploymentConfigProjectionRecord = ControlPlaneProviderConfigProjectionRecord & {
+  targetId: string;
+};
+
+export function deployDesiredStateProjectionInputFromControlPlaneRecords(
+  input: DeployControlPlaneRecordsProjectionInput,
+): DeployDesiredStateProjectionInput {
+  const activeRecords = input.records.filter((record) => record.deletedAt === undefined);
+  const providerConfigs = providerConfigProjectionRecordsFromControlPlaneRecords(activeRecords);
+  const providerConfigsById = new Map(providerConfigs.map((config) => [config.id, config]));
+  const primaryProviderConfig = primaryProviderConfigForTarget(providerConfigs, input.targetId);
+  const routes = routeProjectionRecordsFromControlPlaneRecords(activeRecords).filter((route) =>
+    routeMatchesProjectionTarget(route, {
+      primaryProviderConfig,
+      providerConfigs: providerConfigsById,
+      targetId: input.targetId,
+    }),
+  );
+  const workerName = primaryProviderConfig?.workerName ?? input.workerName;
+
+  return {
+    appInstalls: appInstallProjectionRecordsFromControlPlaneRecords(activeRecords),
+    instanceId: input.instanceId,
+    providerConfigs: providerConfigProjectionInputRecords(providerConfigs),
+    routes,
+    targetId: input.targetId,
+    ...(workerName === undefined ? {} : { workerName }),
+  };
+}
 
 export function projectDeployControlPlaneDesiredState(
   input: DeployDesiredStateProjectionInput,
@@ -187,6 +221,207 @@ export function deployLogicalResourceId(
     .filter((part): part is string => part !== undefined && part !== "")
     .map((part) => normalizeDeployLogicalIdPart(part, "value"))
     .join("-");
+}
+
+function appInstallProjectionRecordsFromControlPlaneRecords(
+  records: readonly ControlPlaneProjectionSourceRecord[],
+): ControlPlaneAppInstallProjectionRecord[] {
+  return records
+    .filter((record) => record.entity === "app-install")
+    .map((record) => {
+      const installId = stringRecordValue(record, "installId");
+      const packageAppKey = stringRecordValue(record, "packageAppKey");
+
+      if (installId === undefined || packageAppKey === undefined) {
+        return undefined;
+      }
+
+      return {
+        id: record.id,
+        installId,
+        packageAppKey,
+      };
+    })
+    .filter((record): record is ControlPlaneAppInstallProjectionRecord => record !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function routeProjectionRecordsFromControlPlaneRecords(
+  records: readonly ControlPlaneProjectionSourceRecord[],
+): ControlPlaneRouteProjectionRecord[] {
+  return records
+    .filter((record) => record.entity === "route")
+    .map(routeProjectionRecordFromControlPlaneRecord)
+    .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function routeProjectionRecordFromControlPlaneRecord(
+  record: ControlPlaneProjectionSourceRecord,
+): ControlPlaneRouteProjectionRecord | undefined {
+  const kind = stringRecordValue(record, "kind");
+  const matchPath = stringRecordValue(record, "matchPath");
+
+  if ((kind !== "mount" && kind !== "redirect") || matchPath === undefined) {
+    return undefined;
+  }
+
+  const appInstall = stringRecordValue(record, "appInstall");
+  const deploymentConfig = stringRecordValue(record, "deploymentConfig");
+  const matchHost = stringRecordValue(record, "matchHost");
+  const matchPrefix = stringRecordValue(record, "matchPrefix");
+  const preservePath = booleanRecordValue(record, "preservePath");
+  const preserveQueryString = booleanRecordValue(record, "preserveQueryString");
+  const statusCode = redirectStatusCodeRecordValue(record, "statusCode");
+  const surface = routeSurfaceRecordValue(record, "surface");
+  const targetProfile = routeTargetProfileRecordValue(record, "targetProfile");
+  const toHost = stringRecordValue(record, "toHost");
+  const toUrl = stringRecordValue(record, "toUrl");
+
+  return {
+    enabled: booleanRecordValue(record, "enabled") ?? true,
+    id: record.id,
+    kind,
+    matchPath,
+    ...(appInstall === undefined ? {} : { appInstall }),
+    ...(deploymentConfig === undefined ? {} : { providerConfig: deploymentConfig }),
+    ...(matchHost === undefined ? {} : { matchHost }),
+    ...(matchPrefix === undefined ? {} : { matchPrefix }),
+    ...(preservePath === undefined ? {} : { preservePath }),
+    ...(preserveQueryString === undefined ? {} : { preserveQueryString }),
+    ...(statusCode === undefined ? {} : { statusCode }),
+    ...(surface === undefined ? {} : { surface }),
+    ...(targetProfile === undefined ? {} : { targetProfile }),
+    ...(toHost === undefined ? {} : { toHost }),
+    ...(toUrl === undefined ? {} : { toUrl }),
+  };
+}
+
+function providerConfigProjectionRecordsFromControlPlaneRecords(
+  records: readonly ControlPlaneProjectionSourceRecord[],
+): DeploymentConfigProjectionRecord[] {
+  return records
+    .filter(
+      (record) =>
+        record.entity === "deployment-config" &&
+        booleanRecordValue(record, "enabled") !== false &&
+        stringRecordValue(record, "providerFamily") === "cloudflare",
+    )
+    .map((record) => {
+      const targetId = stringRecordValue(record, "targetId") ?? record.id;
+      const workerName = stringRecordValue(record, "workerName");
+
+      return {
+        id: record.id,
+        providerFamily: "cloudflare" as const,
+        targetId,
+        ...(workerName === undefined ? {} : { workerName }),
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function primaryProviderConfigForTarget(
+  providerConfigs: readonly DeploymentConfigProjectionRecord[],
+  targetId: string,
+): DeploymentConfigProjectionRecord | undefined {
+  const matchingPrimary = providerConfigs.find((config) => config.targetId === targetId);
+
+  return matchingPrimary ?? (providerConfigs.length === 1 ? providerConfigs[0] : undefined);
+}
+
+function providerConfigProjectionInputRecords(
+  providerConfigs: readonly DeploymentConfigProjectionRecord[],
+): ControlPlaneProviderConfigProjectionRecord[] {
+  return providerConfigs.map((providerConfig) => ({
+    id: providerConfig.id,
+    providerFamily: providerConfig.providerFamily,
+    ...(providerConfig.workerName === undefined ? {} : { workerName: providerConfig.workerName }),
+  }));
+}
+
+function routeMatchesProjectionTarget(
+  route: ControlPlaneRouteProjectionRecord,
+  input: {
+    primaryProviderConfig?: DeploymentConfigProjectionRecord;
+    providerConfigs: ReadonlyMap<string, DeploymentConfigProjectionRecord>;
+    targetId: string;
+  },
+): boolean {
+  const providerConfig =
+    route.providerConfig === undefined
+      ? input.primaryProviderConfig
+      : input.providerConfigs.get(route.providerConfig);
+
+  return providerConfig === undefined || providerConfig.targetId === input.targetId;
+}
+
+function stringRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): string | undefined {
+  const value = record.values[fieldName];
+
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+function booleanRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): boolean | undefined {
+  const value = record.values[fieldName];
+
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function redirectStatusCodeRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): ControlPlaneRouteProjectionRecord["statusCode"] | undefined {
+  const value = record.values[fieldName];
+
+  if (
+    value === 301 ||
+    value === 302 ||
+    value === 303 ||
+    value === 307 ||
+    value === 308 ||
+    value === "301" ||
+    value === "302" ||
+    value === "303" ||
+    value === "307" ||
+    value === "308"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function routeSurfaceRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): ControlPlaneRouteProjectionRecord["surface"] | undefined {
+  const value = stringRecordValue(record, fieldName);
+
+  if (value === "admin" || value === "public-site" || value === "schema") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function routeTargetProfileRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): ControlPlaneRouteProjectionRecord["targetProfile"] | undefined {
+  const value = stringRecordValue(record, fieldName);
+
+  if (value === "app" || value === "instance" || value === "public-site") {
+    return value;
+  }
+
+  return undefined;
 }
 
 function projectRouteProviderResources(
@@ -534,13 +769,39 @@ function normalizeRouteInputs(
 }
 
 function redirectTargetUrl(redirect: RedirectRouteIntent): string {
-  if (redirect.toUrl !== undefined) {
-    return redirect.toUrl;
+  const targetUrlBase =
+    redirect.toUrl === undefined ? undefined : normalizeRedirectTargetUrlBase(redirect.toUrl);
+
+  if (targetUrlBase !== undefined) {
+    return redirect.preservePath ? `${targetUrlBase}/${"$"}{1}` : targetUrlBase;
   }
 
   const targetHost = redirect.toHost ?? redirect.fromHost;
 
   return redirect.preservePath ? `https://${targetHost}/${"$"}{1}` : `https://${targetHost}/`;
+}
+
+function normalizeRedirectTargetUrlBase(value: string): string | undefined {
+  const normalized = optionalText(value);
+
+  if (normalized === undefined) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(normalized);
+
+    url.pathname = stripTrailingSlash(url.pathname);
+    url.search = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return normalized;
+  }
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.length > 1 ? value.replace(/\/+$/, "") || "/" : value;
 }
 
 function normalizeOptionalHost(value: string | undefined): string | undefined {

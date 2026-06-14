@@ -195,7 +195,7 @@ async function readDesiredStateProjection(input: {
   target: DeploymentTarget;
 }) {
   const now = nowIsoString();
-  const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection(input.storage, {
+  const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection({
     env: input.env,
     now,
     requestUrl: input.request.url,

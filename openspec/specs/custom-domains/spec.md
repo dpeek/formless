@@ -146,6 +146,8 @@ semantics.
 - **WHEN** deployment desired state is built for a target
 - **THEN** enabled mapping routes are projected into deployment graph resources
 - **AND** disabled mapping routes do not create desired provider resources
+- **AND** legacy domain-mapping storage is not used as a deployment projection
+  fallback
 
 #### Scenario: Project redirect intent
 
@@ -154,6 +156,18 @@ semantics.
 - **THEN** enabled redirect routes are projected into redirect rule and
   redirect DNS graph resources
 - **AND** disabled redirect routes do not create desired provider resources
+- **AND** legacy redirect-intent storage is not used as a deployment projection
+  fallback
+
+#### Scenario: Route records are the projection source
+
+- **GIVEN** compatibility domain mapping or redirect workflows still accept
+  legacy-shaped inputs
+- **WHEN** deployment desired state is built
+- **THEN** those workflows must have synchronized desired state into
+  schema-owned `route` records before provider resources can be projected
+- **AND** absent route records mean absent custom-domain or redirect provider
+  resources
 
 #### Scenario: Removed routes disappear from desired state
 
