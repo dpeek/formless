@@ -1,11 +1,11 @@
 import {
   type DeploymentDesiredStateSource,
-  type DeploymentResourceGraph,
   type DeploymentTarget,
 } from "../shared/deployment-runtime.ts";
 import {
   deployDesiredStateProjectionInputFromControlPlaneRecords,
   projectDeployControlPlaneDesiredState,
+  type DeployResourceGraph,
 } from "@dpeek/formless-deploy";
 import type { StoredRecord } from "../shared/protocol.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
@@ -42,7 +42,7 @@ export function buildDeploymentDesiredStateProjectionFromControlPlaneRecords(
     targetId: DeploymentTarget["targetId"];
   },
 ): {
-  resourceGraph: DeploymentResourceGraph;
+  resourceGraph: DeployResourceGraph;
   source: DeploymentDesiredStateSource;
 } {
   const projectionInput = deployDesiredStateProjectionInputFromControlPlaneRecords({

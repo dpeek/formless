@@ -4,11 +4,25 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import path from "node:path";
 
 import {
+  deployDeploymentAppliedSummary,
+  deployDeploymentObservationPatch,
+  deployDeploymentObservationPatchFromLatestStatus,
+  deployDesiredStateDisplaySummary,
   deployDesiredStateProjectionInputFromControlPlaneRecords,
+  deployDisplaySafeFailureSummary,
+  deployLatestStatusDisplaySummary,
   projectDeployControlPlaneDesiredState,
+  deployResourceCountsByKind,
   stableDeployJsonStringify,
+  type DeployDesiredStateResponse,
+  type DeployDesiredStateVersionRef,
+  type DeployEvidenceSummary,
+  type DeployFailureSummary,
+  type DeployLatestStatus,
+  type DeployLatestStatusDisplaySummary,
   type DeployDesiredStateProjectionInput,
   type DeployResourceGraph,
+  type DeployResourceKind,
 } from "@dpeek/formless-deploy";
 
 import {
@@ -37,16 +51,6 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
 } from "../shared/instance-domain-mappings.ts";
-import type {
-  DeploymentDesiredStateVersionRef,
-  DeploymentFailureSummary,
-  InstanceDeploymentDesiredStateResponse,
-  DeploymentResourceEvidenceSummary,
-  DeploymentResourceKind,
-  DeploymentStatus,
-  DeploymentStatusDisplaySummary,
-} from "../shared/deployment-runtime.ts";
-import { deploymentStatusDisplaySummary } from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -320,7 +324,7 @@ export type FormlessInstanceWorkspaceDriftSummary = {
 };
 
 export type CheckFormlessInstanceWorkspaceResult = {
-  deploymentStatus?: DeploymentStatusDisplaySummary;
+  deploymentStatus?: DeployLatestStatusDisplaySummary;
   drift: FormlessInstanceWorkspaceDriftSummary;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
@@ -410,7 +414,7 @@ export type RefreshFormlessInstanceDeploymentObservationDependencies = {
 };
 
 export type RefreshFormlessInstanceDeploymentObservationResult = {
-  deploymentStatus: DeploymentStatusDisplaySummary;
+  deploymentStatus: DeployLatestStatusDisplaySummary;
   observation: DeployLocalFormlessWorkspaceObservation;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
@@ -589,7 +593,7 @@ export type DeployLocalFormlessWorkspaceEvidenceSummary = {
 };
 
 export type DeployLocalFormlessWorkspaceObservation = {
-  desiredState: DeploymentDesiredStateVersionRef;
+  desiredState: DeployDesiredStateVersionRef;
   evidence: DeployLocalFormlessWorkspaceEvidenceSummary;
   evidenceCount: number;
   observedAt: string;
@@ -597,7 +601,7 @@ export type DeployLocalFormlessWorkspaceObservation = {
   observedStatus: FormlessInstanceDeploymentObservationPatch["observedStatus"];
   observedSummary: string;
   resourceCount: number;
-  resourcesByKind: Record<DeploymentResourceKind, number>;
+  resourcesByKind: Record<DeployResourceKind, number>;
   runnerId: string;
   targetId: string;
 };
@@ -1064,7 +1068,7 @@ export async function checkFormlessInstanceWorkspace(
     );
 
     return {
-      deploymentStatus: deploymentStatusDisplaySummary(deploymentStatus.status),
+      deploymentStatus: deployLatestStatusDisplaySummary(deploymentStatus.status),
       drift: compareWorkspaceArchives({
         domainDesiredDrift,
         localControlPlane,
@@ -1444,7 +1448,7 @@ export async function refreshFormlessInstanceDeploymentObservation(
   );
 
   return {
-    deploymentStatus: deploymentStatusDisplaySummary(statusResponse.status),
+    deploymentStatus: deployLatestStatusDisplaySummary(statusResponse.status),
     observation,
     selectedTarget,
     workspaceRoot,
@@ -1734,7 +1738,10 @@ export async function deployLocalFormlessWorkspace(
         desiredState: planned.desiredState,
         observedStatus: "deployed",
         resourceEvidence: deployment.resourceEvidence ?? [],
-        summary: localWorkspaceDeploymentSuccessSummary(planned.desiredState),
+        summary: deployDeploymentAppliedSummary({
+          resourceCount: planned.desiredState.resourceCount,
+          sourceLabel: "workspace source",
+        }),
         targetUrl: deploymentUrl,
       },
       dependencies,
@@ -1778,7 +1785,7 @@ async function writeLocalWorkspaceDeploymentObservation(
     desiredState: LocalWorkspaceDeploymentDesiredState;
     observedError?: string;
     observedStatus: FormlessInstanceDeploymentObservationPatch["observedStatus"];
-    resourceEvidence: DeploymentResourceEvidenceSummary[];
+    resourceEvidence: DeployEvidenceSummary[];
     summary: string;
     targetUrl: string;
   },
@@ -1802,19 +1809,21 @@ async function writeLocalWorkspaceDeploymentObservation(
     runtimeDesiredState.desiredState as DeployDesiredStateVersionLike,
   );
   const runnerId = "local-gateway";
-  const observedAt = dependencies.now();
+  const observation = deployDeploymentObservationPatch({
+    desiredState,
+    observedAt: dependencies.now(),
+    observedError: input.observedError,
+    observedStatus: input.observedStatus,
+    observedSummary: input.summary,
+    runnerId,
+  });
+  const observedError =
+    typeof observation.observedError === "string" ? observation.observedError : undefined;
 
   await patchFormlessInstanceDeploymentConfigObservation(
     {
       adminToken: input.adminToken,
-      observation: {
-        observedAt,
-        observedDesiredStateHash: desiredState.hash,
-        observedError: input.observedError ?? "",
-        observedRunnerId: runnerId,
-        observedStatus: input.observedStatus,
-        observedSummary: input.summary,
-      },
+      observation,
       targetId: desiredState.targetId,
       targetUrl: input.targetUrl,
     },
@@ -1825,14 +1834,12 @@ async function writeLocalWorkspaceDeploymentObservation(
     desiredState,
     evidence: summarizeLocalWorkspaceDeploymentEvidence(input.resourceEvidence),
     evidenceCount: input.resourceEvidence.length,
-    observedAt,
-    ...(input.observedError === undefined ? {} : { observedError: input.observedError }),
-    observedStatus: input.observedStatus,
-    observedSummary: input.summary,
+    observedAt: observation.observedAt,
+    ...(observedError === undefined ? {} : { observedError }),
+    observedStatus: observation.observedStatus,
+    observedSummary: observation.observedSummary ?? "",
     resourceCount: runtimeDesiredState.desiredState.display.resourceCount,
-    resourcesByKind: runtimeDesiredResourcesByKind(
-      runtimeDesiredState.desiredState.display.resourcesByKind,
-    ),
+    resourcesByKind: runtimeDesiredState.desiredState.display.resourcesByKind,
     runnerId,
     targetId: desiredState.targetId,
   };
@@ -1847,7 +1854,7 @@ async function tryWriteLocalWorkspaceDeploymentFailureObservation(
   },
   dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "fetch" | "now">,
 ): Promise<void> {
-  const failure = localWorkspaceDeploymentFailureSummary(input.error);
+  const failure = localWorkspaceDeployFailureSummary(input.error);
 
   try {
     await writeLocalWorkspaceDeploymentObservation(
@@ -1901,8 +1908,8 @@ async function checkLocalWorkspaceDeploymentHealth(input: {
 async function patchDeploymentStatusObservation(
   input: {
     adminToken: string;
-    desiredState: InstanceDeploymentDesiredStateResponse["desiredState"];
-    status: DeploymentStatus;
+    desiredState: DeployDesiredStateResponse["desiredState"];
+    status: DeployLatestStatus;
     targetUrl: string;
   },
   dependencies: Pick<RefreshFormlessInstanceDeploymentObservationDependencies, "fetch" | "now">,
@@ -1910,21 +1917,19 @@ async function patchDeploymentStatusObservation(
   const desiredState = deployDesiredStateVersionRef(
     input.desiredState as DeployDesiredStateVersionLike,
   );
-  const statusSummary = deploymentStatusDisplaySummary(input.status);
-  const observation = deploymentStatusObservation(input.status, desiredState, statusSummary);
-  const runnerId = observation.runnerId ?? "local-gateway";
+  const observation = deployDeploymentObservationPatchFromLatestStatus({
+    desiredState,
+    fallbackRunnerId: "local-gateway",
+    status: input.status,
+  });
+  const observedError =
+    typeof observation.observedError === "string" ? observation.observedError : undefined;
+  const runnerId = observation.observedRunnerId ?? "local-gateway";
 
   await patchFormlessInstanceDeploymentConfigObservation(
     {
       adminToken: input.adminToken,
-      observation: {
-        observedAt: observation.observedAt,
-        observedDesiredStateHash: desiredState.hash,
-        observedError: observation.observedError ?? "",
-        observedRunnerId: runnerId,
-        observedStatus: observation.observedStatus,
-        observedSummary: observation.observedSummary,
-      },
+      observation,
       targetId: desiredState.targetId,
       targetUrl: input.targetUrl,
     },
@@ -1936,86 +1941,18 @@ async function patchDeploymentStatusObservation(
     evidence: summarizeLocalWorkspaceDeploymentEvidence([]),
     evidenceCount: 0,
     observedAt: observation.observedAt,
-    ...(observation.observedError === undefined
-      ? {}
-      : { observedError: observation.observedError }),
+    ...(observedError === undefined ? {} : { observedError }),
     observedStatus: observation.observedStatus,
-    observedSummary: observation.observedSummary,
+    observedSummary: observation.observedSummary ?? "",
     resourceCount: input.desiredState.display.resourceCount,
-    resourcesByKind: runtimeDesiredResourcesByKind(input.desiredState.display.resourcesByKind),
+    resourcesByKind: input.desiredState.display.resourcesByKind,
     runnerId,
     targetId: desiredState.targetId,
   };
 }
 
-function deploymentStatusObservation(
-  status: DeploymentStatus,
-  desiredState: DeploymentDesiredStateVersionRef,
-  summary: DeploymentStatusDisplaySummary,
-): {
-  observedAt: string;
-  observedError?: string;
-  observedStatus: FormlessInstanceDeploymentObservationPatch["observedStatus"];
-  observedSummary: string;
-  runnerId?: string;
-} {
-  if (
-    status.state === "deployed" &&
-    deploymentStatusMatchesDesiredState(status.latestDesiredState, desiredState)
-  ) {
-    return {
-      observedAt: status.deployedAt,
-      observedStatus: "deployed",
-      observedSummary: status.summary ?? summary.detail,
-      ...(status.runnerId === undefined ? {} : { runnerId: status.runnerId }),
-    };
-  }
-
-  if (
-    status.state === "failed-current-version" &&
-    deploymentStatusMatchesDesiredState(status.latestDesiredState, desiredState)
-  ) {
-    return {
-      observedAt: status.failedAt,
-      observedError: status.summary.displayMessage,
-      observedStatus: "failed",
-      observedSummary: status.summary.displayMessage,
-      ...(status.runnerId === undefined ? {} : { runnerId: status.runnerId }),
-    };
-  }
-
-  if (
-    status.state === "drift" &&
-    deploymentStatusMatchesDesiredState(status.latestDesiredState, desiredState)
-  ) {
-    return {
-      observedAt: status.checkedAt,
-      observedStatus: "drifted",
-      observedSummary: status.summary ?? summary.detail,
-      ...(status.runnerId === undefined ? {} : { runnerId: status.runnerId }),
-    };
-  }
-
-  return {
-    observedAt: status.checkedAt,
-    observedStatus: "unknown",
-    observedSummary: summary.detail,
-  };
-}
-
-function deploymentStatusMatchesDesiredState(
-  observed: DeploymentDesiredStateVersionRef,
-  desiredState: DeploymentDesiredStateVersionRef,
-): boolean {
-  return (
-    observed.hash === desiredState.hash &&
-    observed.targetId === desiredState.targetId &&
-    observed.versionId === desiredState.versionId
-  );
-}
-
 function summarizeLocalWorkspaceDeploymentEvidence(
-  evidence: readonly DeploymentResourceEvidenceSummary[],
+  evidence: readonly DeployEvidenceSummary[],
 ): DeployLocalFormlessWorkspaceEvidenceSummary {
   return {
     actionsByKind: countBy(evidence, (entry) => entry.action),
@@ -2038,13 +1975,7 @@ function countBy<T>(items: readonly T[], selectKey: (item: T) => string): Record
 
 function assertRuntimeDesiredStateMatchesLocalProjection(input: {
   local: LocalWorkspaceDeploymentDesiredState;
-  runtime: {
-    display: {
-      resourceCount: number;
-      resourcesByKind: Record<string, number>;
-    };
-    targetId: string;
-  };
+  runtime: DeployDesiredStateResponse["desiredState"];
 }): void {
   if (input.runtime.targetId !== input.local.targetId) {
     throw new Error(
@@ -2052,42 +1983,27 @@ function assertRuntimeDesiredStateMatchesLocalProjection(input: {
     );
   }
 
-  if (input.runtime.display.resourceCount !== input.local.resourceCount) {
+  const localDisplay = deployDesiredStateDisplaySummary(input.local.resourceGraph);
+
+  if (input.runtime.display.resourceCount !== localDisplay.resourceCount) {
     throw new Error(
-      `Local deploy apply desired-state resource count ${input.local.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
+      `Local deploy apply desired-state resource count ${localDisplay.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
     );
   }
 
   if (
     stableDeployJsonStringify(input.runtime.display.resourcesByKind) !==
-    stableDeployJsonStringify(input.local.resourcesByKind)
+    stableDeployJsonStringify(localDisplay.resourcesByKind)
   ) {
     throw new Error("Local deploy apply desired-state resource kinds did not match runtime.");
   }
 }
 
-function localWorkspaceDeploymentSuccessSummary(
-  desiredState: LocalWorkspaceDeploymentDesiredState,
-): string {
-  return `${desiredState.resourceCount} deployment resource${
-    desiredState.resourceCount === 1 ? "" : "s"
-  } applied from workspace source.`;
-}
-
-function localWorkspaceDeploymentFailureSummary(_error: unknown): DeploymentFailureSummary {
-  return {
+function localWorkspaceDeployFailureSummary(_error: unknown): DeployFailureSummary {
+  return deployDisplaySafeFailureSummary({
     code: "local-gateway-deploy-apply-failed",
     displayMessage: "Local workspace deploy apply failed.",
-  };
-}
-
-function runtimeDesiredResourcesByKind(
-  resourcesByKind: Record<string, number>,
-): Record<DeploymentResourceKind, number> {
-  return Object.fromEntries(Object.entries(resourcesByKind)) as Record<
-    DeploymentResourceKind,
-    number
-  >;
+  });
 }
 
 export async function planDeployLocalFormlessWorkspace(
@@ -4175,7 +4091,7 @@ type LocalWorkspaceDeploymentDesiredState = {
   logicalIds: string[];
   resourceCount: number;
   resourceGraph: DeployResourceGraph;
-  resourcesByKind: Record<string, number>;
+  resourcesByKind: Record<DeployResourceKind, number>;
   routeTargetCount: number;
   sourceFingerprint: string;
   targetId: string;
@@ -4284,21 +4200,11 @@ function projectLocalWorkspaceDeploymentDesiredState(input: {
     logicalIds: resourceGraph.resources.map((resource) => resource.logicalId),
     resourceCount: resourceGraph.resources.length,
     resourceGraph,
-    resourcesByKind: resourceCountsByKind(resourceGraph),
+    resourcesByKind: deployResourceCountsByKind(resourceGraph),
     routeTargetCount: routeProjection.routeTargets.length,
     sourceFingerprint: routeProjection.sourceFingerprint,
     targetId: input.targetId,
   };
-}
-
-function resourceCountsByKind(resourceGraph: DeployResourceGraph): Record<string, number> {
-  const counts: Record<string, number> = {};
-
-  for (const resource of resourceGraph.resources) {
-    counts[resource.kind] = (counts[resource.kind] ?? 0) + 1;
-  }
-
-  return counts;
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {

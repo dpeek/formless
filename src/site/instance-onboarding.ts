@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { DeployResourceGraph } from "@dpeek/formless-deploy";
+import type { DeployEvidenceSummary, DeployResourceGraph } from "@dpeek/formless-deploy";
 
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
@@ -9,7 +9,6 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
-import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
 import {
@@ -159,7 +158,7 @@ export type DeployFormlessInstanceInput = {
 };
 
 export type DeployFormlessInstanceResult = {
-  resourceEvidence?: DeploymentResourceEvidenceSummary[];
+  resourceEvidence?: DeployEvidenceSummary[];
   url: string;
 };
 
@@ -880,7 +879,7 @@ export async function deployFormlessInstanceWithAlchemy(
     ...profileOptions,
     url: plan.resources.worker.workersDevEnabled,
   });
-  let resourceEvidence: DeploymentResourceEvidenceSummary[] | undefined;
+  let resourceEvidence: DeployEvidenceSummary[] | undefined;
 
   if (
     input.deploymentResourceGraph !== undefined &&
@@ -1647,7 +1646,7 @@ function parseDeployFormlessInstanceResult(result: unknown): DeployFormlessInsta
   }
 
   const resourceEvidence = Array.isArray(result.resourceEvidence)
-    ? (result.resourceEvidence as DeploymentResourceEvidenceSummary[])
+    ? (result.resourceEvidence as DeployEvidenceSummary[])
     : undefined;
 
   return {

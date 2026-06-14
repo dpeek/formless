@@ -7,9 +7,12 @@ import type {
   RedirectRule,
   RedirectRuleProps,
 } from "alchemy/cloudflare";
-import type { DeployJsonValue, DeployResource, DeployResourceGraph } from "@dpeek/formless-deploy";
-
-import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
+import type {
+  DeployEvidenceSummary,
+  DeployJsonValue,
+  DeployResource,
+  DeployResourceGraph,
+} from "@dpeek/formless-deploy";
 import type {
   DomainProviderCustomDomainResource,
   DomainProviderDnsRecordsResource,
@@ -91,7 +94,7 @@ export type AlchemyDomainProviderRunResult = {
 };
 
 export type AlchemyDeployResourceGraphApplyResult = {
-  evidence: DeploymentResourceEvidenceSummary[];
+  evidence: DeployEvidenceSummary[];
   resources: AlchemyDeployResourceGraphResourceResult[];
 };
 
@@ -354,7 +357,7 @@ async function redirectRulePropsFromDeployResource(
 function deploymentEvidenceFromAlchemyResult(input: {
   resource: DeployResource;
   result: AlchemyDeployResourceGraphResourceResult;
-}): DeploymentResourceEvidenceSummary {
+}): DeployEvidenceSummary {
   return {
     action: "updated",
     alchemyResourceId: input.resource.logicalId,

@@ -142,6 +142,21 @@ a deploy package slice.
 - AND runtime code does not maintain a separate route-to-provider-resource
   projection implementation
 
+#### Scenario: Shared desired-state and observation module
+
+- GIVEN runtime, CLI, workspace, gateway, UI, or tests need deployment
+  desired-state version, latest status, or observation patch behavior
+- WHEN control-plane route and deployment-config records are interpreted for a
+  supported deployment target
+- THEN desired-state response refs, canonical graph hashes, display summaries,
+  latest status interpretation, and display-safe observation patch payloads
+  derive from Deploy package helpers
+- AND Worker runtime adapts schema-owned control-plane records into Deploy
+  package inputs instead of redefining compatible deployment state, status, or
+  observation payload shapes locally
+- AND provider execution, credential resolution, raw provider state, Alchemy
+  state, and runtime secrets remain outside the Deploy package boundary
+
 ### Requirement: Route Records
 
 The system SHALL represent all desired route behavior as `route` control-plane

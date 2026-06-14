@@ -1,14 +1,22 @@
 import {
+  DEPLOYMENT_DESIRED_STATE_API_PATH,
+  DEPLOYMENT_STATUS_API_PATH,
+  deployDeploymentObservationPatchIdempotencyKey,
+  deployDeploymentObservationPatchValues,
   deployControlPlaneActorHeaders,
   deployControlPlaneBootstrapPath,
   deployControlPlaneRecordsByEntity,
   deployDesiredStateVersionRef,
+  parseDeployDesiredStateResponse,
+  parseDeployLatestStatusResponse,
+  type DeployDeploymentObservationPatch,
   type DeployControlPlaneProtocolActorKind,
   type DeployControlPlaneRecord,
+  type DeployDesiredStateResponse,
   type DeployDesiredStateVersionRef,
   type DeployControlPlaneBootstrapResponse,
+  type DeployLatestStatusResponse,
 } from "@dpeek/formless-deploy/client";
-import type { ControlPlaneDeploymentConfigObservedStatus } from "@dpeek/formless-deploy";
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
@@ -23,9 +31,7 @@ import {
   INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH,
   INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
   INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH,
-  INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
   INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
-  INSTANCE_DEPLOYMENT_STATUS_API_PATH,
   type InstanceDeploymentAttemptFailureWritebackRequest,
   type InstanceDeploymentAttemptFailureWritebackResponse,
   type InstanceDeploymentAttemptHeartbeatRequest,
@@ -36,10 +42,8 @@ import {
   type InstanceDeploymentAttemptStartResponse,
   type InstanceDeploymentAttemptSuccessWritebackRequest,
   type InstanceDeploymentAttemptSuccessWritebackResponse,
-  type InstanceDeploymentDesiredStateResponse,
   type InstanceDeploymentDriftWritebackRequest,
   type InstanceDeploymentDriftWritebackResponse,
-  type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
@@ -78,11 +82,7 @@ import type {
   RecordInstanceDomainMappingApplyEvidenceRequest,
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
-import type {
-  AppInstallsResponse,
-  OwnerSetupStatusResponse,
-  RecordValues,
-} from "../shared/protocol.ts";
+import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import {
   isSourceSchemaHash,
@@ -107,6 +107,9 @@ const PACKAGE_MIGRATIONS_APPLY_PATH_SUFFIX = "/package-migrations/apply";
 const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
 const DOMAIN_MAPPINGS_FORGET_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/forget`;
+
+export type InstanceDeploymentDesiredStateResponse = DeployDesiredStateResponse;
+export type InstanceDeploymentStatusResponse = DeployLatestStatusResponse;
 
 export type FormlessInstanceTargetStatus = {
   appRegistry: AppInstallsResponse;
@@ -134,14 +137,7 @@ export type FormlessInstanceDeploymentCommandContext = {
   status: InstanceDeploymentStatusResponse;
 };
 
-export type FormlessInstanceDeploymentObservationPatch = {
-  observedAt: string;
-  observedDesiredStateHash: string;
-  observedError?: string | null;
-  observedRunnerId?: string | null;
-  observedStatus: ControlPlaneDeploymentConfigObservedStatus;
-  observedSummary?: string | null;
-};
+export type FormlessInstanceDeploymentObservationPatch = DeployDeploymentObservationPatch;
 
 export type FormlessInstanceTargetDeployMetadata = {
   cacheControl: string;
@@ -709,11 +705,11 @@ export async function readFormlessInstanceDeploymentDesiredState(
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
   const desiredStateUrl = deploymentReadUrl(
     targetUrl,
-    INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    DEPLOYMENT_DESIRED_STATE_API_PATH,
     input.targetId,
   );
 
-  return parseDeploymentDesiredStateResponse(
+  return parseDeployDesiredStateResponse(
     await fetchJson(dependencies.fetch, desiredStateUrl, {
       headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
@@ -726,13 +722,9 @@ export async function readFormlessInstanceDeploymentStatus(
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDeploymentStatusResponse> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
-  const statusUrl = deploymentReadUrl(
-    targetUrl,
-    INSTANCE_DEPLOYMENT_STATUS_API_PATH,
-    input.targetId,
-  );
+  const statusUrl = deploymentReadUrl(targetUrl, DEPLOYMENT_STATUS_API_PATH, input.targetId);
 
-  return parseDeploymentStatusResponse(
+  return parseDeployLatestStatusResponse(
     await fetchJson(dependencies.fetch, statusUrl, {
       headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
@@ -829,10 +821,13 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
     targetUrl,
     `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/deployment-config/update`,
   );
-  const values = deploymentObservationPatchValues(input.observation);
+  const values = deployDeploymentObservationPatchValues(input.observation);
   const idempotencyKey =
     input.mutationId ??
-    `deployment-observation:${input.targetId}:${input.observation.observedDesiredStateHash}:${input.observation.observedStatus}:${input.observation.observedAt}`;
+    deployDeploymentObservationPatchIdempotencyKey({
+      observation: input.observation,
+      targetId: input.targetId,
+    });
 
   return parseOperationInvocationResponse(
     await postJson(dependencies.fetch, operationUrl, {
@@ -861,20 +856,6 @@ async function readOptionalFormlessInstanceDeploymentStatus(
 
     throw error;
   }
-}
-
-function deploymentObservationPatchValues(
-  observation: FormlessInstanceDeploymentObservationPatch,
-): RecordValues {
-  return {
-    observedAt: observation.observedAt,
-    observedDesiredStateHash: observation.observedDesiredStateHash,
-    observedError: observation.observedError ?? "",
-    observedRunnerId: observation.observedRunnerId ?? "",
-    observedStatus: observation.observedStatus,
-    observedSummary: observation.observedSummary ?? "",
-    updatedAt: observation.observedAt,
-  };
 }
 
 export async function startFormlessInstanceDeploymentAttempt(
@@ -1692,28 +1673,6 @@ function parseDomainProviderPlan(
   }
 
   return value as InstanceDomainProviderPlanResponse;
-}
-
-function parseDeploymentDesiredStateResponse(
-  value: unknown,
-  context: string,
-): InstanceDeploymentDesiredStateResponse {
-  if (!isRecord(value) || !isRecord(value.desiredState) || !isRecord(value.target)) {
-    throw new Error(`${context} failed: deployment desired-state response is invalid.`);
-  }
-
-  return value as InstanceDeploymentDesiredStateResponse;
-}
-
-function parseDeploymentStatusResponse(
-  value: unknown,
-  context: string,
-): InstanceDeploymentStatusResponse {
-  if (!isRecord(value) || !isRecord(value.status) || !isRecord(value.target)) {
-    throw new Error(`${context} failed: deployment status response is invalid.`);
-  }
-
-  return value as InstanceDeploymentStatusResponse;
 }
 
 function parseControlPlaneBootstrapResponse(

@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
+import {
+  deriveDeployLatestStatus,
+  materializeDeployDesiredStateVersion,
+} from "@dpeek/formless-deploy";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   buildDeploymentDesiredStateVersion,
@@ -64,6 +68,20 @@ describe("instance deployment runtime state", () => {
       "dns:app.example.com",
     ]);
     expect(JSON.stringify(first.resourceGraph)).not.toContain("secret-token");
+    await expect(
+      materializeDeployDesiredStateVersion({
+        now: "2026-05-28T00:00:00.000Z",
+        resourceGraph: first.resourceGraph,
+        source: first.source,
+        targetId,
+        title: "Primary instance target",
+      }),
+    ).resolves.toMatchObject({
+      display: first.display,
+      hash: first.hash,
+      revision: first.revision,
+      versionId: first.versionId,
+    });
     expect(second.hash).toBe(first.hash);
     expect(second.versionId).toBe(first.versionId);
   });
@@ -121,20 +139,22 @@ describe("instance deployment runtime state", () => {
       state: "pending-changes",
       targetId,
     });
-    expect(
-      readLatestDeploymentStatus({
-        deploymentConfig: deploymentConfigRecord({
-          ...baseConfig.values,
-          observedAt: "2026-05-28T00:02:00.000Z",
-          observedRunnerId: "runner.primary",
-          observedStatus: "deployed",
-          observedSummary: "Deployed 2 resources.",
-        }),
-        desiredState,
-        now: "2026-05-28T00:03:00.000Z",
-        targetId,
+    const deployedInput = {
+      deploymentConfig: deploymentConfigRecord({
+        ...baseConfig.values,
+        observedAt: "2026-05-28T00:02:00.000Z",
+        observedRunnerId: "runner.primary",
+        observedStatus: "deployed",
+        observedSummary: "Deployed 2 resources.",
       }),
-    ).toMatchObject({
+      desiredState,
+      now: "2026-05-28T00:03:00.000Z",
+      targetId,
+    };
+    expect(readLatestDeploymentStatus(deployedInput)).toEqual(
+      deriveDeployLatestStatus(deployedInput),
+    );
+    expect(readLatestDeploymentStatus(deployedInput)).toMatchObject({
       deployedAt: "2026-05-28T00:02:00.000Z",
       runnerId: "runner.primary",
       state: "deployed",

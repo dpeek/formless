@@ -1,17 +1,34 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
+  canonicalizeDeployResourceGraph,
+  computeDeployDesiredStateHash,
   computeDeployProjectionHash,
+  deployDeploymentAppliedSummary,
+  deployDeploymentObservationPatch,
+  deployDeploymentObservationPatchFromLatestStatus,
+  deployDesiredStateHashInputCanonicalJson,
+  deployDesiredStateSchemaVersion,
+  deployDesiredStateSourceRevision,
+  deployDisplaySafeFailureSummary,
   deployDesiredStateProjectionInputFromControlPlaneRecords,
+  deployLatestStatusDisplaySummary,
   deployProjectionCanonicalJson,
+  deployResourceCountsByKind,
+  deriveDeployLatestStatus,
+  materializeDeployDesiredStateVersion,
   projectDeployControlPlaneDesiredState,
   projectDeployRouteTargets,
 } from "./index.ts";
 import type {
   ControlPlaneAppInstallProjectionRecord,
+  ControlPlaneDeploymentConfigObservationRecord,
   ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneProjectionSourceRecord,
   ControlPlaneRouteProjectionRecord,
+  DeployDesiredStateHashInput,
+  DeployResourceGraph,
+  DeployTargetId,
 } from "./types.ts";
 
 describe("Deploy control-plane projection helpers", () => {
@@ -284,6 +301,365 @@ describe("Deploy control-plane projection helpers", () => {
   });
 });
 
+describe("Deploy desired-state version helpers", () => {
+  it("materializes deterministic desired-state versions from canonical resource graphs", async () => {
+    const targetId = "instance.primary" as DeployTargetId;
+    const first = await materializeDeployDesiredStateVersion({
+      now: "2026-06-14T00:00:00.000Z",
+      resourceGraph: deployResourceGraph([
+        customDomainResource({
+          dependencies: [{ logicalId: "zone:example" }],
+          inputs: {
+            apiToken: "secret-token",
+            host: "app.example.com",
+            workerName: "formless-prod",
+            zoneId: "zone-example",
+          },
+          logicalId: "custom-domain:app.example.com",
+          targetId,
+        }),
+        dnsRecordsResource({
+          dependencies: [],
+          inputs: { name: "app.example.com", zoneId: "zone-example" },
+          logicalId: "dns:app.example.com",
+          targetId,
+        }),
+      ]),
+      source: { fingerprint: "control-plane:primary", intentRevision: 4 },
+      targetId,
+      title: "Primary instance target",
+    });
+    const second = await materializeDeployDesiredStateVersion({
+      now: "2026-06-14T00:05:00.000Z",
+      resourceGraph: first.resourceGraph,
+      source: first.source,
+      targetId,
+      title: "Primary instance target",
+    });
+
+    expect(first.hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(deployDesiredStateSchemaVersion()).toBe(1);
+    expect(first.versionId).toBe(`desired.${targetId}.${first.hash}`);
+    expect(first.revision).toBe(4);
+    expect(first.display).toEqual({
+      resourceCount: 2,
+      resourcesByKind: {
+        "cloudflare-dns-records": 1,
+        "cloudflare-worker-custom-domain": 1,
+      },
+      title: "Primary instance target",
+    });
+    expect(first.resourceGraph.resources.map((resource) => resource.logicalId)).toEqual([
+      "custom-domain:app.example.com",
+      "dns:app.example.com",
+    ]);
+    expect(JSON.stringify(first.resourceGraph)).not.toContain("secret-token");
+    expect(second.hash).toBe(first.hash);
+    expect(second.versionId).toBe(first.versionId);
+  });
+
+  it("hashes equivalent resource graphs the same way and omits secret-like inputs", async () => {
+    const first = deployHashInput([
+      redirectRuleResource({
+        dependencies: [
+          { reason: "host placeholder", logicalId: "dns:www.example.com" },
+          { logicalId: "zone:example", reason: "zone lookup" },
+        ],
+        inputs: {
+          statusCode: 301,
+          targetUrl: "https://example.com/${1}",
+          zoneId: "zone-example",
+        },
+        logicalId: "redirect:www.example.com",
+      }),
+      customDomainResource({
+        dependencies: [{ logicalId: "zone:example" }],
+        inputs: {
+          headers: {
+            authorizationHeader: "Bearer token",
+            publicHeader: "cache",
+          },
+          privateKey: "secret-key",
+          publicSetting: "kept",
+          zoneId: "zone-example",
+        },
+        logicalId: "custom-domain:app.example.com",
+      }),
+    ]);
+    const second = deployHashInput([
+      customDomainResource({
+        dependencies: [{ logicalId: "zone:example" }],
+        inputs: {
+          headers: {
+            publicHeader: "cache",
+          },
+          publicSetting: "kept",
+          zoneId: "zone-example",
+        },
+        logicalId: "custom-domain:app.example.com",
+      }),
+      redirectRuleResource({
+        dependencies: [
+          { logicalId: "zone:example", reason: "zone lookup" },
+          { logicalId: "dns:www.example.com", reason: "host placeholder" },
+        ],
+        inputs: {
+          targetUrl: "https://example.com/${1}",
+          zoneId: "zone-example",
+          statusCode: 301,
+        },
+        logicalId: "redirect:www.example.com",
+      }),
+    ]);
+
+    expect(deployDesiredStateHashInputCanonicalJson(first)).toBe(
+      deployDesiredStateHashInputCanonicalJson(second),
+    );
+    expect(deployDesiredStateHashInputCanonicalJson(first)).not.toContain("token");
+    expect(deployDesiredStateHashInputCanonicalJson(first)).not.toContain("secret-key");
+    expect(await computeDeployDesiredStateHash(first)).toBe(
+      await computeDeployDesiredStateHash(second),
+    );
+    expect(canonicalizeDeployResourceGraph(first.resourceGraph).resources[0]?.logicalId).toBe(
+      "custom-domain:app.example.com",
+    );
+    expect(deployDesiredStateSourceRevision({ fingerprint: "bad", intentRevision: -1 })).toBe(0);
+  });
+
+  it("derives latest deployment status from display-safe observation fields", async () => {
+    const targetId = "instance.primary" as DeployTargetId;
+    const desiredState = await materializeDeployDesiredStateVersion({
+      now: "2026-06-14T00:00:00.000Z",
+      resourceGraph: deployResourceGraph([], targetId),
+      source: { fingerprint: "control-plane:empty", intentRevision: 0 },
+      targetId,
+    });
+    const baseConfig = deploymentConfigRecord({
+      observedDesiredStateHash: desiredState.hash,
+    });
+    const pending = deriveDeployLatestStatus({
+      deploymentConfig: deploymentConfigRecord(),
+      desiredState,
+      now: "2026-06-14T00:01:00.000Z",
+      targetId,
+    });
+    const drift = deriveDeployLatestStatus({
+      deploymentConfig: deploymentConfigRecord({
+        ...baseConfig.values,
+        observedStatus: "drifted",
+        observedSummary: "1 resource drifted.",
+      }),
+      desiredState,
+      now: "2026-06-14T00:05:00.000Z",
+      targetId,
+    });
+
+    expect(
+      deriveDeployLatestStatus({
+        desiredState,
+        now: "2026-06-14T00:01:00.000Z",
+        targetId,
+      }),
+    ).toEqual({
+      checkedAt: "2026-06-14T00:01:00.000Z",
+      state: "no-target",
+    });
+    expect(pending).toMatchObject({
+      latestDesiredState: {
+        hash: desiredState.hash,
+        revision: 0,
+        targetId,
+        versionId: desiredState.versionId,
+      },
+      state: "pending-changes",
+      targetId,
+    });
+    expect(
+      deriveDeployLatestStatus({
+        deploymentConfig: deploymentConfigRecord({
+          observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
+          observedError: "Old deploy failed.",
+          observedStatus: "failed",
+        }),
+        desiredState,
+        now: "2026-06-14T00:01:00.000Z",
+        targetId,
+      }),
+    ).toMatchObject({
+      state: "pending-changes",
+      targetId,
+    });
+    expect(
+      deriveDeployLatestStatus({
+        deploymentConfig: deploymentConfigRecord({
+          ...baseConfig.values,
+          observedAt: "2026-06-14T00:02:00.000Z",
+          observedRunnerId: "runner.primary",
+          observedStatus: "deployed",
+          observedSummary: "Deployed 2 resources.",
+        }),
+        desiredState,
+        now: "2026-06-14T00:03:00.000Z",
+        targetId,
+      }),
+    ).toMatchObject({
+      deployedAt: "2026-06-14T00:02:00.000Z",
+      runnerId: "runner.primary",
+      state: "deployed",
+      summary: "Deployed 2 resources.",
+      targetId,
+    });
+    expect(
+      deriveDeployLatestStatus({
+        deploymentConfig: deploymentConfigRecord({
+          ...baseConfig.values,
+          observedAt: "2026-06-14T00:04:00.000Z",
+          observedError: "Provider apply failed.",
+          observedStatus: "failed",
+        }),
+        desiredState,
+        now: "2026-06-14T00:05:00.000Z",
+        targetId,
+      }),
+    ).toMatchObject({
+      failedAt: "2026-06-14T00:04:00.000Z",
+      state: "failed-current-version",
+      summary: {
+        code: "observed-failure",
+        displayMessage: "Provider apply failed.",
+      },
+      targetId,
+    });
+    expect(drift).toMatchObject({
+      state: "drift",
+      summary: "1 resource drifted.",
+      targetId,
+    });
+    expect(deployLatestStatusDisplaySummary(pending)).toEqual({
+      detail: "Desired revision 0 pending",
+      label: "Pending changes",
+      state: "pending-changes",
+      tone: "warning",
+    });
+    expect(deployLatestStatusDisplaySummary(drift)).toEqual({
+      detail: "1 resource drifted.",
+      label: "Drift detected",
+      state: "drift",
+      tone: "warning",
+    });
+  });
+
+  it("composes display-safe observation patches and summaries", async () => {
+    const targetId = "instance.primary" as DeployTargetId;
+    const desiredState = await materializeDeployDesiredStateVersion({
+      now: "2026-06-14T00:00:00.000Z",
+      resourceGraph: deployResourceGraph([
+        customDomainResource({
+          inputs: {
+            apiToken: "secret-token",
+            host: "app.example.com",
+            workerName: "formless-prod",
+          },
+          logicalId: "custom-domain:app.example.com",
+          targetId,
+        }),
+      ]),
+      source: { fingerprint: "control-plane:primary", intentRevision: 4 },
+      targetId,
+    });
+    const deployed = deriveDeployLatestStatus({
+      deploymentConfig: deploymentConfigRecord({
+        observedAt: "2026-06-14T00:02:00.000Z",
+        observedDesiredStateHash: desiredState.hash,
+        observedRunnerId: "runner.primary",
+        observedStatus: "deployed",
+        observedSummary: "Deployed 1 resource.",
+      }),
+      desiredState,
+      now: "2026-06-14T00:03:00.000Z",
+      targetId,
+    });
+    const pending = deriveDeployLatestStatus({
+      deploymentConfig: deploymentConfigRecord(),
+      desiredState,
+      now: "2026-06-14T00:04:00.000Z",
+      targetId,
+    });
+
+    expect(deployResourceCountsByKind(desiredState.resourceGraph)).toEqual({
+      "cloudflare-worker-custom-domain": 1,
+    });
+    expect(
+      deployDeploymentObservationPatchFromLatestStatus({
+        desiredState,
+        fallbackRunnerId: "local-gateway",
+        status: deployed,
+      }),
+    ).toEqual({
+      observedAt: "2026-06-14T00:02:00.000Z",
+      observedDesiredStateHash: desiredState.hash,
+      observedRunnerId: "runner.primary",
+      observedStatus: "deployed",
+      observedSummary: "Deployed 1 resource.",
+    });
+    expect(
+      deployDeploymentObservationPatchFromLatestStatus({
+        desiredState,
+        fallbackRunnerId: "local-gateway",
+        status: pending,
+      }),
+    ).toEqual({
+      observedAt: "2026-06-14T00:04:00.000Z",
+      observedDesiredStateHash: desiredState.hash,
+      observedRunnerId: "local-gateway",
+      observedStatus: "unknown",
+      observedSummary: "Desired revision 4 pending",
+    });
+    expect(
+      deployDeploymentObservationPatch({
+        desiredState,
+        observedAt: "2026-06-14T00:05:00.000Z",
+        observedError: "Provider failed.",
+        observedStatus: "failed",
+        observedSummary: "Provider failed.",
+        runnerId: "local-gateway",
+      }),
+    ).toEqual({
+      observedAt: "2026-06-14T00:05:00.000Z",
+      observedDesiredStateHash: desiredState.hash,
+      observedError: "Provider failed.",
+      observedRunnerId: "local-gateway",
+      observedStatus: "failed",
+      observedSummary: "Provider failed.",
+    });
+    expect(
+      deployDisplaySafeFailureSummary({
+        code: "local-gateway-deploy-apply-failed",
+        details: "  ",
+        displayMessage: "Local workspace deploy apply failed.",
+      }),
+    ).toEqual({
+      code: "local-gateway-deploy-apply-failed",
+      displayMessage: "Local workspace deploy apply failed.",
+    });
+    expect(
+      deployDeploymentAppliedSummary({
+        resourceCount: desiredState.display.resourceCount,
+        sourceLabel: "workspace source",
+      }),
+    ).toBe("1 deployment resource applied from workspace source.");
+    expect(JSON.stringify(desiredState)).not.toContain("secret-token");
+    expect(
+      JSON.stringify(
+        deployDeploymentObservationPatchFromLatestStatus({
+          desiredState,
+          status: deployed,
+        }),
+      ),
+    ).not.toContain("secret-token");
+  });
+});
+
 const appInstalls = [
   {
     id: "app-install:site",
@@ -457,3 +833,96 @@ const sourceRecords = [
     },
   },
 ] satisfies ControlPlaneProjectionSourceRecord[];
+
+function deployHashInput(resources: DeployResourceGraph["resources"]): DeployDesiredStateHashInput {
+  const targetId = "instance.primary" as DeployTargetId;
+
+  return {
+    resourceGraph: deployResourceGraph(resources, targetId),
+    schemaVersion: 1,
+    targetId,
+  };
+}
+
+function deployResourceGraph(
+  resources: DeployResourceGraph["resources"],
+  targetId: DeployTargetId = "instance.primary",
+): DeployResourceGraph {
+  return {
+    resources,
+    targetId,
+  };
+}
+
+function customDomainResource(
+  input: Partial<DeployResourceGraph["resources"][number]> & {
+    logicalId: string;
+  },
+): DeployResourceGraph["resources"][number] {
+  const { logicalId, ...overrides } = input;
+
+  return {
+    dependencies: [],
+    inputs: {},
+    kind: "cloudflare-worker-custom-domain",
+    logicalId,
+    providerFamily: "cloudflare",
+    targetId: "instance.primary",
+    ...overrides,
+  };
+}
+
+function dnsRecordsResource(
+  input: Partial<DeployResourceGraph["resources"][number]> & {
+    logicalId: string;
+  },
+): DeployResourceGraph["resources"][number] {
+  const { logicalId, ...overrides } = input;
+
+  return {
+    dependencies: [],
+    inputs: {},
+    kind: "cloudflare-dns-records",
+    logicalId,
+    providerFamily: "cloudflare",
+    targetId: "instance.primary",
+    ...overrides,
+  };
+}
+
+function redirectRuleResource(
+  input: Partial<DeployResourceGraph["resources"][number]> & {
+    logicalId: string;
+  },
+): DeployResourceGraph["resources"][number] {
+  const { logicalId, ...overrides } = input;
+
+  return {
+    dependencies: [],
+    inputs: {},
+    kind: "cloudflare-redirect-rule",
+    logicalId,
+    providerFamily: "cloudflare",
+    targetId: "instance.primary",
+    ...overrides,
+  };
+}
+
+function deploymentConfigRecord(
+  values: Record<string, unknown> = {},
+): ControlPlaneDeploymentConfigObservationRecord {
+  return {
+    createdAt: "2026-06-14T00:00:00.000Z",
+    entity: "deployment-config",
+    id: "instance.primary",
+    values: {
+      enabled: true,
+      label: "Primary",
+      providerFamily: "cloudflare",
+      targetId: "instance.primary",
+      targetKind: "instance",
+      targetUrl: "https://primary.example.workers.dev",
+      ...values,
+    },
+  };
+}

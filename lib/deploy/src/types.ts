@@ -47,6 +47,16 @@ export type DeploySecretReference = {
 
 export type DeployProviderFamily = "cloudflare";
 
+export type DeployRunnerId = string;
+export type DeployTargetId = string;
+export type DeployTargetKind = "instance";
+
+export type DeployTargetRef = {
+  kind: DeployTargetKind;
+  label?: string;
+  targetId: DeployTargetId;
+};
+
 export type DeployResourceKind =
   | "cloudflare-dns-records"
   | "cloudflare-redirect-rule"
@@ -75,7 +85,56 @@ export type DeployResource = {
 
 export type DeployResourceGraph = {
   resources: DeployResource[];
-  targetId: string;
+  targetId: DeployTargetId;
+};
+
+export type DeployDesiredStateHash = string;
+export type DeployDesiredStateVersionId = string;
+export type DeployDesiredStateSchemaVersion = typeof DEPLOY_PUBLIC_CONTRACT_VERSION;
+
+export type DeployDesiredStateSource = {
+  fingerprint: string;
+  intentRevision: number;
+};
+
+export type DeployDesiredStateVersionRef = {
+  hash: DeployDesiredStateHash;
+  revision: number;
+  targetId: DeployTargetId;
+  versionId: DeployDesiredStateVersionId;
+};
+
+export type DeployDesiredStateDisplaySummary = {
+  resourceCount: number;
+  resourcesByKind: Record<DeployResourceKind, number>;
+  title?: string;
+};
+
+export type DeployDesiredStateVersion = DeployDesiredStateVersionRef & {
+  createdAt: string;
+  display: DeployDesiredStateDisplaySummary;
+  resourceGraph: DeployResourceGraph;
+  schemaVersion: DeployDesiredStateSchemaVersion;
+  source: DeployDesiredStateSource;
+};
+
+export type DeployDesiredStateHashInput = {
+  resourceGraph: DeployResourceGraph;
+  schemaVersion: DeployDesiredStateSchemaVersion;
+  targetId: DeployTargetId;
+};
+
+export type MaterializeDeployDesiredStateVersionInput = {
+  now: string;
+  resourceGraph: DeployResourceGraph;
+  source: DeployDesiredStateSource;
+  targetId: DeployTargetId;
+  title?: string;
+};
+
+export type DeployDesiredStateResponse = {
+  desiredState: DeployDesiredStateVersion;
+  target: DeployTargetRef;
 };
 
 export type DeployDesiredStateProjection = {
@@ -179,6 +238,30 @@ export type ControlPlaneDeploymentConfigObservedField =
 
 export type ControlPlaneRedirectStatusCode = 301 | 302 | 303 | 307 | 308;
 
+export type ControlPlaneDeploymentConfigObservationRecord = {
+  createdAt?: string;
+  deletedAt?: string;
+  entity: string;
+  id: string;
+  updatedAt?: string;
+  values: Readonly<Record<string, unknown>>;
+};
+
+export type DeployDeploymentObservationPatch = {
+  observedAt: string;
+  observedDesiredStateHash: DeployDesiredStateHash;
+  observedError?: string | null;
+  observedRunnerId?: DeployRunnerId | null;
+  observedStatus: ControlPlaneDeploymentConfigObservedStatus;
+  observedSummary?: string | null;
+};
+
+export type DeployDeploymentObservationPatchRequest = {
+  desiredState?: DeployDesiredStateVersionRef;
+  observation: DeployDeploymentObservationPatch;
+  targetId: DeployTargetId;
+};
+
 export type DeployEvidenceAction = "adopted" | "created" | "deleted" | "no-change" | "updated";
 
 export type DeployEvidenceSummary = {
@@ -189,7 +272,7 @@ export type DeployEvidenceSummary = {
   logicalId: string;
   providerFamily: DeployProviderFamily;
   providerResourceIds: string[];
-  recordedAt: string;
+  recordedAt?: string;
   targetId: string;
 };
 
@@ -214,8 +297,90 @@ export type DeployDriftSummary = {
   create: number;
   delete: number;
   status: DeployDriftStatus;
-  targetId: string;
+  targetId: DeployTargetId;
   update: number;
+};
+
+export type DeployFailureSummary = {
+  code: string;
+  details?: string;
+  displayMessage: string;
+};
+
+export type DeployLatestStatus =
+  | DeployDeployedStatus
+  | DeployDriftedStatus
+  | DeployFailedCurrentVersionStatus
+  | DeployNoTargetStatus
+  | DeployPendingChangesStatus;
+
+export type DeriveDeployLatestStatusInput = {
+  deploymentConfig?: ControlPlaneDeploymentConfigObservationRecord;
+  desiredState?: DeployDesiredStateVersion;
+  now: string;
+  targetId: DeployTargetId;
+};
+
+export type DeployNoTargetStatus = {
+  checkedAt: string;
+  state: "no-target";
+};
+
+export type DeployPendingChangesStatus = {
+  checkedAt: string;
+  latestDesiredState: DeployDesiredStateVersionRef;
+  latestSuccessfulDesiredState?: DeployDesiredStateVersionRef;
+  state: "pending-changes";
+  targetId: DeployTargetId;
+};
+
+export type DeployDeployedStatus = {
+  checkedAt: string;
+  deployedAt: string;
+  latestDesiredState: DeployDesiredStateVersionRef;
+  runnerId?: DeployRunnerId;
+  state: "deployed";
+  summary?: string;
+  targetId: DeployTargetId;
+};
+
+export type DeployFailedCurrentVersionStatus = {
+  checkedAt: string;
+  failedAt: string;
+  latestDesiredState: DeployDesiredStateVersionRef;
+  runnerId?: DeployRunnerId;
+  state: "failed-current-version";
+  summary: DeployFailureSummary;
+  targetId: DeployTargetId;
+};
+
+export type DeployDriftedStatus = {
+  checkedAt: string;
+  latestDesiredState: DeployDesiredStateVersionRef;
+  latestSuccessfulDesiredState?: DeployDesiredStateVersionRef;
+  runnerId?: DeployRunnerId;
+  state: "drift";
+  summary?: string;
+  targetId: DeployTargetId;
+};
+
+export type DeployLatestStatusResponse = {
+  status: DeployLatestStatus;
+  target: DeployTargetRef;
+};
+
+export type DeployLatestStatusDisplayTone =
+  | "danger"
+  | "neutral"
+  | "progress"
+  | "success"
+  | "warning";
+
+export type DeployLatestStatusDisplaySummary = {
+  detail: string;
+  label: string;
+  state: DeployLatestStatus["state"];
+  tone: DeployLatestStatusDisplayTone;
 };
 
 export type DeployProjectionHashInput = {

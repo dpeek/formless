@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { deployLatestStatusDisplaySummary } from "@dpeek/formless-deploy";
 
 import packageJson from "../../package.json";
 import {
@@ -933,6 +934,24 @@ describe("local workspace gateway", () => {
         "POST /api/formless/control-plane/operations/deployment-config/update",
       ],
     );
+    const desiredState = deploymentDesiredStateRef();
+    const expectedStatusSummary = deployLatestStatusDisplaySummary({
+      checkedAt: "2026-06-02T01:11:00.000Z",
+      latestDesiredState: desiredState,
+      state: "pending-changes",
+      targetId: "instance.primary",
+    });
+
+    expect(
+      capturedRequestJson<{ input: { observedStatus: string; observedSummary: string } }>(
+        requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"),
+      ),
+    ).toMatchObject({
+      input: {
+        observedStatus: "unknown",
+        observedSummary: expectedStatusSummary.detail,
+      },
+    });
   });
 
   it("scopes operation ids to the configured workspace root", async () => {

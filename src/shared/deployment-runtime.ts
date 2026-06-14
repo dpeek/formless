@@ -1,4 +1,17 @@
-import type { DomainProviderResourceKind } from "./domain-provider-protocol.ts";
+import {
+  DEPLOYMENT_API_ROUTE_PREFIX,
+  DEPLOYMENT_DESIRED_STATE_API_PATH,
+  DEPLOYMENT_STATUS_API_PATH,
+} from "@dpeek/formless-deploy/client";
+import type {
+  DeployJsonPrimitive,
+  DeployJsonValue,
+  DeployProviderFamily,
+  DeployResource,
+  DeployResourceDependency,
+  DeployResourceGraph,
+  DeployResourceKind,
+} from "@dpeek/formless-deploy";
 
 export type DeploymentActorId = string;
 export type DeploymentAttemptId = string;
@@ -10,15 +23,15 @@ export type DeploymentLeaseToken = string;
 export type DeploymentRunnerId = string;
 export type DeploymentTargetId = string;
 
-export const INSTANCE_DEPLOYMENT_API_PATH = "/api/formless/deployments";
-export const INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/desired-state`;
+export const INSTANCE_DEPLOYMENT_API_PATH = DEPLOYMENT_API_ROUTE_PREFIX;
+export const INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH = DEPLOYMENT_DESIRED_STATE_API_PATH;
 export const INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/attempts/start`;
 export const INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/attempts/heartbeat`;
 export const INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/attempts/plan`;
 export const INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/attempts/success`;
 export const INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/attempts/failure`;
 export const INSTANCE_DEPLOYMENT_DRIFT_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/drift`;
-export const INSTANCE_DEPLOYMENT_STATUS_API_PATH = `${INSTANCE_DEPLOYMENT_API_PATH}/status`;
+export const INSTANCE_DEPLOYMENT_STATUS_API_PATH = DEPLOYMENT_STATUS_API_PATH;
 
 export type DeploymentRuntimeValidationErrorCode =
   | "invalid-actor-id"
@@ -100,35 +113,19 @@ export type InstanceDeploymentDesiredStateResponse = {
   target: DeploymentTarget;
 };
 
-export type DeploymentProviderFamily = "cloudflare";
+export type DeploymentProviderFamily = DeployProviderFamily;
 
-export type DeploymentResourceKind = DomainProviderResourceKind;
+export type DeploymentResourceKind = DeployResourceKind;
 
-export type DeploymentJsonPrimitive = boolean | number | string | null;
+export type DeploymentJsonPrimitive = DeployJsonPrimitive;
 
-export type DeploymentJsonValue =
-  | DeploymentJsonPrimitive
-  | DeploymentJsonValue[]
-  | { [key: string]: DeploymentJsonValue };
+export type DeploymentJsonValue = DeployJsonValue;
 
-export type DeploymentResourceDependency = {
-  logicalId: string;
-  reason?: string;
-};
+export type DeploymentResourceDependency = DeployResourceDependency;
 
-export type DeploymentResource = {
-  dependencies: DeploymentResourceDependency[];
-  inputs: Record<string, DeploymentJsonValue>;
-  kind: DomainProviderResourceKind;
-  logicalId: string;
-  providerFamily: DeploymentProviderFamily;
-  targetId: DeploymentTargetId;
-};
+export type DeploymentResource = DeployResource;
 
-export type DeploymentResourceGraph = {
-  resources: DeploymentResource[];
-  targetId: DeploymentTargetId;
-};
+export type DeploymentResourceGraph = DeployResourceGraph;
 
 export type DeploymentDesiredStateHashInput = {
   resourceGraph: DeploymentResourceGraph;
@@ -635,7 +632,7 @@ export type DeploymentResourceEvidenceSummary = {
   action: DeploymentEvidenceAction;
   alchemyResourceId?: string;
   displayName?: string;
-  kind: DomainProviderResourceKind;
+  kind: DeploymentResourceKind;
   logicalId: string;
   providerFamily: DeploymentProviderFamily;
   providerResourceIds: string[];

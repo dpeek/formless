@@ -1,18 +1,38 @@
 import {
   DEPLOY_PUBLIC_CONTRACT_VERSION,
   type ControlPlaneAppInstallProjectionRecord,
+  type ControlPlaneDeploymentConfigObservationRecord,
+  type ControlPlaneDeploymentConfigObservedStatus,
   type ControlPlaneDomainMappingProfile,
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneProjectionSourceRecord,
   type ControlPlaneRedirectStatusCode,
   type ControlPlaneRouteProjectionRecord,
+  type DeriveDeployLatestStatusInput,
   type DeployControlPlaneRecordsProjectionInput,
+  type DeployDeploymentObservationPatch,
+  type DeployDesiredStateDisplaySummary,
+  type DeployDesiredStateHash,
+  type DeployDesiredStateHashInput,
   type DeployDesiredStateProjection,
   type DeployDesiredStateProjectionInput,
+  type DeployDesiredStateSchemaVersion,
+  type DeployDesiredStateSource,
+  type DeployDesiredStateVersion,
+  type DeployDesiredStateVersionId,
+  type DeployDesiredStateVersionRef,
+  type DeployFailureSummary,
   type DeployJsonValue,
+  type DeployLatestStatus,
+  type DeployLatestStatusDisplaySummary,
   type DeployProjectionHashInput,
   type DeployResource,
+  type DeployResourceGraph,
+  type DeployResourceKind,
+  type DeployRunnerId,
   type DeployRouteTargetProjection,
+  type DeployTargetId,
+  type MaterializeDeployDesiredStateVersionInput,
 } from "./types.ts";
 
 export {
@@ -25,6 +45,7 @@ export type {
   ControlPlaneAppRouteKind,
   ControlPlaneAppRouteSurface,
   ControlPlaneAppInstallProjectionRecord,
+  ControlPlaneDeploymentConfigObservationRecord,
   ControlPlaneDeploymentConfigObservedField,
   ControlPlaneDeploymentConfigObservedStatus,
   ControlPlaneDomainMappingProfile,
@@ -35,6 +56,7 @@ export type {
   ControlPlaneRouteProjectionRecord,
   ControlPlaneRouteSurface,
   ControlPlaneRouteTargetProfile,
+  DeriveDeployLatestStatusInput,
   DeployActor,
   DeployActorKind,
   DeployAttemptMode,
@@ -42,22 +64,48 @@ export type {
   DeployAttemptSummary,
   DeployControlPlaneRecordsProjectionInput,
   DeployControlPlaneActionId,
+  DeployDeployedStatus,
+  DeployDeploymentObservationPatch,
+  DeployDeploymentObservationPatchRequest,
+  DeployDesiredStateDisplaySummary,
+  DeployDesiredStateHash,
+  DeployDesiredStateHashInput,
   DeployDesiredStateProjection,
   DeployDesiredStateProjectionInput,
+  DeployDesiredStateResponse,
+  DeployDesiredStateSchemaVersion,
+  DeployDesiredStateSource,
+  DeployDesiredStateVersion,
+  DeployDesiredStateVersionId,
+  DeployDesiredStateVersionRef,
+  DeployDriftedStatus,
   DeployDriftStatus,
   DeployDriftSummary,
   DeployEvidenceAction,
   DeployEvidenceSummary,
+  DeployFailureSummary,
+  DeployFailedCurrentVersionStatus,
   DeployJsonPrimitive,
   DeployJsonValue,
+  DeployLatestStatus,
+  DeployLatestStatusDisplaySummary,
+  DeployLatestStatusDisplayTone,
+  DeployLatestStatusResponse,
+  DeployNoTargetStatus,
+  DeployPendingChangesStatus,
   DeployProjectionHashInput,
   DeployProviderFamily,
   DeployResource,
   DeployResourceDependency,
   DeployResourceGraph,
   DeployResourceKind,
+  DeployRunnerId,
   DeployRouteTargetProjection,
   DeploySecretReference,
+  DeployTargetId,
+  DeployTargetKind,
+  DeployTargetRef,
+  MaterializeDeployDesiredStateVersionInput,
 } from "./types.ts";
 
 const redirectPlaceholderDnsRecord = {
@@ -166,6 +214,348 @@ export function projectDeployRouteTargets(
       };
     })
     .sort(compareRouteTargets);
+}
+
+export async function materializeDeployDesiredStateVersion(
+  input: MaterializeDeployDesiredStateVersionInput,
+): Promise<DeployDesiredStateVersion> {
+  assertDeployGraphTarget(input);
+
+  const resourceGraph = canonicalizeDeployResourceGraph(input.resourceGraph);
+  const hash = await computeDeployDesiredStateHash({
+    resourceGraph,
+    schemaVersion: DEPLOY_PUBLIC_CONTRACT_VERSION,
+    targetId: input.targetId,
+  });
+  const revision = deployDesiredStateSourceRevision(input.source);
+
+  return {
+    createdAt: input.now,
+    display: deployDesiredStateDisplaySummary(resourceGraph, input.title),
+    hash,
+    resourceGraph,
+    revision,
+    schemaVersion: DEPLOY_PUBLIC_CONTRACT_VERSION,
+    source: input.source,
+    targetId: input.targetId,
+    versionId: deployDesiredStateVersionId(input.targetId, hash),
+  };
+}
+
+export function canonicalizeDeployResourceGraph(graph: DeployResourceGraph): DeployResourceGraph {
+  return {
+    resources: graph.resources
+      .map(canonicalizeDeployResourceGraphResource)
+      .sort(compareDeployResourceGraphResources),
+    targetId: graph.targetId,
+  };
+}
+
+export function deployResourceGraphCanonicalJson(graph: DeployResourceGraph): string {
+  return stableDeployJsonStringify(canonicalizeDeployResourceGraph(graph));
+}
+
+export function deployDesiredStateHashInputCanonicalJson(
+  input: DeployDesiredStateHashInput,
+): string {
+  return stableDeployJsonStringify({
+    resourceGraph: canonicalizeDeployResourceGraph(input.resourceGraph),
+    schemaVersion: input.schemaVersion,
+    targetId: input.targetId,
+  });
+}
+
+export async function computeDeployDesiredStateHash(
+  input: DeployDesiredStateHashInput,
+): Promise<DeployDesiredStateHash> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(deployDesiredStateHashInputCanonicalJson(input)),
+  );
+  const hex = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+  return `sha256:${hex}`;
+}
+
+export function deployDesiredStateVersionId(
+  targetId: DeployTargetId,
+  hash: DeployDesiredStateHash,
+): DeployDesiredStateVersionId {
+  return `desired.${targetId}.${hash}`;
+}
+
+export function deployDesiredStateVersionRef(
+  version: DeployDesiredStateVersion,
+): DeployDesiredStateVersionRef {
+  return {
+    hash: version.hash,
+    revision: version.revision,
+    targetId: version.targetId,
+    versionId: version.versionId,
+  };
+}
+
+export function deployDesiredStateSchemaVersion(): DeployDesiredStateSchemaVersion {
+  return DEPLOY_PUBLIC_CONTRACT_VERSION;
+}
+
+export function deployDesiredStateSourceRevision(source: DeployDesiredStateSource): number {
+  return Number.isSafeInteger(source.intentRevision) && source.intentRevision >= 0
+    ? source.intentRevision
+    : 0;
+}
+
+export function deployDesiredStateDisplaySummary(
+  resourceGraph: DeployResourceGraph,
+  title?: string,
+): DeployDesiredStateDisplaySummary {
+  return {
+    resourceCount: resourceGraph.resources.length,
+    resourcesByKind: deployResourceCountsByKind(resourceGraph),
+    ...(title === undefined ? {} : { title }),
+  };
+}
+
+export function deployResourceCountsByKind(
+  resourceGraph: DeployResourceGraph,
+): Record<DeployResourceKind, number> {
+  const resourcesByKind: Partial<Record<DeployResourceKind, number>> = {};
+
+  for (const resource of resourceGraph.resources) {
+    resourcesByKind[resource.kind] = (resourcesByKind[resource.kind] ?? 0) + 1;
+  }
+
+  return resourcesByKind as Record<DeployResourceKind, number>;
+}
+
+export function deployDeploymentAppliedSummary(input: {
+  resourceCount: number;
+  sourceLabel: string;
+}): string {
+  return `${input.resourceCount} deployment resource${
+    input.resourceCount === 1 ? "" : "s"
+  } applied from ${input.sourceLabel}.`;
+}
+
+export function deployDisplaySafeFailureSummary(input: {
+  code: string;
+  details?: string | null;
+  displayMessage: string;
+}): DeployFailureSummary {
+  const details = textRecordValue(input.details);
+
+  return {
+    code: input.code,
+    ...(details === undefined ? {} : { details }),
+    displayMessage: input.displayMessage,
+  };
+}
+
+export function deployDeploymentObservationPatch(input: {
+  desiredState: DeployDesiredStateVersionRef;
+  observedAt: string;
+  observedError?: string | null;
+  observedStatus: ControlPlaneDeploymentConfigObservedStatus;
+  observedSummary?: string | null;
+  runnerId?: DeployRunnerId | null;
+}): DeployDeploymentObservationPatch {
+  const observedError = textRecordValue(input.observedError);
+  const observedSummary = textRecordValue(input.observedSummary);
+  const observedRunnerId = deployRunnerId(input.runnerId);
+
+  return {
+    observedAt: input.observedAt,
+    observedDesiredStateHash: input.desiredState.hash,
+    ...(observedError === undefined ? {} : { observedError }),
+    ...(observedRunnerId === undefined ? {} : { observedRunnerId }),
+    observedStatus: input.observedStatus,
+    ...(observedSummary === undefined ? {} : { observedSummary }),
+  };
+}
+
+export function deployDeploymentObservationPatchFromLatestStatus(input: {
+  desiredState: DeployDesiredStateVersionRef;
+  fallbackRunnerId?: DeployRunnerId;
+  status: DeployLatestStatus;
+  summary?: DeployLatestStatusDisplaySummary;
+}): DeployDeploymentObservationPatch {
+  const summary = input.summary ?? deployLatestStatusDisplaySummary(input.status);
+
+  switch (input.status.state) {
+    case "deployed":
+      if (deployStatusDesiredStateMatches(input.status.latestDesiredState, input.desiredState)) {
+        return deployDeploymentObservationPatch({
+          desiredState: input.desiredState,
+          observedAt: input.status.deployedAt,
+          observedStatus: "deployed",
+          observedSummary: input.status.summary ?? summary.detail,
+          runnerId: input.status.runnerId ?? input.fallbackRunnerId,
+        });
+      }
+      break;
+    case "failed-current-version":
+      if (deployStatusDesiredStateMatches(input.status.latestDesiredState, input.desiredState)) {
+        return deployDeploymentObservationPatch({
+          desiredState: input.desiredState,
+          observedAt: input.status.failedAt,
+          observedError: input.status.summary.displayMessage,
+          observedStatus: "failed",
+          observedSummary: input.status.summary.displayMessage,
+          runnerId: input.status.runnerId ?? input.fallbackRunnerId,
+        });
+      }
+      break;
+    case "drift":
+      if (deployStatusDesiredStateMatches(input.status.latestDesiredState, input.desiredState)) {
+        return deployDeploymentObservationPatch({
+          desiredState: input.desiredState,
+          observedAt: input.status.checkedAt,
+          observedStatus: "drifted",
+          observedSummary: input.status.summary ?? summary.detail,
+          runnerId: input.status.runnerId ?? input.fallbackRunnerId,
+        });
+      }
+      break;
+    case "no-target":
+    case "pending-changes":
+      break;
+  }
+
+  return deployDeploymentObservationPatch({
+    desiredState: input.desiredState,
+    observedAt: input.status.checkedAt,
+    observedStatus: "unknown",
+    observedSummary: summary.detail,
+    runnerId: input.fallbackRunnerId,
+  });
+}
+
+export function deriveDeployLatestStatus(input: DeriveDeployLatestStatusInput): DeployLatestStatus {
+  if (
+    input.deploymentConfig === undefined ||
+    !deployDeploymentConfigMatchesTarget(input.deploymentConfig, input.targetId)
+  ) {
+    return {
+      checkedAt: input.now,
+      state: "no-target",
+    };
+  }
+
+  if (input.desiredState === undefined) {
+    return {
+      checkedAt: input.now,
+      state: "no-target",
+    };
+  }
+
+  const latestDesiredState = deployDesiredStateVersionRef(input.desiredState);
+  const observedStatus = deployObservedDeploymentStatus(
+    input.deploymentConfig.values.observedStatus,
+  );
+  const observedHash = deployObservedDesiredStateHash(
+    input.deploymentConfig.values.observedDesiredStateHash,
+  );
+
+  if (observedStatus === undefined || observedHash !== input.desiredState.hash) {
+    return {
+      checkedAt: input.now,
+      latestDesiredState,
+      state: "pending-changes",
+      targetId: input.targetId,
+    };
+  }
+
+  const observedAt = textRecordValue(input.deploymentConfig.values.observedAt) ?? input.now;
+  const runnerId = deployRunnerId(input.deploymentConfig.values.observedRunnerId);
+  const summary = textRecordValue(input.deploymentConfig.values.observedSummary);
+
+  if (observedStatus === "deployed" || observedStatus === "in-sync") {
+    return {
+      checkedAt: input.now,
+      deployedAt: observedAt,
+      latestDesiredState,
+      ...(runnerId === undefined ? {} : { runnerId }),
+      state: "deployed",
+      ...(summary === undefined ? {} : { summary }),
+      targetId: input.targetId,
+    };
+  }
+
+  if (observedStatus === "failed") {
+    return {
+      checkedAt: input.now,
+      failedAt: observedAt,
+      latestDesiredState,
+      ...(runnerId === undefined ? {} : { runnerId }),
+      state: "failed-current-version",
+      summary: deployObservedFailureSummary(input.deploymentConfig),
+      targetId: input.targetId,
+    };
+  }
+
+  if (observedStatus === "drifted") {
+    return {
+      checkedAt: input.now,
+      latestDesiredState,
+      ...(runnerId === undefined ? {} : { runnerId }),
+      state: "drift",
+      ...(summary === undefined ? {} : { summary }),
+      targetId: input.targetId,
+    };
+  }
+
+  return {
+    checkedAt: input.now,
+    latestDesiredState,
+    state: "pending-changes",
+    targetId: input.targetId,
+  };
+}
+
+export function deployLatestStatusDisplaySummary(
+  status: DeployLatestStatus,
+): DeployLatestStatusDisplaySummary {
+  switch (status.state) {
+    case "no-target":
+      return {
+        detail: "No desired-state version has been recorded",
+        label: "No deployment state",
+        state: status.state,
+        tone: "neutral",
+      };
+    case "pending-changes":
+      return {
+        detail: status.latestSuccessfulDesiredState
+          ? `Desired revision ${status.latestDesiredState.revision} pending; deployed revision ${status.latestSuccessfulDesiredState.revision}`
+          : `Desired revision ${status.latestDesiredState.revision} pending`,
+        label: "Pending changes",
+        state: status.state,
+        tone: "warning",
+      };
+    case "deployed":
+      return {
+        detail: `Revision ${status.latestDesiredState.revision} deployed at ${status.deployedAt}`,
+        label: "Deployed",
+        state: status.state,
+        tone: "success",
+      };
+    case "failed-current-version":
+      return {
+        detail: `Revision ${status.latestDesiredState.revision}: ${deployFailureLabel(status.summary)}`,
+        label: "Failed current version",
+        state: status.state,
+        tone: "danger",
+      };
+    case "drift":
+      return {
+        detail: status.summary ?? "Latest observation reports drift",
+        label: "Drift detected",
+        state: status.state,
+        tone: "warning",
+      };
+  }
 }
 
 export function deployProjectionCanonicalJson(projection: DeployDesiredStateProjection): string {
@@ -669,6 +1059,175 @@ function redirectStatusCode(
     default:
       return 301;
   }
+}
+
+function assertDeployGraphTarget(input: MaterializeDeployDesiredStateVersionInput) {
+  if (input.resourceGraph.targetId !== input.targetId) {
+    throw new Error(
+      `Deploy resource graph target "${input.resourceGraph.targetId}" does not match target "${input.targetId}".`,
+    );
+  }
+
+  for (const resource of input.resourceGraph.resources) {
+    if (resource.targetId !== input.targetId) {
+      throw new Error(
+        `Deploy resource "${resource.logicalId}" target "${resource.targetId}" does not match target "${input.targetId}".`,
+      );
+    }
+  }
+}
+
+function canonicalizeDeployResourceGraphResource(resource: DeployResource): DeployResource {
+  return {
+    dependencies: resource.dependencies
+      .map((dependency) => ({
+        logicalId: dependency.logicalId,
+        ...(dependency.reason === undefined ? {} : { reason: dependency.reason }),
+      }))
+      .sort(compareDeployResourceGraphDependencies),
+    inputs: canonicalizeDeployResourceGraphJsonObject(resource.inputs),
+    kind: resource.kind,
+    logicalId: resource.logicalId,
+    providerFamily: resource.providerFamily,
+    targetId: resource.targetId,
+  };
+}
+
+function canonicalizeDeployResourceGraphJsonValue(value: DeployJsonValue): DeployJsonValue {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeDeployResourceGraphJsonValue);
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  return canonicalizeDeployResourceGraphJsonObject(value);
+}
+
+function canonicalizeDeployResourceGraphJsonObject(
+  value: Record<string, DeployJsonValue>,
+): Record<string, DeployJsonValue> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, entryValue]) => entryValue !== undefined && !isDeploySecretInputKey(key))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entryValue]) => [key, canonicalizeDeployResourceGraphJsonValue(entryValue)]),
+  );
+}
+
+function isDeploySecretInputKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+  return (
+    normalizedKey.includes("apikey") ||
+    normalizedKey.includes("authorization") ||
+    normalizedKey.includes("clientsecret") ||
+    normalizedKey.includes("credential") ||
+    normalizedKey.includes("password") ||
+    normalizedKey.includes("privatekey") ||
+    normalizedKey.includes("secret") ||
+    normalizedKey.includes("statetoken") ||
+    normalizedKey.endsWith("token")
+  );
+}
+
+function compareDeployResourceGraphResources(left: DeployResource, right: DeployResource): number {
+  return (
+    left.targetId.localeCompare(right.targetId) ||
+    left.logicalId.localeCompare(right.logicalId) ||
+    left.kind.localeCompare(right.kind) ||
+    left.providerFamily.localeCompare(right.providerFamily) ||
+    deployResourceGraphCanonicalTieBreaker(left).localeCompare(
+      deployResourceGraphCanonicalTieBreaker(right),
+    )
+  );
+}
+
+function compareDeployResourceGraphDependencies(
+  left: DeployResource["dependencies"][number],
+  right: DeployResource["dependencies"][number],
+): number {
+  return (
+    left.logicalId.localeCompare(right.logicalId) ||
+    (left.reason ?? "").localeCompare(right.reason ?? "")
+  );
+}
+
+function deployResourceGraphCanonicalTieBreaker(resource: DeployResource): string {
+  const canonical = canonicalizeDeployResourceGraphResource(resource);
+
+  return stableDeployJsonStringify({
+    dependencies: canonical.dependencies,
+    inputs: canonical.inputs,
+  });
+}
+
+function deployDeploymentConfigMatchesTarget(
+  record: ControlPlaneDeploymentConfigObservationRecord,
+  targetId: DeployTargetId,
+): boolean {
+  return (
+    record.deletedAt === undefined &&
+    record.entity === "deployment-config" &&
+    record.values.enabled === true &&
+    textRecordValue(record.values.targetId) === targetId
+  );
+}
+
+function deployStatusDesiredStateMatches(
+  observed: DeployDesiredStateVersionRef,
+  desiredState: DeployDesiredStateVersionRef,
+): boolean {
+  return (
+    observed.hash === desiredState.hash &&
+    observed.targetId === desiredState.targetId &&
+    observed.versionId === desiredState.versionId
+  );
+}
+
+function deployObservedDeploymentStatus(
+  value: unknown,
+): ControlPlaneDeploymentConfigObservedStatus | undefined {
+  return value === "deployed" ||
+    value === "drifted" ||
+    value === "failed" ||
+    value === "in-sync" ||
+    value === "unknown"
+    ? value
+    : undefined;
+}
+
+function deployObservedDesiredStateHash(value: unknown): DeployDesiredStateHash | undefined {
+  const hash = textRecordValue(value);
+
+  return hash?.startsWith("sha256:") ? hash : undefined;
+}
+
+function deployObservedFailureSummary(
+  record: ControlPlaneDeploymentConfigObservationRecord,
+): DeployFailureSummary {
+  const displayMessage =
+    textRecordValue(record.values.observedError) ??
+    textRecordValue(record.values.observedSummary) ??
+    "Deployment failed.";
+
+  return {
+    code: "observed-failure",
+    displayMessage,
+  };
+}
+
+function deployRunnerId(value: unknown): DeployRunnerId | undefined {
+  return textRecordValue(value);
+}
+
+function textRecordValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+function deployFailureLabel(summary: DeployFailureSummary): string {
+  return summary.code ? `${summary.displayMessage} (${summary.code})` : summary.displayMessage;
 }
 
 function canonicalizeDeployProjection(

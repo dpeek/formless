@@ -93,6 +93,18 @@ supported deployment target.
   drift reports, deployment config observation cache fields, and status display
   data do not change the desired-state hash
 
+#### Scenario: Deploy package owns desired-state versioning
+
+- WHEN deployment runtime, CLI, workspace gateway, or tests need desired-state
+  version facts
+- THEN they use Deploy package helpers for canonical resource graph hashing,
+  schema version refs, display summaries, target refs, and source revision
+  normalization
+- AND Worker runtime adapts control-plane records into Deploy package inputs
+  instead of owning a separate desired-state version implementation
+- AND provider credentials, runtime secrets, Alchemy passwords, and state tokens
+  remain outside Deploy package version output
+
 ### Requirement: Runtime Upgrade Facts
 
 The deployment runtime SHALL expose upgrade-relevant runtime facts for exact
@@ -202,11 +214,33 @@ tables.
 - THEN it replaces the previous observation fields on the deployment config
 - AND the runtime does not append deployment history records
 
+#### Scenario: Deploy package owns observation patch payloads
+
+- WHEN a CLI deployer, workspace gateway, or trusted deploy node records latest
+  deployment observation
+- THEN it composes display-safe observation patch payloads through Deploy
+  package helpers
+- AND the payload references the desired-state version or hash being observed
+- AND the payload does not include provider credentials, raw provider state, raw
+  operation tokens, Alchemy state tokens, full execution logs, or runtime
+  secrets
+
 ### Requirement: Deployment Status
 
 The system SHALL derive display-friendly deployment status from the current
 desired-state projection and the target deployment config's latest observation
 cache.
+
+#### Scenario: Deploy package owns latest status derivation
+
+- WHEN runtime, CLI, workspace gateway, browser UI, or tests need latest
+  deployment status
+- THEN they use Deploy package helpers to interpret the current desired-state
+  version together with the target deployment config observation cache
+- AND Worker runtime supplies the current desired state and target deployment
+  config data instead of maintaining a separate status derivation
+- AND provider mutation, credential resolution, Alchemy state inspection, and
+  operation execution stay outside the status helper
 
 #### Scenario: No target state
 
@@ -283,6 +317,16 @@ read-only deployment projection and display status.
   the latest deployment observation cache
 - **AND** Worker, R2, DNS, custom-domain, redirect, and other projected
   provider resources use the same deployer protocol boundary
+
+#### Scenario: Shared deployment client contracts
+
+- WHEN a CLI, workspace gateway, browser client, or trusted deploy node reads
+  desired state, reads status, or patches observation cache fields
+- THEN route constants, response refs, desired-state version refs, and
+  observation patch request payload contracts come from the Deploy package
+  client boundary
+- AND callers may provide transport, auth, storage, and gateway-specific
+  adapters outside that package boundary
 
 #### Scenario: Route deletion is not provider mutation
 

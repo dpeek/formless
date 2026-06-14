@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import type { DeployResourceGraph } from "@dpeek/formless-deploy";
+import {
+  deployDeploymentAppliedSummary,
+  deployResourceCountsByKind,
+  type DeployEvidenceSummary,
+  type DeployResourceGraph,
+} from "@dpeek/formless-deploy";
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
@@ -21,8 +26,7 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
-import { packageAppFactsForKey, listInstallableAppPackages } from "../shared/app-installs.ts";
+import { listInstallableAppPackages, packageAppFactsForKey } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -362,7 +366,7 @@ describe("Formless workspace operations", () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const deployInputs: DeployFormlessInstanceInput[] = [];
-    const deploymentEvidence: DeploymentResourceEvidenceSummary[] = [];
+    const deploymentEvidence: DeployEvidenceSummary[] = [];
     const requests: CapturedRequest[] = [];
     const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
       [];
@@ -424,6 +428,15 @@ describe("Formless workspace operations", () => {
     }
 
     const desiredState = deploymentDesiredStateRef();
+    const deployedResourceGraph = deployInputs[0]?.deploymentResourceGraph ?? {
+      resources: [],
+      targetId: "instance.primary",
+    };
+    const deployedResourcesByKind = deployResourceCountsByKind(deployedResourceGraph);
+    const deployedResourceCount = Object.values(deployedResourcesByKind).reduce(
+      (total, count) => total + count,
+      0,
+    );
     const observation = capturedRequestJson<{
       idempotencyKey: string;
       input: {
@@ -458,12 +471,8 @@ describe("Formless workspace operations", () => {
             desiredState,
             evidenceCount: 3,
             observedStatus: "deployed",
-            resourceCount: 3,
-            resourcesByKind: {
-              "cloudflare-dns-records": 1,
-              "cloudflare-redirect-rule": 1,
-              "cloudflare-worker-custom-domain": 1,
-            },
+            resourceCount: deployedResourceCount,
+            resourcesByKind: deployedResourcesByKind,
             runnerId: "local-gateway",
             targetId: "instance.primary",
           },
@@ -490,7 +499,10 @@ describe("Formless workspace operations", () => {
         observedError: "",
         observedRunnerId: "local-gateway",
         observedStatus: "deployed",
-        observedSummary: "3 deployment resources applied from workspace source.",
+        observedSummary: deployDeploymentAppliedSummary({
+          resourceCount: deployedResourceCount,
+          sourceLabel: "workspace source",
+        }),
       },
     });
     expect(deployInputs).toHaveLength(1);
@@ -1356,7 +1368,7 @@ function deploymentDesiredStateRef() {
 
 function deploymentResourceEvidenceFromGraph(
   resourceGraph: DeployResourceGraph | undefined,
-): DeploymentResourceEvidenceSummary[] {
+): DeployEvidenceSummary[] {
   return (
     resourceGraph?.resources.map((resource, index) => ({
       action: "updated",
