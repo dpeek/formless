@@ -18,6 +18,7 @@ import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
+import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { createRecordId } from "../shared/ids.ts";
 import type {
@@ -347,6 +348,7 @@ export function executeReadOperationInvocation(input: {
 
 export function executeWriteOperationInvocation(input: {
   envelope: OperationInvocationEnvelope;
+  packageResolver?: AppPackageResolver;
   schema: AppSchema;
   storage: DurableObjectStorage;
   validateConstraints?: RecordConstraintValidator;
@@ -360,6 +362,7 @@ export function executeWriteOperationInvocation(input: {
         input.storage,
         input.envelope,
         input.schema,
+        input.packageResolver,
         input.validateConstraints,
       );
       const response = operationInvocationResponseFromWriteOutcome(input.envelope, writeOutcome);
@@ -384,6 +387,7 @@ function executeWriteOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse | ActionResponse> {
   if (!isEntityOperationWriteKind(envelope.operation.kind)) {
@@ -393,16 +397,29 @@ function executeWriteOperationInvocationOutcome(
   }
 
   if (envelope.operation.kind === "command") {
-    return executeCommandOperationInvocationOutcome(storage, envelope, schema, validateConstraints);
+    return executeCommandOperationInvocationOutcome(
+      storage,
+      envelope,
+      schema,
+      packageResolver,
+      validateConstraints,
+    );
   }
 
-  return executeMutationOperationInvocationOutcome(storage, envelope, schema, validateConstraints);
+  return executeMutationOperationInvocationOutcome(
+    storage,
+    envelope,
+    schema,
+    packageResolver,
+    validateConstraints,
+  );
 }
 
 function executeMutationOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse> {
   const validateRecordConstraints = operationRecordConstraintValidator(
@@ -414,6 +431,7 @@ function executeMutationOperationInvocationOutcome(
     operationMutationRequest(envelope, schema, storage),
     schema,
     storage,
+    { packageResolver },
   );
 
   if ("outcome" in validatedMutation) {
@@ -454,6 +472,7 @@ function executeCommandOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   if (envelope.operation.effect?.type === "recordPlan") {
@@ -462,6 +481,7 @@ function executeCommandOperationInvocationOutcome(
       envelope,
       schema,
       envelope.operation.effect,
+      packageResolver,
       validateConstraints,
     );
   }
@@ -539,6 +559,7 @@ function executeRecordPlanOperationInvocationOutcome(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   effect: RecordPlanEntityOperationEffectSchema,
+  packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   const actionId = requiredWriteIdentity(envelope);
@@ -549,7 +570,15 @@ function executeRecordPlanOperationInvocationOutcome(
   }
 
   const inputValues = recordPlanCommandInput(envelope, schema, storage);
-  const plans = recordPlanWritePlans(storage, envelope, schema, effect, inputValues, actionId);
+  const plans = recordPlanWritePlans(
+    storage,
+    envelope,
+    schema,
+    effect,
+    inputValues,
+    actionId,
+    packageResolver,
+  );
 
   return mapWriteOutcome(
     writeRecordSetForActionOutcome(
@@ -581,6 +610,7 @@ type RecordPlanPlanningState = {
   actionId: string;
   envelope: OperationInvocationEnvelope;
   inputValues: RecordPlanInputValues;
+  packageResolver?: AppPackageResolver;
   plannedRecordsById: Map<string, StoredRecord>;
   schema: AppSchema;
   stepOutputs: Map<string, StoredRecord>;
@@ -613,11 +643,13 @@ function recordPlanWritePlans(
   effect: RecordPlanEntityOperationEffectSchema,
   inputValues: RecordPlanInputValues,
   actionId: string,
+  packageResolver?: AppPackageResolver,
 ): ActionRecordWritePlan[] {
   const state: RecordPlanPlanningState = {
     actionId,
     envelope,
     inputValues,
+    packageResolver,
     plannedRecordsById: new Map(),
     schema,
     stepOutputs: new Map(),
@@ -728,6 +760,7 @@ function validateRecordPlanStepMutation(
 ) {
   const result = validateMutationRequest(mutation, state.schema, state.storage, {
     additionalRecords: [...state.plannedRecordsById.values()],
+    packageResolver: state.packageResolver,
   });
 
   if ("outcome" in result) {

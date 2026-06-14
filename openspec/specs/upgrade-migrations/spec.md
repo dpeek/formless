@@ -89,7 +89,8 @@ workflows.
 - THEN it reads local metadata, deployed runtime metadata, app install facts,
   archive state when relevant, and deployment status
 - AND it reports required code deploy, SQL migration, package app migration,
-  archive normalization, browser reload, and backup steps without mutating data
+  unsupported archive input, browser reload, and backup steps without mutating
+  data
 
 #### Scenario: Apply upgrade
 

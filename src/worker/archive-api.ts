@@ -1,5 +1,5 @@
 import {
-  normalizePortableArchive,
+  parsePortableArchive,
   parseAppArchiveData,
   type AppArchiveData,
   type InstanceArchiveControlPlane,
@@ -8,6 +8,7 @@ import type {
   AppStorageIdentity,
   InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
+import type { AppInstall } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -16,7 +17,10 @@ import {
 } from "../shared/protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppInstallsFromRecords,
+  instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
 } from "../shared/instance-control-plane.ts";
 import {
@@ -29,10 +33,8 @@ import {
 } from "./archive-restore.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import {
-  readInstanceAppInstalls,
-  restoreInstanceAppInstall,
-} from "./instance-app-installs-state.ts";
+import { readControlPlaneAppInstallsForRequest } from "./instance-app-installs.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import {
   activeAppPackageResolver,
   activeWorkerSourceSchemas,
@@ -71,7 +73,7 @@ export async function handleInstanceArchiveApiRequest(
 
 export async function handleInstanceArchiveDurableObjectRequest(
   request: Request,
-  storage: DurableObjectStorage,
+  _storage: DurableObjectStorage,
   env: InstanceArchiveApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
@@ -100,9 +102,9 @@ export async function handleInstanceArchiveDurableObjectRequest(
     }
 
     const body = parseArchiveRestoreRequest(await readJson(request));
-    const archive = normalizePortableArchive(body.archive).archive;
+    const archive = parsePortableArchive(body.archive);
     const mediaFilesByPath = new Map(body.mediaFiles.map((file) => [file.archivePath, file]));
-    const target = archiveRestoreApiTarget(request, storage, env, mediaFilesByPath);
+    const target = archiveRestoreApiTarget(request, env, mediaFilesByPath);
     const result = archive.restorePolicy.dryRun
       ? await dryRunPortableArchiveRestore(archive, target)
       : await applyPortableArchiveRestore(archive, target);
@@ -169,14 +171,13 @@ export async function handleArchiveAppDataRestoreDurableObjectRequest(
 
 function archiveRestoreApiTarget(
   request: Request,
-  storage: DurableObjectStorage,
   env: InstanceArchiveApiEnv,
   mediaFilesByPath: Map<string, ArchiveRestoreMediaRead>,
 ): ArchiveRestoreApplyTarget {
   const packageResolver = activeAppPackageResolver(env);
 
   return {
-    listInstalledApps: () => readInstanceAppInstalls(storage, packageResolver),
+    listInstalledApps: () => readControlPlaneAppInstallsForRequest(env, request.url),
     media: {
       listFiles: async () => [...mediaFilesByPath.values()].map(mediaFileMetadata),
       readFile: async (archivePath) => mediaFilesByPath.get(archivePath),
@@ -193,13 +194,60 @@ function archiveRestoreApiTarget(
     restoreControlPlane: async (controlPlane) => {
       await restoreControlPlaneViaAuthority(request, env, controlPlane);
     },
-    restoreInstall: ({ action, install }) => {
-      restoreInstanceAppInstall(storage, { action, install }, packageResolver);
-    },
+    restoreInstall: ({ action, install }) =>
+      restoreInstallViaControlPlane(request, env, { action, install }),
     packageResolver,
     packages: listActiveAppPackages(env),
     sourceSchemas: activeWorkerSourceSchemas(env),
   };
+}
+
+async function restoreInstallViaControlPlane(
+  request: Request,
+  env: InstanceArchiveApiEnv,
+  input: { action: "create" | "replace"; install: AppInstall },
+): Promise<void> {
+  const packageResolver = activeAppPackageResolver(env);
+  const records = (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [];
+  const existing = instanceControlPlaneAppInstallsFromRecords(records, packageResolver).find(
+    (install) => install.installId === input.install.installId,
+  );
+
+  if (input.action === "create" && existing) {
+    throw new Error(`Install id "${input.install.installId}" is already installed.`);
+  }
+
+  if (input.action === "replace" && !existing) {
+    throw new Error(`Install id "${input.install.installId}" is not installed.`);
+  }
+
+  if (existing && existing.packageAppKey !== input.install.packageAppKey) {
+    throw new Error(
+      `Install id "${input.install.installId}" uses package "${existing.packageAppKey}", not "${input.install.packageAppKey}".`,
+    );
+  }
+
+  const nextRecords = records
+    .filter((record) => record.deletedAt === undefined)
+    .filter(
+      (record) =>
+        record.id !== input.install.installId &&
+        !(
+          record.entity === "route" &&
+          record.values.appInstall === input.install.installId &&
+          record.values.matchHost === undefined
+        ),
+    );
+  const now = input.install.updatedAt || input.install.createdAt;
+
+  await restoreControlPlaneViaAuthority(request, env, {
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    schemaUpdatedAt: now,
+    records: [
+      ...nextRecords,
+      ...instanceControlPlaneRecordsForAppInstall({ install: input.install, now }),
+    ],
+  });
 }
 
 async function restoreControlPlaneViaAuthority(

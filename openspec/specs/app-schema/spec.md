@@ -124,7 +124,7 @@ pure helpers through the Schema package slice.
 #### Scenario: Package owns app schema interface
 
 - **WHEN** generated UI models, schema authoring state, Authority validation,
-  browser replicas, archive planning, archive normalization, upgrade
+  browser replicas, archive planning, archive validation, upgrade
   migrations, tests, or other package slices need App schema types, parse
   behavior, stringify behavior, schema-local entity key helpers, qualified
   entity name helpers, field behavior, query helpers, read model helpers,

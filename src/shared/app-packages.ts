@@ -1,4 +1,4 @@
-import { isSchemaKey, schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
+import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
 import {
   bundledSourceSchemaHashFixtures,
   isSourceSchemaHash,
@@ -246,22 +246,6 @@ export function findResolvedAppPackage(
   resolver: AppPackageResolver = bundledAppPackageResolver,
 ): ResolvedAppPackage | undefined {
   return resolver.findPackage(packageAppKey);
-}
-
-export function isBundledResolvedAppPackage(
-  appPackage: ResolvedAppPackage,
-): appPackage is ResolvedAppPackage & {
-  packageAppKey: SchemaKey;
-  sourceOrigin: "bundled";
-  sourceSchemaKey: SchemaKey;
-  seedRecordsKey: SchemaKey;
-} {
-  return (
-    appPackage.sourceOrigin === "bundled" &&
-    isSchemaKey(appPackage.packageAppKey) &&
-    isSchemaKey(appPackage.sourceSchemaKey) &&
-    isSchemaKey(appPackage.seedRecordsKey)
-  );
 }
 
 function resolveAppPackageManifest(manifest: unknown, context: string): ResolvedAppPackage {

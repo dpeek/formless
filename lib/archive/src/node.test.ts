@@ -60,7 +60,6 @@ describe("archive node adapter", () => {
         contentType: "image/png",
       },
     ]);
-    expect(read.normalizationEvidence).toEqual([]);
   });
 });
 

@@ -4,7 +4,11 @@ import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
 import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts";
-import { listBundledAppPackages, type AppInstall } from "../../shared/app-installs.ts";
+import {
+  listInstallableAppPackages,
+  type AppInstall,
+  type InstallableAppPackage,
+} from "../../shared/app-installs.ts";
 import type { InstanceDeploymentDesiredStateResponse } from "../../shared/deployment-runtime.ts";
 import {
   instanceControlPlaneSchema,
@@ -17,6 +21,7 @@ import {
   InstanceShellRouteView,
   WorkspaceOperationProgress,
   displaySafeEntries,
+  instanceShellUninitializedWorkspaceInstallState,
   operationPollsAutomatically,
   selectWorkspaceGatewayOperationControls,
   workspaceGatewayStartInputFromDefinition,
@@ -222,6 +227,32 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain("workspacePath");
     expect(html).not.toContain("/Users/");
+  });
+
+  it("uses fetched active registry packages for uninitialized workspace install state", () => {
+    const privateSite = privateSitePackage();
+    const { state } = instanceShellUninitializedWorkspaceInstallState({
+      installs: [],
+      packages: [privateSite],
+    });
+    const html = renderToStaticMarkup(
+      <InstallAppDialogForm
+        state={state}
+        installDrafts={{ "private-site": { installId: "private-site", label: "Private Site" } }}
+      />,
+    );
+
+    expect(state.installs).toEqual([]);
+    expect(state.packages).toEqual([privateSite]);
+    expect(state.packages[0]).toMatchObject({
+      packageAppKey: "private-site",
+      publicRouteBase: "/sites",
+      sourceOrigin: "workspace",
+    });
+    expect(html).toContain("Private Site");
+    expect(html).toContain("Workspace-linked public Site package.");
+    expect(html).toContain("Install Private Site");
+    expect(html).not.toContain("Public website app backed by the bundled Site schema");
   });
 
   it("selects browser operation controls from gateway bindings and runtime capabilities", () => {
@@ -625,7 +656,7 @@ describe("instance shell route view", () => {
     ]);
   });
 
-  it("renders the install dialog with a bundled app type switcher", () => {
+  it("renders the install dialog with an app type switcher", () => {
     const html = renderToStaticMarkup(
       <InstallAppDialogForm
         installDrafts={{
@@ -662,7 +693,7 @@ describe("instance shell route view", () => {
   });
 
   it("renders CRM package defaults in the install dialog when CRM is selected", () => {
-    const packages = listBundledAppPackages();
+    const packages = listInstallableAppPackages();
     const crmPackage = packages.find((appPackage) => appPackage.packageAppKey === "crm");
 
     if (!crmPackage) {
@@ -973,7 +1004,7 @@ function readyState(
     domainAppliedStates: [],
     installing: false,
     installs: [siteInstall({ installId: "site", label: "Site" })],
-    packages: listBundledAppPackages(),
+    packages: listInstallableAppPackages(),
     status: "ready",
     ...overrides,
   };
@@ -1102,6 +1133,33 @@ function deploymentConfigRecord(
 
 function siteInstall(input: { installId: string; label: string }): AppInstall {
   return appInstall({ ...input, packageAppKey: "site" });
+}
+
+function privateSitePackage(): InstallableAppPackage {
+  return {
+    adminRouteBase: "/apps",
+    defaultInstallId: "private-site",
+    description: "Workspace-linked public Site package.",
+    label: "Private Site",
+    packageAppKey: "private-site",
+    packageRevision: 7,
+    publicRouteBase: "/sites",
+    seedRecordsKey: "private-site",
+    seedRecordsLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/seed-records.json",
+    },
+    sourceOrigin: "workspace",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaKey: "private-site",
+    sourceSchemaLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/schema.json",
+    },
+    supportsMultipleInstalls: false,
+  };
 }
 
 function appInstall(input: {

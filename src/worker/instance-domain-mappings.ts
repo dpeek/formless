@@ -28,7 +28,7 @@ import {
   recordInstanceDomainMappingApplyEvidence,
   resetInstanceDomainMappingTables,
 } from "./instance-domain-mappings-state.ts";
-import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
+import { readControlPlaneAppInstallsForRequest } from "./instance-app-installs.ts";
 import {
   readControlPlaneRecords,
   syncDomainIntentToControlPlane,
@@ -164,7 +164,7 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
         env,
         request.url,
       );
-      const installs = await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
+      const installs = await readControlPlaneAppInstallsForRequest(env, request.url);
       const result = buildInstanceDomainMapping({
         ...body,
         existingMappings,
@@ -442,7 +442,7 @@ async function readControlPlaneSyncedDomainMappings(
   env: InstanceDomainMappingsApiEnv,
   requestUrl: string,
 ): Promise<InstanceDomainMapping[]> {
-  await readBackfilledControlPlaneAppInstalls(storage, env, requestUrl);
+  await readControlPlaneAppInstallsForRequest(env, requestUrl);
   const cleanupEvents = readInstanceDomainMappingDesiredCleanupEvents(storage);
   const legacyMappings = readInstanceDomainMappings(storage).filter(
     (mapping) => !isForgottenDomainMapping(mapping, cleanupEvents),

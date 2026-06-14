@@ -47,6 +47,19 @@ app install can be created.
 - **AND** package metadata comes from app package manifest facts, not from app
   install records or instance control-plane route records
 
+#### Scenario: Active resolver is authoritative
+
+- **GIVEN** app install creation, package fact updates, route validation, upgrade
+  planning, archive planning, browser replica metadata, or install registry
+  responses need package app metadata
+- **WHEN** package metadata is resolved
+- **THEN** the runtime uses the active package resolver for the current
+  workspace, request, or deployment target
+- **AND** globally bundled package metadata is used only as input to the default
+  resolver when no workspace-linked packages are present
+- **AND** code paths do not expose or call bundled-only compatibility package
+  list or lookup APIs for active installs
+
 #### Scenario: Private package availability
 
 - **GIVEN** a private app package such as ClearTrace is resolved from a
@@ -79,8 +92,8 @@ instance `route` records.
 - **AND** route records target the install for admin route `/apps/personal`,
   schema route `/apps/personal/schema`, public route `/sites/personal`, and
   public route prefix `/sites/personal/`
-- **AND** compatibility metadata can include those route summaries derived from
-  route records
+- **AND** app install API metadata can include route summaries derived from route
+  records
 
 #### Scenario: Non-Site install routes
 
@@ -280,23 +293,24 @@ schema-owned `route` records that target app install records.
   an `app-install` record
 - **AND** the install id remains the storage identity for installed app data
 
-### Requirement: App Install Compatibility
+### Requirement: App Install Control-Plane Source
 
-Existing app install API responses SHALL remain compatible while app installs
-and routes are backed by control-plane records.
+App install APIs SHALL derive install state from schema-owned control-plane
+records and the active package resolver.
 
-#### Scenario: Existing registry read
+#### Scenario: Registry read
 
-- **GIVEN** `/api/formless/app-installs` is read during or after migration
+- **GIVEN** `/api/formless/app-installs` is read
 - **WHEN** control-plane install and route records are available
-- **THEN** the response includes the same app install metadata and route fields
-  expected by existing clients
-- **AND** the response is derived from schema-owned app install and route
-  records
+- **THEN** the response derives installed apps from schema-owned app install and
+  route records
+- **AND** package lists come from the active package resolver
+- **AND** no legacy install registry, SQL table, backfill path, or bundled-only
+  compatibility API is used as an alternate source of truth
 
-#### Scenario: Existing create install request
+#### Scenario: Create install request
 
-- **GIVEN** the existing create app install API is called
+- **GIVEN** the create app install API is called
 - **WHEN** the request is valid
 - **THEN** it creates schema-owned app install and route records
 - **AND** unsupported packages, invalid install ids, duplicate install ids,

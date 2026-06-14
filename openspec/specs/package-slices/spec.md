@@ -193,7 +193,7 @@ Package tests SHALL be fast, deterministic, and local.
 ### Requirement: Archive Package Slice
 
 The system SHALL provide an Archive package slice under `lib/archive/` for
-portable archive contracts, parsers, normalizers, restore planning, and local
+portable archive contracts, parsers, restore planning, and local
 archive filesystem adapters.
 
 #### Scenario: Archive package scaffold
@@ -211,7 +211,7 @@ archive filesystem adapters.
 
 - GIVEN CLI, Site runtime, Worker restore APIs, Workspace operations, upgrade
   planning, or tests need portable archive behavior
-- WHEN they import archive contracts, parsers, normalizers, restore planning,
+- WHEN they import archive contracts, parsers, restore planning,
   or local archive file adapters
 - THEN they import from `@dpeek/formless-archive` or
   `@dpeek/formless-archive/node`
@@ -228,7 +228,7 @@ execution, workspace operation execution, or CLI command policy.
 
 - GIVEN archive envelope types, archive kind constants, archive version
   constants, archive capability parsing, archive formatting, compatibility
-  normalizers, restore dry-run planning, media manifest validation, or local
+  rejection, restore dry-run planning, media manifest validation, or local
   archive directory IO are needed
 - WHEN runtime-neutral or local Node code consumes portable archive behavior
 - THEN they come from `lib/archive`
@@ -247,7 +247,7 @@ execution, workspace operation execution, or CLI command policy.
   Authority, Media runtime, Deploy runtime, or provider adapters own the
   execution
 - AND the Archive package only supplies contracts, parser/formatter behavior,
-  compatibility normalization, deterministic planning, and package-local tests
+  current-envelope rejection, deterministic planning, and package-local tests
 
 ### Requirement: Deploy Package Slice
 

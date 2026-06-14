@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { formatAppArchive, parseAppArchive, planAppArchiveRestore } from "@dpeek/formless-archive";
+import { listInstallableAppPackages } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";
@@ -123,6 +124,7 @@ describe("Site project app archive import", () => {
     expect(
       planAppArchiveRestore(reparsed, {
         mediaFiles: entry.mediaFiles,
+        packages: listInstallableAppPackages(),
         sourceSchemas: { site: siteSourceSchema },
       }),
     ).toMatchObject({

@@ -4,7 +4,7 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { listBundledAppPackages } from "../shared/app-installs.ts";
+import { listInstallableAppPackages } from "../shared/app-installs.ts";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -154,7 +154,7 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/deploy") {
             return Response.json(
               {
-                packageApps: listBundledAppPackages().map((appPackage) => ({
+                packageApps: listInstallableAppPackages().map((appPackage) => ({
                   packageAppKey: appPackage.packageAppKey,
                   packageRevision: appPackage.packageRevision,
                   sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -175,7 +175,7 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/app-installs") {
             expect(headers.get("authorization")).toBe("Bearer status-token");
             return Response.json({
-              packages: listBundledAppPackages(),
+              packages: listInstallableAppPackages(),
               installs: [
                 {
                   adminRoute: "/apps/site",
@@ -238,7 +238,7 @@ describe("Formless instance target client", () => {
       version: 1,
     });
     expect(result.upgradeStatus.localPackages).toEqual(
-      listBundledAppPackages().map((appPackage) => ({
+      listInstallableAppPackages().map((appPackage) => ({
         packageAppKey: appPackage.packageAppKey,
         packageRevision: appPackage.packageRevision,
         sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -275,7 +275,7 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/deploy") {
             return Response.json(
               {
-                packageApps: listBundledAppPackages().map((appPackage) => ({
+                packageApps: listInstallableAppPackages().map((appPackage) => ({
                   packageAppKey: appPackage.packageAppKey,
                   packageRevision: appPackage.packageRevision,
                   sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -295,7 +295,7 @@ describe("Formless instance target client", () => {
 
           if (pathname === "/api/formless/app-installs") {
             return Response.json({
-              packages: listBundledAppPackages(),
+              packages: listInstallableAppPackages(),
               installs: [],
             });
           }
@@ -337,7 +337,7 @@ describe("Formless instance target client", () => {
 
           if (pathname === "/api/formless/app-installs") {
             return Response.json({
-              packages: listBundledAppPackages(),
+              packages: listInstallableAppPackages(),
               installs: [
                 {
                   adminRoute: "/apps/site",
@@ -434,8 +434,10 @@ describe("Formless instance target control-plane client", () => {
       },
     ]);
     expect(records.appInstalls.map((record) => record.id)).toEqual(["site"]);
-    expect(records.appRoutes.map((record) => record.id)).toEqual(["app-route:site:publicSite"]);
-    expect(records.domainMappings.map((record) => record.id)).toEqual(["domain:www.example.com"]);
+    expect(records.appRoutes.map((record) => record.id)).toEqual(["route:site:public-site"]);
+    expect(records.domainMappings.map((record) => record.id)).toEqual([
+      "route:host:publicSite:www.example.com",
+    ]);
     expect(records.deploymentConfigs.map((record) => record.id)).toEqual(["instance.primary"]);
   });
 
@@ -619,14 +621,28 @@ function controlPlaneBootstrapResponse(): Response {
     records: [
       { entity: "app-install", id: "site", values: { installId: "site" } },
       {
-        entity: "app-route",
-        id: "app-route:site:publicSite",
-        values: { appInstall: "site", path: "/sites/site" },
+        entity: "route",
+        id: "route:site:public-site",
+        values: {
+          appInstall: "site",
+          kind: "mount",
+          matchPath: "/sites/site",
+          surface: "public-site",
+          targetProfile: "public-site",
+        },
       },
       {
-        entity: "domain-mapping",
-        id: "domain:www.example.com",
-        values: { appRoute: "app-route:site:publicSite", host: "www.example.com" },
+        entity: "route",
+        id: "route:host:publicSite:www.example.com",
+        values: {
+          appInstall: "site",
+          kind: "mount",
+          matchHost: "www.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          surface: "public-site",
+          targetProfile: "public-site",
+        },
       },
       {
         entity: "deployment-config",

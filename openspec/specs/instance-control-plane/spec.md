@@ -168,6 +168,18 @@ records.
 - **AND** the route records the selected target profile and surface without
   duplicating installed app data or storage state
 
+#### Scenario: Public Site mount package capability
+
+- **GIVEN** an owner or admin creates a public Site mount route for an app
+  install
+- **WHEN** the route is validated
+- **THEN** the referenced app install package app key is resolved through the
+  active package resolver for the current runtime or workspace
+- **AND** the route is accepted only when the resolved package declares public
+  Site route capability
+- **AND** the validator does not fall back to bundled-only package lookups or
+  package key special cases
+
 #### Scenario: Mount route access
 
 - **GIVEN** an owner or admin creates a mount route

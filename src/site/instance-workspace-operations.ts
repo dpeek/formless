@@ -874,7 +874,6 @@ function summarizeRestore(result: RestorePortableArchiveResult): WorkspaceOperat
   const summary = result.remote.report?.summary ?? result.remote.plan?.summary;
 
   return {
-    archiveNormalizationEvidenceCount: result.archiveNormalizationEvidence.length,
     createdInstalls: summary?.createdInstalls ?? [],
     errorCount: result.remote.errors?.length ?? 0,
     ok: result.remote.ok,

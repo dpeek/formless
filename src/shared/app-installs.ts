@@ -2,11 +2,9 @@ import {
   type AppPackageKey,
   type AppPackageResolver,
   findResolvedAppPackage,
-  isBundledResolvedAppPackage,
   listResolvedAppPackages,
   type ResolvedAppPackage,
 } from "./app-packages.ts";
-import type { SchemaKey } from "./schema-apps.ts";
 import type { RuntimeRouteAccess } from "./runtime-topology.ts";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
@@ -38,23 +36,6 @@ export type AppInstall = {
   publicRoute?: `/${string}`;
   publicRoutePrefix?: `/${string}/`;
   routes?: AppInstallRoute[];
-};
-
-export type BundledAppPackage = {
-  packageAppKey: SchemaKey;
-  packageRevision: PackageAppRevision;
-  sourceSchemaHash: SourceSchemaHash;
-  label: string;
-  description: string;
-  defaultInstallId: AppInstallId;
-  supportsMultipleInstalls: boolean;
-  sourceOrigin: "bundled";
-  sourceSchemaKey: SchemaKey;
-  seedRecordsKey: SchemaKey;
-  sourceSchemaLocation: ResolvedAppPackage["sourceSchemaLocation"] & { kind: "bundled" };
-  seedRecordsLocation: ResolvedAppPackage["seedRecordsLocation"] & { kind: "bundled" };
-  adminRouteBase: "/apps";
-  publicRouteBase?: "/sites";
 };
 
 export type InstallableAppPackage = ResolvedAppPackage;
@@ -140,18 +121,8 @@ const reservedInstallIds = new Set([
   "static",
 ]);
 
-export function listBundledAppPackages(): BundledAppPackage[] {
-  return listResolvedAppPackages().map(toBundledAppPackage);
-}
-
 export function listInstallableAppPackages(resolver?: AppPackageResolver): InstallableAppPackage[] {
   return listResolvedAppPackages(resolver);
-}
-
-export function findBundledAppPackage(packageAppKey: string): BundledAppPackage | undefined {
-  const appPackage = findResolvedAppPackage(packageAppKey);
-
-  return appPackage ? toBundledAppPackage(appPackage) : undefined;
 }
 
 export function packageAppFactsForKey(
@@ -399,26 +370,5 @@ function initializationPlanForInstall(
     packageAppKey: packageApp.packageAppKey,
     sourceSchemaKey: packageApp.sourceSchemaKey,
     seedRecordsKey: packageApp.seedRecordsKey,
-  };
-}
-
-function toBundledAppPackage(appPackage: ResolvedAppPackage): BundledAppPackage {
-  if (!isBundledResolvedAppPackage(appPackage)) {
-    throw new Error(`Package app "${appPackage.packageAppKey}" is not a bundled source app.`);
-  }
-
-  return {
-    ...appPackage,
-    packageAppKey: appPackage.packageAppKey,
-    sourceSchemaKey: appPackage.sourceSchemaKey,
-    seedRecordsKey: appPackage.seedRecordsKey,
-    sourceSchemaLocation: {
-      ...appPackage.sourceSchemaLocation,
-      kind: "bundled",
-    },
-    seedRecordsLocation: {
-      ...appPackage.seedRecordsLocation,
-      kind: "bundled",
-    },
   };
 }

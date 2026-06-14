@@ -15,8 +15,21 @@ import type {
   SyncResponse,
 } from "../shared/protocol.ts";
 import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
-import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
+import {
+  bundledSourceSchemaHashFixtures,
+  computeSourceSchemaHash,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  type AppPackageManifest,
+} from "../shared/app-packages.ts";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
@@ -280,6 +293,82 @@ describe("instance control-plane API routes", () => {
     expect(unsupportedPublicRoute.body.error).toBe(
       'Package app "tasks" does not support public Site routes.',
     );
+  });
+
+  it("validates public Site route capability through the active package resolver", async () => {
+    const now = "2026-06-15T00:00:00.000Z";
+    const sourceSchemaHash = await computeSourceSchemaHash(siteSourceSchema);
+    const privateHarness = await createWorkerHarness(
+      "src/worker/index.ts",
+      {
+        FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+      },
+      {
+        bindings: {
+          FORMLESS_ADMIN_TOKEN: adminToken,
+          [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
+            {
+              manifest: privatePublicSitePackageManifest(sourceSchemaHash),
+              sourceSchema: siteSourceSchema,
+              seedRecords: siteSeedRecords,
+            },
+          ]),
+        },
+      },
+    );
+
+    try {
+      const install = await postHarnessAdminJson<MutationResponse>(
+        privateHarness,
+        `${controlPlaneApi}/mutations`,
+        {
+          mutationId: "mutation-private-site-install",
+          entity: "app-install",
+          op: "create",
+          values: {
+            installId: "private-site",
+            packageAppKey: "private-site",
+            packageRevision: 7,
+            sourceSchemaHash,
+            label: "Private Site",
+            status: "installed",
+            storageIdentity: "app:private-site",
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      );
+      const route = await postHarnessAdminJson<MutationResponse>(
+        privateHarness,
+        `${controlPlaneApi}/mutations`,
+        {
+          mutationId: "mutation-private-site-public-route",
+          entity: "route",
+          op: "create",
+          values: {
+            enabled: true,
+            matchPath: "/sites/private-site",
+            matchPrefix: "/sites/private-site/",
+            kind: "mount",
+            targetProfile: "public-site",
+            appInstall: "private-site",
+            surface: "public-site",
+            access: "anonymous",
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      );
+
+      expect(install.response.status).toBe(200);
+      expect(route.response.status).toBe(200);
+      expect(route.body.record.values).toMatchObject({
+        appInstall: "private-site",
+        surface: "public-site",
+      });
+    } finally {
+      await privateHarness.dispose();
+    }
   });
 
   it("backfills legacy route intent records without deployment execution history records", async () => {
@@ -585,6 +674,24 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
   };
 }
 
+async function postHarnessAdminJson<T>(targetHarness: Harness, path: string, body: unknown) {
+  const request = operationWriteRequest(path, body);
+  const response = await targetHarness.fetch(request.path, {
+    body: JSON.stringify(request.body),
+    headers: {
+      ...adminHeaders(),
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const bodyJson = await response.json();
+
+  return {
+    body: (response.ok ? request.response(bodyJson) : bodyJson) as T,
+    response,
+  };
+}
+
 async function resetWorkerState() {
   try {
     await resetKnownState();
@@ -762,6 +869,34 @@ const legacyEditableMutations = {
   patch: { enabled: true },
   delete: { enabled: false },
 } satisfies EntityMutationPolicy;
+
+function privatePublicSitePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageManifest {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-site",
+    label: "Private Site",
+    description: "Private workspace Site package.",
+    defaultInstallId: "private-site",
+    supportsMultipleInstalls: true,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-site",
+      path: "packages/private-site/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-site",
+      path: "packages/private-site/seed-records.json",
+    },
+    sourceSchemaHash,
+    capabilities: [
+      { kind: "generatedAdmin", routeBase: "/apps" },
+      { kind: "publicSite", routeBase: "/sites" },
+    ],
+  };
+}
 
 function legacyAppInstallRecord(installId: string, now: string): StoredRecord {
   return {

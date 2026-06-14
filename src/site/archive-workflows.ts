@@ -10,7 +10,6 @@ import {
   parsePortableArchive,
   type AppArchive,
   type AppArchiveMediaObject,
-  type ArchiveNormalizationEvidence,
   type ArchiveRestorePolicy,
   type InstanceArchive,
   type InstanceArchiveControlPlane,
@@ -103,7 +102,6 @@ export type ArchiveRestoreSummary = {
 
 export type RestorePortableArchiveResult = {
   archiveInput: PortableArchiveInputStatus;
-  archiveNormalizationEvidence: ArchiveNormalizationEvidence[];
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
   upgradePlanning?: CliUpgradePlanningReport;
@@ -328,7 +326,6 @@ export async function restorePortableArchive(
 
   return {
     archiveInput,
-    archiveNormalizationEvidence: diskArchive.normalizationEvidence,
     archivePath: diskArchive.archivePath,
     remote,
     ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
@@ -383,7 +380,6 @@ export async function restoreAppArchive(
 
   return {
     archiveInput,
-    archiveNormalizationEvidence: diskArchive.normalizationEvidence,
     archivePath: diskArchive.archivePath,
     remote,
     ...(upgradePlanning === undefined ? {} : { upgradePlanning }),

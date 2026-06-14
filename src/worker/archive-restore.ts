@@ -1,6 +1,6 @@
 import {
   INSTANCE_ARCHIVE_KIND,
-  normalizePortableArchive,
+  parsePortableArchive,
   planPortableArchiveRestore,
   type AppArchive,
   type AppArchiveData,
@@ -27,10 +27,6 @@ import {
 } from "@dpeek/formless-media/worker";
 import type { BootstrapResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
-import {
-  readInstanceAppInstalls,
-  restoreInstanceAppInstall,
-} from "./instance-app-installs-state.ts";
 import { workerSchemaApps } from "./schema-apps.ts";
 import {
   ensureStorageTables,
@@ -149,17 +145,6 @@ type ArchiveAppDataRestorePlan =
       kind: "sourceRecords";
       source: StorageSource;
     };
-
-export function archiveRestoreInstanceRegistryTarget(
-  storage: DurableObjectStorage,
-): Pick<ArchiveRestoreApplyTarget, "listInstalledApps" | "restoreInstall"> {
-  return {
-    listInstalledApps: () => readInstanceAppInstalls(storage),
-    restoreInstall: (input) => {
-      restoreInstanceAppInstall(storage, input);
-    },
-  };
-}
 
 export async function dryRunPortableArchiveRestore(
   value: unknown,
@@ -479,7 +464,7 @@ async function parseAndPlanArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = normalizePortableArchive(value).archive;
+    archive = parsePortableArchive(value);
   } catch (error) {
     return {
       errors: [

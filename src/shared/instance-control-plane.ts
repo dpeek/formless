@@ -1,4 +1,11 @@
-import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
+import {
+  listAppInstalls,
+  type AppInstall,
+  type AppInstallId,
+  type AppInstallRoute,
+  type AppInstallRouteKind,
+  type PackageAppKey,
+} from "./app-installs.ts";
 import { findResolvedAppPackage, type AppPackageResolver } from "./app-packages.ts";
 import {
   CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
@@ -12,7 +19,11 @@ import type {
   FieldSchema,
 } from "@dpeek/formless-schema";
 import type { RuntimeRouteAccess } from "./runtime-topology.ts";
-import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
+import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "./upgrade-migrations.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
 export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
@@ -68,6 +79,13 @@ export type InstanceControlPlaneRecord<Entity extends InstanceControlPlaneEntity
   id: string;
   updatedAt?: string;
   values: Values;
+};
+
+export type InstanceControlPlaneProjectionRecord = {
+  deletedAt?: string;
+  entity: string;
+  id: string;
+  values: Readonly<Record<string, unknown>>;
 };
 
 export type InstanceControlPlaneAppInstallStatus = "disabled" | "failed" | "installed";
@@ -705,6 +723,192 @@ export function instanceControlPlaneRecordsForAppInstall(input: {
     instanceControlPlaneAppInstallRecord(input.install),
     ...instanceControlPlaneRouteRecordsForAppInstall(input),
   ];
+}
+
+export function instanceControlPlaneAppInstallsFromRecords(
+  records: readonly InstanceControlPlaneProjectionRecord[],
+  packageResolver?: AppPackageResolver,
+): AppInstall[] {
+  const activeRecords = records.filter((record) => record.deletedAt === undefined);
+  const routeRecords = activeRecords.filter((record) => record.entity === "route");
+
+  return listAppInstalls(
+    activeRecords
+      .filter((record) => record.entity === "app-install" && record.values.status === "installed")
+      .map((record) =>
+        appInstallFromControlPlaneValues(
+          record.values,
+          routeRecords
+            .filter(
+              (routeRecord) =>
+                routeRecord.values.appInstall === record.id &&
+                routeRecord.values.matchHost === undefined,
+            )
+            .map((routeRecord) => ({
+              id: routeRecord.id,
+              values: routeRecord.values as InstanceControlPlaneRouteValues,
+            })),
+          packageResolver,
+        ),
+      ),
+  );
+}
+
+function appInstallFromControlPlaneValues(
+  values: Readonly<Record<string, unknown>>,
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
+  packageResolver?: AppPackageResolver,
+): AppInstall {
+  const packageAppKey = stringControlPlaneValue(values.packageAppKey);
+  const packageApp = packageAppKey
+    ? findResolvedAppPackage(packageAppKey, packageResolver)
+    : undefined;
+
+  if (!packageApp) {
+    throw new Error(`Stored app install "${String(values.installId)}" has unsupported package.`);
+  }
+
+  const installId = stringControlPlaneValue(values.installId) ?? "";
+  const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords);
+  const hasRouteRecords = routes.length > 0;
+  const adminRoute =
+    enabledRoutePath(routes, "admin") ?? `${packageApp.adminRouteBase}/${installId}`;
+  const schemaRoute =
+    enabledRoutePath(routes, "schema") ?? `${packageApp.adminRouteBase}/${installId}/schema`;
+  const publicRoute = enabledAppInstallRoute(routes, "publicSite");
+
+  return {
+    installId,
+    packageAppKey: packageApp.packageAppKey,
+    packageRevision: packageRevisionFromControlPlaneValue(
+      values.packageRevision,
+      packageApp.packageRevision,
+    ),
+    sourceSchemaHash: sourceSchemaHashFromControlPlaneValue(
+      values.sourceSchemaHash,
+      packageApp.sourceSchemaHash,
+    ),
+    label: stringControlPlaneValue(values.label) ?? "",
+    status: "installed",
+    createdAt: stringControlPlaneValue(values.createdAt) ?? "",
+    updatedAt: stringControlPlaneValue(values.updatedAt) ?? "",
+    adminRoute,
+    schemaRoute,
+    ...(publicRoute
+      ? {
+          publicRoute: publicRoute.path,
+          publicRoutePrefix:
+            publicRoute.prefix ?? (`${publicRoute.path.replace(/\/+$/, "")}/` as `/${string}/`),
+        }
+      : packageApp.publicRouteBase === undefined || hasRouteRecords
+        ? {}
+        : {
+            publicRoute: `${packageApp.publicRouteBase}/${installId}`,
+            publicRoutePrefix: `${packageApp.publicRouteBase}/${installId}/`,
+          }),
+    ...(hasRouteRecords ? { routes } : {}),
+  };
+}
+
+function appInstallRoutesFromControlPlaneRoutes(
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
+): AppInstallRoute[] {
+  return routeRecords
+    .flatMap((record) => {
+      const route = appInstallRouteFromControlPlaneRoute(record.id, record.values);
+
+      return route ? [route] : [];
+    })
+    .sort(compareAppInstallRoutes);
+}
+
+function appInstallRouteFromControlPlaneRoute(
+  id: string,
+  values: InstanceControlPlaneRouteValues,
+): AppInstallRoute | undefined {
+  if (values.kind !== "mount" || values.surface === undefined) {
+    return undefined;
+  }
+
+  const routeKind = appInstallRouteKindFromRouteSurface(values.surface);
+
+  if (routeKind === undefined) {
+    return undefined;
+  }
+
+  return {
+    access: instanceControlPlaneEffectiveRouteAccess(values),
+    enabled: values.enabled,
+    id,
+    path: values.matchPath,
+    ...(values.matchPrefix === undefined ? {} : { prefix: values.matchPrefix as `/${string}/` }),
+    routeKind,
+  };
+}
+
+function compareAppInstallRoutes(left: AppInstallRoute, right: AppInstallRoute) {
+  const kindOrder =
+    appInstallRouteKindOrder(left.routeKind) - appInstallRouteKindOrder(right.routeKind);
+
+  return kindOrder === 0 ? left.path.localeCompare(right.path) : kindOrder;
+}
+
+function appInstallRouteKindOrder(kind: AppInstallRouteKind) {
+  switch (kind) {
+    case "admin":
+      return 0;
+    case "schema":
+      return 1;
+    case "publicSite":
+      return 2;
+  }
+}
+
+function appInstallRouteKindFromRouteSurface(
+  surface: InstanceControlPlaneRouteValues["surface"],
+): AppInstallRouteKind | undefined {
+  switch (surface) {
+    case "admin":
+      return "admin";
+    case "schema":
+      return "schema";
+    case "public-site":
+      return "publicSite";
+    default:
+      return undefined;
+  }
+}
+
+function enabledRoutePath(
+  routes: readonly AppInstallRoute[],
+  routeKind: AppInstallRoute["routeKind"],
+): `/${string}` | undefined {
+  return enabledAppInstallRoute(routes, routeKind)?.path;
+}
+
+function enabledAppInstallRoute(
+  routes: readonly AppInstallRoute[],
+  routeKind: AppInstallRoute["routeKind"],
+): AppInstallRoute | undefined {
+  return routes.find((route) => route.enabled && route.routeKind === routeKind);
+}
+
+function packageRevisionFromControlPlaneValue(
+  value: unknown,
+  fallback: PackageAppRevision,
+): PackageAppRevision {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function sourceSchemaHashFromControlPlaneValue(
+  value: unknown,
+  fallback: SourceSchemaHash,
+): SourceSchemaHash {
+  return isSourceSchemaHash(value) ? value : fallback;
+}
+
+function stringControlPlaneValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 export function instanceControlPlaneAppRouteId(

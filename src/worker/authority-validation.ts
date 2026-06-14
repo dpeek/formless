@@ -5,7 +5,7 @@ import {
   shouldValidateExistingFieldValue,
   validateAuthorityFieldValue,
 } from "@dpeek/formless-schema";
-import { findResolvedAppPackage } from "../shared/app-packages.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { instanceControlPlaneReservedRoutePaths } from "../shared/instance-control-plane.ts";
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type {
@@ -44,6 +44,7 @@ export type ValidatedMutation =
 
 type MutationValidationOptions = {
   additionalRecords?: StoredRecord[];
+  packageResolver?: AppPackageResolver;
 };
 
 export function validateMutationRequest(
@@ -167,6 +168,7 @@ export function validateMutationRequest(
         additionalRecords: options.additionalRecords,
         entityName: value.entity,
         existingRecordId: value.recordId,
+        packageResolver: options.packageResolver,
         schema,
       },
     );
@@ -195,6 +197,7 @@ export function validateMutationRequest(
         {
           additionalRecords: options.additionalRecords,
           entityName: value.entity,
+          packageResolver: options.packageResolver,
           schema,
         },
       ),
@@ -418,6 +421,7 @@ export function validateRecordValues(
     additionalRecords?: StoredRecord[];
     entityName: string;
     existingRecordId?: string;
+    packageResolver?: AppPackageResolver;
     schema: AppSchema;
   },
 ): RecordValues {
@@ -486,6 +490,7 @@ export function validateRecordValues(
       storage,
       runtimeOptions.existingRecordId,
       runtimeOptions.additionalRecords,
+      runtimeOptions.packageResolver,
     );
   }
 
@@ -742,6 +747,7 @@ function validateRuntimeControlPlaneValues(
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
+  packageResolver: AppPackageResolver | undefined,
 ) {
   const metadata = runtimeControlPlaneEntityMetadata(schema, entityName);
   const routeValidation = metadata?.routeValidation;
@@ -758,7 +764,13 @@ function validateRuntimeControlPlaneValues(
   }
 
   if (isInstanceControlPlaneRouteValidationEntity(schema, entityName)) {
-    validateInstanceControlPlaneRouteValues(values, storage, existingRecordId, additionalRecords);
+    validateInstanceControlPlaneRouteValues(
+      values,
+      storage,
+      existingRecordId,
+      additionalRecords,
+      packageResolver,
+    );
   }
 }
 
@@ -876,6 +888,7 @@ function validateInstanceControlPlaneRouteValues(
   storage: DurableObjectStorage,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
+  packageResolver: AppPackageResolver | undefined,
 ) {
   const matchHost = optionalStringRecordValue(values, "matchHost");
   const matchPath = stringRecordValue(values, "matchPath");
@@ -907,6 +920,7 @@ function validateInstanceControlPlaneRouteValues(
       matchPath,
       matchPrefix,
       additionalRecords,
+      packageResolver,
     );
   } else if (kind === "redirect") {
     validateInstanceControlPlaneRedirectRoute(values, matchHost);
@@ -931,6 +945,7 @@ function validateInstanceControlPlaneMountRoute(
   matchPath: string,
   matchPrefix: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
+  packageResolver: AppPackageResolver | undefined,
 ) {
   const targetProfile = optionalStringRecordValue(values, "targetProfile");
   const appInstall = optionalStringRecordValue(values, "appInstall");
@@ -1004,7 +1019,9 @@ function validateInstanceControlPlaneMountRoute(
 
   const packageAppKey = optionalStringRecordValue(install.values, "packageAppKey");
   const packageApp =
-    packageAppKey === undefined ? undefined : findResolvedAppPackage(packageAppKey);
+    packageAppKey === undefined
+      ? undefined
+      : findResolvedAppPackage(packageAppKey, packageResolver);
 
   if (!packageApp) {
     throw new BadRequestError(`Route app install "${appInstall}" uses unsupported package.`);

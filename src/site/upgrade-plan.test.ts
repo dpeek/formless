@@ -3,7 +3,7 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { listBundledAppPackages } from "../shared/app-installs.ts";
+import { listInstallableAppPackages } from "../shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   buildCliUpgradePlanningReport,
@@ -160,33 +160,12 @@ describe("CLI upgrade plan formatting", () => {
           },
           type: "manual-approval",
         },
-        {
-          archiveKind: "formless.instanceArchive",
-          fromArchiveVersion: 1,
-          id: "archive.instance.v1-to-v2.package-facts",
-          normalizationStatus: "available",
-          requiredEvidence: [
-            {
-              description: "archive.instance.v1-to-v2.package-facts output manifest version 2",
-              kind: "archive-normalization",
-            },
-          ],
-          safety: "auto-with-backup",
-          status: "ready",
-          summary: "Normalize older instance archive before restore",
-          target: {
-            archivePath: "/workspace/archive/archive.json",
-            targetId: "instance.primary",
-          },
-          toArchiveVersion: 2,
-          type: "archive-normalization",
-        },
       ],
     };
 
     expect(formatCliUpgradePlan(plan)).toBe(`Upgrade plan.
 Target: label=Primary instance, targetId=instance.primary, url=https://instance.example.
-Steps: 7.
+Steps: 6.
 
 1. code-deploy [ready] safety=auto-safe
    Summary: Deploy runtime package 0.1.9.
@@ -233,17 +212,10 @@ Steps: 7.
    Required evidence: manual-approval: explicit approval token destructive-site-cleanup.
    Details: approval=destructive-site-cleanup; reason=Deletes tombstoned legacy Site records.
    Blocked: Manual approval has not been provided.
-
-7. archive-normalization [ready] safety=auto-with-backup
-   Summary: Normalize older instance archive before restore.
-   Target: targetId=instance.primary, archivePath=/workspace/archive/archive.json.
-   Package app: none.
-   Required evidence: archive-normalization: archive.instance.v1-to-v2.package-facts output manifest version 2.
-   Details: archiveKind=formless.instanceArchive; version=1->2; normalization=available.
 `);
   });
 
-  it("formats unsupported archive normalization as a blocked plan step", () => {
+  it("formats unsupported archive input as a blocked plan step", () => {
     const plan: CliUpgradePlan = {
       target: {
         targetId: "instance.primary",
@@ -251,19 +223,20 @@ Steps: 7.
       steps: [
         {
           archiveKind: "formless.instanceArchive",
-          fromArchiveVersion: 0,
+          archiveStatus: "unsupported",
+          archiveVersion: 0,
+          expectedArchiveVersion: 2,
           id: "unsupported-archive",
-          normalizationStatus: "unsupported",
           requiredEvidence: [],
           safety: "manual-approval",
           status: "blocked",
-          statusReason: "Archive version 0 has no registered normalizer",
+          statusReason: "Archive version 0 is unsupported; expected version 2",
           summary: "Reject unsupported archive before restore",
           target: {
             archivePath: "/workspace/archive/archive.json",
             targetId: "instance.primary",
           },
-          type: "archive-normalization",
+          type: "archive-input",
         },
       ],
     };
@@ -272,13 +245,13 @@ Steps: 7.
 Target: targetId=instance.primary.
 Steps: 1.
 
-1. archive-normalization [blocked] safety=manual-approval
+1. archive-input [blocked] safety=manual-approval
    Summary: Reject unsupported archive before restore.
    Target: targetId=instance.primary, archivePath=/workspace/archive/archive.json.
    Package app: none.
    Required evidence: none.
-   Details: archiveKind=formless.instanceArchive; version=0->current; normalization=unsupported.
-   Blocked: Archive version 0 has no registered normalizer.
+   Details: archiveKind=formless.instanceArchive; version=0; expectedVersion=2; support=unsupported.
+   Blocked: Archive version 0 is unsupported; expected version 2.
 `);
   });
 });
@@ -352,7 +325,7 @@ function upgradeStatus(
     deployedMetadata: {
       cacheControl: "no-store",
       metadataUrl: "https://live.example/api/formless/deploy",
-      packageApps: listBundledAppPackages().map((appPackage) => ({
+      packageApps: listInstallableAppPackages().map((appPackage) => ({
         packageAppKey: appPackage.packageAppKey,
         packageRevision: appPackage.packageRevision,
         sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -363,7 +336,7 @@ function upgradeStatus(
       version: "0.1.9",
     },
     installedApps: [],
-    localPackages: listBundledAppPackages().map((appPackage) => ({
+    localPackages: listInstallableAppPackages().map((appPackage) => ({
       packageAppKey: appPackage.packageAppKey,
       packageRevision: appPackage.packageRevision,
       sourceSchemaHash: appPackage.sourceSchemaHash,

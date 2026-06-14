@@ -66,7 +66,7 @@ import {
   readControlPlaneRecords,
   syncDomainIntentToControlPlane,
 } from "./deployment-control-plane-client.ts";
-import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
+import { readControlPlaneAppInstallsForRequest } from "./instance-app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   domainProviderRedirectIntentFromRow as redirectIntentFromRow,
@@ -1134,8 +1134,7 @@ async function readControlPlaneSyncedDomainProviderIntent(
   redirectIntents: InstanceDomainProviderRedirectIntent[];
 }> {
   if (env.FORMLESS_AUTHORITY) {
-    await readBackfilledControlPlaneAppInstalls(
-      storage,
+    await readControlPlaneAppInstallsForRequest(
       {
         ...env,
         FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,

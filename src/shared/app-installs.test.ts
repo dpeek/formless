@@ -3,9 +3,8 @@ import {
   appInstallRegistryError,
   createAppInstall,
   findAppInstall,
-  findBundledAppPackage,
   listAppInstalls,
-  listBundledAppPackages,
+  listInstallableAppPackages,
   validateAppInstallId,
   type AppInstall,
   type CreateAppInstallResult,
@@ -26,8 +25,10 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site, Tasks, Estii, CRM, and ClearTrace as installable bundled app packages", () => {
-    expect(listBundledAppPackages()).toEqual([
+  it("declares Site, Tasks, Estii, CRM, and ClearTrace as default installable app packages", () => {
+    const packages = listInstallableAppPackages();
+
+    expect(packages).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
         defaultInstallId: "site",
@@ -85,11 +86,17 @@ describe("app install registry", () => {
         supportsMultipleInstalls: true,
       }),
     ]);
-    expect(findBundledAppPackage("site")?.label).toBe("Site");
-    expect(findBundledAppPackage("tasks")?.label).toBe("Tasks");
-    expect(findBundledAppPackage("estii")?.label).toBe("Estii");
-    expect(findBundledAppPackage("crm")?.label).toBe("CRM");
-    expect(findBundledAppPackage("cleartrace")?.label).toBe("ClearTrace");
+    expect(packages.find((appPackage) => appPackage.packageAppKey === "site")?.label).toBe("Site");
+    expect(packages.find((appPackage) => appPackage.packageAppKey === "tasks")?.label).toBe(
+      "Tasks",
+    );
+    expect(packages.find((appPackage) => appPackage.packageAppKey === "estii")?.label).toBe(
+      "Estii",
+    );
+    expect(packages.find((appPackage) => appPackage.packageAppKey === "crm")?.label).toBe("CRM");
+    expect(packages.find((appPackage) => appPackage.packageAppKey === "cleartrace")?.label).toBe(
+      "ClearTrace",
+    );
   });
 
   it("validates route-safe install ids", () => {
@@ -291,7 +298,7 @@ describe("app install registry", () => {
   });
 
   it("passes bundled resolved source metadata to initial source validation", () => {
-    for (const appPackage of listBundledAppPackages()) {
+    for (const appPackage of listInstallableAppPackages()) {
       const result = expectSuccess(
         createAppInstall({
           existingInstalls: [],

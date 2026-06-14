@@ -8,16 +8,8 @@ import {
   type InstanceArchive,
   type PortableArchive,
 } from "./types.ts";
-import {
-  normalizeAppArchive,
-  normalizeInstanceArchive,
-  normalizePortableArchive,
-} from "./normalizers.ts";
-import {
-  listBundledAppPackages,
-  type AppInstall,
-  type InstallableAppPackage,
-} from "../../../src/shared/app-installs.ts";
+import { parseAppArchive, parseInstanceArchive, parsePortableArchive } from "./types.ts";
+import { type AppInstall, type InstallableAppPackage } from "../../../src/shared/app-installs.ts";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "../../../src/shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
@@ -156,7 +148,7 @@ export function planPortableArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = normalizePortableArchive(value).archive;
+    archive = parsePortableArchive(value);
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -171,7 +163,7 @@ export function planInstanceArchiveRestore(
   let archive: InstanceArchive;
 
   try {
-    archive = normalizeInstanceArchive(value).archive;
+    archive = parseInstanceArchive(value);
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -186,7 +178,7 @@ export function planAppArchiveRestore(
   let archive: AppArchive;
 
   try {
-    archive = normalizeAppArchive(value).archive;
+    archive = parseAppArchive(value);
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -282,10 +274,7 @@ function plannerContext(target: ArchiveRestoreTargetState): PlannerContext {
         ? undefined
         : new Map(target.mediaFiles.map((file) => [file.archivePath, file])),
     packagesByKey: new Map(
-      (target.packages ?? listBundledAppPackages()).map((appPackage) => [
-        appPackage.packageAppKey,
-        appPackage,
-      ]),
+      (target.packages ?? []).map((appPackage) => [appPackage.packageAppKey, appPackage]),
     ),
     sourceSchemas: target.sourceSchemas,
   };

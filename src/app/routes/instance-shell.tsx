@@ -43,7 +43,6 @@ import {
 } from "../../client/deployment-runtime.ts";
 import { useRecordsById } from "../../client/store.ts";
 import {
-  listBundledAppPackages,
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
@@ -81,7 +80,7 @@ import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   type InstanceControlPlaneDeploymentConfigValues,
 } from "../../shared/instance-control-plane.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { AppInstallsResponse, StoredRecord } from "../../shared/protocol.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderDeleteJob,
@@ -293,20 +292,20 @@ export function InstanceShellRoute() {
           );
 
           if (workspaceInitialized(workspaceGatewayResponse.operation) === false) {
-            const packages = listBundledAppPackages();
+            const appResponse = await fetchInstanceAppInstalls({ signal: controller.signal });
 
-            setState({
-              domainAppliedStates: [],
-              installing: false,
-              installs: [],
-              packages,
-              status: "ready",
-            });
+            if (stopped) {
+              return;
+            }
+
+            const uninitialized = instanceShellUninitializedWorkspaceInstallState(appResponse);
+
+            setState(uninitialized.state);
             setInstallDrafts((current) =>
               initializePackageInstallDrafts({
                 currentDrafts: current,
-                installs: [],
-                packages,
+                installs: uninitialized.state.installs,
+                packages: uninitialized.state.packages,
               }),
             );
             return;
@@ -845,6 +844,20 @@ export function workspaceOperationRefreshesDeploymentRuntime(
     operation.status === "succeeded" &&
     (operation.operation === "deployApply" || operation.operation === "deploymentRefresh")
   );
+}
+
+export function instanceShellUninitializedWorkspaceInstallState(appResponse: AppInstallsResponse): {
+  state: Extract<InstanceShellRouteState, { status: "ready" }>;
+} {
+  return {
+    state: {
+      domainAppliedStates: [],
+      installing: false,
+      installs: appResponse.installs,
+      packages: appResponse.packages,
+      status: "ready",
+    },
+  };
 }
 
 function workspaceGatewayReadyStateFromResponse(
@@ -2416,7 +2429,7 @@ export function InstallAppDialogForm({
       <ModalHeader>
         <ModalTitle>Install app</ModalTitle>
         <ModalDescription>
-          Choose a bundled app type, then set its instance label and install id.
+          Choose an app type, then set its instance label and install id.
         </ModalDescription>
       </ModalHeader>
       <ModalBody>

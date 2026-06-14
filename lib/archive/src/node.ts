@@ -9,8 +9,7 @@ import {
   archiveApps,
   archiveRecordCount,
   formatPortableArchive,
-  normalizePortableArchive,
-  type ArchiveNormalizationEvidence,
+  parsePortableArchive,
   type PortableArchive,
 } from "./index.ts";
 
@@ -34,7 +33,6 @@ export type ReadPortableArchiveDirectoryResult = {
   archive: PortableArchive;
   archivePath: string;
   mediaFiles: ArchiveDiskMediaFile[];
-  normalizationEvidence: ArchiveNormalizationEvidence[];
 };
 
 export async function writePortableArchiveDirectory(
@@ -72,10 +70,7 @@ export async function readPortableArchiveDirectory(
 ): Promise<ReadPortableArchiveDirectoryResult> {
   const archiveDir = path.resolve(dependencies.cwd, archiveDirInput);
   const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
-  const normalized = normalizePortableArchive(
-    JSON.parse(await readFile(archivePath, "utf8")) as unknown,
-  );
-  const archive = normalized.archive;
+  const archive = parsePortableArchive(JSON.parse(await readFile(archivePath, "utf8")) as unknown);
   const mediaFiles = await Promise.all(
     archiveApps(archive).flatMap((app) =>
       app.media.objects.map(async (object) => {
@@ -97,7 +92,6 @@ export async function readPortableArchiveDirectory(
     archive,
     archivePath,
     mediaFiles,
-    normalizationEvidence: normalized.evidence,
   };
 }
 

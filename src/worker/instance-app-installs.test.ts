@@ -24,6 +24,7 @@ import {
   computeSourceSchemaHash,
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "../shared/instance-control-plane.ts";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -33,6 +34,7 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -214,6 +216,7 @@ describe("instance app install API routes", () => {
       ).toMatchObject({
         defaultInstallId: "labs",
         packageRevision: 7,
+        publicRouteBase: "/sites",
         sourceOrigin: "workspace",
         sourceSchemaHash,
         sourceSchemaKey: "private-labs",
@@ -232,12 +235,13 @@ describe("instance app install API routes", () => {
           label: "Private Labs",
           packageAppKey: "private-labs",
           packageRevision: 7,
+          publicRoute: "/sites/labs",
+          publicRoutePrefix: "/sites/labs/",
           schemaRoute: "/apps/labs/schema",
           sourceSchemaHash,
           status: "installed",
         }),
       );
-      expect(created.body.install).not.toHaveProperty("publicRoute");
       expect(bootstrap.body.schema).toEqual(taskSourceSchema);
       expect(bootstrap.body.records).toEqual(taskSeedRecords);
       expect(appInstall?.values).toMatchObject({
@@ -249,7 +253,21 @@ describe("instance app install API routes", () => {
         routes
           .map((record) => record.values.matchPath)
           .sort((left, right) => String(left).localeCompare(String(right))),
-      ).toEqual(["/apps/labs", "/apps/labs/schema"]);
+      ).toEqual(["/apps/labs", "/apps/labs/schema", "/sites/labs"]);
+      expect(
+        routes
+          .map((record) => [
+            record.id,
+            record.values.targetProfile,
+            record.values.surface,
+            record.values.access,
+          ])
+          .sort(([left], [right]) => String(left).localeCompare(String(right))),
+      ).toEqual([
+        ["route:labs:admin", "app", "admin", "owner"],
+        ["route:labs:public-site", "public-site", "public-site", "anonymous"],
+        ["route:labs:schema", "app", "schema", "owner"],
+      ]);
       expect(controlPlaneJson).not.toContain("formless.app.json");
       expect(controlPlaneJson).not.toContain("../app");
     } finally {
@@ -307,6 +325,30 @@ describe("instance app install API routes", () => {
         ["publicSite", "anonymous"],
       ],
     );
+  });
+
+  it("does not serve legacy app install registry reset or backfill endpoints", async () => {
+    const reset = await harness.durableObjectFetch(
+      "FORMLESS_AUTHORITY",
+      FORMLESS_INSTANCE_AUTHORITY_NAME,
+      "/_internal/reset-instance-app-installs",
+      { method: "POST" },
+    );
+    const backfill = await harness.durableObjectFetch(
+      "FORMLESS_AUTHORITY",
+      INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      "/api/formless/control-plane/_internal/backfill-app-installs",
+      {
+        body: JSON.stringify({ installs: [] }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(reset.status).toBe(404);
+    expect(await reset.json()).toEqual({ error: "Not found." });
+    expect(backfill.status).toBe(404);
+    expect(await backfill.json()).toEqual({ error: "Not found." });
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {
@@ -802,6 +844,9 @@ function privatePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageM
       path: "source/seed-records.json",
     },
     sourceSchemaHash,
-    capabilities: [{ kind: "generatedAdmin", routeBase: "/apps" }],
+    capabilities: [
+      { kind: "generatedAdmin", routeBase: "/apps" },
+      { kind: "publicSite", routeBase: "/sites" },
+    ],
   };
 }

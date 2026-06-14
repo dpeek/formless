@@ -29,7 +29,6 @@ import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-in
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
 import {
   LaunchFixtureConfigurationError,
-  initializeInstanceAppInstallsFromConfiguredLaunchFixture,
   launchFixtureStorageSourceForAuthorityName,
   launchFixtureStorageSourceForIdentity,
 } from "./launch-fixtures.ts";
@@ -69,16 +68,6 @@ export class FormlessAuthority extends DurableObject<Env> {
     const url = new URL(request.url);
 
     if (this.ctx.id.name === FORMLESS_INSTANCE_AUTHORITY_NAME) {
-      try {
-        initializeInstanceAppInstallsFromConfiguredLaunchFixture(this.ctx.storage, this.bindings);
-      } catch (error) {
-        if (error instanceof LaunchFixtureConfigurationError) {
-          return jsonResponse({ error: error.message }, 400);
-        }
-
-        throw error;
-      }
-
       ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.bindings);
     }
 

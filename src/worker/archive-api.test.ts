@@ -24,8 +24,6 @@ import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts
 import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
-import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH } from "./instance-app-installs.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -425,7 +423,6 @@ describe("instance archive restore API", () => {
 async function resetWorkerState() {
   await Promise.all([
     postReset("/api/formless/control-plane/reset/seed"),
-    postInternalInstanceReset(INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH),
     postInternalAppStorageReset("personal"),
     postInternalAppStorageReset("work"),
     postInternalAppStorageReset("rates"),
@@ -442,19 +439,6 @@ async function postReset(path: string) {
     },
     method: "POST",
   });
-
-  expect(response.status).toBe(200);
-}
-
-async function postInternalInstanceReset(path: string) {
-  const response = await harness.durableObjectFetch(
-    "FORMLESS_AUTHORITY",
-    FORMLESS_INSTANCE_AUTHORITY_NAME,
-    path,
-    {
-      method: "POST",
-    },
-  );
 
   expect(response.status).toBe(200);
 }

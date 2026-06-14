@@ -22,7 +22,7 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
 import type { DeploymentResourceEvidenceSummary } from "../shared/deployment-runtime.ts";
-import { packageAppFactsForKey, listBundledAppPackages } from "../shared/app-installs.ts";
+import { packageAppFactsForKey, listInstallableAppPackages } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -1096,7 +1096,7 @@ function authorityExportFetch(
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json(
         {
-          packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageApps: listInstallableAppPackages().map((appPackage) => ({
             packageAppKey: appPackage.packageAppKey,
             packageRevision: appPackage.packageRevision,
             sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1113,7 +1113,7 @@ function authorityExportFetch(
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs,
-        packages: listBundledAppPackages(),
+        packages: listInstallableAppPackages(),
       });
     }
 
@@ -1219,7 +1219,7 @@ function deployApplyFetch(
 
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json({
-        packageApps: listBundledAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages().map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1234,7 +1234,7 @@ function deployApplyFetch(
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs: [installedSite("david", "David Peek")],
-        packages: listBundledAppPackages(),
+        packages: listInstallableAppPackages(),
       });
     }
 

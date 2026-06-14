@@ -28,37 +28,18 @@ capability, metadata, app data, and media payload information.
 - THEN `core-media-assets` is accepted
 - AND `app-scoped-media` is rejected
 
-### Requirement: Archive Compatibility Normalization
+### Requirement: Current Archive Input Only
 
-The system SHALL normalize older supported archive versions before restore or
-import validation.
+The system SHALL reject non-current portable archive envelopes before restore,
+import, or workspace validation.
 
-#### Scenario: Restore older supported archive
+#### Scenario: Reject non-current archive input
 
-- WHEN archive restore reads an older supported app or instance archive envelope
-- THEN a version-specific normalizer converts it into the current internal
-  restore model before validation
-- AND restore planning reports normalization evidence in dry-run output
-- AND version `1` app and instance archive envelopes are normalized to the
-  latest archive envelope before validation
-
-#### Scenario: Normalize legacy control-plane entity names
-
-- WHEN a supported archive or workspace record-source reader encounters older
-  camelCase instance control-plane entity names
-- THEN the reader normalizes those names to canonical qualified names such as
-  `instance:app-install`, `instance:app-route`,
-  `instance:domain-mapping`, and `instance:deployment-config` before
-  validation
-- AND dry-run or check output reports the normalization evidence
-- AND canonical output is written with kebab-case qualified entity names
-
-#### Scenario: Reject unsupported archive version
-
-- WHEN archive restore reads an unsupported archive kind, unsupported version,
-  archive version without a registered normalizer, or unsupported entity-name
-  spelling
-- THEN restore is rejected before mutation
+- WHEN archive restore, restore dry-run planning, import validation, or
+  workspace archive checks read an unsupported archive kind, archive version
+  older or newer than the current archive version, missing package fact fields,
+  or unsupported entity-name spelling
+- THEN the archive is rejected before mutation
 - AND target app, instance, and media data remain unchanged
 
 ### Requirement: Export Latest Archive Format
@@ -171,17 +152,17 @@ The system SHALL import standalone Site projects as installed Site app archives.
 
 ### Requirement: Archive Package Boundary
 
-The system SHALL expose reusable portable archive contracts, parsing,
-normalization, restore planning, and local archive file adapters through the
-Archive package slice.
+The system SHALL expose reusable portable archive contracts, current-envelope
+parsing, restore planning, and local archive file adapters through the Archive
+package slice.
 
 #### Scenario: Package owns portable archive contracts
 
 - **WHEN** CLI, Site runtime, Worker restore APIs, Workspace operations,
   upgrade planning, tests, or package slices need archive envelope kinds,
   archive version constants, archive capability parsing, archive formatting,
-  compatibility normalizers, restore dry-run planning, media manifest
-  validation, or deterministic local archive directory IO
+  restore dry-run planning, media manifest validation, or deterministic local
+  archive directory IO
 - **THEN** they import that behavior from `@dpeek/formless-archive` or
   `@dpeek/formless-archive/node`
 - **AND** they do not import package-owned archive behavior from old
@@ -197,10 +178,18 @@ Archive package slice.
   Workspace runtime, Worker runtime, Authority, Media runtime, Deploy runtime,
   or provider adapters
 - **AND** the Archive package supplies contracts, parser/formatter behavior,
-  compatibility normalization, deterministic planning, and local archive
-  filesystem adapters rather than owning app records, runtime storage, media
-  storage, deployed runtime records, provider credentials, Cloudflare
-  resources, or Alchemy resources
+  deterministic planning, and local archive filesystem adapters rather than
+  owning app records, runtime storage, media storage, deployed runtime records,
+  provider credentials, Cloudflare resources, or Alchemy resources
+
+#### Scenario: Current archive version only
+
+- **GIVEN** archive parsing, restore dry-run planning, or workspace archive
+  checks read an archive envelope
+- **WHEN** the archive version differs from the current portable archive version
+- **THEN** the archive is rejected with an unsupported archive version error
+- **AND** package facts are not filled from bundled defaults or other
+  compatibility paths
 
 ### Requirement: Workspace Source Of Truth
 

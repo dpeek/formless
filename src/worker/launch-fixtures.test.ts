@@ -228,7 +228,7 @@ async function writeLaunchFixtureHarness() {
       import { DurableObject } from "cloudflare:workers";
       import { createLaunchFixtureInitializationPlan } from "${process.cwd()}/src/shared/launch-fixtures.ts";
       import {
-        initializeInstanceAppInstallsFromLaunchFixture,
+        initializeControlPlaneFromLaunchFixture,
         initializeLaunchFixtureAppStorage,
       } from "${process.cwd()}/src/worker/launch-fixtures.ts";
       import {
@@ -250,7 +250,7 @@ async function writeLaunchFixtureHarness() {
 
           if (url.pathname === "/instance") {
             return Response.json(
-              initializeInstanceAppInstallsFromLaunchFixture(this.ctx.storage, plan),
+              initializeControlPlaneFromLaunchFixture(this.ctx.storage, plan),
             );
           }
 

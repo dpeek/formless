@@ -16,7 +16,7 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { packageAppFactsForKey, listBundledAppPackages } from "../shared/app-installs.ts";
+import { packageAppFactsForKey, listInstallableAppPackages } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -1292,7 +1292,7 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
 
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json({
-        packageApps: listBundledAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages().map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1307,7 +1307,7 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs: [installedSite(installId, "Site")],
-        packages: listBundledAppPackages(),
+        packages: listInstallableAppPackages(),
       });
     }
 

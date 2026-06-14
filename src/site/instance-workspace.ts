@@ -20,8 +20,7 @@ import {
   archiveRecordCount,
   formatAppArchive,
   formatInstanceArchive,
-  normalizePortableArchive,
-  type ArchiveNormalizationEvidence,
+  parsePortableArchive,
   type AppArchive,
   type InstanceArchive,
   type InstanceArchiveControlPlane,
@@ -299,7 +298,6 @@ export type FormlessInstanceWorkspacePackageMismatch = {
 };
 
 export type FormlessInstanceWorkspaceDriftSummary = {
-  archiveNormalizationEvidence: ArchiveNormalizationEvidence[];
   changedArchivePaths: string[];
   changedControlPlaneRecords: string[];
   domainDesiredDrift: FormlessInstanceWorkspaceDomainDesiredDrift[];
@@ -2744,7 +2742,6 @@ type WorkspaceArchiveDirectory = {
   archivePath: string;
   mediaFiles: ArchiveDiskMediaFile[];
   missingMediaFiles: string[];
-  normalizationEvidence: ArchiveNormalizationEvidence[];
 };
 
 type WorkspaceInstanceArchiveDirectory = WorkspaceArchiveDirectory & {
@@ -3121,8 +3118,7 @@ async function readArchiveDirectoryForCheck(
     throw error;
   }
 
-  const normalized = normalizePortableArchive(JSON.parse(contents) as unknown);
-  const archive = normalized.archive;
+  const archive = parsePortableArchive(JSON.parse(contents) as unknown);
   const mediaFiles: ArchiveDiskMediaFile[] = [];
   const missingMediaFiles: string[] = [];
 
@@ -3153,7 +3149,6 @@ async function readArchiveDirectoryForCheck(
     archivePath,
     mediaFiles,
     missingMediaFiles: missingMediaFiles.sort((left, right) => left.localeCompare(right)),
-    normalizationEvidence: normalized.evidence,
   };
 }
 
@@ -3354,7 +3349,6 @@ function workspaceAppArchiveDirectoryFromInstanceExport(
     missingMediaFiles: directory.missingMediaFiles.filter((archivePath) =>
       app.media.objects.some((object) => object.archivePath === archivePath),
     ),
-    normalizationEvidence: directory.normalizationEvidence,
   };
 }
 
@@ -3488,7 +3482,6 @@ function compareWorkspaceArchives(input: {
     packageMismatches.length > 0;
 
   return {
-    archiveNormalizationEvidence: workspaceArchiveNormalizationEvidence(input),
     changedArchivePaths: [...changedArchivePaths].sort((left, right) => left.localeCompare(right)),
     changedControlPlaneRecords: [...changedControlPlaneRecords].sort((left, right) =>
       left.localeCompare(right),
@@ -3513,46 +3506,6 @@ function compareWorkspaceArchives(input: {
     remoteRecordCount: remoteApps.reduce((count, app) => count + archiveRecordCount(app), 0),
     status: hasDrift ? "drift" : "no-drift",
   };
-}
-
-function workspaceArchiveNormalizationEvidence(input: {
-  localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
-  remoteArchive: WorkspaceArchiveDirectory;
-}): ArchiveNormalizationEvidence[] {
-  return uniqueArchiveNormalizationEvidence([
-    ...[...input.localAppArchives.values()].flatMap((archive) => archive.normalizationEvidence),
-    ...input.remoteArchive.normalizationEvidence,
-  ]);
-}
-
-function uniqueArchiveNormalizationEvidence(
-  evidence: readonly ArchiveNormalizationEvidence[],
-): ArchiveNormalizationEvidence[] {
-  const seen = new Set<string>();
-  const unique: ArchiveNormalizationEvidence[] = [];
-
-  for (const entry of evidence) {
-    const key = JSON.stringify({
-      archiveKind: entry.archiveKind,
-      details: entry.details ?? [],
-      fromVersion: entry.fromVersion,
-      normalizerId: entry.normalizerId,
-      toVersion: entry.toVersion,
-    });
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    unique.push(entry);
-  }
-
-  return unique.sort((left, right) =>
-    `${left.normalizerId}:${left.details?.join(";") ?? ""}`.localeCompare(
-      `${right.normalizerId}:${right.details?.join(";") ?? ""}`,
-    ),
-  );
 }
 
 function changedControlPlaneIntentRecordKeys(
@@ -3846,11 +3799,11 @@ function appDeclarationFromArchive(
 }
 
 async function readWorkspaceArchive(archiveDir: string): Promise<PortableArchive> {
-  return normalizePortableArchive(
+  return parsePortableArchive(
     JSON.parse(
       await readFile(path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
     ) as unknown,
-  ).archive;
+  );
 }
 
 async function readWorkspaceManifest(workspaceRoot: string): Promise<{

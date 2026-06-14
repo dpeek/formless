@@ -24,7 +24,6 @@ import {
   type RecordInstanceDomainMappingApplyEvidenceRequest,
 } from "../shared/instance-domain-mappings.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
-import { readInstanceAppInstalls } from "./instance-app-installs-state.ts";
 import {
   createSqlStorageMigrationRegistry,
   runSqlStorageMigrations,
@@ -263,7 +262,7 @@ export function createInstanceDomainMapping(
     const result = buildInstanceDomainMapping({
       ...input,
       existingMappings: readDomainMappings(storage),
-      installs: input.installs ?? readInstanceAppInstalls(storage),
+      installs: input.installs ?? [],
     });
 
     if (!result.ok) {

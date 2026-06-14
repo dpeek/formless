@@ -371,7 +371,7 @@ function upgradeVerificationFailures(input: {
   if (input.localPackages.length === 0) {
     failures.push({
       code: "local-package-facts-missing",
-      message: "Local package metadata is missing bundled package facts.",
+      message: "Local package metadata is missing package facts.",
       source: "local-package",
     });
   }
@@ -1776,12 +1776,39 @@ function controlPlaneRecordsByEntity(
   return {
     actorKind,
     appInstalls: deployControlPlaneRecordsByEntity(records, "app-install"),
-    appRoutes: deployControlPlaneRecordsByEntity(records, "app-route"),
+    appRoutes: controlPlaneAppRouteRecords(records),
     deploymentConfigs: deployControlPlaneRecordsByEntity(records, "deployment-config"),
-    domainMappings: deployControlPlaneRecordsByEntity(records, "domain-mapping"),
+    domainMappings: controlPlaneDomainRouteRecords(records),
     records,
-    redirectIntents: deployControlPlaneRecordsByEntity(records, "redirect-intent"),
+    redirectIntents: controlPlaneRedirectRouteRecords(records),
   };
+}
+
+function controlPlaneAppRouteRecords(
+  records: DeployControlPlaneRecord[],
+): DeployControlPlaneRecord[] {
+  return deployControlPlaneRecordsByEntity(records, "route").filter(
+    (record) =>
+      record.values.kind === "mount" &&
+      record.values.matchHost === undefined &&
+      typeof record.values.appInstall === "string",
+  );
+}
+
+function controlPlaneDomainRouteRecords(
+  records: DeployControlPlaneRecord[],
+): DeployControlPlaneRecord[] {
+  return deployControlPlaneRecordsByEntity(records, "route").filter(
+    (record) => record.values.kind === "mount" && typeof record.values.matchHost === "string",
+  );
+}
+
+function controlPlaneRedirectRouteRecords(
+  records: DeployControlPlaneRecord[],
+): DeployControlPlaneRecord[] {
+  return deployControlPlaneRecordsByEntity(records, "route").filter(
+    (record) => record.values.kind === "redirect",
+  );
 }
 
 function parseDeploymentAttemptStartResponse(

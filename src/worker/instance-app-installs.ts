@@ -6,6 +6,7 @@ import {
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppInstallsFromRecords,
 } from "../shared/instance-control-plane.ts";
 import {
   parseCreateAppInstallRequest,
@@ -24,14 +25,8 @@ import {
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import {
-  INTERNAL_BACKFILL_APP_INSTALLS_PATH,
-  INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
-} from "./instance-control-plane.ts";
-import {
-  readLegacyInstanceAppInstalls,
-  resetInstanceAppInstallTables,
-} from "./instance-app-installs-state.ts";
+import { INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH } from "./instance-control-plane.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import {
   activeAppPackageResolver,
   listActiveAppPackages,
@@ -40,7 +35,6 @@ import {
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 export const INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX = "/package-migrations/apply";
-export const INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH = "/_internal/reset-instance-app-installs";
 
 export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv &
   ActiveRuntimeAppPackageEnv & {
@@ -86,20 +80,10 @@ export async function lookupInstanceAppInstallForRequest(
 
 export async function handleInstanceAppInstallsDurableObjectRequest(
   request: Request,
-  storage: DurableObjectStorage,
+  _storage: DurableObjectStorage,
   env: InstanceAppInstallsApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
-
-  if (pathname === INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH) {
-    if (request.method !== "POST") {
-      return methodNotAllowedResponse("POST");
-    }
-
-    resetInstanceAppInstallTables(storage);
-
-    return jsonResponse({ reset: true });
-  }
 
   if (!isInstanceAppInstallsApiPath(pathname)) {
     return undefined;
@@ -124,7 +108,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       }
 
       const install = findAppInstall(
-        await readBackfilledControlPlaneAppInstalls(storage, env, request.url),
+        await readControlPlaneAppInstallsForRequest(env, request.url),
         migrationApplyRoute.installId,
       );
 
@@ -169,7 +153,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
         );
       }
 
-      return jsonResponse(await appInstallsResponse(request, storage, env));
+      return jsonResponse(await appInstallsResponse(request, env));
     }
 
     if (request.method === "POST") {
@@ -184,7 +168,6 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       }
 
       const body = parseCreateAppInstallRequest(await readJson(request));
-      await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
       const created = await createControlPlaneAppInstall(request, env, body);
 
       if (!created.response.ok) {
@@ -198,7 +181,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
         );
       }
 
-      const installs = await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
+      const installs = await readControlPlaneAppInstallsForRequest(env, request.url);
       const install = findAppInstall(installs, body.installId);
 
       if (!install) {
@@ -339,44 +322,21 @@ async function applyInstalledAppPackageMigrations(
 
 async function appInstallsResponse(
   request: Request,
-  storage: DurableObjectStorage,
   env: InstanceAppInstallsApiEnv,
 ): Promise<AppInstallsResponse> {
   return {
     packages: listActiveAppPackages(env),
-    installs: await readBackfilledControlPlaneAppInstalls(storage, env, request.url),
+    installs: await readControlPlaneAppInstallsForRequest(env, request.url),
   };
 }
 
-export async function readBackfilledControlPlaneAppInstalls(
-  storage: DurableObjectStorage,
+export async function readControlPlaneAppInstallsForRequest(
   env: InstanceAppInstallsApiEnv,
   requestUrl: string,
 ): Promise<AppInstall[]> {
-  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
-  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(
-      new URL(
-        `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_BACKFILL_APP_INSTALLS_PATH}`,
-        requestUrl,
-      ),
-      {
-        body: JSON.stringify({
-          installs: readLegacyInstanceAppInstalls(storage, activeAppPackageResolver(env)),
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      },
-    ),
-  );
+  const records = await readControlPlaneRecords({ env, requestUrl });
 
-  const body = (await response.json()) as { installs?: AppInstall[]; error?: string };
-
-  if (!response.ok || !Array.isArray(body.installs)) {
-    throw new Error(body.error ?? "Control-plane app install backfill failed.");
-  }
-
-  return body.installs;
+  return instanceControlPlaneAppInstallsFromRecords(records ?? [], activeAppPackageResolver(env));
 }
 
 async function updateControlPlaneAppInstallPackageFacts(
@@ -427,7 +387,7 @@ async function createControlPlaneAppInstall(
       new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/actions/createAppInstall`, request.url),
       {
         body: JSON.stringify({
-          actionId: `legacyAppInstallApi:${input.installId}:${crypto.randomUUID()}`,
+          actionId: `appInstallApi:${input.installId}:${crypto.randomUUID()}`,
           input,
         }),
         headers,

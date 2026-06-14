@@ -7,7 +7,7 @@ import {
   type AppArchiveMediaObject,
   type InstanceArchive,
 } from "./index.ts";
-import { listBundledAppPackages, type AppInstall } from "../../../src/shared/app-installs.ts";
+import { listInstallableAppPackages, type AppInstall } from "../../../src/shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
 import {
   planAppArchiveRestore,
@@ -69,6 +69,7 @@ describe("archive restore planner", () => {
 
     const errors = expectFailure(
       planInstanceArchiveRestore(archive, {
+        packages: listInstallableAppPackages(),
         mediaFiles: [legacySiteMediaFile("personal", "hero")],
         sourceSchemas: { site: siteSourceSchema },
       }),
@@ -135,6 +136,7 @@ describe("archive restore planner", () => {
 
     const plan = expectPlan(
       planInstanceArchiveRestore(archive, {
+        packages: listInstallableAppPackages(),
         mediaFiles: [coreMediaFile("hero")],
         sourceSchemas: {
           estii: rateSourceSchema,
@@ -164,6 +166,7 @@ describe("archive restore planner", () => {
     const rejected = expectFailure(
       planAppArchiveRestore(appArchive({ app: archivedInstall("personal", "Personal") }), {
         installedApps: existing,
+        packages: listInstallableAppPackages(),
         sourceSchemas: { site: siteSourceSchema },
       }),
     );
@@ -178,6 +181,7 @@ describe("archive restore planner", () => {
         }),
         {
           installedApps: existing,
+          packages: listInstallableAppPackages(),
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
@@ -209,13 +213,14 @@ describe("archive restore planner", () => {
           },
         }),
         {
-          packages: listBundledAppPackages(),
+          packages: listInstallableAppPackages(),
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
     );
     const missingSource = expectFailure(
       planAppArchiveRestore(sourceRecordAppArchive(), {
+        packages: listInstallableAppPackages(),
         sourceSchemas: {},
       }),
     );
@@ -223,6 +228,7 @@ describe("archive restore planner", () => {
     mismatchedSchema.entities.site.label = "Different Site";
     const schemaMismatch = expectFailure(
       planAppArchiveRestore(sourceRecordAppArchive(), {
+        packages: listInstallableAppPackages(),
         sourceSchemas: { site: mismatchedSchema },
       }),
     );
@@ -258,6 +264,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
+          packages: listInstallableAppPackages(),
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
@@ -293,6 +300,7 @@ describe("archive restore planner", () => {
           media: { objects: [] },
         }),
         {
+          packages: listInstallableAppPackages(),
           mediaFiles: [],
           sourceSchemas: { site: siteSourceSchema },
         },
@@ -324,6 +332,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
+          packages: listInstallableAppPackages(),
           mediaFiles: [],
           sourceSchemas: { site: siteSourceSchema },
         },
@@ -358,6 +367,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
+          packages: listInstallableAppPackages(),
           mediaFiles: [coreMediaFile("hero")],
           sourceSchemas: { site: siteSourceSchema },
         },

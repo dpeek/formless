@@ -197,7 +197,7 @@ describe("archive restore execution", () => {
     expect(result.errors).toEqual([
       {
         code: "invalid-archive",
-        message: "Archive version 0 has no registered normalizer for formless.appArchive.",
+        message: "App archive version must be 2.",
       },
     ]);
   });

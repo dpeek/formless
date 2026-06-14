@@ -75,7 +75,7 @@ describe("runtime upgrade status API", () => {
         },
       }),
     );
-    expect(instance?.sqlMigrations).toContainEqual(
+    expect(instance?.sqlMigrations).not.toContainEqual(
       expect.objectContaining({
         migrationId: "2026-05-28-instance-app-installs-package-facts",
         storageFamily: "instance-app-installs",
@@ -123,7 +123,7 @@ describe("runtime upgrade status API", () => {
     );
 
     expect(apply.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(instance?.sqlMigrations).toContainEqual(
+    expect(instance?.sqlMigrations).not.toContainEqual(
       expect.objectContaining({
         migrationId: "2026-05-28-instance-app-installs-package-facts",
         storageFamily: "instance-app-installs",

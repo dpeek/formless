@@ -43,7 +43,6 @@ import {
   type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
 import type { InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget } from "@dpeek/formless-workspace";
-import type { ArchiveNormalizationEvidence } from "@dpeek/formless-archive";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   INSTANCE_WORKSPACE_GITIGNORE_ENTRY as FORMLESS_INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
@@ -1550,16 +1549,11 @@ function formatArchiveRestoreResult(
     !applied && result.upgradePlanning
       ? formatCliUpgradePlanningReport(result.upgradePlanning).trimEnd()
       : null;
-  const archiveNormalizationEvidence = formatArchiveNormalizationEvidence(
-    result.archiveNormalizationEvidence,
-  );
-
   if (!result.remote.ok) {
     return [
       upgradePlanning,
       `${label} ${status} failed.`,
       `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
-      archiveNormalizationEvidence,
       ...(result.remote.errors ?? []).map((error) => `Error: ${error.message}`),
     ]
       .filter((line): line is string => line !== null)
@@ -1570,32 +1564,12 @@ function formatArchiveRestoreResult(
     upgradePlanning,
     `${label} ${status} ok.`,
     `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
-    archiveNormalizationEvidence,
     summary ? `Apps: ${summary.appCount}.` : null,
     summary ? `Created installs: ${summary.createdInstalls.join(", ") || "none"}.` : null,
     summary ? `Replaced installs: ${summary.replacedInstalls.join(", ") || "none"}.` : null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
-}
-
-function formatArchiveNormalizationEvidence(
-  evidence: readonly ArchiveNormalizationEvidence[],
-): string | null {
-  if (evidence.length === 0) {
-    return null;
-  }
-
-  return `Archive normalization: ${evidence
-    .map((entry) => {
-      const details =
-        entry.details === undefined || entry.details.length === 0
-          ? ""
-          : ` (${entry.details.join("; ")})`;
-
-      return `${entry.normalizerId} ${entry.archiveKind} version ${entry.fromVersion}->${entry.toVersion}${details}`;
-    })
-    .join("; ")}.`;
 }
 
 function formatCliWorkspaceOperationResult(state: WorkspaceOperationState): string {

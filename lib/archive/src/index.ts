@@ -2,7 +2,6 @@
  * Runtime-neutral Archive package entrypoint.
  */
 export * from "./types.ts";
-export * from "./normalizers.ts";
 export * from "./restore-plan.ts";
 
 import {

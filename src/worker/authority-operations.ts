@@ -390,6 +390,7 @@ export function executeAuthorityOperation(
       return {
         body: executeWriteOperationInvocation({
           envelope,
+          packageResolver: input.packageResolver,
           schema,
           storage: input.storage,
           validateConstraints: input.validateConstraints,
@@ -493,7 +494,7 @@ function assertBrowserReplicaWriteCompatible(input: AuthorityOperationExecutionI
     return;
   }
 
-  const upgrade = browserReplicaUpgradeFacts(input.storage, input.identity);
+  const upgrade = browserReplicaUpgradeFacts(input.storage, input.identity, input.packageResolver);
 
   if (
     clientFacts.runtimeProtocolVersion !== undefined &&

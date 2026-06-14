@@ -1,4 +1,5 @@
-import { findAppInstall, type AppInstall } from "../shared/app-installs.ts";
+import { parseAppSchema } from "@dpeek/formless-schema";
+import type { AppInstall } from "../shared/app-installs.ts";
 import {
   type AppStorageIdentity,
   type InstalledAppStorageIdentity,
@@ -13,13 +14,17 @@ import {
 } from "../shared/launch-fixtures.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
-  createInstanceAppInstall,
-  readInstanceAppInstalls,
-} from "./instance-app-installs-state.ts";
+  instanceControlPlaneAppInstallsFromRecords,
+  instanceControlPlaneRecordsForAppInstall,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
+import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   ensureStorageTables,
+  getBootstrapRecords,
   initializeStorageFromSource,
+  readCurrentStoredSchema,
   type StorageSource,
   type StoredSchema,
 } from "./storage.ts";
@@ -41,37 +46,52 @@ export class LaunchFixtureConfigurationError extends Error {
   }
 }
 
-export function initializeInstanceAppInstallsFromLaunchFixture(
+export function launchFixtureControlPlaneRecords(
+  plan: LaunchFixtureInitializationPlan,
+): ReturnType<typeof instanceControlPlaneRecordsForAppInstall>[number][] {
+  return plan.appInstalls.flatMap((appPlan) =>
+    instanceControlPlaneRecordsForAppInstall({
+      install: appPlan.install,
+      now: appPlan.install.createdAt,
+    }),
+  );
+}
+
+export function launchFixtureControlPlaneRecordsForEnv(
+  env: LaunchFixtureStartupEnv,
+): ReturnType<typeof instanceControlPlaneRecordsForAppInstall>[number][] {
+  const plan = configuredLaunchFixtureInitializationPlan(env);
+
+  return plan ? launchFixtureControlPlaneRecords(plan) : [];
+}
+
+export function launchFixtureControlPlaneStorageSource(
+  plan: LaunchFixtureInitializationPlan,
+): StorageSource {
+  return {
+    changeMutationPrefix: "seed-instance-control-plane",
+    records: launchFixtureControlPlaneRecords(plan),
+    schema: parseAppSchema(instanceControlPlaneSchema),
+  };
+}
+
+export function initializeControlPlaneFromLaunchFixture(
   storage: DurableObjectStorage,
   plan: LaunchFixtureInitializationPlan,
+  packageResolver?: AppPackageResolver,
 ): LaunchFixtureInstanceInitializationResult {
-  const createdInstalls: AppInstall[] = [];
-
-  for (const appPlan of plan.appInstalls) {
-    const existing = readInstanceAppInstalls(storage);
-
-    if (findAppInstall(existing, appPlan.install.installId)) {
-      continue;
-    }
-
-    const result = createInstanceAppInstall(storage, {
-      installId: appPlan.install.installId,
-      label: appPlan.install.label,
-      now: appPlan.install.createdAt,
-      packageAppKey: appPlan.install.packageAppKey,
-    });
-
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-
-    createdInstalls.push(result.install);
-  }
+  ensureStorageTables(storage);
+  const initialized = readCurrentStoredSchema(storage) !== undefined;
+  initializeStorageFromSource(storage, launchFixtureControlPlaneStorageSource(plan));
+  const installs = instanceControlPlaneAppInstallsFromRecords(
+    getBootstrapRecords(storage),
+    packageResolver,
+  );
 
   return {
-    createdInstalls,
+    createdInstalls: initialized ? [] : plan.appInstalls.map((appPlan) => appPlan.install),
     fixtureName: plan.fixtureName,
-    installs: readInstanceAppInstalls(storage),
+    installs,
   };
 }
 
@@ -101,15 +121,6 @@ export function launchFixtureStorageSourceForApp(
     records: seed.seedRecords,
     schema: source.sourceSchema,
   };
-}
-
-export function initializeInstanceAppInstallsFromConfiguredLaunchFixture(
-  storage: DurableObjectStorage,
-  env: LaunchFixtureStartupEnv,
-): LaunchFixtureInstanceInitializationResult | undefined {
-  const plan = configuredLaunchFixtureInitializationPlan(env);
-
-  return plan ? initializeInstanceAppInstallsFromLaunchFixture(storage, plan) : undefined;
 }
 
 export function launchFixtureStorageSourceForIdentity(
@@ -168,7 +179,7 @@ function appPlanMatchesIdentity(
   );
 }
 
-function configuredLaunchFixtureInitializationPlan(
+export function configuredLaunchFixtureInitializationPlan(
   env: LaunchFixtureStartupEnv,
 ): LaunchFixtureInitializationPlan | undefined {
   const fixtureName = stringConfigValue(env.FORMLESS_LAUNCH_FIXTURE);

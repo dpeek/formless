@@ -30,7 +30,7 @@ import type {
   CloudflareZone,
 } from "./cloudflare-domain-client.ts";
 import {
-  listBundledAppPackages,
+  listInstallableAppPackages,
   packageAppFactsForKey,
   type InstallableAppPackage,
 } from "../shared/app-installs.ts";
@@ -757,7 +757,7 @@ describe("Formless Site CLI", () => {
       },
     });
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [installedSite("david", "David Peek"), installedSite("james", "James Peek")],
     });
 
@@ -900,7 +900,7 @@ describe("Formless Site CLI", () => {
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: false });
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [installedSite("david", "David Peek")],
     });
     responses.queueJson({
@@ -1865,7 +1865,7 @@ describe("Formless Site CLI", () => {
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: true });
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [installedSite("david", "David Peek")],
     });
     responses.queueJson({
@@ -2068,7 +2068,7 @@ describe("Formless Site CLI", () => {
     responses.queueJson({ version: packageJson.version });
     responses.queueJson({ setupComplete: true });
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [installedSite("david", "David Peek")],
     });
     responses.queueJson(
@@ -2234,7 +2234,7 @@ describe("Formless Site CLI", () => {
       responses.queueJson({ version: packageJson.version });
       responses.queueJson({ setupComplete: true });
       responses.queueJson({
-        packages: listBundledAppPackages(),
+        packages: listInstallableAppPackages(),
         installs: [installedSite("david", "David Peek")],
       });
     };
@@ -4824,7 +4824,7 @@ describe("Formless Site CLI", () => {
     const sourceRecords = mediaRecords();
 
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [
         {
           adminRoute: "/apps/personal",
@@ -5044,7 +5044,7 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
 
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [
         {
           adminRoute: "/apps/work",
@@ -5115,7 +5115,7 @@ describe("Formless Site CLI", () => {
     const sourceRecords = mediaRecords();
 
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [
         {
           adminRoute: "/apps/personal",
@@ -5315,7 +5315,7 @@ describe("Formless Site CLI", () => {
     await writeArchiveDirectory(outDir, instanceArchive([appArchive("david", "David Peek")]));
     responses.queueJson(
       {
-        packageApps: listBundledAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages().map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -5330,7 +5330,7 @@ describe("Formless Site CLI", () => {
     );
     responses.queueJson({ setupComplete: true });
     responses.queueJson({
-      packages: listBundledAppPackages(),
+      packages: listInstallableAppPackages(),
       installs: [installedSite("david", "David Peek")],
     });
     responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
@@ -5364,58 +5364,32 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Archive restore dry run ok.");
   });
 
-  it("normalizes older supported archive restore dry-runs before posting to the target", async () => {
+  it("rejects older archive restore dry-runs before posting to the target", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "legacy-instance-restore");
     const requests: CapturedFetchRequest[] = [];
-    const responses = responseQueue();
-    const logs: string[] = [];
 
     await mkdir(outDir, { recursive: true });
     await writeFile(
       path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
       `${JSON.stringify(legacyV1Archive(instanceArchive([appArchive("david", "David Peek")])), null, 2)}\n`,
     );
-    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
-    responses.queueJson({ setupComplete: true });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
-    });
-    responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
 
-    await runFormlessCli(
-      ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
-      cliDeps(tempDir, {
-        fetch: responses.fetcher(requests),
-        logs,
-      }),
-    );
-
-    const restoreRequest = requests.at(-1);
-    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
-
-    expect(restoreBody.archive.version).toBe(ARCHIVE_VERSION);
-    expect(restoreBody.archive.apps[0]?.app).toMatchObject({
-      packageRevision: packageAppFactsForKey("site")!.packageRevision,
-      sourceSchemaHash: packageAppFactsForKey("site")!.sourceSchemaHash,
-    });
-    expect(logs.at(-1)).toContain(
-      `Archive input: kind=formless.instanceArchive; version=1; readable=yes; archivePath=${path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE)}.`,
-    );
-    expect(logs.at(-1)).toContain("archive-normalization [ready] safety=auto-with-backup");
-    expect(logs.at(-1)).toContain(
-      "Archive normalization: archive.instance.v1-to-v2.package-facts formless.instanceArchive version 1->2.",
-    );
-    expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+    await expect(
+      runFormlessCli(
+        ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
+        cliDeps(tempDir, {
+          fetch: responseQueue().fetcher(requests),
+        }),
+      ),
+    ).rejects.toThrow("Instance archive version must be 2.");
+    expect(requests).toEqual([]);
   });
 
-  it("reports legacy control-plane entity normalization in archive restore dry-runs", async () => {
+  it("rejects legacy control-plane entity spellings in archive restore dry-runs", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "legacy-control-plane-restore");
     const requests: CapturedFetchRequest[] = [];
-    const responses = responseQueue();
-    const logs: string[] = [];
     const archive: InstanceArchive = {
       ...instanceArchive([appArchive("david", "David Peek")]),
       capabilities: [
@@ -5438,32 +5412,16 @@ describe("Formless Site CLI", () => {
       path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
       `${JSON.stringify(archive, null, 2)}\n`,
     );
-    responses.queueJson(currentDeployMetadata(), 200, { "Cache-Control": "no-store" });
-    responses.queueJson({ setupComplete: true });
-    responses.queueJson({
-      packages: listBundledAppPackages(),
-      installs: [installedSite("david", "David Peek")],
-    });
-    responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
 
-    await runFormlessCli(
-      ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
-      cliDeps(tempDir, {
-        fetch: responses.fetcher(requests),
-        logs,
-      }),
-    );
-
-    const restoreRequest = requests.at(-1);
-    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
-
-    expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toContain(
-      "instance:app-install",
-    );
-    expect(logs.at(-1)).toContain(
-      "Archive normalization: archive.instance.control-plane-entity-names formless.instanceArchive version 2->2 (appInstall -> instance:app-install (1 record)).",
-    );
-    expect(logs.at(-1)).toContain("Archive restore dry run ok.");
+    await expect(
+      runFormlessCli(
+        ["archive", "restore", "--target", "https://instance.example", "--archive", outDir],
+        cliDeps(tempDir, {
+          fetch: responseQueue().fetcher(requests),
+        }),
+      ),
+    ).rejects.toThrow('must be a qualified entity name in "<schema-key>:<entity-key>" format');
+    expect(requests).toEqual([]);
   });
 
   it("rejects unsupported archive versions before restore mutation", async () => {
@@ -5502,9 +5460,7 @@ describe("Formless Site CLI", () => {
           fetch: responseQueue().fetcher(requests),
         }),
       ),
-    ).rejects.toThrow(
-      "Archive version 0 has no registered normalizer for formless.instanceArchive.",
-    );
+    ).rejects.toThrow("Instance archive version must be 2.");
     expect(requests).toEqual([]);
   });
 
@@ -5985,20 +5941,6 @@ function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredR
   ];
 }
 
-function currentDeployMetadata() {
-  return {
-    packageApps: listBundledAppPackages().map((appPackage) => ({
-      packageAppKey: appPackage.packageAppKey,
-      packageRevision: appPackage.packageRevision,
-      sourceSchemaHash: appPackage.sourceSchemaHash,
-    })),
-    packageVersion: packageJson.version,
-    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
-    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
-    version: packageJson.version,
-  };
-}
-
 function instanceArchive(apps: AppArchive[]): InstanceArchive {
   return {
     kind: INSTANCE_ARCHIVE_KIND,
@@ -6197,7 +6139,7 @@ function archiveFetch(
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json(
         {
-          packageApps: listBundledAppPackages().map((appPackage) => ({
+          packageApps: listInstallableAppPackages().map((appPackage) => ({
             packageAppKey: appPackage.packageAppKey,
             packageRevision: appPackage.packageRevision,
             sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -6217,7 +6159,7 @@ function archiveFetch(
 
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
-        packages: [...listBundledAppPackages(), ...extraPackages],
+        packages: [...listInstallableAppPackages(), ...extraPackages],
         installs,
       });
     }
@@ -6726,7 +6668,7 @@ function localInstanceDevFetch(
 
     if (method === "GET" && parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
-        packages: listBundledAppPackages(),
+        packages: listInstallableAppPackages(),
         installs,
       });
     }

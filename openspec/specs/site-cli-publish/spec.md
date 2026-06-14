@@ -144,6 +144,8 @@ optional first app install, credential setup, and deploy operations.
 - **THEN** the product instance runtime starts with workspace-local persistence
 - **AND** the CLI builds the active package resolver from bundled packages plus
   linked packages declared in `formless.packages.json` when present
+- **AND** installable package lists shown before the workspace has installed
+  apps come from that active resolver
 - **AND** first-run local runtime state starts from workspace control-plane
   record source and app archives when present
 - **AND** the browser can complete onboarding before any Cloudflare deploy
@@ -256,14 +258,9 @@ Formless instances.
   app install package facts, archive state when relevant, and deployment status
 - AND local package metadata comes from the active resolver built from bundled
   packages plus workspace-linked package manifests when present
-- AND the CLI reports code deploy, SQL migration, package app migration, archive
-  normalization, backup, and browser reload requirements
-
-#### Scenario: Report archive normalization evidence
-
-- WHEN an archive restore dry-run reads an older supported archive envelope
-- THEN the CLI normalizes the archive before posting the dry-run restore
-- AND output reports the archive normalizer id and from/to archive versions
+- AND the CLI reports code deploy, SQL migration, package app migration, backup,
+  and browser reload requirements
+- AND older archive compatibility normalization is not part of upgrade planning
 
 #### Scenario: Dry-run remains non-mutating
 

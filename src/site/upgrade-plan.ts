@@ -1,10 +1,5 @@
 import type { PackageAppKey } from "../shared/app-installs.ts";
-import {
-  APP_ARCHIVE_KIND,
-  ARCHIVE_VERSION,
-  INSTANCE_ARCHIVE_KIND,
-  findArchiveNormalizer,
-} from "@dpeek/formless-archive";
+import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, INSTANCE_ARCHIVE_KIND } from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -24,7 +19,7 @@ import type {
 } from "./instance-target-client.ts";
 
 export type CliUpgradePlanStepType =
-  | "archive-normalization"
+  | "archive-input"
   | "backup"
   | "browser-reload"
   | "code-deploy"
@@ -128,16 +123,16 @@ export type CliUpgradeManualApprovalStep = CliUpgradePlanStepBase & {
   type: "manual-approval";
 };
 
-export type CliUpgradeArchiveNormalizationStep = CliUpgradePlanStepBase & {
+export type CliUpgradeArchiveInputStep = CliUpgradePlanStepBase & {
   archiveKind?: string | null;
-  fromArchiveVersion?: number | string | null;
-  normalizationStatus: "available" | "unsupported";
-  toArchiveVersion?: number | string | null;
-  type: "archive-normalization";
+  archiveStatus: "unsupported";
+  archiveVersion?: number | string | null;
+  expectedArchiveVersion?: number;
+  type: "archive-input";
 };
 
 export type CliUpgradePlanStep =
-  | CliUpgradeArchiveNormalizationStep
+  | CliUpgradeArchiveInputStep
   | CliUpgradeBackupStep
   | CliUpgradeBrowserReloadStep
   | CliUpgradeCodeDeployStep
@@ -261,11 +256,14 @@ function formatPlanStep(step: CliUpgradePlanStep, index: number): string[] {
 
 function formatStepDetails(step: CliUpgradePlanStep): string {
   switch (step.type) {
-    case "archive-normalization":
+    case "archive-input":
       return compactJoin([
         formatValue("archiveKind", step.archiveKind ?? "unknown"),
-        formatTransition("version", step.fromArchiveVersion, step.toArchiveVersion ?? "current"),
-        formatValue("normalization", step.normalizationStatus),
+        formatValue("version", step.archiveVersion ?? "unknown"),
+        step.expectedArchiveVersion === undefined
+          ? null
+          : formatValue("expectedVersion", step.expectedArchiveVersion),
+        formatValue("support", step.archiveStatus),
       ]);
     case "backup":
       return compactJoin([
@@ -405,12 +403,12 @@ function plannedUpgradeSteps(input: {
     });
   }
 
-  steps.push(...archiveNormalizationSteps(input.status, input.target));
+  steps.push(...archiveInputSteps(input.status, input.target));
 
   return steps;
 }
 
-function archiveNormalizationSteps(
+function archiveInputSteps(
   status: FormlessInstanceTargetUpgradeStatus,
   target: CliUpgradePlanTargetIdentity,
 ): CliUpgradePlanStep[] {
@@ -429,16 +427,16 @@ function archiveNormalizationSteps(
     return [
       {
         archiveKind: archiveInput.kind,
-        fromArchiveVersion: archiveInput.version,
+        archiveStatus: "unsupported",
+        archiveVersion: archiveInput.version,
         id: "unsupported-archive-input",
-        normalizationStatus: "unsupported",
         requiredEvidence: [],
         safety: "manual-approval",
         status: "blocked",
         statusReason: `Archive manifest is not readable: ${archiveInput.error ?? "unknown error"}`,
         summary: "Reject unreadable archive before restore",
         target: stepTarget,
-        type: "archive-normalization",
+        type: "archive-input",
       },
     ];
   }
@@ -447,16 +445,16 @@ function archiveNormalizationSteps(
     return [
       {
         archiveKind: archiveInput.kind,
-        fromArchiveVersion: archiveInput.version,
+        archiveStatus: "unsupported",
+        archiveVersion: archiveInput.version,
         id: "unsupported-archive-kind",
-        normalizationStatus: "unsupported",
         requiredEvidence: [],
         safety: "manual-approval",
         status: "blocked",
-        statusReason: `Archive kind ${archiveInput.kind ?? "unknown"} has no registered normalizer`,
+        statusReason: `Archive kind ${archiveInput.kind ?? "unknown"} is unsupported`,
         summary: "Reject unsupported archive before restore",
         target: stepTarget,
-        type: "archive-normalization",
+        type: "archive-input",
       },
     ];
   }
@@ -465,47 +463,20 @@ function archiveNormalizationSteps(
     return [];
   }
 
-  const normalizer = findArchiveNormalizer({
-    archiveKind: archiveInput.kind,
-    version: archiveInput.version,
-  });
-
-  if (normalizer) {
-    return [
-      {
-        archiveKind: archiveInput.kind,
-        fromArchiveVersion: archiveInput.version,
-        id: normalizer.normalizerId,
-        normalizationStatus: "available",
-        requiredEvidence: [
-          {
-            description: `${normalizer.normalizerId} output manifest version ${ARCHIVE_VERSION}`,
-            kind: "archive-normalization",
-          },
-        ],
-        safety: "auto-with-backup",
-        status: "ready",
-        summary: "Normalize older archive before restore",
-        target: stepTarget,
-        toArchiveVersion: ARCHIVE_VERSION,
-        type: "archive-normalization",
-      },
-    ];
-  }
-
   return [
     {
       archiveKind: archiveInput.kind,
-      fromArchiveVersion: archiveInput.version,
+      archiveStatus: "unsupported",
+      archiveVersion: archiveInput.version,
+      expectedArchiveVersion: ARCHIVE_VERSION,
       id: "unsupported-archive-version",
-      normalizationStatus: "unsupported",
       requiredEvidence: [],
       safety: "manual-approval",
       status: "blocked",
-      statusReason: `Archive version ${archiveInput.version ?? "unknown"} has no registered normalizer`,
+      statusReason: `Archive version ${archiveInput.version ?? "unknown"} is unsupported; expected version ${ARCHIVE_VERSION}`,
       summary: "Reject unsupported archive before restore",
       target: stepTarget,
-      type: "archive-normalization",
+      type: "archive-input",
     },
   ];
 }
