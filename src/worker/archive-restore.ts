@@ -13,11 +13,12 @@ import {
   type PortableArchive,
   type SourceArchiveRecord,
 } from "@dpeek/formless-archive";
-import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
+import type { AppInstall, InstallableAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
+import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "@dpeek/formless-media";
 import {
   restoreImageMedia,
@@ -26,7 +27,6 @@ import {
 } from "@dpeek/formless-media/worker";
 import type { BootstrapResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
-import type { SchemaKey } from "../shared/schema-apps.ts";
 import {
   readInstanceAppInstalls,
   restoreInstanceAppInstall,
@@ -59,7 +59,8 @@ export type ArchiveRestoreMediaAdapter = {
 
 export type ArchiveRestoreApplyTarget = {
   listInstalledApps: () => AppInstall[] | Promise<AppInstall[]>;
-  packages?: readonly BundledAppPackage[];
+  packageResolver?: AppPackageResolver;
+  packages?: readonly InstallableAppPackage[];
   restoreControlPlane?: (controlPlane: InstanceArchiveControlPlane) => void | Promise<void>;
   restoreAppData: (input: {
     app: AppInstall;
@@ -71,7 +72,7 @@ export type ArchiveRestoreApplyTarget = {
     install: AppInstall;
   }) => void | Promise<void>;
   media?: ArchiveRestoreMediaAdapter;
-  sourceSchemas?: Partial<Record<SchemaKey, AppSchema>>;
+  sourceSchemas?: Partial<Record<string, AppSchema>>;
 };
 
 export type ArchiveRestoreExecutionErrorCode =
@@ -244,10 +245,13 @@ export async function applyPortableArchiveRestore(
     const archiveApp = archiveApps.get(step.appInstallId);
     const identity =
       archiveApp &&
-      installedAppStorageIdentity({
-        installId: archiveApp.app.installId,
-        packageAppKey: archiveApp.app.packageAppKey,
-      });
+      installedAppStorageIdentity(
+        {
+          installId: archiveApp.app.installId,
+          packageAppKey: archiveApp.app.packageAppKey,
+        },
+        target.packageResolver,
+      );
 
     if (!archiveApp || !identity) {
       return {
@@ -665,10 +669,8 @@ function stepReports(steps: readonly ArchiveRestorePlanStep[]): ArchiveRestoreSt
   });
 }
 
-function workerSourceSchemas(): Partial<Record<SchemaKey, AppSchema>> {
-  return Object.fromEntries(workerSchemaApps.map((app) => [app.key, app.sourceSchema])) as Partial<
-    Record<SchemaKey, AppSchema>
-  >;
+function workerSourceSchemas(): Partial<Record<string, AppSchema>> {
+  return Object.fromEntries(workerSchemaApps.map((app) => [app.key, app.sourceSchema]));
 }
 
 function restoreFailure(

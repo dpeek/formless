@@ -45,7 +45,7 @@ import { useRecordsById } from "../../client/store.ts";
 import {
   listBundledAppPackages,
   type AppInstall,
-  type BundledAppPackage,
+  type InstallableAppPackage,
   type PackageAppKey,
 } from "../../shared/app-installs.ts";
 import {
@@ -134,7 +134,7 @@ export type InstanceShellRouteState =
       installing: boolean;
       installingPackageAppKey?: PackageAppKey;
       installs: AppInstall[];
-      packages: BundledAppPackage[];
+      packages: InstallableAppPackage[];
       status: "ready";
     };
 
@@ -2457,7 +2457,7 @@ function PackageTypeSwitcher({
 }: {
   isDisabled: boolean;
   onSelect: (packageAppKey: PackageAppKey) => void;
-  packages: readonly BundledAppPackage[];
+  packages: readonly InstallableAppPackage[];
   selectedPackageAppKey: PackageAppKey;
 }) {
   return (
@@ -2495,7 +2495,7 @@ function PackageInstallFields({
   isDisabled,
   onDraftChange,
 }: {
-  appPackage: BundledAppPackage;
+  appPackage: InstallableAppPackage;
   draft: PackageInstallDraft;
   installError: string | undefined;
   isDisabled: boolean;
@@ -2562,7 +2562,7 @@ function initializePackageInstallDrafts({
 }: {
   currentDrafts: PackageInstallDrafts;
   installs: readonly AppInstall[];
-  packages: readonly BundledAppPackage[];
+  packages: readonly InstallableAppPackage[];
 }): PackageInstallDrafts {
   const nextDrafts: PackageInstallDrafts = {};
 
@@ -2580,7 +2580,10 @@ function initializePackageInstallDrafts({
   return nextDrafts;
 }
 
-function availableDefaultInstallId(appPackage: BundledAppPackage, installs: readonly AppInstall[]) {
+function availableDefaultInstallId(
+  appPackage: InstallableAppPackage,
+  installs: readonly AppInstall[],
+) {
   const installedIds = new Set(installs.map((install) => install.installId));
 
   if (!installedIds.has(appPackage.defaultInstallId)) {

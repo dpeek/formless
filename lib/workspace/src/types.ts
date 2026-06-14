@@ -21,6 +21,10 @@ export const DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT = "media";
 export const DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT = ".formless/local";
 export const DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT = ".formless";
 
+export const WORKSPACE_PACKAGE_LINKS_FILE = "formless.packages.json";
+export const WORKSPACE_PACKAGE_LINKS_VERSION = 1;
+export const WORKSPACE_PACKAGE_LINKS_KIND = "formless.workspacePackages";
+
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND =
@@ -53,6 +57,18 @@ export const WORKSPACE_OPERATION_STATE_FILE_VERSION = 1;
 export const WORKSPACE_OPERATION_STATE_ROOT = ".formless/operations";
 
 export type WorkspaceOperationActor = "automation" | "browser" | "cli" | "system";
+
+export type WorkspacePackageLink = {
+  manifest: string;
+};
+
+export type WorkspacePackageLinks = {
+  version: typeof WORKSPACE_PACKAGE_LINKS_VERSION;
+  kind: typeof WORKSPACE_PACKAGE_LINKS_KIND;
+  links: WorkspacePackageLink[];
+};
+
+export type FormatWorkspacePackageLinksInput = WorkspacePackageLinks;
 
 export type WorkspaceOperationActorPolicy = {
   allowedActors: readonly WorkspaceOperationActor[];

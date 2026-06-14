@@ -1,7 +1,6 @@
 import {
   appInstallInitializationPlan,
   findAppInstall,
-  listBundledAppPackages,
   type AppInstall,
 } from "../shared/app-installs.ts";
 import {
@@ -33,14 +32,20 @@ import {
   readLegacyInstanceAppInstalls,
   resetInstanceAppInstallTables,
 } from "./instance-app-installs-state.ts";
+import {
+  activeAppPackageResolver,
+  listActiveAppPackages,
+  type ActiveRuntimeAppPackageEnv,
+} from "./runtime-app-packages.ts";
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 export const INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX = "/package-migrations/apply";
 export const INTERNAL_RESET_INSTANCE_APP_INSTALLS_PATH = "/_internal/reset-instance-app-installs";
 
-export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv & {
-  FORMLESS_AUTHORITY: DurableObjectNamespace;
-};
+export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv &
+  ActiveRuntimeAppPackageEnv & {
+    FORMLESS_AUTHORITY: DurableObjectNamespace;
+  };
 
 export async function handleInstanceAppInstallsApiRequest(
   request: Request,
@@ -201,7 +206,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       }
 
       const response: CreateAppInstallResponse = {
-        initialization: appInstallInitializationPlan(install),
+        initialization: appInstallInitializationPlan(install, activeAppPackageResolver(env)),
         install,
         installs,
       };
@@ -338,7 +343,7 @@ async function appInstallsResponse(
   env: InstanceAppInstallsApiEnv,
 ): Promise<AppInstallsResponse> {
   return {
-    packages: listBundledAppPackages(),
+    packages: listActiveAppPackages(env),
     installs: await readBackfilledControlPlaneAppInstalls(storage, env, request.url),
   };
 }
@@ -356,7 +361,9 @@ export async function readBackfilledControlPlaneAppInstalls(
         requestUrl,
       ),
       {
-        body: JSON.stringify({ installs: readLegacyInstanceAppInstalls(storage) }),
+        body: JSON.stringify({
+          installs: readLegacyInstanceAppInstalls(storage, activeAppPackageResolver(env)),
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       },

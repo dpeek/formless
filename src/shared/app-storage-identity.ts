@@ -1,9 +1,5 @@
-import {
-  findBundledAppPackage,
-  validateAppInstallId,
-  type AppInstallId,
-  type PackageAppKey,
-} from "./app-installs.ts";
+import { validateAppInstallId, type AppInstallId, type PackageAppKey } from "./app-installs.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "./app-packages.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -37,8 +33,8 @@ export type InstalledAppStorageIdentity = {
   kind: "appInstall";
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
-  sourceSchemaKey: SchemaKey;
-  seedRecordsKey: SchemaKey;
+  sourceSchemaKey: string;
+  seedRecordsKey: string;
   authorityName: `app:${AppInstallId}`;
   apiRoutePrefix: `/api/app-installs/${PackageAppKey}/${AppInstallId}`;
   browserDatabaseName: string;
@@ -73,12 +69,15 @@ export function schemaKeyStorageIdentity(
   };
 }
 
-export function installedAppStorageIdentity(input: {
-  installId: string;
-  packageAppKey: string;
-  projectId?: string;
-}): InstalledAppStorageIdentity | undefined {
-  const packageApp = findBundledAppPackage(input.packageAppKey);
+export function installedAppStorageIdentity(
+  input: {
+    installId: string;
+    packageAppKey: string;
+    projectId?: string;
+  },
+  resolver?: AppPackageResolver,
+): InstalledAppStorageIdentity | undefined {
+  const packageApp = findResolvedAppPackage(input.packageAppKey, resolver);
   const installId = validateAppInstallId(input.installId);
 
   if (!packageApp || !installId.ok) {
@@ -120,8 +119,11 @@ export function instanceControlPlaneStorageIdentity(
   };
 }
 
-export function parseAuthorityApiRoute(pathname: string): AuthorityApiRoute | undefined {
-  return parseInstalledAppApiRoute(pathname) ?? parseSchemaKeyApiRoute(pathname);
+export function parseAuthorityApiRoute(
+  pathname: string,
+  resolver?: AppPackageResolver,
+): AuthorityApiRoute | undefined {
+  return parseInstalledAppApiRoute(pathname, resolver) ?? parseSchemaKeyApiRoute(pathname);
 }
 
 export function parseInstanceControlPlaneApiRoute(pathname: string):
@@ -149,7 +151,10 @@ export function parseInstanceControlPlaneApiRoute(pathname: string):
   };
 }
 
-function parseInstalledAppApiRoute(pathname: string): AuthorityApiRoute | undefined {
+function parseInstalledAppApiRoute(
+  pathname: string,
+  resolver?: AppPackageResolver,
+): AuthorityApiRoute | undefined {
   const [apiSegment, appInstallsSegment, packageAppKey, installId, ...routeSegments] = pathname
     .split("/")
     .filter(Boolean);
@@ -164,7 +169,7 @@ function parseInstalledAppApiRoute(pathname: string): AuthorityApiRoute | undefi
     return undefined;
   }
 
-  const identity = installedAppStorageIdentity({ installId, packageAppKey });
+  const identity = installedAppStorageIdentity({ installId, packageAppKey }, resolver);
 
   return identity ? { identity, path: `/${routeSegments.join("/")}` } : undefined;
 }

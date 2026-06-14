@@ -2,7 +2,7 @@ import { parseAppSchema, type AppSchema, type SchemaActionActorKind } from "@dpe
 import type {
   AppInstall,
   AppInstallInitializationPlan,
-  BundledAppPackage,
+  InstallableAppPackage,
   PackageAppKey,
 } from "./app-installs.ts";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
@@ -313,7 +313,7 @@ export type OwnerSetupCompleteResponse = {
 };
 
 export type AppInstallsResponse = {
-  packages: BundledAppPackage[];
+  packages: InstallableAppPackage[];
   installs: AppInstall[];
 };
 

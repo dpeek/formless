@@ -60,13 +60,13 @@ import {
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
-  listBundledAppPackages,
   packageAppFactsForKey,
   type AppInstall,
-  type BundledAppPackage,
+  type InstallableAppPackage,
   type PackageAppKey,
 } from "../shared/app-installs.ts";
 import {
+  findResolvedAppPackage,
   listResolvedAppPackages,
   type AppPackageResolver,
   type ResolvedAppPackage,
@@ -275,7 +275,7 @@ export async function readFormlessInstanceTargetStatus(
     ),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
     readFormlessInstanceAppRegistryResult(
-      { adminToken: input.adminToken, targetUrl },
+      { adminToken: input.adminToken, packageResolver: input.packageResolver, targetUrl },
       dependencies,
     ),
     input.includeDeploymentStatus
@@ -570,7 +570,7 @@ export async function readFormlessInstanceOwnerSetupStatus(
 }
 
 export async function readFormlessInstanceAppRegistry(
-  input: { targetUrl: string },
+  input: { packageResolver?: AppPackageResolver; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<AppInstallsResponse> {
   return (await readFormlessInstanceAppRegistryResult(input, dependencies)).appRegistry;
@@ -619,6 +619,7 @@ export async function applyFormlessInstalledAppAutoSafePackageMigrations(
     adminToken?: string | null;
     installId: string;
     packageAppKey: PackageAppKey;
+    packageResolver?: AppPackageResolver;
     targetUrl: string;
   },
   dependencies: FormlessInstanceTargetClientDependencies,
@@ -636,11 +637,12 @@ export async function applyFormlessInstalledAppAutoSafePackageMigrations(
       method: "POST",
     }),
     applyUrl,
+    input.packageResolver,
   );
 }
 
 async function readFormlessInstanceAppRegistryResult(
-  input: { adminToken?: string | null; targetUrl: string },
+  input: { adminToken?: string | null; packageResolver?: AppPackageResolver; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceAppRegistryReadResult> {
   const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
@@ -649,7 +651,7 @@ async function readFormlessInstanceAppRegistryResult(
   const value = await fetchJson(dependencies.fetch, registryUrl, {
     headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
   });
-  const appRegistry = parseAppRegistry(value, registryUrl);
+  const appRegistry = parseAppRegistry(value, registryUrl, input.packageResolver);
 
   return {
     appRegistry,
@@ -1221,13 +1223,17 @@ function parseOwnerSetupStatus(value: unknown, context: string): OwnerSetupStatu
   };
 }
 
-function parseAppRegistry(value: unknown, context: string): AppInstallsResponse {
+function parseAppRegistry(
+  value: unknown,
+  context: string,
+  packageResolver?: AppPackageResolver,
+): AppInstallsResponse {
   if (!isRecord(value) || !Array.isArray(value.packages) || !Array.isArray(value.installs)) {
     throw new Error(`${context} failed: app registry must include packages and installs arrays.`);
   }
 
   const packages = value.packages.map((appPackage, index) =>
-    parseBundledPackageApp(appPackage, `${context} packages[${index}]`),
+    parseInstallablePackageApp(appPackage, `${context} packages[${index}]`, packageResolver),
   );
   const packagesByKey = new Map(
     packages.map((appPackage) => [appPackage.packageAppKey, appPackage]),
@@ -1235,7 +1241,7 @@ function parseAppRegistry(value: unknown, context: string): AppInstallsResponse 
 
   return {
     installs: value.installs.map((install, index) =>
-      parseAppInstall(install, packagesByKey, `${context} installs[${index}]`),
+      parseAppInstall(install, packagesByKey, `${context} installs[${index}]`, packageResolver),
     ),
     packages,
   };
@@ -1255,12 +1261,17 @@ function parseInstanceUpgradeStatusResponse(
 function parsePackageMigrationApplyResponse(
   value: unknown,
   context: string,
+  packageResolver?: AppPackageResolver,
 ): FormlessInstancePackageMigrationApplyResponse {
   if (!isRecord(value)) {
     throw new Error(`${context} failed: package migration apply response must be an object.`);
   }
 
-  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const packageAppKey = parsePackageAppKey(
+    value.packageAppKey,
+    `${context} packageAppKey`,
+    packageResolver,
+  );
   const packageRevision = parseOptionalPositiveInteger(
     value.packageRevision,
     1 as PackageAppRevision,
@@ -1268,7 +1279,7 @@ function parsePackageMigrationApplyResponse(
   );
   const sourceSchemaHash = parseOptionalSourceSchemaHash(
     value.sourceSchemaHash,
-    packageAppFactsForKey(packageAppKey)?.sourceSchemaHash ?? undefined,
+    packageAppFactsForKey(packageAppKey, packageResolver)?.sourceSchemaHash ?? undefined,
     `${context} sourceSchemaHash`,
   );
 
@@ -1284,7 +1295,11 @@ function parsePackageMigrationApplyResponse(
 
   return {
     applied: value.applied.map((migration, index) =>
-      parsePackageAppMigrationAppliedState(migration, `${context} applied[${index}]`),
+      parsePackageAppMigrationAppliedState(
+        migration,
+        `${context} applied[${index}]`,
+        packageResolver,
+      ),
     ),
     changes: value.changes,
     cursor: value.cursor,
@@ -1292,7 +1307,11 @@ function parsePackageMigrationApplyResponse(
     packageRevision,
     schemaUpdatedAt: value.schemaUpdatedAt,
     skipped: value.skipped.map((migration, index) =>
-      parsePackageAppMigrationAppliedState(migration, `${context} skipped[${index}]`),
+      parsePackageAppMigrationAppliedState(
+        migration,
+        `${context} skipped[${index}]`,
+        packageResolver,
+      ),
     ),
     sourceSchemaHash,
   };
@@ -1301,15 +1320,20 @@ function parsePackageMigrationApplyResponse(
 function parsePackageAppMigrationAppliedState(
   value: unknown,
   context: string,
+  packageResolver?: AppPackageResolver,
 ): UpgradePackageAppMigrationAppliedState {
   if (!isRecord(value)) {
     throw new Error(`${context} failed: package migration evidence must be an object.`);
   }
 
-  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const packageAppKey = parsePackageAppKey(
+    value.packageAppKey,
+    `${context} packageAppKey`,
+    packageResolver,
+  );
   const sourceSchemaHash = parseOptionalSourceSchemaHash(
     value.sourceSchemaHash,
-    packageAppFactsForKey(packageAppKey)?.sourceSchemaHash ?? undefined,
+    packageAppFactsForKey(packageAppKey, packageResolver)?.sourceSchemaHash ?? undefined,
     `${context} sourceSchemaHash`,
   );
 
@@ -1389,15 +1413,21 @@ function parseDeployPackageApp(
   };
 }
 
-function parseBundledPackageApp(value: unknown, context: string): BundledAppPackage {
+function parseInstallablePackageApp(
+  value: unknown,
+  context: string,
+  packageResolver?: AppPackageResolver,
+): InstallableAppPackage {
   if (!isRecord(value)) {
-    throw new Error(`${context} failed: bundled package metadata must be an object.`);
+    throw new Error(`${context} failed: package metadata must be an object.`);
   }
 
-  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
-  const localPackage = listBundledAppPackages().find(
-    (appPackage) => appPackage.packageAppKey === packageAppKey,
+  const packageAppKey = parsePackageAppKey(
+    value.packageAppKey,
+    `${context} packageAppKey`,
+    packageResolver,
   );
+  const localPackage = findResolvedAppPackage(packageAppKey, packageResolver);
 
   if (!localPackage) {
     throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
@@ -1407,12 +1437,12 @@ function parseBundledPackageApp(value: unknown, context: string): BundledAppPack
     value.publicRouteBase,
     localPackage.publicRouteBase,
   );
-  const sourceSchemaKey = parseRequiredBundledSchemaKey(
+  const sourceSchemaKey = parseRequiredString(
     value.sourceSchemaKey,
     localPackage.sourceSchemaKey,
     `${context} sourceSchemaKey`,
   );
-  const seedRecordsKey = parseRequiredBundledSchemaKey(
+  const seedRecordsKey = parseRequiredString(
     value.seedRecordsKey,
     localPackage.seedRecordsKey,
     `${context} seedRecordsKey`,
@@ -1451,12 +1481,10 @@ function parseBundledPackageApp(value: unknown, context: string): BundledAppPack
     sourceSchemaLocation: {
       ...localPackage.sourceSchemaLocation,
       key: sourceSchemaKey,
-      path: `schema/apps/${sourceSchemaKey}/schema.json`,
     },
     seedRecordsLocation: {
       ...localPackage.seedRecordsLocation,
       key: seedRecordsKey,
-      path: `schema/apps/${seedRecordsKey}/seed-records.json`,
     },
     adminRouteBase: parseRouteBase(value.adminRouteBase, localPackage.adminRouteBase),
     ...(publicRouteBase === undefined ? {} : { publicRouteBase }),
@@ -1465,8 +1493,9 @@ function parseBundledPackageApp(value: unknown, context: string): BundledAppPack
 
 function parseAppInstall(
   value: unknown,
-  packagesByKey: ReadonlyMap<PackageAppKey, BundledAppPackage>,
+  packagesByKey: ReadonlyMap<PackageAppKey, InstallableAppPackage>,
   context: string,
+  packageResolver?: AppPackageResolver,
 ): AppInstall {
   if (!isRecord(value)) {
     throw new Error(`${context} failed: app install metadata must be an object.`);
@@ -1474,8 +1503,7 @@ function parseAppInstall(
 
   const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
   const packageApp =
-    packagesByKey.get(packageAppKey) ??
-    listBundledAppPackages().find((candidate) => candidate.packageAppKey === packageAppKey);
+    packagesByKey.get(packageAppKey) ?? findResolvedAppPackage(packageAppKey, packageResolver);
 
   if (!packageApp) {
     throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
@@ -1541,23 +1569,6 @@ function parsePackageAppKey(
   }
 
   return value as PackageAppKey;
-}
-
-function parseRequiredBundledSchemaKey(
-  value: unknown,
-  fallback: BundledAppPackage["sourceSchemaKey"],
-  context: string,
-): BundledAppPackage["sourceSchemaKey"] {
-  const packageAppKey = value === undefined ? fallback : parsePackageAppKey(value, context);
-  const bundledPackage = listBundledAppPackages().find(
-    (candidate) => candidate.packageAppKey === packageAppKey,
-  );
-
-  if (!bundledPackage) {
-    throw new Error(`${context} failed: bundled schema key is unsupported.`);
-  }
-
-  return bundledPackage.packageAppKey;
 }
 
 function parseOptionalPositiveInteger(
@@ -1628,7 +1639,7 @@ function adminJsonHeaders(adminToken: string | null | undefined): Record<string,
   return siteCliTargetJsonHeaders({ adminToken });
 }
 
-function parseRouteBase(value: unknown, fallback: BundledAppPackage["adminRouteBase"]): "/apps" {
+function parseRouteBase(value: unknown, fallback: "/apps"): "/apps" {
   const routeBase = parseRequiredString(value, fallback, "app registry adminRouteBase");
 
   if (routeBase !== "/apps") {
@@ -1640,7 +1651,7 @@ function parseRouteBase(value: unknown, fallback: BundledAppPackage["adminRouteB
 
 function parseOptionalRouteBase(
   value: unknown,
-  fallback: BundledAppPackage["publicRouteBase"],
+  fallback: "/sites" | undefined,
 ): "/sites" | undefined {
   if (value === undefined) {
     return fallback;

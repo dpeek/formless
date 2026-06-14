@@ -16,12 +16,11 @@ import {
 import {
   listBundledAppPackages,
   type AppInstall,
-  type BundledAppPackage,
+  type InstallableAppPackage,
 } from "../../../src/shared/app-installs.ts";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "../../../src/shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
-import type { SchemaKey } from "../../../src/shared/schema-apps.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
@@ -41,8 +40,8 @@ export type ArchiveRestoreMediaFile = {
 export type ArchiveRestoreTargetState = {
   installedApps?: readonly AppInstall[];
   mediaFiles?: readonly ArchiveRestoreMediaFile[];
-  packages?: readonly BundledAppPackage[];
-  sourceSchemas?: Partial<Record<SchemaKey, AppSchema>>;
+  packages?: readonly InstallableAppPackage[];
+  sourceSchemas?: Partial<Record<string, AppSchema>>;
 };
 
 export type ArchiveRestorePlanErrorCode =
@@ -146,8 +145,8 @@ export type ArchiveRestorePlanResult =
 type PlannerContext = {
   existingInstallsById: Map<string, AppInstall>;
   mediaFilesByPath: Map<string, ArchiveRestoreMediaFile> | undefined;
-  packagesByKey: Map<string, BundledAppPackage>;
-  sourceSchemas: Partial<Record<SchemaKey, AppSchema>> | undefined;
+  packagesByKey: Map<string, InstallableAppPackage>;
+  sourceSchemas: Partial<Record<string, AppSchema>> | undefined;
 };
 
 export function planPortableArchiveRestore(
@@ -367,7 +366,7 @@ function planAppArchive(
 
 function validatePackageCompatibility(
   app: ArchivedAppInstall,
-  appPackage: BundledAppPackage,
+  appPackage: InstallableAppPackage,
   context: PlannerContext,
   data: AppArchiveData,
   errors: ArchiveRestorePlanError[],
@@ -912,7 +911,10 @@ function planSummary(appPlans: ArchiveRestoreAppPlan[]): ArchiveRestorePlanSumma
   };
 }
 
-function appInstallForArchive(app: ArchivedAppInstall, appPackage: BundledAppPackage): AppInstall {
+function appInstallForArchive(
+  app: ArchivedAppInstall,
+  appPackage: InstallableAppPackage,
+): AppInstall {
   return {
     installId: app.installId,
     packageAppKey: appPackage.packageAppKey,

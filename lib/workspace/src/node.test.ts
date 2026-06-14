@@ -5,21 +5,34 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import rawTaskSeedRecords from "../../../schema/apps/tasks/seed-records.json";
+import rawTaskSourceSchema from "../../../schema/apps/tasks/schema.json";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  findResolvedAppPackage,
+} from "../../../src/shared/app-packages.ts";
+import { computeSourceSchemaHash } from "../../../src/shared/upgrade-migrations.ts";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
   INSTANCE_WORKSPACE_LOCAL_DEV_SECRET_STATE_PATH,
   INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
   INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  WORKSPACE_PACKAGE_LINKS_FILE,
+  createWorkspaceAppPackageResolver,
   createWorkspaceOperationState,
+  defaultWorkspacePackageLinks,
   ensureInstanceWorkspaceLocalDevSecretState,
   ensureInstanceWorkspaceSecretStateIgnored,
+  formatWorkspacePackageLinks,
   formatInstanceWorkspaceLocalDevSecretState,
   formatInstanceWorkspaceSecretState,
   instanceWorkspaceLocalDevSecretStatePath,
   instanceWorkspaceSecretStatePath,
   parseInstanceWorkspaceLocalDevSecretState,
   parseInstanceWorkspaceSecretState,
+  readWorkspacePackageLinks,
   readWorkspaceOperationState,
   readInstanceWorkspaceLocalDevSecretState,
   readInstanceWorkspaceSecretState,
@@ -186,6 +199,125 @@ describe("Formless instance workspace secret state", () => {
   });
 });
 
+describe("workspace app package source resolver", () => {
+  it("defaults to bundled packages when package links are omitted", async () => {
+    const workspaceRoot = await makeTempDir();
+    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+
+    await expect(readWorkspacePackageLinks(workspaceRoot)).resolves.toEqual(
+      defaultWorkspacePackageLinks(),
+    );
+    expect(result.packageLinks).toEqual(defaultWorkspacePackageLinks());
+    expect(result.linkedPackages).toEqual([]);
+    expect(result.resolver.findPackage("site")).toMatchObject({
+      packageAppKey: "site",
+      sourceOrigin: "bundled",
+    });
+    expect(result.resolver.findPackage("private-labs")).toBeUndefined();
+  });
+
+  it("reads sibling linked package manifests, source schemas, and seed records", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "instance");
+    const packageRoot = path.join(root, "app");
+    const sourceSchemaHash = await computeSourceSchemaHash(rawTaskSourceSchema);
+
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot);
+
+    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+    const linkedPackage = result.linkedPackages[0];
+
+    expect(findResolvedAppPackage("private-labs")).toBeUndefined();
+    expect(result.resolver.findPackage("private-labs")).toMatchObject({
+      defaultInstallId: "labs",
+      label: "Private Labs",
+      packageAppKey: "private-labs",
+      packageRevision: 7,
+      seedRecordsKey: "private-labs",
+      sourceOrigin: "workspace",
+      sourceSchemaHash,
+      sourceSchemaKey: "private-labs",
+    });
+    expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
+      "site",
+      "tasks",
+      "estii",
+      "crm",
+      "cleartrace",
+      "private-labs",
+    ]);
+    expect(linkedPackage).toMatchObject({
+      appPackage: expect.objectContaining({ packageAppKey: "private-labs" }),
+      manifest: expect.objectContaining({ packageAppKey: "private-labs" }),
+      manifestPath: path.join(packageRoot, "formless.app.json"),
+      packageRoot,
+      seedRecordsPath: path.join(packageRoot, "source/seed-records.json"),
+      sourceSchemaHash,
+      sourceSchemaPath: path.join(packageRoot, "source/schema.json"),
+    });
+    expect(linkedPackage?.sourceSchema.entities.task).toBeDefined();
+    expect(linkedPackage?.seedRecords.map((record) => record.entity)).toEqual([
+      "task",
+      "task",
+      "task",
+      "task",
+      "task",
+    ]);
+  });
+
+  it("rejects linked source schemas that do not parse as app schemas", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "instance");
+    const packageRoot = path.join(root, "app");
+    const invalidSchema = { version: 1 };
+
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot, { sourceSchema: invalidSchema });
+
+    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
+      'Schema must include "entities".',
+    );
+  });
+
+  it("rejects linked seed records that do not match the source schema", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "instance");
+    const packageRoot = path.join(root, "app");
+
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot, {
+      seedRecords: [
+        {
+          id: "rec_private_invalid",
+          entity: "task",
+          values: { missing: "field", title: "Invalid task", done: false },
+          createdAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
+      'values include unknown field "task.missing"',
+    );
+  });
+
+  it("rejects linked source schema hash mismatches", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "instance");
+    const packageRoot = path.join(root, "app");
+
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot, {
+      sourceSchemaHash: `sha256:${"2".repeat(64)}`,
+    });
+
+    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
+      /does not match manifest sourceSchemaHash/,
+    );
+  });
+});
+
 describe("workspace operation node state", () => {
   it("creates, updates, reads, and lists ignored operation state files", async () => {
     const workspaceRoot = await makeTempDir();
@@ -255,6 +387,80 @@ async function makeTempDir(): Promise<string> {
   await mkdir(tempDir, { recursive: true });
 
   return tempDir;
+}
+
+async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: string): Promise<void> {
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, WORKSPACE_PACKAGE_LINKS_FILE),
+    formatWorkspacePackageLinks({
+      ...defaultWorkspacePackageLinks(),
+      links: [{ manifest }],
+    }),
+  );
+}
+
+async function writePrivatePackageFixture(
+  packageRoot: string,
+  options: {
+    manifestOverrides?: Record<string, unknown>;
+    seedRecords?: unknown;
+    sourceSchema?: unknown;
+    sourceSchemaHash?: string;
+  } = {},
+): Promise<void> {
+  const sourceRoot = path.join(packageRoot, "source");
+  const sourceSchema = options.sourceSchema ?? rawTaskSourceSchema;
+  const seedRecords = options.seedRecords ?? rawTaskSeedRecords;
+  const sourceSchemaHash =
+    options.sourceSchemaHash ?? (await computeSourceSchemaHash(sourceSchema));
+
+  await mkdir(sourceRoot, { recursive: true });
+  await writeJsonFile(path.join(sourceRoot, "schema.json"), sourceSchema);
+  await writeJsonFile(path.join(sourceRoot, "seed-records.json"), seedRecords);
+  await writeJsonFile(
+    path.join(packageRoot, "formless.app.json"),
+    privatePackageManifest({
+      sourceSchemaHash,
+      ...options.manifestOverrides,
+    }),
+  );
+}
+
+function privatePackageManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/seed-records.json",
+    },
+    sourceSchemaHash: `sha256:${"0".repeat(64)}`,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function timestampSequence(...timestamps: string[]): () => string {

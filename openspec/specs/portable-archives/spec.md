@@ -204,9 +204,9 @@ Archive package slice.
 
 ### Requirement: Workspace Source Of Truth
 
-The system SHALL treat layout-only `formless.json`, workspace control-plane
-record source, app archives, and media payloads as the reviewable local source
-of truth for local-first Formless workspaces.
+The system SHALL treat layout-only `formless.json`, optional workspace package
+links, workspace control-plane record source, app archives, and media payloads
+as the reviewable local source of truth for local-first Formless workspaces.
 
 #### Scenario: Fresh local workspace bootstrap
 
@@ -250,6 +250,53 @@ of truth for local-first Formless workspaces.
 - **THEN** the local product instance starts with no installed apps
 - **AND** the user can install the first app through local Authority-backed
   browser actions
+
+### Requirement: Workspace App Package Links
+
+The system SHALL allow a local Formless workspace to link private filesystem app
+package manifests through a reviewable package resolver source file without
+storing package links in instance control-plane records.
+
+#### Scenario: Workspace package link source
+
+- **GIVEN** a workspace contains optional `formless.packages.json`
+- **WHEN** the package link source is read
+- **THEN** the file declares kind `formless.workspacePackages`, version `1`,
+  and an ordered list of app package manifest links
+- **AND** each link points to a local relative `formless.app.json` path such as
+  `../app/formless.app.json`
+- **AND** absolute paths, URL-like values, home-relative paths, empty paths,
+  duplicate links, and secret-looking fields are rejected
+- **AND** omitting `formless.packages.json` means the active resolver contains
+  only bundled app packages
+
+#### Scenario: Resolve linked package source
+
+- **GIVEN** a workspace package link points at a local app package manifest
+- **WHEN** the workspace package resolver is built
+- **THEN** the linked package manifest is parsed
+- **AND** the linked package source schema and seed records are read relative
+  to the package manifest directory
+- **AND** the source schema parses as an app schema
+- **AND** the seed records validate as stored-record shaped data for that
+  source schema
+- **AND** the computed source schema hash matches the package manifest
+  `sourceSchemaHash`
+- **AND** the resolved package is added to the active workspace resolver
+  without writing package source paths to `app-install`, `route`, or
+  `deployment-config` records
+
+#### Scenario: Package link source is dependency config
+
+- **WHEN** workspace source is saved, checked, pushed, deployed, exported, or
+  restored
+- **THEN** `formless.packages.json` is treated as reviewable dependency
+  configuration for resolving package app source
+- **AND** package links are not app install intent, route intent, app data,
+  media payloads, provider config, deployment observation, or runtime secret
+  state
+- **AND** `formless.json` remains layout-only and does not duplicate package
+  links
 
 ### Requirement: Workspace Package Boundary
 

@@ -5,9 +5,9 @@ import {
   type InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
-import { getSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
+import { findSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
 
-export type ClientAppSchemaKey = SchemaKey | typeof INSTANCE_CONTROL_PLANE_SCHEMA_KEY;
+export type ClientAppSchemaKey = string;
 export type ClientAppStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
 export type ClientAppTarget = SchemaKey | ClientAppStorageIdentity;
 
@@ -41,7 +41,7 @@ export function clientSchemaKeyLabel(schemaKey: ClientAppSchemaKey): string {
     return "Instance control plane";
   }
 
-  return getSchemaAppDefinition(schemaKey).label;
+  return findSchemaAppDefinition(schemaKey)?.label ?? schemaKey;
 }
 
 export function instanceControlPlaneClientTarget(
@@ -53,9 +53,15 @@ export function instanceControlPlaneClientTarget(
 }
 
 export function clientTargetForSchemaKey(schemaKey: ClientAppSchemaKey): ClientAppTarget {
-  return schemaKey === INSTANCE_CONTROL_PLANE_SCHEMA_KEY
-    ? instanceControlPlaneClientTarget()
-    : schemaKey;
+  if (schemaKey === INSTANCE_CONTROL_PLANE_SCHEMA_KEY) {
+    return instanceControlPlaneClientTarget();
+  }
+
+  if (findSchemaAppDefinition(schemaKey)) {
+    return schemaKey as SchemaKey;
+  }
+
+  throw new Error(`No bundled client target for schema key "${schemaKey}".`);
 }
 
 function clientProjectStorageId(): string | undefined {

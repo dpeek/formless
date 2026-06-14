@@ -142,6 +142,8 @@ optional first app install, credential setup, and deploy operations.
 - **WHEN** `formless dev` runs for a layout-only workspace or workspace source
   with records and archives
 - **THEN** the product instance runtime starts with workspace-local persistence
+- **AND** the CLI builds the active package resolver from bundled packages plus
+  linked packages declared in `formless.packages.json` when present
 - **AND** first-run local runtime state starts from workspace control-plane
   record source and app archives when present
 - **AND** the browser can complete onboarding before any Cloudflare deploy
@@ -166,8 +168,31 @@ optional first app install, credential setup, and deploy operations.
 
 - **WHEN** the user installs a package app through the local web UI
 - **THEN** the local Authority records schema-owned `app-install` and `route`
-  records and initializes install-scoped app state
+  records and initializes install-scoped app state from the active package
+  resolver
 - **AND** no Cloudflare resource is mutated
+
+#### Scenario: Install linked private app locally
+
+- **GIVEN** `formless.packages.json` links a private local app package manifest
+- **WHEN** `formless dev` starts and an owner opens the app install flow
+- **THEN** the linked package appears in the installable package list for that
+  workspace
+- **AND** installing it initializes app storage from the linked source schema
+  and seed records
+- **AND** the generated `app-install` and `route` records do not store the
+  package link path or package source repository facts
+
+#### Scenario: Reject missing linked package source
+
+- **GIVEN** `formless.packages.json` points at a missing or invalid package
+  manifest, source schema, or seed record file
+- **WHEN** `formless dev`, `formless check`, `formless deploy`, or a workspace
+  operation builds the active package resolver
+- **THEN** the command fails before starting local runtime mutation, remote
+  mutation, deploy planning, or provider mutation
+- **AND** the error identifies the invalid package link path and validation
+  reason without exposing secrets
 
 #### Scenario: Deploy before installing an app
 
@@ -229,6 +254,8 @@ Formless instances.
 - WHEN a user runs an upgrade-aware CLI command against a target instance
 - THEN the CLI compares local package metadata with deployed runtime metadata,
   app install package facts, archive state when relevant, and deployment status
+- AND local package metadata comes from the active resolver built from bundled
+  packages plus workspace-linked package manifests when present
 - AND the CLI reports code deploy, SQL migration, package app migration, archive
   normalization, backup, and browser reload requirements
 

@@ -6,8 +6,29 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  parseAppSchema,
+  validateAuthorityFieldValue,
+  type AppSchema,
+} from "@dpeek/formless-schema";
+
+import {
+  bundledAppPackageManifests,
+  createAppPackageResolver,
+  parseAppPackageManifest,
+  type AppPackageManifest,
+  type AppPackageResolver,
+  type ResolvedAppPackage,
+} from "../../../src/shared/app-packages.ts";
+import type { RecordValues, StoredRecord } from "../../../src/shared/protocol.ts";
+import {
+  computeSourceSchemaHash,
+  type SourceSchemaHash,
+} from "../../../src/shared/upgrade-migrations.ts";
+import {
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_ENTITIES,
+  WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_OPERATION_STATE_ROOT,
+  defaultWorkspacePackageLinks,
   formatWorkspaceOperationState,
   formatInstanceWorkspaceControlPlaneRecordSourceFile,
   initialWorkspaceOperationState,
@@ -15,6 +36,7 @@ import {
   instanceWorkspaceControlPlaneRecordSourceRecords,
   instanceWorkspaceControlPlaneRecordSourceRelativePath,
   nextWorkspaceOperationState,
+  parseWorkspacePackageLinksJson,
   parseWorkspaceOperationStateJson,
   parseInstanceWorkspaceControlPlaneRecordSourceControlPlane,
   parseInstanceWorkspaceControlPlaneRecordSourceFileJson,
@@ -26,6 +48,8 @@ import type {
   InstanceWorkspaceControlPlaneRecordSourceEntity,
   InstanceWorkspaceManifest,
   UpdateWorkspaceOperationStateInput,
+  WorkspacePackageLink,
+  WorkspacePackageLinks,
   WorkspaceOperationState,
 } from "./index.ts";
 
@@ -67,6 +91,30 @@ export type CreateWorkspaceOperationStateInput = Omit<
   workspaceLabel?: string;
 };
 
+export type WorkspaceAppPackageSource = {
+  appPackage: ResolvedAppPackage;
+  manifest: AppPackageManifest;
+  manifestPath: string;
+  packageRoot: string;
+  seedRecords: StoredRecord[];
+  seedRecordsPath: string;
+  sourceSchema: AppSchema;
+  sourceSchemaHash: SourceSchemaHash;
+  sourceSchemaPath: string;
+};
+
+export type CreateWorkspaceAppPackageResolverInput = {
+  bundledManifests?: readonly unknown[];
+  packageLinks?: WorkspacePackageLinks;
+  workspaceRoot: string;
+};
+
+export type WorkspaceAppPackageResolverResult = {
+  linkedPackages: WorkspaceAppPackageSource[];
+  packageLinks: WorkspacePackageLinks;
+  resolver: AppPackageResolver;
+};
+
 export function instanceWorkspaceSecretStatePath(workspaceRoot: string): string {
   return path.join(
     workspaceRoot,
@@ -88,6 +136,52 @@ export function workspaceOperationStatePath(workspaceRoot: string, operationId: 
     workspaceOperationStateRoot(workspaceRoot),
     `${workspaceOperationStateFileName(operationId)}.json`,
   );
+}
+
+export function workspacePackageLinksPath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, WORKSPACE_PACKAGE_LINKS_FILE);
+}
+
+export async function readWorkspacePackageLinks(
+  workspaceRoot: string,
+): Promise<WorkspacePackageLinks> {
+  const filePath = workspacePackageLinksPath(workspaceRoot);
+
+  try {
+    return parseWorkspacePackageLinksJson(await readFile(filePath, "utf8"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return defaultWorkspacePackageLinks();
+    }
+
+    throw error;
+  }
+}
+
+export async function createWorkspaceAppPackageResolver(
+  input: CreateWorkspaceAppPackageResolverInput,
+): Promise<WorkspaceAppPackageResolverResult> {
+  const packageLinks = input.packageLinks ?? (await readWorkspacePackageLinks(input.workspaceRoot));
+  const linkedPackages: WorkspaceAppPackageSource[] = [];
+
+  for (const link of packageLinks.links) {
+    linkedPackages.push(
+      await readLinkedWorkspaceAppPackage({
+        context: `Workspace package link "${link.manifest}"`,
+        link,
+        workspaceRoot: input.workspaceRoot,
+      }),
+    );
+  }
+
+  return {
+    linkedPackages,
+    packageLinks,
+    resolver: createAppPackageResolver([
+      ...(input.bundledManifests ?? bundledAppPackageManifests),
+      ...linkedPackages.map((appPackage) => appPackage.manifest),
+    ]),
+  };
 }
 
 export function parseWorkspaceDotEnv(contents: string): Record<string, string> {
@@ -469,6 +563,203 @@ export async function writeInstanceWorkspaceControlPlaneRecordSource(input: {
   }
 }
 
+async function readLinkedWorkspaceAppPackage(input: {
+  context: string;
+  link: WorkspacePackageLink;
+  workspaceRoot: string;
+}): Promise<WorkspaceAppPackageSource> {
+  const manifestPath = path.resolve(input.workspaceRoot, input.link.manifest);
+  const packageRoot = path.dirname(manifestPath);
+  const manifestValue = await readJsonFile(manifestPath, `${input.context} manifest`);
+  const manifest = parseAppPackageManifest(manifestValue, `${input.context} manifest`);
+
+  assertWorkspaceLinkedPackageManifest(manifest, input.context);
+
+  const sourceSchemaPath = path.resolve(packageRoot, manifest.sourceSchema.path);
+  const seedRecordsPath = path.resolve(packageRoot, manifest.seedRecords.path);
+  const rawSourceSchema = await readJsonFile(
+    sourceSchemaPath,
+    `${input.context} source schema "${manifest.sourceSchema.path}"`,
+  );
+  const sourceSchema = parseAppSchema(rawSourceSchema);
+  const sourceSchemaHash = await computeSourceSchemaHash(rawSourceSchema);
+
+  if (sourceSchemaHash !== manifest.sourceSchemaHash) {
+    throw new Error(
+      `${input.context} source schema hash "${sourceSchemaHash}" does not match manifest sourceSchemaHash "${manifest.sourceSchemaHash}".`,
+    );
+  }
+
+  const seedRecords = parseWorkspacePackageSeedRecords(
+    await readJsonFile(
+      seedRecordsPath,
+      `${input.context} seed records "${manifest.seedRecords.path}"`,
+    ),
+    sourceSchema,
+    `${input.context} seed records "${manifest.seedRecords.path}"`,
+  );
+  const appPackage = createAppPackageResolver([manifest]).findPackage(manifest.packageAppKey);
+
+  if (!appPackage) {
+    throw new Error(`${input.context} package "${manifest.packageAppKey}" did not resolve.`);
+  }
+
+  return {
+    appPackage,
+    manifest,
+    manifestPath,
+    packageRoot,
+    seedRecords,
+    seedRecordsPath,
+    sourceSchema,
+    sourceSchemaHash,
+    sourceSchemaPath,
+  };
+}
+
+export function parseWorkspacePackageSeedRecords(
+  value: unknown,
+  schema: AppSchema,
+  context: string,
+): StoredRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  const records = value.map((record, index) =>
+    parseWorkspacePackageSeedRecord(record, `${context}[${index}]`),
+  );
+
+  validateWorkspacePackageSeedRecords(records, schema, context);
+
+  return records;
+}
+
+function parseWorkspacePackageSeedRecord(value: unknown, context: string): StoredRecord {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  if (typeof value.id !== "string" || value.id.trim() === "") {
+    throw new Error(`${context} must include an id.`);
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`${context} must include an entity.`);
+  }
+
+  if (!isRecordValues(value.values)) {
+    throw new Error(`${context} values are invalid.`);
+  }
+
+  if (typeof value.createdAt !== "string" || value.createdAt.trim() === "") {
+    throw new Error(`${context} must include createdAt.`);
+  }
+
+  if ("deletedAt" in value) {
+    throw new Error(`${context} must not include deletedAt.`);
+  }
+
+  return {
+    id: value.id,
+    entity: value.entity,
+    values: value.values,
+    createdAt: value.createdAt,
+  };
+}
+
+function validateWorkspacePackageSeedRecords(
+  records: StoredRecord[],
+  schema: AppSchema,
+  context: string,
+) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`${context} includes duplicate id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const [index, record] of records.entries()) {
+    const recordContext = `${context}[${index}]`;
+    const entity = schema.entities[record.entity];
+
+    if (!entity) {
+      throw new Error(`${recordContext} references unknown entity "${record.entity}".`);
+    }
+
+    for (const fieldName of Object.keys(record.values)) {
+      if (!Object.hasOwn(entity.fields, fieldName)) {
+        throw new Error(
+          `${recordContext} values include unknown field "${record.entity}.${fieldName}".`,
+        );
+      }
+    }
+
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      const value = record.values[fieldName];
+      const fieldWasProvided = value !== undefined;
+
+      try {
+        validateAuthorityFieldValue(fieldName, field, value, fieldWasProvided);
+      } catch (error) {
+        throw new Error(
+          `${recordContext} has invalid field "${record.entity}.${fieldName}": ${
+            error instanceof Error ? error.message : "Field value is invalid."
+          }`,
+        );
+      }
+
+      if (field.type !== "reference" || value === undefined) {
+        continue;
+      }
+
+      if (typeof value !== "string") {
+        throw new Error(
+          `${recordContext} field "${record.entity}.${fieldName}" must be a reference ID.`,
+        );
+      }
+
+      const referencedRecord = recordsById.get(value);
+
+      if (!referencedRecord || referencedRecord.entity !== field.to) {
+        throw new Error(
+          `${recordContext} field "${record.entity}.${fieldName}" references missing ${field.to} record "${value}".`,
+        );
+      }
+    }
+  }
+}
+
+async function readJsonFile(filePath: string, context: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`${context} must be valid JSON.`);
+    }
+
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new Error(`${context} file is missing.`);
+    }
+
+    throw error;
+  }
+}
+
+function assertWorkspaceLinkedPackageManifest(manifest: AppPackageManifest, context: string) {
+  if (manifest.sourceSchema.kind !== "workspace") {
+    throw new Error(`${context} manifest sourceSchema kind must be "workspace".`);
+  }
+
+  if (manifest.seedRecords.kind !== "workspace") {
+    throw new Error(`${context} manifest seedRecords kind must be "workspace".`);
+  }
+}
+
 function parseOptionalEnvValue(value: string | null | undefined): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -517,6 +808,22 @@ async function readTextFileIfExists(filePath: string): Promise<string | null> {
 
     throw error;
   }
+}
+
+function isRecordValues(value: unknown): value is RecordValues {
+  return (
+    isRecord(value) &&
+    Object.values(value).every(
+      (fieldValue) =>
+        typeof fieldValue === "string" ||
+        typeof fieldValue === "boolean" ||
+        (typeof fieldValue === "number" && Number.isFinite(fieldValue)),
+    )
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

@@ -24,10 +24,10 @@ import {
 } from "@dpeek/formless-archive/node";
 import {
   findAppInstall,
-  findBundledAppPackage,
   type AppInstall,
-  type BundledAppPackage,
+  type InstallableAppPackage,
 } from "../shared/app-installs.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -117,6 +117,7 @@ export async function exportInstanceArchive(
   input: {
     adminToken?: string | null;
     outDir: string;
+    packageResolver?: AppPackageResolver;
     target: string;
   },
   dependencies: ArchiveWorkflowDependencies,
@@ -134,6 +135,7 @@ export async function exportInstanceArchive(
           exportedAt,
           fetcher: dependencies.fetch,
           install,
+          packageResolver: input.packageResolver,
           packages: registry.packages,
           target,
         }),
@@ -257,6 +259,7 @@ export async function exportAppArchive(
     adminToken?: string | null;
     installId: string;
     outDir: string;
+    packageResolver?: AppPackageResolver;
     target: string;
   },
   dependencies: ArchiveWorkflowDependencies,
@@ -275,6 +278,7 @@ export async function exportAppArchive(
     exportedAt: dependencies.now(),
     fetcher: dependencies.fetch,
     install,
+    packageResolver: input.packageResolver,
     packages: registry.packages,
     target,
   });
@@ -291,6 +295,7 @@ export async function restorePortableArchive(
     apply: boolean;
     archiveDir: string;
     includeUpgradePlanning?: boolean;
+    packageResolver?: AppPackageResolver;
     replace: boolean;
     target: string;
     upgradeTarget?: CliUpgradePlanTargetIdentity;
@@ -337,6 +342,7 @@ export async function restoreAppArchive(
     archiveDir: string;
     includeUpgradePlanning?: boolean;
     installId: string;
+    packageResolver?: AppPackageResolver;
     replace: boolean;
     target: string;
     upgradeTarget?: CliUpgradePlanTargetIdentity;
@@ -392,6 +398,7 @@ async function readDryRunArchiveRestoreUpgradePlanning(
       adminToken?: string | null;
       apply: boolean;
       includeUpgradePlanning?: boolean;
+      packageResolver?: AppPackageResolver;
       target: string;
       upgradeTarget?: CliUpgradePlanTargetIdentity;
     };
@@ -406,6 +413,7 @@ async function readDryRunArchiveRestoreUpgradePlanning(
     {
       adminToken: input.input.adminToken,
       archiveInput: input.archiveInput,
+      packageResolver: input.input.packageResolver,
       targetUrl: input.input.target,
     },
     { fetch: dependencies.fetch },
@@ -460,13 +468,15 @@ async function buildRemoteAppArchiveEntry(input: {
   exportedAt: string;
   fetcher: typeof fetch;
   install: AppInstall;
-  packages: readonly BundledAppPackage[];
+  packageResolver?: AppPackageResolver;
+  packages: readonly InstallableAppPackage[];
   target: string;
 }): Promise<{ archive: AppArchive; mediaFiles: ArchiveDiskMediaFile[] }> {
-  const packageApp = findBundledAppPackage(input.install.packageAppKey);
   const registryPackage = input.packages.find(
     (candidate) => candidate.packageAppKey === input.install.packageAppKey,
   );
+  const packageApp =
+    registryPackage ?? findResolvedAppPackage(input.install.packageAppKey, input.packageResolver);
   const sourceSchemaKey = registryPackage?.sourceSchemaKey ?? packageApp?.sourceSchemaKey;
   const packageRevision =
     input.install.packageRevision ??

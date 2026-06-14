@@ -22,6 +22,7 @@ import {
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
+import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "./src/shared/workspace-runtime-packages.ts";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
@@ -84,6 +85,10 @@ function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
     ...optionalWorkerVar("FORMLESS_LAUNCH_FIXTURE", env.FORMLESS_LAUNCH_FIXTURE),
     ...optionalWorkerVar("FORMLESS_OWNER_SESSION_SECRET", env.FORMLESS_OWNER_SESSION_SECRET),
     ...optionalWorkerVar("FORMLESS_RUNTIME_PROFILE", env.FORMLESS_RUNTIME_PROFILE),
+    ...optionalWorkerVar(
+      FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+      env[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME],
+    ),
     ...optionalWorkerVar(LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV, env[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]),
     ...optionalWorkerVar(
       FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,

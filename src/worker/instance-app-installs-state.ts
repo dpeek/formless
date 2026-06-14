@@ -7,6 +7,7 @@ import {
   type CreateAppInstallResult,
 } from "../shared/app-installs.ts";
 import { findResolvedAppPackage } from "../shared/app-packages.ts";
+import type { AppPackageResolver } from "../shared/app-packages.ts";
 import type { CreateAppInstallRequest } from "../shared/protocol.ts";
 import {
   bundledSourceSchemaHashFixtures,
@@ -68,14 +69,20 @@ export function ensureInstanceAppInstallTables(storage: DurableObjectStorage) {
   });
 }
 
-export function readInstanceAppInstalls(storage: DurableObjectStorage): AppInstall[] {
+export function readInstanceAppInstalls(
+  storage: DurableObjectStorage,
+  packageResolver?: AppPackageResolver,
+): AppInstall[] {
   ensureInstanceAppInstallTables(storage);
 
-  return listAppInstalls(readAppInstalls(storage));
+  return listAppInstalls(readAppInstalls(storage, packageResolver));
 }
 
-export function readLegacyInstanceAppInstalls(storage: DurableObjectStorage): AppInstall[] {
-  return readInstanceAppInstalls(storage);
+export function readLegacyInstanceAppInstalls(
+  storage: DurableObjectStorage,
+  packageResolver?: AppPackageResolver,
+): AppInstall[] {
+  return readInstanceAppInstalls(storage, packageResolver);
 }
 
 export function resetInstanceAppInstallTables(storage: DurableObjectStorage) {
@@ -159,6 +166,7 @@ export function createInstanceAppInstallInCurrentTransaction(
 export function restoreInstanceAppInstall(
   storage: DurableObjectStorage,
   input: { action: "create" | "replace"; install: AppInstall },
+  packageResolver?: AppPackageResolver,
 ): AppInstall[] {
   ensureInstanceAppInstallTables(storage);
 
@@ -211,7 +219,7 @@ export function restoreInstanceAppInstall(
       input.install.updatedAt,
     );
 
-    return readInstanceAppInstalls(storage);
+    return readInstanceAppInstalls(storage, packageResolver);
   });
 }
 
@@ -259,7 +267,10 @@ export function updateInstanceAppInstallPackageFacts(
   });
 }
 
-function readAppInstalls(storage: DurableObjectStorage): AppInstall[] {
+function readAppInstalls(
+  storage: DurableObjectStorage,
+  packageResolver?: AppPackageResolver,
+): AppInstall[] {
   const installs: AppInstall[] = [];
 
   for (const row of storage.sql.exec<AppInstallRow>(
@@ -277,7 +288,7 @@ function readAppInstalls(storage: DurableObjectStorage): AppInstall[] {
       ORDER BY created_at ASC, install_id ASC
     `,
   )) {
-    installs.push(appInstallFromRow(row));
+    installs.push(appInstallFromRow(row, packageResolver));
   }
 
   return installs;
@@ -319,8 +330,8 @@ function ensureInstanceAppInstallPackageFactColumns(storage: DurableObjectStorag
   );
 }
 
-function appInstallFromRow(row: AppInstallRow): AppInstall {
-  const packageApp = findResolvedAppPackage(row.package_app_key);
+function appInstallFromRow(row: AppInstallRow, packageResolver?: AppPackageResolver): AppInstall {
+  const packageApp = findResolvedAppPackage(row.package_app_key, packageResolver);
 
   if (!packageApp) {
     throw new Error(`Stored app install "${row.install_id}" has unsupported package.`);

@@ -33,16 +33,23 @@ import {
   readInstanceAppInstalls,
   restoreInstanceAppInstall,
 } from "./instance-app-installs-state.ts";
+import {
+  activeAppPackageResolver,
+  activeWorkerSourceSchemas,
+  listActiveAppPackages,
+  type ActiveRuntimeAppPackageEnv,
+} from "./runtime-app-packages.ts";
 import { mediaObjectStoreFromR2Bucket } from "@dpeek/formless-media/worker";
 import type { AuthorityWriteNotifier } from "./authority-operations.ts";
 
 export const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
 export const ARCHIVE_APP_DATA_RESTORE_PATH = "/archive/restore-app-data";
 
-type InstanceArchiveApiEnv = AuthorityAdminGuardEnv & {
-  FORMLESS_AUTHORITY: DurableObjectNamespace;
-  FORMLESS_MEDIA: R2Bucket;
-};
+type InstanceArchiveApiEnv = AuthorityAdminGuardEnv &
+  ActiveRuntimeAppPackageEnv & {
+    FORMLESS_AUTHORITY: DurableObjectNamespace;
+    FORMLESS_MEDIA: R2Bucket;
+  };
 
 type ArchiveRestoreRequest = {
   archive: unknown;
@@ -166,8 +173,10 @@ function archiveRestoreApiTarget(
   env: InstanceArchiveApiEnv,
   mediaFilesByPath: Map<string, ArchiveRestoreMediaRead>,
 ): ArchiveRestoreApplyTarget {
+  const packageResolver = activeAppPackageResolver(env);
+
   return {
-    listInstalledApps: () => readInstanceAppInstalls(storage),
+    listInstalledApps: () => readInstanceAppInstalls(storage, packageResolver),
     media: {
       listFiles: async () => [...mediaFilesByPath.values()].map(mediaFileMetadata),
       readFile: async (archivePath) => mediaFilesByPath.get(archivePath),
@@ -185,8 +194,11 @@ function archiveRestoreApiTarget(
       await restoreControlPlaneViaAuthority(request, env, controlPlane);
     },
     restoreInstall: ({ action, install }) => {
-      restoreInstanceAppInstall(storage, { action, install });
+      restoreInstanceAppInstall(storage, { action, install }, packageResolver);
     },
+    packageResolver,
+    packages: listActiveAppPackages(env),
+    sourceSchemas: activeWorkerSourceSchemas(env),
   };
 }
 

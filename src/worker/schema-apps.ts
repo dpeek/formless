@@ -38,27 +38,31 @@ export const workerSchemaAppDefinitions = {
   tasks: {
     ...schemaAppDefinitions.tasks,
     sourceSchema: taskSourceSchema,
-    seedRecords: parseSeedRecords(rawTaskSeedRecords, taskSourceSchema, "tasks seed records"),
+    seedRecords: parseWorkerSeedRecords(rawTaskSeedRecords, taskSourceSchema, "tasks seed records"),
   },
   estii: {
     ...schemaAppDefinitions.estii,
     sourceSchema: estiiSourceSchema,
-    seedRecords: parseSeedRecords(rawEstiiSeedRecords, estiiSourceSchema, "estii seed records"),
+    seedRecords: parseWorkerSeedRecords(
+      rawEstiiSeedRecords,
+      estiiSourceSchema,
+      "estii seed records",
+    ),
   },
   site: {
     ...schemaAppDefinitions.site,
     sourceSchema: siteSourceSchema,
-    seedRecords: parseSeedRecords(rawSiteSeedRecords, siteSourceSchema, "site seed records"),
+    seedRecords: parseWorkerSeedRecords(rawSiteSeedRecords, siteSourceSchema, "site seed records"),
   },
   crm: {
     ...schemaAppDefinitions.crm,
     sourceSchema: crmSourceSchema,
-    seedRecords: parseSeedRecords(rawCrmSeedRecords, crmSourceSchema, "crm seed records"),
+    seedRecords: parseWorkerSeedRecords(rawCrmSeedRecords, crmSourceSchema, "crm seed records"),
   },
   cleartrace: {
     ...schemaAppDefinitions.cleartrace,
     sourceSchema: cleartraceSourceSchema,
-    seedRecords: parseSeedRecords(
+    seedRecords: parseWorkerSeedRecords(
       rawCleartraceSeedRecords,
       cleartraceSourceSchema,
       "cleartrace seed records",
@@ -80,7 +84,11 @@ export function findWorkerSchemaAppDefinition(key: string): WorkerSchemaAppDefin
   return app ? getWorkerSchemaAppDefinition(app.key) : undefined;
 }
 
-function parseSeedRecords(value: unknown, schema: AppSchema, label: string): StoredRecord[] {
+export function parseWorkerSeedRecords(
+  value: unknown,
+  schema: AppSchema,
+  label: string,
+): StoredRecord[] {
   if (!Array.isArray(value)) {
     throw new Error(`Seed fixture "${label}" must be an array.`);
   }

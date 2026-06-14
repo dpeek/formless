@@ -57,6 +57,8 @@ export type BundledAppPackage = {
   publicRouteBase?: "/sites";
 };
 
+export type InstallableAppPackage = ResolvedAppPackage;
+
 export type AppInstallInitializationPlan = {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
@@ -140,6 +142,10 @@ const reservedInstallIds = new Set([
 
 export function listBundledAppPackages(): BundledAppPackage[] {
   return listResolvedAppPackages().map(toBundledAppPackage);
+}
+
+export function listInstallableAppPackages(resolver?: AppPackageResolver): InstallableAppPackage[] {
+  return listResolvedAppPackages(resolver);
 }
 
 export function findBundledAppPackage(packageAppKey: string): BundledAppPackage | undefined {

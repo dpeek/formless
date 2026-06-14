@@ -50,7 +50,7 @@ app install can be created.
 #### Scenario: Private package availability
 
 - **GIVEN** a private app package such as ClearTrace is resolved from a
-  workspace-linked or deployment-linked package source
+  workspace-linked package source
 - **WHEN** app packages are listed for that workspace or runtime
 - **THEN** the private package is installable only in that resolver scope
 - **AND** the package is not made globally bundled, public, discoverable, or
@@ -316,6 +316,17 @@ The system SHALL derive workspace app install intent from schema-owned
   and its matching app archive
 - **AND** `formless.json` app declarations, labels, package app keys, and route
   summaries are not read as install source
+
+#### Scenario: Workspace install requires active package
+
+- **WHEN** workspace source contains an active `app-install` record
+- **THEN** its package app key must be available in the active package resolver
+  built for that workspace
+- **AND** local dev, check, push, deploy, and archive restore report missing
+  package metadata before mutating app storage, control-plane records, provider
+  resources, or remote instances
+- **AND** package source paths, repository URLs, local links, and resolver
+  configuration are not copied into the `app-install` record
 
 #### Scenario: Missing app archive
 

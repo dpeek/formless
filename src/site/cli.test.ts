@@ -32,8 +32,9 @@ import type {
 import {
   listBundledAppPackages,
   packageAppFactsForKey,
-  type BundledAppPackage,
+  type InstallableAppPackage,
 } from "../shared/app-installs.ts";
+import { appPackageManifestKind, appPackageManifestVersion } from "../shared/app-packages.ts";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -45,6 +46,8 @@ import {
   type StoredRecord,
 } from "../shared/protocol.ts";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
+import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
+import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
@@ -53,8 +56,10 @@ import {
 } from "@dpeek/formless-gateway";
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  defaultWorkspacePackageLinks,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  formatWorkspacePackageLinks,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
 } from "@dpeek/formless-workspace";
 import {
@@ -3269,6 +3274,100 @@ describe("Formless Site CLI", () => {
     expect(child.killed).toBe(false);
   });
 
+  it("starts workspace dev with a linked private app package and clean install records", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "instance");
+    const packageRoot = path.join(tempDir, "app");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+    const sourceSchemaHash = await computeSourceSchemaHash(taskSourceSchema);
+
+    await writeWorkspaceManifest(workspaceRoot, { apps: [] });
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot, sourceSchemaHash);
+    await writeWorkspaceControlPlaneRecordSource(
+      workspaceRoot,
+      privateControlPlaneRecords(sourceSchemaHash),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/apps/labs"),
+      privateAppArchive(sourceSchemaHash),
+    );
+
+    const run = runFormlessCli(
+      ["instance", "dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: { PORT: "4451" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+          announceFakeCliDevServer(child, options.env);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
+    );
+    child.close(0);
+    await run;
+
+    const runtimePackages = spawnCalls[0]?.env?.[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME];
+
+    expect(runtimePackages).toContain('"packageAppKey": "private-labs"');
+    expect(runtimePackages).toContain('"sourceSchema"');
+    expect(runtimePackages).not.toContain("../app/formless.app.json");
+    expect(runtimePackages).not.toContain(packageRoot);
+
+    const restoreBody = capturedRequestJson<{
+      archive: InstanceArchive;
+      mediaFiles: { bytesBase64: string }[];
+    }>(requests.at(-1));
+    const controlPlaneJson = JSON.stringify(restoreBody.archive.controlPlane);
+    const appInstall = restoreBody.archive.controlPlane?.records.find(
+      (record) => record.entity === "instance:app-install",
+    );
+    const routes = restoreBody.archive.controlPlane?.records.filter(
+      (record) => record.entity === "instance:route",
+    );
+
+    expect(appInstall?.values).toMatchObject({
+      installId: "labs",
+      packageAppKey: "private-labs",
+      sourceSchemaHash,
+    });
+    expect(
+      routes
+        ?.map((record) => record.values.matchPath)
+        .sort((left, right) => String(left).localeCompare(String(right))),
+    ).toEqual(["/apps/labs", "/apps/labs/schema"]);
+    expect(restoreBody.archive.apps[0]?.app).toMatchObject({
+      installId: "labs",
+      packageAppKey: "private-labs",
+      sourceSchemaHash,
+      sourceSchemaKey: "private-labs",
+    });
+    expect(controlPlaneJson).toContain("private-labs");
+    expect(controlPlaneJson).not.toContain("../app");
+    expect(controlPlaneJson).not.toContain("formless.app.json");
+    expect(controlPlaneJson).not.toContain(packageRoot);
+    expect(restoreBody.mediaFiles).toEqual([]);
+    expect(logs.at(-1)).toBe(
+      "Workspace archive restored: record source (1 apps, 0 records, 0 media).",
+    );
+  });
+
   it("rejects missing local app archive before local dev restore", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -5639,6 +5738,59 @@ async function writeWorkspaceManifest(
   );
 }
 
+async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: string) {
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, "formless.packages.json"),
+    formatWorkspacePackageLinks({
+      ...defaultWorkspacePackageLinks(),
+      links: [{ manifest }],
+    }),
+  );
+}
+
+async function writePrivatePackageFixture(packageRoot: string, sourceSchemaHash: SourceSchemaHash) {
+  const sourceRoot = path.join(packageRoot, "source");
+
+  await mkdir(sourceRoot, { recursive: true });
+  await writeJsonFile(path.join(sourceRoot, "schema.json"), taskSourceSchema);
+  await writeJsonFile(path.join(sourceRoot, "seed-records.json"), []);
+  await writeJsonFile(
+    path.join(packageRoot, "formless.app.json"),
+    privatePackageManifest(sourceSchemaHash),
+  );
+}
+
+function privatePackageManifest(sourceSchemaHash: SourceSchemaHash): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/seed-records.json",
+    },
+    sourceSchemaHash,
+    capabilities: [{ kind: "generatedAdmin", routeBase: "/apps" }],
+  };
+}
+
+async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
 async function writeWorkspaceControlPlaneRecordSource(
   workspaceRoot: string,
   records: StoredRecord[] = controlPlaneRecords(),
@@ -5780,6 +5932,59 @@ function installedApp(installId: string, label: string, packageAppKey: "site" | 
   };
 }
 
+function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredRecord[] {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return [
+    {
+      id: "labs",
+      entity: "app-install",
+      values: {
+        installId: "labs",
+        packageAppKey: "private-labs",
+        packageRevision: 7,
+        sourceSchemaHash,
+        label: "Private Labs",
+        status: "installed",
+        storageIdentity: "app:labs",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "route:labs:admin",
+      entity: "route",
+      values: {
+        enabled: true,
+        matchPath: "/apps/labs",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "labs",
+        surface: "admin",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "route:labs:schema",
+      entity: "route",
+      values: {
+        enabled: true,
+        matchPath: "/apps/labs/schema",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "labs",
+        surface: "schema",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+  ];
+}
+
 function currentDeployMetadata() {
   return {
     packageApps: listBundledAppPackages().map((appPackage) => ({
@@ -5894,6 +6099,43 @@ function appArchive(
   };
 }
 
+function privateAppArchive(sourceSchemaHash: SourceSchemaHash): AppArchive {
+  return {
+    kind: APP_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["app-store-snapshots", "core-media-assets"],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    app: {
+      installId: "labs",
+      packageAppKey: "private-labs",
+      packageRevision: 7,
+      sourceSchemaKey: "private-labs",
+      sourceSchemaHash,
+      label: "Private Labs",
+      status: "installed",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    },
+    data: {
+      kind: "storeSnapshot",
+      snapshot: {
+        kind: STORE_SNAPSHOT_KIND,
+        version: STORE_SNAPSHOT_VERSION,
+        schemaKey: "private-labs",
+        exportedAt: "2026-05-12T00:00:00.000Z",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        sourceCursor: 0,
+        schema: taskSourceSchema,
+        records: [],
+      },
+    },
+    media: {
+      objects: [],
+    },
+  };
+}
+
 async function writeArchiveDirectory(
   archiveRoot: string,
   archive: InstanceArchive | AppArchive,
@@ -5936,7 +6178,7 @@ function archiveFetch(
   requests: CapturedFetchRequest[],
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
-  extraPackages: BundledAppPackage[] = [],
+  extraPackages: InstallableAppPackage[] = [],
   domainMappings: ReturnType<typeof domainMapping>[] = [],
   controlPlaneRecords?: StoredRecord[],
 ): typeof fetch {
@@ -6318,7 +6560,7 @@ function pushArchiveFetch(
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   restoreResponses: unknown[],
-  extraPackages: BundledAppPackage[] = [],
+  extraPackages: InstallableAppPackage[] = [],
   domainMappings: ReturnType<typeof domainMapping>[] = [],
   controlPlaneRecords?: StoredRecord[],
 ): typeof fetch {

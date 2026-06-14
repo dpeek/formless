@@ -59,7 +59,7 @@ const controlPlaneEntitySpecs: Record<InstanceWorkspaceControlPlaneRecordSourceE
     "app-install": {
       fields: {
         installId: textField(true),
-        packageAppKey: enumField(true, ["crm", "estii", "site", "tasks"]),
+        packageAppKey: textField(true),
         packageRevision: numberField(false, { integer: true, min: 0 }),
         sourceSchemaHash: textField(false),
         label: textField(true),
@@ -462,6 +462,17 @@ function validateControlPlaneRecord(
     const value = record.values[fieldName];
 
     if (!isValidControlPlaneFieldValue(value, field)) {
+      throw new Error(
+        `${context} records record "${record.id}" has invalid field "${formatSourceEntityLabel(record.entity)}.${fieldName}".`,
+      );
+    }
+
+    if (
+      entity === "app-install" &&
+      fieldName === "packageAppKey" &&
+      typeof value === "string" &&
+      !schemaLocalEntityKeyPattern.test(value)
+    ) {
       throw new Error(
         `${context} records record "${record.id}" has invalid field "${formatSourceEntityLabel(record.entity)}.${fieldName}".`,
       );

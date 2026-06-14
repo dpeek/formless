@@ -42,6 +42,7 @@ import {
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
+import { activeAppPackageResolver } from "./runtime-app-packages.ts";
 
 export { FormlessAuthority } from "./authority.ts";
 
@@ -69,6 +70,7 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
+  FORMLESS_WORKSPACE_APP_PACKAGES?: string;
   FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN?: string;
   FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN?: string;
   FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN?: string;
@@ -158,7 +160,9 @@ export default {
       return publishedSiteIndexingResponse;
     }
 
-    const deployMetadataResponse = handleDeployMetadataRequest(request, env);
+    const deployMetadataResponse = handleDeployMetadataRequest(request, env, {
+      packageResolver: activeAppPackageResolver(env),
+    });
 
     if (deployMetadataResponse) {
       return deployMetadataResponse;
@@ -232,7 +236,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const authorityRoute = parseAuthorityApiRoute(url.pathname);
+    const authorityRoute = parseAuthorityApiRoute(url.pathname, activeAppPackageResolver(env));
 
     if (authorityRoute) {
       if (

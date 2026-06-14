@@ -20,7 +20,8 @@ import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import { findBundledAppPackage, type PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "../shared/app-installs.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";
 import {
@@ -174,6 +175,7 @@ type AuthorityOperationExecutionInput = {
   body?: unknown;
   identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;
   operation: AuthorityOperation;
+  packageResolver?: AppPackageResolver;
   requestHeaders?: Headers;
   source: StorageSource;
   storage: DurableObjectStorage;
@@ -269,7 +271,7 @@ export function executeAuthorityOperation(
 
       return {
         body: bootstrapResponse(input.storage, schema, updatedAt),
-        headers: browserReplicaUpgradeHeaders(input.storage, input.identity),
+        headers: browserReplicaUpgradeHeaders(input.storage, input.identity, input.packageResolver),
       };
     }
 
@@ -333,7 +335,7 @@ export function executeAuthorityOperation(
           cursor: getCurrentCursor(input.storage),
           ...schemaFields,
         },
-        headers: browserReplicaUpgradeHeaders(input.storage, input.identity),
+        headers: browserReplicaUpgradeHeaders(input.storage, input.identity, input.packageResolver),
       };
     }
 
@@ -425,7 +427,11 @@ export function executeAuthorityOperation(
     case "applyPackageMigrations": {
       initializeStorageFromSource(input.storage, input.source);
 
-      const packageFacts = parsePackageAppMigrationApplyRequest(input.body, input.app.key);
+      const packageFacts = parsePackageAppMigrationApplyRequest(
+        input.body,
+        input.app.key,
+        input.packageResolver,
+      );
       const migrations = selectPackageAppMigrations({
         currentPackageRevision: packageFacts.currentPackageRevision,
         packageAppKey: packageFacts.packageAppKey,
@@ -605,8 +611,9 @@ function parseOptionalSourceSchemaHashHeader(headers: Headers | undefined) {
 function browserReplicaUpgradeHeaders(
   storage: DurableObjectStorage,
   identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
+  packageResolver?: AppPackageResolver,
 ): HeadersInit {
-  const facts = browserReplicaUpgradeFacts(storage, identity);
+  const facts = browserReplicaUpgradeFacts(storage, identity, packageResolver);
   const headers: Record<string, string> = {
     [FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER]: String(facts.runtimeProtocolVersion),
   };
@@ -626,6 +633,7 @@ function browserReplicaUpgradeHeaders(
 function browserReplicaUpgradeFacts(
   storage: DurableObjectStorage,
   identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
+  packageResolver?: AppPackageResolver,
 ): BrowserReplicaUpgradeFacts {
   const storedSchema = readCurrentStoredSchema(storage);
 
@@ -637,7 +645,7 @@ function browserReplicaUpgradeFacts(
     };
   }
 
-  const packageApp = findBundledAppPackage(identity.packageAppKey);
+  const packageApp = findResolvedAppPackage(identity.packageAppKey, packageResolver);
   const packageState = readPackageAppMigrationState(storage, identity.packageAppKey);
 
   return {
@@ -678,8 +686,12 @@ function bootstrapResponse(
   };
 }
 
-function parsePackageAppMigrationApplyRequest(value: unknown, packageAppKey: string) {
-  const packageApp = findBundledAppPackage(packageAppKey);
+function parsePackageAppMigrationApplyRequest(
+  value: unknown,
+  packageAppKey: string,
+  packageResolver?: AppPackageResolver,
+) {
+  const packageApp = findResolvedAppPackage(packageAppKey, packageResolver);
 
   if (!packageApp) {
     throw new BadRequestError(`Package app "${packageAppKey}" is not installable.`);

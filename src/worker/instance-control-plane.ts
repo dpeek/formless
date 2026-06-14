@@ -9,7 +9,7 @@ import {
   type AppInstallRoute,
   type PackageAppKey,
 } from "../shared/app-installs.ts";
-import { findResolvedAppPackage } from "../shared/app-packages.ts";
+import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -61,7 +61,7 @@ import {
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
-import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
+import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   createRecordSetForActionOutcome,
   ensureStorageTables,
@@ -77,6 +77,11 @@ import {
   INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH,
   resolveInstanceRuntimeRouteFromRecords,
 } from "./instance-runtime-routes.ts";
+import {
+  activeAppPackageResolver,
+  findActiveWorkerSchemaAppDefinition,
+  type ActiveRuntimeAppPackageEnv,
+} from "./runtime-app-packages.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
@@ -112,9 +117,10 @@ function ensureControlPlaneStorage(storage: DurableObjectStorage) {
   backfillLegacyRouteIntentRecords(storage);
 }
 
-type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv & {
-  FORMLESS_AUTHORITY: DurableObjectNamespace;
-};
+type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv &
+  ActiveRuntimeAppPackageEnv & {
+    FORMLESS_AUTHORITY: DurableObjectNamespace;
+  };
 
 type ParsedCreateAppInstallActionRequest = {
   actionId: string;
@@ -160,11 +166,11 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 
   try {
     if (route.path === INTERNAL_BACKFILL_APP_INSTALLS_PATH) {
-      return await handleInternalBackfillAppInstalls(request, storage);
+      return await handleInternalBackfillAppInstalls(request, storage, env);
     }
 
     if (route.path === INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH) {
-      return await handleInternalUpdateAppInstallPackageFacts(request, storage);
+      return await handleInternalUpdateAppInstallPackageFacts(request, storage, env);
     }
 
     if (route.path === INTERNAL_READ_RECORDS_PATH) {
@@ -176,7 +182,7 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
     }
 
     if (route.path === INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH) {
-      return handleInternalResolveRuntimeRoute(request, storage);
+      return handleInternalResolveRuntimeRoute(request, storage, env);
     }
 
     if (route.path === INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH) {
@@ -231,7 +237,7 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
       storage,
       validateConstraints:
         operation.metadata.mode === "write"
-          ? validateControlPlaneRecordConstraint(storage)
+          ? validateControlPlaneRecordConstraint(storage, activeAppPackageResolver(env))
           : undefined,
       writes: noopWriteNotifier,
     });
@@ -246,7 +252,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
   }
 }
 
-export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppInstall[] {
+export function readControlPlaneAppInstalls(
+  storage: DurableObjectStorage,
+  packageResolver?: AppPackageResolver,
+): AppInstall[] {
   ensureStorageTables(storage);
   initializeStorageFromSource(storage, instanceControlPlaneSource);
   const records = getBootstrapRecords(storage).filter((record) => !record.deletedAt);
@@ -268,6 +277,7 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
               id: routeRecord.id,
               values: routeRecord.values as InstanceControlPlaneRouteValues,
             })),
+          packageResolver,
         ),
       ),
   );
@@ -276,6 +286,7 @@ export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppI
 async function handleInternalBackfillAppInstalls(
   request: Request,
   storage: DurableObjectStorage,
+  env: InstanceControlPlaneApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -284,7 +295,8 @@ async function handleInternalBackfillAppInstalls(
   initializeControlPlaneStorage(storage);
 
   const installs = parseInternalBackfillAppInstalls(await readJson(request));
-  const existing = readControlPlaneAppInstalls(storage);
+  const packageResolver = activeAppPackageResolver(env);
+  const existing = readControlPlaneAppInstalls(storage, packageResolver);
   const backfilled: string[] = [];
 
   for (const install of installs) {
@@ -292,7 +304,7 @@ async function handleInternalBackfillAppInstalls(
       continue;
     }
 
-    backfillAppInstallRecords(storage, install);
+    backfillAppInstallRecords(storage, install, packageResolver);
     existing.push(install);
     backfilled.push(install.installId);
   }
@@ -301,13 +313,14 @@ async function handleInternalBackfillAppInstalls(
 
   return jsonResponse({
     backfilled,
-    installs: readControlPlaneAppInstalls(storage),
+    installs: readControlPlaneAppInstalls(storage, packageResolver),
   });
 }
 
 async function handleInternalUpdateAppInstallPackageFacts(
   request: Request,
   storage: DurableObjectStorage,
+  env: InstanceControlPlaneApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -315,8 +328,12 @@ async function handleInternalUpdateAppInstallPackageFacts(
 
   ensureControlPlaneStorage(storage);
 
+  const packageResolver = activeAppPackageResolver(env);
   const parsed = parseInternalAppInstallPackageFactsUpdate(await readJson(request));
-  const install = findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId);
+  const install = findAppInstall(
+    readControlPlaneAppInstalls(storage, packageResolver),
+    parsed.installId,
+  );
 
   if (!install) {
     throw new BadRequestError(`Install id "${parsed.installId}" is not installed.`);
@@ -344,13 +361,18 @@ async function handleInternalUpdateAppInstallPackageFacts(
         },
       },
       undefined,
-      validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema),
+      validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema, {
+        packageResolver,
+      }),
     ),
   );
 
   return jsonResponse({
-    install: findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId),
-    installs: readControlPlaneAppInstalls(storage),
+    install: findAppInstall(
+      readControlPlaneAppInstalls(storage, packageResolver),
+      parsed.installId,
+    ),
+    installs: readControlPlaneAppInstalls(storage, packageResolver),
   });
 }
 
@@ -407,6 +429,7 @@ async function handleInternalSyncDomainIntent(
 function handleInternalResolveRuntimeRoute(
   request: Request,
   storage: DurableObjectStorage,
+  env: InstanceControlPlaneApiEnv,
 ): Response {
   if (request.method !== "GET") {
     return methodNotAllowedResponse("GET");
@@ -419,11 +442,12 @@ function handleInternalResolveRuntimeRoute(
   const pathname = routeRequestPath(url.searchParams.get("path"));
   const search = url.searchParams.get("search") ?? "";
   const includeHostless = url.searchParams.get("includeHostless") !== "false";
+  const packageResolver = activeAppPackageResolver(env);
 
   return jsonResponse({
     route:
       resolveInstanceRuntimeRouteFromRecords({
-        appInstalls: readControlPlaneAppInstalls(storage),
+        appInstalls: readControlPlaneAppInstalls(storage, packageResolver),
         records: activeControlPlaneRecords(storage),
         request: {
           host,
@@ -431,6 +455,7 @@ function handleInternalResolveRuntimeRoute(
           search,
         },
         options: { includeHostless },
+        packageResolver,
       }) ?? null,
   });
 }
@@ -467,15 +492,17 @@ async function handleCreateAppInstallAction(
   }
 
   const now = nowIsoString();
+  const packageResolver = activeAppPackageResolver(env);
   const result = createAppInstall({
-    existingInstalls: readControlPlaneAppInstalls(storage),
+    existingInstalls: readControlPlaneAppInstalls(storage, packageResolver),
     installId: parsed.input.installId,
     label: parsed.input.label,
     now,
     packageAppKey: parsed.input.packageAppKey,
+    packageResolver,
     validateInitialSource: ({ initialization }) => {
-      const source = findWorkerSchemaAppDefinition(initialization.sourceSchemaKey);
-      const seed = findWorkerSchemaAppDefinition(initialization.seedRecordsKey);
+      const source = findActiveWorkerSchemaAppDefinition(initialization.sourceSchemaKey, env);
+      const seed = findActiveWorkerSchemaAppDefinition(initialization.seedRecordsKey, env);
 
       if (!source || !seed) {
         return appInstallRegistryError(
@@ -502,7 +529,7 @@ async function handleCreateAppInstallAction(
   }
 
   const records = instanceControlPlaneRecordsForAppInstall({ install: result.install, now });
-  preflightAppInstallRecordSet(storage, records, now);
+  preflightAppInstallRecordSet(storage, records, now, packageResolver);
 
   const outcome = noopWriteNotifier.apply(() =>
     createRecordSetForActionOutcome(
@@ -515,7 +542,9 @@ async function handleCreateAppInstallAction(
         id: record.id,
         values: record.values,
       })),
-      validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema),
+      validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema, {
+        packageResolver,
+      }),
     ),
   );
 
@@ -529,6 +558,7 @@ function preflightAppInstallRecordSet(
     ...InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[],
   ],
   createdAt: string,
+  packageResolver?: AppPackageResolver,
 ) {
   const pendingRecords: StoredRecord[] = records.map((record) => ({
     createdAt,
@@ -538,6 +568,7 @@ function preflightAppInstallRecordSet(
   }));
   const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema, {
     additionalRecords: pendingRecords,
+    packageResolver,
   });
 
   for (const record of pendingRecords) {
@@ -548,7 +579,7 @@ function preflightAppInstallRecordSet(
 function validateControlPlaneRecordWrite(
   storage: DurableObjectStorage,
   schema: typeof instanceControlPlaneSource.schema,
-  options: { additionalRecords?: StoredRecord[] } = {},
+  options: { additionalRecords?: StoredRecord[]; packageResolver?: AppPackageResolver } = {},
 ) {
   return (
     entityName: string,
@@ -575,9 +606,10 @@ function validateControlPlaneRecordWrite(
 
 function validateControlPlaneRecordConstraint(
   storage: DurableObjectStorage,
+  packageResolver?: AppPackageResolver,
 ): RecordConstraintValidator {
   return (entityName, values) => {
-    validateControlPlanePackageBoundary(storage, entityName, values, {});
+    validateControlPlanePackageBoundary(storage, entityName, values, { packageResolver });
   };
 }
 
@@ -585,12 +617,12 @@ function validateControlPlanePackageBoundary(
   storage: DurableObjectStorage,
   entityName: string,
   values: RecordValues,
-  options: { additionalRecords?: StoredRecord[] },
+  options: { additionalRecords?: StoredRecord[]; packageResolver?: AppPackageResolver },
 ) {
   if (entityName === "app-install") {
     const packageAppKey = parseRequiredString("packageAppKey", values.packageAppKey);
 
-    if (!findResolvedAppPackage(packageAppKey)) {
+    if (!findResolvedAppPackage(packageAppKey, options.packageResolver)) {
       throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
     }
 
@@ -614,7 +646,9 @@ function validateControlPlanePackageBoundary(
     options.additionalRecords,
   );
   const packageAppKey = stringRecordValue(appInstallRecord?.values.packageAppKey);
-  const packageApp = packageAppKey ? findResolvedAppPackage(packageAppKey) : undefined;
+  const packageApp = packageAppKey
+    ? findResolvedAppPackage(packageAppKey, options.packageResolver)
+    : undefined;
 
   if (!packageApp) {
     throw new BadRequestError(`Route app install "${installId}" uses unsupported package.`);
@@ -676,9 +710,10 @@ function parseOptionalActionIdentity(value: unknown): string | undefined {
 function appInstallFromControlPlaneValues(
   values: RecordValues,
   routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
+  packageResolver?: AppPackageResolver,
 ): AppInstall {
   const packageAppKey = String(values.packageAppKey);
-  const packageApp = findResolvedAppPackage(packageAppKey);
+  const packageApp = findResolvedAppPackage(packageAppKey, packageResolver);
 
   if (!packageApp) {
     throw new Error(`Stored app install "${String(values.installId)}" has unsupported package.`);
@@ -728,7 +763,11 @@ function appInstallFromControlPlaneValues(
   };
 }
 
-function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppInstall) {
+function backfillAppInstallRecords(
+  storage: DurableObjectStorage,
+  install: AppInstall,
+  packageResolver?: AppPackageResolver,
+) {
   const appInstallRecord = instanceControlPlaneAppInstallRecord(install);
   const now = install.updatedAt || install.createdAt || nowIsoString();
   const routes = instanceControlPlaneRecordsForAppInstall({ install, now }).slice(1);
@@ -744,7 +783,9 @@ function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppIn
       id: record.id,
       values: record.values,
     })),
-    validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema),
+    validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema, {
+      packageResolver,
+    }),
   );
 }
 

@@ -39,6 +39,17 @@ archive, or deploy workflows.
 - AND referenced seed records validate as stored-record shaped data for that
   source schema
 
+#### Scenario: Verify resolved package source hash
+
+- GIVEN an app package manifest declares a source schema hash
+- WHEN package source is resolved from local filesystem source
+- THEN the resolver computes the deterministic source schema hash from the
+  referenced source schema
+- AND resolution fails when the computed hash differs from the manifest
+  `sourceSchemaHash`
+- AND the package is not exposed to install, upgrade, archive, or deploy
+  workflows until the manifest and source schema agree
+
 #### Scenario: Resolve bundled app packages from manifests
 
 - GIVEN the current bundled package app keys `site`, `tasks`, `estii`, `crm`,

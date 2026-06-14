@@ -15,6 +15,7 @@ import {
 } from "../shared/instance-control-plane.ts";
 import { parseRuntimeRouteAccess, type RuntimeRouteAccess } from "../shared/runtime-topology.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
+import type { AppPackageResolver } from "../shared/app-packages.ts";
 
 export const INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH = "/_internal/resolve-runtime-route";
 
@@ -112,6 +113,7 @@ export function resolveInstanceRuntimeRouteFromRecords(input: {
   records: readonly StoredRecord[];
   request: InstanceRuntimeRouteRequest;
   options?: InstanceRuntimeRouteResolutionOptions;
+  packageResolver?: AppPackageResolver;
 }): InstanceRuntimeRouteResolution | undefined {
   const candidate = selectInstanceRuntimeRouteCandidate({
     records: input.records,
@@ -123,7 +125,12 @@ export function resolveInstanceRuntimeRouteFromRecords(input: {
     return undefined;
   }
 
-  return runtimeRouteResolutionFromCandidate(candidate, input.appInstalls, input.request);
+  return runtimeRouteResolutionFromCandidate(
+    candidate,
+    input.appInstalls,
+    input.request,
+    input.packageResolver,
+  );
 }
 
 function selectInstanceRuntimeRouteCandidate(input: {
@@ -270,6 +277,7 @@ function runtimeRouteResolutionFromCandidate(
   candidate: RouteCandidate,
   appInstalls: readonly AppInstall[],
   request: InstanceRuntimeRouteRequest,
+  packageResolver?: AppPackageResolver,
 ): InstanceRuntimeRouteResolution | undefined {
   const values = candidate.values;
 
@@ -295,7 +303,7 @@ function runtimeRouteResolutionFromCandidate(
     return undefined;
   }
 
-  const target = installTarget(values, appInstalls);
+  const target = installTarget(values, appInstalls, packageResolver);
 
   if ((targetProfile === "app" || targetProfile === "public-site") && !target) {
     return undefined;
@@ -317,6 +325,7 @@ function runtimeRouteResolutionFromCandidate(
 function installTarget(
   values: InstanceControlPlaneRouteValues,
   appInstalls: readonly AppInstall[],
+  packageResolver?: AppPackageResolver,
 ): InstalledAppStorageIdentity | undefined {
   const installId = values.appInstall;
 
@@ -327,10 +336,13 @@ function installTarget(
   const install = findAppInstall(appInstalls, installId);
 
   return install
-    ? installedAppStorageIdentity({
-        installId: install.installId,
-        packageAppKey: install.packageAppKey,
-      })
+    ? installedAppStorageIdentity(
+        {
+          installId: install.installId,
+          packageAppKey: install.packageAppKey,
+        },
+        packageResolver,
+      )
     : undefined;
 }
 

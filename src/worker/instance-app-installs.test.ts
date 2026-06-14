@@ -19,7 +19,20 @@ import {
   taskSourceSchema,
 } from "../test/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
-import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
+import {
+  bundledSourceSchemaHashFixtures,
+  computeSourceSchemaHash,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  type AppPackageManifest,
+} from "../shared/app-packages.ts";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -142,6 +155,106 @@ describe("instance app install API routes", () => {
       status: "installed",
     });
     expect(after.body.installs).toEqual(created.body.installs);
+  });
+
+  it("lists and creates linked workspace app packages from the active resolver", async () => {
+    const sourceSchemaHash = await computeSourceSchemaHash(taskSourceSchema);
+    const privateHarness = await createWorkerHarness(
+      "src/worker/index.ts",
+      {
+        FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+      },
+      {
+        bindings: {
+          FORMLESS_ADMIN_TOKEN: adminToken,
+          [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
+            {
+              manifest: privatePackageManifest(sourceSchemaHash),
+              sourceSchema: taskSourceSchema,
+              seedRecords: taskSeedRecords,
+            },
+          ]),
+        },
+      },
+    );
+
+    try {
+      const before = await getHarnessJson<AppInstallsResponse>(
+        privateHarness,
+        "/api/formless/app-installs",
+      );
+      const created = await postHarnessAdminJson<CreateAppInstallResponse>(
+        privateHarness,
+        "/api/formless/app-installs",
+        {
+          packageAppKey: "private-labs",
+          installId: "labs",
+          label: "Private Labs",
+        },
+      );
+      const bootstrap = await getHarnessJson<BootstrapResponse>(
+        privateHarness,
+        "/api/app-installs/private-labs/labs/bootstrap",
+      );
+      const controlPlane = await getHarnessJson<BootstrapResponse>(
+        privateHarness,
+        "/api/formless/control-plane/bootstrap",
+      );
+      const appInstall = controlPlane.body.records.find(
+        (record) => record.entity === "app-install" && record.id === "labs",
+      );
+      const routes = controlPlane.body.records.filter((record) => record.entity === "route");
+      const controlPlaneJson = JSON.stringify(controlPlane.body.records);
+
+      expect(before.body.packages.map((appPackage) => appPackage.packageAppKey)).toContain(
+        "private-labs",
+      );
+      expect(
+        before.body.packages.find((appPackage) => appPackage.packageAppKey === "private-labs"),
+      ).toMatchObject({
+        defaultInstallId: "labs",
+        packageRevision: 7,
+        sourceOrigin: "workspace",
+        sourceSchemaHash,
+        sourceSchemaKey: "private-labs",
+      });
+      expect(created.response.status).toBe(201);
+      expect(created.body.initialization).toEqual({
+        installId: "labs",
+        packageAppKey: "private-labs",
+        seedRecordsKey: "private-labs",
+        sourceSchemaKey: "private-labs",
+      });
+      expect(created.body.install).toEqual(
+        expect.objectContaining({
+          adminRoute: "/apps/labs",
+          installId: "labs",
+          label: "Private Labs",
+          packageAppKey: "private-labs",
+          packageRevision: 7,
+          schemaRoute: "/apps/labs/schema",
+          sourceSchemaHash,
+          status: "installed",
+        }),
+      );
+      expect(created.body.install).not.toHaveProperty("publicRoute");
+      expect(bootstrap.body.schema).toEqual(taskSourceSchema);
+      expect(bootstrap.body.records).toEqual(taskSeedRecords);
+      expect(appInstall?.values).toMatchObject({
+        installId: "labs",
+        packageAppKey: "private-labs",
+        sourceSchemaHash,
+      });
+      expect(
+        routes
+          .map((record) => record.values.matchPath)
+          .sort((left, right) => String(left).localeCompare(String(right))),
+      ).toEqual(["/apps/labs", "/apps/labs/schema"]);
+      expect(controlPlaneJson).not.toContain("formless.app.json");
+      expect(controlPlaneJson).not.toContain("../app");
+    } finally {
+      await privateHarness.dispose();
+    }
   });
 
   it("derives app install API responses from control-plane install and route records", async () => {
@@ -596,6 +709,31 @@ async function postAdminJson<T>(path: string, body: unknown) {
   };
 }
 
+async function getHarnessJson<T>(targetHarness: Harness, path: string) {
+  const response = await targetHarness.fetch(path, { headers: adminHeaders() });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function postHarnessAdminJson<T>(targetHarness: Harness, path: string, body: unknown) {
+  const request = operationWriteRequest(path, body);
+  const response = await targetHarness.fetch(request.path, {
+    body: JSON.stringify(request.body),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  return {
+    body: request.response(await response.json()) as T,
+    response,
+  };
+}
+
 async function resetWorkerState() {
   await Promise.all([
     postReset("/api/formless/control-plane/reset/seed"),
@@ -641,4 +779,29 @@ async function ownerSessionHeaders() {
 
 function cookiePair(cookie: string) {
   return cookie.split(";")[0] ?? cookie;
+}
+
+function privatePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageManifest {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-labs",
+    label: "Private Labs",
+    description: "Private lab package fixture.",
+    defaultInstallId: "labs",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-labs",
+      path: "source/seed-records.json",
+    },
+    sourceSchemaHash,
+    capabilities: [{ kind: "generatedAdmin", routeBase: "/apps" }],
+  };
 }

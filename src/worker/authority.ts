@@ -22,7 +22,7 @@ import {
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { Env } from "./index.ts";
 import { authorizeAuthorityOperation, authorizeInstanceWrite } from "./authority-admin-guard.ts";
-import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
+import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
@@ -50,6 +50,10 @@ import {
   handleAppStorageUpgradeStatusDurableObjectRequest,
   handleInstanceUpgradeStatusDurableObjectRequest,
 } from "./upgrade-status-api.ts";
+import {
+  activeAppPackageResolver,
+  findActiveWorkerSchemaAppDefinition,
+} from "./runtime-app-packages.ts";
 
 export const INTERNAL_RESET_APP_STORAGE_PATH = "/_internal/reset-app-storage";
 
@@ -189,7 +193,7 @@ export class FormlessAuthority extends DurableObject<Env> {
       return jsonResponse({ reset: true });
     }
 
-    const route = parseAuthorityRoute(url.pathname);
+    const route = parseAuthorityRoute(url.pathname, this.bindings);
 
     if (!route) {
       return jsonResponse({ error: "Not found." }, 404);
@@ -292,6 +296,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           body,
           identity: route.identity,
           operation,
+          packageResolver: activeAppPackageResolver(this.bindings),
           requestHeaders: request.headers,
           source,
           storage: this.ctx.storage,
@@ -432,11 +437,11 @@ function storageSourceFromSyncSocket(
     return launchFixtureSource;
   }
 
-  return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name);
+  return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name, env);
 }
 
-function storageSourceFromSchemaKey(schemaKey: string | undefined): StorageSource {
-  const app = schemaKey ? findWorkerSchemaAppDefinition(schemaKey) : undefined;
+function storageSourceFromSchemaKey(schemaKey: string | undefined, env: Env): StorageSource {
+  const app = schemaKey ? findActiveWorkerSchemaAppDefinition(schemaKey, env) : undefined;
 
   if (!app) {
     throw new Error("Authority Durable Object is missing a valid schema key.");
@@ -524,14 +529,15 @@ function sendSyncSocketError(socket: WebSocket, message: string) {
 
 function parseAuthorityRoute(
   pathname: string,
+  env: Env,
 ): { app: WorkerSchemaAppDefinition; identity: AppStorageIdentity; path: string } | undefined {
-  const route = parseAuthorityApiRoute(pathname);
+  const route = parseAuthorityApiRoute(pathname, activeAppPackageResolver(env));
 
   if (!route) {
     return undefined;
   }
 
-  const app = findWorkerSchemaAppDefinition(route.identity.sourceSchemaKey);
+  const app = findActiveWorkerSchemaAppDefinition(route.identity.sourceSchemaKey, env);
 
   if (!app) {
     return undefined;
