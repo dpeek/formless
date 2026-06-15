@@ -24,6 +24,20 @@ The system SHALL select generated surfaces from the active runtime profile and r
 - **AND** the mapped install schema editor mounts at `/schema`
 - **AND** the instance shell is not exposed
 
+#### Scenario: Package-owned public surface
+
+- **GIVEN** a browser route targets an installed app whose resolved package
+  declares public Site runtime support
+- **WHEN** React routing selects the public surface for that route
+- **THEN** generated UI discovers the public route component from the package
+  runtime React registry using the target package app key
+- **AND** the public component receives route base, app storage identity,
+  runtime profile, and package metadata from Formless core
+- **AND** generated admin screens, schema editing, sync, field editors, and
+  mutation behavior remain schema-driven core generated UI behavior
+- **AND** React routing does not hard-code the bundled Site route component
+  when the selected package has no registered public adapter
+
 ### Requirement: App Frame And Settings
 
 The system SHALL render app chrome according to profile and SHALL expose app-local controls through the app settings surface.

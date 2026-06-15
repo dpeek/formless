@@ -49,6 +49,45 @@ The system SHALL project live Site block and block placement records into a nest
 - THEN live dated post or project items are attached under query output
 - AND items are ordered by descending date
 
+### Requirement: Site App Runtime Adapter
+
+The system SHALL select Site-specific public runtime behavior through a
+package-owned runtime adapter for the resolved Site app package.
+
+#### Scenario: Adapter owns public tree behavior
+
+- GIVEN an installed app uses a package app key whose resolved package declares
+  public Site runtime support
+- WHEN the runtime receives a public tree read for that install
+- THEN the runtime dispatches to that package's registered public Site adapter
+- AND the adapter builds the public tree from flat app records and placement
+  edges in the selected app storage identity
+- AND the core Authority route does not branch on a hard-coded package app key
+  to call Site tree projection behavior
+
+#### Scenario: Adapter owns public document behavior
+
+- GIVEN a preview route, installed public route, mapped host, or published Site
+  profile targets a Site-capable installed app
+- WHEN the runtime handles a public document, metadata, indexing, or root icon
+  request for that target
+- THEN Worker dispatch selects the public Site adapter for the target package
+  app key
+- AND the adapter supplies document rendering, metadata, sitemap, robots, SVG
+  icon, PNG icon, and ICO icon behavior
+- AND request routing, route access, app storage identity, and core media
+  delivery remain owned by Formless core runtime boundaries
+
+#### Scenario: Adapter absence is unsupported
+
+- GIVEN a package manifest declares public Site runtime support but the current
+  runtime environment has no registered public Site adapter for that package
+  app key
+- WHEN a route, public tree read, document render, indexing resource, root icon,
+  or generated public surface requires that adapter
+- THEN the runtime rejects the request as an unsupported package capability
+- AND it does not fall back to the built-in Site implementation by package name
+
 ### Requirement: Subscribe Form Public Tree Projection
 
 The system SHALL project subscribe form blocks into public Site trees without exposing private challenge or runtime secrets.

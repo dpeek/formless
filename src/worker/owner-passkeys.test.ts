@@ -288,10 +288,10 @@ describe("owner passkey API routes", () => {
       },
       { headers: { Authorization: `Bearer ${adminToken}` } },
     );
-    const tokenOnlyLogin = await harness.fetch("/api/formless/session", {
-      headers: { Authorization: `Bearer ${adminToken}` },
-      method: "POST",
-    });
+    const tokenOnlyLogin = await postJson<{
+      authenticated: false;
+      error: string;
+    }>("/api/formless/session", {}, { headers: { Authorization: `Bearer ${adminToken}` } });
     const logout = await postJson<OwnerLogoutResponse>(
       "/api/formless/session/logout",
       {},
@@ -324,9 +324,9 @@ describe("owner passkey API routes", () => {
       "site",
       "crm-admin",
     ]);
-    expect(tokenOnlyLogin.status).toBe(401);
-    expect(tokenOnlyLogin.headers.get("Set-Cookie")).toBeNull();
-    expect(await tokenOnlyLogin.json()).toEqual({
+    expect(tokenOnlyLogin.response.status).toBe(401);
+    expect(tokenOnlyLogin.response.headers.get("Set-Cookie")).toBeNull();
+    expect(tokenOnlyLogin.body).toEqual({
       authenticated: false,
       error: "Passkey login is required.",
     });

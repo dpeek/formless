@@ -6,7 +6,7 @@ import {
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
 import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
-import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";

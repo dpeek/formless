@@ -4,10 +4,10 @@ import type {
   BootstrapResponse,
   MutationResponse,
   OwnerIdentity,
-  SitePageTreeResponse,
   StoreSnapshot,
   StoredRecord,
 } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";

@@ -16,9 +16,9 @@ import type {
   PublicOperationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
-  SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";

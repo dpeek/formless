@@ -10,15 +10,25 @@ import {
   type MutationResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type SitePageTreeResponse,
   type StoreSnapshot,
   type StoredRecord,
   type SyncResponse,
   type SyncSocketServerMessage,
 } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import { packageAppFactsForKey } from "../shared/app-installs.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  type AppPackageManifest,
+} from "../shared/app-packages.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
   crmSeedRecords,
@@ -36,7 +46,7 @@ import {
   type AuthorityWriteHelpers,
 } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -445,8 +455,57 @@ describe("authority", () => {
 
     expect(response.status).toBe(400);
     expect((await response.json()) as { error: string }).toEqual({
-      error: "Site page trees are only available for the site schema.",
+      error: 'Package app "tasks" does not declare public Site runtime support.',
     });
+  });
+
+  it("rejects public tree reads for public Site packages without a Worker adapter", async () => {
+    const sourceSchemaHash = await computeSourceSchemaHash(siteSourceSchema);
+    const privateHarness = await createWorkerHarness(
+      "src/worker/index.ts",
+      {
+        FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+      },
+      {
+        bindings: {
+          FORMLESS_ADMIN_TOKEN: "test-admin-token",
+          [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
+            {
+              manifest: privatePublicSitePackageManifest(sourceSchemaHash),
+              sourceSchema: siteSourceSchema,
+              seedRecords: siteSeedRecords,
+            },
+          ]),
+        },
+      },
+    );
+
+    try {
+      const created = await privateHarness.fetch("/api/formless/app-installs", {
+        body: JSON.stringify({
+          packageAppKey: "private-site",
+          installId: "private-site",
+          label: "Private Site",
+        }),
+        headers: {
+          Authorization: "Bearer test-admin-token",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const response = await privateHarness.fetch(
+        "/api/app-installs/private-site/private-site/tree/home",
+      );
+
+      expect(created.status).toBe(201);
+      expect(response.status).toBe(400);
+      expect((await response.json()) as { error: string }).toEqual({
+        error:
+          'Package app "private-site" declares public Site runtime support, but no public Site Worker adapter is registered.',
+      });
+    } finally {
+      await privateHarness.dispose();
+    }
   });
 
   it("returns source seed changes when sync initializes fresh storage", async () => {
@@ -4437,4 +4496,32 @@ function expectRecordsIgnoringOrder(actual: StoredRecord[], expected: StoredReco
 
 function recordsById(records: StoredRecord[]) {
   return Object.fromEntries(records.map((record) => [record.id, record]));
+}
+
+function privatePublicSitePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageManifest {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "private-site",
+    label: "Private Site",
+    description: "Private workspace Site package.",
+    defaultInstallId: "private-site",
+    supportsMultipleInstalls: true,
+    packageRevision: 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: "private-site",
+      path: "packages/private-site/schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "private-site",
+      path: "packages/private-site/seed-records.json",
+    },
+    sourceSchemaHash,
+    capabilities: [
+      { kind: "generatedAdmin", routeBase: "/apps" },
+      { kind: "publicSite", routeBase: "/sites" },
+    ],
+  };
 }

@@ -142,6 +142,18 @@ The system MUST route public Site documents through published Site behavior only
 - THEN the request is handled as a published Site document
 - AND the response uses public Site SSR instead of the client shell
 
+#### Scenario: Published document adapter selection
+
+- GIVEN the runtime profile or a route record selects an installed app whose
+  resolved package declares public Site runtime support
+- WHEN a public Site document request is eligible for SSR
+- THEN route topology selects the target app install and package app key before
+  document rendering
+- AND Worker document rendering is dispatched through the registered public Site
+  adapter for that package app key
+- AND no published document path is rendered by hard-coding the bundled `site`
+  package implementation when the selected package has no adapter
+
 #### Scenario: Non-document paths stay out of SSR
 
 - GIVEN the runtime profile is `publishedSite`
@@ -165,6 +177,8 @@ The system SHALL distinguish static asset fallback from dynamic public Site reso
 - WHEN a `GET` or `HEAD` request targets `/robots.txt`, `/sitemap.xml`, `/favicon.svg`, `/favicon.ico`, or `/apple-touch-icon.png`
 - THEN the request is handled as a dynamic public Site resource
 - AND dynamic root icon requests are not served from static asset fallback
+- AND the resource body is produced by the public Site adapter selected for the
+  target package app key
 
 ### Requirement: Preview Route Compatibility
 
@@ -205,6 +219,8 @@ profile behavior.
   top-level mapped-host paths
 - **AND** generated app routes, schema-key routes, instance shell routes, owner
   setup, owner login, and passkey ceremony requests are blocked on that host
+- **AND** public Site document, indexing, and icon behavior is selected from the
+  package runtime adapter registered for the route target's package app key
 
 #### Scenario: Mapped app host
 
@@ -239,6 +255,8 @@ routes from enabled schema-owned `route` records.
   Site `app-install` record
 - **AND** public Site reads use the matching install-scoped app storage
   identity
+- **AND** public Site runtime behavior is dispatched through the package
+  adapter registered for that app install's package app key
 
 #### Scenario: Disabled or conflicting route
 

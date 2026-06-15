@@ -17,10 +17,8 @@ import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.t
 import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
 import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes.ts";
 import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
-import { mappedSiteHostFromRuntimeRoute } from "./mapped-site-host.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
-import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
@@ -32,8 +30,12 @@ import {
   workerRuntimeProfileInput,
   type WorkerRuntimeRequestTopology,
 } from "./routing.ts";
-import { handleSiteIconRequest } from "./site-icons.ts";
-import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
+import {
+  handlePublicSiteDocumentRequest,
+  handlePublicSiteIconRequest,
+  handlePublicSiteIndexingRequest,
+  mappedPublicSiteHostFromRuntimeRoute,
+} from "./public-site-worker-runtime.ts";
 import { handleInstanceUpgradeStatusApiRequest } from "./upgrade-status-api.ts";
 import {
   handleLocalSessionBootstrapApiRequest,
@@ -96,8 +98,9 @@ export default {
       return redirectResponse(runtimeRoute.location, runtimeRoute.status);
     }
 
+    const packageResolver = activeAppPackageResolver(env);
     const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
-    const mappedSiteHost = mappedSiteHostFromRuntimeRoute(runtimeRoute);
+    const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute, packageResolver);
     const mappedRouteTargetProfile =
       runtimeRoute?.kind === "mount" ? runtimeRoute.targetProfile : undefined;
     const isMappedAppProfileHost = mappedRouteTargetProfile === "app";
@@ -134,8 +137,9 @@ export default {
       return mediaResponse;
     }
 
-    const siteIconResponse = await handleSiteIconRequest(request, env, {
+    const siteIconResponse = await handlePublicSiteIconRequest(request, env, {
       mappedSiteHost,
+      packageResolver,
       runtimeTopology: requestTopology,
     });
 
@@ -151,8 +155,9 @@ export default {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
     }
 
-    const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env, {
+    const publishedSiteIndexingResponse = await handlePublicSiteIndexingRequest(request, env, {
       mappedSiteHost,
+      packageResolver,
       runtimeTopology: requestTopology,
     });
 
@@ -161,7 +166,7 @@ export default {
     }
 
     const deployMetadataResponse = handleDeployMetadataRequest(request, env, {
-      packageResolver: activeAppPackageResolver(env),
+      packageResolver,
     });
 
     if (deployMetadataResponse) {
@@ -270,8 +275,9 @@ export default {
       return authority.fetch(authorityRequestWithOriginalUrlFacts(request));
     }
 
-    const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env, {
+    const siteDocumentResponse = await handlePublicSiteDocumentRequest(request, env, {
       mappedSiteHost,
+      packageResolver,
       runtimeTopology: requestTopology,
     });
 

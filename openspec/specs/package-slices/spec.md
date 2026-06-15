@@ -41,6 +41,38 @@ with a minimal package-local contract and adapter layout.
   `tsconfig.json`, and `src/` files for public contract and supported adapters
 - AND the package does not require a bundled app schema
 
+### Requirement: In-Repo App Package Structure
+
+The system SHALL allow in-repo app packages under `lib/<package>/` when the
+package owns source schema, seed records, and package-specific runtime
+adapters.
+
+#### Scenario: App package scaffold
+
+- GIVEN an app package such as Site is extracted into an in-repo package
+- WHEN the package is scaffolded
+- THEN the package contains package-local `AGENTS.md`, `package.json`,
+  `tsconfig.json`, `formless.app.json`, `schema.json`, `seed-records.json`,
+  and `src/` entrypoints for public contracts and supported runtime adapters
+- AND the app package is published as a workspace package with documented root,
+  React, Worker, and Node subpaths when those adapters exist
+- AND source schema and seed records remain app package source data rather than
+  generated runtime state
+
+#### Scenario: App package adapter ownership
+
+- GIVEN an in-repo app package declares a runtime capability in
+  `formless.app.json`
+- WHEN core runtime, Worker, React, CLI, archive, or tests need executable
+  behavior for that capability
+- THEN they import the package root or documented adapter subpaths
+- AND the package-owned adapter supplies capability-specific behavior such as
+  public tree projection, public document rendering, metadata, icons, or
+  indexing
+- AND core runtime owns app install identity, route records, Authority storage,
+  browser replicas, sync, media storage, and generic archive execution
+- AND code outside the package does not deep-import package internals
+
 ### Requirement: Minimal Package Documentation
 
 Package documentation SHALL stay minimal and source-faithful.

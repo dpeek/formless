@@ -74,7 +74,6 @@ describe("runtime profile resolver", () => {
     });
     expect(profile.installedSitePublicRoutes).toEqual({
       homeSlug: "home",
-      packageAppKey: "site",
       siteRouteBase: "/sites",
     });
     expect(profile.worlds).toEqual([]);
@@ -115,7 +114,6 @@ describe("runtime profile resolver", () => {
     });
     expect(profile.installedSitePublicRoutes).toEqual({
       homeSlug: "home",
-      packageAppKey: "site",
       siteRouteBase: "/sites",
     });
     expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "site", "crm"]);
@@ -449,6 +447,7 @@ describe("runtime profile resolver", () => {
     expect(world.route).toBe("/admin");
     expect(world.schemaRoute).toBeUndefined();
     expect(profile.publicSitePreview).toEqual({
+      packageAppKey: "site",
       rootRoute: "/",
       routePattern: "/*",
       homeSlug: "home",
@@ -482,9 +481,10 @@ describe("runtime profile resolver", () => {
     expect(world.route).toBe("/");
     expect(world.schemaRoute).toBeUndefined();
     expect(profile.publishedSite).toEqual({
+      homeSlug: "home",
+      packageAppKey: "site",
       rootRoute: "/",
       routePattern: "/*",
-      homeSlug: "home",
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
       ownerLoginRoute: "/login",
@@ -574,6 +574,23 @@ describe("runtime profile resolver", () => {
     expect(world.route).toBe("/");
     expect(world.schemaRoute).toBe("/schema");
     expect(world.target.installId).toBe("task-workspace");
+  });
+
+  it("uses document public Site target hints for mapped installed public hosts", () => {
+    const profile = resolveRuntimeProfile({
+      profile: "publishedSite",
+      appInstallId: "personal",
+      packageAppKey: "site",
+    });
+
+    if (!profile.publishedSite?.target || profile.publishedSite.target.kind !== "appInstall") {
+      throw new Error("Missing published Site target.");
+    }
+
+    expect(profile.kind).toBe("publishedSite");
+    expect(profile.publishedSite.packageAppKey).toBe("site");
+    expect(profile.publishedSite.target.installId).toBe("personal");
+    expect(profile.publishedSite.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
   });
 
   it("lets SSR document profile hints override the baked browser env profile", () => {

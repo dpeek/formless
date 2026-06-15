@@ -14,11 +14,13 @@ import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { OwnerLoginRoute, fetchOwnerSessionStatus } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
+import { normalizeSitePageSlug } from "@dpeek/formless-site-app/react";
 import {
-  SitePageRoute as DefaultSitePageRoute,
-  normalizeSitePageSlug,
-} from "./app/routes/site-page.tsx";
-import type { SitePageLinkMode } from "./app/site-renderer/links.ts";
+  createPublicSiteReactAdapterRegistry,
+  publicSiteReactAdapterForPackageAppKey,
+  type PublicSiteReactAdapterRegistry,
+  type PublicSiteRouteProps,
+} from "./app/public-site-runtime.tsx";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
@@ -59,17 +61,12 @@ type HomeRouteProps = {
   screenPath: string;
 };
 type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
-type SitePageRouteProps = {
-  linkMode?: SitePageLinkMode;
-  routeBase?: `/${string}`;
-  slug: string;
-  target?: ClientAppTarget;
-};
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
   SchemaRoute: ElementType<SchemaRouteProps>;
-  SitePageRoute: ElementType<SitePageRouteProps>;
+  SitePageRoute: ElementType<PublicSiteRouteProps>;
+  publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
 
 const defaultRouteComponents: AppRouteComponents = {
@@ -79,7 +76,7 @@ const defaultRouteComponents: AppRouteComponents = {
   SchemaRoute: lazy(() =>
     import("./app/routes/schema.tsx").then((module) => ({ default: module.SchemaRoute })),
   ),
-  SitePageRoute: DefaultSitePageRoute,
+  SitePageRoute: createPublicSiteReactAdapterRegistry().get("site")!.Route,
 };
 
 export function App({
@@ -430,9 +427,14 @@ function AppRoutes({
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
-  const { HomeRoute, SchemaRoute, SitePageRoute } = routeComponents;
+  const { HomeRoute, SchemaRoute } = routeComponents;
+  const publicSiteReactAdapters =
+    routeComponents.publicSiteReactAdapters ??
+    createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
   const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
+  const publishedSite = runtimeProfile.publishedSite;
+  const publicSitePreview = runtimeProfile.publicSitePreview;
   const hasLazyGeneratedRoutes =
     generatedWorlds.length > 0 || browserRoutes.installedAppHomeRoutePattern !== undefined;
   const routes = (
@@ -466,15 +468,31 @@ function AppRoutes({
           </OwnerRouteGuard>
         </Route>
       ) : null}
-      {runtimeProfile.publishedSite ? (
-        <Route path={runtimeProfile.publishedSite.rootRoute}>
-          <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
+      {publishedSite ? (
+        <Route path={publishedSite.rootRoute}>
+          <PublicSiteRoute
+            adapters={publicSiteReactAdapters}
+            packageAppKey={publishedSite.packageAppKey}
+            routeProps={{
+              linkMode: "published",
+              slug: publishedSite.homeSlug,
+              target: publishedSite.target,
+            }}
+          />
         </Route>
       ) : null}
-      {runtimeProfile.publishedSite ? (
-        <Route path={runtimeProfile.publishedSite.routePattern}>
+      {publishedSite ? (
+        <Route path={publishedSite.routePattern}>
           {(params) => (
-            <SitePageRoute linkMode="published" slug={runtimeWildcardSiteSlug(params)} />
+            <PublicSiteRoute
+              adapters={publicSiteReactAdapters}
+              packageAppKey={publishedSite.packageAppKey}
+              routeProps={{
+                linkMode: "published",
+                slug: runtimeWildcardSiteSlug(params),
+                target: publishedSite.target,
+              }}
+            />
           )}
         </Route>
       ) : null}
@@ -551,7 +569,7 @@ function AppRoutes({
             <InstalledSitePublicRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
-              routeComponents={routeComponents}
+              publicSiteReactAdapters={publicSiteReactAdapters}
               runtimeProfile={runtimeProfile}
               slug={runtimeInstalledSitePublicHomeSlug(runtimeProfile) ?? "home"}
             />
@@ -564,31 +582,39 @@ function AppRoutes({
             <InstalledSitePublicRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
-              routeComponents={routeComponents}
+              publicSiteReactAdapters={publicSiteReactAdapters}
               runtimeProfile={runtimeProfile}
               slug={runtimeWildcardSiteSlug(params)}
             />
           )}
         </Route>
       ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.rootRoute}>
-          {runtimeProfile.publicSitePreview.homeRoute ? (
-            <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
+      {publicSitePreview ? (
+        <Route path={publicSitePreview.rootRoute}>
+          {publicSitePreview.homeRoute ? (
+            <Redirect replace to={publicSitePreview.homeRoute} />
           ) : (
-            <SitePageRoute
-              linkMode={runtimeProfile.publicSitePreview.linkMode}
-              slug={runtimeProfile.publicSitePreview.homeSlug}
+            <PublicSiteRoute
+              adapters={publicSiteReactAdapters}
+              packageAppKey={publicSitePreview.packageAppKey}
+              routeProps={{
+                linkMode: publicSitePreview.linkMode,
+                slug: publicSitePreview.homeSlug,
+              }}
             />
           )}
         </Route>
       ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.routePattern}>
+      {publicSitePreview ? (
+        <Route path={publicSitePreview.routePattern}>
           {(params) => (
-            <SitePageRoute
-              linkMode={runtimeProfile.publicSitePreview?.linkMode}
-              slug={runtimeWildcardSiteSlug(params)}
+            <PublicSiteRoute
+              adapters={publicSiteReactAdapters}
+              packageAppKey={publicSitePreview.packageAppKey}
+              routeProps={{
+                linkMode: publicSitePreview.linkMode,
+                slug: runtimeWildcardSiteSlug(params),
+              }}
             />
           )}
         </Route>
@@ -683,18 +709,16 @@ function InstalledAppHomeRoute({
 function InstalledSitePublicRoute({
   installedAppRouteInstalls,
   installId,
-  routeComponents,
+  publicSiteReactAdapters,
   runtimeProfile,
   slug,
 }: {
   installedAppRouteInstalls: readonly AppInstall[] | undefined;
   installId: string | undefined;
-  routeComponents: AppRouteComponents;
+  publicSiteReactAdapters: PublicSiteReactAdapterRegistry;
   runtimeProfile: RuntimeProfile;
   slug: string;
 }) {
-  const { SitePageRoute } = routeComponents;
-
   if (!installId) {
     return <NotFoundRoute />;
   }
@@ -718,13 +742,44 @@ function InstalledSitePublicRoute({
   }
 
   return (
-    <SitePageRoute
-      linkMode="installed"
-      routeBase={surface.routeBase}
-      slug={surface.slug}
-      target={surface.target}
+    <PublicSiteRoute
+      adapters={publicSiteReactAdapters}
+      packageAppKey={surface.target.packageAppKey}
+      routeProps={{
+        linkMode: "installed",
+        routeBase: surface.routeBase,
+        slug: surface.slug,
+        target: surface.target,
+      }}
     />
   );
+}
+
+function PublicSiteRoute({
+  adapters,
+  packageAppKey,
+  routeProps,
+}: {
+  adapters: PublicSiteReactAdapterRegistry;
+  packageAppKey: string;
+  routeProps: PublicSiteRouteProps;
+}) {
+  const adapter = publicSiteReactAdapterForPackageAppKey(packageAppKey, adapters);
+
+  if (!adapter) {
+    return (
+      <section className="mx-auto max-w-3xl px-6 py-10">
+        <h1 className="text-2xl font-semibold">Unsupported public Site package</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Package app <code>{packageAppKey}</code> has no registered public Site React adapter.
+        </p>
+      </section>
+    );
+  }
+
+  const RouteComponent = adapter.Route;
+
+  return <RouteComponent {...routeProps} />;
 }
 
 function RouteLoading() {

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
+import rawSiteSeedRecords from "@dpeek/formless-site-app/seed-records.json";
+import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
+import { parseAppPackageManifest } from "../shared/app-packages.ts";
+import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import {
   findWorkerSchemaAppDefinition,
   getWorkerSchemaAppDefinition,
@@ -6,6 +11,34 @@ import {
 } from "./schema-apps.ts";
 
 describe("worker schema app definitions", () => {
+  it("loads bundled Site source from package-local manifest files", async () => {
+    const manifest = parseAppPackageManifest(rawSiteAppPackageManifest, "Site package manifest");
+    const site = getWorkerSchemaAppDefinition("site");
+
+    await expect(computeSourceSchemaHash(rawSiteSourceSchema)).resolves.toBe(
+      manifest.sourceSchemaHash,
+    );
+    expect(manifest).toMatchObject({
+      packageAppKey: "site",
+      seedRecords: {
+        kind: "bundled",
+        key: "site",
+        path: "seed-records.json",
+      },
+      sourceSchema: {
+        kind: "bundled",
+        key: "site",
+        path: "schema.json",
+      },
+    });
+    expect(Array.isArray(rawSiteSeedRecords)).toBe(true);
+    expect(site.sourceSchema.entities.site?.label).toBe("Site");
+    expect(site.seedRecords.length).toBeGreaterThan(0);
+    expect(site.seedRecords.every((record) => record.entity in site.sourceSchema.entities)).toBe(
+      true,
+    );
+  });
+
   it("loads parsed source schemas for each app", () => {
     const tasks = getWorkerSchemaAppDefinition("tasks");
     const site = getWorkerSchemaAppDefinition("site");

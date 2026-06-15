@@ -1,0 +1,31 @@
+{
+  "kind": "formless.appPackage",
+  "version": 1,
+  "packageAppKey": "site",
+  "label": "Site",
+  "description": "Public website app backed by the bundled Site schema and starter records.",
+  "defaultInstallId": "site",
+  "supportsMultipleInstalls": true,
+  "packageRevision": 1,
+  "sourceSchema": {
+    "kind": "bundled",
+    "key": "site",
+    "path": "schema.json"
+  },
+  "seedRecords": {
+    "kind": "bundled",
+    "key": "site",
+    "path": "seed-records.json"
+  },
+  "sourceSchemaHash": "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
+  "capabilities": [
+    {
+      "kind": "generatedAdmin",
+      "routeBase": "/apps"
+    },
+    {
+      "kind": "publicSite",
+      "routeBase": "/sites"
+    }
+  ]
+}

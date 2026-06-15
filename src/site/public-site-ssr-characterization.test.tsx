@@ -10,10 +10,10 @@ import {
   SitePageRoute,
   startSitePageRouteSession,
   type SitePageRouteState,
-} from "../app/routes/site-page.tsx";
+} from "@dpeek/formless-site-app/react";
 import { HomeRoute } from "../app/routes/home.tsx";
 import { SchemaRoute } from "../app/routes/schema.tsx";
-import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 
 describe("public Site SSR characterization", () => {
   it("characterizes the current HTML shell as an empty SPA root", () => {

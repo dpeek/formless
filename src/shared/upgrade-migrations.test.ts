@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
 import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
-import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
 import {
   bundledSourceSchemaHashFixtures,

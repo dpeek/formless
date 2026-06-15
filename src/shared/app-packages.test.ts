@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -14,6 +15,40 @@ const privateSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 
 describe("app package manifests", () => {
+  it("parses the bundled Site package manifest from package source", () => {
+    expect(parseAppPackageManifest(rawSiteAppPackageManifest)).toEqual({
+      kind: appPackageManifestKind,
+      version: appPackageManifestVersion,
+      packageAppKey: "site",
+      label: "Site",
+      description: "Public website app backed by the bundled Site schema and starter records.",
+      defaultInstallId: "site",
+      supportsMultipleInstalls: true,
+      packageRevision: 1,
+      sourceSchema: {
+        kind: "bundled",
+        key: "site",
+        path: "schema.json",
+      },
+      seedRecords: {
+        kind: "bundled",
+        key: "site",
+        path: "seed-records.json",
+      },
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      capabilities: [
+        {
+          kind: "generatedAdmin",
+          routeBase: "/apps",
+        },
+        {
+          kind: "publicSite",
+          routeBase: "/sites",
+        },
+      ],
+    });
+  });
+
   it("parses runtime-neutral package source facts", () => {
     expect(parseAppPackageManifest(privatePackageManifest())).toEqual({
       kind: appPackageManifestKind,
@@ -152,12 +187,12 @@ describe("app package manifests", () => {
     expect(findResolvedAppPackage("site")?.sourceSchemaLocation).toEqual({
       kind: "bundled",
       key: "site",
-      path: "schema/apps/site/schema.json",
+      path: "schema.json",
     });
     expect(findResolvedAppPackage("site")?.seedRecordsLocation).toEqual({
       kind: "bundled",
       key: "site",
-      path: "schema/apps/site/seed-records.json",
+      path: "seed-records.json",
     });
   });
 

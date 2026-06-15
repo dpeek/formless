@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "./fixtures/rate-card-schema.json";
-import rawSiteSchema from "../../schema/apps/site/schema.json";
+import rawSiteSchema from "@dpeek/formless-site-app/schema.json";
 import {
   sourceLikeSchemas,
   sourceLikeSiteSchema,

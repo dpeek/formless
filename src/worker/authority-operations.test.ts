@@ -26,7 +26,7 @@ import {
 import type { StoredOperationInvocation } from "./storage.ts";
 import { BadRequestError } from "./errors.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 

@@ -39,6 +39,20 @@ archive, or deploy workflows.
 - AND referenced seed records validate as stored-record shaped data for that
   source schema
 
+#### Scenario: Declare package runtime capabilities
+
+- GIVEN an app package manifest declares runtime capabilities
+- WHEN the package source is resolved
+- THEN the resolved package metadata exposes stable capability facts such as
+  generated admin and public Site runtime support
+- AND capability facts are data declarations used by install, route, archive,
+  deploy, and runtime dispatch validation
+- AND the manifest does not embed executable handler paths, JavaScript module
+  references, React component names, Worker functions, filesystem adapter
+  functions, or other runtime implementation details
+- AND executable behavior for a capability is selected from the runtime's
+  package adapter registry for the resolved package app key
+
 #### Scenario: Verify resolved package source hash
 
 - GIVEN an app package manifest declares a source schema hash

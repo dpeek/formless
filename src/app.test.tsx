@@ -17,10 +17,10 @@ import { RecordTree } from "./app/generated/tree.tsx";
 import {
   SitePageRoute,
   SitePageRouteView,
+  SitePageRenderer,
   startSitePageRouteSession,
   type SitePageRouteState,
-} from "./app/routes/site-page.tsx";
-import { SitePageRenderer } from "./app/site-renderer/renderer.tsx";
+} from "@dpeek/formless-site-app/react";
 import {
   applyBootstrapResponse,
   applyRecordMerge,
@@ -43,7 +43,7 @@ import {
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
-import { buildSitePageTree } from "./site/tree.ts";
+import { buildSitePageTree, type SitePageTree } from "@dpeek/formless-site-app";
 import {
   createDevRuntimeProfile,
   createAppRuntimeProfile,
@@ -71,7 +71,6 @@ import {
 } from "./client/views.ts";
 import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
-import type { SitePageTree } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
 import { parseAppSchema } from "@dpeek/formless-schema";
@@ -1423,6 +1422,25 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
     expect(html).not.toContain("Formless</span>");
+  });
+
+  it("rejects published public Site routes whose package has no React adapter", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createPublishedSiteRuntimeProfile({ packageAppKey: "private-site" })}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain("Unsupported public Site package");
+    expect(html).toContain("private-site");
+    expect(html).not.toContain('data-site-link-mode="published"');
   });
 
   it('renders a Site authoring profile home preview at "/" with top-level links', () => {

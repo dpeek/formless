@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 

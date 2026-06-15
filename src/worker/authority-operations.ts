@@ -1,4 +1,3 @@
-import { buildSitePageTree } from "../site/tree.ts";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
@@ -8,10 +7,10 @@ import {
   type BootstrapResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type SitePageTreeResponse,
   type StoreSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type {
   OperationInvocationEnvelope,
   OperationInvocationResponse,
@@ -43,7 +42,7 @@ import {
 } from "./authority-validation.ts";
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
-import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import {
   exportStorageSnapshot,
   getBootstrapRecords,
@@ -70,6 +69,7 @@ import {
   packageAppMigrationRegistry,
   selectPackageAppMigrationChain,
 } from "./package-app-migrations.ts";
+import { publicSiteWorkerAdapterForPackageAppKey } from "./public-site-worker-runtime.ts";
 
 export type AuthorityOperationMode = "read" | "write";
 
@@ -292,17 +292,20 @@ export function executeAuthorityOperation(
     }
 
     case "siteTree": {
-      if (input.app.key !== "site") {
-        throw new BadRequestError("Site page trees are only available for the site schema.");
-      }
-
       if (input.identity.kind === "instanceControlPlane") {
         throw new BadRequestError("Site page trees are only available for app storage.");
       }
 
       const slug = parseSiteTreeSlug(operation.metadata.path);
       const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const projection = buildSitePageTree(schema, getBootstrapRecords(input.storage), slug, {
+      const adapter = publicSiteWorkerAdapterForPackageAppKey(
+        input.identity.packageAppKey,
+        input.packageResolver,
+      );
+      const projection = adapter.buildPublicTree({
+        records: getBootstrapRecords(input.storage),
+        schema,
+        slug,
         target: input.identity,
         turnstileSiteKey: input.turnstileSiteKey,
       });

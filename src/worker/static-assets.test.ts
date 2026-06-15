@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "../site/site-icon-source.ts";
+import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "@dpeek/formless-site-app";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "./site-cache.ts";
+import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 

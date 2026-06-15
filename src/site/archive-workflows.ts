@@ -50,7 +50,10 @@ import {
   readFormlessInstanceTargetStatus,
   readOptionalFormlessInstanceControlPlaneRecords,
 } from "./instance-target-client.ts";
-import { isLegacySiteMediaHref, unsupportedLegacySiteMediaMessage } from "./source-media.ts";
+import {
+  isLegacySiteMediaHref,
+  unsupportedLegacySiteMediaMessage,
+} from "@dpeek/formless-site-app/node";
 import {
   buildCliUpgradePlanningReport,
   type CliUpgradePlanningReport,

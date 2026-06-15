@@ -1,3 +1,4 @@
+import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
 import {
   bundledSourceSchemaHashFixtures,
@@ -89,13 +90,9 @@ const reservedDefaultInstallIds = new Set([
 const currentBundledPackageAppRevision = 1 satisfies PackageAppRevision;
 
 export const bundledAppPackageManifests = [
-  bundledAppPackageManifest({
+  bundledAppPackageManifestFromSource(rawSiteAppPackageManifest, {
+    context: "bundled Site app package manifest",
     packageAppKey: "site",
-    label: schemaAppDefinitions.site.label,
-    description: "Public website app backed by the bundled Site schema and starter records.",
-    defaultInstallId: "site",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
-    publicSite: true,
   }),
   bundledAppPackageManifest({
     packageAppKey: "tasks",
@@ -313,6 +310,30 @@ function bundledAppPackageManifest(input: {
         : []),
     ],
   });
+}
+
+function bundledAppPackageManifestFromSource(
+  manifest: unknown,
+  input: {
+    context: string;
+    packageAppKey: SchemaKey;
+  },
+): AppPackageManifest {
+  const parsed = parseAppPackageManifest(manifest, input.context);
+
+  if (parsed.packageAppKey !== input.packageAppKey) {
+    throw new Error(`${input.context} packageAppKey must be "${input.packageAppKey}".`);
+  }
+
+  if (parsed.sourceSchema.kind !== "bundled") {
+    throw new Error(`${input.context} sourceSchema kind must be "bundled".`);
+  }
+
+  if (parsed.seedRecords.kind !== "bundled") {
+    throw new Error(`${input.context} seedRecords kind must be "bundled".`);
+  }
+
+  return parsed;
 }
 
 function parseSourceLocation(

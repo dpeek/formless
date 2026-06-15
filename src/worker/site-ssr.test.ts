@@ -1,18 +1,23 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
-import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../app/site-renderer/initial-tree.ts";
+import {
+  FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+} from "../app/runtime-profile.ts";
+import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "@dpeek/formless-site-app/react";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
+import { handlePublicSiteDocumentRequest } from "./public-site-worker-runtime.ts";
 import {
   PUBLISHED_SITE_ERROR_CACHE_CONTROL,
   PUBLISHED_SITE_HTML_CACHE_CONTROL,
   PUBLISHED_SITE_NOT_FOUND_CACHE_CONTROL,
-} from "./site-cache.ts";
+} from "@dpeek/formless-site-app/worker";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -46,7 +51,7 @@ afterAll(async () => {
 
 describe("published Site Worker SSR", () => {
   it("does not render published Site documents outside the published runtime profile", async () => {
-    const response = await handlePublishedSiteDocumentRequest(
+    const response = await handlePublicSiteDocumentRequest(
       new Request("https://example.com/", {
         headers: { Accept: "text/html" },
       }),
@@ -121,7 +126,7 @@ describe("published Site Worker SSR", () => {
   });
 
   it("injects production client assets from the built client shell", async () => {
-    const response = await handlePublishedSiteDocumentRequest(
+    const response = await handlePublicSiteDocumentRequest(
       new Request("https://example.com/projects", {
         headers: { Accept: "text/html" },
       }),
@@ -158,6 +163,47 @@ describe("published Site Worker SSR", () => {
     expect(html).not.toContain("/favicon-32x32.png");
   });
 
+  it("emits runtime target hints for mapped installed public Site documents", async () => {
+    const target = installedAppStorageIdentity({
+      installId: "personal",
+      packageAppKey: "site",
+    });
+
+    if (!target) {
+      throw new Error("Missing installed Site target.");
+    }
+
+    const response = await handlePublicSiteDocumentRequest(
+      new Request("https://example.com/projects", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(Response.json(testSitePageTree("projects"))),
+      {
+        mappedSiteHost: {
+          host: "example.com",
+          installId: "personal",
+          target,
+        },
+      },
+    );
+
+    if (!response) {
+      throw new Error("Expected a mapped public Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(html).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />`,
+    );
+    expect(html).toContain(
+      `<meta name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}" content="personal" />`,
+    );
+    expect(html).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME}" content="site" />`,
+    );
+  });
+
   it("returns server-rendered HTML for starter nested published Site slugs", async () => {
     const response = await getDocument("/blog/starter-post");
     const html = await response.text();
@@ -174,7 +220,7 @@ describe("published Site Worker SSR", () => {
   });
 
   it("renders escaped clean metadata from public tree facts", async () => {
-    const response = await handlePublishedSiteDocumentRequest(
+    const response = await handlePublicSiteDocumentRequest(
       new Request("https://example.com/projects?preview=1", {
         headers: { Accept: "text/html" },
       }),
@@ -237,7 +283,7 @@ describe("published Site Worker SSR", () => {
   });
 
   it("returns a no-store error document when the public tree read fails", async () => {
-    const response = await handlePublishedSiteDocumentRequest(
+    const response = await handlePublicSiteDocumentRequest(
       new Request("https://example.com/broken-page", {
         headers: { Accept: "text/html" },
       }),

@@ -10,7 +10,7 @@ import {
   installedAppStorageIdentity,
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { AppInstall, AppInstallRoute } from "../shared/app-installs.ts";
+import type { AppInstall, AppInstallRoute, PackageAppKey } from "../shared/app-installs.ts";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
@@ -46,7 +46,6 @@ export type RuntimeInstalledAppRoutes = {
 
 export type RuntimeInstalledSitePublicRoutes = {
   homeSlug: "home";
-  packageAppKey: "site";
   siteRouteBase: "/sites";
 };
 
@@ -63,6 +62,7 @@ export type RuntimeInstalledAppRouteContext = {
 export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
 
 export type RuntimePublicSitePreview = {
+  packageAppKey: PackageAppKey;
   rootRoute: `/${string}`;
   routePattern: `/${string}`;
   homeRoute?: `/${string}`;
@@ -71,9 +71,11 @@ export type RuntimePublicSitePreview = {
 };
 
 export type RuntimePublishedSiteRoutes = {
+  homeSlug: "home";
+  packageAppKey: PackageAppKey;
   rootRoute: "/";
   routePattern: "/*";
-  homeSlug: "home";
+  target?: AppStorageIdentity;
 };
 
 export type RuntimeProfile = {
@@ -125,6 +127,12 @@ export type SiteAuthoringRuntimeProfileOptions = {
   exposeSchemaRoute?: boolean;
 };
 
+export type PublishedSiteRuntimeProfileOptions = {
+  installId?: string | undefined;
+  packageAppKey?: string | undefined;
+  target?: AppStorageIdentity;
+};
+
 export {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
@@ -160,7 +168,10 @@ export function resolveRuntimeProfile(
     case "siteAuthoring":
       return createSiteAuthoringRuntimeProfile();
     case "publishedSite":
-      return createPublishedSiteRuntimeProfile();
+      return createPublishedSiteRuntimeProfile({
+        installId: input.appInstallId,
+        packageAppKey: input.packageAppKey,
+      });
     case "dev":
       return createDevRuntimeProfile();
   }
@@ -178,7 +189,6 @@ export function createInstanceRuntimeProfile(): RuntimeProfile {
     },
     installedSitePublicRoutes: {
       homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
-      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
       siteRouteBase: runtimeTopologyRoutes.siteRouteBase,
     },
   };
@@ -200,10 +210,10 @@ export function createDevWorkbenchRuntimeProfile(): RuntimeProfile {
     },
     installedSitePublicRoutes: {
       homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
-      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
       siteRouteBase: runtimeTopologyRoutes.siteRouteBase,
     },
     publicSitePreview: {
+      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
       rootRoute: runtimeTopologyRoutes.publicSitePreviewRouteBase,
       routePattern: `${runtimeTopologyRoutes.publicSitePreviewRouteBase}/*`,
       homeRoute: `${runtimeTopologyRoutes.publicSitePreviewRouteBase}/home`,
@@ -390,6 +400,7 @@ export function createSiteAuthoringRuntimeProfile(
       },
     ],
     publicSitePreview: {
+      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
       rootRoute: runtimeTopologyRoutes.instanceRootRoute,
       routePattern: "/*",
       homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
@@ -398,21 +409,41 @@ export function createSiteAuthoringRuntimeProfile(
   };
 }
 
-export function createPublishedSiteRuntimeProfile(): RuntimeProfile {
+export function createPublishedSiteRuntimeProfile(
+  options: PublishedSiteRuntimeProfileOptions = {},
+): RuntimeProfile {
+  const target =
+    options.target ??
+    (options.installId && options.packageAppKey
+      ? installedAppStorageIdentity({
+          installId: options.installId,
+          packageAppKey: options.packageAppKey,
+        })
+      : undefined);
+  const packageAppKey =
+    target?.packageAppKey ?? options.packageAppKey ?? runtimeTopologyRoutes.publicSitePackageAppKey;
+  const app =
+    (target
+      ? findSchemaAppDefinition(target.sourceSchemaKey)
+      : findSchemaAppDefinition(packageAppKey)) ?? getSchemaAppDefinition("site");
+
   return {
     kind: "publishedSite",
     shell: "publishedSite",
     worlds: [
       {
-        app: getSchemaAppDefinition("site"),
+        app,
         generatedRoutes: false,
         route: runtimeTopologyRoutes.instanceRootRoute,
+        ...(target ? { target } : {}),
       },
     ],
     publishedSite: {
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
+      packageAppKey,
       rootRoute: runtimeTopologyRoutes.instanceRootRoute,
       routePattern: "/*",
-      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
+      ...(target ? { target } : {}),
     },
   };
 }
@@ -469,11 +500,11 @@ export function installedSitePublicSurfaceFromRoute(
     return undefined;
   }
 
-  const install = (context.appInstalls ?? [])
-    .filter((candidate) => candidate.packageAppKey === routes.packageAppKey)
-    .find((candidate) => installedSitePublicRouteMatch(candidate, pathname));
+  const install = (context.appInstalls ?? []).find((candidate) =>
+    installedSitePublicRouteMatch(candidate, pathname),
+  );
 
-  if (!install || install.packageAppKey !== routes.packageAppKey) {
+  if (!install) {
     return undefined;
   }
 

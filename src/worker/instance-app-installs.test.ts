@@ -7,8 +7,8 @@ import type {
   CreateAppInstallResponse,
   MutationResponse,
   OwnerIdentity,
-  SitePageTreeResponse,
 } from "../shared/protocol.ts";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import {
   crmSeedRecords,
   crmSourceSchema,

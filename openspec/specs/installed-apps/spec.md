@@ -59,6 +59,21 @@ app install can be created.
 - **AND** code paths do not expose or call bundled-only compatibility package
   list or lookup APIs for active installs
 
+#### Scenario: Runtime adapter availability
+
+- **GIVEN** an installed route, public route, mapped host, archive import,
+  generated public surface, or runtime read requires package-specific behavior
+- **WHEN** runtime dispatch selects the installed app's package app key
+- **THEN** the runtime first verifies the package is present in the active
+  resolver and declares the required capability
+- **AND** executable behavior is selected from the environment-specific package
+  runtime adapter registry for that resolved package app key
+- **AND** a route or operation whose package declares the capability but has no
+  registered adapter is rejected with an unsupported package capability result
+  before calling Site-specific fallback code
+- **AND** install records, route records, and app records do not store adapter
+  module paths or executable handler identities
+
 #### Scenario: Private package availability
 
 - **GIVEN** a private app package such as ClearTrace is resolved from a

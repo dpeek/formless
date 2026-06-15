@@ -13,6 +13,7 @@
         "@dpeek/formless-gateway": "^0.1.0",
         "@dpeek/formless-media": "^0.1.0",
         "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-site-app": "^0.1.0",
         "@dpeek/formless-ui": "^0.1.3",
         "@dpeek/formless-workspace": "^0.1.0",
         "@internationalized/date": "^3.12.1",
@@ -63,6 +64,18 @@
     "lib/schema": {
       "name": "@dpeek/formless-schema",
       "version": "0.1.0",
+    },
+    "lib/site-app": {
+      "name": "@dpeek/formless-site-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cf-wasm/resvg": "0.3.4",
+        "@dpeek/formless-media": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-ui": "^0.1.3",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+      },
     },
     "lib/ui": {
       "name": "@dpeek/formless-ui",
@@ -208,6 +221,8 @@
     "@dpeek/formless-media": ["@dpeek/formless-media@workspace:lib/media"],
 
     "@dpeek/formless-schema": ["@dpeek/formless-schema@workspace:lib/schema"],
+
+    "@dpeek/formless-site-app": ["@dpeek/formless-site-app@workspace:lib/site-app"],
 
     "@dpeek/formless-ui": ["@dpeek/formless-ui@workspace:lib/ui"],
 

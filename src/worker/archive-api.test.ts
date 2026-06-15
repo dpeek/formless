@@ -7,6 +7,7 @@ import {
   type AppArchive,
   type InstanceArchive,
 } from "@dpeek/formless-archive";
+import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { AppInstall } from "../shared/app-installs.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -17,7 +18,6 @@ import type {
   AppInstallsResponse,
   BootstrapResponse,
   RecordValues,
-  SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
