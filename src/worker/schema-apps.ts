@@ -1,7 +1,5 @@
 import rawCrmSeedRecords from "../../schema/apps/crm/seed-records.json";
 import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
-import rawEstiiSeedRecords from "../../schema/apps/estii/seed-records.json";
-import rawEstiiSourceSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
@@ -27,7 +25,6 @@ export type WorkerSchemaAppDefinition = Omit<SchemaAppDefinition, "key"> & {
 };
 
 const taskSourceSchema = parseAppSchema(rawTaskSourceSchema);
-const estiiSourceSchema = parseAppSchema(rawEstiiSourceSchema);
 const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
 const crmSourceSchema = parseAppSchema(rawCrmSourceSchema);
 
@@ -36,15 +33,6 @@ export const workerSchemaAppDefinitions = {
     ...schemaAppDefinitions.tasks,
     sourceSchema: taskSourceSchema,
     seedRecords: parseWorkerSeedRecords(rawTaskSeedRecords, taskSourceSchema, "tasks seed records"),
-  },
-  estii: {
-    ...schemaAppDefinitions.estii,
-    sourceSchema: estiiSourceSchema,
-    seedRecords: parseWorkerSeedRecords(
-      rawEstiiSeedRecords,
-      estiiSourceSchema,
-      "estii seed records",
-    ),
   },
   site: {
     ...schemaAppDefinitions.site,

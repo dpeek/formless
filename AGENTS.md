@@ -69,7 +69,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 - App schema: runtime data contract.
 - Source schema: `schema/apps/<key>/schema.json`.
-- Schema key: route and storage key such as `tasks`, `estii`, `site`.
+- Schema key: route and storage key such as `tasks`, `site`, `crm`.
 - Entity: flat record type.
 - Field: scalar or reference value.
 - Record: stored entity instance with flat values.
@@ -112,7 +112,6 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## App Terms
 
 - Task app: tasks with active, completed, overdue queries.
-- Estii app: resources, cards, rates. Rate is join record.
 - Site app: blocks and block placements. Public pages render from tree projection.
 - Block: Site content, media, group, or page record.
 - Block placement: flat parent-child composition edge.

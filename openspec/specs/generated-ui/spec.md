@@ -13,9 +13,8 @@ The system SHALL select generated surfaces from the active runtime profile and r
 #### Scenario: Dev workbench routes
 
 - **GIVEN** the dev workbench profile
-- **WHEN** the user visits `/tasks`, `/estii`, `/site`, `/crm`, their `/schema` routes, or installed app routes
+- **WHEN** the user visits `/tasks`, `/site`, `/crm`, their `/schema` routes, or installed app routes
 - **THEN** the matching generated app, schema editor, admin, or public Site surface mounts
-- **AND** legacy `/rates` routes redirect to `/estii` routes
 
 #### Scenario: App custom-domain host
 
@@ -41,7 +40,7 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 
 - **GIVEN** the product instance shell renders
 - **WHEN** bundled app packages and custom domains are available
-- **THEN** install controls support Site, Tasks, Estii, and CRM packages by
+- **THEN** install controls support Site, Tasks, and CRM packages by
   default
 - **AND** custom domain management shows desired route state and provider applied
   evidence separately
@@ -422,7 +421,7 @@ records that matches current table-driven install management behavior.
 - **WHEN** installed apps are rendered
 - **THEN** app installs render in a scannable collection with package, label,
   status, and route summary fields derived from `route` records
-- **AND** install controls support Site, Tasks, Estii, and CRM package creation
+- **AND** install controls support Site, Tasks, and CRM package creation
   by default
 
 #### Scenario: Create install

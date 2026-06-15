@@ -177,7 +177,10 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/tasks"), instanceProfile),
     ).toBe(false);
     expect(
-      shouldDeferToStaticAssets(documentRequest("http://example.com/estii/setup"), instanceProfile),
+      shouldDeferToStaticAssets(
+        documentRequest("http://example.com/crm/audiences"),
+        instanceProfile,
+      ),
     ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/site/schema"), instanceProfile),
@@ -348,7 +351,7 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/api/site/tree/home"),
       documentRequest("http://example.com/pages/home"),
       documentRequest("http://example.com/tasks"),
-      documentRequest("http://example.com/estii/setup"),
+      documentRequest("http://example.com/crm/audiences"),
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
       documentRequest("http://example.com/setup"),
@@ -405,7 +408,7 @@ describe("Worker document routing", () => {
   it("blocks generated app paths from published document and static shell handling", () => {
     const generatedAppRequests = [
       documentRequest("http://example.com/tasks"),
-      documentRequest("http://example.com/estii/setup"),
+      documentRequest("http://example.com/crm/audiences"),
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
     ];
@@ -639,7 +642,7 @@ describe("Worker document routing", () => {
   it("recognizes generated app and preview route prefixes as client shell routes", () => {
     expect(isClientShellRoute("/pages/home")).toBe(true);
     expect(isClientShellRoute("/tasks")).toBe(true);
-    expect(isClientShellRoute("/estii/setup")).toBe(true);
+    expect(isClientShellRoute("/crm/audiences")).toBe(true);
     expect(isClientShellRoute("/site/schema")).toBe(true);
     expect(isClientShellRoute("/apps/personal")).toBe(true);
     expect(isClientShellRoute("/sites/personal/blog")).toBe(true);

@@ -348,7 +348,7 @@ describe("published Site Worker SSR", () => {
     const responses = await Promise.all([
       getDocument("/site"),
       getDocument("/tasks"),
-      getDocument("/estii/setup"),
+      getDocument("/crm/audiences"),
       getDocument("/schema"),
     ]);
     const bodies = await Promise.all(responses.map((response) => response.text()));

@@ -12,7 +12,7 @@ The system SHALL key each browser replica by app storage identity.
 
 #### Scenario: Schema-key browser replica
 
-- GIVEN a schema-key app such as `tasks`, `estii`, or `site`
+- GIVEN a schema-key app such as `tasks`, `site`, or `crm`
 - WHEN the browser opens the app
 - THEN the local IndexedDB replica uses a schema-key-specific database name
 - AND the matching broadcast channel is scoped to the same schema key

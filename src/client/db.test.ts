@@ -18,7 +18,7 @@ import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
-  await deleteClientDb("estii");
+  await deleteClientDb("site");
   await deleteClientDb(instanceControlPlaneClientTarget());
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
@@ -49,17 +49,17 @@ describe("client db", () => {
       records: [record("record-1", "Task")],
       cursor: 1,
     });
-    await saveBootstrapResponse("estii", {
+    await saveBootstrapResponse("site", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
-      records: [record("record-2", "Rate")],
+      records: [record("record-2", "Site")],
       cursor: 2,
     });
 
-    await deleteRawDatabase("formless:estii");
+    await deleteRawDatabase("formless:site");
 
     expect((await readLocalSnapshot("tasks")).records).toEqual([record("record-1", "Task")]);
-    expect(await readLocalSnapshot("estii")).toMatchObject({
+    expect(await readLocalSnapshot("site")).toMatchObject({
       schema: null,
       records: [],
       cursor: 0,

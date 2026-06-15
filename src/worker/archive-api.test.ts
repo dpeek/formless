@@ -21,7 +21,12 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
-import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
+import {
+  crmSeedRecords,
+  crmSourceSchema,
+  siteSourceSchema,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -209,11 +214,11 @@ describe("instance archive restore API", () => {
     );
   });
 
-  it("restores installed Estii app archives without Site media", async () => {
-    const dryRun = await postArchiveRestore(estiiAppArchive({ dryRun: true }));
-    const applied = await postArchiveRestore(estiiAppArchive({ dryRun: false }));
+  it("restores installed CRM app archives without Site media", async () => {
+    const dryRun = await postArchiveRestore(crmAppArchive({ dryRun: true }));
+    const applied = await postArchiveRestore(crmAppArchive({ dryRun: false }));
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
-    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/crm/rates/bootstrap");
 
     expect(dryRun.response.status).toBe(200);
     expect(dryRun.body).toMatchObject({
@@ -243,22 +248,22 @@ describe("instance archive restore API", () => {
       expect.objectContaining({
         adminRoute: "/apps/rates",
         installId: "rates",
-        packageAppKey: "estii",
+        packageAppKey: "crm",
         schemaRoute: "/apps/rates/schema",
       }),
     ]);
     expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
-    expect(bootstrap.body.schema).toEqual(rateSourceSchema);
-    expect(bootstrap.body.records).toEqual(estiiRecords());
+    expect(bootstrap.body.schema).toEqual(crmSourceSchema);
+    expect(bootstrap.body.records).toEqual(crmSeedRecords);
   });
 
-  it("restores mixed Site, Tasks, and Estii instance archives without non-Site media", async () => {
+  it("restores mixed Site, Tasks, and CRM instance archives without non-Site media", async () => {
     const dryRun = await postArchiveRestore(mixedInstanceArchive({ dryRun: true }));
     const applied = await postArchiveRestore(mixedInstanceArchive({ dryRun: false }));
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const site = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
     const tasks = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
-    const estii = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
+    const crm = await getJson<BootstrapResponse>("/api/app-installs/crm/rates/bootstrap");
 
     expect(dryRun.response.status).toBe(200);
     expect(dryRun.body).toMatchObject({
@@ -286,7 +291,7 @@ describe("instance archive restore API", () => {
     });
     expect(installs.body.installs.map((install) => install.packageAppKey)).toEqual([
       "site",
-      "estii",
+      "crm",
       "tasks",
     ]);
     expect(
@@ -299,8 +304,8 @@ describe("instance archive restore API", () => {
     expect(site.body.records).toEqual([siteRecord()]);
     expect(tasks.body.schema).toEqual(taskSourceSchema);
     expect(tasks.body.records).toEqual([taskRecord()]);
-    expect(estii.body.schema).toEqual(rateSourceSchema);
-    expect(estii.body.records).toEqual(estiiRecords());
+    expect(crm.body.schema).toEqual(crmSourceSchema);
+    expect(crm.body.records).toEqual(crmSeedRecords);
   });
 
   it("restores schema-owned control-plane records through the archive API", async () => {
@@ -523,7 +528,7 @@ function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
     exportedAt: "2026-05-12T00:00:00.000Z",
     capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
-    apps: [appArchive(input), tasksAppArchive(input), estiiAppArchive(input)],
+    apps: [appArchive(input), tasksAppArchive(input), crmAppArchive(input)],
   };
 }
 
@@ -721,7 +726,7 @@ function tasksAppArchive(input: {
   };
 }
 
-function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
+function crmAppArchive(input: { dryRun: boolean }): AppArchive {
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
@@ -730,10 +735,10 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "rates",
-      packageAppKey: "estii",
+      packageAppKey: "crm",
       packageRevision: 1,
-      sourceSchemaKey: "estii",
-      sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
+      sourceSchemaKey: "crm",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
       label: "Rates",
       status: "installed",
       createdAt: "2026-05-12T00:00:00.000Z",
@@ -744,12 +749,12 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
       snapshot: {
         kind: "formless.storeSnapshot",
         version: 1,
-        schemaKey: "estii",
+        schemaKey: "crm",
         exportedAt: "2026-05-12T00:00:00.000Z",
         schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        sourceCursor: 3,
-        schema: rateSourceSchema,
-        records: estiiRecords(),
+        sourceCursor: crmSeedRecords.length,
+        schema: crmSourceSchema,
+        records: crmSeedRecords,
       },
     },
     media: { objects: [] },
@@ -895,45 +900,4 @@ function taskRecord(overrides: { done?: boolean; id?: string; title?: string } =
       priority: "normal",
     },
   };
-}
-
-function estiiRecords(): StoredRecord[] {
-  return [
-    {
-      id: "card-restored",
-      createdAt: "2026-05-12T00:00:00.000Z",
-      entity: "card",
-      values: {
-        name: "Restored card",
-        isDefault: true,
-        marginMin: 0.4,
-        marginMed: 0.5,
-        marginMax: 0.6,
-      },
-    },
-    {
-      id: "resource-restored",
-      createdAt: "2026-05-12T00:00:01.000Z",
-      entity: "resource",
-      values: {
-        name: "Restored resource",
-        kind: "role",
-        unit: "day",
-      },
-    },
-    {
-      id: "rate-restored",
-      createdAt: "2026-05-12T00:00:02.000Z",
-      entity: "rate",
-      values: {
-        resource: "resource-restored",
-        card: "card-restored",
-        cost: 500,
-        costUnit: "day",
-        price: 750,
-        priceSet: true,
-        currency: "usd",
-      },
-    },
-  ];
 }

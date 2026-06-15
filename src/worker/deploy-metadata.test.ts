@@ -45,11 +45,6 @@ describe("Worker deploy metadata", () => {
           sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
         },
         {
-          packageAppKey: "estii",
-          packageRevision: 1,
-          sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-        },
-        {
           packageAppKey: "crm",
           packageRevision: 1,
           sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,

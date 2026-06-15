@@ -12,8 +12,6 @@ import type {
 import {
   crmSeedRecords,
   crmSourceSchema,
-  rateSeedRecords,
-  rateSourceSchema,
   siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema,
@@ -112,13 +110,6 @@ describe("instance app install API routes", () => {
         packageAppKey: "tasks",
         packageRevision: 1,
         sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
-      }),
-      expect.objectContaining({
-        defaultInstallId: "estii",
-        label: "Estii",
-        packageAppKey: "estii",
-        packageRevision: 1,
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
       }),
       expect.objectContaining({
         defaultInstallId: "crm",
@@ -483,40 +474,6 @@ describe("instance app install API routes", () => {
     expect(after.body.installs).toEqual(applied.body.installs);
   });
 
-  it("persists Estii installs and bootstraps from the bundled Estii source", async () => {
-    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
-      packageAppKey: "estii",
-      installId: "rates",
-      label: "Rates",
-    });
-    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
-
-    expect(created.response.status).toBe(201);
-    expect(created.body.initialization).toEqual({
-      installId: "rates",
-      packageAppKey: "estii",
-      seedRecordsKey: "estii",
-      sourceSchemaKey: "estii",
-    });
-    expect(created.body.install).toEqual(
-      expect.objectContaining({
-        adminRoute: "/apps/rates",
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
-        packageRevision: 1,
-        schemaRoute: "/apps/rates/schema",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-        status: "installed",
-      }),
-    );
-    expect(created.body.install).not.toHaveProperty("publicRoute");
-    expect(created.body.install).not.toHaveProperty("publicRoutePrefix");
-    expect(bootstrap.body.schema).toEqual(rateSourceSchema);
-    expect(bootstrap.body.records).toEqual(rateSeedRecords);
-    expect(bootstrap.body.cursor).toBe(rateSeedRecords.length);
-  });
-
   it("persists CRM installs and bootstraps from the bundled CRM source", async () => {
     const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "crm",
@@ -814,7 +771,6 @@ async function resetWorkerState() {
     postReset("/api/app-installs/site/site/reset/seed"),
     postReset("/api/app-installs/site/personal/reset/seed"),
     postReset("/api/app-installs/tasks/tasks/reset/seed"),
-    postReset("/api/app-installs/estii/rates/reset/seed"),
     postReset("/api/app-installs/crm/crm/reset/seed"),
   ]);
 }

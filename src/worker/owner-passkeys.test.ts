@@ -282,9 +282,9 @@ describe("owner passkey API routes", () => {
     const adminWrite = await postJson<CreateAppInstallResponse>(
       "/api/formless/app-installs",
       {
-        packageAppKey: "estii",
-        installId: "estii-admin",
-        label: "Estii Admin",
+        packageAppKey: "crm",
+        installId: "crm-admin",
+        label: "CRM Admin",
       },
       { headers: { Authorization: `Bearer ${adminToken}` } },
     );
@@ -317,12 +317,12 @@ describe("owner passkey API routes", () => {
     });
     expect(adminWrite.response.status).toBe(201);
     expect(adminWrite.body.install).toMatchObject({
-      installId: "estii-admin",
-      packageAppKey: "estii",
+      installId: "crm-admin",
+      packageAppKey: "crm",
     });
     expect(appInstallsAfter.body.installs.map((install) => install.installId)).toEqual([
       "site",
-      "estii-admin",
+      "crm-admin",
     ]);
     expect(tokenOnlyLogin.status).toBe(401);
     expect(tokenOnlyLogin.headers.get("Set-Cookie")).toBeNull();

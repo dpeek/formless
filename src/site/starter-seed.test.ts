@@ -17,7 +17,7 @@ describe("Site starter seed", () => {
     expect(ownedOrInlineImageHrefs()).toEqual([]);
     expect(serializedSeed()).not.toContain("David Peek");
     expect(serializedSeed()).not.toContain("dpeek");
-    expect(serializedSeed()).not.toContain("Estii");
+    expect(serializedSeed()).not.toContain("PricingLab");
     expect(serializedSeed()).not.toContain("OpenSurf");
   });
 

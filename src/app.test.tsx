@@ -670,8 +670,6 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/tasks")).toContain('aria-current="page"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
-    expect(html).toContain('href="/estii"');
-    expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expectAppSettings(html, {
@@ -684,28 +682,6 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Create Task");
   });
 
-  it('renders the "/estii" route with Estii navigation', () => {
-    const html = renderRoute("/estii");
-
-    expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="generated-app"');
-    expectRuntimeShell(html);
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain("Tasks");
-    expect(html).toContain('href="/estii"');
-    expect(html).toContain("Estii");
-    expect(html).toContain('href="/site"');
-    expect(html).toContain("Site");
-    expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
-      schemaRoute: "/estii/schema",
-    });
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain("Loading Estii...");
-    expect(html).not.toContain("Create Resource");
-  });
-
   it('renders the "/site" route with site navigation', () => {
     const html = renderRoute("/site");
 
@@ -714,8 +690,6 @@ describe("App smoke routes", () => {
     expectRuntimeShell(html);
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
-    expect(html).toContain('href="/estii"');
-    expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expectAppSettings(html, {
@@ -729,15 +703,15 @@ describe("App smoke routes", () => {
   });
 
   it("marks active app sidebar screen and settings links as current", () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const devSetupHtml = generatedAppFrameHtml(renderRoute("/estii/setup"));
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
+    const devSetupHtml = generatedAppFrameHtml(renderRoute("/crm/audiences"));
 
-    expect(linkHtml(devSetupHtml, "/estii/setup")).toContain('aria-current="page"');
-    expect(linkHtml(devSetupHtml, "/estii")).not.toContain('aria-current="page"');
-    expect(linkHtml(devSetupHtml, "/estii/schema")).not.toContain('aria-current="page"');
+    expect(linkHtml(devSetupHtml, "/crm/audiences")).toContain('aria-current="page"');
+    expect(linkHtml(devSetupHtml, "/crm")).not.toContain('aria-current="page"');
+    expect(linkHtml(devSetupHtml, "/crm/schema")).not.toContain('aria-current="page"');
 
     const appSchemaHtml = generatedAppFrameHtml(
-      renderRoute("/schema", createAppRuntimeProfile("estii")),
+      renderRoute("/schema", createAppRuntimeProfile("crm")),
     );
 
     expect(linkHtml(appSchemaHtml, "/schema")).toContain('aria-current="page"');
@@ -1019,46 +993,6 @@ describe("App smoke routes", () => {
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:task-workspace");
   });
 
-  it("renders installed Estii rates from the install-scoped target", () => {
-    const appInstalls = [
-      appInstallFixture({
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
-      }),
-    ];
-    const installedWorld = findRuntimeWorldMountByRoute(createDevRuntimeProfile(), "/apps/rates", {
-      appInstalls,
-    });
-
-    if (
-      !installedWorld?.target ||
-      typeof installedWorld.target !== "object" ||
-      installedWorld.target.kind !== "appInstall"
-    ) {
-      throw new Error("Expected installed Estii target for /apps/rates.");
-    }
-
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), installedWorld.target);
-    const html = renderRoute("/apps/rates", undefined, appInstalls);
-
-    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Rates" });
-    expectAppSettings(html, {
-      appLabel: "Estii",
-      resetScopeLabel: "Estii app install rates",
-      schemaKey: "estii",
-      schemaRoute: "/apps/rates/schema",
-      syncWorldKey: "app:rates",
-    });
-    expect(html).toContain('href="/apps/rates/setup"');
-    expect(html).toContain("Create Resource");
-    expect(html).toContain("Average cost");
-    expect(html).toContain("Average margin");
-    expect(html).toContain("Margin");
-    expect(html).not.toContain("Loading Estii...");
-    expect(installedWorld.target.browserDatabaseName).toBe("formless:app:rates");
-  });
-
   it("renders installed CRM generated UI from the install-scoped target", () => {
     const appInstalls = [
       appInstallFixture({
@@ -1097,43 +1031,6 @@ describe("App smoke routes", () => {
     expect(html).toContain("Email addresses");
     expect(html).not.toContain("Loading CRM...");
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:crm");
-  });
-
-  it("routes installed Estii setup through the app-relative setup screen", () => {
-    const appInstalls = [
-      appInstallFixture({
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
-      }),
-    ];
-    const installedWorld = findRuntimeWorldMountByRoute(
-      createDevRuntimeProfile(),
-      "/apps/rates/setup",
-      { appInstalls },
-    );
-
-    if (!installedWorld?.target) {
-      throw new Error("Expected installed Estii target for /apps/rates/setup.");
-    }
-
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), installedWorld.target);
-    const html = renderRoute("/apps/rates/setup", undefined, appInstalls);
-
-    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Setup" });
-    expectAppSettings(html, {
-      appLabel: "Estii",
-      resetScopeLabel: "Estii app install rates",
-      schemaKey: "estii",
-      schemaRoute: "/apps/rates/schema",
-      syncWorldKey: "app:rates",
-    });
-    expect(linkHtml(generatedAppFrameHtml(html), "/apps/rates/setup")).toContain(
-      'aria-current="page"',
-    );
-    expect(html).toContain("Rate cards");
-    expect(html).toContain("Resources");
-    expect(html).not.toContain("Loading Estii...");
   });
 
   it("keeps installed Site home routes scoped to the installed app target", () => {
@@ -1231,11 +1128,6 @@ describe("App smoke routes", () => {
         packageAppKey: "tasks",
       }),
       appInstallFixture({
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
-      }),
-      appInstallFixture({
         installId: "crm",
         label: "CRM",
         packageAppKey: "crm",
@@ -1275,14 +1167,6 @@ describe("App smoke routes", () => {
         key: "tasks:task-workspace",
         label: "Task Workspace",
         packageAppKey: "tasks",
-      },
-      {
-        href: "/apps/rates",
-        installId: "rates",
-        isCurrent: false,
-        key: "estii:rates",
-        label: "Rates",
-        packageAppKey: "estii",
       },
       {
         href: "/apps/crm",
@@ -1432,52 +1316,6 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
-    expect(html).not.toContain("<code>estii</code>");
-  });
-
-  it('renders the "/estii/schema" route', () => {
-    applyBootstrapResponse(bootstrap([], rateCardSchema), "estii");
-    const html = renderRoute("/estii/schema");
-
-    expect(html).toContain('data-frame="workbench"');
-    expect(html).not.toContain('data-frame="workbench-tool"');
-    expect(html).toContain('data-frame="generated-app"');
-    expectRuntimeShell(html);
-    expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
-      schemaRoute: "/estii/schema",
-    });
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain('href="/estii/setup"');
-    expect(html).not.toContain("Estii Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">estii</span>");
-    expect(html).not.toContain('aria-label="Estii route reset controls"');
-    expect(html).not.toContain('aria-label="Estii source reset controls"');
-    expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Schema builder"');
-    expect(html).toContain('aria-label="Schema entities"');
-    expect(html).not.toContain('aria-label="Builder schema tree"');
-    expect(html).not.toContain('role="tree"');
-    expect(html).toContain('data-entity-key="resource"');
-    expect(html).toContain('data-field-key="name"');
-    expect(html).toContain('aria-label="Entity label for resource"');
-    expect(html).toContain('aria-label="Field label for resource.name"');
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).toContain("Save schema");
-    expect(html).not.toContain("Open app");
-    expect(html).not.toContain("Reset schema and seed data");
-    expect(html).not.toContain('aria-label="Estii store snapshot controls"');
-    expect(html).not.toContain("Export store snapshot");
-    expect(html).not.toContain("Estii snapshot file");
-    expect(html).not.toContain("Restore store snapshot");
-    expect(html).not.toContain("Reset source schema");
-    expect(html).toContain("&quot;rateSetup&quot;");
-    expect(html).toContain("&quot;rate&quot;");
-    expect(html).toContain("&quot;resource&quot;");
-    expect(html).not.toContain("<code>tasks</code>");
-    expect(html).not.toContain("<code>rates</code>");
   });
 
   it('renders the "/site/schema" route', () => {
@@ -1527,7 +1365,6 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;block-placement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
-    expect(html).not.toContain("<code>estii</code>");
   });
 
   it('renders the "/crm/schema" route', () => {
@@ -1643,7 +1480,6 @@ describe("App smoke routes", () => {
     expect(html).toContain('href="/admin/settings"');
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).not.toContain('href="/tasks"');
-    expect(html).not.toContain('href="/estii"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/site/schema"');
     expect(html).not.toContain('href="/admin/schema"');
@@ -1682,10 +1518,10 @@ describe("App smoke routes", () => {
   });
 
   it("renders a published Site profile slug path outside generated admin navigation", () => {
-    const html = renderRoute("/projects/estii", createPublishedSiteRuntimeProfile());
+    const html = renderRoute("/projects/pricinglab", createPublishedSiteRuntimeProfile());
 
     expect(html).toContain("Loading site page...");
-    expect(html).toContain("Loading projects/estii.");
+    expect(html).toContain("Loading projects/pricinglab.");
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('href="/tasks"');
@@ -1711,24 +1547,24 @@ describe("App smoke routes", () => {
   });
 
   it('renders an app profile home at "/" without the multi-app switcher', () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const html = renderRoute("/", createAppRuntimeProfile("estii"));
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
+    const html = renderRoute("/", createAppRuntimeProfile("crm"));
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
     expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
+      appLabel: "CRM",
+      schemaKey: "crm",
       schemaRoute: "/schema",
     });
-    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Rates" });
-    expect(html).toContain(">Rates</h1>");
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain('href="/setup"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Contacts" });
+    expect(html).toContain(">Contacts</h1>");
+    expect(html).toContain('aria-label="CRM screens"');
+    expect(html).toContain('href="/audiences"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
-    expect(html).not.toContain('href="/estii"');
-    expect(html).not.toContain('href="/estii/schema"');
+    expect(html).not.toContain('href="/crm"');
+    expect(html).not.toContain('href="/crm/schema"');
   });
 
   it('renders an installed app profile home at "/" from the install-scoped target', () => {
@@ -1762,22 +1598,21 @@ describe("App smoke routes", () => {
   });
 
   it("renders an app profile screen path without the schema key prefix", () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const html = renderRoute("/setup", createAppRuntimeProfile("estii"));
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
+    const html = renderRoute("/audiences", createAppRuntimeProfile("crm"));
 
-    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Setup" });
-    expect(html).toContain(">Setup</h1>");
-    expect(html).toContain('aria-label="Estii screens"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Audiences" });
+    expect(html).toContain(">Audiences</h1>");
+    expect(html).toContain('aria-label="CRM screens"');
     expect(html).toContain('href="/"');
-    expect(html).toContain('href="/setup"');
+    expect(html).toContain('href="/audiences"');
     expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
+      appLabel: "CRM",
+      schemaKey: "crm",
       schemaRoute: "/schema",
     });
-    expect(html).toContain(">Rate cards</h2>");
-    expect(html).toContain(">Resources</h2>");
-    expect(html).not.toContain('href="/estii/setup"');
+    expect(html).toContain("Create Audience");
+    expect(html).not.toContain('href="/crm/audiences"');
   });
 
   it('renders an installed app profile schema editor at "/schema" from the install-scoped target', () => {
@@ -1811,26 +1646,26 @@ describe("App smoke routes", () => {
   });
 
   it('renders an app profile schema editor at "/schema" with the selected schema key', () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const html = renderRoute("/schema", createAppRuntimeProfile("estii"));
+    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
+    const html = renderRoute("/schema", createAppRuntimeProfile("crm"));
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Schema" });
-    expect(html).not.toContain("Estii Schema");
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Schema" });
+    expect(html).not.toContain("CRM Schema");
     expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">estii</span>");
-    expect(html).toContain('href="/setup"');
+    expect(html).toContain(">crm</span>");
+    expect(html).toContain('href="/audiences"');
     expectAppSettings(html, {
-      appLabel: "Estii",
-      schemaKey: "estii",
+      appLabel: "CRM",
+      schemaKey: "crm",
       schemaRoute: "/schema",
     });
-    expect(html).not.toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain('aria-label="CRM route reset controls"');
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
-    expect(html).not.toContain('href="/estii/schema"');
+    expect(html).not.toContain('href="/crm/schema"');
   });
 });
 
@@ -2131,7 +1966,7 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/blog"');
     expect(html).toContain('href="/projects"');
     expect(html).toContain('href="/resume"');
-    expect(html).toContain('href="/projects/estii"');
+    expect(html).toContain('href="/projects/pricinglab"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
@@ -2149,7 +1984,7 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/sites/personal/blog"');
     expect(html).toContain('href="/sites/personal/projects"');
     expect(html).toContain('href="/sites/personal/resume"');
-    expect(html).toContain('href="/sites/personal/projects/estii"');
+    expect(html).toContain('href="/sites/personal/projects/pricinglab"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
@@ -2190,7 +2025,7 @@ describe("public site renderer", () => {
     expect(html).toContain("Shipping schema-backed authoring");
     expect(html).toContain("Draft notes on generated editorial tools");
     expect(html).toContain("Featured projects");
-    expect(html).toContain("Estii");
+    expect(html).toContain("PricingLab");
     expect(html).toContain("OpenSurf");
     expect(html).toContain("Formless makes app schema describe enough behavior");
   });
@@ -2211,7 +2046,7 @@ describe("public site renderer", () => {
       testSiteSeedRecords.filter(
         (record) =>
           ![
-            "rec_site_place_projects_estii",
+            "rec_site_place_projects_pricinglab",
             "rec_site_place_projects_opensurf",
             "rec_site_place_projects_formless",
           ].includes(record.id),
@@ -2238,11 +2073,11 @@ describe("public site renderer", () => {
     expect(projectsHtml).toContain("OpenSurf");
     expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
     expect(projectsHtml).toContain("Formless");
-    expect(projectsHtml).toContain("Estii");
+    expect(projectsHtml).toContain("PricingLab");
     expect(projectCardHtml).toContain('data-site-summary-link="project"');
     expect(projectCardHtml).toContain("absolute inset-0");
     expect(projectsHtml.indexOf("OpenSurf")).toBeLessThan(projectsHtml.indexOf("Formless"));
-    expect(projectsHtml.indexOf("Formless")).toBeLessThan(projectsHtml.indexOf("Estii"));
+    expect(projectsHtml.indexOf("Formless")).toBeLessThan(projectsHtml.indexOf("PricingLab"));
     expect(projectsHtml).not.toContain("2026-05-08");
     expect(projectsHtml).not.toContain("2026-05-03");
     expect(projectsHtml).not.toContain("2026-05-01");
@@ -2254,7 +2089,7 @@ describe("public site renderer", () => {
         testSiteSeedRecords.filter(
           (record) =>
             ![
-              "rec_site_place_projects_estii",
+              "rec_site_place_projects_pricinglab",
               "rec_site_place_projects_opensurf",
               "rec_site_place_projects_formless",
             ].includes(record.id),
@@ -2280,10 +2115,10 @@ describe("public site renderer", () => {
 
     expect(main).not.toContain("Projects");
     expect(main).not.toContain("Current and recent product work");
-    expect(html).toContain("Estii");
+    expect(html).toContain("PricingLab");
     expect(html).toContain("OpenSurf");
     expect(html).toContain("Formless");
-    expect(html).toContain('href="/pages/projects/estii"');
+    expect(html).toContain('href="/pages/projects/pricinglab"');
     expect(html).toContain('href="/pages/projects/opensurf"');
     expect(html).toContain('href="/pages/projects/formless"');
     expect(main).not.toContain("2026-05-08");
@@ -2292,10 +2127,10 @@ describe("public site renderer", () => {
     expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).toContain("operational assumptions");
     expect(html).toContain("<strong");
-    expect(html).toContain('href="https://estii.com/"');
+    expect(html).toContain('href="https://pricinglab.example/"');
     expect(html).toContain(">pricing structures<");
     expect(html).not.toContain("**operational assumptions**");
-    expect(html).not.toContain("[pricing structures](https://estii.com)");
+    expect(html).not.toContain("[pricing structures](https://pricinglab.example)");
   });
 
   it("renders post detail routes through the Site frame", () => {
@@ -2469,7 +2304,7 @@ describe("public site renderer", () => {
         values: {
           type: "markdown",
           label: "Intro markdown",
-          body: "I co-founded [estii.com](https://estii.com) and **OpenSurf**.",
+          body: "I co-founded [pricinglab.example](https://pricinglab.example) and **OpenSurf**.",
         },
         createdAt: "2026-05-05T00:00:32.000Z",
       },
@@ -2487,10 +2322,10 @@ describe("public site renderer", () => {
     const html = renderSitePage("home", records);
 
     expect(html).toContain('data-web-markdown-renderer="shared"');
-    expect(html).toContain('href="https://estii.com/"');
-    expect(html).toContain(">estii.com<");
+    expect(html).toContain('href="https://pricinglab.example/"');
+    expect(html).toContain(">pricinglab.example<");
     expect(html).toContain("<strong");
-    expect(html).not.toContain("[estii.com](https://estii.com)");
+    expect(html).not.toContain("[pricinglab.example](https://pricinglab.example)");
     expect(html).not.toContain("**OpenSurf**");
   });
 
@@ -3737,26 +3572,26 @@ describe("generated collection home", () => {
   });
 
   it("renders only primary rate-card collection navigation", () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
-    const html = renderRoute("/estii");
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "tasks");
+    const html = renderRoute("/tasks");
 
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain('href="/estii/setup"');
+    expect(html).toContain('aria-label="Tasks screens"');
+    expect(html).toContain('href="/tasks/setup"');
     expect(html).toContain("Rates");
     expect(html).toContain("Create Resource");
     expect(html).not.toContain("Regenerate missing rates");
     expect(html).not.toMatch(/<button[^>]*>Create Rate<\/button>/);
   });
 
-  it("routes Estii setup through the setup screen path", () => {
-    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
-    const html = renderRoute("/estii/setup");
+  it("routes setup through the app screen path", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "tasks");
+    const html = renderRoute("/tasks/setup");
 
     expect(html).toContain(">Setup</h1>");
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain('href="/estii"');
-    expect(html).toContain('href="/estii/setup"');
+    expect(html).toContain('aria-label="Tasks screens"');
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain('href="/tasks/setup"');
     expect(html).toContain(">Rate cards</h2>");
     expect(html).toContain(">Resources</h2>");
     expect(html).toContain("Create Rate card");

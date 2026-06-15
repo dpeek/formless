@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { AppInstallsResponse, BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import {
-  rateSeedRecords,
-  rateSourceSchema,
   crmSeedRecords,
   crmSourceSchema,
   siteSeedRecords,
@@ -79,20 +77,10 @@ describe("worker launch fixture startup", () => {
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const legacyTasks = await harness.fetch("/api/tasks/bootstrap");
     const tasks = await getJson<BootstrapResponse>("/api/app-installs/tasks/tasks/bootstrap");
-    const estii = await getJson<BootstrapResponse>("/api/app-installs/estii/estii/bootstrap");
 
-    expect(installs.installs.map((install) => install.installId)).toEqual([
-      "estii",
-      "site",
-      "tasks",
-    ]);
-    expect(installs.installs.map((install) => install.packageAppKey)).toEqual([
-      "estii",
-      "site",
-      "tasks",
-    ]);
+    expect(installs.installs.map((install) => install.installId)).toEqual(["site", "tasks"]);
+    expect(installs.installs.map((install) => install.packageAppKey)).toEqual(["site", "tasks"]);
     expect(installs.installs.map((install) => install.publicRoute)).toEqual([
-      undefined,
       "/sites/site",
       undefined,
     ]);
@@ -100,9 +88,6 @@ describe("worker launch fixture startup", () => {
     expect(tasks.schema).toEqual(taskSourceSchema);
     expect(tasks.cursor).toBe(taskSeedRecords.length);
     expect(recordIds(tasks.records)).toEqual(recordIds(taskSeedRecords));
-    expect(estii.schema).toEqual(rateSourceSchema);
-    expect(estii.cursor).toBe(rateSeedRecords.length);
-    expect(recordIds(estii.records)).toEqual(recordIds(rateSeedRecords));
   });
 
   it("starts a product instance from the CRM fixture without Site public route metadata", async () => {

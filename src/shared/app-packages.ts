@@ -105,13 +105,6 @@ export const bundledAppPackageManifests = [
     sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
   }),
   bundledAppPackageManifest({
-    packageAppKey: "estii",
-    label: schemaAppDefinitions.estii.label,
-    description: "Rate-card app backed by the bundled Estii schema and starter records.",
-    defaultInstallId: "estii",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-  }),
-  bundledAppPackageManifest({
     packageAppKey: "crm",
     label: schemaAppDefinitions.crm.label,
     description: "CRM app backed by the bundled CRM schema and demo records.",

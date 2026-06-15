@@ -26,11 +26,11 @@ describe("generated table app paths", () => {
     resetClientStore();
   });
 
-  it("keeps the Estii rate table on the React Aria table path", () => {
+  it("keeps the rate table on the React Aria table path", () => {
     const html = renderGeneratedTableCollectionHtml({
       records: rateSeedRecords,
       schema: rateSourceSchema,
-      schemaKey: "estii",
+      schemaKey: "tasks",
       selectedContextRecordId: null,
       viewName: "rateHome",
     });

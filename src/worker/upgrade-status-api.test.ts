@@ -102,7 +102,7 @@ describe("runtime upgrade status API", () => {
     expect(
       status.body.storageIdentities.some(
         (storage) =>
-          storage.identity.kind === "appInstall" && storage.identity.installId === "estii",
+          storage.identity.kind === "appInstall" && storage.identity.installId === "rates",
       ),
     ).toBe(false);
   });

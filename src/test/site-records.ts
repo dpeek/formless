@@ -64,11 +64,11 @@ export const testSiteSeedRecords: StoredRecord[] = [
     body: "Current and recent product work",
     href: "/projects",
   }),
-  block("rec_site_content_project_estii", "2026-05-05T00:00:08.000Z", {
+  block("rec_site_content_project_pricinglab", "2026-05-05T00:00:08.000Z", {
     type: "project",
-    label: "Estii",
-    body: "Estii helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://estii.com).",
-    href: "/projects/estii",
+    label: "PricingLab",
+    body: "PricingLab helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://pricinglab.com).",
+    href: "/projects/pricinglab",
     date: "2026-05-01",
   }),
   block("rec_site_content_project_opensurf", "2026-05-05T00:00:09.000Z", {
@@ -301,10 +301,10 @@ export const testSiteSeedRecords: StoredRecord[] = [
     2000,
   ),
   placement(
-    "rec_site_place_featured_project_estii",
+    "rec_site_place_featured_project_pricinglab",
     "2026-05-05T00:00:29.300Z",
     "rec_site_block_home_projects",
-    "rec_site_content_project_estii",
+    "rec_site_content_project_pricinglab",
     1000,
   ),
   placement(
@@ -322,10 +322,10 @@ export const testSiteSeedRecords: StoredRecord[] = [
     3000,
   ),
   placement(
-    "rec_site_place_projects_estii",
+    "rec_site_place_projects_pricinglab",
     "2026-05-05T00:00:29.600Z",
     "rec_site_content_projects",
-    "rec_site_content_project_estii",
+    "rec_site_content_project_pricinglab",
     1000,
   ),
   placement(

@@ -26,8 +26,8 @@ import {
 } from "../../../src/shared/protocol.ts";
 import { cloneTestValue } from "../../../src/test/schema-builders.ts";
 import {
-  rateSeedRecords,
-  rateSourceSchema,
+  crmSeedRecords,
+  crmSourceSchema,
   siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema,
@@ -90,7 +90,7 @@ describe("archive restore planner", () => {
     );
   });
 
-  it("plans mixed Site, Tasks, and Estii instance archive restores with current core media", () => {
+  it("plans mixed Site, Tasks, and CRM instance archive restores with current core media", () => {
     const archive = instanceArchive({
       apps: [
         appArchive({
@@ -119,14 +119,14 @@ describe("archive restore planner", () => {
           media: { objects: [] },
         }),
         appArchive({
-          app: archivedInstall("estii", "Estii", "estii"),
+          app: archivedInstall("crm", "CRM", "crm"),
           data: {
             kind: "storeSnapshot",
             snapshot: storeSnapshot({
-              records: rateSeedRecords,
-              schema: rateSourceSchema,
-              schemaKey: "estii",
-              sourceCursor: rateSeedRecords.length,
+              records: crmSeedRecords,
+              schema: crmSourceSchema,
+              schemaKey: "crm",
+              sourceCursor: crmSeedRecords.length,
             }),
           },
           media: { objects: [] },
@@ -139,7 +139,7 @@ describe("archive restore planner", () => {
         packages: listInstallableAppPackages(),
         mediaFiles: [coreMediaFile("hero")],
         sourceSchemas: {
-          estii: rateSourceSchema,
+          crm: crmSourceSchema,
           site: siteSourceSchema,
           tasks: taskSourceSchema,
         },
@@ -147,9 +147,9 @@ describe("archive restore planner", () => {
     );
 
     expect(plan.summary.appCount).toBe(3);
-    expect(plan.summary.createdInstalls).toEqual(["estii", "site", "tasks"]);
+    expect(plan.summary.createdInstalls).toEqual(["crm", "site", "tasks"]);
     expect(plan.summary.mediaCountsByApp).toEqual({
-      estii: 0,
+      crm: 0,
       site: 1,
       tasks: 0,
     });
@@ -479,10 +479,6 @@ function archivedInstall(
 function sourceSchemaHashForPackageAppKey(packageAppKey: string) {
   if (packageAppKey === "tasks") {
     return bundledSourceSchemaHashFixtures.tasks;
-  }
-
-  if (packageAppKey === "estii") {
-    return bundledSourceSchemaHashFixtures.estii;
   }
 
   return bundledSourceSchemaHashFixtures.site;

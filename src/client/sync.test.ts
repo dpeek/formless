@@ -55,14 +55,14 @@ import {
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
-  await deleteClientDb("estii");
+  await deleteClientDb("crm");
   await deleteClientDb(instanceControlPlaneClientTarget());
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
   await deleteClientDb(installedTasksIdentity("work"));
   await deleteClientDb(installedTasksIdentity("team"));
-  await deleteClientDb(installedEstiiIdentity("rates"));
-  await deleteClientDb(installedEstiiIdentity("alt-rates"));
+  await deleteClientDb(installedCRMIdentity("rates"));
+  await deleteClientDb(installedCRMIdentity("alt-rates"));
   resetClientStore();
 });
 
@@ -86,10 +86,10 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
-  it("bootstraps rate data into the Estii local database only", async () => {
+  it("bootstraps rate data into the CRM local database only", async () => {
     await bootstrapClient(
-      "estii",
-      jsonFetcher("/api/estii/bootstrap", {
+      "crm",
+      jsonFetcher("/api/crm/bootstrap", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [record("record-2", "Rate")],
@@ -98,7 +98,7 @@ describe("client sync", () => {
     );
 
     expect((await readLocalSnapshot("tasks")).records).toEqual([]);
-    expect((await readLocalSnapshot("estii")).records).toEqual([record("record-2", "Rate")]);
+    expect((await readLocalSnapshot("crm")).records).toEqual([record("record-2", "Rate")]);
   });
 
   it("bootstraps installed app data into the selected install replica only", async () => {
@@ -168,14 +168,14 @@ describe("client sync", () => {
     });
   });
 
-  it("bootstraps installed Estii into an install-scoped replica only", async () => {
-    const rates = installedEstiiIdentity("rates");
-    const altRates = installedEstiiIdentity("alt-rates");
+  it("bootstraps installed CRM into an install-scoped replica only", async () => {
+    const rates = installedCRMIdentity("rates");
+    const altRates = installedCRMIdentity("alt-rates");
     const rate = rateRecord("rate-1", "resource-1", "card-1");
 
     await bootstrapClient(
       rates,
-      jsonFetcher("/api/app-installs/estii/rates/bootstrap", {
+      jsonFetcher("/api/app-installs/crm/rates/bootstrap", {
         schema: rateCardSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [rate],
@@ -185,10 +185,10 @@ describe("client sync", () => {
 
     expect((await readLocalSnapshot(rates)).records).toEqual([rate]);
     expect((await readLocalSnapshot(altRates)).records).toEqual([]);
-    expect((await readLocalSnapshot("estii")).records).toEqual([]);
+    expect((await readLocalSnapshot("crm")).records).toEqual([]);
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:rates",
-      activeSchemaKey: "estii",
+      activeSchemaKey: "crm",
     });
   });
 
@@ -405,12 +405,12 @@ describe("client sync", () => {
     }
   });
 
-  it("opens rate-card push sync on the Estii schema key", () => {
+  it("opens rate-card push sync on the CRM schema key", () => {
     const sockets = fakeSocketFactory();
-    const stop = startPushSync("estii", { socketFactory: sockets.create });
+    const stop = startPushSync("crm", { socketFactory: sockets.create });
 
     try {
-      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/estii/sync/ws");
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/crm/sync/ws");
     } finally {
       stop();
     }
@@ -446,15 +446,15 @@ describe("client sync", () => {
     }
   });
 
-  it("opens installed Estii push sync on the Estii install API path", () => {
+  it("opens installed CRM push sync on the CRM install API path", () => {
     const sockets = fakeSocketFactory();
-    const stop = startPushSync(installedEstiiIdentity("rates"), {
+    const stop = startPushSync(installedCRMIdentity("rates"), {
       socketFactory: sockets.create,
     });
 
     try {
       expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
-        "/api/app-installs/estii/rates/sync/ws",
+        "/api/app-installs/crm/rates/sync/ws",
       );
     } finally {
       stop();
@@ -488,7 +488,7 @@ describe("client sync", () => {
       await waitFor(() => getClientStoreSnapshot().cursor === 2);
 
       const taskSnapshot = await readLocalSnapshot("tasks");
-      const rateSnapshot = await readLocalSnapshot("estii");
+      const rateSnapshot = await readLocalSnapshot("crm");
 
       expect(taskSnapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
         "record-1",
@@ -1078,8 +1078,8 @@ describe("client sync", () => {
     });
   });
 
-  it("uses installed Estii API paths for sync, operation writes, snapshots, and resets", async () => {
-    const rates = installedEstiiIdentity("rates");
+  it("uses installed CRM API paths for sync, operation writes, snapshots, and resets", async () => {
+    const rates = installedCRMIdentity("rates");
     const existingRate = rateRecord("rate-1", "resource-1", "card-1");
     const syncedRate = rateRecord("rate-2", "resource-2", "card-1");
     const createdResource = resourceRecord("resource-2", "Writer");
@@ -1097,7 +1097,7 @@ describe("client sync", () => {
     await syncClient(
       rates,
       jsonFetcher(
-        "/api/app-installs/estii/rates/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+        "/api/app-installs/crm/rates/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
         {
           changes: [mutationChange(2, "mutation-rate-sync", syncedRate, "create")],
           cursor: 2,
@@ -1114,7 +1114,7 @@ describe("client sync", () => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [mutationChange(3, operation.idempotencyKey, createdResource, "create")];
 
-        expect(input).toBe("/api/app-installs/estii/rates/operations/resource/create");
+        expect(input).toBe("/api/app-installs/crm/rates/operations/resource/create");
         expect(init?.method).toBe("POST");
 
         return Response.json(
@@ -1133,7 +1133,7 @@ describe("client sync", () => {
       const operation = parseOperationRequestBody(init?.body);
       const changes = [actionChange(4, actionRate, operation.idempotencyKey)];
 
-      expect(input).toBe("/api/app-installs/estii/rates/operations/rate/regenerateMissingRates");
+      expect(input).toBe("/api/app-installs/crm/rates/operations/rate/regenerateMissingRates");
       expect(init?.method).toBe("POST");
 
       return Response.json(
@@ -1154,9 +1154,9 @@ describe("client sync", () => {
     const exported = await exportStoreSnapshot(
       rates,
       jsonFetcher(
-        "/api/app-installs/estii/rates/snapshot",
+        "/api/app-installs/crm/rates/snapshot",
         storeSnapshot({
-          schemaKey: "estii",
+          schemaKey: "crm",
           schema: rateCardSchema,
           records: [actionRate],
           sourceCursor: 4,
@@ -1166,13 +1166,13 @@ describe("client sync", () => {
     const restored = await restoreStoreSnapshot(
       rates,
       storeSnapshot({
-        schemaKey: "estii",
+        schemaKey: "crm",
         schema: rateCardSchema,
         records: [restoredRate],
         sourceCursor: 4,
       }),
       async (input, init) => {
-        expect(input).toBe("/api/app-installs/estii/rates/snapshot/restore");
+        expect(input).toBe("/api/app-installs/crm/rates/snapshot/restore");
         expect(init?.method).toBe("POST");
 
         return Response.json({
@@ -1186,7 +1186,7 @@ describe("client sync", () => {
 
     await resetSourceSchema(
       rates,
-      jsonFetcher("/api/app-installs/estii/rates/reset/schema", {
+      jsonFetcher("/api/app-installs/crm/rates/reset/schema", {
         schema: rateCardSchema,
         schemaUpdatedAt: "2026-04-28T00:05:00.000Z",
         records: [restoredRate],
@@ -1196,7 +1196,7 @@ describe("client sync", () => {
 
     const reset = await resetSeedData(
       rates,
-      jsonFetcher("/api/app-installs/estii/rates/reset/seed", {
+      jsonFetcher("/api/app-installs/crm/rates/reset/seed", {
         schema: rateCardSchema,
         schemaUpdatedAt: "2026-04-28T00:06:00.000Z",
         records: [rateRecord("rate-5", "resource-5", "card-2")],
@@ -1207,30 +1207,30 @@ describe("client sync", () => {
     expect(exported.records).toEqual([actionRate]);
     expect(restored.records).toEqual([restoredRate]);
     expect(reset.records).toEqual([rateRecord("rate-5", "resource-5", "card-2")]);
-    expect((await readLocalSnapshot("estii")).records).toEqual([]);
+    expect((await readLocalSnapshot("crm")).records).toEqual([]);
     expect((await readLocalSnapshot(rates)).records).toEqual([
       rateRecord("rate-5", "resource-5", "card-2"),
     ]);
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:rates",
-      activeSchemaKey: "estii",
+      activeSchemaKey: "crm",
       cursor: 7,
     });
   });
 
-  it("submits rate-card command operations to the Estii API and merges created rates", async () => {
+  it("submits rate-card command operations to the CRM API and merges created rates", async () => {
     const createdRate = rateRecord("rate-1", "resource-1", "card-1");
 
-    await saveBootstrapResponse("estii", {
+    await saveBootstrapResponse("crm", {
       schema: rateCardSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [],
       cursor: 0,
     });
-    await refreshClientStoreFromDb("estii");
+    await refreshClientStoreFromDb("crm");
 
     const response = await submitOperation(
-      "estii",
+      "crm",
       "rate",
       "regenerateMissingRates",
       {},
@@ -1238,7 +1238,7 @@ describe("client sync", () => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [actionChange(1, createdRate, operation.idempotencyKey)];
 
-        expect(input).toBe("/api/estii/operations/rate/regenerateMissingRates");
+        expect(input).toBe("/api/crm/operations/rate/regenerateMissingRates");
         expect(init?.method).toBe("POST");
         expect(operation).toMatchObject({
           source: { protocol: "generated-ui" },
@@ -1261,7 +1261,7 @@ describe("client sync", () => {
     );
 
     const taskSnapshot = await readLocalSnapshot("tasks");
-    const rateSnapshot = await readLocalSnapshot("estii");
+    const rateSnapshot = await readLocalSnapshot("crm");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(
@@ -1481,7 +1481,7 @@ describe("client sync", () => {
       records: [record("record-1", "First")],
       cursor: 1,
     });
-    await saveBootstrapResponse("estii", {
+    await saveBootstrapResponse("crm", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-3", "Rate")],
@@ -1489,8 +1489,8 @@ describe("client sync", () => {
     });
 
     const response = await resetSeedData(
-      "estii",
-      jsonFetcher("/api/estii/reset/seed", {
+      "crm",
+      jsonFetcher("/api/crm/reset/seed", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
         records: [acceptedRecord],
@@ -1498,7 +1498,7 @@ describe("client sync", () => {
       } satisfies BootstrapResponse),
     );
     const taskSnapshot = await readLocalSnapshot("tasks");
-    const rateSnapshot = await readLocalSnapshot("estii");
+    const rateSnapshot = await readLocalSnapshot("crm");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(response.records).toEqual([acceptedRecord]);
@@ -1548,8 +1548,8 @@ describe("client sync", () => {
   });
 
   it("can request the rate-card source schema reset", async () => {
-    await resetSourceSchema("estii", async (input, init) => {
-      expect(input).toBe("/api/estii/reset/schema");
+    await resetSourceSchema("crm", async (input, init) => {
+      expect(input).toBe("/api/crm/reset/schema");
       expect(init?.method).toBe("POST");
       expect(parsePlainRequestBody(init?.body)).toEqual({});
 
@@ -1611,8 +1611,8 @@ describe("client sync", () => {
     const stopBroadcast = connectBroadcastToClientStore("tasks");
 
     try {
-      await mergeRecords("estii", [record("record-2", "Rate")], 1);
-      publishClientEvent("estii", "records-updated");
+      await mergeRecords("crm", [record("record-2", "Rate")], 1);
+      publishClientEvent("crm", "records-updated");
 
       await delay(20);
       expect(states).toEqual([getClientStoreSnapshot()]);
@@ -1916,11 +1916,11 @@ function installedTasksIdentity(installId: string) {
   return identity;
 }
 
-function installedEstiiIdentity(installId: string) {
-  const identity = installedAppStorageIdentity({ installId, packageAppKey: "estii" });
+function installedCRMIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "crm" });
 
   if (!identity) {
-    throw new Error(`Expected installed Estii identity for ${installId}.`);
+    throw new Error(`Expected installed CRM identity for ${installId}.`);
   }
 
   return identity;

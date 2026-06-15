@@ -41,8 +41,8 @@ app install can be created.
   default install id, multiple-install policy, source origin, source schema key,
   seed records key, package revision, source schema hash, admin route base, and
   optional public route capability
-- **AND** the default runtime resolver includes the bundled Site, Tasks, Estii,
-  and CRM packages with package app keys `site`, `tasks`, `estii`, and `crm`
+- **AND** the default runtime resolver includes the bundled Site, Tasks, and
+  CRM packages with package app keys `site`, `tasks`, and `crm`
 - **AND** package metadata comes from app package manifest facts, not from app
   install records or instance control-plane route records
 
@@ -147,13 +147,6 @@ package's source schema and source seed records.
 - **THEN** the bootstrap response contains the bundled Tasks source schema and source seed records
 - **AND** the bootstrap cursor reflects the seeded records
 
-#### Scenario: Estii initialization
-
-- **GIVEN** an Estii app install is created with install id `rates`
-- **WHEN** `/api/app-installs/estii/rates/bootstrap` is read
-- **THEN** the bootstrap response contains the bundled Estii source schema and source seed records
-- **AND** the install metadata keeps label and route identity scoped to `rates`
-
 #### Scenario: CRM initialization
 
 - **GIVEN** a CRM app install is created with install id `crm`
@@ -202,7 +195,7 @@ installed app state without changing route shape.
 
 - **GIVEN** `FORMLESS_LAUNCH_FIXTURE` selects `mixed-apps`
 - **WHEN** fixture initialization runs
-- **THEN** the initial installs are Site, Tasks, and Estii
+- **THEN** the initial installs are Site and Tasks
 - **AND** only the Site install receives Site public route metadata
 
 #### Scenario: CRM fixture

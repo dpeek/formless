@@ -92,16 +92,16 @@ describe("client store", () => {
   });
 
   it("ignores stale responses for an inactive schema key", () => {
-    selectClientStoreSchemaKey("estii");
+    selectClientStoreSchemaKey("site");
 
     applyBootstrapResponse(bootstrap([record("record-1", "First")]), "tasks");
 
-    expect(getClientStoreSnapshot().activeSchemaKey).toBe("estii");
+    expect(getClientStoreSnapshot().activeSchemaKey).toBe("site");
     expect(getClientStoreSnapshot().recordsById).toEqual({});
 
-    applyBootstrapResponse(bootstrap([record("record-2", "Rate")]), "estii");
+    applyBootstrapResponse(bootstrap([record("record-2", "Site")]), "site");
 
-    expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(record("record-2", "Rate"));
+    expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(record("record-2", "Site"));
   });
 
   it("tracks the runtime-owned control-plane schema key for its client target", () => {

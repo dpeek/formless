@@ -63,8 +63,8 @@ import {
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
 } from "@dpeek/formless-workspace";
 import {
-  rateSeedRecords,
-  rateSourceSchema,
+  crmSeedRecords,
+  crmSourceSchema,
   siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema,
@@ -5142,13 +5142,13 @@ describe("Formless Site CLI", () => {
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
         {
-          adminRoute: "/apps/rates",
+          adminRoute: "/apps/sales",
           createdAt: "2026-05-01T00:00:00.000Z",
-          installId: "rates",
-          label: "Rates",
-          packageAppKey: "estii",
-          ...packageAppFactsForKey("estii")!,
-          schemaRoute: "/apps/rates/schema",
+          installId: "sales",
+          label: "Sales CRM",
+          packageAppKey: "crm",
+          ...packageAppFactsForKey("crm")!,
+          schemaRoute: "/apps/sales/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -5157,7 +5157,7 @@ describe("Formless Site CLI", () => {
     responses.queueJson({ error: "not found" }, 404);
     responses.queueJson(snapshot(sourceRecords));
     responses.queueJson(taskSnapshot(taskSeedRecords));
-    responses.queueJson(rateSnapshot(rateSeedRecords));
+    responses.queueJson(crmSnapshot(crmSeedRecords));
     responses.queueBinary(Buffer.from([4, 5, 6]), "image/png");
 
     await runFormlessCli(
@@ -5179,7 +5179,7 @@ describe("Formless Site CLI", () => {
     }
 
     const personal = archive.apps.find((app) => app.app.installId === "personal");
-    const rates = archive.apps.find((app) => app.app.installId === "rates");
+    const sales = archive.apps.find((app) => app.app.installId === "sales");
     const work = archive.apps.find((app) => app.app.installId === "work");
 
     expect(
@@ -5197,10 +5197,10 @@ describe("Formless Site CLI", () => {
         packageAppFactsForKey("site")!.sourceSchemaHash,
       ],
       [
-        "rates",
-        "estii",
-        packageAppFactsForKey("estii")!.packageRevision,
-        packageAppFactsForKey("estii")!.sourceSchemaHash,
+        "sales",
+        "crm",
+        packageAppFactsForKey("crm")!.packageRevision,
+        packageAppFactsForKey("crm")!.sourceSchemaHash,
       ],
       [
         "work",
@@ -5220,7 +5220,7 @@ describe("Formless Site CLI", () => {
         storageKey: "media/images/cover.png",
       }),
     ]);
-    expect(rates?.media.objects).toEqual([]);
+    expect(sales?.media.objects).toEqual([]);
     expect(work?.media.objects).toEqual([]);
     await expect(
       readFile(path.join(outDir, "media/personal/media/images/cover.png")),
@@ -5230,7 +5230,7 @@ describe("Formless Site CLI", () => {
       "GET https://instance.example/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
       "GET https://instance.example/api/app-installs/site/personal/snapshot",
       "GET https://instance.example/api/app-installs/tasks/work/snapshot",
-      "GET https://instance.example/api/app-installs/estii/rates/snapshot",
+      "GET https://instance.example/api/app-installs/crm/sales/snapshot",
       "GET https://instance.example/api/formless/media/media/images/cover.png",
     ]);
     expect(requests.slice(0, 6).map((request) => request.headers.authorization)).toEqual([
@@ -5249,11 +5249,11 @@ describe("Formless Site CLI", () => {
         applied: true,
         summary: {
           appCount: 3,
-          createdInstalls: ["personal", "rates", "work"],
-          mediaCountsByApp: { personal: 1, rates: 0, work: 0 },
+          createdInstalls: ["personal", "sales", "work"],
+          mediaCountsByApp: { personal: 1, sales: 0, work: 0 },
           recordCountsByApp: {
             personal: { total: sourceRecords.length },
-            rates: { total: rateSeedRecords.length },
+            sales: { total: crmSeedRecords.length },
             work: { total: taskSeedRecords.length },
           },
           replacedInstalls: [],
@@ -5295,7 +5295,7 @@ describe("Formless Site CLI", () => {
       installCollisions: "reject",
     });
     expect(
-      restoreBody.archive.apps.find((app) => app.app.installId === "rates")?.media.objects,
+      restoreBody.archive.apps.find((app) => app.app.installId === "sales")?.media.objects,
     ).toEqual([]);
     expect(
       restoreBody.archive.apps.find((app) => app.app.installId === "work")?.media.objects,
@@ -7018,15 +7018,15 @@ function taskSnapshot(records: StoredRecord[]): StoreSnapshot {
   };
 }
 
-function rateSnapshot(records: StoredRecord[]): StoreSnapshot {
+function crmSnapshot(records: StoredRecord[]): StoreSnapshot {
   return {
     kind: STORE_SNAPSHOT_KIND,
     version: STORE_SNAPSHOT_VERSION,
-    schemaKey: "estii",
+    schemaKey: "crm",
     exportedAt: "2026-05-12T00:00:00.000Z",
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
     sourceCursor: records.length,
-    schema: rateSourceSchema,
+    schema: crmSourceSchema,
     records,
   };
 }
@@ -7040,8 +7040,8 @@ function snapshotForPackage(packageAppKey: string, records: StoredRecord[]): Sto
     return taskSnapshot(records);
   }
 
-  if (packageAppKey === "estii") {
-    return rateSnapshot(records);
+  if (packageAppKey === "crm") {
+    return crmSnapshot(records);
   }
 
   throw new Error(`Unsupported test package "${packageAppKey}".`);

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
-import rawEstiiSourceSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
 import {
@@ -35,9 +34,6 @@ describe("upgrade migration contracts", () => {
 
     await expect(computeSourceSchemaHash(rawTaskSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.tasks,
-    );
-    await expect(computeSourceSchemaHash(rawEstiiSourceSchema)).resolves.toBe(
-      bundledSourceSchemaHashFixtures.estii,
     );
     await expect(computeSourceSchemaHash(rawSiteSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.site,

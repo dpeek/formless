@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/apps/estii/schema.json";
+import rawRateCardSchema from "./fixtures/rate-card-schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
 import {
   sourceLikeSchemas,
@@ -6451,7 +6451,7 @@ describe("schema relationships", () => {
             ...rateRelationships(),
             rateCard: {
               ...rateRelationships().rateCard,
-              to: { entity: "estii:card" },
+              to: { entity: "legacy:card" },
             },
           },
         }),

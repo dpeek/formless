@@ -6,7 +6,6 @@ import {
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
   FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
-  type ActionResponse,
   type BootstrapResponse,
   type MutationResponse,
   type SchemaResponse,
@@ -22,8 +21,9 @@ import { packageAppFactsForKey } from "../shared/app-installs.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
+  crmSeedRecords,
+  crmSourceSchema,
   rateSeedRecords as rateCardSeedRecords,
-  rateSourceSchema as rateCardSchema,
   siteSeedRecords,
   siteSourceSchema,
   taskSeedRecords,
@@ -52,8 +52,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetSchemaApp("tasks");
-  await resetSchemaApp("estii");
   await resetSchemaApp("site");
+  await resetSchemaApp("crm");
   useSchemaApp("tasks");
 });
 
@@ -105,19 +105,6 @@ describe("authority", () => {
       cursor: bootstrapBody.cursor,
       schema: appSchema,
       schemaUpdatedAt: bootstrapBody.schemaUpdatedAt,
-    });
-  });
-
-  it("returns the rate-card source schema from the Estii bootstrap path", async () => {
-    useSchemaApp("estii");
-
-    const body = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(body).toEqual({
-      schema: rateCardSchema,
-      schemaUpdatedAt: expect.any(String),
-      records: rateCardSeedRecords,
-      cursor: rateCardSeedRecords.length,
     });
   });
 
@@ -289,87 +276,6 @@ describe("authority", () => {
     expect(legacy.records).toEqual(taskSeedRecords);
     expect(team.records).not.toContainEqual(created.record);
     expect(legacy.records).not.toContainEqual(created.record);
-  });
-
-  it("isolates installed Estii storage, sync, reset, snapshot, and actions by install id", async () => {
-    await resetInstalledApp("estii", "rates");
-    await resetInstalledApp("estii", "team-rates");
-
-    const omittedRate = rateCardSeedRecords.find(
-      (record) => record.id === "rec_rate_default_designer",
-    );
-
-    if (!omittedRate) {
-      throw new Error("Expected Estii seed records to include the default designer rate.");
-    }
-
-    const restoredRecords = rateCardSeedRecords.filter((record) => record.id !== omittedRate.id);
-    const initialSync = await getInstalledAppJson<SyncResponse>("estii", "rates", "/sync?after=0");
-    const restored = await postInstalledAppJson<BootstrapResponse>(
-      "estii",
-      "rates",
-      "/snapshot/restore",
-      storeSnapshot({
-        schemaKey: "estii",
-        sourceCursor: rateCardSeedRecords.length,
-        schema: rateCardSchema,
-        records: restoredRecords,
-      }),
-    );
-    const action = await postInstalledAppJson<ActionResponse>("estii", "rates", "/actions", {
-      actionId: "action-installed-estii-regenerate-rates",
-      entity: "rate",
-      action: "regenerateMissingRates",
-    });
-    const ratesSnapshot = await getInstalledAppJson<StoreSnapshot>("estii", "rates", "/snapshot");
-    const reset = await postInstalledAppJson<BootstrapResponse>(
-      "estii",
-      "rates",
-      "/reset/seed",
-      {},
-    );
-    const rates = await getInstalledAppJson<BootstrapResponse>("estii", "rates", "/bootstrap");
-    const team = await getInstalledAppJson<BootstrapResponse>("estii", "team-rates", "/bootstrap");
-    useSchemaApp("estii");
-    const legacy = await getJson<BootstrapResponse>("/api/bootstrap");
-    const createdRate = action.changes[0]?.payload;
-    const restoredActiveRecords = restored.records.filter((record) => !record.deletedAt);
-
-    expect(initialSync.cursor).toBe(rateCardSeedRecords.length);
-    expect(initialSync.changes.map((change) => change.payload)).toEqual(rateCardSeedRecords);
-    expect(restored.schema).toEqual(rateCardSchema);
-    expect(restoredActiveRecords).toEqual(restoredRecords);
-    expect(restored.records).toContainEqual(
-      expect.objectContaining({
-        deletedAt: expect.any(String),
-        id: omittedRate.id,
-      }),
-    );
-    expect(action.changes).toHaveLength(1);
-    expect(createdRate).toMatchObject({
-      entity: "rate",
-      values: {
-        resource: omittedRate.values.resource,
-        card: omittedRate.values.card,
-        cost: 0,
-        costUnit: "day",
-        price: 0,
-        priceSet: true,
-        currency: "usd",
-      },
-    });
-    expect(ratesSnapshot).toMatchObject({
-      kind: "formless.storeSnapshot",
-      schemaKey: "estii",
-      schema: rateCardSchema,
-    });
-    expect(ratesSnapshot.records).toContainEqual(createdRate);
-    expect(reset.records).toEqual(rateCardSeedRecords);
-    expect(rates.records).toEqual(rateCardSeedRecords);
-    expect(team.records).toEqual(rateCardSeedRecords);
-    expect(legacy.records).toEqual(rateCardSeedRecords);
-    expect(team.records).not.toContainEqual(createdRate);
-    expect(legacy.records).not.toContainEqual(createdRate);
   });
 
   it("projects installed Site tree media asset ids through core delivery with manual href fallback", async () => {
@@ -564,22 +470,22 @@ describe("authority", () => {
   it("isolates records and mutation replay by schema key", async () => {
     const task = await postMutation("mutation-shared", { title: "First", done: false });
 
-    useSchemaApp("estii");
-    const resource = await postMutationForEntity("mutation-shared", "resource", {
-      name: "Designer",
+    useSchemaApp("crm");
+    const contact = await postMutationForEntity("mutation-shared", "contact", {
+      label: "Designer",
     });
-    const ratesBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const crmBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
     useSchemaApp("tasks");
     const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
     expect(task.mutationId).toBe(operationWriteId("task", "create", "mutation-shared"));
-    expect(resource.mutationId).toBe(operationWriteId("resource", "create", "mutation-shared"));
+    expect(contact.mutationId).toBe(operationWriteId("contact", "create", "mutation-shared"));
     expect(tasksBootstrap.schema).toEqual(appSchema);
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
-    expect(ratesBootstrap.schema).toEqual(rateCardSchema);
-    expect(ratesBootstrap.records).toContainEqual(resource.record);
-    expect(ratesBootstrap.records.every((record) => record.entity !== "task")).toBe(true);
+    expect(crmBootstrap.schema).toEqual(crmSourceSchema);
+    expect(crmBootstrap.records).toContainEqual(contact.record);
+    expect(crmBootstrap.records.every((record) => record.entity !== "task")).toBe(true);
   });
 
   it("returns query, item view, and collection definitions from bootstrap", async () => {
@@ -883,17 +789,17 @@ describe("authority", () => {
       done: false,
     });
 
-    useSchemaApp("estii");
-    await postMutationForEntity("mutation-rate-local-resource", "resource", {
-      name: "Temporary resource",
+    useSchemaApp("crm");
+    await postMutationForEntity("mutation-crm-local-contact", "contact", {
+      label: "Temporary contact",
     });
-    const rateReset = await postJson<BootstrapResponse>("/api/reset/seed", {});
+    const crmReset = await postJson<BootstrapResponse>("/api/reset/seed", {});
 
     useSchemaApp("tasks");
     const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    expect(rateReset.records).toEqual(rateCardSeedRecords);
-    expect(rateReset.cursor).toBe(rateCardSeedRecords.length);
+    expect(crmReset.records).toEqual(crmSeedRecords);
+    expect(crmReset.cursor).toBe(crmSeedRecords.length);
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
   });
 
@@ -917,13 +823,13 @@ describe("authority", () => {
     });
     expect(snapshot.records).toEqual([...taskSeedRecords, created.record]);
 
-    useSchemaApp("estii");
-    const rateSnapshot = await getJson<StoreSnapshot>("/api/snapshot");
+    useSchemaApp("crm");
+    const crmSnapshot = await getJson<StoreSnapshot>("/api/snapshot");
 
-    expect(rateSnapshot.schemaKey).toBe("estii");
-    expect(rateSnapshot.schema).toEqual(rateCardSchema);
-    expect(rateSnapshot.records).toEqual(rateCardSeedRecords);
-    expect(rateSnapshot.records.some((record) => record.id === created.record.id)).toBe(false);
+    expect(crmSnapshot.schemaKey).toBe("crm");
+    expect(crmSnapshot.schema).toEqual(crmSourceSchema);
+    expect(crmSnapshot.records).toEqual(crmSeedRecords);
+    expect(crmSnapshot.records.some((record) => record.id === created.record.id)).toBe(false);
   });
 
   it("keeps manual Site snapshots separate from source seed reset", async () => {
@@ -953,16 +859,16 @@ describe("authority", () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const restoredRecord = taskSnapshotRecord("snapshot-task-restored", "Restored task");
     const taskSocket = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
-    let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
+    const crmSocket = await openSyncSocket("/api/sync/ws", "crm");
+    let crmCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
 
     try {
       await primeSyncSocket(taskSocket, before.cursor, schemaResponse.updatedAt);
 
-      useSchemaApp("estii");
-      const rateSchema = await getJson<SchemaResponse>("/api/schema");
-      await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
-      ratesCapture = captureSyncSocketMessages(ratesSocket);
+      useSchemaApp("crm");
+      const crmSchema = await getJson<SchemaResponse>("/api/schema");
+      await primeSyncSocket(crmSocket, crmSeedRecords.length, crmSchema.updatedAt);
+      crmCapture = captureSyncSocketMessages(crmSocket);
 
       useSchemaApp("tasks");
       const message = readSyncSocketMessage(taskSocket);
@@ -996,11 +902,11 @@ describe("authority", () => {
           schemaUpdatedAt: restored.schemaUpdatedAt,
         },
       });
-      await expectNoCapturedMessages(ratesCapture);
+      await expectNoCapturedMessages(crmCapture);
     } finally {
-      ratesCapture?.stop();
+      crmCapture?.stop();
       taskSocket.close();
-      ratesSocket.close();
+      crmSocket.close();
     }
   });
 
@@ -1015,7 +921,7 @@ describe("authority", () => {
       const capture = captureSyncSocketMessages(socket);
       await expectError(
         "/api/snapshot/restore",
-        storeSnapshot({ schemaKey: "estii" }),
+        storeSnapshot({ schemaKey: "crm" }),
         'Store snapshot schemaKey must be "tasks".',
       );
       await expectNoCapturedMessages(capture);
@@ -1068,46 +974,6 @@ describe("authority", () => {
       }),
       'Cannot add unique constraint "task.uniqueTitle" because existing records violate it.',
     );
-  });
-
-  it("applies expanded rate-card defaults when creating sample records", async () => {
-    useSchemaApp("estii");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: rateCardSchemaWithoutAfterCreateHooks(),
-    });
-
-    const resource = await postMutationForEntity("mutation-resource", "resource", {
-      name: "Designer",
-    });
-    const card = await postMutationForEntity("mutation-card", "card", { name: "Default" });
-    const rate = await postMutationForEntity("mutation-rate", "rate", {
-      resource: resource.record.id,
-      card: card.record.id,
-      cost: 325,
-      price: 475,
-    });
-
-    expect(resource.record.values).toEqual({
-      name: "Designer",
-      kind: "role",
-      unit: "day",
-    });
-    expect(card.record.values).toEqual({
-      name: "Default",
-      isDefault: false,
-      marginMin: 0.4,
-      marginMed: 0.5,
-      marginMax: 0.6,
-    });
-    expect(rate.record.values).toEqual({
-      resource: resource.record.id,
-      card: card.record.id,
-      cost: 325,
-      costUnit: "day",
-      price: 475,
-      priceSet: true,
-      currency: "usd",
-    });
   });
 
   it("rejects create and patch mutations that violate unique constraints", async () => {
@@ -1194,146 +1060,6 @@ describe("authority", () => {
     expect(recreated.record.values.title).toBe(completed.record.values.title);
   });
 
-  it("creates missing rate join records through the rate-card action", async () => {
-    useSchemaApp("estii");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: rateCardSchemaWithoutAfterCreateHooks(),
-    });
-
-    const resources = await createRateResources(5);
-    const card = await postMutationForEntity("mutation-card", "card", { name: "Enterprise" });
-    const action = await postActionForEntity(
-      "action-regenerate-rates",
-      "rate",
-      "regenerateMissingRates",
-    );
-    const replay = await postActionForEntity(
-      "action-regenerate-rates",
-      "rate",
-      "regenerateMissingRates",
-    );
-    const noOp = await postActionForEntity(
-      "action-regenerate-rates-noop",
-      "rate",
-      "regenerateMissingRates",
-    );
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const createdRates = action.changes.map((change) => change.payload);
-
-    expect(card.changes).toHaveLength(1);
-    expect(action.changes).toHaveLength(20);
-    expect(action.changes.every((change) => change.op === "action")).toBe(true);
-    expect(
-      new Set(createdRates.map((record) => `${record.values.resource}:${record.values.card}`)).size,
-    ).toBe(20);
-    expect(createdRates).toContainEqual(
-      expect.objectContaining({
-        values: {
-          resource: resources[0]?.record.id,
-          card: card.record.id,
-          cost: 0,
-          costUnit: "day",
-          price: 0,
-          priceSet: true,
-          currency: "usd",
-        },
-      }),
-    );
-    expect(countRecordsByEntity(bootstrap.records)).toEqual({
-      card: 3,
-      rate: 30,
-      resource: 10,
-    });
-    expect(replay).toEqual(action);
-    expect(noOp).toEqual({
-      actionId: operationWriteId("rate", "regenerateMissingRates", "action-regenerate-rates-noop"),
-      changes: [],
-      cursor: action.cursor,
-    });
-  });
-
-  it("creates and removes selected many-to-many join records through relationship actions", async () => {
-    useSchemaApp("estii");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: rateCardSchemaWithSelectedJoinActions(),
-    });
-
-    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
-      name: "Producer",
-    });
-    const card = await postMutationForEntity("mutation-selected-card", "card", {
-      name: "Enterprise",
-    });
-    const actionInput = {
-      input: {
-        fromRecordId: card.record.id,
-        toRecordId: resource.record.id,
-      },
-    };
-    const created = await postActionForEntity(
-      "action-add-selected-rate",
-      "rate",
-      "addSelectedRate",
-      actionInput,
-    );
-    const replay = await postActionForEntity(
-      "action-add-selected-rate",
-      "rate",
-      "addSelectedRate",
-      actionInput,
-    );
-
-    expect(created.changes).toHaveLength(1);
-    expect(created.changes[0]?.op).toBe("action");
-    expect(created.changes[0]?.payload.values).toEqual({
-      resource: resource.record.id,
-      card: card.record.id,
-      cost: 0,
-      costUnit: "day",
-      price: 0,
-      priceSet: true,
-      currency: "usd",
-    });
-    expect(replay).toEqual(created);
-
-    const createdRateId = created.changes[0]?.recordId;
-    if (!createdRateId) {
-      throw new Error("Selected join action did not create a rate.");
-    }
-
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-add-selected-rate-duplicate",
-        entity: "rate",
-        action: "addSelectedRate",
-        ...actionInput,
-      },
-      'Unique constraint "rate.uniqueRatePair" would be violated.',
-    );
-
-    const removed = await postActionForEntity(
-      "action-remove-selected-rate",
-      "rate",
-      "removeSelectedRates",
-      { input: { recordIds: [createdRateId] } },
-    );
-    const recreated = await postActionForEntity(
-      "action-add-selected-rate-again",
-      "rate",
-      "addSelectedRate",
-      actionInput,
-    );
-
-    expect(removed.changes).toHaveLength(1);
-    expect(removed.changes[0]?.payload).toMatchObject({
-      id: createdRateId,
-      deletedAt: expect.any(String),
-    });
-    expect(recreated.changes).toHaveLength(1);
-    expect(recreated.changes[0]?.payload.values).toEqual(created.changes[0]?.payload.values);
-  });
-
   it("creates Site tree child blocks with placement edges and removes only the placement", async () => {
     useSchemaApp("site");
     const parent = await postMutationForEntity("mutation-site-tree-test-parent", "block", {
@@ -1417,239 +1143,6 @@ describe("authority", () => {
       id: placement.id,
       entity: "block-placement",
       deletedAt: expect.any(String),
-    });
-  });
-
-  it("rejects selected join creation with missing or tombstoned endpoints", async () => {
-    useSchemaApp("estii");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: rateCardSchemaWithSelectedJoinActions(),
-    });
-
-    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
-      name: "Producer",
-    });
-
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-add-selected-rate-missing",
-        entity: "rate",
-        action: "addSelectedRate",
-        input: {
-          fromRecordId: "missing-card",
-          toRecordId: resource.record.id,
-        },
-      },
-      'references unknown card record "missing-card"',
-    );
-
-    useSchemaApp("tasks");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithSelectedTaskProjectJoinAction(),
-    });
-    const project = await postMutationForEntity("mutation-project", "project", {
-      name: "Website",
-    });
-    const seedCompleted = getSeedCompletedTask();
-
-    await postAction("action-clear-completed", "clearCompletedTasks");
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-add-tombstoned-task-project",
-        entity: "assignment",
-        action: "addSelectedProject",
-        input: {
-          fromRecordId: seedCompleted.id,
-          toRecordId: project.record.id,
-        },
-      },
-      `cannot reference tombstoned task record "${seedCompleted.id}"`,
-    );
-  });
-
-  it("rejects selected join action input validation without committing or broadcasting", async () => {
-    useSchemaApp("estii");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: rateCardSchemaWithSelectedJoinActions(),
-    });
-
-    const before = await getJson<BootstrapResponse>("/api/bootstrap");
-    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
-    const socket = await openSyncSocket();
-
-    try {
-      await primeSyncSocket(socket, before.cursor, schemaResponse.updatedAt);
-
-      const capture = captureSyncSocketMessages(socket);
-      await expectError(
-        "/api/actions",
-        {
-          actionId: "action-add-selected-rate-invalid-input",
-          entity: "rate",
-          action: "addSelectedRate",
-        },
-        'Action "addSelectedRate" requires input with fromRecordId and toRecordId.',
-      );
-      await expectNoCapturedMessages(capture);
-      capture.stop();
-    } finally {
-      socket.close();
-    }
-
-    const afterInvalid = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(afterInvalid.cursor).toBe(before.cursor);
-    expect(afterInvalid.records).toEqual(before.records);
-
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-add-selected-rate-blank-input",
-        entity: "rate",
-        action: "addSelectedRate",
-        input: {
-          fromRecordId: " ",
-          toRecordId: "resource-1",
-        },
-      },
-      'Action "addSelectedRate" input fromRecordId must be non-empty.',
-    );
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-remove-selected-rate-missing-input",
-        entity: "rate",
-        action: "removeSelectedRates",
-      },
-      'Action "removeSelectedRates" requires input with recordIds.',
-    );
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-remove-selected-rate-empty-input",
-        entity: "rate",
-        action: "removeSelectedRates",
-        input: { recordIds: [] },
-      },
-      'Action "removeSelectedRates" input recordIds must not be empty.',
-    );
-
-    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
-      name: "Producer",
-    });
-    const card = await postMutationForEntity("mutation-selected-card", "card", {
-      name: "Enterprise",
-    });
-    const created = await postActionForEntity(
-      "action-add-selected-rate-invalid-input",
-      "rate",
-      "addSelectedRate",
-      {
-        input: {
-          fromRecordId: card.record.id,
-          toRecordId: resource.record.id,
-        },
-      },
-    );
-    const createdRateId = created.changes[0]?.recordId;
-
-    if (!createdRateId) {
-      throw new Error("Selected join action did not create a rate.");
-    }
-
-    await expectError(
-      "/api/actions",
-      {
-        actionId: "action-remove-selected-rate-duplicate-input",
-        entity: "rate",
-        action: "removeSelectedRates",
-        input: { recordIds: [createdRateId, createdRateId] },
-      },
-      'Action "removeSelectedRates" input recordIds must not contain duplicates.',
-    );
-
-    const removed = await postActionForEntity(
-      "action-remove-selected-rate-duplicate-input",
-      "rate",
-      "removeSelectedRates",
-      { input: { recordIds: [createdRateId] } },
-    );
-
-    expect(created.changes).toHaveLength(1);
-    expect(created.changes[0]?.payload.values).toEqual({
-      resource: resource.record.id,
-      card: card.record.id,
-      cost: 0,
-      costUnit: "day",
-      price: 0,
-      priceSet: true,
-      currency: "usd",
-    });
-    expect(removed.changes).toHaveLength(1);
-    expect(removed.changes[0]?.recordId).toBe(createdRateId);
-  });
-
-  it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
-    useSchemaApp("estii");
-    await createRateResources(5);
-
-    const body = {
-      mutationId: "mutation-card-lifecycle",
-      entity: "card",
-      op: "create",
-      values: { name: "Enterprise" },
-    };
-    const first = await postJson<MutationResponse>("/api/mutations", body);
-    const replay = await postJson<MutationResponse>("/api/mutations", body);
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const createdRates = first.changes.slice(1).map((change) => change.payload);
-
-    expect(first.record.entity).toBe("card");
-    expect(first.record.id).toBe(first.changes[0]?.recordId);
-    expect(first.changes).toHaveLength(11);
-    expect(first.changes[0]?.op).toBe("create");
-    expect(first.changes.slice(1).every((change) => change.op === "action")).toBe(true);
-    expect(createdRates.map((record) => record.values.card)).toEqual(
-      Array.from({ length: 10 }, () => first.record.id),
-    );
-    expect(sync.changes.filter((change) => change.mutationId === first.mutationId)).toHaveLength(
-      11,
-    );
-    expect(countRecordsByEntity(bootstrap.records)).toEqual({
-      card: 3,
-      rate: 30,
-      resource: 10,
-    });
-    expect(replay).toEqual(first);
-  });
-
-  it("runs rate-card afterCreate hooks for resource creates through mutation changes", async () => {
-    useSchemaApp("estii");
-    const cards = await createRateCards(2);
-
-    const resource = await postMutationForEntity("mutation-resource-lifecycle", "resource", {
-      name: "Producer",
-    });
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const createdRates = resource.changes.slice(1).map((change) => change.payload);
-
-    expect(resource.record.entity).toBe("resource");
-    expect(resource.changes).toHaveLength(5);
-    expect(resource.changes[0]?.op).toBe("create");
-    expect(resource.changes.slice(1).every((change) => change.op === "action")).toBe(true);
-    expect(createdRates.map((record) => record.values.resource)).toEqual(
-      Array.from({ length: 4 }, () => resource.record.id),
-    );
-    expect(new Set(createdRates.map((record) => record.values.card))).toEqual(
-      new Set(["rec_card_default", "rec_card_premium", ...cards.map((card) => card.record.id)]),
-    );
-    expect(countRecordsByEntity(bootstrap.records)).toEqual({
-      card: 4,
-      rate: 24,
-      resource: 6,
     });
   });
 
@@ -1794,7 +1287,7 @@ describe("authority", () => {
 
   it("accepts keyed hibernatable sync WebSocket upgrades", async () => {
     const tasksSocket = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "crm");
 
     tasksSocket.close();
     ratesSocket.close();
@@ -2058,18 +1551,18 @@ describe("authority", () => {
   it("broadcasts committed task creates to same-schema sync WebSockets only", async () => {
     const taskSocketA = await openSyncSocket("/api/sync/ws", "tasks");
     const taskSocketB = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
-    let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
+    const crmSocket = await openSyncSocket("/api/sync/ws", "crm");
+    let crmCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
 
     try {
       const taskSchema = await getJson<SchemaResponse>("/api/schema");
       await primeSyncSocket(taskSocketA, taskSeedRecords.length, taskSchema.updatedAt);
       await primeSyncSocket(taskSocketB, taskSeedRecords.length, taskSchema.updatedAt);
 
-      useSchemaApp("estii");
-      const rateSchema = await getJson<SchemaResponse>("/api/schema");
-      await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
-      ratesCapture = captureSyncSocketMessages(ratesSocket);
+      useSchemaApp("crm");
+      const crmSchema = await getJson<SchemaResponse>("/api/schema");
+      await primeSyncSocket(crmSocket, crmSeedRecords.length, crmSchema.updatedAt);
+      crmCapture = captureSyncSocketMessages(crmSocket);
 
       useSchemaApp("tasks");
       const messageA = readSyncSocketMessage(taskSocketA);
@@ -2093,49 +1586,12 @@ describe("authority", () => {
           cursor: created.cursor,
         },
       });
-      await expectNoCapturedMessages(ratesCapture);
+      await expectNoCapturedMessages(crmCapture);
     } finally {
-      ratesCapture?.stop();
+      crmCapture?.stop();
       taskSocketA.close();
       taskSocketB.close();
-      ratesSocket.close();
-    }
-  });
-
-  it("broadcasts committed create mutations after caused records are committed", async () => {
-    useSchemaApp("estii");
-    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
-    const socket = await openSyncSocket();
-
-    try {
-      await primeSyncSocket(socket, rateCardSeedRecords.length, schemaResponse.updatedAt);
-
-      const message = readSyncSocketMessage(socket);
-      const created = await postMutationForEntity("mutation-broadcast-caused-records", "resource", {
-        name: "Animator",
-      });
-
-      expect(created.changes.length).toBeGreaterThan(1);
-      expect(created.changes[0]).toMatchObject({
-        mutationId: created.mutationId,
-        op: "create",
-        entity: "resource",
-        recordId: created.record.id,
-      });
-      expect(
-        created.changes
-          .slice(1)
-          .every((change) => change.op === "action" && change.entity === "rate"),
-      ).toBe(true);
-      await expect(message).resolves.toEqual({
-        type: "sync",
-        payload: {
-          changes: created.changes,
-          cursor: created.cursor,
-        },
-      });
-    } finally {
-      socket.close();
+      crmSocket.close();
     }
   });
 
@@ -3935,172 +3391,8 @@ function deleteEnabledMutations(): AppSchema["entities"][string]["mutations"] {
   };
 }
 
-function rateCardSchemaWithoutAfterCreateHooks(): AppSchema {
-  const resource = rateCardSchema.entities.resource;
-  const card = rateCardSchema.entities.card;
-
-  if (!resource || !card) {
-    throw new Error("Rate-card schema must include resource and card entities.");
-  }
-
-  return {
-    ...rateCardSchema,
-    entities: {
-      ...rateCardSchema.entities,
-      resource: {
-        ...resource,
-        mutations: {
-          ...resource.mutations,
-          create: { enabled: resource.mutations.create.enabled },
-        },
-      },
-      card: {
-        ...card,
-        mutations: {
-          ...card.mutations,
-          create: { enabled: card.mutations.create.enabled },
-        },
-      },
-    },
-  };
-}
-
-function rateCardSchemaWithSelectedJoinActions(): AppSchema {
-  const schema = rateCardSchemaWithoutAfterCreateHooks();
-  const rate = schema.entities.rate;
-
-  if (!rate) {
-    throw new Error("Rate-card schema must include a rate entity.");
-  }
-
-  const actions = {
-    ...rate.actions,
-    addSelectedRate: {
-      label: "Add selected rate",
-      kind: "create-selected-join-record",
-      relationship: "cardResources",
-    },
-    removeSelectedRates: {
-      label: "Remove selected rates",
-      kind: "remove-selected-join-records",
-      relationship: "cardResources",
-    },
-  } satisfies NonNullable<EntitySchema["actions"]>;
-
-  return {
-    ...schema,
-    entities: {
-      ...schema.entities,
-      rate: {
-        ...rate,
-        actions,
-        operations: taskOperations(rate.label, rate.fields, actions),
-      },
-    },
-  } satisfies AppSchema;
-}
-
-function schemaWithSelectedTaskProjectJoinAction(): AppSchema {
-  return {
-    ...appSchema,
-    entities: {
-      ...appSchema.entities,
-      project: {
-        label: "Project",
-        fields: {
-          name: { type: "text", required: true, label: "Name" },
-        },
-        mutations: defaultMutations(),
-        operations: taskOperations("Project", {
-          name: { type: "text", required: true, label: "Name" },
-        }),
-      },
-      assignment: {
-        label: "Assignment",
-        fields: {
-          task: {
-            type: "reference",
-            required: true,
-            label: "Task",
-            to: "task",
-            displayField: "title",
-          },
-          project: {
-            type: "reference",
-            required: true,
-            label: "Project",
-            to: "project",
-            displayField: "name",
-          },
-        },
-        mutations: defaultMutations(),
-        operations: taskOperations(
-          "Assignment",
-          {
-            task: {
-              type: "reference",
-              required: true,
-              label: "Task",
-              to: "task",
-              displayField: "title",
-            },
-            project: {
-              type: "reference",
-              required: true,
-              label: "Project",
-              to: "project",
-              displayField: "name",
-            },
-          },
-          {
-            addSelectedProject: {
-              label: "Add selected project",
-              kind: "create-selected-join-record",
-              relationship: "taskProjects",
-            },
-          },
-        ),
-        constraints: {
-          uniqueAssignmentPair: {
-            kind: "unique",
-            fields: ["task", "project"],
-          },
-        },
-        actions: {
-          addSelectedProject: {
-            label: "Add selected project",
-            kind: "create-selected-join-record",
-            relationship: "taskProjects",
-          },
-        },
-      },
-    },
-    relationships: {
-      taskProjects: {
-        kind: "manyToMany",
-        label: "Projects",
-        from: { entity: "task" },
-        to: { entity: "project" },
-        through: {
-          entity: "assignment",
-          fromField: "task",
-          toField: "project",
-          uniqueConstraint: "uniqueAssignmentPair",
-        },
-      },
-    },
-  } satisfies AppSchema;
-}
-
 function expectUniqueIds(records: Array<{ id: string }>) {
   expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
-}
-
-function countRecordsByEntity(records: Array<{ entity: string }>) {
-  return records.reduce<Record<string, number>>((counts, record) => {
-    counts[record.entity] = (counts[record.entity] ?? 0) + 1;
-    return counts;
-  }, {});
 }
 
 function operationWriteId(entity: string, operation: string, idempotencyKey: string) {
@@ -5002,34 +4294,6 @@ function installedAppApiPath(packageAppKey: string, installId: string, path: str
   }
 
   return `/api/app-installs/${packageAppKey}/${installId}${path}`;
-}
-
-async function createRateResources(count: number) {
-  const resources: MutationResponse[] = [];
-
-  for (let index = 0; index < count; index += 1) {
-    resources.push(
-      await postMutationForEntity(`mutation-resource-${index + 1}`, "resource", {
-        name: `Resource ${index + 1}`,
-      }),
-    );
-  }
-
-  return resources;
-}
-
-async function createRateCards(count: number) {
-  const cards: MutationResponse[] = [];
-
-  for (let index = 0; index < count; index += 1) {
-    cards.push(
-      await postMutationForEntity(`mutation-card-${index + 1}`, "card", {
-        name: `Card ${index + 1}`,
-      }),
-    );
-  }
-
-  return cards;
 }
 
 async function postMutation(mutationId: string, values: Record<string, unknown>) {

@@ -25,7 +25,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site, Tasks, Estii, and CRM as default installable app packages", () => {
+  it("declares Site, Tasks, and CRM as default installable app packages", () => {
     const packages = listInstallableAppPackages();
 
     expect(packages).toEqual([
@@ -54,17 +54,6 @@ describe("app install registry", () => {
       }),
       expect.objectContaining({
         adminRouteBase: "/apps",
-        defaultInstallId: "estii",
-        label: "Estii",
-        packageAppKey: "estii",
-        packageRevision: 1,
-        seedRecordsKey: "estii",
-        sourceSchemaKey: "estii",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-        supportsMultipleInstalls: true,
-      }),
-      expect.objectContaining({
-        adminRouteBase: "/apps",
         defaultInstallId: "crm",
         label: "CRM",
         packageAppKey: "crm",
@@ -78,9 +67,6 @@ describe("app install registry", () => {
     expect(packages.find((appPackage) => appPackage.packageAppKey === "site")?.label).toBe("Site");
     expect(packages.find((appPackage) => appPackage.packageAppKey === "tasks")?.label).toBe(
       "Tasks",
-    );
-    expect(packages.find((appPackage) => appPackage.packageAppKey === "estii")?.label).toBe(
-      "Estii",
     );
     expect(packages.find((appPackage) => appPackage.packageAppKey === "crm")?.label).toBe("CRM");
     expect(
@@ -190,37 +176,6 @@ describe("app install registry", () => {
       packageAppKey: "tasks",
       seedRecordsKey: "tasks",
       sourceSchemaKey: "tasks",
-    });
-  });
-
-  it("creates a flat Estii install without Site public route metadata", () => {
-    const result = expectSuccess(
-      createAppInstall({
-        existingInstalls: [],
-        installId: "estii",
-        label: " Estii ",
-        now,
-        packageAppKey: "estii",
-      }),
-    );
-
-    expect(result.install).toEqual({
-      adminRoute: "/apps/estii",
-      createdAt: now,
-      installId: "estii",
-      label: "Estii",
-      packageAppKey: "estii",
-      packageRevision: 1,
-      schemaRoute: "/apps/estii/schema",
-      sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
-      status: "installed",
-      updatedAt: now,
-    });
-    expect(result.initialization).toEqual({
-      installId: "estii",
-      packageAppKey: "estii",
-      seedRecordsKey: "estii",
-      sourceSchemaKey: "estii",
     });
   });
 

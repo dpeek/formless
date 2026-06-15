@@ -47,7 +47,7 @@ Common commands:
 
 The runtime already has:
 
-- app schemas for Tasks, Estii, and Site;
+- app schemas for Tasks, Site, and CRM;
 - flat record storage through Durable Object Authority;
 - source schema and seed bootstrap;
 - browser IndexedDB replicas;

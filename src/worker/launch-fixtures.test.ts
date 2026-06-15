@@ -6,8 +6,6 @@ import type { AppInstall } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import {
-  rateSeedRecords,
-  rateSourceSchema,
   crmSeedRecords,
   crmSourceSchema,
   siteSeedRecords,
@@ -97,19 +95,10 @@ describe("worker launch fixture initialization", () => {
     );
 
     expect(first.fixtureName).toBe("mixed-apps");
-    expect(first.createdInstalls.map((install) => install.installId)).toEqual([
-      "site",
-      "tasks",
-      "estii",
-    ]);
-    expect(first.installs.map((install) => install.installId)).toEqual(["estii", "site", "tasks"]);
-    expect(first.installs.map((install) => install.packageAppKey)).toEqual([
-      "estii",
-      "site",
-      "tasks",
-    ]);
+    expect(first.createdInstalls.map((install) => install.installId)).toEqual(["site", "tasks"]);
+    expect(first.installs.map((install) => install.installId)).toEqual(["site", "tasks"]);
+    expect(first.installs.map((install) => install.packageAppKey)).toEqual(["site", "tasks"]);
     expect(first.installs.map((install) => install.publicRoute)).toEqual([
-      undefined,
       "/sites/site",
       undefined,
     ]);
@@ -164,20 +153,11 @@ describe("worker launch fixture initialization", () => {
       "/app/tasks?fixture=mixed-apps",
       "app-mixed-tasks",
     );
-    const estii = await getJson<AppStorageInitializationResponse>(
-      "/app/estii?fixture=mixed-apps",
-      "app-mixed-estii",
-    );
 
     expect(tasks.schema).toEqual(taskSourceSchema);
     expect(tasks.schemaUpdatedAt).toEqual(expect.any(String));
     expect(tasks.cursor).toBe(taskSeedRecords.length);
     expect(recordIds(tasks.records)).toEqual(recordIds(taskSeedRecords));
-
-    expect(estii.schema).toEqual(rateSourceSchema);
-    expect(estii.schemaUpdatedAt).toEqual(expect.any(String));
-    expect(estii.cursor).toBe(rateSeedRecords.length);
-    expect(recordIds(estii.records)).toEqual(recordIds(rateSeedRecords));
   });
 
   it("keeps the empty fixture empty", async () => {

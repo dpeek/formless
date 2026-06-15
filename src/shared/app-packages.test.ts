@@ -110,7 +110,6 @@ describe("app package manifests", () => {
     expect(bundledAppPackageManifests.map((manifest) => manifest.packageAppKey)).toEqual([
       "site",
       "tasks",
-      "estii",
       "crm",
     ]);
 
@@ -137,17 +136,6 @@ describe("app package manifests", () => {
         sourceOrigin: "bundled",
         sourceSchemaKey: "tasks",
         sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
-      }),
-      expect.objectContaining({
-        adminRouteBase: "/apps",
-        defaultInstallId: "estii",
-        label: "Estii",
-        packageAppKey: "estii",
-        packageRevision: 1,
-        seedRecordsKey: "estii",
-        sourceOrigin: "bundled",
-        sourceSchemaKey: "estii",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
       }),
       expect.objectContaining({
         adminRouteBase: "/apps",
@@ -196,7 +184,6 @@ describe("app package manifests", () => {
     expect(resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
       "site",
       "tasks",
-      "estii",
       "crm",
       "private-labs",
     ]);

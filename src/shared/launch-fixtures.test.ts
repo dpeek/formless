@@ -61,30 +61,19 @@ describe("launch fixture registry", () => {
   it("creates mixed app initialization plans with Site-only public routes", () => {
     const plan = createLaunchFixtureInitializationPlan("mixed-apps", { now });
 
-    expect(plan?.appInstalls.map((app) => app.install.installId)).toEqual([
-      "site",
-      "tasks",
-      "estii",
-    ]);
-    expect(plan?.appInstalls.map((app) => app.install.packageAppKey)).toEqual([
-      "site",
-      "tasks",
-      "estii",
-    ]);
+    expect(plan?.appInstalls.map((app) => app.install.installId)).toEqual(["site", "tasks"]);
+    expect(plan?.appInstalls.map((app) => app.install.packageAppKey)).toEqual(["site", "tasks"]);
     expect(plan?.appInstalls.map((app) => app.install.adminRoute)).toEqual([
       "/apps/site",
       "/apps/tasks",
-      "/apps/estii",
     ]);
     expect(plan?.appInstalls.map((app) => app.install.publicRoute)).toEqual([
       "/sites/site",
-      undefined,
       undefined,
     ]);
     expect(plan?.appInstalls.map((app) => app.seed)).toEqual([
       { kind: "source", seedRecordsKey: "site" },
       { kind: "source", seedRecordsKey: "tasks" },
-      { kind: "source", seedRecordsKey: "estii" },
     ]);
   });
 

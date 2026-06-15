@@ -8,11 +8,11 @@ App schema is runtime data that defines how a schema key stores flat records and
 
 ### Requirement: Bundled Source Apps
 
-The system SHALL provide source schemas for the current bundled schema keys `tasks`, `estii`, `site`, and `crm`, and SHALL treat source seed records as stored-record shaped data.
+The system SHALL provide source schemas for the current bundled schema keys `tasks`, `site`, and `crm`, and SHALL treat source seed records as stored-record shaped data.
 
 #### Scenario: Load current source app
 
-- **GIVEN** a current schema key `tasks`, `estii`, `site`, or `crm`
+- **GIVEN** a current schema key `tasks`, `site`, or `crm`
 - **WHEN** the runtime loads the source schema
 - **THEN** the app schema is available for that schema key
 - **AND** seed records can initialize records without being interpreted as change rows
@@ -52,8 +52,7 @@ archive, or deploy workflows.
 
 #### Scenario: Resolve bundled app packages from manifests
 
-- GIVEN the current bundled package app keys `site`, `tasks`, `estii`, and
-  `crm`
+- GIVEN the current bundled package app keys `site`, `tasks`, and `crm`
 - WHEN package metadata is listed or read
 - THEN each package is exposed as a resolved app package derived from app
   package manifest facts

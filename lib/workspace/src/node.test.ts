@@ -242,7 +242,6 @@ describe("workspace app package source resolver", () => {
     expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
       "site",
       "tasks",
-      "estii",
       "crm",
       "private-labs",
     ]);
@@ -289,7 +288,6 @@ describe("workspace app package source resolver", () => {
     expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
       "site",
       "tasks",
-      "estii",
       "crm",
       "cleartrace",
     ]);

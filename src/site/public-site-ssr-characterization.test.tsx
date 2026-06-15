@@ -74,12 +74,12 @@ describe("public Site SSR characterization", () => {
 
   it("renders published Site document routes as loading shells before tree data arrives", () => {
     const homeHtml = renderPublishedRoute("/");
-    const nestedHtml = renderPublishedRoute("/projects/estii");
+    const nestedHtml = renderPublishedRoute("/projects/pricinglab");
 
     expect(homeHtml).toContain("Loading site page...");
     expect(homeHtml).toContain("Loading home.");
     expect(nestedHtml).toContain("Loading site page...");
-    expect(nestedHtml).toContain("Loading projects/estii.");
+    expect(nestedHtml).toContain("Loading projects/pricinglab.");
     expect(homeHtml).not.toContain('data-frame="workbench"');
     expect(homeHtml).not.toContain('data-frame="generated-app"');
     expect(homeHtml).not.toContain("data-site-header");
@@ -110,7 +110,7 @@ describe("public Site SSR characterization", () => {
         return () => {};
       },
       onState: (state) => states.push(state),
-      slug: "/projects%2Festii",
+      slug: "/projects%2Fpricinglab",
       startPreviewSync: () => {
         startedPreviewSync = true;
 
@@ -119,19 +119,19 @@ describe("public Site SSR characterization", () => {
     });
 
     try {
-      expect(states).toEqual([{ status: "loading", slug: "projects/estii" }]);
-      expect(fetchPaths).toEqual(["/api/site/tree/projects%2Festii"]);
+      expect(states).toEqual([{ status: "loading", slug: "projects/pricinglab" }]);
+      expect(fetchPaths).toEqual(["/api/site/tree/projects%2Fpricinglab"]);
       expect(startedPreviewSync).toBe(false);
       expect(listenedForPreviewChanges).toBe(false);
 
-      resolveTree?.(Response.json(sitePageTree("projects/estii")));
+      resolveTree?.(Response.json(sitePageTree("projects/pricinglab")));
 
       await waitFor(() => states.some((state) => state.status === "ready"));
       expect(states).toEqual([
-        { status: "loading", slug: "projects/estii" },
-        siteReadyState("projects/estii"),
+        { status: "loading", slug: "projects/pricinglab" },
+        siteReadyState("projects/pricinglab"),
       ]);
-      expect(fetchPaths).toEqual(["/api/site/tree/projects%2Festii"]);
+      expect(fetchPaths).toEqual(["/api/site/tree/projects%2Fpricinglab"]);
     } finally {
       stop();
     }

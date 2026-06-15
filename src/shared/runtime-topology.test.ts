@@ -156,7 +156,7 @@ describe("runtime topology", () => {
   it("classifies client-shell routes for general, published, and instance profiles", () => {
     expect(isRuntimeClientShellRoute("/pages/home")).toBe(true);
     expect(isRuntimeClientShellRoute("/tasks")).toBe(true);
-    expect(isRuntimeClientShellRoute("/estii/setup")).toBe(true);
+    expect(isRuntimeClientShellRoute("/crm/audiences")).toBe(true);
     expect(isRuntimeClientShellRoute("/site/schema")).toBe(true);
     expect(isRuntimeClientShellRoute("/schema")).toBe(true);
     expect(isRuntimeClientShellRoute("/apps/personal")).toBe(true);

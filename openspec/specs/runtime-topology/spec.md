@@ -56,7 +56,7 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - WHEN a browser navigates to `/`, `/deployments`, `/setup`, `/login`,
   `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
 - THEN the request is eligible for the client shell
-- AND source schema routes such as `/tasks`, `/estii/setup`, `/site/schema`, and `/pages/home` are not eligible instance browser routes
+- AND source schema routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and `/pages/home` are not eligible instance browser routes
 
 #### Scenario: Product instance deployment route
 
@@ -145,7 +145,7 @@ The system MUST route public Site documents through published Site behavior only
 #### Scenario: Non-document paths stay out of SSR
 
 - GIVEN the runtime profile is `publishedSite`
-- WHEN a request targets `/api/*`, `/tasks`, `/estii/setup`, `/site/schema`, `/schema`, `/apps/<installId>`, `/sites/<installId>`, static asset-like paths, dynamic root icon paths, or a non-HTML request
+- WHEN a request targets `/api/*`, `/tasks`, `/crm/audiences`, `/site/schema`, `/schema`, `/apps/<installId>`, `/sites/<installId>`, static asset-like paths, dynamic root icon paths, or a non-HTML request
 - THEN the request is not handled as a published Site document
 
 ### Requirement: Static Assets And Dynamic Public Resources

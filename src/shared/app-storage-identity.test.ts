@@ -94,22 +94,6 @@ describe("app storage identity", () => {
     });
     expect(
       installedAppStorageIdentity({
-        installId: "estii",
-        packageAppKey: "estii",
-      }),
-    ).toEqual({
-      apiRoutePrefix: "/api/app-installs/estii/estii",
-      authorityName: "app:estii",
-      broadcastChannelName: "formless:app:estii",
-      browserDatabaseName: "formless:app:estii",
-      installId: "estii",
-      kind: "appInstall",
-      packageAppKey: "estii",
-      seedRecordsKey: "estii",
-      sourceSchemaKey: "estii",
-    });
-    expect(
-      installedAppStorageIdentity({
         installId: "crm",
         packageAppKey: "crm",
       }),
@@ -123,22 +107,6 @@ describe("app storage identity", () => {
       packageAppKey: "crm",
       seedRecordsKey: "crm",
       sourceSchemaKey: "crm",
-    });
-    expect(
-      installedAppStorageIdentity({
-        installId: "cleartrace",
-        packageAppKey: "cleartrace",
-      }),
-    ).toEqual({
-      apiRoutePrefix: "/api/app-installs/cleartrace/cleartrace",
-      authorityName: "app:cleartrace",
-      broadcastChannelName: "formless:app:cleartrace",
-      browserDatabaseName: "formless:app:cleartrace",
-      installId: "cleartrace",
-      kind: "appInstall",
-      packageAppKey: "cleartrace",
-      seedRecordsKey: "cleartrace",
-      sourceSchemaKey: "cleartrace",
     });
   });
 
@@ -155,7 +123,7 @@ describe("app storage identity", () => {
     expect(installedAppStorageIdentity({ installId: "Docs", packageAppKey: "site" })).toBe(
       undefined,
     );
-    expect(installedAppStorageIdentity({ installId: "estii", packageAppKey: "missing" })).toBe(
+    expect(installedAppStorageIdentity({ installId: "rates", packageAppKey: "missing" })).toBe(
       undefined,
     );
   });
@@ -255,26 +223,6 @@ describe("app storage identity", () => {
       },
       path: "/bootstrap",
     });
-    expect(parseAuthorityApiRoute("/api/app-installs/estii/estii/bootstrap")).toMatchObject({
-      identity: {
-        authorityName: "app:estii",
-        installId: "estii",
-        kind: "appInstall",
-        packageAppKey: "estii",
-      },
-      path: "/bootstrap",
-    });
-    expect(
-      parseAuthorityApiRoute("/api/app-installs/cleartrace/cleartrace/bootstrap"),
-    ).toMatchObject({
-      identity: {
-        authorityName: "app:cleartrace",
-        installId: "cleartrace",
-        kind: "appInstall",
-        packageAppKey: "cleartrace",
-      },
-      path: "/bootstrap",
-    });
   });
 
   it("parses instance control-plane API route identities separately from app storage routes", () => {
@@ -297,7 +245,7 @@ describe("app storage identity", () => {
       "/api/site",
       "/api/missing/bootstrap",
       "/api/app-installs/site/personal",
-      "/api/app-installs/missing/estii/bootstrap",
+      "/api/app-installs/missing/rates/bootstrap",
     ]) {
       expect(parseAuthorityApiRoute(pathname)).toBeUndefined();
     }

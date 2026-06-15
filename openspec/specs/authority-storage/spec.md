@@ -12,7 +12,7 @@ The system SHALL isolate Authority storage by app storage identity.
 
 #### Scenario: Schema-key app identity
 
-- GIVEN a schema-key app such as `tasks`, `estii`, or `site`
+- GIVEN a schema-key app such as `tasks`, `site`, or `crm`
 - WHEN the app uses its schema-key API prefix
 - THEN committed records, changes, schema, operation invocations, and action
   executions belong to the Authority for that schema key

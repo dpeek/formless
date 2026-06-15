@@ -8,13 +8,11 @@ import {
 describe("worker schema app definitions", () => {
   it("loads parsed source schemas for each app", () => {
     const tasks = getWorkerSchemaAppDefinition("tasks");
-    const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
     const crm = getWorkerSchemaAppDefinition("crm");
 
-    expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "estii", "site", "crm"]);
+    expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "site", "crm"]);
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
-    expect(estii.sourceSchema.entities.rate?.label).toBe("Rate");
     expect(site.sourceSchema.entities.site?.label).toBe("Site");
     expect(crm.sourceSchema.entities.contact?.label).toBe("Contact");
     expect(crm.sourceSchema.entities.subscription?.label).toBe("Subscription");
@@ -29,16 +27,11 @@ describe("worker schema app definitions", () => {
 
   it("loads parsed seed records for each app", () => {
     const tasks = getWorkerSchemaAppDefinition("tasks");
-    const estii = getWorkerSchemaAppDefinition("estii");
     const site = getWorkerSchemaAppDefinition("site");
     const crm = getWorkerSchemaAppDefinition("crm");
 
     expect(tasks.seedRecords).toHaveLength(5);
     expect(tasks.seedRecords.every((record) => record.entity === "task")).toBe(true);
-    expect(estii.seedRecords).toHaveLength(17);
-    expect(new Set(estii.seedRecords.map((record) => record.entity))).toEqual(
-      new Set(["card", "resource", "rate"]),
-    );
     expect(site.seedRecords.filter((record) => record.entity === "site")).toEqual([
       expect.objectContaining({
         values: expect.objectContaining({

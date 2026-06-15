@@ -79,7 +79,7 @@ describe("runtime profile resolver", () => {
     });
     expect(profile.worlds).toEqual([]);
     expect(findRuntimeWorldMountByRoute(profile, "/tasks")).toBeUndefined();
-    expect(findRuntimeWorldMountByRoute(profile, "/estii")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/crm")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/site")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/tasks/schema")).toBeUndefined();
     expect(runtimeRoutePolicy(profile)).toEqual({
@@ -118,17 +118,11 @@ describe("runtime profile resolver", () => {
       packageAppKey: "site",
       siteRouteBase: "/sites",
     });
-    expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site", "crm"]);
-    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true, true]);
-    expect(profile.worlds.map((world) => world.route)).toEqual([
-      "/tasks",
-      "/estii",
-      "/site",
-      "/crm",
-    ]);
+    expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "site", "crm"]);
+    expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true]);
+    expect(profile.worlds.map((world) => world.route)).toEqual(["/tasks", "/site", "/crm"]);
     expect(profile.worlds.map((world) => world.schemaRoute)).toEqual([
       "/tasks/schema",
-      "/estii/schema",
       "/site/schema",
       "/crm/schema",
     ]);
@@ -167,11 +161,6 @@ describe("runtime profile resolver", () => {
         packageAppKey: "tasks",
       }),
       appInstallFixture({
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
-      }),
-      appInstallFixture({
         installId: "crm",
         label: "CRM",
         packageAppKey: "crm",
@@ -181,7 +170,6 @@ describe("runtime profile resolver", () => {
     const tasksWorld = installedAppWorldMountFromInstallId(profile, "task-workspace", {
       appInstalls,
     });
-    const estiiWorld = installedAppWorldMountFromInstallId(profile, "rates", { appInstalls });
     const crmWorld = installedAppWorldMountFromInstallId(profile, "crm", { appInstalls });
 
     if (!world?.target || world.target.kind !== "appInstall") {
@@ -190,10 +178,6 @@ describe("runtime profile resolver", () => {
 
     if (!tasksWorld?.target || tasksWorld.target.kind !== "appInstall") {
       throw new Error("Missing installed Tasks world.");
-    }
-
-    if (!estiiWorld?.target || estiiWorld.target.kind !== "appInstall") {
-      throw new Error("Missing installed Estii world.");
     }
 
     if (!crmWorld?.target || crmWorld.target.kind !== "appInstall") {
@@ -212,11 +196,6 @@ describe("runtime profile resolver", () => {
     expect(tasksWorld.schemaRoute).toBe("/apps/task-workspace/schema");
     expect(tasksWorld.target.installId).toBe("task-workspace");
     expect(tasksWorld.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
-    expect(estiiWorld.app.key).toBe("estii");
-    expect(estiiWorld.route).toBe("/apps/rates");
-    expect(estiiWorld.schemaRoute).toBe("/apps/rates/schema");
-    expect(estiiWorld.target.installId).toBe("rates");
-    expect(estiiWorld.target.apiRoutePrefix).toBe("/api/app-installs/estii/rates");
     expect(crmWorld.app.key).toBe("crm");
     expect(crmWorld.route).toBe("/apps/crm");
     expect(crmWorld.schemaRoute).toBe("/apps/crm/schema");
@@ -224,20 +203,17 @@ describe("runtime profile resolver", () => {
     expect(crmWorld.target.apiRoutePrefix).toBe("/api/app-installs/crm/crm");
     expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
     expect(runtimeScreenRoute(world, "/settings")).toBe("/apps/personal/settings");
-    expect(runtimeScreenRoute(estiiWorld, "/setup")).toBe("/apps/rates/setup");
+    expect(runtimeScreenRoute(crmWorld, "/audiences")).toBe("/apps/crm/audiences");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/settings")).toBe("/settings");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBeUndefined();
-    expect(runtimeScreenPathFromRoute(estiiWorld, "/apps/rates/setup")).toBe("/setup");
+    expect(runtimeScreenPathFromRoute(crmWorld, "/apps/crm/audiences")).toBe("/audiences");
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/personal/settings", { appInstalls })?.target,
     ).toEqual(world.target);
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace", { appInstalls })?.target,
     ).toEqual(tasksWorld.target);
-    expect(
-      findRuntimeWorldMountByRoute(profile, "/apps/rates/setup", { appInstalls })?.target,
-    ).toEqual(estiiWorld.target);
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/crm/audiences", { appInstalls })?.target,
     ).toEqual(crmWorld.target);
@@ -253,11 +229,6 @@ describe("runtime profile resolver", () => {
         installId: "task-workspace",
         label: "Task Workspace",
         packageAppKey: "tasks",
-      }),
-      appInstallFixture({
-        installId: "rates",
-        label: "Rates",
-        packageAppKey: "estii",
       }),
     ];
     const world = installedAppWorldMountFromInstallId(profile, "task-workspace", { appInstalls });
@@ -414,7 +385,7 @@ describe("runtime profile resolver", () => {
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {
-    const profile = createAppRuntimeProfile("estii");
+    const profile = createAppRuntimeProfile("crm");
     const world = profile.worlds[0];
 
     if (!world) {
@@ -424,7 +395,7 @@ describe("runtime profile resolver", () => {
     expect(profile.kind).toBe("app");
     expect(profile.shell).toBe("app");
     expect(profile.defaultRedirect).toBeUndefined();
-    expect(world.app.key).toBe("estii");
+    expect(world.app.key).toBe("crm");
     expect(world.generatedRoutes).toBe(true);
     expect(world.route).toBe("/");
     expect(world.schemaRoute).toBe("/schema");
@@ -526,7 +497,7 @@ describe("runtime profile resolver", () => {
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {
     expect(resolveRuntimeProfile({ profile: "instance" }).kind).toBe("instance");
-    expect(resolveRuntimeProfile({ profile: "app", schemaKey: "estii" }).kind).toBe("app");
+    expect(resolveRuntimeProfile({ profile: "app", schemaKey: "crm" }).kind).toBe("app");
     expect(resolveRuntimeProfile({ profile: "siteAuthoring" }).kind).toBe("siteAuthoring");
     expect(resolveRuntimeProfile({ profile: "publishedSite" }).kind).toBe("publishedSite");
     expect(

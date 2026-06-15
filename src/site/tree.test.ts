@@ -138,7 +138,7 @@ describe("site page tree projection", () => {
     expect(projectList.type).toBe("group");
     expect(projectList.query).toBeUndefined();
     expect(projectList.placements.map((placement) => placement.block.label)).toEqual([
-      "Estii",
+      "PricingLab",
       "OpenSurf",
       "Formless",
     ]);
@@ -730,7 +730,7 @@ describe("site page tree projection", () => {
       ...baseTreeRecords().filter(
         (record) =>
           ![
-            "rec_site_place_projects_estii",
+            "rec_site_place_projects_pricinglab",
             "rec_site_place_projects_opensurf",
             "rec_site_place_projects_formless",
           ].includes(record.id),
@@ -892,7 +892,7 @@ describe("site page tree projection", () => {
       href: "/projects",
     });
     expect(tree.page.placements.map((placement) => placement.id)).toEqual([
-      "rec_site_place_projects_estii",
+      "rec_site_place_projects_pricinglab",
       "rec_site_place_projects_opensurf",
       "rec_site_place_projects_formless",
     ]);
@@ -902,12 +902,12 @@ describe("site page tree projection", () => {
       "project",
     ]);
     expect(tree.page.placements.map((placement) => placement.block.href)).toEqual([
-      "/projects/estii",
+      "/projects/pricinglab",
       "/projects/opensurf",
       "/projects/formless",
     ]);
     expect(tree.page.placements[0]?.block.body).toBe(
-      "Estii helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://estii.com).",
+      "PricingLab helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://pricinglab.com).",
     );
   });
 
@@ -916,7 +916,7 @@ describe("site page tree projection", () => {
       ...baseTreeRecords().filter(
         (record) =>
           ![
-            "rec_site_place_projects_estii",
+            "rec_site_place_projects_pricinglab",
             "rec_site_place_projects_opensurf",
             "rec_site_place_projects_formless",
           ].includes(record.id),
@@ -946,7 +946,7 @@ describe("site page tree projection", () => {
     expect(projectList.query?.items.map((item) => item.id)).toEqual([
       "rec_site_content_project_opensurf",
       "rec_site_content_project_formless",
-      "rec_site_content_project_estii",
+      "rec_site_content_project_pricinglab",
     ]);
     expect(projectList.query?.items.map((item) => item.date)).toEqual([
       "2026-05-08",
@@ -1193,7 +1193,7 @@ describe("site page tree projection", () => {
       "rec_site_content_post_shipped_schema",
     ]);
     expect(projects.placements.map((placement) => placement.block.id)).toEqual([
-      "rec_site_content_project_estii",
+      "rec_site_content_project_pricinglab",
       "rec_site_content_project_opensurf",
     ]);
   });

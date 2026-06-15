@@ -47,7 +47,6 @@ describe("instance shell route view", () => {
         installDrafts={{
           site: { installId: "docs", label: "Docs Site" },
           tasks: { installId: "tasks", label: "Task Space" },
-          estii: { installId: "rates", label: "Rates" },
           crm: { installId: "crm", label: "CRM" },
         }}
         state={readyState({
@@ -81,7 +80,6 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Bundled apps");
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
     expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");
-    expect(html).not.toContain("Rate-card app backed by the bundled Estii schema");
   });
 
   it("renders deployments from config observations, desired state, and gateway status", () => {
@@ -661,7 +659,6 @@ describe("instance shell route view", () => {
         installDrafts={{
           site: { installId: "docs", label: "Docs Site" },
           tasks: { installId: "tasks", label: "Task Space" },
-          estii: { installId: "rates", label: "Rates" },
           crm: { installId: "crm", label: "CRM" },
         }}
         state={readyState({
@@ -675,14 +672,12 @@ describe("instance shell route view", () => {
     expect(html).toContain('role="tab"');
     expect(html).toContain("Site");
     expect(html).toContain("Tasks");
-    expect(html).toContain("Estii");
     expect(html).toContain("CRM");
     expect(html).toContain("Public website app backed by the bundled Site schema");
     expect(html).toContain("Install Site");
     expect(html).toContain('value="Docs Site"');
     expect(html).toContain('value="docs"');
     expect(html).not.toContain('value="Task Space"');
-    expect(html).not.toContain('value="Rates"');
     expect(html).not.toContain('value="CRM"');
     expect(html).not.toContain('value="crm"');
   });
@@ -706,7 +701,6 @@ describe("instance shell route view", () => {
 
     expect(html).toContain("Site");
     expect(html).toContain("Tasks");
-    expect(html).toContain("Estii");
     expect(html).toContain("CRM");
     expect(html).toContain("CRM app backed by the bundled CRM schema and demo records.");
     expect(html).toContain("Install CRM");
