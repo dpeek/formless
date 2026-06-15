@@ -318,23 +318,15 @@ describe("instance control-plane API routes", () => {
     );
 
     try {
-      const install = await postHarnessAdminJson<MutationResponse>(
+      const install = await postHarnessAdminJson<ActionResponse>(
         privateHarness,
-        `${controlPlaneApi}/mutations`,
+        `${controlPlaneApi}/actions/createAppInstall`,
         {
-          mutationId: "mutation-private-site-install",
-          entity: "app-install",
-          op: "create",
-          values: {
-            installId: "private-site",
+          actionId: "action-private-site-install",
+          input: {
             packageAppKey: "private-site",
-            packageRevision: 7,
-            sourceSchemaHash,
             label: "Private Site",
-            status: "installed",
-            storageIdentity: "app:private-site",
-            createdAt: now,
-            updatedAt: now,
+            installId: "private-site",
           },
         },
       );
@@ -347,8 +339,8 @@ describe("instance control-plane API routes", () => {
           op: "create",
           values: {
             enabled: true,
-            matchPath: "/sites/private-site",
-            matchPrefix: "/sites/private-site/",
+            matchPath: "/sites/private-site-alt",
+            matchPrefix: "/sites/private-site-alt/",
             kind: "mount",
             targetProfile: "public-site",
             appInstall: "private-site",
@@ -360,7 +352,7 @@ describe("instance control-plane API routes", () => {
         },
       );
 
-      expect(install.response.status).toBe(200);
+      expect(install.response.status).toBe(201);
       expect(route.response.status).toBe(200);
       expect(route.body.record.values).toMatchObject({
         appInstall: "private-site",

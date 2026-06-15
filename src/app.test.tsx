@@ -715,7 +715,7 @@ describe("App smoke routes", () => {
     );
 
     expect(linkHtml(appSchemaHtml, "/schema")).toContain('aria-current="page"');
-    expect(linkHtml(appSchemaHtml, "/setup")).not.toContain('aria-current="page"');
+    expect(appSchemaHtml).not.toContain('href="/setup"');
 
     resetClientStore();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
@@ -2127,10 +2127,10 @@ describe("public site renderer", () => {
     expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).toContain("operational assumptions");
     expect(html).toContain("<strong");
-    expect(html).toContain('href="https://pricinglab.example/"');
+    expect(html).toContain('href="https://pricinglab.com/"');
     expect(html).toContain(">pricing structures<");
     expect(html).not.toContain("**operational assumptions**");
-    expect(html).not.toContain("[pricing structures](https://pricinglab.example)");
+    expect(html).not.toContain("[pricing structures](https://pricinglab.com)");
   });
 
   it("renders post detail routes through the Site frame", () => {

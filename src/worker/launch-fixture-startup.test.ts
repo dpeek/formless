@@ -47,7 +47,7 @@ describe("worker launch fixture startup", () => {
       controlPlane.records
         .filter((record) => record.entity === "app-install")
         .map((record) => record.id),
-    ).toEqual(["docs", "projects", "site"]);
+    ).toEqual(["site", "docs", "projects"]);
     expect(controlPlane.records.filter((record) => record.entity === "route")).toHaveLength(9);
     expect(
       controlPlane.records

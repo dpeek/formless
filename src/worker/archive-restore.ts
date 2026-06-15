@@ -18,7 +18,7 @@ import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { AppPackageResolver } from "../shared/app-packages.ts";
+import { listResolvedAppPackages, type AppPackageResolver } from "../shared/app-packages.ts";
 import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "@dpeek/formless-media";
 import {
   restoreImageMedia,
@@ -480,7 +480,7 @@ async function parseAndPlanArchiveRestore(
   const planResult = planPortableArchiveRestore(archive, {
     installedApps: await target.listInstalledApps(),
     mediaFiles: target.media ? await target.media.listFiles() : undefined,
-    packages: target.packages,
+    packages: target.packages ?? listResolvedAppPackages(target.packageResolver),
     sourceSchemas: target.sourceSchemas ?? workerSourceSchemas(),
   });
 
