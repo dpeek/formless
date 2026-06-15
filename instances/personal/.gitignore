@@ -1,7 +1,0 @@
-.alchemy/
-.env
-.formless/
-node_modules/
-.tmp/
-archives/instance/snapshots/*
-!archives/instance/snapshots/.gitkeep
