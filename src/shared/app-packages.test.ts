@@ -112,7 +112,6 @@ describe("app package manifests", () => {
       "tasks",
       "estii",
       "crm",
-      "cleartrace",
     ]);
 
     expect(listResolvedAppPackages()).toEqual([
@@ -161,17 +160,6 @@ describe("app package manifests", () => {
         sourceSchemaKey: "crm",
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
       }),
-      expect.objectContaining({
-        adminRouteBase: "/apps",
-        defaultInstallId: "cleartrace",
-        label: "ClearTrace",
-        packageAppKey: "cleartrace",
-        packageRevision: 1,
-        seedRecordsKey: "cleartrace",
-        sourceOrigin: "bundled",
-        sourceSchemaKey: "cleartrace",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
-      }),
     ]);
     expect(findResolvedAppPackage("site")?.sourceSchemaLocation).toEqual({
       kind: "bundled",
@@ -210,7 +198,6 @@ describe("app package manifests", () => {
       "tasks",
       "estii",
       "crm",
-      "cleartrace",
       "private-labs",
     ]);
   });

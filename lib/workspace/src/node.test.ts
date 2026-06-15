@@ -244,7 +244,6 @@ describe("workspace app package source resolver", () => {
       "tasks",
       "estii",
       "crm",
-      "cleartrace",
       "private-labs",
     ]);
     expect(linkedPackage).toMatchObject({
@@ -264,6 +263,49 @@ describe("workspace app package source resolver", () => {
       "task",
       "task",
     ]);
+  });
+
+  it("links the sibling ClearTrace package through workspace package links", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifestPath = "/Users/dpeek/code/cleartrace/formless.app.json";
+    const manifestLink = path.relative(workspaceRoot, manifestPath);
+
+    await writeWorkspacePackageLinks(workspaceRoot, manifestLink);
+
+    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+    const linkedPackage = result.linkedPackages[0];
+
+    expect(findResolvedAppPackage("cleartrace")).toBeUndefined();
+    expect(result.resolver.findPackage("cleartrace")).toMatchObject({
+      defaultInstallId: "cleartrace",
+      label: "ClearTrace",
+      packageAppKey: "cleartrace",
+      packageRevision: 1,
+      seedRecordsKey: "cleartrace",
+      sourceOrigin: "workspace",
+      sourceSchemaHash: "sha256:534fa538ac1bc45409c12dfdb0f798520c1824d1f81dc37c7695b8eba4adaade",
+      sourceSchemaKey: "cleartrace",
+    });
+    expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
+      "site",
+      "tasks",
+      "estii",
+      "crm",
+      "cleartrace",
+    ]);
+    expect(linkedPackage).toMatchObject({
+      appPackage: expect.objectContaining({ packageAppKey: "cleartrace" }),
+      manifest: expect.objectContaining({ packageAppKey: "cleartrace" }),
+      manifestPath,
+      packageRoot: "/Users/dpeek/code/cleartrace",
+      seedRecordsPath: "/Users/dpeek/code/cleartrace/seed-records.json",
+      sourceSchemaHash: "sha256:534fa538ac1bc45409c12dfdb0f798520c1824d1f81dc37c7695b8eba4adaade",
+      sourceSchemaPath: "/Users/dpeek/code/cleartrace/schema.json",
+    });
+    expect(linkedPackage?.sourceSchema.entities.order?.label).toBe("Order");
+    expect(
+      linkedPackage?.seedRecords.some((record) => record.id === "rec_cleartrace_customer_ada"),
+    ).toBe(true);
   });
 
   it("rejects linked source schemas that do not parse as app schemas", async () => {

@@ -25,7 +25,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site, Tasks, Estii, CRM, and ClearTrace as default installable app packages", () => {
+  it("declares Site, Tasks, Estii, and CRM as default installable app packages", () => {
     const packages = listInstallableAppPackages();
 
     expect(packages).toEqual([
@@ -74,17 +74,6 @@ describe("app install registry", () => {
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
         supportsMultipleInstalls: true,
       }),
-      expect.objectContaining({
-        adminRouteBase: "/apps",
-        defaultInstallId: "cleartrace",
-        label: "ClearTrace",
-        packageAppKey: "cleartrace",
-        packageRevision: 1,
-        seedRecordsKey: "cleartrace",
-        sourceSchemaKey: "cleartrace",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
-        supportsMultipleInstalls: true,
-      }),
     ]);
     expect(packages.find((appPackage) => appPackage.packageAppKey === "site")?.label).toBe("Site");
     expect(packages.find((appPackage) => appPackage.packageAppKey === "tasks")?.label).toBe(
@@ -94,9 +83,9 @@ describe("app install registry", () => {
       "Estii",
     );
     expect(packages.find((appPackage) => appPackage.packageAppKey === "crm")?.label).toBe("CRM");
-    expect(packages.find((appPackage) => appPackage.packageAppKey === "cleartrace")?.label).toBe(
-      "ClearTrace",
-    );
+    expect(
+      packages.find((appPackage) => appPackage.packageAppKey === "cleartrace"),
+    ).toBeUndefined();
   });
 
   it("validates route-safe install ids", () => {
@@ -266,7 +255,20 @@ describe("app install registry", () => {
     });
   });
 
-  it("creates a flat ClearTrace install without Site public route metadata", () => {
+  it("creates a flat ClearTrace install only through the active resolver", () => {
+    const resolver = createAppPackageResolver([
+      ...bundledAppPackageManifests,
+      cleartracePackageManifest(),
+    ]);
+    const unavailable = expectFailure(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "cleartrace",
+        label: "ClearTrace",
+        now,
+        packageAppKey: "cleartrace",
+      }),
+    );
     const result = expectSuccess(
       createAppInstall({
         existingInstalls: [],
@@ -274,9 +276,11 @@ describe("app install registry", () => {
         label: " ClearTrace ",
         now,
         packageAppKey: "cleartrace",
+        packageResolver: resolver,
       }),
     );
 
+    expect(unavailable.error.code).toBe("unsupported-package");
     expect(result.install).toEqual({
       adminRoute: "/apps/cleartrace",
       createdAt: now,
@@ -285,7 +289,7 @@ describe("app install registry", () => {
       packageAppKey: "cleartrace",
       packageRevision: 1,
       schemaRoute: "/apps/cleartrace/schema",
-      sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
+      sourceSchemaHash: privateSourceSchemaHash,
       status: "installed",
       updatedAt: now,
     });
@@ -563,6 +567,36 @@ function privatePackageManifest(): Record<string, unknown> {
       {
         kind: "publicSite",
         routeBase: "/sites",
+      },
+    ],
+  };
+}
+
+function cleartracePackageManifest(): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: "cleartrace",
+    label: "ClearTrace",
+    description: "Private ClearTrace package fixture.",
+    defaultInstallId: "cleartrace",
+    supportsMultipleInstalls: true,
+    packageRevision: 1,
+    sourceSchema: {
+      kind: "workspace",
+      key: "cleartrace",
+      path: "schema.json",
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: "cleartrace",
+      path: "seed-records.json",
+    },
+    sourceSchemaHash: privateSourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
       },
     ],
   };

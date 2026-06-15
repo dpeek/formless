@@ -41,7 +41,8 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 
 - **GIVEN** the product instance shell renders
 - **WHEN** bundled app packages and custom domains are available
-- **THEN** install controls support Site, Tasks, Estii, CRM, and ClearTrace packages
+- **THEN** install controls support Site, Tasks, Estii, and CRM packages by
+  default
 - **AND** custom domain management shows desired route state and provider applied
   evidence separately
 - **AND** instance-level navigation includes a deployments destination that is
@@ -421,7 +422,8 @@ records that matches current table-driven install management behavior.
 - **WHEN** installed apps are rendered
 - **THEN** app installs render in a scannable collection with package, label,
   status, and route summary fields derived from `route` records
-- **AND** install controls support Site, Tasks, Estii, CRM, and ClearTrace package creation
+- **AND** install controls support Site, Tasks, Estii, and CRM package creation
+  by default
 
 #### Scenario: Create install
 

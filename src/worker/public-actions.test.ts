@@ -19,7 +19,6 @@ import type {
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
-import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
@@ -447,208 +446,6 @@ describe("public operation runtime", () => {
         secret: turnstileSecret,
         response: "token-ok",
         idempotency_key: "record-plan-installed",
-      },
-    ]);
-  });
-
-  it("executes ClearTrace public intake record plans and leaves staff lifecycle continuation protected", async () => {
-    await resetSchemaApp("cleartrace");
-
-    const route = "/api/cleartrace/public/operations/order/submit-public-intake";
-    const before = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-    const accepted = await postPublicAction(
-      route,
-      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-intake" }),
-    );
-    const body = (await accepted.json()) as PublicOperationResponse;
-    const after = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-
-    expect(accepted.status).toBe(200);
-    expect(body).toMatchObject({
-      invocationId: "operation:order.submit-public-intake:cleartrace-intake",
-      operation: {
-        entityName: "order",
-        operationName: "submit-public-intake",
-        canonicalKey: "order.submit-public-intake",
-        kind: "command",
-      },
-      output: {
-        type: "command",
-        cursor: after.cursor,
-        response: {
-          actionId: "operation:order.submit-public-intake:cleartrace-intake",
-          recordPlan: {
-            steps: [
-              { name: "createCustomer", kind: "create", entity: "customer" },
-              { name: "createOrder", kind: "create", entity: "order" },
-              { name: "createSample", kind: "create", entity: "sample" },
-              { name: "createOrderLine", kind: "create", entity: "order-line" },
-              { name: "createTestRequest", kind: "create", entity: "test-request" },
-              { name: "createWorkItem", kind: "create", entity: "work-item" },
-              { name: "createAuditEvent", kind: "create", entity: "audit-event" },
-            ],
-          },
-        },
-      },
-      status: "committed",
-    });
-    if (body.output.type !== "command") {
-      throw new Error("Expected command output.");
-    }
-
-    const steps = body.output.response.recordPlan?.steps ?? [];
-    const customer = requiredPlanRecord(after.records, steps, "createCustomer", "customer");
-    const order = requiredPlanRecord(after.records, steps, "createOrder", "order");
-    const sample = requiredPlanRecord(after.records, steps, "createSample", "sample");
-    const orderLine = requiredPlanRecord(after.records, steps, "createOrderLine", "order-line");
-    const request = requiredPlanRecord(after.records, steps, "createTestRequest", "test-request");
-    const workItem = requiredPlanRecord(after.records, steps, "createWorkItem", "work-item");
-    const auditEvent = requiredPlanRecord(after.records, steps, "createAuditEvent", "audit-event");
-
-    expect(body.output).not.toHaveProperty("changes");
-    expect(body.output.affectedChangeIds).toHaveLength(7);
-    expect(steps.map((step) => step.changeId)).toEqual(body.output.affectedChangeIds);
-    expect(after.records.length).toBe(before.records.length + 7);
-    expect(customer.values).toMatchObject({
-      label: "Public Intake Labs",
-      email: "cleartrace-intake@example.com",
-      status: "active",
-    });
-    expect(order.values).toMatchObject({
-      customer: customer.id,
-      status: "awaitingPayment",
-      paymentStatus: "manualPending",
-      total: 0,
-      currency: "AUD",
-      termsAccepted: true,
-    });
-    expect(String(order.values.orderNumber)).toMatch(/^CT_/);
-    expect(sample.values).toMatchObject({
-      order: order.id,
-      customer: customer.id,
-      analyte: "rec_cleartrace_analyte_peptide_a",
-      status: "expected",
-      form: "vial",
-      customerNotes: "Customer submitted intake notes.",
-    });
-    expect(String(sample.values.sampleCode)).toMatch(/^CT-S_/);
-    expect(orderLine.values).toMatchObject({
-      order: order.id,
-      catalogItem: "rec_cleartrace_catalog_identity",
-      description: sample.values.sampleCode,
-      quantity: 1,
-      unitPrice: 0,
-      total: 0,
-      sample: sample.id,
-    });
-    expect(request.values).toMatchObject({
-      order: order.id,
-      sample: sample.id,
-      testPackage: "rec_cleartrace_package_standard",
-      status: "pendingReview",
-      priority: "normal",
-      assignedTo: "Lab intake",
-    });
-    expect(workItem.values).toMatchObject({
-      label: sample.values.sampleCode,
-      type: "intake",
-      status: "open",
-      priority: "normal",
-      relatedRecordId: sample.id,
-      assignedTo: "Lab intake",
-    });
-    expect(auditEvent.values).toMatchObject({
-      label: "Submitted public intake",
-      actorType: "customer",
-      actionKey: "submit-public-intake",
-      recordType: "order",
-      recordId: order.id,
-      previousState: "none",
-      nextState: "awaitingPayment",
-      actorMode: "anonymous",
-      occurredAt: "2026-06-11",
-      sourceHost: "example.com",
-      sourcePath: route,
-    });
-    expect(auditEvent.values.operationReceivedAt).toEqual(expect.any(String));
-    expect(JSON.stringify(body)).not.toContain("token-ok");
-    expect(JSON.stringify(body)).not.toContain(turnstileSecret);
-    expect(JSON.stringify(body)).not.toContain("Customer submitted intake notes.");
-
-    const replay = await postPublicAction(
-      route,
-      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-intake" }),
-    );
-    const replayBody = (await replay.json()) as PublicOperationResponse;
-    const afterReplay = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-
-    expect(replay.status).toBe(200);
-    expect(replayBody.status).toBe("replayed");
-    expect(afterReplay.records).toEqual(after.records);
-    expect(afterReplay.cursor).toBe(after.cursor);
-
-    const anonymousTransition = await postPublicAction(
-      "/api/cleartrace/public/operations/sample/receiveSample",
-      publicCleartraceIntakeBody({ idempotencyKey: "cleartrace-public-transition" }),
-    );
-    expect(anonymousTransition.status).toBe(404);
-
-    const beforeRejected = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-    const rejected = await postPublicAction(
-      route,
-      publicCleartraceIntakeBody({
-        idempotencyKey: "cleartrace-intake-rejected",
-        input: {
-          ...publicCleartraceIntakeInput("cleartrace-intake-rejected"),
-          catalogItemId: "missing-catalog-item",
-        },
-      }),
-    );
-    const afterRejected = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-
-    expect(rejected.status).toBe(400);
-    expect((await rejected.json()) as { error: string }).toEqual({
-      error:
-        'Field "catalogItem" references unknown service-catalog-item record "missing-catalog-item".',
-    });
-    expect(afterRejected.records).toEqual(beforeRejected.records);
-    expect(afterRejected.cursor).toBe(beforeRejected.cursor);
-
-    await postAdminJson<OperationInvocationResponse>(
-      "/api/cleartrace/operations/sample/receiveSample",
-      {
-        idempotencyKey: "cleartrace-staff-receive-sample",
-        input: { recordId: sample.id },
-      },
-    );
-    await postAdminJson<OperationInvocationResponse>(
-      "/api/cleartrace/operations/sample/accessionSample",
-      {
-        idempotencyKey: "cleartrace-staff-accession-sample",
-        input: { recordId: sample.id },
-      },
-    );
-    await postAdminJson<OperationInvocationResponse>(
-      "/api/cleartrace/operations/test-request/acceptTestRequest",
-      {
-        idempotencyKey: "cleartrace-staff-accept-request",
-        input: { recordId: request.id },
-      },
-    );
-    const afterStaff = await getJson<BootstrapResponse>("/api/cleartrace/bootstrap");
-
-    expect(recordById(afterStaff.records, sample.id)?.values.status).toBe("accessioned");
-    expect(recordById(afterStaff.records, request.id)?.values.status).toBe("accepted");
-    expect(turnstileRequests).toEqual([
-      {
-        secret: turnstileSecret,
-        response: "token-ok",
-        idempotency_key: "cleartrace-intake",
-      },
-      {
-        secret: turnstileSecret,
-        response: "token-ok",
-        idempotency_key: "cleartrace-intake-rejected",
       },
     ]);
   });
@@ -1423,10 +1220,7 @@ async function turnstileVerifyResponse(request: Request) {
   return Response.json(turnstileResponse);
 }
 
-async function resetSchemaApp(
-  schemaKey: "cleartrace" | "tasks" | "site",
-  target: Harness = harness,
-) {
+async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = harness) {
   const response = await target.fetch(`/api/${schemaKey}/reset/seed`, {
     body: "{}",
     headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -1498,31 +1292,6 @@ function publicRecordPlanBody(input: {
     },
     proof: { turnstileToken: input.token ?? "token-ok" },
     idempotencyKey: input.idempotencyKey,
-  };
-}
-
-function publicCleartraceIntakeBody(input: {
-  idempotencyKey: string;
-  input?: Record<string, unknown>;
-  token?: string;
-}) {
-  return {
-    input: input.input ?? publicCleartraceIntakeInput(input.idempotencyKey),
-    proof: { turnstileToken: input.token ?? "token-ok" },
-    idempotencyKey: input.idempotencyKey,
-  };
-}
-
-function publicCleartraceIntakeInput(idempotencyKey: string) {
-  return {
-    customerName: "Public Intake Labs",
-    customerEmail: `${idempotencyKey}@example.com`,
-    catalogItemId: "rec_cleartrace_catalog_identity",
-    testPackageId: "rec_cleartrace_package_standard",
-    analyteId: "rec_cleartrace_analyte_peptide_a",
-    sampleForm: "vial",
-    sampleNotes: "Customer submitted intake notes.",
-    termsAcceptance: "accepted",
   };
 }
 
@@ -1657,26 +1426,6 @@ function taskRecordPlanRecords(records: StoredRecord[]) {
     tasks: records.filter((record) => record.entity === "task"),
     logs: records.filter((record) => record.entity === "task-log"),
   };
-}
-
-function requiredPlanRecord(
-  records: StoredRecord[],
-  steps: { entity: string; name: string; recordId: string }[],
-  stepName: string,
-  entity: string,
-) {
-  const step = steps.find((candidate) => candidate.name === stepName);
-  const record = step ? recordById(records, step.recordId) : undefined;
-
-  if (!step || record?.entity !== entity) {
-    throw new Error(`Missing record-plan step "${stepName}" for "${entity}".`);
-  }
-
-  return record;
-}
-
-function recordById(records: StoredRecord[], recordId: string) {
-  return records.find((record) => record.id === recordId);
 }
 
 async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {

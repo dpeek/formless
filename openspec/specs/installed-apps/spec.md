@@ -42,8 +42,7 @@ app install can be created.
   seed records key, package revision, source schema hash, admin route base, and
   optional public route capability
 - **AND** the default runtime resolver includes the bundled Site, Tasks, Estii,
-  CRM, and ClearTrace packages with package app keys `site`, `tasks`, `estii`,
-  `crm`, and `cleartrace`
+  and CRM packages with package app keys `site`, `tasks`, `estii`, and `crm`
 - **AND** package metadata comes from app package manifest facts, not from app
   install records or instance control-plane route records
 
@@ -161,13 +160,6 @@ package's source schema and source seed records.
 - **WHEN** `/api/app-installs/crm/crm/bootstrap` is read
 - **THEN** the bootstrap response contains the bundled CRM source schema and source seed records
 - **AND** the install metadata keeps label and route identity scoped to `crm`
-
-#### Scenario: ClearTrace initialization
-
-- **GIVEN** a ClearTrace app install is created with install id `cleartrace`
-- **WHEN** `/api/app-installs/cleartrace/cleartrace/bootstrap` is read
-- **THEN** the bootstrap response contains the bundled ClearTrace source schema and source seed records
-- **AND** the install metadata keeps label and route identity scoped to `cleartrace`
 
 #### Scenario: Private package initialization
 

@@ -22,8 +22,6 @@ import { packageAppFactsForKey } from "../shared/app-installs.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
-  cleartraceSeedRecords,
-  cleartraceSourceSchema,
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
   siteSeedRecords,
@@ -3453,124 +3451,6 @@ describe("authority", () => {
         id: created.record.id,
         values: expect.objectContaining({ priority: "normal" }),
       }),
-    );
-  });
-
-  it("runs ClearTrace lifecycle transitions and writes flat audit events", async () => {
-    await resetSchemaApp("cleartrace");
-    useSchemaApp("cleartrace");
-
-    const sampleId = "rec_cleartrace_sample_1001_a";
-    const requestId = "rec_cleartrace_request_1001_a";
-    const before = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(before.schema).toEqual(cleartraceSourceSchema);
-    expect(before.records).toHaveLength(cleartraceSeedRecords.length);
-
-    const sampleTransition = await postActionForEntity(
-      "action-cleartrace-sample-accession",
-      "sample",
-      "accessionSample",
-      { input: { recordId: sampleId } },
-    );
-    const requestTransition = await postActionForEntity(
-      "action-cleartrace-request-start",
-      "test-request",
-      "startTestRequest",
-      { input: { recordId: requestId } },
-    );
-    const report = await postMutationForEntity("mutation-cleartrace-report-draft", "report", {
-      reportNumber: "CT-R-1001-B",
-      order: "rec_cleartrace_order_1001",
-      sample: sampleId,
-      title: "Draft lifecycle report",
-    });
-    await postActionForEntity(
-      "action-cleartrace-report-submit-review",
-      "report",
-      "submitReportReview",
-      { input: { recordId: report.record.id } },
-    );
-    await postActionForEntity("action-cleartrace-report-approve", "report", "approveReport", {
-      input: { recordId: report.record.id },
-    });
-    const releaseTransition = await postActionForEntity(
-      "action-cleartrace-report-release",
-      "report",
-      "releaseReport",
-      { input: { recordId: report.record.id } },
-    );
-
-    await expectError(
-      "/api/mutations",
-      {
-        mutationId: "mutation-cleartrace-direct-sample-status",
-        entity: "sample",
-        op: "patch",
-        recordId: sampleId,
-        values: { status: "inAnalysis" },
-      },
-      "must change through transition actions",
-    );
-
-    const after = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sampleEvent = sampleTransition.changes.find((change) => change.entity === "audit-event");
-    const requestEvent = requestTransition.changes.find(
-      (change) => change.entity === "audit-event",
-    );
-    const releaseEvent = releaseTransition.changes.find(
-      (change) => change.entity === "audit-event",
-    );
-    const auditEvents = after.records.filter((record) => record.entity === "audit-event");
-
-    expect(report.record.values.status).toBe("draft");
-    expect(sampleTransition.changes).toHaveLength(2);
-    expect(requestTransition.changes).toHaveLength(2);
-    expect(releaseTransition.changes).toHaveLength(2);
-    expect(sampleEvent?.payload.values).toMatchObject({
-      actionKey: "accessionSample",
-      recordType: "sample",
-      recordId: sampleId,
-      previousState: "received",
-      nextState: "accessioned",
-      actorMode: "owner",
-    });
-    expect(requestEvent?.payload.values).toMatchObject({
-      actionKey: "startTestRequest",
-      recordType: "test-request",
-      recordId: requestId,
-      previousState: "queued",
-      nextState: "inProgress",
-      actorMode: "owner",
-    });
-    expect(releaseEvent?.payload.values).toMatchObject({
-      actionKey: "releaseReport",
-      recordType: "report",
-      recordId: report.record.id,
-      previousState: "approved",
-      nextState: "released",
-      actorMode: "owner",
-    });
-    expect(after.records).toContainEqual(
-      expect.objectContaining({
-        id: sampleId,
-        values: expect.objectContaining({ status: "accessioned" }),
-      }),
-    );
-    expect(after.records).toContainEqual(
-      expect.objectContaining({
-        id: requestId,
-        values: expect.objectContaining({ status: "inProgress" }),
-      }),
-    );
-    expect(after.records).toContainEqual(
-      expect.objectContaining({
-        id: report.record.id,
-        values: expect.objectContaining({ status: "released" }),
-      }),
-    );
-    expect(auditEvents).toHaveLength(
-      cleartraceSeedRecords.filter((record) => record.entity === "audit-event").length + 5,
     );
   });
 

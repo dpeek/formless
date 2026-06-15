@@ -118,13 +118,6 @@ export const bundledAppPackageManifests = [
     defaultInstallId: "crm",
     sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
   }),
-  bundledAppPackageManifest({
-    packageAppKey: "cleartrace",
-    label: schemaAppDefinitions.cleartrace.label,
-    description: "Lab operations app backed by the bundled ClearTrace schema and demo records.",
-    defaultInstallId: "cleartrace",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.cleartrace,
-  }),
 ] as const satisfies readonly AppPackageManifest[];
 
 export const bundledAppPackageResolver = createAppPackageResolver(bundledAppPackageManifests);

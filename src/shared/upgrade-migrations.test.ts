@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
-import rawCleartraceSourceSchema from "../../schema/apps/cleartrace/schema.json";
 import rawEstiiSourceSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
@@ -46,12 +45,8 @@ describe("upgrade migration contracts", () => {
     await expect(computeSourceSchemaHash(rawCrmSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.crm,
     );
-    await expect(computeSourceSchemaHash(rawCleartraceSourceSchema)).resolves.toBe(
-      bundledSourceSchemaHashFixtures.cleartrace,
-    );
     expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.site)).toBe(true);
     expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.crm)).toBe(true);
-    expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.cleartrace)).toBe(true);
   });
 
   it("keeps registry order and filters by migration family", () => {
