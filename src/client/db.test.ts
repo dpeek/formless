@@ -66,11 +66,6 @@ describe("client db", () => {
     });
   });
 
-  it("can scope browser storage by Site project identity", () => {
-    expect(clientDbName("site", "project-123")).toBe("formless:project-123:site");
-    expect(clientDbName("site", "../project")).toBe("formless:site");
-  });
-
   it("stores installed app replicas by install id", async () => {
     const personal = installedSiteIdentity("personal");
     const docs = installedSiteIdentity("docs");

@@ -30,14 +30,6 @@ describe("app storage identity", () => {
       sourceSchemaKey: "site",
     });
     expect(schemaKeyStorageIdentity("site")).not.toHaveProperty("siteMedia");
-    expect(schemaKeyStorageIdentity("site", { projectId: "project-123" })).toMatchObject({
-      broadcastChannelName: "formless:project-123:site",
-      browserDatabaseName: "formless:project-123:site",
-    });
-    expect(schemaKeyStorageIdentity("site", { projectId: "../project" })).toMatchObject({
-      broadcastChannelName: "formless:site",
-      browserDatabaseName: "formless:site",
-    });
   });
 
   it("maps an installed Site to install-scoped storage names and API paths", () => {
@@ -63,16 +55,6 @@ describe("app storage identity", () => {
         packageAppKey: "site",
       }),
     ).not.toHaveProperty("siteMedia");
-    expect(
-      installedAppStorageIdentity({
-        installId: "personal",
-        packageAppKey: "site",
-        projectId: "instance-123",
-      }),
-    ).toMatchObject({
-      broadcastChannelName: "formless:instance-123:app:personal",
-      browserDatabaseName: "formless:instance-123:app:personal",
-    });
   });
 
   it("maps installed non-Site apps without Site media facts", () => {
@@ -157,10 +139,6 @@ describe("app storage identity", () => {
       browserDatabaseName: "formless:instance:control-plane",
       kind: "instanceControlPlane",
       schemaKey: "instance-control-plane",
-    });
-    expect(instanceControlPlaneStorageIdentity({ projectId: "instance-123" })).toMatchObject({
-      broadcastChannelName: "formless:instance-123:instance:control-plane",
-      browserDatabaseName: "formless:instance-123:instance:control-plane",
     });
   });
 

@@ -131,25 +131,6 @@ restore command supports retargeting.
 - THEN the app archive can be restored to that install id
 - AND install-scoped storage and routes use the target install id
 
-### Requirement: Site Project Import
-
-The system SHALL import standalone Site projects as installed Site app archives.
-
-#### Scenario: Import standalone Site project
-
-- GIVEN a standalone Site project has source records and project media
-- WHEN `formless archive import-site` runs
-- THEN an installed Site app archive is written
-- AND project media is represented as core media objects with the
-  `core-media-assets` capability
-
-#### Scenario: Preserve external URLs
-
-- GIVEN a standalone Site project uses external media URLs
-- WHEN the project is imported
-- THEN external URLs are preserved as authored values
-- AND no provider media object is created for those URLs
-
 ### Requirement: Archive Package Boundary
 
 The system SHALL expose reusable portable archive contracts, current-envelope

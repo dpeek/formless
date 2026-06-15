@@ -13,13 +13,8 @@ export type ClientAppTarget = SchemaKey | ClientAppStorageIdentity;
 
 export function appStorageIdentityForClientTarget(
   target: ClientAppTarget,
-  options: { projectId?: string } = {},
 ): ClientAppStorageIdentity {
-  return typeof target === "string"
-    ? schemaKeyStorageIdentity(target, {
-        projectId: options.projectId ?? clientProjectStorageId(),
-      })
-    : target;
+  return typeof target === "string" ? schemaKeyStorageIdentity(target) : target;
 }
 
 export function clientTargetStorageName(target: ClientAppTarget): string {
@@ -44,12 +39,8 @@ export function clientSchemaKeyLabel(schemaKey: ClientAppSchemaKey): string {
   return findSchemaAppDefinition(schemaKey)?.label ?? schemaKey;
 }
 
-export function instanceControlPlaneClientTarget(
-  options: { projectId?: string } = {},
-): InstanceControlPlaneStorageIdentity {
-  return instanceControlPlaneStorageIdentity({
-    projectId: options.projectId ?? clientProjectStorageId(),
-  });
+export function instanceControlPlaneClientTarget(): InstanceControlPlaneStorageIdentity {
+  return instanceControlPlaneStorageIdentity();
 }
 
 export function clientTargetForSchemaKey(schemaKey: ClientAppSchemaKey): ClientAppTarget {
@@ -62,12 +53,4 @@ export function clientTargetForSchemaKey(schemaKey: ClientAppSchemaKey): ClientA
   }
 
   throw new Error(`No bundled client target for schema key "${schemaKey}".`);
-}
-
-function clientProjectStorageId(): string | undefined {
-  return stringConfigValue(import.meta.env.VITE_FORMLESS_SITE_PROJECT_ID);
-}
-
-function stringConfigValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

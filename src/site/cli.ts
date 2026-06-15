@@ -10,11 +10,9 @@ import packageJson from "../../package.json";
 import {
   exportAppArchive as exportAppArchiveCommand,
   exportInstanceArchive as exportInstanceArchiveCommand,
-  importSiteProjectArchive as importSiteProjectArchiveCommand,
   restoreAppArchive as restoreAppArchiveCommand,
   restorePortableArchive as restorePortableArchiveCommand,
   type ArchiveDiskWriteResult,
-  type ImportSiteProjectArchiveResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import {
@@ -259,13 +257,6 @@ export {
   type FormlessInstanceTargetDeployMetadata,
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
-export {
-  buildSiteProjectAppArchiveEntry,
-  readSiteProjectAppArchiveEntry,
-  type SiteProjectAppArchiveEntry,
-  type SiteProjectAppArchiveMediaFile,
-  type SiteProjectAppArchiveReport,
-} from "./project-archive.ts";
 export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   type ArchiveRestoreRemoteResult,
@@ -512,18 +503,6 @@ export async function runFormlessCli(
           result,
           dependencies.cwd,
         ),
-      );
-      return;
-    }
-    case "archiveImportSite": {
-      const result = await importSiteProjectArchive(command, dependencies);
-      dependencies.log(
-        [
-          `Site project archive written for ${result.report.installId}.`,
-          `Archive: ${formatCliPath(dependencies.cwd, result.archivePath)}.`,
-          `Records: ${result.recordCount}.`,
-          `Media files: ${result.mediaCount}.`,
-        ].join("\n"),
       );
       return;
     }
@@ -791,21 +770,6 @@ export async function restoreAppArchive(
   > = nodeFormlessCliDependencies(),
 ): Promise<RestorePortableArchiveResult> {
   return restoreAppArchiveCommand(input, dependencies);
-}
-
-export async function importSiteProjectArchive(
-  input: {
-    installId: string;
-    label?: string | null;
-    outDir: string;
-    projectPath: string;
-  },
-  dependencies: Pick<
-    FormlessCliDependencies,
-    "cwd" | "fetch" | "now"
-  > = nodeFormlessCliDependencies(),
-): Promise<ImportSiteProjectArchiveResult> {
-  return importSiteProjectArchiveCommand(input, dependencies);
 }
 
 export async function initFormlessInstanceWorkspace(

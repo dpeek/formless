@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import packageJson from "../../package.json";
 import {
   APP_ARCHIVE_KIND,
@@ -44,10 +42,6 @@ import {
 } from "@dpeek/formless-media";
 import type { AppInstallsResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import type { DeployControlPlaneRecord } from "@dpeek/formless-deploy/client";
-import {
-  readSiteProjectAppArchiveEntry,
-  type SiteProjectAppArchiveEntry,
-} from "./project-archive.ts";
 import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
@@ -105,10 +99,6 @@ export type RestorePortableArchiveResult = {
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
   upgradePlanning?: CliUpgradePlanningReport;
-};
-
-export type ImportSiteProjectArchiveResult = ArchiveDiskWriteResult & {
-  report: SiteProjectAppArchiveEntry["report"];
 };
 
 export async function exportInstanceArchive(
@@ -424,32 +414,6 @@ async function readDryRunArchiveRestoreUpgradePlanning(
       targetUrl: input.input.upgradeTarget?.targetUrl ?? input.input.target,
     },
   });
-}
-
-export async function importSiteProjectArchive(
-  input: {
-    installId: string;
-    label?: string | null;
-    outDir: string;
-    projectPath: string;
-  },
-  dependencies: ArchiveWorkflowDependencies,
-): Promise<ImportSiteProjectArchiveResult> {
-  const entry = await readSiteProjectAppArchiveEntry({
-    exportedAt: dependencies.now(),
-    installId: input.installId,
-    label: input.label ?? undefined,
-    projectRoot: path.resolve(dependencies.cwd, input.projectPath),
-  });
-  const write = await writePortableArchiveDirectory(
-    { archive: entry.archive, mediaFiles: entry.mediaFiles, outDir: input.outDir },
-    dependencies,
-  );
-
-  return {
-    ...write,
-    report: entry.report,
-  };
 }
 
 function restorePolicy(input: { apply: boolean; replace: boolean }): ArchiveRestorePolicy {

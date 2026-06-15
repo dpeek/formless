@@ -165,7 +165,6 @@ import {
   FORMLESS_ALCHEMY_PROFILE_REF_PREFIX,
 } from "./instance-workspace-credential-setup.ts";
 import { packageExecCommand } from "./package-commands.ts";
-import { SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
@@ -2482,14 +2481,11 @@ export function formlessInstanceWorkspaceDevEnv(
   }
 
   delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;
-  delete nextEnv.FORMLESS_SITE_PROJECT_ID;
-  delete nextEnv.FORMLESS_SITE_PROJECT_ROOT;
   delete nextEnv.FORMLESS_WORKSPACE_GATEWAY_ROOT;
   delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN;
   delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL;
   delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN;
   delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL;
-  delete nextEnv.VITE_FORMLESS_SITE_PROJECT_ID;
 
   return nextEnv;
 }
@@ -3748,18 +3744,6 @@ async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
 
 async function assertLocalOnboardingWorkspaceReady(workspaceRoot: string) {
   await assertNoExistingWorkspaceManifest(workspaceRoot);
-  await assertNoLocalOnboardingConflict(
-    workspaceRoot,
-    SITE_PROJECT_CONFIG_FILE,
-    "standalone Site project file",
-    "Import or move the Site project before browser setup.",
-  );
-  await assertNoLocalOnboardingConflict(
-    workspaceRoot,
-    SITE_PROJECT_RECORDS_FILE,
-    "standalone Site project file",
-    "Import or move the Site project before browser setup.",
-  );
   await assertNoLocalOnboardingConflict(
     workspaceRoot,
     PORTABLE_ARCHIVE_MANIFEST_FILE,

@@ -33,8 +33,6 @@ Common commands:
 - `formless destroy` is the explicit Cloudflare boundary for tearing down the configured deployment.
 - `formless instance ...` manages advanced instance workspace pull, check,
   push, dev, deploy, and destroy flows.
-- `formless archive import-site --project <path> --install <id> --out <dir>`
-  imports a legacy standalone Site project as an app archive.
 
 ## Packages
 
@@ -56,7 +54,6 @@ The runtime already has:
 - Site records projected into public trees and SSR documents;
 - local-first workspace CLI for dev, save, check, deploy, and destroy;
 - portable app and instance archives;
-- explicit legacy Site project archive import;
 - installed app identity and routes;
 - schema-owned instance control-plane records for installs, routes, domain
   intent, and deployment intent;

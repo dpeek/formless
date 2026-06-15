@@ -70,8 +70,6 @@ import {
   taskSourceSchema,
 } from "../test/schema-apps.ts";
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
-import { defaultSiteProjectConfig, formatSiteProjectConfig } from "./project-config.ts";
-import { formatSiteProjectRecords } from "./project-source.ts";
 import {
   instanceWorkspaceControlPlaneRecordSourcePath,
   listWorkspaceOperationStates,
@@ -126,8 +124,6 @@ describe("Formless Site CLI", () => {
       "       [--admin-token <token>]",
       "  archive restore-app --target <url> --archive <dir> --install <id>",
       "       [--apply] [--replace] [--admin-token <token>]",
-      "  archive import-site --project <path> --install <id> --out <dir>",
-      "       [--label <label>]",
       "  instance init-workspace [--workspace <path>] [--name <name>]",
       "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
       "  instance status|refresh|pull|check [--workspace <path>] [--target <alias>]",
@@ -220,33 +216,6 @@ describe("Formless Site CLI", () => {
       workspacePath: "../personal",
     });
     expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
-  });
-
-  it("rejects removed standalone Site project command shapes", () => {
-    expect(() => parseFormlessCliArgs(["init", "my-site"])).toThrow("Unknown command: init");
-    expect(() => parseFormlessCliArgs(["dev", "--project", "../site"])).toThrow(
-      "Unknown option for formless dev: --project",
-    );
-    expect(() => parseFormlessCliArgs(["save", "--project", "../site"])).toThrow(
-      "Unknown option for formless save: --project",
-    );
-    expect(() => parseFormlessCliArgs(["save", "--source", "https://example.com"])).toThrow(
-      "Unknown option for formless save: --source",
-    );
-    expect(() =>
-      parseFormlessCliArgs([
-        "deploy",
-        "setup",
-        "--worker",
-        "brother-site",
-        "--publish-url",
-        "https://live.example/",
-        "--media-bucket",
-        "brother-site-media",
-      ]),
-    ).toThrow("Unknown option for formless deploy: setup");
-    expect(() => parseFormlessCliArgs(["publish"])).toThrow("Unknown command: publish");
-    expect(() => parseFormlessCliArgs(["publish", "-y"])).toThrow("Unknown command: publish");
   });
 
   it("keeps CLI parse error messages stable", () => {
@@ -357,26 +326,6 @@ describe("Formless Site CLI", () => {
       kind: "archiveRestoreApp",
       replace: true,
       target: "https://instance.example",
-    });
-    expect(
-      parseFormlessCliArgs([
-        "archive",
-        "import-site",
-        "--project",
-        "../site",
-        "--install",
-        "personal",
-        "--label",
-        "Personal Site",
-        "--out",
-        "personal-archive",
-      ]),
-    ).toEqual({
-      installId: "personal",
-      kind: "archiveImportSite",
-      label: "Personal Site",
-      outDir: "personal-archive",
-      projectPath: "../site",
     });
     expect(() => parseFormlessCliArgs(["archive", "export"])).toThrow(
       "Missing required option for formless archive export: --target.",
@@ -2749,11 +2698,6 @@ describe("Formless Site CLI", () => {
         write: "file",
       },
       {
-        expected: "standalone Site project file exists",
-        path: "formless.config.json",
-        write: "file",
-      },
-      {
         expected: "portable archive source exists",
         path: PORTABLE_ARCHIVE_MANIFEST_FILE,
         write: "file",
@@ -2833,10 +2777,8 @@ describe("Formless Site CLI", () => {
       cliDeps(tempDir, {
         env: {
           FORMLESS_ADMIN_TOKEN: "remote-token",
-          FORMLESS_SITE_PROJECT_ROOT: "/old-site",
           KEEP: "value",
           PORT: "4444",
-          VITE_FORMLESS_SITE_PROJECT_ID: "old-site-id",
         },
         fetch: localInstanceDevFetch(requests, []),
         logs,
@@ -2881,8 +2823,6 @@ describe("Formless Site CLI", () => {
     expect(spawnCalls[0]?.env?.[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).not.toBe(
       "persisted-local-admin",
     );
-    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_SITE_PROJECT_ROOT");
-    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_SITE_PROJECT_ID");
     await expect(
       readFile(path.join(workspaceRoot, ".formless/local/dev.env"), "utf8"),
     ).resolves.toBe(
@@ -5034,60 +4974,6 @@ describe("Formless Site CLI", () => {
     expect(requests).toEqual([]);
   });
 
-  it("imports a standalone Site project into an app archive directory", async () => {
-    const tempDir = await makeTempDir();
-    const projectRoot = path.join(tempDir, "site");
-    const outDir = path.join(tempDir, "site-archive");
-    const logs: string[] = [];
-
-    await writeFileTree(projectRoot, mediaRecords());
-    await mkdir(path.join(projectRoot, "media/media/images"), { recursive: true });
-    await writeFile(path.join(projectRoot, "media/media/images/cover.png"), Buffer.from([7, 8]));
-
-    await runFormlessCli(
-      [
-        "archive",
-        "import-site",
-        "--project",
-        projectRoot,
-        "--install",
-        "personal",
-        "--out",
-        outDir,
-      ],
-      cliDeps(tempDir, { logs }),
-    );
-
-    const archive = parsePortableArchive(
-      JSON.parse(
-        await readFile(path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
-      ) as unknown,
-    );
-
-    if (archive.kind !== APP_ARCHIVE_KIND) {
-      throw new Error("Expected app archive.");
-    }
-
-    expect(archive.app.installId).toBe("personal");
-    expect(archive.data.kind).toBe("sourceRecords");
-    expect(archive.media.objects[0]).toMatchObject({
-      archivePath: "media/personal/media/images/cover.png",
-      deliveryHref: "/api/formless/media/media/images/cover.png",
-      storageKey: "media/images/cover.png",
-    });
-    await expect(
-      readFile(path.join(outDir, "media/personal/media/images/cover.png")),
-    ).resolves.toEqual(Buffer.from([7, 8]));
-    expect(logs).toEqual([
-      [
-        "Site project archive written for personal.",
-        `Archive: ${path.relative(tempDir, path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE))}.`,
-        `Records: ${mediaRecords().length}.`,
-        "Media files: 1.",
-      ].join("\n"),
-    ]);
-  });
-
   it("normalizes local source URLs", () => {
     expect(normalizeSourceUrl("http://localhost:5173/pages/home?x=1#top")).toBe(
       "http://localhost:5173/pages/home",
@@ -5222,16 +5108,6 @@ function fakeCliDevReadyLog(origin: string): string {
 
 function withoutFakeCliDevLogs(logs: string[]): string[] {
   return logs.filter((line) => !line.startsWith("Fake Vite ready: "));
-}
-
-async function writeFileTree(
-  projectRoot: string,
-  records: StoredRecord[],
-  config = defaultSiteProjectConfig(),
-) {
-  await mkdir(projectRoot, { recursive: true });
-  await writeFile(path.join(projectRoot, "formless.config.json"), formatSiteProjectConfig(config));
-  await writeFile(path.join(projectRoot, "site.records.json"), formatSiteProjectRecords(records));
 }
 
 async function writeWorkspaceManifest(

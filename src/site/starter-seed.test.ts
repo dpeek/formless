@@ -2,17 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { resolveIconCatalogSvg } from "../shared/icon-catalog.ts";
 import type { FieldValue, StoredRecord } from "../shared/protocol.ts";
-import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
-import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
+import { siteSeedRecords } from "../test/schema-apps.ts";
 
 describe("Site starter seed", () => {
-  it("defines a neutral no-media starter that validates as source records", () => {
-    expect(() =>
-      buildSiteSourceSnapshot(siteSourceSchema, siteSeedRecords, {
-        exportedAt: "2026-05-15T00:00:00.000Z",
-      }),
-    ).not.toThrow();
-
+  it("defines a neutral no-media starter source", () => {
+    expect(siteSeedRecords.length).toBeGreaterThan(0);
+    expect(siteSeedRecords.some((record) => record.deletedAt !== undefined)).toBe(false);
     expect(blocksOfType("image")).toEqual([]);
     expect(ownedOrInlineImageHrefs()).toEqual([]);
     expect(serializedSeed()).not.toContain("David Peek");

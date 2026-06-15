@@ -24,17 +24,6 @@ The system SHALL key each browser replica by app storage identity.
 - THEN the local IndexedDB replica uses `formless:app:<installId>`
 - AND the matching broadcast channel uses the same app install id scope
 
-### Requirement: Project-Scoped Replica
-
-The system SHALL include the Site project id in local browser replica names when a standalone Site project is active.
-
-#### Scenario: Site project local storage
-
-- GIVEN `VITE_FORMLESS_SITE_PROJECT_ID` is set
-- WHEN the browser opens a schema-key app for that project
-- THEN the local IndexedDB database name includes the project id
-- AND the broadcast channel name includes the project id
-
 ### Requirement: Local Replica Stores
 
 The system SHALL persist browser replica metadata and records locally.

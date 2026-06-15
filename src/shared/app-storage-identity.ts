@@ -50,12 +50,9 @@ const browserStoragePrefix = "formless";
 const installedAppAuthorityPrefix = "app";
 const installedAppApiPrefix = "/api/app-installs";
 
-export function schemaKeyStorageIdentity(
-  schemaKey: SchemaKey,
-  options: { projectId?: string } = {},
-): SchemaKeyStorageIdentity {
+export function schemaKeyStorageIdentity(schemaKey: SchemaKey): SchemaKeyStorageIdentity {
   const app = getSchemaAppDefinition(schemaKey);
-  const storageName = browserStorageName(schemaKey, options.projectId);
+  const storageName = browserStorageName(schemaKey);
 
   return {
     kind: "schemaKey",
@@ -73,7 +70,6 @@ export function installedAppStorageIdentity(
   input: {
     installId: string;
     packageAppKey: string;
-    projectId?: string;
   },
   resolver?: AppPackageResolver,
 ): InstalledAppStorageIdentity | undefined {
@@ -84,7 +80,7 @@ export function installedAppStorageIdentity(
     return undefined;
   }
 
-  const storageName = browserStorageName(`app:${installId.installId}`, input.projectId);
+  const storageName = browserStorageName(`app:${installId.installId}`);
   const apiRoutePrefix =
     `${installedAppApiPrefix}/${packageApp.packageAppKey}/${installId.installId}` as const;
 
@@ -101,13 +97,8 @@ export function installedAppStorageIdentity(
   };
 }
 
-export function instanceControlPlaneStorageIdentity(
-  options: { projectId?: string } = {},
-): InstanceControlPlaneStorageIdentity {
-  const storageName = browserStorageName(
-    INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-    options.projectId,
-  );
+export function instanceControlPlaneStorageIdentity(): InstanceControlPlaneStorageIdentity {
+  const storageName = browserStorageName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
 
   return {
     kind: "instanceControlPlane",
@@ -191,18 +182,6 @@ function parseSchemaKeyApiRoute(pathname: string): AuthorityApiRoute | undefined
     : undefined;
 }
 
-function browserStorageName(identitySegment: string, projectId: string | undefined) {
-  const normalizedProjectId = normalizeProjectStorageId(projectId);
-
-  return normalizedProjectId
-    ? `${browserStoragePrefix}:${normalizedProjectId}:${identitySegment}`
-    : `${browserStoragePrefix}:${identitySegment}`;
-}
-
-function normalizeProjectStorageId(value: string | undefined): string | undefined {
-  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) {
-    return undefined;
-  }
-
-  return value;
+function browserStorageName(identitySegment: string) {
+  return `${browserStoragePrefix}:${identitySegment}`;
 }

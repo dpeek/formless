@@ -169,8 +169,8 @@ export function deleteClientDb(target: ClientAppTarget) {
   });
 }
 
-export function clientDbName(target: ClientAppTarget, projectId?: string) {
-  return appStorageIdentityForClientTarget(target, { projectId }).browserDatabaseName;
+export function clientDbName(target: ClientAppTarget) {
+  return appStorageIdentityForClientTarget(target).browserDatabaseName;
 }
 
 async function openClientDb(target: ClientAppTarget) {

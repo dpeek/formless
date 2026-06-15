@@ -40,13 +40,6 @@ export type FormlessCliCommand =
       target: string;
     }
   | {
-      installId: string;
-      kind: "archiveImportSite";
-      label: string | null;
-      outDir: string;
-      projectPath: string;
-    }
-  | {
       fromArchive: string | null;
       fromRemote: boolean;
       kind: "instanceInitWorkspace";
@@ -184,8 +177,6 @@ export function formlessCliUsage(): string {
     "       [--admin-token <token>]",
     "  archive restore-app --target <url> --archive <dir> --install <id>",
     "       [--apply] [--replace] [--admin-token <token>]",
-    "  archive import-site --project <path> --install <id> --out <dir>",
-    "       [--label <label>]",
     "  instance init-workspace [--workspace <path>] [--name <name>]",
     "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
     "  instance status|refresh|pull|check [--workspace <path>] [--target <alias>]",
@@ -389,12 +380,8 @@ function parseArchiveArgs(args: string[]): FormlessCliCommand {
       return parseArchiveRestoreArgs(rest);
     case "restore-app":
       return parseArchiveRestoreAppArgs(rest);
-    case "import-site":
-      return parseArchiveImportSiteArgs(rest);
     default:
-      throw new Error(
-        "Usage: formless archive <export|export-app|restore|restore-app|import-site>",
-      );
+      throw new Error("Usage: formless archive <export|export-app|restore|restore-app>");
   }
 }
 
@@ -485,53 +472,6 @@ function parseArchiveRestoreAppArgs(args: string[]): FormlessCliCommand {
     kind: "archiveRestoreApp",
     replace: options.replace,
     target: options.target,
-  };
-}
-
-function parseArchiveImportSiteArgs(args: string[]): FormlessCliCommand {
-  const options = parseProjectOptions(args, "formless archive import-site");
-  let installId: string | null = null;
-  let label: string | null = null;
-  let outDir: string | null = null;
-
-  for (let index = 0; index < options.rest.length; index += 1) {
-    const arg = options.rest[index];
-
-    if (arg === "--install") {
-      installId = readOptionValue(options.rest, index, "--install");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--label") {
-      label = readOptionValue(options.rest, index, "--label");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--out") {
-      outDir = readOptionValue(options.rest, index, "--out");
-      index += 1;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless archive import-site: ${arg}`);
-  }
-
-  if (!installId) {
-    throw new Error("Missing required option for formless archive import-site: --install.");
-  }
-
-  if (!outDir) {
-    throw new Error("Missing required option for formless archive import-site: --out.");
-  }
-
-  return {
-    installId,
-    kind: "archiveImportSite",
-    label,
-    outDir,
-    projectPath: options.projectPath,
   };
 }
 
@@ -1466,32 +1406,6 @@ function parseArchiveTargetOptions(
   }
 
   return { rest, target };
-}
-
-function parseProjectOptions(
-  args: string[],
-  usage: string,
-): { projectPath: string; rest: string[] } {
-  let projectPath = ".";
-  const rest: string[] = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-
-    if (arg === "--project") {
-      projectPath = readOptionValue(args, index, "--project");
-      index += 1;
-      continue;
-    }
-
-    if (arg === "-h" || arg === "--help") {
-      throw new Error(`Usage: ${usage} [--project <path>]`);
-    }
-
-    rest.push(arg);
-  }
-
-  return { projectPath, rest };
 }
 
 function readOptionValue(args: string[], index: number, option: string): string {

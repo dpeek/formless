@@ -27,12 +27,11 @@ path.
 - **AND** `formless deploy` and `formless destroy` are explicit Cloudflare
   deployment boundaries
 
-#### Scenario: Archive and import commands
+#### Scenario: Archive commands
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs archive export, restore, or `archive import-site`
-- **THEN** portable archive and legacy standalone Site import behavior remains
-  available
+- **WHEN** a user runs archive export or restore commands
+- **THEN** portable archive data movement remains available
 - **AND** those commands stay scoped to archive data movement
 
 #### Scenario: Explicit cleanup commands
@@ -228,24 +227,6 @@ state back to reviewable workspace record source and app archives.
 - **THEN** the command fails and reports that workspace source must be refreshed
 - **AND** it does not rewrite record source or archive files
 
-### Requirement: Seed Promotion
-
-The system SHALL promote source Site seed data from local Site Authority state in deterministic form with referenced core media files.
-
-#### Scenario: Pull seed
-
-- GIVEN local Site Authority state contains active Site records
-- WHEN `bun run site:pull-seed` runs
-- THEN source seed records are written with stable record ids, created timestamps, deterministic order, and deterministic JSON formatting
-- AND tombstoned records are omitted
-
-#### Scenario: Seed check
-
-- GIVEN source Site records or referenced source media files are stale
-- WHEN `bun run site:pull-seed --check` runs
-- THEN the command fails
-- AND it reports that source output must be refreshed
-
 ### Requirement: CLI Upgrade Planning
 
 The Site CLI SHALL plan runtime and data upgrades before mutating remote
@@ -345,24 +326,6 @@ while consuming Media contracts from public package subpaths.
 - THEN media is represented with core media objects and the `core-media-assets`
   capability
 - AND records do not receive provider-specific URLs
-
-### Requirement: Site Project Import
-
-The system SHALL import a standalone Site project as an installed Site app archive while preserving external URLs and representing owned image media as core media assets.
-
-#### Scenario: Import project
-
-- GIVEN a standalone Site project has records and project media
-- WHEN `formless archive import-site --project <path> --install <id> --out <dir>` runs
-- THEN an installed Site app archive is written
-- AND project media is represented with core media objects and the `core-media-assets` capability
-
-#### Scenario: Import rejects legacy media
-
-- GIVEN the standalone Site project contains legacy same-origin Site media hrefs
-- WHEN import-site validates the project
-- THEN import fails with a migration error
-- AND no app-scoped Site media archive is emitted
 
 ### Requirement: Instance Workspace
 

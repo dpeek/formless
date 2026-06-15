@@ -50,8 +50,8 @@ function createChannel(target: ClientAppTarget) {
   return new BroadcastChannel(channelName(target));
 }
 
-export function channelName(target: ClientAppTarget, projectId?: string) {
-  return appStorageIdentityForClientTarget(target, { projectId }).broadcastChannelName;
+export function channelName(target: ClientAppTarget) {
+  return appStorageIdentityForClientTarget(target).broadcastChannelName;
 }
 
 function isBroadcastEvent(value: unknown): value is BroadcastEvent {
