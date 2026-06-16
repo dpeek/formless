@@ -2296,6 +2296,8 @@ describe("repo-owned Git-backed change skills", () => {
       "reviewers can inspect the intended behavior as `git diff main..changes/<change-id>`",
     );
     expect(propose).toContain("git add openspec/specs/<capability>/spec.md");
+    expect(propose).toContain("Make the first line an active change summary");
+    expect(propose).toContain("Instance overview deployment split cleanup");
     expect(propose).toContain("Formless-Change-State: ready");
     expect(propose).toContain(
       "A ready proposal branch includes both structured commit metadata and a first-pass canonical spec patch.",

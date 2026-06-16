@@ -30,8 +30,10 @@ The proposal branch starts with a direct canonical spec edit. This mirrors the o
 
 Use this commit message shape:
 
+- Make the first line an active change summary, for example `Instance overview deployment split cleanup`.
+
 ```md
-<title>
+<active change summary>
 
 ## Proposal
 
