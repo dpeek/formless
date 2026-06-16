@@ -58,7 +58,7 @@ export function formlessCliUsage(): string {
     "",
     "Commands:",
     "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
-    "  save [--workspace <path>] [--check] Save Authority state to record source and app archives",
+    "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
     "  pull [--workspace <path>] [--target <alias>]",
     "                                      Pull remote instance state into workspace source",
     "  push [--workspace <path>] [--target <alias>]",

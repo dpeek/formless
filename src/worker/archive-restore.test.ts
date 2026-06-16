@@ -11,12 +11,17 @@ import type { AppInstall } from "../shared/app-installs.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
   type BootstrapResponse,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
   applyPortableArchiveRestore,
@@ -57,23 +62,16 @@ describe("archive restore execution", () => {
         appArchive({
           app: archivedInstall("personal", "Personal"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              records: [
-                coreImageBlock("hero"),
-                siteRecord("rec_site_settings_personal", "personal"),
-              ],
-            }),
+            ...storageSnapshot(),
+            records: [coreImageBlock("hero"), siteRecord("rec_site_settings_personal", "personal")],
           },
           media: { objects: [coreMediaObject("hero")] },
         }),
         appArchive({
           app: archivedInstall("docs", "Docs"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              records: [siteRecord("rec_site_settings_docs", "docs")],
-            }),
+            ...storageSnapshot({ storageIdentity: "app:docs" }),
+            records: [siteRecord("rec_site_settings_docs", "docs")],
           },
           media: { objects: [] },
         }),
@@ -94,10 +92,10 @@ describe("archive restore execution", () => {
 
     expect(events).toEqual([
       "install:create:docs",
-      "app-data:app:docs:docs:storeSnapshot",
+      "app-data:app:docs:docs:formless.storageSnapshot",
       "install:create:personal",
       "media:app:personal:media/images/hero.png",
-      "app-data:app:personal:personal:storeSnapshot",
+      "app-data:app:personal:personal:formless.storageSnapshot",
     ]);
     expect(result.report.applied).toBe(true);
     expect(result.report.summary.createdInstalls).toEqual(["docs", "personal"]);
@@ -114,11 +112,7 @@ describe("archive restore execution", () => {
     const archive = instanceArchive({
       capabilities: ["installed-app-registry", "schema-owned-control-plane", "app-store-snapshots"],
       restorePolicy: { dryRun: false, installCollisions: "reject" },
-      controlPlane: {
-        schemaKey: "instance-control-plane",
-        schemaUpdatedAt: now,
-        records: [],
-      },
+      controlPlane: controlPlaneSnapshot({ records: [] }),
     });
     const events: string[] = [];
     const result = await applyPortableArchiveRestore(
@@ -129,7 +123,7 @@ describe("archive restore execution", () => {
     expect(result.ok).toBe(true);
     expect(events).toEqual([
       "install:create:personal",
-      "app-data:app:personal:personal:storeSnapshot",
+      "app-data:app:personal:personal:formless.storageSnapshot",
       "control-plane:0",
     ]);
   });
@@ -308,15 +302,11 @@ function memoryRestoreTarget(input: {
 }
 
 function bootstrapResponse(data: AppArchive["data"]): BootstrapResponse {
-  const schema = data.kind === "storeSnapshot" ? data.snapshot.schema : data.schema;
-  const schemaUpdatedAt =
-    data.kind === "storeSnapshot" ? data.snapshot.schemaUpdatedAt : data.schemaUpdatedAt;
-
   return {
     cursor: 0,
     records: [],
-    schema,
-    schemaUpdatedAt,
+    schema: data.schema,
+    schemaUpdatedAt: data.schemaUpdatedAt,
   };
 }
 
@@ -333,19 +323,22 @@ function instanceArchive(overrides: Partial<InstanceArchive> = {}): InstanceArch
 }
 
 function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
+  const app = overrides.app ?? archivedInstall("personal", "Personal");
+
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
     capabilities: ["app-store-snapshots"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
-    app: archivedInstall("personal", "Personal"),
-    data: {
-      kind: "storeSnapshot",
-      snapshot: storeSnapshot({
+    app,
+    data:
+      overrides.data ??
+      storageSnapshot({
         records: [siteRecord("rec_site_settings_personal", "personal")],
+        schemaKey: app.sourceSchemaKey,
+        storageIdentity: `app:${app.installId}`,
       }),
-    },
     media: { objects: [] },
     ...overrides,
   };
@@ -390,16 +383,32 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
   };
 }
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "app:personal",
     schemaKey: "site",
     exportedAt: now,
     schemaUpdatedAt: now,
     sourceCursor: 7,
     schema: siteSourceSchema,
     records: [siteRecord("rec_site_settings_personal", "personal")],
+    ...overrides,
+  };
+}
+
+function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: now,
+    schemaUpdatedAt: now,
+    sourceCursor: 0,
+    schema: instanceControlPlaneSchema,
+    records: [],
     ...overrides,
   };
 }

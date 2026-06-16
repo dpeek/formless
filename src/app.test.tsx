@@ -538,8 +538,8 @@ function expectRuntimeShell(html: string) {
   expect(shellHtml).not.toContain("Sync details");
   expect(shellHtml).not.toContain("Reset source seed data");
   expect(shellHtml).not.toContain("Publish");
-  expect(shellHtml).not.toContain("Export store snapshot");
-  expect(shellHtml).not.toContain("Restore store snapshot");
+  expect(shellHtml).not.toContain("Export storage snapshot");
+  expect(shellHtml).not.toContain("Restore storage snapshot");
   expect(shellHtml).not.toContain("Portable archive");
   expect(shellHtml).not.toContain("App archive");
   expect(shellHtml).not.toContain("Instance archive");
@@ -575,10 +575,10 @@ function expectAppSettings(
   }
   expect(html).toContain("Reset source seed data");
   expect(html).toContain(`aria-label="Reset source seed data for ${resetScopeLabel}"`);
-  expect(html).not.toContain("Export store snapshot");
-  expect(html).not.toContain("Restore store snapshot");
+  expect(html).not.toContain("Export storage snapshot");
+  expect(html).not.toContain("Restore storage snapshot");
   expect(html).not.toContain("snapshot file");
-  expect(html).not.toContain(`aria-label="Restore snapshot for ${appLabel}"`);
+  expect(html).not.toContain(`aria-label="Restorage snapshot for ${appLabel}"`);
   expect(html).not.toContain("Portable archive");
   expect(html).not.toContain("App archive");
   expect(html).not.toContain("Instance archive");
@@ -1307,10 +1307,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Revert draft");
     expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
-    expect(html).not.toContain('aria-label="Tasks store snapshot controls"');
-    expect(html).not.toContain("Export store snapshot");
+    expect(html).not.toContain('aria-label="Tasks storage snapshot controls"');
+    expect(html).not.toContain("Export storage snapshot");
     expect(html).not.toContain("Tasks snapshot file");
-    expect(html).not.toContain("Restore store snapshot");
+    expect(html).not.toContain("Restore storage snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
@@ -1347,10 +1347,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
     expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
-    expect(html).not.toContain('aria-label="Site store snapshot controls"');
-    expect(html).not.toContain("Export store snapshot");
+    expect(html).not.toContain('aria-label="Site storage snapshot controls"');
+    expect(html).not.toContain("Export storage snapshot");
     expect(html).not.toContain("Site snapshot file");
-    expect(html).not.toContain("Restore store snapshot");
+    expect(html).not.toContain("Restore storage snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;siteEditor&quot;");
     expect(html).toContain("&quot;siteSettings&quot;");

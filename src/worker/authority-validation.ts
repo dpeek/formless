@@ -20,10 +20,10 @@ import type {
   MutationResponse,
   PatchMutation,
   RecordValues,
-  StoreSnapshot,
+  StorageSnapshot,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { parseStoreSnapshot } from "../shared/protocol.ts";
+import { parseStorageSnapshot } from "../shared/protocol.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
@@ -238,41 +238,44 @@ export function validateSourceSchemaReset(
   assertExistingRecordsSatisfyUniqueConstraints(sourceSchema, records);
 }
 
-export function validateStoreSnapshotRestore(value: unknown, schemaKey: string): StoreSnapshot {
-  let snapshot: StoreSnapshot;
+export function validateStorageSnapshotRestore(
+  value: unknown,
+  expected: { schemaKey: string; storageIdentity: string },
+): StorageSnapshot {
+  let snapshot: StorageSnapshot;
 
   try {
-    snapshot = parseStoreSnapshot(value, schemaKey);
+    snapshot = parseStorageSnapshot(value, expected);
   } catch (error) {
     throw new BadRequestError(
-      error instanceof Error ? error.message : "Store snapshot is invalid.",
+      error instanceof Error ? error.message : "Storage snapshot is invalid.",
     );
   }
 
   validateSnapshotRecords(snapshot);
-  assertIsoTimestamp("Store snapshot exportedAt", snapshot.exportedAt);
-  assertIsoTimestamp("Store snapshot schemaUpdatedAt", snapshot.schemaUpdatedAt);
+  assertIsoTimestamp("Storage snapshot exportedAt", snapshot.exportedAt);
+  assertIsoTimestamp("Storage snapshot schemaUpdatedAt", snapshot.schemaUpdatedAt);
   assertExistingRecordsSatisfyUniqueConstraints(snapshot.schema, snapshot.records);
 
   return snapshot;
 }
 
-function validateSnapshotRecords(snapshot: StoreSnapshot) {
+function validateSnapshotRecords(snapshot: StorageSnapshot) {
   const recordsById = new Map<string, StoredRecord>();
 
   for (const record of snapshot.records) {
     if (record.id.trim() === "") {
-      throw new BadRequestError("Store snapshot record id must be non-empty.");
+      throw new BadRequestError("Storage snapshot record id must be non-empty.");
     }
 
     if (recordsById.has(record.id)) {
-      throw new BadRequestError(`Store snapshot includes duplicate record id "${record.id}".`);
+      throw new BadRequestError(`Storage snapshot includes duplicate record id "${record.id}".`);
     }
 
-    assertIsoTimestamp(`Store snapshot record "${record.id}" createdAt`, record.createdAt);
+    assertIsoTimestamp(`Storage snapshot record "${record.id}" createdAt`, record.createdAt);
 
     if (record.deletedAt !== undefined) {
-      assertIsoTimestamp(`Store snapshot record "${record.id}" deletedAt`, record.deletedAt);
+      assertIsoTimestamp(`Storage snapshot record "${record.id}" deletedAt`, record.deletedAt);
     }
 
     recordsById.set(record.id, record);
@@ -293,14 +296,14 @@ function validateSnapshotRecord(
 
   if (!entity) {
     throw new BadRequestError(
-      `Store snapshot record "${record.id}" references unknown entity "${record.entity}".`,
+      `Storage snapshot record "${record.id}" references unknown entity "${record.entity}".`,
     );
   }
 
   for (const fieldName of Object.keys(record.values)) {
     if (!entity.fields[fieldName]) {
       throw new BadRequestError(
-        `Store snapshot record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+        `Storage snapshot record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
       );
     }
   }
@@ -310,7 +313,7 @@ function validateSnapshotRecord(
 
     if (!isValidStoredFieldValue(fieldValue, field, recordsById)) {
       throw new BadRequestError(
-        `Store snapshot record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+        `Storage snapshot record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
       );
     }
   }

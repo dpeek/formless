@@ -11,7 +11,9 @@ import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { AppInstall } from "../shared/app-installs.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneRecordsForAppInstall,
+  instanceControlPlaneSchema,
 } from "../shared/instance-control-plane.ts";
 import type {
   ActionResponse,
@@ -20,6 +22,7 @@ import type {
   RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   crmSeedRecords,
@@ -540,14 +543,20 @@ function controlPlaneInstanceArchive(input: { dryRun: boolean }): InstanceArchiv
     capabilities: [
       "installed-app-registry",
       "schema-owned-control-plane",
-      "source-records",
+      "app-store-snapshots",
       "core-media-assets",
     ],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     apps: [appArchive(input)],
     controlPlane: {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
       schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: "2026-05-12T00:00:00.000Z",
       schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: controlPlaneArchiveRecords().length,
+      schema: instanceControlPlaneSchema,
       records: controlPlaneArchiveRecords(),
     },
   };
@@ -663,7 +672,7 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["source-records", "core-media-assets"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "personal",
@@ -677,9 +686,13 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
       updatedAt: "2026-05-12T00:00:00.000Z",
     },
     data: {
-      kind: "sourceRecords",
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:personal",
       schemaKey: "site",
+      exportedAt: "2026-05-12T00:00:00.000Z",
       schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: 1,
       schema: siteSourceSchema,
       records: [siteRecord()],
     },
@@ -710,17 +723,15 @@ function tasksAppArchive(input: {
       updatedAt: "2026-05-12T00:00:00.000Z",
     },
     data: {
-      kind: "storeSnapshot",
-      snapshot: {
-        kind: "formless.storeSnapshot",
-        version: 1,
-        schemaKey: "tasks",
-        exportedAt: "2026-05-12T00:00:00.000Z",
-        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        sourceCursor: 1,
-        schema: taskSourceSchema,
-        records: input.records ?? [taskRecord()],
-      },
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:work",
+      schemaKey: "tasks",
+      exportedAt: "2026-05-12T00:00:00.000Z",
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: 1,
+      schema: taskSourceSchema,
+      records: input.records ?? [taskRecord()],
     },
     media: { objects: [] },
   };
@@ -745,17 +756,15 @@ function crmAppArchive(input: { dryRun: boolean }): AppArchive {
       updatedAt: "2026-05-12T00:00:00.000Z",
     },
     data: {
-      kind: "storeSnapshot",
-      snapshot: {
-        kind: "formless.storeSnapshot",
-        version: 1,
-        schemaKey: "crm",
-        exportedAt: "2026-05-12T00:00:00.000Z",
-        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        sourceCursor: crmSeedRecords.length,
-        schema: crmSourceSchema,
-        records: crmSeedRecords,
-      },
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:rates",
+      schemaKey: "crm",
+      exportedAt: "2026-05-12T00:00:00.000Z",
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: crmSeedRecords.length,
+      schema: crmSourceSchema,
+      records: crmSeedRecords,
     },
     media: { objects: [] },
   };
@@ -771,9 +780,13 @@ function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
   return {
     ...appArchive(input),
     data: {
-      kind: "sourceRecords",
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:personal",
       schemaKey: "site",
+      exportedAt: "2026-05-12T00:00:00.000Z",
       schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: testSiteSeedRecords.length,
       schema: siteSourceSchema,
       records: testSiteSeedRecords.map((record) =>
         record.id === "rec_site_media_avatar" ? imageAssetRecord(record) : record,
@@ -821,11 +834,15 @@ function imageAssetRecord(record: StoredRecord): StoredRecord {
 function appArchiveWithLegacyMedia(input: { dryRun: boolean }): AppArchive {
   return {
     ...appArchive(input),
-    capabilities: ["source-records"],
+    capabilities: ["app-store-snapshots"],
     data: {
-      kind: "sourceRecords",
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:personal",
       schemaKey: "site",
+      exportedAt: "2026-05-12T00:00:00.000Z",
       schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: testSiteSeedRecords.length,
       schema: siteSourceSchema,
       records: testSiteSeedRecords.map((record) =>
         record.id === "rec_site_media_avatar" ? legacyImageHrefRecord(record) : record,

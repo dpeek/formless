@@ -2,13 +2,17 @@
 
 ## Purpose
 
-Authority storage owns committed app data, active schemas, operation invocations, write invariants, and server API contracts for each app storage identity. It is the durable source of truth that browser replicas, snapshots, archives, and installed apps read from or write through.
+Authority storage owns committed app data, instance control-plane records,
+active schemas, operation invocations, write invariants, and server API
+contracts for each storage identity. It is the durable source of truth that
+browser replicas, storage snapshots, portable archive envelopes, workspace
+state, and installed apps read from or write through.
 
 ## Requirements
 
 ### Requirement: Storage Identity
 
-The system SHALL isolate Authority storage by app storage identity.
+The system SHALL isolate Authority storage by storage identity.
 
 #### Scenario: Schema-key app identity
 
@@ -25,6 +29,14 @@ The system SHALL isolate Authority storage by app storage identity.
 - THEN committed records, changes, schema, operation invocations, and action
   executions belong to `app:<installId>` storage
 - AND the installed app storage is separate from package-level schema-key storage
+
+#### Scenario: Instance control-plane identity
+
+- GIVEN instance control-plane storage is initialized
+- WHEN instance management records are stored, snapshotted, restored, or synced
+- THEN committed records, changes, schema, operation invocations, and action
+  executions belong to `instance:control-plane` storage
+- AND installed app records remain scoped to their app storage identities
 
 ### Requirement: App Storage API
 
@@ -378,29 +390,35 @@ The system SHALL represent record deletes as tombstones.
 - THEN the tombstoned referencing record does not block validation
 - AND the target delete can commit if no active record references it
 
-### Requirement: Reset And Snapshot
+### Requirement: Reset And Storage Snapshot
 
-The system SHALL provide reset and snapshot operations that preserve Authority storage invariants.
+The system SHALL provide reset and storage snapshot operations that preserve
+Authority storage invariants.
 
 #### Scenario: Reset seed
 
-- GIVEN an app storage identity has existing records, changes, action executions, and an active schema
+- GIVEN a storage identity has existing records, changes, action executions, and an active schema
 - WHEN reset seed runs
 - THEN records, changes, action executions, and the active schema are cleared
 - AND the source schema and source seed records are written back as the new durable state
 
-#### Scenario: Snapshot export
+#### Scenario: Storage snapshot export
 
-- GIVEN snapshot export is requested for an app storage identity
+- GIVEN snapshot export is requested for a storage identity
 - WHEN the Authority reads durable storage
 - THEN the snapshot is built from Authority storage, not browser IndexedDB
-- AND the envelope includes kind, version, schema key, exported timestamp,
-  schema timestamp, source cursor, schema, and records
+- AND the envelope kind is `formless.storageSnapshot`
+- AND the envelope includes version, storage identity, schema key, exported
+  timestamp, schema timestamp, source cursor, schema, and records
+- AND storage identity is the compact Authority storage name such as
+  `app:<installId>`, `instance:control-plane`, or a schema key for source
+  schema-key storage
 
-#### Scenario: Snapshot restore
+#### Scenario: Storage snapshot restore
 
-- GIVEN a snapshot envelope for the same schema key
-- WHEN snapshot restore validates its schema, records, references, timestamps, and unique constraints
+- GIVEN a storage snapshot envelope for the same storage identity and schema key
+- WHEN snapshot restore validates its identity, schema, records, references,
+  timestamps, and unique constraints
 - THEN the restore commits as an Authority write
 - AND the response has bootstrap shape
 - AND sync cursors remain monotonic
@@ -507,7 +525,8 @@ canonical provider state out of control-plane records and change rows.
 - WHEN installed app data exists for those installs
 - THEN the installed app's records, changes, active schema, and action
   executions are not nested into control-plane records
-- AND app data continues to move through installed app storage snapshots
+- AND app data continues to move through storage snapshots scoped to
+  `app:<installId>` identities
 
 #### Scenario: Provider truth remains external
 

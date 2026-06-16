@@ -1336,7 +1336,7 @@ function runCommandWithSpawn(
 function formatCliWorkspaceOperationResult(state: WorkspaceOperationState): string {
   return [
     `Workspace operation: ${formatWorkspaceOperationLabel(state.operation)} (${state.status}).`,
-    "Workspace source: layout-only manifest, control-plane record source, app archives.",
+    "Workspace source: layout-only manifest, storage snapshots, media payloads.",
     `Summary: ${state.summary.title}.`,
     ...formatCliDisplayFields(state.summary.fields),
     ...(state.result?.details === undefined

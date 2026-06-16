@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
-  parseStoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  parseStorageSnapshot,
 } from "../shared/protocol.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 
@@ -14,11 +14,12 @@ type PackageJson = {
 };
 
 describe("Site editing and publish workflow baseline", () => {
-  it("characterizes the source seed as active stored records, not a snapshot export", () => {
-    const snapshot = parseStoreSnapshot(
+  it("characterizes the source seed as active stored records, not a storage snapshot export", () => {
+    const snapshot = parseStorageSnapshot(
       {
-        kind: STORE_SNAPSHOT_KIND,
-        version: STORE_SNAPSHOT_VERSION,
+        kind: STORAGE_SNAPSHOT_KIND,
+        version: STORAGE_SNAPSHOT_VERSION,
+        storageIdentity: "site",
         schemaKey: "site",
         exportedAt: "2026-05-12T00:00:00.000Z",
         schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
@@ -26,7 +27,7 @@ describe("Site editing and publish workflow baseline", () => {
         schema: siteSourceSchema,
         records: siteSeedRecords,
       },
-      "site",
+      { schemaKey: "site", storageIdentity: "site" },
     );
 
     expect(snapshot.records).toEqual(siteSeedRecords);

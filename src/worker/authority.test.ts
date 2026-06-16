@@ -6,11 +6,13 @@ import {
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
   FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
   type BootstrapResponse,
   type MutationResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type StoredRecord,
   type SyncResponse,
   type SyncSocketServerMessage,
@@ -229,13 +231,14 @@ describe("authority", () => {
         done: true,
       },
     });
-    const workSnapshot = await getInstalledAppJson<StoreSnapshot>("tasks", "work", "/snapshot");
+    const workSnapshot = await getInstalledAppJson<StorageSnapshot>("tasks", "work", "/snapshot");
     const restoredRecord = taskSnapshotRecord("snapshot-installed-task", "Restored installed task");
     const restored = await postInstalledAppJson<BootstrapResponse>(
       "tasks",
       "work",
       "/snapshot/restore",
-      storeSnapshot({
+      storageSnapshot({
+        storageIdentity: "app:work",
         sourceCursor: workSnapshot.sourceCursor,
         schemaUpdatedAt: workSnapshot.schemaUpdatedAt,
         records: [restoredRecord],
@@ -267,7 +270,8 @@ describe("authority", () => {
     expect(initialSync.cursor).toBe(taskSeedRecords.length);
     expect(initialSync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
     expect(workSnapshot).toMatchObject({
-      kind: "formless.storeSnapshot",
+      kind: STORAGE_SNAPSHOT_KIND,
+      storageIdentity: "app:work",
       schemaKey: "tasks",
       schema: appSchema,
       sourceCursor: created.cursor,
@@ -293,7 +297,8 @@ describe("authority", () => {
       "site",
       "personal",
       "/snapshot/restore",
-      siteStoreSnapshot({
+      siteStorageSnapshot({
+        storageIdentity: "app:personal",
         records: [
           ...testSiteSeedRecords,
           {
@@ -334,7 +339,8 @@ describe("authority", () => {
       "site",
       "personal",
       "/snapshot/restore",
-      siteStoreSnapshot({
+      siteStorageSnapshot({
+        storageIdentity: "app:personal",
         records: siteRecordsWithHomeLabel("Personal Home"),
       }),
     );
@@ -342,7 +348,8 @@ describe("authority", () => {
       "site",
       "docs",
       "/snapshot/restore",
-      siteStoreSnapshot({
+      siteStorageSnapshot({
+        storageIdentity: "app:docs",
         records: siteRecordsWithHomeLabel("Docs Home"),
       }),
     );
@@ -362,7 +369,7 @@ describe("authority", () => {
 
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
-    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
+    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStorageSnapshot());
 
     const response = await harness.fetch(apiPath("/api/tree/home"));
     const body = (await response.json()) as SitePageTreeResponse;
@@ -413,7 +420,7 @@ describe("authority", () => {
 
   it("returns regular blog and dated post route trees for the site app", async () => {
     useSchemaApp("site");
-    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
+    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStorageSnapshot());
 
     const blog = await getJson<SitePageTreeResponse>("/api/tree/blog");
     const post = await getJson<SitePageTreeResponse>(
@@ -862,18 +869,19 @@ describe("authority", () => {
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
   });
 
-  it("exports authority store snapshots by schema key", async () => {
+  it("exports authority storage snapshots by storage identity and schema key", async () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const created = await postMutation("mutation-snapshot-export-task", {
       title: "Snapshot export",
       done: false,
     });
 
-    const snapshot = await getJson<StoreSnapshot>("/api/snapshot");
+    const snapshot = await getJson<StorageSnapshot>("/api/snapshot");
 
     expect(snapshot).toMatchObject({
-      kind: "formless.storeSnapshot",
-      version: 1,
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "tasks",
       schemaKey: "tasks",
       exportedAt: expect.any(String),
       schemaUpdatedAt: schemaResponse.updatedAt,
@@ -883,8 +891,9 @@ describe("authority", () => {
     expect(snapshot.records).toEqual([...taskSeedRecords, created.record]);
 
     useSchemaApp("crm");
-    const crmSnapshot = await getJson<StoreSnapshot>("/api/snapshot");
+    const crmSnapshot = await getJson<StorageSnapshot>("/api/snapshot");
 
+    expect(crmSnapshot.storageIdentity).toBe("crm");
     expect(crmSnapshot.schemaKey).toBe("crm");
     expect(crmSnapshot.schema).toEqual(crmSourceSchema);
     expect(crmSnapshot.records).toEqual(crmSeedRecords);
@@ -899,8 +908,9 @@ describe("authority", () => {
       href: "/temporary-preview-page",
     });
 
-    const snapshot = await getJson<StoreSnapshot>("/api/snapshot");
+    const snapshot = await getJson<StorageSnapshot>("/api/snapshot");
 
+    expect(snapshot.storageIdentity).toBe("site");
     expect(snapshot.schemaKey).toBe("site");
     expect(snapshot.schema).toEqual(siteSourceSchema);
     expectRecordsIgnoringOrder(snapshot.records, [...siteSeedRecords, created.record]);
@@ -933,7 +943,7 @@ describe("authority", () => {
       const message = readSyncSocketMessage(taskSocket);
       const restored = await postJson<BootstrapResponse>(
         "/api/snapshot/restore",
-        storeSnapshot({
+        storageSnapshot({
           schemaUpdatedAt: schemaResponse.updatedAt,
           sourceCursor: before.cursor,
           records: [...before.records, restoredRecord],
@@ -980,8 +990,13 @@ describe("authority", () => {
       const capture = captureSyncSocketMessages(socket);
       await expectError(
         "/api/snapshot/restore",
-        storeSnapshot({ schemaKey: "crm" }),
-        'Store snapshot schemaKey must be "tasks".',
+        storageSnapshot({ storageIdentity: "app:work" }),
+        'Storage snapshot storageIdentity must be "tasks".',
+      );
+      await expectError(
+        "/api/snapshot/restore",
+        storageSnapshot({ schemaKey: "crm" }),
+        'Storage snapshot schemaKey must be "tasks".',
       );
       await expectNoCapturedMessages(capture);
       capture.stop();
@@ -995,7 +1010,7 @@ describe("authority", () => {
   it("validates restore snapshot records before commit", async () => {
     await expectError(
       "/api/snapshot/restore",
-      storeSnapshot({
+      storageSnapshot({
         records: [
           {
             ...taskSnapshotRecord("snapshot-task-invalid-field", "Invalid field"),
@@ -1003,12 +1018,12 @@ describe("authority", () => {
           },
         ],
       }),
-      'Store snapshot record "snapshot-task-invalid-field" includes unknown field "task.missing".',
+      'Storage snapshot record "snapshot-task-invalid-field" includes unknown field "task.missing".',
     );
 
     await expectError(
       "/api/snapshot/restore",
-      storeSnapshot({
+      storageSnapshot({
         schema: schemaWithTaskProjectReference({ required: true }),
         records: [
           {
@@ -1017,12 +1032,12 @@ describe("authority", () => {
           },
         ],
       }),
-      'Store snapshot record "snapshot-task-missing-project" has invalid field "task.project".',
+      'Storage snapshot record "snapshot-task-missing-project" has invalid field "task.project".',
     );
 
     await expectError(
       "/api/snapshot/restore",
-      storeSnapshot({
+      storageSnapshot({
         schema: schemaWithTaskConstraints({
           uniqueTitle: { kind: "unique", fields: ["title"] },
         }),
@@ -1492,7 +1507,7 @@ describe("authority", () => {
       try {
         await getJson<BootstrapResponse>("/api/bootstrap");
         await getJson<SchemaResponse>("/api/schema");
-        await getJson<StoreSnapshot>("/api/snapshot");
+        await getJson<StorageSnapshot>("/api/snapshot");
         await getJson<SyncResponse>(
           `/api/sync?after=${taskSeedRecords.length}&schemaUpdatedAt=${encodeURIComponent(
             schemaResponse.updatedAt,
@@ -3478,10 +3493,11 @@ function getSeedLowPriorityTask() {
   return lowPriority;
 }
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: "formless.storeSnapshot",
-    version: 1,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "tasks",
     schemaKey: "tasks",
     exportedAt: "2026-04-28T00:00:00.000Z",
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
@@ -3492,8 +3508,9 @@ function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
   };
 }
 
-function siteStoreSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
-  return storeSnapshot({
+function siteStorageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
+  return storageSnapshot({
+    storageIdentity: "site",
     schemaKey: "site",
     sourceCursor: testSiteSeedRecords.length,
     schema: siteSourceSchema,

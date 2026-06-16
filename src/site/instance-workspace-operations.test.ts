@@ -16,32 +16,32 @@ import {
 } from "@dpeek/formless-workspace";
 
 import packageJson from "../../package.json";
-import {
-  APP_ARCHIVE_KIND,
-  ARCHIVE_VERSION,
-  formatAppArchive,
-  type AppArchive,
-} from "@dpeek/formless-archive";
+import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, type AppArchive } from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
 import { listInstallableAppPackages, packageAppFactsForKey } from "../shared/app-installs.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
-  type StoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
 import {
   createWorkspaceOperationState,
   listWorkspaceOperationStates,
   readWorkspaceOperationState,
   updateWorkspaceOperationState,
   workspaceOperationStatePath,
-  writeInstanceWorkspaceControlPlaneRecordSource,
+  writeInstanceWorkspaceAppStorageSnapshot,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-workspace/node";
-import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
   type DeployFormlessInstanceInput,
@@ -180,23 +180,23 @@ describe("Formless workspace operations", () => {
 
     expect(state.status).toBe("failed");
     expect(state.summary.fields.error).toBe(
-      'Formless workspace source is stale: archives/apps/david, records/instance-control-plane. Run "npx formless save".',
+      'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
     );
     await expect(
       readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     ).resolves.toBe(manifestBefore);
-    await expect(
-      stat(path.join(workspaceRoot, "records/instance-control-plane/app-install.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.join(workspaceRoot, "state/instance.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
-  it("plans deploy from schema-owned record source and desired-state projection", async () => {
+  it("plans deploy from schema-owned storage state and desired-state projection", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot, {
+    await writeDeployStorageSnapshot(workspaceRoot, {
       credentialRef: "alchemy-profile:personal-profile",
     });
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
@@ -303,7 +303,7 @@ describe("Formless workspace operations", () => {
         ?.affectedLogicalIds,
     ).toHaveLength(3);
     expect(accountDiscoveryInputs).toEqual([{ credentialProfile: "personal-profile" }]);
-    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
+    await expectNoDeploymentHistoryStorageState(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
   });
 
@@ -316,7 +316,7 @@ describe("Formless workspace operations", () => {
     });
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot, {
+    await writeDeployStorageSnapshot(workspaceRoot, {
       targetUrl: "https://personal-sites.dpeek.workers.dev",
       workerName: null,
     });
@@ -359,7 +359,7 @@ describe("Formless workspace operations", () => {
       },
       status: "succeeded",
     });
-    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
+    await expectNoDeploymentHistoryStorageState(workspaceRoot);
   });
 
   it("applies deploy with exact desired-state deployment-config observation", async () => {
@@ -372,7 +372,7 @@ describe("Formless workspace operations", () => {
       [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot, {
+    await writeDeployStorageSnapshot(workspaceRoot, {
       credentialRef: "alchemy-profile:personal-profile",
     });
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
@@ -518,7 +518,7 @@ describe("Formless workspace operations", () => {
     expect(setupInputs).toEqual([]);
     expect(state.summary.fields).not.toHaveProperty("ownerSetupUrl");
     expect(state.result?.summary.fields).not.toHaveProperty("ownerSetupUrl");
-    await expectNoDeploymentHistoryRecordSource(workspaceRoot);
+    await expectNoDeploymentHistoryStorageState(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("/setup?token=");
     expect(JSON.stringify(state)).not.toContain("generated-admin-token");
     expect(JSON.stringify(state)).not.toContain("alchemy-password");
@@ -535,7 +535,7 @@ describe("Formless workspace operations", () => {
     let deployed = false;
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
 
     const runtimeFetch = deployApplyFetch(requests);
@@ -628,7 +628,7 @@ describe("Formless workspace operations", () => {
     const requests: CapturedRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -708,7 +708,7 @@ describe("Formless workspace operations", () => {
     const ownerSetupUrl = `https://personal-sites.dpeek.workers.dev/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot, { includeDeployTarget: false });
+    await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
     await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
@@ -778,7 +778,7 @@ describe("Formless workspace operations", () => {
     const requests: CapturedRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployRecordSource(workspaceRoot, { includeDeployTarget: false });
+    await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
     await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
 
     const state = await runFormlessWorkspaceOperation(
@@ -967,16 +967,18 @@ describe("Formless workspace operations", () => {
   });
 });
 
-async function expectNoDeploymentHistoryRecordSource(workspaceRoot: string) {
-  for (const fileName of [
-    "deploy-attempt.json",
-    "deploy-evidence-summary.json",
-    "deploy-drift-report.json",
-  ]) {
-    await expect(
-      stat(path.join(workspaceRoot, "records/instance-control-plane", fileName)),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-  }
+async function expectNoDeploymentHistoryStorageState(workspaceRoot: string) {
+  const snapshot = JSON.parse(
+    await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
+  ) as { records: Array<{ entity: string }> };
+
+  expect(snapshot.records.map((record) => record.entity)).not.toEqual(
+    expect.arrayContaining([
+      "instance:deploy-attempt",
+      "instance:deploy-evidence-summary",
+      "instance:deploy-drift-report",
+    ]),
+  );
 }
 
 function operationDeps(
@@ -1065,14 +1067,12 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      archives: { apps: "archives/apps" },
       local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
-      source: { records: "records/instance-control-plane" },
     }),
   );
 }
 
-async function writeDeployRecordSource(
+async function writeDeployStorageSnapshot(
   workspaceRoot: string,
   options: {
     credentialRef?: string;
@@ -1082,15 +1082,10 @@ async function writeDeployRecordSource(
   } = {},
 ) {
   const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
-  const now = "2026-05-26T00:00:00.000Z";
 
-  await writeInstanceWorkspaceControlPlaneRecordSource({
-    controlPlane: {
-      schemaKey: "instance-control-plane",
-      schemaUpdatedAt: now,
-      records: deployControlPlaneRecords(options),
-    },
+  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
+    snapshot: controlPlaneSnapshot(deployControlPlaneRecords(options)),
     workspaceRoot,
   });
 }
@@ -1137,6 +1132,12 @@ function authorityExportFetch(
       });
     }
 
+    if (parsedUrl.pathname === "/api/formless/control-plane/snapshot") {
+      return Response.json(
+        controlPlaneSnapshot(options.controlPlaneRecords ?? controlPlaneRecords()),
+      );
+    }
+
     if (parsedUrl.pathname === "/api/formless/domain-mappings") {
       return Response.json({ mappings: [] });
     }
@@ -1162,7 +1163,7 @@ function authorityExportFetch(
     if (snapshotMatch) {
       const installId = snapshotMatch[2] ?? "";
 
-      return Response.json(snapshot(dataByInstall[installId]?.records ?? []));
+      return Response.json(snapshot(dataByInstall[installId]?.records ?? [], `app:${installId}`));
     }
 
     return Response.json({ error: "not found" }, { status: 404 });
@@ -1192,16 +1193,34 @@ function installedSite(installId: string, label: string) {
   };
 }
 
-function snapshot(records: StoredRecord[]): StoreSnapshot {
+function snapshot(
+  records: StoredRecord[],
+  storageIdentity: `app:${string}` = "app:david",
+): StorageSnapshot {
   return {
     exportedAt: "2026-05-12T02:00:00.000Z",
-    kind: STORE_SNAPSHOT_KIND,
+    kind: STORAGE_SNAPSHOT_KIND,
     records,
     schema: siteSourceSchema,
     schemaKey: "site",
     schemaUpdatedAt: "2026-05-01T00:00:00.000Z",
     sourceCursor: 1,
-    version: STORE_SNAPSHOT_VERSION,
+    storageIdentity,
+    version: STORAGE_SNAPSHOT_VERSION,
+  };
+}
+
+function controlPlaneSnapshot(records: StoredRecord[]): StorageSnapshot {
+  return {
+    exportedAt: "2026-05-12T02:00:00.000Z",
+    kind: STORAGE_SNAPSHOT_KIND,
+    records,
+    schema: instanceControlPlaneSchema,
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    schemaUpdatedAt: "2026-05-01T00:00:00.000Z",
+    sourceCursor: records.length,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    version: STORAGE_SNAPSHOT_VERSION,
   };
 }
 
@@ -1256,6 +1275,12 @@ function deployApplyFetch(
         records: options.controlPlaneRecords ?? deployControlPlaneRecords(),
         schema: {},
       });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/control-plane/snapshot") {
+      return Response.json(
+        controlPlaneSnapshot(options.controlPlaneRecords ?? deployControlPlaneRecords()),
+      );
     }
 
     if (parsedUrl.pathname === "/api/app-installs/site/david/snapshot") {
@@ -1416,13 +1441,19 @@ function parseCapturedBody<T>(init: RequestInit | undefined): T {
 }
 
 async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string, label: string) {
-  const archiveRoot = path.join(workspaceRoot, "archives/apps", installId);
+  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
+  const archive = appArchive(installId, label);
 
-  await mkdir(archiveRoot, { recursive: true });
-  await writeFile(
-    path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
-    formatAppArchive(appArchive(installId, label)),
-  );
+  if (archive.data.kind !== STORAGE_SNAPSHOT_KIND) {
+    throw new Error("Expected app archive data to be a storage snapshot.");
+  }
+
+  await writeInstanceWorkspaceAppStorageSnapshot({
+    installId,
+    manifest,
+    snapshot: archive.data,
+    workspaceRoot,
+  });
 }
 
 function appArchive(installId: string, label: string): AppArchive {
@@ -1449,10 +1480,7 @@ function appArchive(installId: string, label: string): AppArchive {
       createdAt: "2026-05-01T00:00:00.000Z",
       updatedAt: "2026-05-01T00:00:00.000Z",
     },
-    data: {
-      kind: "storeSnapshot",
-      snapshot: snapshot([]),
-    },
+    data: snapshot([], `app:${installId}`),
     media: { objects: [] },
   };
 }

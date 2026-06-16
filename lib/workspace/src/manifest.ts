@@ -1,10 +1,8 @@
 import {
-  DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-  DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT,
-  DEFAULT_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
   DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
+  DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT,
   INSTANCE_WORKSPACE_KIND,
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   INSTANCE_WORKSPACE_MANIFEST_VERSION,
@@ -15,28 +13,28 @@ import {
 import type {
   FormatInstanceWorkspaceManifestInput,
   FormatWorkspacePackageLinksInput,
-  InstanceWorkspaceArchives,
   InstanceWorkspaceLocalState,
   InstanceWorkspaceManifest,
   InstanceWorkspaceMedia,
-  InstanceWorkspaceSource,
+  InstanceWorkspaceState,
   WorkspacePackageLink,
   WorkspacePackageLinks,
 } from "./types.ts";
 
-const rootKeys = new Set(["archives", "kind", "local", "media", "name", "source", "version"]);
+const rootKeys = new Set(["kind", "local", "media", "name", "state", "version"]);
 const workspacePackageLinksRootKeys = new Set(["kind", "links", "version"]);
 const workspacePackageLinkKeys = new Set(["manifest"]);
 const removedManifestSourceKeys = new Set([
   "apps",
+  "archives",
   "defaultAppPolicy",
   "defaultTarget",
   "deploy",
   "domains",
+  "source",
   "targets",
 ]);
-const sourceKeys = new Set(["records"]);
-const archivesKeys = new Set(["apps"]);
+const stateKeys = new Set(["root"]);
 const mediaKeys = new Set(["root"]);
 const localKeys = new Set(["secretStateRoot", "stateRoot"]);
 const urlLikePathPattern = /^[a-z][a-z0-9+.-]*:/i;
@@ -76,14 +74,10 @@ export function defaultInstanceWorkspaceManifest(input: {
     version: INSTANCE_WORKSPACE_MANIFEST_VERSION,
     kind: INSTANCE_WORKSPACE_KIND,
     name: parseWorkspaceName(`${INSTANCE_WORKSPACE_MANIFEST_FILE} name`, input.name),
-    source: {
-      records: DEFAULT_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
+    state: {
+      root: DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT,
     },
     targets: [],
-    archives: {
-      instance: DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
-      apps: DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-    },
     media: {
       root: DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT,
     },
@@ -153,9 +147,8 @@ export function parseInstanceWorkspaceManifest(value: unknown): InstanceWorkspac
     version: INSTANCE_WORKSPACE_MANIFEST_VERSION,
     kind: INSTANCE_WORKSPACE_KIND,
     name: parseWorkspaceName(`${INSTANCE_WORKSPACE_MANIFEST_FILE} name`, value.name),
-    source: parseSource(value.source),
+    state: parseState(value.state),
     targets: [],
-    archives: parseArchives(value.archives),
     media: parseMedia(value.media),
     local: parseLocalState(value.local),
     defaultAppPolicy: "none",
@@ -198,11 +191,8 @@ export function formatInstanceWorkspaceManifest(
     version: manifest.version,
     kind: manifest.kind,
     name: manifest.name,
-    source: {
-      records: manifest.source?.records ?? fallback.source.records,
-    },
-    archives: {
-      apps: manifest.archives?.apps ?? fallback.archives.apps,
+    state: {
+      root: manifest.state?.root ?? fallback.state.root,
     },
     media: {
       root: manifest.media?.root ?? fallback.media.root,
@@ -216,11 +206,8 @@ export function formatInstanceWorkspaceManifest(
     version: parsed.version,
     kind: parsed.kind,
     name: parsed.name,
-    source: {
-      records: parsed.source.records,
-    },
-    archives: {
-      apps: parsed.archives.apps,
+    state: {
+      root: parsed.state.root,
     },
     media: {
       root: parsed.media.root,
@@ -325,33 +312,17 @@ export function parseWorkspacePackageManifestLinkPath(context: string, value: un
   return filePath;
 }
 
-function parseSource(value: unknown): InstanceWorkspaceSource {
+function parseState(value: unknown): InstanceWorkspaceState {
   if (!isRecord(value)) {
-    throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} source must be an object.`);
+    throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} state must be an object.`);
   }
 
-  assertOnlyKeys(value, sourceKeys, `${INSTANCE_WORKSPACE_MANIFEST_FILE} source`);
+  assertOnlyKeys(value, stateKeys, `${INSTANCE_WORKSPACE_MANIFEST_FILE} state`);
 
   return {
-    records: parseInstanceWorkspaceRelativePath(
-      `${INSTANCE_WORKSPACE_MANIFEST_FILE} source.records`,
-      value.records,
-    ),
-  };
-}
-
-function parseArchives(value: unknown): InstanceWorkspaceArchives {
-  if (!isRecord(value)) {
-    throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} archives must be an object.`);
-  }
-
-  assertOnlyKeys(value, archivesKeys, `${INSTANCE_WORKSPACE_MANIFEST_FILE} archives`);
-
-  return {
-    instance: DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
-    apps: parseInstanceWorkspaceRelativePath(
-      `${INSTANCE_WORKSPACE_MANIFEST_FILE} archives.apps`,
-      value.apps,
+    root: parseInstanceWorkspaceRelativePath(
+      `${INSTANCE_WORKSPACE_MANIFEST_FILE} state.root`,
+      value.root,
     ),
   };
 }
@@ -469,7 +440,7 @@ function assertNoRemovedManifestSourceKeys(value: Record<string, unknown>) {
   for (const key of Object.keys(value)) {
     if (removedManifestSourceKeys.has(key)) {
       throw new Error(
-        `${INSTANCE_WORKSPACE_MANIFEST_FILE} key "${key}" was removed from manifest version 1; store instance intent in workspace record source instead.`,
+        `${INSTANCE_WORKSPACE_MANIFEST_FILE} key "${key}" was removed from manifest version 1; store instance intent in workspace storage state instead.`,
       );
     }
   }

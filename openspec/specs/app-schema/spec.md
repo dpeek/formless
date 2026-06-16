@@ -156,7 +156,7 @@ pure helpers through the Schema package slice.
 - **WHEN** App schema behavior is used to load bundled or resolved package
   source schemas, load source seed records, render generated React surfaces,
   edit Builder drafts, validate Authority writes, store active schemas, sync
-  browser replicas, plan or apply archives, compose Workspace record source,
+  browser replicas, plan or apply archives, compose Workspace storage snapshots,
   build instance control-plane records, or apply package app migrations
 - **THEN** those runtime behaviors remain owned by app, client, Worker,
   archive, Workspace, instance control-plane, migration, or generated UI modules
@@ -217,7 +217,7 @@ the declaring schema.
 
 #### Scenario: Emit external qualified entity name
 
-- WHEN records are written to archives, workspace record source, drift reports,
+- WHEN records are written to archives, workspace storage snapshots, drift reports,
   logs, diagnostic output, or another external boundary that combines schema
   record families
 - THEN entity identity is represented with a qualified name such as

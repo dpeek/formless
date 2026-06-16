@@ -19,9 +19,9 @@ import {
   type ArchiveRestorePlanResult,
 } from "./index.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
-  type StoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../../../src/shared/protocol.ts";
 import { cloneTestValue } from "../../../src/test/schema-builders.ts";
@@ -42,13 +42,11 @@ describe("archive restore planner", () => {
         appArchive({
           app: archivedInstall("personal", "Personal"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              records: [
-                legacySiteMediaImageBlock("personal", "hero"),
-                siteRecord("rec_site_settings_personal", "personal"),
-              ],
-            }),
+            ...storageSnapshot(),
+            records: [
+              legacySiteMediaImageBlock("personal", "hero"),
+              siteRecord("rec_site_settings_personal", "personal"),
+            ],
           },
           media: {
             objects: [legacySiteMediaObject("personal", "hero")],
@@ -57,10 +55,8 @@ describe("archive restore planner", () => {
         appArchive({
           app: archivedInstall("docs", "Docs"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              records: [siteRecord("rec_site_settings_docs", "docs")],
-            }),
+            ...storageSnapshot({ storageIdentity: "app:docs" }),
+            records: [siteRecord("rec_site_settings_docs", "docs")],
           },
           media: { objects: [] },
         }),
@@ -96,10 +92,8 @@ describe("archive restore planner", () => {
         appArchive({
           app: archivedInstall("site", "Site"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              records: [coreImageBlock("hero"), siteRecord("rec_site_settings_site", "site")],
-            }),
+            ...storageSnapshot({ storageIdentity: "app:site" }),
+            records: [coreImageBlock("hero"), siteRecord("rec_site_settings_site", "site")],
           },
           media: {
             objects: [coreMediaObject("hero")],
@@ -108,12 +102,12 @@ describe("archive restore planner", () => {
         appArchive({
           app: archivedInstall("tasks", "Tasks", "tasks"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: taskSeedRecords,
               schema: taskSourceSchema,
               schemaKey: "tasks",
               sourceCursor: taskSeedRecords.length,
+              storageIdentity: "app:tasks",
             }),
           },
           media: { objects: [] },
@@ -121,12 +115,12 @@ describe("archive restore planner", () => {
         appArchive({
           app: archivedInstall("crm", "CRM", "crm"),
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: crmSeedRecords,
               schema: crmSourceSchema,
               schemaKey: "crm",
               sourceCursor: crmSeedRecords.length,
+              storageIdentity: "app:crm",
             }),
           },
           media: { objects: [] },
@@ -195,7 +189,7 @@ describe("archive restore planner", () => {
     });
   });
 
-  it("validates package availability and source-record schema compatibility", () => {
+  it("validates package availability and storage snapshot schema compatibility", () => {
     const unsupportedPackage = expectFailure(
       planAppArchiveRestore(
         appArchive({
@@ -205,10 +199,10 @@ describe("archive restore planner", () => {
             sourceSchemaKey: "missing",
           },
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
-              schemaKey: "missing",
+            ...storageSnapshot({
               records: [siteRecord("rec_site_settings_tasks", "tasks")],
+              schemaKey: "missing",
+              storageIdentity: "app:tasks-copy",
             }),
           },
         }),
@@ -219,7 +213,7 @@ describe("archive restore planner", () => {
       ),
     );
     const missingSource = expectFailure(
-      planAppArchiveRestore(sourceRecordAppArchive(), {
+      planAppArchiveRestore(appArchive(), {
         packages: listInstallableAppPackages(),
         sourceSchemas: {},
       }),
@@ -227,7 +221,7 @@ describe("archive restore planner", () => {
     const mismatchedSchema = cloneTestValue(siteSourceSchema);
     mismatchedSchema.entities.site.label = "Different Site";
     const schemaMismatch = expectFailure(
-      planAppArchiveRestore(sourceRecordAppArchive(), {
+      planAppArchiveRestore(appArchive(), {
         packages: listInstallableAppPackages(),
         sourceSchemas: { site: mismatchedSchema },
       }),
@@ -243,8 +237,7 @@ describe("archive restore planner", () => {
       planAppArchiveRestore(
         appArchive({
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: [
                 siteRecord("rec_dup", "primary"),
                 siteRecord("rec_dup", "secondary"),
@@ -289,8 +282,7 @@ describe("archive restore planner", () => {
       planAppArchiveRestore(
         appArchive({
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: [
                 siteRecord("rec_site_settings_media", "media"),
                 legacySiteMediaImageBlock("personal", "missing"),
@@ -322,8 +314,7 @@ describe("archive restore planner", () => {
         appArchive({
           capabilities: ["app-store-snapshots", "core-media-assets"],
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: [siteRecord("rec_site_settings_media", "media"), coreImageBlock("hero")],
             }),
           },
@@ -357,8 +348,7 @@ describe("archive restore planner", () => {
         appArchive({
           capabilities: ["app-store-snapshots", "core-media-assets"],
           data: {
-            kind: "storeSnapshot",
-            snapshot: storeSnapshot({
+            ...storageSnapshot({
               records: [siteRecord("rec_site_settings_media", "media"), coreImageBlock("hero")],
             }),
           },
@@ -427,35 +417,25 @@ function instanceArchive(overrides: Partial<InstanceArchive> = {}): InstanceArch
 }
 
 function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
+  const app = overrides.app ?? archivedInstall("personal", "Personal");
+
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
     capabilities: ["app-store-snapshots"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
-    app: archivedInstall("personal", "Personal"),
-    data: {
-      kind: "storeSnapshot",
-      snapshot: storeSnapshot({
+    app,
+    data:
+      overrides.data ??
+      storageSnapshot({
         records: [siteRecord("rec_site_settings_primary", "primary")],
+        schemaKey: app.sourceSchemaKey,
+        storageIdentity: `app:${app.installId}`,
       }),
-    },
     media: { objects: [] },
     ...overrides,
   };
-}
-
-function sourceRecordAppArchive(): AppArchive {
-  return appArchive({
-    capabilities: ["source-records"],
-    data: {
-      kind: "sourceRecords",
-      schemaKey: "site",
-      schemaUpdatedAt: now,
-      schema: siteSourceSchema,
-      records: [siteRecord("rec_site_settings_source", "source")],
-    },
-  });
 }
 
 function archivedInstall(
@@ -484,10 +464,11 @@ function sourceSchemaHashForPackageAppKey(packageAppKey: string) {
   return bundledSourceSchemaHashFixtures.site;
 }
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "app:personal",
     schemaKey: "site",
     exportedAt: now,
     schemaUpdatedAt: now,

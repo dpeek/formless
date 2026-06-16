@@ -39,12 +39,16 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
-  type StoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
 import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
@@ -70,10 +74,12 @@ import {
 } from "../test/schema-apps.ts";
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import {
-  instanceWorkspaceControlPlaneRecordSourcePath,
+  instanceWorkspaceInstanceStatePath,
+  instanceWorkspaceMediaFilePath,
   listWorkspaceOperationStates,
-  readInstanceWorkspaceControlPlaneRecordSource,
-  writeInstanceWorkspaceControlPlaneRecordSource,
+  readInstanceWorkspaceControlPlaneStorageSnapshot,
+  writeInstanceWorkspaceAppStorageSnapshot,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-workspace/node";
 import {
   FORMLESS_ALCHEMY_APP_NAME,
@@ -117,7 +123,7 @@ describe("Formless Site CLI", () => {
       "",
       "Commands:",
       "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
-      "  save [--workspace <path>] [--check] Save Authority state to record source and app archives",
+      "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
       "  pull [--workspace <path>] [--target <alias>]",
       "                                      Pull remote instance state into workspace source",
       "  push [--workspace <path>] [--target <alias>]",
@@ -532,7 +538,7 @@ describe("Formless Site CLI", () => {
     const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
 
     responses.queueJson({ setupComplete: false });
 
@@ -581,7 +587,7 @@ describe("Formless Site CLI", () => {
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
 
     responses.queueJson({
       setupComplete: true,
@@ -628,7 +634,7 @@ describe("Formless Site CLI", () => {
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
 
     responses.queueJson({ setupComplete: false });
 
@@ -664,7 +670,7 @@ describe("Formless Site CLI", () => {
     const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -721,7 +727,7 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -733,7 +739,7 @@ describe("Formless Site CLI", () => {
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
-    const pulledControlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
+    const pulledControlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
@@ -757,25 +763,17 @@ describe("Formless Site CLI", () => {
     expect(JSON.stringify(pulledControlPlane)).not.toContain("CF_API_TOKEN");
     expect(JSON.stringify(pulledControlPlane)).not.toContain("rec_site");
     await expect(
-      readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
+      readFile(path.join(workspaceRoot, "state/media/media/david/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     await expect(
-      readFile(
-        path.join(workspaceRoot, "archives/apps/james", PORTABLE_ARCHIVE_MANIFEST_FILE),
-        "utf8",
-      ),
-    ).resolves.toContain('"installId": "james"');
+      readFile(path.join(workspaceRoot, "state/apps/james.json"), "utf8"),
+    ).resolves.toContain('"storageIdentity": "app:james"');
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
-      "GET https://personal.dpeek.workers.dev/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
+      "GET https://personal.dpeek.workers.dev/api/formless/control-plane/snapshot?actorKind=cliDeployer",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
       "GET https://personal.dpeek.workers.dev/api/formless/media/media/images/cover.png",
-      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
-      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
-      "GET https://personal.dpeek.workers.dev/api/formless/media/media/images/cover.png",
-      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
-      "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
       "GET https://personal.dpeek.workers.dev/api/formless/domain-mappings",
     ]);
     expect(requests.map((request) => request.headers.authorization)).toEqual(
@@ -784,13 +782,13 @@ describe("Formless Site CLI", () => {
     expect(logs).toEqual([
       [
         "Workspace operation: pull (succeeded).",
-        "Workspace source: layout-only manifest, control-plane record source, app archives.",
+        "Workspace source: layout-only manifest, storage snapshots, media payloads.",
         "Summary: Workspace pulled.",
         "appCount: 2.",
         "mediaCount: 1.",
         "recordCount: 2.",
         "Details:",
-        "appArchives: david, james.",
+        "appState: david, james.",
         "domainCount: 2.",
         "target: instance.primary.",
       ].join("\n"),
@@ -798,7 +796,7 @@ describe("Formless Site CLI", () => {
     expect(logs.join("\n")).not.toContain("stored-archive-token");
     expect(JSON.stringify(pulledControlPlane)).not.toContain("stored-archive-token");
     await expect(
-      readFile(path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE)),
+      readFile(path.join(workspaceRoot, "state/apps/david.json")),
     ).resolves.not.toContain("stored-archive-token");
   });
 
@@ -817,10 +815,9 @@ describe("Formless Site CLI", () => {
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",
-        source: { records: "records/instance-control-plane" },
+        state: { root: "state" },
         defaultTarget: "remote",
         targets: [selectedTarget],
-        archives: { instance: "archives/instance", apps: "archives/apps" },
         media: { root: "media" },
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
@@ -912,10 +909,8 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
-      david: Buffer.from([4, 5, 6]),
-    });
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid, Buffer.from([4, 5, 6]));
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -946,12 +941,12 @@ describe("Formless Site CLI", () => {
     ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
-      "instance:app-install",
-      "instance:deployment-config",
-      "instance:route",
-      "instance:route",
-      "instance:route",
-      "instance:route",
+      "app-install",
+      "deployment-config",
+      "route",
+      "route",
+      "route",
+      "route",
     ]);
     expect(logs).toHaveLength(1);
 
@@ -962,7 +957,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("drift: drift.");
   });
 
-  it("pushes redirect route source records through the composed workspace archive", async () => {
+  it("pushes redirect route storage snapshot records through the composed workspace archive", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -978,7 +973,7 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, [
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, [
       ...controlPlaneRecords(),
       redirectRouteRecord("old.dpeek.com", "dpeek.com"),
     ]);
@@ -990,13 +985,9 @@ describe("Formless Site CLI", () => {
         "app-store-snapshots",
         "core-media-assets",
       ],
-      controlPlane: {
-        schemaKey: "instance-control-plane",
-        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        records: [redirectRouteRecord("old.dpeek.com", "dpeek.com")],
-      },
+      controlPlane: controlPlaneSnapshot([redirectRouteRecord("old.dpeek.com", "dpeek.com")]),
     });
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -1017,7 +1008,7 @@ describe("Formless Site CLI", () => {
 
     expect(
       restoreBody.archive.controlPlane?.records.map((record) => `${record.entity}:${record.id}`),
-    ).toContain("instance:route:route:redirect:old.dpeek.com");
+    ).toContain("route:route:redirect:old.dpeek.com");
     expect(
       restoreBody.archive.controlPlane?.records.find(
         (record) => record.id === "route:redirect:old.dpeek.com",
@@ -1054,12 +1045,12 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await runFormlessCli(
       ["push", "--workspace", workspaceRoot, "--apply", "--replace"],
@@ -1107,12 +1098,12 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -1146,7 +1137,7 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(
+    await writeWorkspaceControlPlaneStorageSnapshot(
       workspaceRoot,
       controlPlaneRecords({ host: "local.dpeek.com" }),
     );
@@ -1154,7 +1145,7 @@ describe("Formless Site CLI", () => {
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -1181,12 +1172,12 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -1214,7 +1205,7 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
 
     await expect(
       runFormlessCli(["token", "adopt", "--workspace", workspaceRoot], cliDeps(tempDir)),
@@ -1303,7 +1294,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
     );
     child.close(0);
     await run;
@@ -1370,7 +1361,7 @@ describe("Formless Site CLI", () => {
       "Instance shell: http://localhost:4443/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
-      "Workspace archive restore skipped: no workspace archives declared.",
+      "Workspace storage restore skipped: no workspace state found.",
     ]);
     expect(child.killed).toBe(false);
     expect(sidecars).toMatchObject([
@@ -1415,7 +1406,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
     );
     child.close(0);
     await run;
@@ -1460,7 +1451,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
     );
     child.close(0);
     await run;
@@ -1543,9 +1534,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some(
-        (line) => line === "Workspace archive restore skipped: no workspace archives declared.",
-      ),
+      logs.some((line) => line === "Workspace storage restore skipped: no workspace state found."),
     );
     child.close(0);
     await run;
@@ -1651,7 +1640,7 @@ describe("Formless Site CLI", () => {
     }
   });
 
-  it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from record source", async () => {
+  it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore from storage state", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
@@ -1669,10 +1658,8 @@ describe("Formless Site CLI", () => {
       path.join(workspaceRoot, ".formless/local/dev.env"),
       "FORMLESS_ADMIN_TOKEN=persisted-local-admin\nFORMLESS_OWNER_SESSION_SECRET=persisted-owner-session\n",
     );
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, localOnlyControlPlaneRecords());
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
-      david: Buffer.from([4, 5, 6]),
-    });
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localOnlyControlPlaneRecords());
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid, Buffer.from([4, 5, 6]));
 
     const run = runFormlessCli(
       ["dev", "--workspace", workspaceRoot],
@@ -1700,7 +1687,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
+      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
     );
     child.close(0);
     await run;
@@ -1753,13 +1740,13 @@ describe("Formless Site CLI", () => {
       installCollisions: "reject",
     });
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
-      "instance:app-install",
-      "instance:route",
-      "instance:route",
-      "instance:route",
+      "app-install",
+      "route",
+      "route",
+      "route",
     ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
-    expect(restoreBody.archive.apps[0]?.data.kind).toBe("storeSnapshot");
+    expect(restoreBody.archive.apps[0]?.data.kind).toBe(STORAGE_SNAPSHOT_KIND);
     expect(JSON.stringify(restoreBody.archive.controlPlane)).not.toContain(
       "media/images/cover.png",
     );
@@ -1768,7 +1755,7 @@ describe("Formless Site CLI", () => {
       "Instance shell: http://localhost:4444/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
-      `Workspace archive restored: record source (1 apps, ${mediaRecords().length} records, 1 media).`,
+      `Workspace storage restored: storage state (1 apps, ${mediaRecords().length} records, 1 media).`,
     ]);
     expect(child.killed).toBe(false);
   });
@@ -1786,14 +1773,11 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot, { apps: [] });
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writePrivatePackageFixture(packageRoot, sourceSchemaHash);
-    await writeWorkspaceControlPlaneRecordSource(
+    await writeWorkspaceControlPlaneStorageSnapshot(
       workspaceRoot,
       privateControlPlaneRecords(sourceSchemaHash),
     );
-    await writeArchiveDirectory(
-      path.join(workspaceRoot, "archives/apps/labs"),
-      privateAppArchive(sourceSchemaHash),
-    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, privateAppArchive(sourceSchemaHash));
 
     const run = runFormlessCli(
       ["dev", "--workspace", workspaceRoot],
@@ -1817,7 +1801,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
+      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
     );
     child.close(0);
     await run;
@@ -1835,10 +1819,10 @@ describe("Formless Site CLI", () => {
     }>(requests.at(-1));
     const controlPlaneJson = JSON.stringify(restoreBody.archive.controlPlane);
     const appInstall = restoreBody.archive.controlPlane?.records.find(
-      (record) => record.entity === "instance:app-install",
+      (record) => record.entity === "app-install",
     );
     const routes = restoreBody.archive.controlPlane?.records.filter(
-      (record) => record.entity === "instance:route",
+      (record) => record.entity === "route",
     );
 
     expect(appInstall?.values).toMatchObject({
@@ -1863,7 +1847,7 @@ describe("Formless Site CLI", () => {
     expect(controlPlaneJson).not.toContain(packageRoot);
     expect(restoreBody.mediaFiles).toEqual([]);
     expect(logs.at(-1)).toBe(
-      "Workspace archive restored: record source (1 apps, 0 records, 0 media).",
+      "Workspace storage restored: storage state (1 apps, 0 records, 0 media).",
     );
   });
 
@@ -1874,7 +1858,7 @@ describe("Formless Site CLI", () => {
     const requests: CapturedFetchRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, localOnlyControlPlaneRecords());
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localOnlyControlPlaneRecords());
 
     await expect(
       runFormlessCli(
@@ -1890,18 +1874,11 @@ describe("Formless Site CLI", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Formless instance local dev requires local app archive archives/apps/david.",
+      "Formless instance local dev requires local app state state/apps/david.json.",
     );
 
-    expect(child.killed).toBe(true);
-    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET http://localhost:4447/api/formless/app-installs",
-      "GET http://localhost:4447/api/formless/app-installs",
-    ]);
-    expect(requests.map((request) => request.headers.authorization)).toEqual([
-      "Bearer generated-token",
-      "Bearer generated-token",
-    ]);
+    expect(child.killed).toBe(false);
+    expect(requests).toEqual([]);
   });
 
   it("rejects mismatched app archive identity and package facts before local dev restore", async () => {
@@ -1910,10 +1887,12 @@ describe("Formless Site CLI", () => {
     const child = new FakeCliDevChild();
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, localOnlyControlPlaneRecords());
-    await writeArchiveDirectory(
-      path.join(workspaceRoot, "archives/apps/david"),
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localOnlyControlPlaneRecords());
+    await writeWorkspaceAppStateFromArchive(
+      workspaceRoot,
       appArchive("james", "James Peek"),
+      undefined,
+      "david",
     );
 
     await expect(
@@ -1929,15 +1908,23 @@ describe("Formless Site CLI", () => {
           }) as typeof spawn,
         }),
       ),
-    ).rejects.toThrow(
-      'Formless instance local dev app archive archives/apps/david has install id "james", expected "david".',
+    ).rejects.toThrow('Storage snapshot storageIdentity must be "app:david".');
+
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      localOnlyControlPlaneRecords().map((record) =>
+        record.entity === "app-install"
+          ? {
+              ...record,
+              values: {
+                ...record.values,
+                packageRevision: 999,
+              },
+            }
+          : record,
+      ),
     );
-
-    const wrongFacts = appArchive("david", "David Peek");
-    const factsChild = new FakeCliDevChild();
-
-    wrongFacts.app.packageRevision = 999;
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), wrongFacts);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, appArchive("david", "David Peek"));
 
     await expect(
       runFormlessCli(
@@ -1945,15 +1932,12 @@ describe("Formless Site CLI", () => {
         cliDeps(tempDir, {
           env: { PORT: "4449" },
           fetch: localInstanceDevFetch([], []),
-          spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
-            announceFakeCliDevServer(factsChild, options.env);
-
-            return factsChild as unknown as ReturnType<typeof spawn>;
-          }) as typeof spawn,
+          spawn: ((_command: string, _args: string[], _options: CapturedSpawnOptions) =>
+            child as unknown as ReturnType<typeof spawn>) as typeof spawn,
         }),
       ),
     ).rejects.toThrow(
-      "Formless instance local dev app archive archives/apps/david has package revision 999, expected 1.",
+      'Formless instance local dev app install "david" has package revision 999, expected 1.',
     );
   });
 
@@ -1967,8 +1951,8 @@ describe("Formless Site CLI", () => {
     });
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, localOnlyControlPlaneRecords());
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localOnlyControlPlaneRecords());
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -1984,18 +1968,18 @@ describe("Formless Site CLI", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Formless instance local dev app archive archives/apps/david is missing media files: media/david/media/images/cover.png.",
+      "Formless instance local dev app state state/apps/david.json is missing media files: media/david/media/images/cover.png.",
     );
   });
 
-  it("rejects secret-looking control-plane record source before local dev restore", async () => {
+  it("rejects secret-looking control-plane storage state before local dev restore", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
     const manifestPath = path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE);
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(
+    await writeWorkspaceControlPlaneStorageSnapshot(
       workspaceRoot,
       controlPlaneRecordsWithDisabledDeployTarget(),
     );
@@ -2003,22 +1987,22 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(manifestPath, "utf8"),
     );
-    const deploymentConfigSourcePath = instanceWorkspaceControlPlaneRecordSourcePath(
-      workspaceRoot,
-      manifest,
-      "deployment-config",
-    );
+    const deploymentConfigSourcePath = instanceWorkspaceInstanceStatePath(workspaceRoot, manifest);
     const deploymentConfigSource = JSON.parse(
       await readFile(deploymentConfigSourcePath, "utf8"),
     ) as { records: StoredRecord[] };
 
-    deploymentConfigSource.records = deploymentConfigSource.records.map((record) => ({
-      ...record,
-      values: {
-        ...record.values,
-        credentialRef: "CF_API_TOKEN_secret",
-      },
-    }));
+    deploymentConfigSource.records = deploymentConfigSource.records.map((record) =>
+      record.entity === "deployment-config"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              targetUrl: "https://CF_API_TOKEN_secret.example",
+            },
+          }
+        : record,
+    );
     await writeFile(
       deploymentConfigSourcePath,
       `${JSON.stringify(deploymentConfigSource, null, 2)}\n`,
@@ -2074,9 +2058,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some(
-        (line) => line === "Workspace archive restore skipped: no workspace archives declared.",
-      ),
+      logs.some((line) => line === "Workspace storage restore skipped: no workspace state found."),
     );
     child.close(0);
     await run;
@@ -2100,7 +2082,7 @@ describe("Formless Site CLI", () => {
       "Instance shell: http://localhost:4446/",
       "Local bootstrap entry: complete workspace setup in the browser.",
       `Local state: ${path.relative(nestedRoot, path.join(workspaceRoot, ".formless/local"))}.`,
-      "Workspace archive restore skipped: no workspace archives declared.",
+      "Workspace storage restore skipped: no workspace state found.",
     ]);
   });
 
@@ -2128,7 +2110,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
     );
     child.close(0);
     await run;
@@ -2142,7 +2124,7 @@ describe("Formless Site CLI", () => {
       "Bearer generated-token",
     ]);
     expect(logs.at(-1)).toBe(
-      "Workspace archive restore skipped: local installs already exist (david).",
+      "Workspace storage restore skipped: local installs already exist (david).",
     );
   });
 
@@ -2178,19 +2160,14 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest,
       workspaceRoot,
     });
     const operationStates = await listWorkspaceOperationStates(workspaceRoot);
-    const appArchiveValue = parsePortableArchive(
-      JSON.parse(
-        await readFile(
-          path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE),
-          "utf8",
-        ),
-      ) as unknown,
-    );
+    const appStateValue = JSON.parse(
+      await readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
+    ) as StorageSnapshot;
 
     expect(manifest).toEqual(layoutWorkspaceManifest("personal-sites"));
     expect(operationStates).toHaveLength(1);
@@ -2200,9 +2177,6 @@ describe("Formless Site CLI", () => {
       operation: "save",
       status: "succeeded",
     });
-    if (appArchiveValue.kind !== APP_ARCHIVE_KIND) {
-      throw new Error("Expected saved app archive.");
-    }
     expect(controlPlane?.records.map((record) => record.entity)).toContain("route");
     expect(controlPlane?.records.map((record) => record.entity)).toContain("app-install");
     expect(controlPlane?.records.map((record) => record.entity)).not.toContain(
@@ -2210,14 +2184,14 @@ describe("Formless Site CLI", () => {
     );
     expect(JSON.stringify(controlPlane)).not.toContain("CF_API_TOKEN");
     expect(JSON.stringify(controlPlane)).not.toContain("media/images/cover.png");
-    expect(appArchiveValue.data.kind).toBe("storeSnapshot");
-    expect(appArchiveValue.media.objects).toHaveLength(1);
+    expect(appStateValue.kind).toBe(STORAGE_SNAPSHOT_KIND);
+    expect(appStateValue.storageIdentity).toBe("app:david");
     await expect(
-      readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
+      readFile(path.join(workspaceRoot, "state/media/media/david/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5173/api/formless/app-installs",
-      "GET http://localhost:5173/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
+      "GET http://localhost:5173/api/formless/control-plane/snapshot?actorKind=cliDeployer",
       "GET http://localhost:5173/api/app-installs/site/david/snapshot",
       "GET http://localhost:5173/api/formless/media/media/images/cover.png",
     ]);
@@ -2230,7 +2204,7 @@ describe("Formless Site CLI", () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain("Workspace operation: save (succeeded).");
     expect(logs[0]).toContain(
-      "Workspace source: layout-only manifest, control-plane record source, app archives.",
+      "Workspace source: layout-only manifest, storage snapshots, media payloads.",
     );
     expect(logs[0]).toContain("Summary: Workspace saved.");
     expect(logs[0]).toContain("source: http://localhost:5173.");
@@ -2238,7 +2212,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("mediaCount: 1.");
     expect(logs[0]).toContain("recordCount: 6.");
     expect(logs[0]).toContain(
-      `appArchives: {"installId":"david","mediaCount":1,"recordCount":${mediaRecords().length}}.`,
+      `appState: {"installId":"david","mediaCount":1,"recordCount":${mediaRecords().length}}.`,
     );
   });
 
@@ -2260,14 +2234,14 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, controlPlaneRecords());
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneRecords());
 
     await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
 
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest,
       workspaceRoot,
     });
@@ -2301,14 +2275,14 @@ describe("Formless Site CLI", () => {
     await expect(
       runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher })),
     ).rejects.toThrow(
-      'Formless workspace source is stale: archives/apps/david, records/instance-control-plane. Run "npx formless save".',
+      'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
     );
     await expect(
       readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     ).resolves.toBe(manifestBefore);
-    await expect(
-      stat(path.join(workspaceRoot, "records/instance-control-plane/app-install.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(path.join(workspaceRoot, "state/instance.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 
     const logs: string[] = [];
 
@@ -2359,10 +2333,7 @@ describe("Formless Site CLI", () => {
     const workspaceRoot = path.join(tempDir, "personal-sites");
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeArchiveDirectory(
-      path.join(workspaceRoot, "archives/apps/david"),
-      appArchive("david", "David Peek"),
-    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, appArchive("david", "David Peek"));
     await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
     await mkdir(path.join(workspaceRoot, ".formless/backups"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
@@ -2384,11 +2355,8 @@ describe("Formless Site CLI", () => {
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
     await expect(
-      readFile(
-        path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE),
-        "utf8",
-      ),
-    ).resolves.toContain('"installId": "david"');
+      readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
+    ).resolves.toContain('"storageIdentity": "app:david"');
     expect(result.localStateRoot).toBe(path.join(workspaceRoot, ".formless/local"));
   });
 
@@ -2400,11 +2368,8 @@ describe("Formless Site CLI", () => {
     const requests: CapturedFetchRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, localOnlyControlPlaneRecords());
-    await writeArchiveDirectory(
-      path.join(workspaceRoot, "archives/apps/david"),
-      appArchive("david", "David Peek"),
-    );
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localOnlyControlPlaneRecords());
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, appArchive("david", "David Peek"));
     await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
 
@@ -2428,7 +2393,7 @@ describe("Formless Site CLI", () => {
     );
 
     await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace archive restored: record source")),
+      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
     );
     child.close(0);
     await run;
@@ -2450,7 +2415,7 @@ describe("Formless Site CLI", () => {
       readFile(path.join(workspaceRoot, ".formless/local/dev.json"), "utf8"),
     ).resolves.toContain('"sourceUrl": "http://localhost:4450"');
     expect(logs.at(-1)).toBe(
-      "Workspace archive restored: record source (1 apps, 0 records, 0 media).",
+      "Workspace storage restored: storage state (1 apps, 0 records, 0 media).",
     );
     expect(child.killed).toBe(false);
   });
@@ -2461,7 +2426,7 @@ describe("Formless Site CLI", () => {
     const manifestPath = path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE);
     const deploymentStateRoot = path.join(workspaceRoot, ".formless/deploy/personal");
     const instanceArchiveRoot = path.join(workspaceRoot, "archives/instance");
-    const appArchiveRoot = path.join(workspaceRoot, "archives/apps/david");
+    const appStatePath = path.join(workspaceRoot, "state/apps/david.json");
     const destroyInputs: DestroyFormlessInstanceInput[] = [];
     const logs: string[] = [];
 
@@ -2480,7 +2445,7 @@ describe("Formless Site CLI", () => {
       disabledHostRouteRecord("draft.dpeek.com", "david"),
     ];
 
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, controlPlaneSourceRecords);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneSourceRecords);
     await writeArchiveDirectory(instanceArchiveRoot, {
       ...instanceArchive([appArchive("david", "David Peek")]),
       capabilities: [
@@ -2489,13 +2454,9 @@ describe("Formless Site CLI", () => {
         "app-store-snapshots",
         "core-media-assets",
       ],
-      controlPlane: {
-        schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-        schemaUpdatedAt: "2026-05-26T00:00:00.000Z",
-        records: controlPlaneSourceRecords,
-      },
+      controlPlane: controlPlaneSnapshot(controlPlaneSourceRecords),
     });
-    await writeArchiveDirectory(appArchiveRoot, appArchive("david", "David Peek"));
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, appArchive("david", "David Peek"));
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/instance.env"), "FORMLESS_ADMIN_TOKEN=x\n");
     await writeWorkspaceDeployState(workspaceRoot);
@@ -2572,9 +2533,9 @@ describe("Formless Site CLI", () => {
     await expect(
       readFile(path.join(instanceArchiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
     ).resolves.toContain("formless.instanceArchive");
-    await expect(
-      readFile(path.join(appArchiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
-    ).resolves.toContain("formless.appArchive");
+    await expect(readFile(appStatePath, "utf8")).resolves.toContain(
+      '"storageIdentity": "app:david"',
+    );
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
@@ -2608,7 +2569,7 @@ describe("Formless Site CLI", () => {
     const destroyInputs: DestroyFormlessInstanceInput[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeWorkspaceDeployState(workspaceRoot);
 
     await runFormlessCli(
@@ -2641,7 +2602,7 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeWorkspaceDeployState(workspaceRoot);
 
     await runFormlessCli(
@@ -2679,7 +2640,6 @@ describe("Formless Site CLI", () => {
         kind: "formless-instance-workspace",
         name: "personal-sites",
         targets: [],
-        archives: { instance: "archives/instance", apps: "archives/apps" },
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
@@ -2709,7 +2669,7 @@ describe("Formless Site CLI", () => {
     const destroyInputs: DestroyFormlessInstanceInput[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeWorkspaceDeployState(workspaceRoot);
 
     await expect(
@@ -2761,7 +2721,7 @@ describe("Formless Site CLI", () => {
     const destroyInputs: DestroyFormlessInstanceInput[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await writeWorkspaceDeployState(workspaceRoot, { deployEnv: "CLOUDFLARE_API_TOKEN=token\n" });
 
     await expect(
@@ -2807,7 +2767,7 @@ describe("Formless Site CLI", () => {
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await writeFile(
       path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
       formatFormlessInstanceWorkspaceManifest({
@@ -2815,13 +2775,12 @@ describe("Formless Site CLI", () => {
         kind: "formless-instance-workspace",
         name: "personal",
         targets: [],
-        archives: { instance: "archives/instance", apps: "archives/apps" },
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
       }),
     );
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, controlPlaneSourceRecords);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneSourceRecords);
 
     await runFormlessCli(
       ["deploy"],
@@ -2861,7 +2820,7 @@ describe("Formless Site CLI", () => {
     const manifest = parseFormlessInstanceWorkspaceManifestJson(
       await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     );
-    const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
+    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest,
       workspaceRoot,
     });
@@ -3053,8 +3012,8 @@ describe("Formless Site CLI", () => {
     ];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot, controlPlaneSourceRecords);
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneSourceRecords);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
@@ -3092,7 +3051,7 @@ describe("Formless Site CLI", () => {
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
       [
         "GET /api/formless/app-installs",
-        "GET /api/formless/control-plane/bootstrap",
+        "GET /api/formless/control-plane/snapshot",
         "GET /api/app-installs/site/david/snapshot",
         "GET /api/formless/domain-mappings",
         "GET /api/formless/deployments/status",
@@ -3116,7 +3075,7 @@ describe("Formless Site CLI", () => {
     const localDavid = appArchive("david", "David Peek");
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await writeFile(
       path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
       formatFormlessInstanceWorkspaceManifest({
@@ -3124,13 +3083,12 @@ describe("Formless Site CLI", () => {
         kind: "formless-instance-workspace",
         name: "personal",
         targets: [],
-        archives: { instance: "archives/instance", apps: "archives/apps" },
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
       }),
     );
-    await writeWorkspaceControlPlaneRecordSource(
+    await writeWorkspaceControlPlaneStorageSnapshot(
       workspaceRoot,
       controlPlaneRecords().filter(
         (record) =>
@@ -3186,13 +3144,13 @@ describe("Formless Site CLI", () => {
     ];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".formless/instance.env"),
       "FORMLESS_ADMIN_TOKEN=local-token\n",
     );
-    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -3243,7 +3201,7 @@ describe("Formless Site CLI", () => {
     expect(deployInputs).toEqual([]);
 
     await writeWorkspaceManifest(existingWorkspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(existingWorkspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(existingWorkspaceRoot);
     await mkdir(path.join(existingWorkspaceRoot, ".formless"), { recursive: true });
     await writeFile(
       path.join(existingWorkspaceRoot, ".formless/instance.env"),
@@ -3253,10 +3211,7 @@ describe("Formless Site CLI", () => {
       path.join(existingWorkspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
     );
-    await writeArchiveDirectory(
-      path.join(existingWorkspaceRoot, "archives/apps/david"),
-      localDavid,
-    );
+    await writeWorkspaceAppStateFromArchive(existingWorkspaceRoot, localDavid);
 
     await expect(
       runFormlessCli(
@@ -3266,9 +3221,16 @@ describe("Formless Site CLI", () => {
             deployInputs.push(input);
             return { url: "https://wrong.dpeek.workers.dev" };
           },
-          fetch: archiveFetch([], [installedSite("david", "David Peek")], {
-            david: { records: [] },
-          }),
+          fetch: archiveFetch(
+            [],
+            [installedSite("david", "David Peek")],
+            {
+              david: { records: [] },
+            },
+            [],
+            [],
+            controlPlaneRecords(),
+          ),
         }),
       ),
     ).rejects.toThrow(
@@ -3282,9 +3244,9 @@ describe("Formless Site CLI", () => {
     const workspaceRoot = path.join(tempDir, "personal-sites");
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneRecordSource(workspaceRoot);
-    await writeArchiveDirectory(
-      path.join(workspaceRoot, "archives/apps/david"),
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(
+      workspaceRoot,
       appArchive("david", "David Peek", { records: [] }),
     );
 
@@ -3293,9 +3255,16 @@ describe("Formless Site CLI", () => {
         ["deploy", "--workspace", workspaceRoot],
         cliDeps(tempDir, {
           deploy: async () => ({ url: "https://wrong.dpeek.workers.dev" }),
-          fetch: archiveFetch([], [installedSite("david", "David Peek")], {
-            david: { records: [] },
-          }),
+          fetch: archiveFetch(
+            [],
+            [installedSite("david", "David Peek")],
+            {
+              david: { records: [] },
+            },
+            [],
+            [],
+            controlPlaneRecords(),
+          ),
         }),
       ),
     ).rejects.toThrow(
@@ -3308,7 +3277,7 @@ describe("Formless Site CLI", () => {
     const outDir = path.join(tempDir, "personal-backup");
     const requests: CapturedFetchRequest[] = [];
     const responses = responseQueue();
-    const sourceRecords = mediaRecords();
+    const sourceSnapshotRecords = mediaRecords();
 
     responses.queueJson({
       packages: listInstallableAppPackages(),
@@ -3327,7 +3296,7 @@ describe("Formless Site CLI", () => {
         },
       ],
     });
-    responses.queueJson(snapshot(sourceRecords));
+    responses.queueJson(snapshot(sourceSnapshotRecords));
     responses.queueBinary(Buffer.from([4, 5, 6]), "image/png");
 
     await exportAppArchive(
@@ -3382,7 +3351,7 @@ describe("Formless Site CLI", () => {
           appCount: 1,
           createdInstalls: ["personal-copy"],
           mediaCountsByApp: { "personal-copy": 1 },
-          recordCountsByApp: { "personal-copy": { total: sourceRecords.length } },
+          recordCountsByApp: { "personal-copy": { total: sourceSnapshotRecords.length } },
           replacedInstalls: [],
         },
       },
@@ -3496,8 +3465,8 @@ describe("Formless Site CLI", () => {
       storageKey: legacyStorageKey,
     });
     expect(
-      restoreBody.archive.data.kind === "storeSnapshot"
-        ? restoreBody.archive.data.snapshot.records[0]?.values.href
+      restoreBody.archive.data.kind === STORAGE_SNAPSHOT_KIND
+        ? restoreBody.archive.data.records[0]?.values.href
         : undefined,
     ).toBe(legacyHref);
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
@@ -3555,10 +3524,7 @@ describe("Formless Site CLI", () => {
       sourceSchemaKey: "tasks",
       sourceSchemaHash: packageAppFactsForKey("tasks")!.sourceSchemaHash,
     });
-    expect(archive.data).toEqual({
-      kind: "storeSnapshot",
-      snapshot: taskSnapshot(taskSeedRecords),
-    });
+    expect(archive.data).toEqual(taskSnapshot(taskSeedRecords));
     expect(archive.media.objects).toEqual([]);
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://instance.example/api/formless/app-installs",
@@ -3571,7 +3537,7 @@ describe("Formless Site CLI", () => {
     const outDir = path.join(tempDir, "instance-backup");
     const requests: CapturedFetchRequest[] = [];
     const responses = responseQueue();
-    const sourceRecords = mediaRecords();
+    const sourceSnapshotRecords = mediaRecords();
 
     responses.queueJson({
       packages: listInstallableAppPackages(),
@@ -3613,10 +3579,10 @@ describe("Formless Site CLI", () => {
         },
       ],
     });
-    responses.queueJson({ error: "not found" }, 404);
-    responses.queueJson(snapshot(sourceRecords));
+    responses.queueJson(controlPlaneSnapshot(controlPlaneRecords()));
+    responses.queueJson(snapshot(sourceSnapshotRecords));
     responses.queueJson(taskSnapshot(taskSeedRecords));
-    responses.queueJson(crmSnapshot(crmSeedRecords));
+    responses.queueJson(crmSnapshot(crmSeedRecords, "app:sales"));
     responses.queueBinary(Buffer.from([4, 5, 6]), "image/png");
 
     await exportInstanceArchive(
@@ -3672,6 +3638,7 @@ describe("Formless Site CLI", () => {
     ]);
     expect(archive.capabilities).toEqual([
       "installed-app-registry",
+      "schema-owned-control-plane",
       "app-store-snapshots",
       "core-media-assets",
     ]);
@@ -3688,7 +3655,7 @@ describe("Formless Site CLI", () => {
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://instance.example/api/formless/app-installs",
-      "GET https://instance.example/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
+      "GET https://instance.example/api/formless/control-plane/snapshot?actorKind=cliDeployer",
       "GET https://instance.example/api/app-installs/site/personal/snapshot",
       "GET https://instance.example/api/app-installs/tasks/work/snapshot",
       "GET https://instance.example/api/app-installs/crm/sales/snapshot",
@@ -3712,7 +3679,7 @@ describe("Formless Site CLI", () => {
           createdInstalls: ["personal", "sales", "work"],
           mediaCountsByApp: { personal: 1, sales: 0, work: 0 },
           recordCountsByApp: {
-            personal: { total: sourceRecords.length },
+            personal: { total: sourceSnapshotRecords.length },
             sales: { total: crmSeedRecords.length },
             work: { total: taskSeedRecords.length },
           },
@@ -3858,13 +3825,11 @@ describe("Formless Site CLI", () => {
         "app-store-snapshots",
         "core-media-assets",
       ],
-      controlPlane: {
-        schemaKey: "instance-control-plane",
-        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        records: controlPlaneRecords().map((record) =>
+      controlPlane: controlPlaneSnapshot(
+        controlPlaneRecords().map((record) =>
           record.entity === "app-install" ? { ...record, entity: "appInstall" } : record,
         ),
-      },
+      ),
     };
 
     await mkdir(outDir, { recursive: true });
@@ -3886,7 +3851,9 @@ describe("Formless Site CLI", () => {
           fetch: responseQueue().fetcher(requests),
         }),
       ),
-    ).rejects.toThrow('must be a qualified entity name in "<schema-key>:<entity-key>" format');
+    ).rejects.toThrow(
+      'Instance archive controlPlane records record "david" references unknown entity "appInstall".',
+    );
     expect(requests).toEqual([]);
   });
 
@@ -4085,7 +4052,6 @@ async function writeWorkspaceManifest(
       name: "personal-sites",
       defaultTarget: "remote",
       targets: [{ alias: "remote", url: "https://personal.dpeek.workers.dev" }],
-      archives: { instance: "archives/instance", apps: "archives/apps" },
       local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
       defaultAppPolicy: "declared-installs",
       apps: options.apps ?? [workspaceApp("david", "David Peek")],
@@ -4147,7 +4113,7 @@ async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-async function writeWorkspaceControlPlaneRecordSource(
+async function writeWorkspaceControlPlaneStorageSnapshot(
   workspaceRoot: string,
   records: StoredRecord[] = controlPlaneRecords(),
 ) {
@@ -4155,13 +4121,9 @@ async function writeWorkspaceControlPlaneRecordSource(
     await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
   );
 
-  await writeInstanceWorkspaceControlPlaneRecordSource({
-    controlPlane: {
-      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-      schemaUpdatedAt: "2026-05-26T00:00:00.000Z",
-      records,
-    },
+  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
+    snapshot: controlPlaneSnapshot(records),
     workspaceRoot,
   });
 }
@@ -4222,7 +4184,7 @@ function workspaceApp(installId: string, label: string) {
     installId,
     packageAppKey: "site",
     label,
-    archivePath: `archives/apps/${installId}`,
+    archivePath: `state/apps/${installId}.json`,
   };
 }
 
@@ -4231,13 +4193,9 @@ function layoutWorkspaceManifest(name: string) {
     version: 1,
     kind: "formless-instance-workspace",
     name,
-    source: { records: "records/instance-control-plane" },
+    state: { root: "state" },
     targets: [],
-    archives: {
-      instance: "archives/instance",
-      apps: "archives/apps",
-    },
-    media: { root: "media" },
+    media: { root: "state/media" },
     local: {
       stateRoot: ".formless/local",
       secretStateRoot: ".formless",
@@ -4410,10 +4368,7 @@ function appArchive(
       createdAt: "2026-05-01T00:00:00.000Z",
       updatedAt: "2026-05-01T00:00:00.000Z",
     },
-    data: {
-      kind: "storeSnapshot",
-      snapshot: snapshot(options.records ?? []),
-    },
+    data: snapshot(options.records ?? [], `app:${installId}`),
     media: {
       objects: options.mediaBytes
         ? [
@@ -4460,17 +4415,15 @@ function privateAppArchive(sourceSchemaHash: SourceSchemaHash): AppArchive {
       updatedAt: "2026-05-01T00:00:00.000Z",
     },
     data: {
-      kind: "storeSnapshot",
-      snapshot: {
-        kind: STORE_SNAPSHOT_KIND,
-        version: STORE_SNAPSHOT_VERSION,
-        schemaKey: "private-labs",
-        exportedAt: "2026-05-12T00:00:00.000Z",
-        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-        sourceCursor: 0,
-        schema: taskSourceSchema,
-        records: [],
-      },
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:labs",
+      schemaKey: "private-labs",
+      exportedAt: "2026-05-12T00:00:00.000Z",
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      sourceCursor: 0,
+      schema: taskSourceSchema,
+      records: [],
     },
     media: {
       objects: [],
@@ -4483,6 +4436,20 @@ async function writeArchiveDirectory(
   archive: InstanceArchive | AppArchive,
   mediaByInstall: Record<string, Uint8Array> = {},
 ) {
+  if (archive.kind === APP_ARCHIVE_KIND) {
+    const workspaceRoot = workspaceRootFromLegacyAppArchiveRoot(archiveRoot);
+
+    if (workspaceRoot !== undefined) {
+      await writeWorkspaceAppStateFromArchive(
+        workspaceRoot,
+        archive,
+        mediaByInstall[archive.app.installId],
+        path.basename(archiveRoot),
+      );
+      return;
+    }
+  }
+
   const mediaFiles: ArchiveDiskMediaFile[] = [];
 
   for (const app of archiveApps(archive)) {
@@ -4514,6 +4481,59 @@ async function writeArchiveDirectory(
     },
     { cwd: "/" },
   );
+}
+
+function workspaceRootFromLegacyAppArchiveRoot(archiveRoot: string): string | undefined {
+  const marker = `${path.sep}archives${path.sep}apps${path.sep}`;
+  const index = archiveRoot.lastIndexOf(marker);
+
+  return index < 0 ? undefined : archiveRoot.slice(0, index);
+}
+
+async function writeWorkspaceAppStateFromArchive(
+  workspaceRoot: string,
+  archive: AppArchive,
+  mediaBytes?: Uint8Array,
+  installId: string = archive.app.installId,
+) {
+  const manifest = parseFormlessInstanceWorkspaceManifestJson(
+    await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+  );
+
+  if (archive.data.kind !== STORAGE_SNAPSHOT_KIND) {
+    throw new Error(
+      `Workspace app state for "${archive.app.installId}" must be a storage snapshot.`,
+    );
+  }
+
+  if (installId === archive.app.installId) {
+    await writeInstanceWorkspaceAppStorageSnapshot({
+      installId,
+      manifest,
+      snapshot: archive.data,
+      workspaceRoot,
+    });
+  } else {
+    const statePath = path.join(workspaceRoot, manifest.state.root, "apps", `${installId}.json`);
+
+    await mkdir(path.dirname(statePath), { recursive: true });
+    await writeFile(statePath, `${JSON.stringify(archive.data, null, 2)}\n`);
+  }
+
+  if (mediaBytes === undefined) {
+    return;
+  }
+
+  const object = archive.media.objects[0];
+
+  if (!object) {
+    throw new Error(`Expected media object for ${archive.app.installId}.`);
+  }
+
+  const mediaPath = instanceWorkspaceMediaFilePath(workspaceRoot, manifest, object.archivePath);
+
+  await mkdir(path.dirname(mediaPath), { recursive: true });
+  await writeFile(mediaPath, mediaBytes);
 }
 
 function archiveFetch(
@@ -4598,6 +4618,14 @@ function archiveFetch(
       });
     }
 
+    if (parsedUrl.pathname === "/api/formless/control-plane/snapshot") {
+      if (controlPlaneRecords === undefined) {
+        return Response.json({ error: "not found" }, { status: 404 });
+      }
+
+      return Response.json(controlPlaneSnapshot(controlPlaneRecords));
+    }
+
     const snapshotMatch = parsedUrl.pathname.match(
       /^\/api\/app-installs\/([^/]+)\/([^/]+)\/snapshot$/,
     );
@@ -4607,7 +4635,7 @@ function archiveFetch(
       const installId = snapshotMatch[2] ?? "";
 
       return Response.json(
-        snapshotForPackage(packageAppKey, dataByInstall[installId]?.records ?? []),
+        snapshotForPackage(packageAppKey, installId, dataByInstall[installId]?.records ?? []),
       );
     }
 
@@ -4842,7 +4870,7 @@ function pushArchiveFetch(
   restoreResponses: unknown[],
   extraPackages: InstallableAppPackage[] = [],
   domainMappings: ReturnType<typeof domainMapping>[] = [],
-  controlPlaneRecords?: StoredRecord[],
+  remoteControlPlaneRecords?: StoredRecord[],
 ): typeof fetch {
   const readFetch = archiveFetch(
     requests,
@@ -4850,7 +4878,7 @@ function pushArchiveFetch(
     dataByInstall,
     extraPackages,
     domainMappings,
-    controlPlaneRecords,
+    remoteControlPlaneRecords ?? controlPlaneRecords(),
   );
 
   return async (url, init) => {
@@ -5330,10 +5358,14 @@ function responseQueue() {
   };
 }
 
-function snapshot(records: StoredRecord[]): StoreSnapshot {
+function snapshot(
+  records: StoredRecord[],
+  storageIdentity: `app:${string}` = "app:personal",
+): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity,
     schemaKey: "site",
     exportedAt: "2026-05-12T00:00:00.000Z",
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
@@ -5343,10 +5375,28 @@ function snapshot(records: StoredRecord[]): StoreSnapshot {
   };
 }
 
-function taskSnapshot(records: StoredRecord[]): StoreSnapshot {
+function controlPlaneSnapshot(records: StoredRecord[]): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    schemaUpdatedAt: "2026-05-26T00:00:00.000Z",
+    sourceCursor: records.length,
+    schema: instanceControlPlaneSchema,
+    records,
+  };
+}
+
+function taskSnapshot(
+  records: StoredRecord[],
+  storageIdentity: `app:${string}` = "app:work",
+): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity,
     schemaKey: "tasks",
     exportedAt: "2026-05-12T00:00:00.000Z",
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
@@ -5356,10 +5406,14 @@ function taskSnapshot(records: StoredRecord[]): StoreSnapshot {
   };
 }
 
-function crmSnapshot(records: StoredRecord[]): StoreSnapshot {
+function crmSnapshot(
+  records: StoredRecord[],
+  storageIdentity: `app:${string}` = "app:rates",
+): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity,
     schemaKey: "crm",
     exportedAt: "2026-05-12T00:00:00.000Z",
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
@@ -5369,17 +5423,21 @@ function crmSnapshot(records: StoredRecord[]): StoreSnapshot {
   };
 }
 
-function snapshotForPackage(packageAppKey: string, records: StoredRecord[]): StoreSnapshot {
+function snapshotForPackage(
+  packageAppKey: string,
+  installId: string,
+  records: StoredRecord[],
+): StorageSnapshot {
   if (packageAppKey === "site") {
-    return snapshot(records);
+    return snapshot(records, `app:${installId}`);
   }
 
   if (packageAppKey === "tasks") {
-    return taskSnapshot(records);
+    return taskSnapshot(records, `app:${installId}`);
   }
 
   if (packageAppKey === "crm") {
-    return crmSnapshot(records);
+    return crmSnapshot(records, `app:${installId}`);
   }
 
   throw new Error(`Unsupported test package "${packageAppKey}".`);

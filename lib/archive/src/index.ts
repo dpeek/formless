@@ -29,7 +29,5 @@ export function archiveRecordCount(archive: PortableArchive): number {
 }
 
 function appRecordCount(app: AppArchive): number {
-  return app.data.kind === "storeSnapshot"
-    ? app.data.snapshot.records.length
-    : app.data.records.length;
+  return app.data.records.length;
 }

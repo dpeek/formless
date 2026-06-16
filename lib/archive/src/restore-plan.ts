@@ -11,7 +11,7 @@ import {
 import { parseAppArchive, parseInstanceArchive, parsePortableArchive } from "./types.ts";
 import { type AppInstall, type InstallableAppPackage } from "../../../src/shared/app-installs.ts";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
-import type { RecordValues, StoredRecord } from "../../../src/shared/protocol.ts";
+import { type RecordValues, type StoredRecord } from "../../../src/shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
 import {
   CORE_IMAGE_KEY_PREFIX,
@@ -385,14 +385,11 @@ function validatePackageCompatibility(
     return;
   }
 
-  if (
-    data.kind === "sourceRecords" &&
-    stableStringify(data.schema) !== stableStringify(sourceSchema)
-  ) {
+  if (stableStringify(data.schema) !== stableStringify(sourceSchema)) {
     errors.push(
       planError("schema-mismatch", {
         appInstallId: app.installId,
-        message: `Archive app "${app.installId}" source records schema does not match bundled source "${appPackage.sourceSchemaKey}".`,
+        message: `Archive app "${app.installId}" storage snapshot schema does not match bundled source "${appPackage.sourceSchemaKey}".`,
       }),
     );
   }
@@ -925,28 +922,19 @@ function appInstallForArchive(
 }
 
 function recordsForAppData(data: AppArchiveData): StoredRecord[] {
-  if (data.kind === "storeSnapshot") {
-    return data.snapshot.records;
-  }
-
-  return data.records.map((record) => ({
-    id: record.id,
-    entity: record.entity,
-    values: record.values,
-    createdAt: record.createdAt,
-  }));
+  return data.records;
 }
 
 function schemaForAppData(data: AppArchiveData): AppSchema {
-  return data.kind === "storeSnapshot" ? data.snapshot.schema : data.schema;
+  return data.schema;
 }
 
 function schemaKeyForAppData(data: AppArchiveData): string {
-  return data.kind === "storeSnapshot" ? data.snapshot.schemaKey : data.schemaKey;
+  return data.schemaKey;
 }
 
 function schemaUpdatedAtForAppData(data: AppArchiveData): string {
-  return data.kind === "storeSnapshot" ? data.snapshot.schemaUpdatedAt : data.schemaUpdatedAt;
+  return data.schemaUpdatedAt;
 }
 
 function recordCounts(records: StoredRecord[]): ArchiveRestoreRecordCounts {

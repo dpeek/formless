@@ -231,6 +231,7 @@ The system MUST keep installed app storage, APIs, browser replicas, broadcast ch
 - WHEN the app storage identity is selected
 - THEN the API prefix is `/api/app-installs/site/personal`, the Authority name is `app:personal`, and browser database and broadcast channel names use `formless:app:personal`
 - AND those names are distinct from schema-key Site storage and from other installed Sites
+- AND storage snapshots for that install use storage identity `app:personal`
 - AND the storage identity does not expose a Site-owned media scope
 
 #### Scenario: Installed app API routes
@@ -327,7 +328,7 @@ The system SHALL derive workspace app install intent from schema-owned
 - **WHEN** local dev, push, deploy, or archive restore composes installed app
   registry state from workspace source
 - **THEN** each installed app comes from an `app-install` control-plane record
-  and its matching app archive
+  and its matching app storage snapshot
 - **AND** `formless.json` app declarations, labels, package app keys, and route
   summaries are not read as install source
 
@@ -342,11 +343,11 @@ The system SHALL derive workspace app install intent from schema-owned
 - **AND** package source paths, repository URLs, local links, and resolver
   configuration are not copied into the `app-install` record
 
-#### Scenario: Missing app archive
+#### Scenario: Missing app storage snapshot
 
 - **WHEN** workspace source contains an active `app-install` record without the
-  app archive needed for restore or push
-- **THEN** the operation reports the missing archive before mutation
+  app storage snapshot needed for restore or push
+- **THEN** the operation reports the missing snapshot before mutation
 - **AND** target app install registry state is not changed
 
 ### Requirement: Browser-Created App Install Source
@@ -362,8 +363,8 @@ same install records used by CLI and archive workflows.
   instance control-plane identity
 - **AND** the installed app storage identity is initialized from the package
   source schema and source seed records
-- **AND** the next workspace save writes the install records and app archive to
-  reviewable workspace source
+- **AND** the next workspace save writes the install records and app storage
+  snapshot to reviewable workspace source
 
 ### Requirement: Blank Instances Stay App-Less
 

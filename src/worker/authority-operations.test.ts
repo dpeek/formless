@@ -8,7 +8,7 @@ import {
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
   type BootstrapResponse,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
@@ -322,7 +322,7 @@ describe("authority operation execution", () => {
       path: "/sync",
       search: `after=${beforeCursor}&schemaUpdatedAt=${encodeURIComponent(schemaUpdatedAt)}`,
     });
-    const snapshot = await executeOperation<StoreSnapshot>({
+    const snapshot = await executeOperation<StorageSnapshot>({
       method: "GET",
       path: "/snapshot",
     });
@@ -689,7 +689,7 @@ describe("authority operation execution", () => {
       path: "/sync",
       search: `after=${beforeCursor}&schemaUpdatedAt=${encodeURIComponent(schemaUpdatedAt)}`,
     });
-    const snapshot = await executeOperation<StoreSnapshot>({
+    const snapshot = await executeOperation<StorageSnapshot>({
       method: "GET",
       path: "/snapshot",
     });

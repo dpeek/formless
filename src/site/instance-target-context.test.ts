@@ -8,12 +8,21 @@ import {
   type InstanceWorkspaceManifest,
 } from "@dpeek/formless-workspace";
 import {
-  writeInstanceWorkspaceControlPlaneRecordSource,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
 import { describe, expect, it } from "vite-plus/test";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../shared/instance-control-plane.ts";
+import {
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
+  type StoredRecord,
+} from "../shared/protocol.ts";
 import {
   resolveSiteCliTargetContext,
   siteCliTargetAcceptHeaders,
@@ -108,13 +117,9 @@ async function writeTargetWorkspace(input: { storedAdminToken?: string } = {}) {
     path.join(workspaceRoot, INSTANCE_WORKSPACE_MANIFEST_FILE),
     formatInstanceWorkspaceManifest(manifest),
   );
-  await writeInstanceWorkspaceControlPlaneRecordSource({
-    controlPlane: {
-      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-      schemaUpdatedAt: "2026-06-11T00:00:00.000Z",
-      records: [deploymentConfigRecord()],
-    },
+  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
+    snapshot: controlPlaneSnapshot([deploymentConfigRecord()]),
     workspaceRoot,
   });
 
@@ -127,14 +132,27 @@ async function writeTargetWorkspace(input: { storedAdminToken?: string } = {}) {
   return workspaceRoot;
 }
 
+function controlPlaneSnapshot(records: StoredRecord[]): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: "2026-06-11T00:00:00.000Z",
+    schemaUpdatedAt: "2026-06-11T00:00:00.000Z",
+    sourceCursor: records.length,
+    schema: instanceControlPlaneSchema,
+    records,
+  };
+}
+
 function targetWorkspaceManifest(): InstanceWorkspaceManifest {
   return {
     version: 1,
     kind: "formless-instance-workspace",
     name: "personal-sites",
-    source: { records: "records/instance-control-plane" },
+    state: { root: "state" },
     targets: [],
-    archives: { instance: "archives/instance", apps: "archives/apps" },
     media: { root: "media" },
     local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
     defaultAppPolicy: "none",

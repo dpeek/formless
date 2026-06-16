@@ -89,7 +89,7 @@ through the Gateway package slice.
   Workspace package local state adapters
 - **AND** the Gateway package does not own app records, Authority storage,
   owner session cookies, runtime topology records, provider credentials,
-  Alchemy state, Cloudflare mutation, workspace source records, semantic
+  Alchemy state, Cloudflare mutation, workspace storage snapshots, semantic
   operation contracts, or operation state storage
 
 ### Requirement: Workspace Gateway Security Baseline
@@ -357,7 +357,7 @@ responses and reviewable source.
 - **THEN** the gateway resolves provider credentials from environment or ignored
   workspace secret state
 - **AND** existing deployed instance targets are resolved from enabled
-  `deployment-config.targetUrl` workspace record source
+  `deployment-config.targetUrl` workspace storage state
 - **AND** the browser receives only display-safe plan, operation, health check,
   restore, and observation summaries
 - **AND** deploy apply patches the target deployment config's latest

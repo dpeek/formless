@@ -432,33 +432,33 @@ credential boundaries.
   patching the cache when the current projection hash changed during deploy
 - **AND** the gateway returns display-safe operation, evidence, drift, cleanup,
   and observation summaries through operation status or completion responses
-- **AND** deployment execution history is not written as schema-owned workspace
-  source records
+- **AND** deployment execution history is not written to schema-owned workspace
+  storage snapshots
 - **AND** Worker runtime code does not perform provider mutation for local
   workspace gateway deploy apply
 
 ### Requirement: Workspace Deploy Source Boundary
 
 The deployment runtime SHALL keep deployment intent reviewable as schema-owned
-record source and deployment observation cache display-safe but outside
-reviewable source.
+storage snapshot records and deployment observation cache display-safe but
+outside reviewable source.
 
 #### Scenario: Save deployment intent
 
 - **WHEN** deployment intent is saved from Authority to workspace source
 - **THEN** `route` and `deployment-config` records are written as
-  schema-owned record source
+  schema-owned storage snapshot records
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:route` and
   `instance:deployment-config`
 - **AND** projected deployment resource graph entries are runtime desired-state
-  content, not reviewable control-plane source records
+  content, not reviewable control-plane storage snapshot records
 - **AND** `formless.json` does not store deployment intent or target facts
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
   `deploy-drift-report`, cleanup audit summaries, raw leases, and provider
-  state payloads are not written as workspace source
+  state payloads are not written as workspace storage state
 - **AND** deployment config observation cache fields are not written as
-  workspace source
+  workspace storage state
 
 #### Scenario: Worker name source
 
@@ -471,7 +471,7 @@ reviewable source.
 
 #### Scenario: Exclude execution secrets
 
-- **WHEN** browser clients, workspace manifests, record source, portable
+- **WHEN** browser clients, workspace manifests, storage snapshots, portable
   archives, or desired-state reads inspect deployment state
 - **THEN** provider API tokens, Alchemy passwords, Alchemy state tokens, raw
   lease tokens, and runtime secrets are not returned

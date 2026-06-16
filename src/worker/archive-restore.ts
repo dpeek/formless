@@ -11,7 +11,6 @@ import {
   type ArchiveRestorePlanStep,
   type InstanceArchiveControlPlane,
   type PortableArchive,
-  type SourceArchiveRecord,
 } from "@dpeek/formless-archive";
 import type { AppInstall, InstallableAppPackage } from "../shared/app-installs.ts";
 import {
@@ -25,17 +24,12 @@ import {
   type MediaObjectStore,
   type MediaWriteResponse,
 } from "@dpeek/formless-media/worker";
-import type { BootstrapResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
+import { type BootstrapResponse } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import { workerSchemaApps } from "./schema-apps.ts";
 import {
   ensureStorageTables,
-  getBootstrapRecords,
-  getCurrentCursor,
-  mapWriteOutcome,
-  resetStorageToSourceSeedOutcome,
   restoreStorageSnapshotOutcome,
-  type StorageSource,
   type WriteOutcome,
 } from "./storage.ts";
 
@@ -135,16 +129,6 @@ export type ArchiveAppDataRestoreInput = {
   data: AppArchiveData;
   identity: InstalledAppStorageIdentity;
 };
-
-type ArchiveAppDataRestorePlan =
-  | {
-      kind: "storeSnapshot";
-      snapshot: StoreSnapshot;
-    }
-  | {
-      kind: "sourceRecords";
-      source: StorageSource;
-    };
 
 export async function dryRunPortableArchiveRestore(
   value: unknown,
@@ -376,21 +360,8 @@ export function restoreArchiveAppDataToStorageOutcome(
   input: ArchiveAppDataRestoreInput,
 ): WriteOutcome<BootstrapResponse> {
   ensureStorageTables(storage);
-  const plan = planArchiveAppDataRestore(input);
-
-  if (plan.kind === "storeSnapshot") {
-    return restoreStorageSnapshotOutcome(storage, plan.snapshot);
-  }
-
-  return mapWriteOutcome(
-    resetStorageToSourceSeedOutcome(storage, plan.source),
-    ({ schema, updatedAt }) => ({
-      cursor: getCurrentCursor(storage),
-      records: getBootstrapRecords(storage),
-      schema,
-      schemaUpdatedAt: updatedAt,
-    }),
-  );
+  assertArchiveAppDataMatchesIdentity(input.data, input.identity);
+  return restoreStorageSnapshotOutcome(storage, input.data);
 }
 
 export async function restoreArchiveMediaObjectToStore(
@@ -579,46 +550,21 @@ function archiveAppsByInstallId(archive: PortableArchive): Map<string, AppArchiv
   return new Map(apps.map((app) => [app.app.installId, app]));
 }
 
-function sourceArchiveRecordsToStoredRecords(
-  records: readonly SourceArchiveRecord[],
-): StoredRecord[] {
-  return records.map((record) => ({
-    id: record.id,
-    entity: record.entity,
-    values: record.values,
-    createdAt: record.createdAt,
-  }));
-}
-
-function planArchiveAppDataRestore(input: ArchiveAppDataRestoreInput): ArchiveAppDataRestorePlan {
-  assertArchiveAppDataMatchesIdentity(input.data, input.identity);
-
-  if (input.data.kind === "storeSnapshot") {
-    return {
-      kind: "storeSnapshot",
-      snapshot: input.data.snapshot,
-    };
-  }
-
-  return {
-    kind: "sourceRecords",
-    source: {
-      changeMutationPrefix: `archive-restore:${input.data.schemaKey}`,
-      records: sourceArchiveRecordsToStoredRecords(input.data.records),
-      schema: input.data.schema,
-    },
-  };
-}
-
 function assertArchiveAppDataMatchesIdentity(
   data: AppArchiveData,
   identity: InstalledAppStorageIdentity,
 ) {
-  const schemaKey = data.kind === "storeSnapshot" ? data.snapshot.schemaKey : data.schemaKey;
+  const schemaKey = data.schemaKey;
 
   if (schemaKey !== identity.sourceSchemaKey) {
     throw new Error(
       `Archive app data schemaKey must be "${identity.sourceSchemaKey}" for installed app "${identity.installId}".`,
+    );
+  }
+
+  if (data.storageIdentity !== identity.authorityName) {
+    throw new Error(
+      `Archive app data storageIdentity must be "${identity.authorityName}" for installed app "${identity.installId}".`,
     );
   }
 }

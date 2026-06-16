@@ -1,19 +1,14 @@
 import {
   parsePortableArchive,
-  parseAppArchiveData,
   type AppArchiveData,
   type InstanceArchiveControlPlane,
 } from "@dpeek/formless-archive";
-import type {
-  AppStorageIdentity,
-  InstalledAppStorageIdentity,
-} from "../shared/app-storage-identity.ts";
+import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
   type BootstrapResponse,
-  type StoreSnapshot,
 } from "../shared/protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -26,7 +21,6 @@ import {
 import {
   applyPortableArchiveRestore,
   dryRunPortableArchiveRestore,
-  restoreArchiveAppDataToStorageOutcome,
   restoreArchiveMediaObjectToStore,
   type ArchiveRestoreApplyTarget,
   type ArchiveRestoreMediaRead,
@@ -42,10 +36,8 @@ import {
   type ActiveRuntimeAppPackageEnv,
 } from "./runtime-app-packages.ts";
 import { mediaObjectStoreFromR2Bucket } from "@dpeek/formless-media/worker";
-import type { AuthorityWriteNotifier } from "./authority-operations.ts";
 
 export const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
-export const ARCHIVE_APP_DATA_RESTORE_PATH = "/archive/restore-app-data";
 
 type InstanceArchiveApiEnv = AuthorityAdminGuardEnv &
   ActiveRuntimeAppPackageEnv & {
@@ -110,60 +102,6 @@ export async function handleInstanceArchiveDurableObjectRequest(
       : await applyPortableArchiveRestore(archive, target);
 
     return jsonResponse(result, result.ok ? 200 : 400);
-  } catch (error) {
-    return jsonResponse({ error: errorMessage(error) }, 400);
-  }
-}
-
-export async function handleArchiveAppDataRestoreDurableObjectRequest(
-  request: Request,
-  input: {
-    env: AuthorityAdminGuardEnv;
-    identity: AppStorageIdentity;
-    path: string;
-    storage: DurableObjectStorage;
-    writes: AuthorityWriteNotifier;
-  },
-): Promise<Response | undefined> {
-  if (input.path !== ARCHIVE_APP_DATA_RESTORE_PATH) {
-    return undefined;
-  }
-
-  try {
-    if (request.method !== "POST") {
-      return methodNotAllowedResponse("POST");
-    }
-
-    const authorization = await authorizeInstanceWrite(request, input.env);
-
-    if (!authorization.authorized) {
-      return jsonResponse(
-        { error: authorization.error },
-        authorization.status,
-        authorization.headers,
-      );
-    }
-
-    const identity = input.identity;
-
-    if (identity.kind !== "appInstall") {
-      return jsonResponse(
-        { error: "Archive app data restore requires an installed app storage identity." },
-        400,
-      );
-    }
-
-    const data = parseAppArchiveData(
-      "Archive app data",
-      await readJson(request),
-      identity.sourceSchemaKey,
-    );
-    const outcome = input.writes.apply(() =>
-      restoreArchiveAppDataToStorageOutcome(input.storage, { data, identity }),
-    );
-    const response: BootstrapResponse = outcome.response;
-
-    return jsonResponse(response);
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
@@ -241,8 +179,14 @@ async function restoreInstallViaControlPlane(
   const now = input.install.updatedAt || input.install.createdAt;
 
   await restoreControlPlaneViaAuthority(request, env, {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: now,
     schemaUpdatedAt: now,
+    sourceCursor: 0,
+    schema: instanceControlPlaneSchema,
     records: [
       ...nextRecords,
       ...instanceControlPlaneRecordsForAppInstall({ install: input.install, now }),
@@ -256,21 +200,11 @@ async function restoreControlPlaneViaAuthority(
   controlPlane: InstanceArchiveControlPlane,
 ): Promise<BootstrapResponse> {
   const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
-  const snapshot: StoreSnapshot = {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
-    schemaKey: controlPlane.schemaKey,
-    exportedAt: controlPlane.schemaUpdatedAt,
-    schemaUpdatedAt: controlPlane.schemaUpdatedAt,
-    sourceCursor: 0,
-    schema: instanceControlPlaneSchema,
-    records: controlPlane.records,
-  };
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(
       new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot/restore`, request.url),
       {
-        body: JSON.stringify(snapshot),
+        body: JSON.stringify(controlPlane),
         headers: archiveRestoreForwardHeaders(request.headers),
         method: "POST",
       },
@@ -296,7 +230,7 @@ async function restoreAppDataViaAuthority(
   identity: InstalledAppStorageIdentity,
 ): Promise<BootstrapResponse> {
   const id = env.FORMLESS_AUTHORITY.idFromName(identity.authorityName);
-  const url = new URL(`${identity.apiRoutePrefix}${ARCHIVE_APP_DATA_RESTORE_PATH}`, request.url);
+  const url = new URL(`${identity.apiRoutePrefix}/snapshot/restore`, request.url);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(url, {
       body: JSON.stringify(data),

@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-  DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT,
-  DEFAULT_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
   DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
+  DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_PACKAGE_LINKS_KIND,
@@ -68,14 +66,10 @@ describe("instance workspace manifest", () => {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      source: {
-        records: DEFAULT_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH,
+      state: {
+        root: DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT,
       },
       targets: [],
-      archives: {
-        instance: DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
-        apps: DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
-      },
       media: {
         root: DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT,
       },
@@ -93,14 +87,11 @@ describe("instance workspace manifest", () => {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      source: {
-        records: "source/control-plane",
-      },
-      archives: {
-        apps: "archives/apps",
+      state: {
+        root: "state",
       },
       media: {
-        root: "media",
+        root: "state/media",
       },
       local: {
         stateRoot: ".formless/local",
@@ -113,16 +104,12 @@ describe("instance workspace manifest", () => {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      source: {
-        records: "source/control-plane",
+      state: {
+        root: "state",
       },
       targets: [],
-      archives: {
-        instance: DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
-        apps: "archives/apps",
-      },
       media: {
-        root: "media",
+        root: "state/media",
       },
       local: {
         stateRoot: ".formless/local",
@@ -136,14 +123,11 @@ describe("instance workspace manifest", () => {
       version: 1,
       kind: "formless-instance-workspace",
       name: "personal-sites",
-      source: {
-        records: "source/control-plane",
-      },
-      archives: {
-        apps: "archives/apps",
+      state: {
+        root: "state",
       },
       media: {
-        root: "media",
+        root: "state/media",
       },
       local: {
         stateRoot: ".formless/local",
@@ -159,14 +143,11 @@ describe("instance workspace manifest", () => {
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",
-        source: {
-          records: "source/control-plane",
-        },
-        archives: {
-          apps: "archives/apps",
+        state: {
+          root: "state",
         },
         media: {
-          root: "media",
+          root: "state/media",
         },
         local: {
           stateRoot: ".formless/local",
@@ -186,7 +167,7 @@ describe("instance workspace manifest", () => {
         },
       }),
     ).toThrow(
-      'formless.json key "deploy" was removed from manifest version 1; store instance intent in workspace record source instead.',
+      'formless.json key "deploy" was removed from manifest version 1; store instance intent in workspace storage state instead.',
     );
 
     expect(() =>
@@ -205,14 +186,11 @@ describe("instance workspace manifest", () => {
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",
-        source: {
-          records: "source/control-plane",
-        },
-        archives: {
-          apps: "archives/apps",
+        state: {
+          root: "state",
         },
         media: {
-          root: "media",
+          root: "state/media",
         },
         local: {
           stateRoot: ".formless/local",
@@ -234,16 +212,16 @@ describe("instance workspace manifest", () => {
     expect(() =>
       parseInstanceWorkspaceManifest({
         ...layoutManifestSource(),
-        source: { records: "../records" },
+        state: { root: "../state" },
       }),
-    ).toThrow("formless.json source.records must be a relative workspace path.");
+    ).toThrow("formless.json state.root must be a relative workspace path.");
 
     expect(() =>
       parseInstanceWorkspaceManifest({
         ...layoutManifestSource(),
-        archives: { apps: "/archives/apps" },
+        state: { root: "/state" },
       }),
-    ).toThrow("formless.json archives.apps must be a relative workspace path.");
+    ).toThrow("formless.json state.root must be a relative workspace path.");
 
     expect(() =>
       parseInstanceWorkspaceManifest({
@@ -263,10 +241,12 @@ describe("instance workspace manifest", () => {
   it("rejects removed v1 source keys without a compatibility parser", () => {
     for (const key of [
       "apps",
+      "archives",
       "defaultAppPolicy",
       "defaultTarget",
       "deploy",
       "domains",
+      "source",
       "targets",
     ]) {
       expect(() =>
@@ -275,19 +255,19 @@ describe("instance workspace manifest", () => {
           [key]: key === "defaultTarget" ? "remote" : [],
         }),
       ).toThrow(
-        `formless.json key "${key}" was removed from manifest version 1; store instance intent in workspace record source instead.`,
+        `formless.json key "${key}" was removed from manifest version 1; store instance intent in workspace storage state instead.`,
       );
     }
 
     expect(() =>
       parseInstanceWorkspaceManifest({
         ...layoutManifestSource(),
-        archives: {
-          instance: "archives/instance",
-          apps: "archives/apps",
+        state: {
+          root: "state",
+          apps: "state/apps",
         },
       }),
-    ).toThrow('formless.json archives has unsupported key "instance".');
+    ).toThrow('formless.json state has unsupported key "apps".');
   });
 
   it("normalizes target URLs to origins", () => {
@@ -820,14 +800,11 @@ function layoutManifestSource(): Record<string, unknown> {
     version: 1,
     kind: "formless-instance-workspace",
     name: "personal-sites",
-    source: {
-      records: "source/control-plane",
-    },
-    archives: {
-      apps: "archives/apps",
+    state: {
+      root: "state",
     },
     media: {
-      root: "media",
+      root: "state/media",
     },
     local: {
       stateRoot: ".formless/local",

@@ -13,11 +13,16 @@ import {
   type InstanceArchive,
 } from "./index.ts";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
-  type StoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../../../src/shared/protocol.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "../../../src/shared/instance-control-plane.ts";
 import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
 import { siteSourceSchema } from "../../../src/test/schema-apps.ts";
 import { testSiteSeedRecords } from "../../../src/test/site-records.ts";
@@ -28,16 +33,14 @@ describe("portable archive protocol", () => {
   it("parses the supported version 2 app archive envelope", () => {
     const archive = appArchive({
       data: {
-        kind: "storeSnapshot",
-        snapshot: storeSnapshot({
-          records: [
-            activeSiteRecord("rec_site_settings_primary"),
-            {
-              ...activeSiteRecord("rec_site_settings_old"),
-              deletedAt: "2026-05-23T00:03:00.000Z",
-            },
-          ],
-        }),
+        ...storageSnapshot(),
+        records: [
+          activeSiteRecord("rec_site_settings_primary"),
+          {
+            ...activeSiteRecord("rec_site_settings_old"),
+            deletedAt: "2026-05-23T00:03:00.000Z",
+          },
+        ],
       },
     });
 
@@ -45,33 +48,19 @@ describe("portable archive protocol", () => {
     expect(parsePortableArchive(archive)).toEqual(archive);
   });
 
-  it("parses source-record app archives and rejects tombstones there", () => {
-    const sourceArchive = appArchive({
-      capabilities: ["source-records", "core-media-assets"],
-      data: {
-        kind: "sourceRecords",
-        schemaKey: "site",
-        schemaUpdatedAt: now,
-        schema: siteSourceSchema,
-        records: [activeSiteRecord("rec_site_settings_primary")],
-      },
-    });
-
-    expect(parseAppArchive(sourceArchive)).toEqual(sourceArchive);
+  it("rejects source-record app archive data without a compatibility parser", () => {
     expect(() =>
       parseAppArchive({
-        ...sourceArchive,
+        ...appArchive({ capabilities: ["core-media-assets"] }),
         data: {
-          ...sourceArchive.data,
-          records: [
-            {
-              ...activeSiteRecord("rec_site_settings_primary"),
-              deletedAt: "2026-05-23T00:03:00.000Z",
-            },
-          ],
+          kind: "sourceRecords",
+          schemaKey: "site",
+          schemaUpdatedAt: now,
+          schema: siteSourceSchema,
+          records: [activeSiteRecord("rec_site_settings_primary")],
         },
       }),
-    ).toThrow('App archive data records[0] has unsupported key "deletedAt".');
+    ).toThrow('App archive data kind must be "formless.storageSnapshot".');
   });
 
   it("parses instance archives as app archive collections", () => {
@@ -94,11 +83,7 @@ describe("portable archive protocol", () => {
         "app-store-snapshots",
         "core-media-assets",
       ],
-      controlPlane: {
-        schemaKey: "instance-control-plane",
-        schemaUpdatedAt: now,
-        records: controlPlaneRecords(),
-      },
+      controlPlane: controlPlaneSnapshot(),
     });
     const parsed = parseInstanceArchive(archive);
     const formatted = formatInstanceArchive(parsed);
@@ -108,7 +93,7 @@ describe("portable archive protocol", () => {
       "deployment-config",
     );
     expect(formattedArchive.controlPlane?.records.map((record) => record.entity)).toContain(
-      "instance:deployment-config",
+      "deployment-config",
     );
     expect(
       parseInstanceArchive(formattedArchive).controlPlane?.records.map((record) => record.entity),
@@ -121,7 +106,7 @@ describe("portable archive protocol", () => {
       throw new Error("Expected control-plane archive records.");
     }
 
-    expect(
+    const formattedObservedArchive = JSON.parse(
       formatInstanceArchive({
         ...archive,
         controlPlane: {
@@ -129,7 +114,11 @@ describe("portable archive protocol", () => {
           records: controlPlaneRecords({ observedCache: true }),
         },
       }),
-    ).not.toContain("observedStatus");
+    ) as InstanceArchive;
+
+    expect(JSON.stringify(formattedObservedArchive.controlPlane?.records)).not.toContain(
+      "observedStatus",
+    );
 
     expect(() =>
       parseInstanceArchive({
@@ -203,14 +192,12 @@ describe("portable archive protocol", () => {
         "app-store-snapshots",
         "core-media-assets",
       ],
-      controlPlane: {
-        schemaKey: "instance-control-plane",
-        schemaUpdatedAt: now,
+      controlPlane: controlPlaneSnapshot({
         records: [
           ...controlPlaneRecords(),
           {
             id: "deploy-drift:instance.primary",
-            entity: "instance:deploy-drift-report",
+            entity: "deploy-drift-report",
             values: {
               deployTarget: "instance.primary",
               versionId: "version-1",
@@ -228,11 +215,11 @@ describe("portable archive protocol", () => {
             createdAt: now,
           },
         ],
-      },
+      }),
     });
 
     expect(() => parseInstanceArchive(archive)).toThrow(
-      'Instance archive controlPlane records[4] record "deploy-drift:instance.primary" entity "instance:deploy-drift-report" is not an instance control-plane entity.',
+      'Instance archive controlPlane records record "deploy-drift:instance.primary" references unknown entity "deploy-drift-report".',
     );
   });
 
@@ -291,19 +278,17 @@ describe("portable archive protocol", () => {
     const archive = appArchive({
       capabilities: ["core-media-assets", "app-store-snapshots"],
       data: {
-        kind: "storeSnapshot",
-        snapshot: storeSnapshot({
-          records: [
-            activeSiteRecord("rec_site_settings_zeta", {
-              label: "Zeta",
-              key: "zeta",
-            }),
-            activeSiteRecord("rec_site_settings_alpha", {
-              label: "Alpha",
-              key: "alpha",
-            }),
-          ],
-        }),
+        ...storageSnapshot(),
+        records: [
+          activeSiteRecord("rec_site_settings_zeta", {
+            label: "Zeta",
+            key: "zeta",
+          }),
+          activeSiteRecord("rec_site_settings_alpha", {
+            label: "Alpha",
+            key: "alpha",
+          }),
+        ],
       },
       media: {
         objects: [mediaObject("zeta"), mediaObject("alpha")],
@@ -320,8 +305,8 @@ describe("portable archive protocol", () => {
       "media/images/zeta.png",
     ]);
     expect(
-      reparsed.data.kind === "storeSnapshot"
-        ? reparsed.data.snapshot.records.map((record) => record.id)
+      reparsed.data.kind === STORAGE_SNAPSHOT_KIND
+        ? reparsed.data.records.map((record) => record.id)
         : [],
     ).toEqual(["rec_site_settings_alpha", "rec_site_settings_zeta"]);
   });
@@ -374,14 +359,18 @@ function instanceArchive(overrides: Partial<InstanceArchive> = {}): InstanceArch
 }
 
 function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
+  const app = overrides.app ?? archivedInstall("personal", "Personal");
+
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
     capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
-    app: archivedInstall("personal", "Personal"),
-    data: { kind: "storeSnapshot", snapshot: storeSnapshot() },
+    app,
+    data:
+      overrides.data ??
+      storageSnapshot({ schemaKey: app.sourceSchemaKey, storageIdentity: `app:${app.installId}` }),
     media: { objects: [mediaObject("hero")] },
     ...overrides,
   };
@@ -482,16 +471,32 @@ function controlPlaneRecords(
   ];
 }
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "app:personal",
     schemaKey: "site",
     exportedAt: now,
     schemaUpdatedAt: now,
     sourceCursor: 7,
     schema: siteSourceSchema,
     records: [activeSiteRecord("rec_site_settings_primary")],
+    ...overrides,
+  };
+}
+
+function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: now,
+    schemaUpdatedAt: now,
+    sourceCursor: controlPlaneRecords().length,
+    schema: instanceControlPlaneSchema,
+    records: controlPlaneRecords(),
     ...overrides,
   };
 }

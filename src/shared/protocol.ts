@@ -211,12 +211,13 @@ export type BootstrapResponse = {
   cursor: number;
 };
 
-export const STORE_SNAPSHOT_KIND = "formless.storeSnapshot";
-export const STORE_SNAPSHOT_VERSION = 1;
+export const STORAGE_SNAPSHOT_KIND = "formless.storageSnapshot";
+export const STORAGE_SNAPSHOT_VERSION = 1;
 
-export type StoreSnapshot = {
-  kind: typeof STORE_SNAPSHOT_KIND;
-  version: typeof STORE_SNAPSHOT_VERSION;
+export type StorageSnapshot = {
+  kind: typeof STORAGE_SNAPSHOT_KIND;
+  version: typeof STORAGE_SNAPSHOT_VERSION;
+  storageIdentity: string;
   schemaKey: string;
   exportedAt: string;
   schemaUpdatedAt: string;
@@ -443,35 +444,47 @@ export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRe
   };
 }
 
-export function parseStoreSnapshot(value: unknown, expectedSchemaKey?: string): StoreSnapshot {
+export function parseStorageSnapshot(
+  value: unknown,
+  expected?: { schemaKey?: string; storageIdentity?: string },
+): StorageSnapshot {
   if (!isRecord(value)) {
-    throw new Error("Store snapshot must be an object.");
+    throw new Error("Storage snapshot must be an object.");
   }
 
-  assertStoreSnapshotKeys(value);
+  assertStorageSnapshotKeys(value);
 
-  if (value.kind !== STORE_SNAPSHOT_KIND) {
-    throw new Error(`Store snapshot kind must be "${STORE_SNAPSHOT_KIND}".`);
+  if (value.kind !== STORAGE_SNAPSHOT_KIND) {
+    throw new Error(`Storage snapshot kind must be "${STORAGE_SNAPSHOT_KIND}".`);
   }
 
-  if (value.version !== STORE_SNAPSHOT_VERSION) {
-    throw new Error(`Store snapshot version must be ${STORE_SNAPSHOT_VERSION}.`);
+  if (value.version !== STORAGE_SNAPSHOT_VERSION) {
+    throw new Error(`Storage snapshot version must be ${STORAGE_SNAPSHOT_VERSION}.`);
   }
 
-  const schemaKey = parseNonEmptyString("Store snapshot schemaKey", value.schemaKey);
-  if (expectedSchemaKey !== undefined && schemaKey !== expectedSchemaKey) {
-    throw new Error(`Store snapshot schemaKey must be "${expectedSchemaKey}".`);
+  const storageIdentity = parseNonEmptyString(
+    "Storage snapshot storageIdentity",
+    value.storageIdentity,
+  );
+  if (expected?.storageIdentity !== undefined && storageIdentity !== expected.storageIdentity) {
+    throw new Error(`Storage snapshot storageIdentity must be "${expected.storageIdentity}".`);
   }
 
-  const records = parseStoreSnapshotRecords(value.records);
+  const schemaKey = parseNonEmptyString("Storage snapshot schemaKey", value.schemaKey);
+  if (expected?.schemaKey !== undefined && schemaKey !== expected.schemaKey) {
+    throw new Error(`Storage snapshot schemaKey must be "${expected.schemaKey}".`);
+  }
+
+  const records = parseStorageSnapshotRecords(value.records);
 
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity,
     schemaKey,
-    exportedAt: parseNonEmptyString("Store snapshot exportedAt", value.exportedAt),
-    schemaUpdatedAt: parseNonEmptyString("Store snapshot schemaUpdatedAt", value.schemaUpdatedAt),
-    sourceCursor: parseCursor("Store snapshot sourceCursor", value.sourceCursor),
+    exportedAt: parseNonEmptyString("Storage snapshot exportedAt", value.exportedAt),
+    schemaUpdatedAt: parseNonEmptyString("Storage snapshot schemaUpdatedAt", value.schemaUpdatedAt),
+    sourceCursor: parseCursor("Storage snapshot sourceCursor", value.sourceCursor),
     schema: parseAppSchema(value.schema),
     records,
   };
@@ -548,10 +561,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assertStoreSnapshotKeys(value: Record<string, unknown>) {
+function assertStorageSnapshotKeys(value: Record<string, unknown>) {
   const requiredKeys = [
     "kind",
     "version",
+    "storageIdentity",
     "schemaKey",
     "exportedAt",
     "schemaUpdatedAt",
@@ -563,13 +577,13 @@ function assertStoreSnapshotKeys(value: Record<string, unknown>) {
 
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
-      throw new Error(`Store snapshot has unsupported key "${key}".`);
+      throw new Error(`Storage snapshot has unsupported key "${key}".`);
     }
   }
 
   for (const key of requiredKeys) {
     if (!(key in value)) {
-      throw new Error(`Store snapshot must include "${key}".`);
+      throw new Error(`Storage snapshot must include "${key}".`);
     }
   }
 }
@@ -633,14 +647,14 @@ function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {
   };
 }
 
-function parseStoreSnapshotRecords(value: unknown): StoredRecord[] {
+function parseStorageSnapshotRecords(value: unknown): StoredRecord[] {
   if (!Array.isArray(value)) {
-    throw new Error("Store snapshot records must be an array.");
+    throw new Error("Storage snapshot records must be an array.");
   }
 
   return value.map((record, index) => {
     if (!isStoredRecord(record)) {
-      throw new Error(`Store snapshot records[${index}] must be a stored record.`);
+      throw new Error(`Storage snapshot records[${index}] must be a stored record.`);
     }
 
     return {

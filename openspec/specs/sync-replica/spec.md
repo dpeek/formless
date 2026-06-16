@@ -2,13 +2,17 @@
 
 ## Purpose
 
-Sync replica keeps browser state aligned with Authority storage for an app storage identity. It stores a local IndexedDB replica, advances sync cursors through HTTP or push sync, merges committed changes, and derives local projections for generated UI surfaces.
+Sync replica keeps browser state aligned with Authority storage for a
+browser-backed storage identity. It stores a local IndexedDB replica, advances
+sync cursors through HTTP or push sync, merges committed changes, and derives
+local projections for generated UI surfaces. Authority storage remains the
+source of truth; the browser replica remains a cache.
 
 ## Requirements
 
 ### Requirement: Replica Identity
 
-The system SHALL key each browser replica by app storage identity.
+The system SHALL key each browser replica by storage identity.
 
 #### Scenario: Schema-key browser replica
 
@@ -24,6 +28,13 @@ The system SHALL key each browser replica by app storage identity.
 - THEN the local IndexedDB replica uses `formless:app:<installId>`
 - AND the matching broadcast channel uses the same app install id scope
 
+#### Scenario: Instance control-plane browser replica
+
+- GIVEN the browser opens the instance control-plane surface
+- WHEN the client target is selected
+- THEN the local IndexedDB replica uses `formless:instance:control-plane`
+- AND the matching broadcast channel uses the same control-plane scope
+
 ### Requirement: Local Replica Stores
 
 The system SHALL persist browser replica metadata and records locally.
@@ -35,12 +46,12 @@ The system SHALL persist browser replica metadata and records locally.
 - THEN sync metadata is stored in the local `meta` store
 - AND records are stored in the local `records` store
 
-#### Scenario: Snapshot restore into local replica
+#### Scenario: Storage snapshot restore into local replica
 
-- GIVEN a snapshot restore returns a bootstrap-shaped response
-- WHEN the client accepts that restore for an app storage identity
+- GIVEN a storage snapshot restore returns a bootstrap-shaped response
+- WHEN the client accepts that restore for a matching storage identity
 - THEN the selected local replica is saved from the restored bootstrap response
-- AND later browser reads use that app storage identity's local replica
+- AND later browser reads use that storage identity's local replica
 
 ### Requirement: Stale Browser Write Handling
 

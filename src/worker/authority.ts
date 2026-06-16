@@ -6,10 +6,7 @@ import type {
 } from "../shared/protocol.ts";
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
 import { parseAuthorityApiRoute, type AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import {
-  handleArchiveAppDataRestoreDurableObjectRequest,
-  handleInstanceArchiveDurableObjectRequest,
-} from "./archive-api.ts";
+import { handleInstanceArchiveDurableObjectRequest } from "./archive-api.ts";
 import {
   ensureStorageTables,
   getChangesAfter,
@@ -211,20 +208,6 @@ export class FormlessAuthority extends DurableObject<Env> {
       const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
         this.ctx.getWebSockets(),
       );
-      const archiveAppDataRestoreResponse = await handleArchiveAppDataRestoreDurableObjectRequest(
-        request,
-        {
-          env: this.bindings,
-          identity: route.identity,
-          path: route.path,
-          storage: this.ctx.storage,
-          writes,
-        },
-      );
-
-      if (archiveAppDataRestoreResponse) {
-        return archiveAppDataRestoreResponse;
-      }
 
       const appStorageUpgradeStatusResponse =
         await handleAppStorageUpgradeStatusDurableObjectRequest({

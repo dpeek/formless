@@ -140,8 +140,7 @@ optional first app install, credential setup, and deploy operations.
   `.formless/local` state, persists local dev secrets, and mints process-scoped
   local session, gateway proxy, gateway CSRF, and sidecar tokens before the
   product instance runtime starts
-- **AND** the CLI does not create empty app archive, control-plane record
-  source, or media directories
+- **AND** the CLI does not create empty storage snapshot or media directories
 - **AND** no app install, route, deployment config, Cloudflare resource,
   Alchemy resource, provider credential, or remote instance is created
 - **AND** the workspace name defaults from the selected directory unless
@@ -150,14 +149,14 @@ optional first app install, credential setup, and deploy operations.
 #### Scenario: Start existing local workspace runtime
 
 - **WHEN** `formless dev` runs for a layout-only workspace or workspace source
-  with records and archives
+  with storage snapshots and media payloads
 - **THEN** the product instance runtime starts with workspace-local persistence
 - **AND** the CLI builds the active package resolver from bundled packages plus
   linked packages declared in `formless.packages.json` when present
 - **AND** installable package lists shown before the workspace has installed
   apps come from that active resolver
-- **AND** first-run local runtime state starts from workspace control-plane
-  record source and app archives when present
+- **AND** first-run local runtime state starts from workspace storage snapshots
+  and media payloads when present
 - **AND** the browser can complete onboarding before any Cloudflare deploy
 - **AND** before a local owner session is established, the browser can only read
   gateway status through bootstrap authorization and exchange a CLI-minted local
@@ -212,31 +211,30 @@ optional first app install, credential setup, and deploy operations.
 - **THEN** credential setup, deploy plan, and deploy apply remain available
   through the browser-owned local runtime flow
 - **AND** the deployment can publish the instance runtime with zero
-  `app-install` records and no app archive payloads
+  `app-install` records and no app storage snapshots
 - **AND** app installation remains a separate optional local Authority write
   before or after the first deploy
 
 ### Requirement: Workspace Save From Local Authority
 
 The CLI SHALL save local workspace runtime state from Authority-backed instance
-state back to reviewable workspace record source and app archives.
+state back to reviewable workspace storage snapshots and media payloads.
 
 #### Scenario: Save local workspace state
 
 - **WHEN** `formless save` runs for a local Formless workspace
 - **THEN** active installed app records, media payloads, and schema-owned
-  control-plane intent are written to deterministic workspace record source and
-  app archives
+  control-plane intent are written to deterministic workspace storage snapshots
 - **AND** browser IndexedDB state is not used as the source of truth
-- **AND** secrets are not written to `formless.json`, record source, or archive
-  files
+- **AND** secrets are not written to `formless.json`, storage snapshots, or
+  media files
 
 #### Scenario: Check workspace source
 
 - **WHEN** a user runs `formless save --check` and local Authority state differs
   from the reviewable workspace source
 - **THEN** the command fails and reports that workspace source must be refreshed
-- **AND** it does not rewrite record source or archive files
+- **AND** it does not rewrite storage snapshot or media files
 
 ### Requirement: CLI Upgrade Planning
 
@@ -324,7 +322,7 @@ while consuming Media contracts from public package subpaths.
 
 The system SHALL manage reviewable Formless workspaces whose `formless.json`
 manifests describe workspace layout and local configuration while instance
-intent lives in schema-owned record source.
+intent lives in schema-owned storage snapshots.
 
 #### Scenario: Pull and deploy dry-run
 
@@ -438,12 +436,12 @@ deployment intent records.
   control-plane state
 - **THEN** they read allowed `app-install`, `route`, and
   `deployment-config` records through the instance control-plane protocol or
-  workspace record source
+  workspace storage snapshots
 - **AND** provider credentials remain in CLI, local gateway, or runner-held
   secret locations
 - **AND** deployment observation, evidence, drift, cleanup, and status summaries
   are read through read-only deployment runtime projection or local gateway
-  operation responses rather than control-plane record source
+  operation responses rather than control-plane storage snapshots
 - **AND** latest persisted deployment status is read from display-safe
   deployment config observation cache fields
 

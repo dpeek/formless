@@ -272,9 +272,10 @@ function summarizeInitResult(
 ): WorkspaceOperationResult {
   return {
     details: {
-      archives: {
-        apps: result.manifest.archives.apps,
-        records: result.manifest.source.records,
+      state: {
+        apps: `${result.manifest.state.root}/apps`,
+        instance: `${result.manifest.state.root}/instance.json`,
+        media: result.manifest.media.root,
       },
       manifest: "formless.json",
     },
@@ -319,7 +320,7 @@ function summarizeStatusResult(
 function summarizeSaveResult(result: SaveLocalFormlessWorkspaceResult): WorkspaceOperationResult {
   return {
     details: {
-      appArchives: result.appArchives.map((archive) => ({
+      appState: result.appArchives.map((archive) => ({
         installId: archive.installId,
         mediaCount: archive.mediaCount,
         recordCount: archive.recordCount,
@@ -380,7 +381,7 @@ function summarizePullResult(
 ): WorkspaceOperationResult {
   return {
     details: {
-      appArchives: result.appArchives.map((archive) => archive.installId),
+      appState: result.appArchives.map((archive) => archive.installId),
       domainCount: result.domains.length,
       target: result.selectedTarget.alias,
     },

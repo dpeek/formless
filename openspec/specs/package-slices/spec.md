@@ -422,7 +422,7 @@ surfaces, archive execution, or workspace source.
 - GIVEN bundled source app package metadata, source schema JSON loading, source
   seed records, schema Builder UI state, generated React rendering, Authority
   table mutation, Durable Object storage, browser replica persistence, archive
-  restore execution, Workspace record source, instance control-plane schema
+  restore execution, Workspace storage snapshots, instance control-plane schema
   construction, package app migrations, or provider execution is needed
 - WHEN those behaviors are implemented
 - THEN they remain owned by their existing app, client, Worker, archive,
@@ -451,7 +451,7 @@ workspace operation contracts, and local Node filesystem adapters.
 
 - GIVEN CLI, Site runtime, Gateway runtime adapters, archive workflows, tests,
   or local agent workflows need workspace source, local state, operation, or
-  record-source behavior
+  storage snapshot behavior
 - WHEN they import the package
 - THEN they import from `@dpeek/formless-workspace` or
   `@dpeek/formless-workspace/node`
@@ -466,7 +466,7 @@ runtime storage, provider execution, or app records.
 #### Scenario: Package owns workspace contracts and local adapters
 
 - GIVEN `formless.json` manifest parsing, workspace path defaults, target URL
-  normalization, reviewable control-plane record-source file contracts, ignored
+  normalization, reviewable control-plane storage snapshot contracts, ignored
   local or secret state file contracts, semantic workspace operation inputs,
   display-safe operation state, operation result shapes, operation redaction, or
   deterministic local filesystem workspace IO are needed

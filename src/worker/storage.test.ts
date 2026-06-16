@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
   ChangeRow,
   MutationResponse,
+  StorageSnapshot,
   StoredRecord,
-  StoreSnapshot,
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
@@ -181,14 +182,14 @@ describe("storage", () => {
   });
 
   it("commits source seed records as ordered write-log changes read by sync", async () => {
-    const sourceRecords = [
+    const sourceSnapshotRecords = [
       record("seed-task-1", "Seed one", { createdAt: "2026-05-28T00:00:01.000Z" }),
       record("seed-task-2", "Seed two", { createdAt: "2026-05-28T00:00:02.000Z" }),
     ];
 
     await postJson("/source-seed", {
       changeMutationPrefix: "seed-task",
-      records: sourceRecords,
+      records: sourceSnapshotRecords,
     });
     const initialSync = await getJson<SyncResponse>("/sync?after=0");
 
@@ -208,7 +209,7 @@ describe("storage", () => {
       "seed-task:seed-task-2",
     ]);
     expect(initialSync.changes.map((change) => change.op)).toEqual(["create", "create"]);
-    expect(initialSync.changes.map((change) => change.payload)).toEqual(sourceRecords);
+    expect(initialSync.changes.map((change) => change.payload)).toEqual(sourceSnapshotRecords);
     expect(catchUp).toEqual({
       changes: [initialSync.changes[1]],
       cursor: 2,
@@ -596,7 +597,7 @@ describe("storage", () => {
     expect(await getJson<ChangeRow[]>("/changes?after=0")).toHaveLength(1);
   });
 
-  it("exports the active store as a schema-keyed snapshot", async () => {
+  it("exports the active store as a storage snapshot", async () => {
     const schema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
     const completed = await createRecord("mutation-1", "Done", true);
     await postJson<ActionResponse>("/tombstone-records", {
@@ -604,11 +605,12 @@ describe("storage", () => {
       recordIds: [completed.record.id],
     });
 
-    const snapshot = await getJson<StoreSnapshot>("/snapshot");
+    const snapshot = await getJson<StorageSnapshot>("/snapshot");
 
     expect(snapshot).toMatchObject({
-      kind: "formless.storeSnapshot",
+      kind: STORAGE_SNAPSHOT_KIND,
       version: 1,
+      storageIdentity: "tasks",
       schemaKey: "tasks",
       exportedAt: expect.any(String),
       schemaUpdatedAt: schema.updatedAt,
@@ -700,7 +702,7 @@ describe("storage", () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: `Store snapshot includes duplicate record id "${existing.record.id}".`,
+      error: `Storage snapshot includes duplicate record id "${existing.record.id}".`,
     });
     expect(await getJson<{ schema: AppSchema; updatedAt: string }>("/schema")).toEqual(
       beforeSchema,
@@ -875,10 +877,11 @@ function packageMigrationRecords(): StoredRecord[] {
   ];
 }
 
-function snapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function snapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: "formless.storeSnapshot",
-    version: 1,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "tasks",
     schemaKey: "tasks",
     exportedAt: "2026-04-28T00:00:00.000Z",
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
@@ -1294,7 +1297,7 @@ async function writeStorageHarness() {
           }
 
           if (request.method === "GET" && url.pathname === "/snapshot") {
-            return Response.json(exportStorageSnapshot(this.ctx.storage, "tasks"));
+            return Response.json(exportStorageSnapshot(this.ctx.storage, "tasks", "tasks"));
           }
 
           if (request.method === "GET" && url.pathname === "/action-response") {

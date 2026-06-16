@@ -14,10 +14,10 @@ export const INSTANCE_WORKSPACE_MANIFEST_VERSION = 1;
 export const INSTANCE_WORKSPACE_KIND = "formless-instance-workspace";
 export const DEFAULT_INSTANCE_WORKSPACE_TARGET_ALIAS = "remote";
 export const DEFAULT_INSTANCE_WORKSPACE_ARCHIVE_ROOT = "archives";
-export const DEFAULT_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH = "archives/instance";
-export const DEFAULT_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT = "archives/apps";
-export const DEFAULT_INSTANCE_WORKSPACE_RECORD_SOURCE_PATH = "records/instance-control-plane";
-export const DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT = "media";
+export const DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT = "state";
+export const DEFAULT_INSTANCE_WORKSPACE_INSTANCE_STATE_PATH = "state/instance.json";
+export const DEFAULT_INSTANCE_WORKSPACE_APP_STATE_ROOT = "state/apps";
+export const DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT = "state/media";
 export const DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT = ".formless/local";
 export const DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT = ".formless";
 
@@ -731,10 +731,9 @@ export type InstanceWorkspaceManifest = {
   version: typeof INSTANCE_WORKSPACE_MANIFEST_VERSION;
   kind: typeof INSTANCE_WORKSPACE_KIND;
   name: string;
-  source: InstanceWorkspaceSource;
+  state: InstanceWorkspaceState;
   defaultTarget?: string;
   targets: InstanceWorkspaceTarget[];
-  archives: InstanceWorkspaceArchives;
   media: InstanceWorkspaceMedia;
   local: InstanceWorkspaceLocalState;
   defaultAppPolicy: InstanceWorkspaceDefaultAppPolicy;
@@ -746,9 +745,9 @@ export type FormatInstanceWorkspaceManifestInput = Pick<
   InstanceWorkspaceManifest,
   "kind" | "name" | "version"
 > &
-  Partial<Omit<InstanceWorkspaceManifest, "archives" | "kind" | "local" | "name" | "version">> & {
-    archives?: Partial<InstanceWorkspaceArchives>;
+  Partial<Omit<InstanceWorkspaceManifest, "kind" | "local" | "name" | "state" | "version">> & {
     local?: Partial<InstanceWorkspaceLocalState>;
+    state?: Partial<InstanceWorkspaceState>;
   };
 
 export type InstanceWorkspaceTarget = {
@@ -756,13 +755,8 @@ export type InstanceWorkspaceTarget = {
   url: string;
 };
 
-export type InstanceWorkspaceSource = {
-  records: string;
-};
-
-export type InstanceWorkspaceArchives = {
-  instance: string;
-  apps: string;
+export type InstanceWorkspaceState = {
+  root: string;
 };
 
 export type InstanceWorkspaceMedia = {

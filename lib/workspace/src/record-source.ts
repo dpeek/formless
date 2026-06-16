@@ -12,7 +12,6 @@ import type {
   InstanceWorkspaceControlPlaneRecordSourceControlPlane,
   InstanceWorkspaceControlPlaneRecordSourceEntity,
   InstanceWorkspaceControlPlaneRecordSourceFile,
-  InstanceWorkspaceManifest,
   InstanceWorkspaceRecordValues,
   InstanceWorkspaceStoredRecord,
 } from "./types.ts";
@@ -108,13 +107,6 @@ const controlPlaneEntitySpecs: Record<InstanceWorkspaceControlPlaneRecordSourceE
       unique: [["targetId"]],
     },
   };
-
-export function instanceWorkspaceControlPlaneRecordSourceRelativePath(
-  manifest: InstanceWorkspaceManifest,
-  entity: InstanceWorkspaceControlPlaneRecordSourceEntity,
-): string {
-  return `${manifest.source.records}/${instanceWorkspaceControlPlaneRecordSourceFileName(entity)}`;
-}
 
 export function instanceWorkspaceControlPlaneRecordSourceFileName(
   entity: InstanceWorkspaceControlPlaneRecordSourceEntity,

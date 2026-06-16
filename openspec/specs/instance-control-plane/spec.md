@@ -15,7 +15,7 @@ deployment history, and provider resource truth stay outside those records.
 
 The system SHALL model owner-authored instance management intent as
 schema-owned control-plane records while keeping deployment execution history
-outside control-plane source records.
+outside reviewable control-plane storage snapshots.
 
 #### Scenario: Control-plane records
 
@@ -278,43 +278,37 @@ The system SHALL represent deploy target and provider selection as one
 The system SHALL use schema-owned instance control-plane records as the
 canonical source for workspace-authored instance intent.
 
-#### Scenario: Save control-plane records to workspace source
+#### Scenario: Save control-plane records to workspace state
 
 - **WHEN** local Authority control-plane state is saved to workspace source
 - **THEN** `app-install`, `route`, and `deployment-config` records are written
-  as schema-owned record source
-- **AND** enabled `deployment-config` source records include the display-safe
+  to the schema-owned `state/instance.json` storage snapshot
+- **AND** enabled `deployment-config` records include the display-safe
   deployed HTTP origin in `targetUrl`
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:app-install` and
   `instance:route`
-- **AND** the default workspace record source root is
-  `records/instance-control-plane`
-- **AND** record source under that root is stored as one deterministic JSON file
-  per supported entity: `app-install.json`, `route.json`, and
-  `deployment-config.json`
-- **AND** each file declares kind
-  `formless.instanceControlPlaneRecordSource`, version `1`, schema key
-  `instance-control-plane`, a `schemaUpdatedAt` timestamp, the qualified
-  entity name, and records for only that entity
+- **AND** `state/instance.json` declares kind `formless.storageSnapshot`,
+  version `1`, storage identity `instance:control-plane`, schema key
+  `instance-control-plane`, schema metadata, source cursor, and records
 - **AND** `formless.json` does not duplicate those records as app, route,
   domain, or deploy intent
 - **AND** `deploy-target`, `provider-config-ref`,
   `deploy-desired-resource`, `deploy-attempt`, `deploy-evidence-summary`, and
   `deploy-drift-report` records are not written as workspace source
 - **AND** runtime-observed deployment cache fields on `deployment-config`
-  records are omitted from reviewable workspace source
+  records are omitted from reviewable workspace storage state
 
-#### Scenario: Restore control-plane records from workspace source
+#### Scenario: Restore control-plane records from workspace state
 
 - **WHEN** local dev, push, or deploy composes runtime state from workspace
   source
-- **THEN** control-plane record source is restored through the
+- **THEN** the control-plane storage snapshot is restored through the
   `instance:control-plane` Authority storage identity
 - **AND** Authority validation rejects invalid references, immutable field
   changes, route conflicts, secret values, and unsupported control-plane
   entities before behavior changes
-- **AND** workspace source containing runtime-observed deployment cache fields is
+- **AND** workspace state containing runtime-observed deployment cache fields is
   rejected or stripped before restore
 
 ### Requirement: Browser-Owned Instance Intent

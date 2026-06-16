@@ -26,11 +26,7 @@ import {
 } from "../shared/app-installs.ts";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
-import {
-  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-  formatInstanceControlPlaneBoundaryEntityName,
-  isInstanceControlPlaneEntityName,
-} from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
@@ -40,16 +36,12 @@ import {
   isRestorableImageMediaKey,
   type MediaAsset,
 } from "@dpeek/formless-media";
-import type { AppInstallsResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
-import type { DeployControlPlaneRecord } from "@dpeek/formless-deploy/client";
+import type { AppInstallsResponse, StorageSnapshot, StoredRecord } from "../shared/protocol.ts";
 import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
-import {
-  readFormlessInstanceTargetStatus,
-  readOptionalFormlessInstanceControlPlaneRecords,
-} from "./instance-target-client.ts";
+import { readFormlessInstanceTargetStatus } from "./instance-target-client.ts";
 import {
   isLegacySiteMediaHref,
   unsupportedLegacySiteMediaMessage,
@@ -118,7 +110,7 @@ export async function exportInstanceArchive(
   const auth = { adminToken: input.adminToken, env: dependencies.env };
   const registry = await fetchRemoteAppRegistry(target, { ...dependencies, ...auth });
   const [controlPlane, entries] = await Promise.all([
-    fetchRemoteControlPlaneArchive({ auth, exportedAt, fetcher: dependencies.fetch, target }),
+    fetchRemoteControlPlaneArchive({ auth, fetcher: dependencies.fetch, target }),
     Promise.all(
       registry.installs.map((install) =>
         buildRemoteAppArchiveEntry({
@@ -151,87 +143,17 @@ export async function exportInstanceArchive(
 
 async function fetchRemoteControlPlaneArchive(input: {
   auth?: ArchiveExportAuth;
-  exportedAt: string;
   fetcher: typeof fetch;
   target: string;
 }): Promise<InstanceArchiveControlPlane | undefined> {
-  const controlPlane = await readOptionalFormlessInstanceControlPlaneRecords(
-    {
-      adminToken: archiveExportAdminToken(input.auth),
-      actorKind: "cliDeployer",
-      targetUrl: input.target,
-    },
-    { fetch: input.fetcher },
+  return fetchJson<StorageSnapshot>(
+    input.fetcher,
+    apiUrl(
+      input.target,
+      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot?actorKind=cliDeployer`,
+    ),
+    { headers: archiveExportRequestHeaders(input.auth, "application/json") },
   );
-
-  if (!controlPlane) {
-    return undefined;
-  }
-
-  return {
-    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-    schemaUpdatedAt: input.exportedAt,
-    records: controlPlane.records
-      .map((record) => storedControlPlaneRecordFromRemote(record, input.exportedAt))
-      .filter((record): record is StoredRecord => record !== undefined),
-  };
-}
-
-function storedControlPlaneRecordFromRemote(
-  record: DeployControlPlaneRecord,
-  exportedAt: string,
-): StoredRecord | undefined {
-  if (record.deletedAt !== undefined) {
-    return undefined;
-  }
-
-  return {
-    id: record.id,
-    entity: record.entity,
-    values: storedControlPlaneRecordValues(record),
-    createdAt:
-      record.createdAt ??
-      stringValue(record.values.createdAt) ??
-      record.updatedAt ??
-      stringValue(record.values.updatedAt) ??
-      exportedAt,
-  };
-}
-
-function storedControlPlaneRecordValues(record: DeployControlPlaneRecord): StoredRecord["values"] {
-  const values: StoredRecord["values"] = {};
-
-  for (const [fieldName, value] of Object.entries(record.values)) {
-    if (value === undefined) {
-      continue;
-    }
-
-    if (
-      typeof value !== "string" &&
-      typeof value !== "boolean" &&
-      !(typeof value === "number" && Number.isFinite(value))
-    ) {
-      throw new Error(
-        `Remote control-plane record "${record.id}" field "${remoteControlPlaneFieldLabel(record.entity, fieldName)}" is not archiveable.`,
-      );
-    }
-
-    values[fieldName] = value;
-  }
-
-  return values;
-}
-
-function remoteControlPlaneFieldLabel(entityName: string, fieldName: string): string {
-  const boundaryEntityName = isInstanceControlPlaneEntityName(entityName)
-    ? formatInstanceControlPlaneBoundaryEntityName(entityName)
-    : entityName;
-
-  return `${boundaryEntityName}.${fieldName}`;
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function instanceArchiveCapabilities(
@@ -449,7 +371,7 @@ async function buildRemoteAppArchiveEntry(input: {
     input.install.sourceSchemaHash ??
     registryPackage?.sourceSchemaHash ??
     packageApp?.sourceSchemaHash;
-  const snapshot = await fetchJson<StoreSnapshot>(
+  const snapshot = await fetchJson<StorageSnapshot>(
     input.fetcher,
     apiUrl(input.target, appApiPath(input.install, "/snapshot")),
     { headers: archiveExportRequestHeaders(input.auth, "application/json") },
@@ -489,10 +411,7 @@ async function buildRemoteAppArchiveEntry(input: {
       createdAt: input.install.createdAt,
       updatedAt: input.install.updatedAt,
     },
-    data: {
-      kind: "storeSnapshot",
-      snapshot,
-    },
+    data: snapshot,
     media: {
       objects: media.objects,
     },
@@ -739,6 +658,8 @@ function retargetAppArchive(archive: AppArchive, installId: string): AppArchive 
   }
 
   nextArchive.app.installId = nextIdentity.installId;
+
+  nextArchive.data.storageIdentity = nextIdentity.authorityName;
 
   return nextArchive;
 }

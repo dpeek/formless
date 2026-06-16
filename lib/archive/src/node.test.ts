@@ -5,14 +5,14 @@ import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
+  APP_ARCHIVE_KIND,
   PORTABLE_ARCHIVE_MANIFEST_FILE,
   readPortableArchiveDirectory,
   writePortableArchiveDirectory,
   type AppArchive,
 } from "./node.ts";
-import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../../../src/shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../../../src/shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
 import { siteSourceSchema } from "../../../src/test/schema-apps.ts";
 
@@ -82,17 +82,15 @@ function appArchive(byteSize: number): AppArchive {
       updatedAt: "2026-05-23T00:00:00.000Z",
     },
     data: {
-      kind: "storeSnapshot",
-      snapshot: {
-        kind: STORE_SNAPSHOT_KIND,
-        version: STORE_SNAPSHOT_VERSION,
-        schemaKey: "site",
-        exportedAt: "2026-05-23T00:00:00.000Z",
-        schemaUpdatedAt: "2026-05-23T00:00:00.000Z",
-        sourceCursor: 0,
-        schema: siteSourceSchema,
-        records: [],
-      },
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:site",
+      schemaKey: "site",
+      exportedAt: "2026-05-23T00:00:00.000Z",
+      schemaUpdatedAt: "2026-05-23T00:00:00.000Z",
+      sourceCursor: 0,
+      schema: siteSourceSchema,
+      records: [],
     },
     media: {
       objects: [

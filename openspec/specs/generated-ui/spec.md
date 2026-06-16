@@ -69,7 +69,7 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **WHEN** settings render
 - **THEN** sync status, a profile-exposed Schema link, and source seed reset are
   available where supported
-- **AND** legacy store snapshot Export or Restore controls are not shown
+- **AND** legacy storage snapshot Export or Restore controls are not shown
 - **AND** portable archive backup, restore, or import controls are not shown
 
 #### Scenario: Instance management provider actions

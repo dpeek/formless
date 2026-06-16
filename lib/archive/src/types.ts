@@ -4,23 +4,23 @@
 import { validateAppInstallId } from "../../../src/shared/app-installs.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   formatInstanceControlPlaneBoundaryEntityName,
   type InstanceControlPlaneEntityName,
   isInstanceControlPlaneEntityName,
   instanceControlPlaneSchema,
-  parseInstanceControlPlaneBoundaryEntityName,
 } from "../../../src/shared/instance-control-plane.ts";
 import {
-  parseStoreSnapshot,
+  STORAGE_SNAPSHOT_KIND,
+  parseStorageSnapshot,
   type RecordValues,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type StoredRecord,
 } from "../../../src/shared/protocol.ts";
 import {
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
   isValidStoredFieldValue,
-  parseAppSchema,
   type AppSchema,
   type FieldSchema,
 } from "@dpeek/formless-schema";
@@ -39,7 +39,6 @@ export const archiveCapabilities = [
   "installed-app-registry",
   "schema-owned-control-plane",
   "app-store-snapshots",
-  "source-records",
   "core-media-assets",
 ] as const;
 
@@ -64,27 +63,9 @@ export type ArchivedAppInstall = {
   updatedAt: string;
 };
 
-export type SourceArchiveRecord = {
-  id: string;
-  entity: string;
-  values: RecordValues;
-  createdAt: string;
-};
+export type AppArchiveStorageSnapshotData = StorageSnapshot;
 
-export type AppArchiveStoreSnapshotData = {
-  kind: "storeSnapshot";
-  snapshot: StoreSnapshot;
-};
-
-export type AppArchiveSourceRecordsData = {
-  kind: "sourceRecords";
-  schemaKey: string;
-  schemaUpdatedAt: string;
-  schema: AppSchema;
-  records: SourceArchiveRecord[];
-};
-
-export type AppArchiveData = AppArchiveStoreSnapshotData | AppArchiveSourceRecordsData;
+export type AppArchiveData = AppArchiveStorageSnapshotData;
 
 export type AppArchiveMediaObject = {
   asset?: MediaAsset;
@@ -110,11 +91,7 @@ export type AppArchive = {
   media: AppArchiveMediaManifest;
 };
 
-export type InstanceArchiveControlPlane = {
-  schemaKey: typeof INSTANCE_CONTROL_PLANE_SCHEMA_KEY;
-  schemaUpdatedAt: string;
-  records: StoredRecord[];
-};
+export type InstanceArchiveControlPlane = StorageSnapshot;
 
 export type InstanceArchive = {
   kind: typeof INSTANCE_ARCHIVE_KIND;
@@ -238,7 +215,10 @@ function parseAppArchiveAt(context: string, value: unknown): AppArchive {
     capabilities: parseCapabilities(`${context} capabilities`, object.capabilities),
     restorePolicy: parseRestorePolicy(`${context} restorePolicy`, object.restorePolicy),
     app,
-    data: parseAppArchiveData(`${context} data`, object.data, app.sourceSchemaKey),
+    data: parseAppArchiveData(`${context} data`, object.data, {
+      schemaKey: app.sourceSchemaKey,
+      storageIdentity: `app:${app.installId}`,
+    }),
     media: parseMediaManifest(`${context} media`, object.media),
   };
 }
@@ -288,61 +268,15 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
 export function parseAppArchiveData(
   context: string,
   value: unknown,
-  expectedSchemaKey: string,
+  expected: { schemaKey: string; storageIdentity?: string },
 ): AppArchiveData {
   const object = parseObject(context, value);
 
-  if (object.kind === "storeSnapshot") {
-    assertExactKeys(context, object, ["kind", "snapshot"]);
-
-    const snapshot = parseStoreSnapshot(object.snapshot, expectedSchemaKey);
-
-    return {
-      kind: "storeSnapshot",
-      snapshot,
-    };
+  if (object.kind === STORAGE_SNAPSHOT_KIND) {
+    return parseStorageSnapshot(object, expected);
   }
 
-  if (object.kind === "sourceRecords") {
-    assertExactKeys(context, object, ["kind", "schemaKey", "schemaUpdatedAt", "schema", "records"]);
-
-    const schemaKey = parseTrimmedNonEmptyString(`${context} schemaKey`, object.schemaKey);
-
-    if (schemaKey !== expectedSchemaKey) {
-      throw new Error(`${context} schemaKey must be "${expectedSchemaKey}".`);
-    }
-
-    return {
-      kind: "sourceRecords",
-      schemaKey,
-      schemaUpdatedAt: parseIsoTimestamp(`${context} schemaUpdatedAt`, object.schemaUpdatedAt),
-      schema: parseAppSchema(object.schema),
-      records: parseSourceRecords(`${context} records`, object.records),
-    };
-  }
-
-  throw new Error(`${context} kind must be "storeSnapshot" or "sourceRecords".`);
-}
-
-function parseSourceRecords(context: string, value: unknown): SourceArchiveRecord[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${context} must be an array.`);
-  }
-
-  return value.map((record, index) => parseSourceRecord(`${context}[${index}]`, record));
-}
-
-function parseSourceRecord(context: string, value: unknown): SourceArchiveRecord {
-  const object = parseObject(context, value);
-
-  assertExactKeys(context, object, ["id", "entity", "values", "createdAt"]);
-
-  return {
-    id: parseNonEmptyString(`${context} id`, object.id),
-    entity: parseNonEmptyString(`${context} entity`, object.entity),
-    values: parseRecordValues(`${context} values`, object.values),
-    createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
-  };
+  throw new Error(`${context} kind must be "${STORAGE_SNAPSHOT_KIND}".`);
 }
 
 function parseMediaManifest(context: string, value: unknown): AppArchiveMediaManifest {
@@ -381,63 +315,14 @@ function parseInstanceArchiveControlPlane(
   context: string,
   value: unknown,
 ): InstanceArchiveControlPlane {
-  const object = parseObject(context, value);
-
-  assertExactKeys(context, object, ["schemaKey", "schemaUpdatedAt", "records"]);
-
-  if (object.schemaKey !== INSTANCE_CONTROL_PLANE_SCHEMA_KEY) {
-    throw new Error(`${context} schemaKey must be "${INSTANCE_CONTROL_PLANE_SCHEMA_KEY}".`);
-  }
-
-  return {
+  const snapshot = parseStorageSnapshot(value, {
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-    schemaUpdatedAt: parseIsoTimestamp(`${context} schemaUpdatedAt`, object.schemaUpdatedAt),
-    records: parseInstanceArchiveControlPlaneRecords(`${context} records`, object.records),
-  };
-}
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  });
 
-function parseInstanceArchiveControlPlaneRecords(context: string, value: unknown): StoredRecord[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${context} must be an array.`);
-  }
+  validateInstanceArchiveControlPlaneRecords(`${context} records`, snapshot.records);
 
-  const records = value.map((record, index) =>
-    parseInstanceArchiveControlPlaneRecord(`${context}[${index}]`, record),
-  );
-
-  validateInstanceArchiveControlPlaneRecords(context, records);
-
-  return records;
-}
-
-function parseInstanceArchiveControlPlaneRecord(context: string, value: unknown): StoredRecord {
-  const object = parseObject(context, value);
-
-  assertExactKeys(context, object, [
-    "id",
-    "entity",
-    "values",
-    "createdAt",
-    ...("deletedAt" in object ? ["deletedAt"] : []),
-  ]);
-
-  const id = parseNonEmptyString(`${context} id`, object.id);
-  const entity = parseInstanceArchiveControlPlaneEntity(
-    `${context} record "${id}" entity`,
-    object.entity,
-  );
-
-  const record = {
-    id,
-    entity,
-    values: parseRecordValues(`${context} values`, object.values),
-    createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
-    ...(object.deletedAt === undefined
-      ? {}
-      : { deletedAt: parseIsoTimestamp(`${context} deletedAt`, object.deletedAt) }),
-  };
-
-  return record;
+  return snapshot;
 }
 
 function validateInstanceArchiveControlPlaneRecords(context: string, records: StoredRecord[]) {
@@ -692,7 +577,7 @@ function parseInstanceArchiveControlPlaneEntity(
     return entity;
   }
 
-  return parseInstanceControlPlaneBoundaryEntityName(context, entity);
+  throw new Error(`${context} "${entity}" is not an instance control-plane entity.`);
 }
 
 function controlPlaneEntityLabel(entityName: string): string {
@@ -847,21 +732,6 @@ function parseCapabilities(context: string, value: unknown): ArchiveCapability[]
   });
 }
 
-function parseRecordValues(context: string, value: unknown): RecordValues {
-  const object = parseObject(context, value);
-  const values: RecordValues = {};
-
-  for (const [fieldName, fieldValue] of Object.entries(object)) {
-    if (!isFieldValue(fieldValue)) {
-      throw new Error(`${context}.${fieldName} must be a string, boolean, or finite number.`);
-    }
-
-    values[fieldName] = fieldValue;
-  }
-
-  return values;
-}
-
 function parseObject(context: string, value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${context} must be an object.`);
@@ -968,14 +838,6 @@ function parseRelativeKey(context: string, value: unknown): string {
   return key;
 }
 
-function isFieldValue(value: unknown): value is RecordValues[string] {
-  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
   return {
     kind: INSTANCE_ARCHIVE_KIND,
@@ -995,12 +857,21 @@ function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
 function canonicalInstanceArchiveControlPlane(
   controlPlane: InstanceArchiveControlPlane,
 ): InstanceArchiveControlPlane {
+  const snapshot = parseStorageSnapshot(controlPlane, {
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  });
+
   return {
-    schemaKey: controlPlane.schemaKey,
-    schemaUpdatedAt: controlPlane.schemaUpdatedAt,
-    records: controlPlane.records
-      .map(canonicalInstanceArchiveControlPlaneRecord)
-      .sort(compareRecords),
+    kind: snapshot.kind,
+    version: snapshot.version,
+    storageIdentity: snapshot.storageIdentity,
+    schemaKey: snapshot.schemaKey,
+    exportedAt: snapshot.exportedAt,
+    schemaUpdatedAt: snapshot.schemaUpdatedAt,
+    sourceCursor: snapshot.sourceCursor,
+    schema: stableValue(snapshot.schema) as AppSchema,
+    records: snapshot.records.map(canonicalInstanceArchiveControlPlaneRecord).sort(compareRecords),
   };
 }
 
@@ -1017,7 +888,7 @@ function canonicalInstanceArchiveControlPlaneRecord(record: StoredRecord): Store
 
   return {
     ...canonical,
-    entity: formatInstanceControlPlaneBoundaryEntityName(entity),
+    entity,
   };
 }
 
@@ -1074,26 +945,14 @@ function canonicalArchivedAppInstall(app: ArchivedAppInstall): ArchivedAppInstal
 }
 
 function canonicalAppArchiveData(data: AppArchiveData): AppArchiveData {
-  if (data.kind === "storeSnapshot") {
-    return {
-      kind: "storeSnapshot",
-      snapshot: canonicalStoreSnapshot(data.snapshot),
-    };
-  }
-
-  return {
-    kind: "sourceRecords",
-    schemaKey: data.schemaKey,
-    schemaUpdatedAt: data.schemaUpdatedAt,
-    schema: stableValue(data.schema) as AppSchema,
-    records: canonicalSourceRecords(data.records),
-  };
+  return canonicalStorageSnapshot(data);
 }
 
-function canonicalStoreSnapshot(snapshot: StoreSnapshot): StoreSnapshot {
+function canonicalStorageSnapshot(snapshot: StorageSnapshot): StorageSnapshot {
   return {
     kind: snapshot.kind,
     version: snapshot.version,
+    storageIdentity: snapshot.storageIdentity,
     schemaKey: snapshot.schemaKey,
     exportedAt: snapshot.exportedAt,
     schemaUpdatedAt: snapshot.schemaUpdatedAt,
@@ -1107,10 +966,6 @@ function canonicalStoredRecords(records: StoredRecord[]): StoredRecord[] {
   return [...records].map(canonicalStoredRecord).sort(compareRecords);
 }
 
-function canonicalSourceRecords(records: SourceArchiveRecord[]): SourceArchiveRecord[] {
-  return [...records].map(canonicalSourceRecord).sort(compareRecords);
-}
-
 function canonicalStoredRecord(record: StoredRecord): StoredRecord {
   return {
     id: record.id,
@@ -1118,15 +973,6 @@ function canonicalStoredRecord(record: StoredRecord): StoredRecord {
     values: canonicalRecordValues(record.values),
     createdAt: record.createdAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
-  };
-}
-
-function canonicalSourceRecord(record: SourceArchiveRecord): SourceArchiveRecord {
-  return {
-    id: record.id,
-    entity: record.entity,
-    values: canonicalRecordValues(record.values),
-    createdAt: record.createdAt,
   };
 }
 

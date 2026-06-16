@@ -32,7 +32,7 @@ import {
   type EntityName,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type SyncResponse,
   type SyncSocketClientMessage,
   type SyncSocketServerMessage,
@@ -137,13 +137,16 @@ export async function saveActiveSchema(
   return response;
 }
 
-export async function exportStoreSnapshot(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+export async function exportStorageSnapshot(
+  target: ClientAppTarget,
+  fetcher: typeof fetch = fetch,
+) {
   const identity = appStorageIdentityForClientTarget(target);
 
-  return fetchJson<StoreSnapshot>(fetcher, apiPath(identity, "snapshot"));
+  return fetchJson<StorageSnapshot>(fetcher, apiPath(identity, "snapshot"));
 }
 
-export async function restoreStoreSnapshot(
+export async function restoreStorageSnapshot(
   target: ClientAppTarget,
   snapshot: unknown,
   fetcher: typeof fetch = fetch,

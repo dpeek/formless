@@ -11,7 +11,7 @@ import {
 } from "@dpeek/formless-workspace";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
-  readInstanceWorkspaceControlPlaneRecordSource,
+  readInstanceWorkspaceControlPlaneStorageSnapshot,
   readInstanceWorkspaceSecretState,
   type InstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
@@ -270,7 +270,7 @@ async function resolveSiteCliWorkspaceTarget(input: {
   targetAlias: string | null | undefined;
   workspaceRoot: string;
 }): Promise<InstanceWorkspaceTarget | undefined> {
-  const controlPlane = await readInstanceWorkspaceControlPlaneRecordSource({
+  const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });

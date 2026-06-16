@@ -13,12 +13,12 @@ import {
 import {
   applySyncResponse,
   bootstrapClient,
-  exportStoreSnapshot,
+  exportStorageSnapshot,
   fetchActiveSchema,
   resetSeedData,
   resetSourceSchema,
   requestSync,
-  restoreStoreSnapshot,
+  restoreStorageSnapshot,
   saveActiveSchema,
   startPushSync,
   submitOperation,
@@ -30,8 +30,8 @@ import {
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
 } from "../shared/protocol.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
@@ -40,7 +40,7 @@ import type {
   ChangeRow,
   SchemaResponse,
   SchemaUpdateResponse,
-  StoreSnapshot,
+  StorageSnapshot,
   StoredRecord,
   SyncSocketClientMessage,
   SyncSocketServerMessage,
@@ -1023,16 +1023,16 @@ describe("client sync", () => {
       );
     });
 
-    const exported = await exportStoreSnapshot(
+    const exported = await exportStorageSnapshot(
       work,
       jsonFetcher(
         "/api/app-installs/tasks/work/snapshot",
-        storeSnapshot({ records: [tombstone], sourceCursor: 4 }),
+        storageSnapshot({ records: [tombstone], sourceCursor: 4, storageIdentity: "app:work" }),
       ),
     );
-    const restored = await restoreStoreSnapshot(
+    const restored = await restoreStorageSnapshot(
       work,
-      storeSnapshot({ records: [restoredRecord], sourceCursor: 4 }),
+      storageSnapshot({ records: [restoredRecord], sourceCursor: 4, storageIdentity: "app:work" }),
       async (input, init) => {
         expect(input).toBe("/api/app-installs/tasks/work/snapshot/restore");
         expect(init?.method).toBe("POST");
@@ -1151,22 +1151,24 @@ describe("client sync", () => {
       );
     });
 
-    const exported = await exportStoreSnapshot(
+    const exported = await exportStorageSnapshot(
       rates,
       jsonFetcher(
         "/api/app-installs/crm/rates/snapshot",
-        storeSnapshot({
+        storageSnapshot({
           schemaKey: "crm",
+          storageIdentity: "app:rates",
           schema: rateCardSchema,
           records: [actionRate],
           sourceCursor: 4,
         }),
       ),
     );
-    const restored = await restoreStoreSnapshot(
+    const restored = await restoreStorageSnapshot(
       rates,
-      storeSnapshot({
+      storageSnapshot({
         schemaKey: "crm",
+        storageIdentity: "app:rates",
         schema: rateCardSchema,
         records: [restoredRate],
         sourceCursor: 4,
@@ -1342,13 +1344,13 @@ describe("client sync", () => {
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
   });
 
-  it("exports store snapshots from the schema-keyed authority", async () => {
-    const snapshot = storeSnapshot({
+  it("exports storage snapshots from the schema-keyed authority", async () => {
+    const snapshot = storageSnapshot({
       records: [record("record-1", "First")],
       sourceCursor: 3,
     });
 
-    const response = await exportStoreSnapshot(
+    const response = await exportStorageSnapshot(
       "tasks",
       jsonFetcher("/api/tasks/snapshot", snapshot),
     );
@@ -1356,14 +1358,15 @@ describe("client sync", () => {
     expect(response).toEqual(snapshot);
   });
 
-  it("exports store snapshots from an installed app authority", async () => {
-    const snapshot = storeSnapshot({
+  it("exports storage snapshots from an installed app authority", async () => {
+    const snapshot = storageSnapshot({
       schemaKey: "site",
+      storageIdentity: "app:personal",
       records: [record("record-1", "Personal")],
       sourceCursor: 3,
     });
 
-    const response = await exportStoreSnapshot(
+    const response = await exportStorageSnapshot(
       installedSiteIdentity("personal"),
       jsonFetcher("/api/app-installs/site/personal/snapshot", snapshot),
     );
@@ -1371,10 +1374,10 @@ describe("client sync", () => {
     expect(response).toEqual(snapshot);
   });
 
-  it("restores store snapshots and replaces the selected local replica", async () => {
+  it("restores storage snapshots and replaces the selected local replica", async () => {
     const restoredRecord = record("record-2", "Restored");
     const restoredSchema = schemaWithSummary();
-    const requestSnapshot = storeSnapshot({
+    const requestSnapshot = storageSnapshot({
       records: [restoredRecord],
       schema: restoredSchema,
     });
@@ -1387,7 +1390,7 @@ describe("client sync", () => {
     });
     await refreshClientStoreFromDb("tasks");
 
-    const response = await restoreStoreSnapshot("tasks", requestSnapshot, async (input, init) => {
+    const response = await restoreStorageSnapshot("tasks", requestSnapshot, async (input, init) => {
       expect(input).toBe("/api/tasks/snapshot/restore");
       expect(init?.method).toBe("POST");
       expect(parsePlainRequestBody(init?.body)).toEqual(requestSnapshot);
@@ -1424,13 +1427,13 @@ describe("client sync", () => {
     await refreshClientStoreFromDb("tasks");
 
     try {
-      await restoreStoreSnapshot("tasks", storeSnapshot(), async () =>
-        Response.json({ error: 'Store snapshot schemaKey must be "tasks".' }, { status: 400 }),
+      await restoreStorageSnapshot("tasks", storageSnapshot(), async () =>
+        Response.json({ error: 'Storage snapshot schemaKey must be "tasks".' }, { status: 400 }),
       );
       throw new Error("Expected restore to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe('Store snapshot schemaKey must be "tasks".');
+      expect((error as Error).message).toBe('Storage snapshot schemaKey must be "tasks".');
     }
 
     const snapshot = await readLocalSnapshot("tasks");
@@ -1882,10 +1885,11 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
   };
 }
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "tasks",
     schemaKey: "tasks",
     exportedAt: "2026-04-28T00:01:00.000Z",
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",

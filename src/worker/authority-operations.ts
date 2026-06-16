@@ -7,7 +7,7 @@ import {
   type BootstrapResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
@@ -38,7 +38,7 @@ import {
 import {
   validateSchemaUpdateRequest,
   validateSourceSchemaReset,
-  validateStoreSnapshotRestore,
+  validateStorageSnapshotRestore,
 } from "./authority-validation.ts";
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
@@ -148,7 +148,7 @@ export type AuthorityOperationResponseBody =
   | SchemaResponse
   | SchemaUpdateResponse
   | SitePageTreeResponse
-  | StoreSnapshot
+  | StorageSnapshot
   | SyncResponse;
 
 export type AuthorityOperationResult = {
@@ -287,7 +287,7 @@ export function executeAuthorityOperation(
       initializeStorageFromSource(input.storage, input.source);
 
       return {
-        body: exportStorageSnapshot(input.storage, input.app.key),
+        body: exportStorageSnapshot(input.storage, input.identity.authorityName, input.app.key),
       };
     }
 
@@ -353,7 +353,10 @@ export function executeAuthorityOperation(
     }
 
     case "restoreSnapshot": {
-      const snapshot = validateStoreSnapshotRestore(input.body, input.app.key);
+      const snapshot = validateStorageSnapshotRestore(input.body, {
+        schemaKey: input.app.key,
+        storageIdentity: input.identity.authorityName,
+      });
 
       return writeOperationResult(
         input.writes.apply(() => restoreStorageSnapshotOutcome(input.storage, snapshot)),

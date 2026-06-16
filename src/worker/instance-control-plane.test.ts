@@ -1,16 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneRouteValues,
 } from "../shared/instance-control-plane.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
   MutationResponse,
   OwnerIdentity,
-  StoreSnapshot,
+  StorageSnapshot,
   StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
@@ -107,6 +109,34 @@ describe("instance control-plane API routes", () => {
     expect(runnerBootstrap.body.cursor).toBe(0);
     expect(ownerSchema.body.schema).toEqual(parsedInstanceControlPlaneSchema);
     expect(ownerSchema.response.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("exports control-plane storage snapshots with the control-plane identity", async () => {
+    const created = await postAdminJson<ActionResponse>(
+      `${controlPlaneApi}/actions/createAppInstall`,
+      {
+        actionId: "action-create-snapshot-export",
+        input: {
+          packageAppKey: "site",
+          installId: "snapshot-export",
+          label: "Snapshot Export Site",
+        },
+      },
+    );
+    const bootstrap = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
+    const snapshot = await getJson<StorageSnapshot>(`${controlPlaneApi}/snapshot`);
+
+    expect(snapshot.body).toMatchObject({
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: "instance-control-plane",
+      exportedAt: expect.any(String),
+      schemaUpdatedAt: bootstrap.body.schemaUpdatedAt,
+      sourceCursor: created.body.cursor,
+      schema: parseAppSchema(instanceControlPlaneSchema),
+    });
+    expect(snapshot.body.records).toEqual(bootstrap.body.records);
   });
 
   it("creates app install and default route records as one idempotent control-plane action", async () => {
@@ -752,10 +782,11 @@ function routeValues(bootstrap: BootstrapResponse): InstanceControlPlaneRouteVal
     .map((record) => record.values as InstanceControlPlaneRouteValues);
 }
 
-function secretSnapshot(now: string): StoreSnapshot {
+function secretSnapshot(now: string): StorageSnapshot {
   return {
-    kind: "formless.storeSnapshot",
-    version: 1,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     schemaKey: "instance-control-plane",
     exportedAt: now,
     schemaUpdatedAt: now,
@@ -780,10 +811,11 @@ function secretSnapshot(now: string): StoreSnapshot {
   };
 }
 
-function legacyRouteIntentSnapshot(now: string, records: StoredRecord[]): StoreSnapshot {
+function legacyRouteIntentSnapshot(now: string, records: StoredRecord[]): StorageSnapshot {
   return {
-    kind: "formless.storeSnapshot",
-    version: 1,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     schemaKey: "instance-control-plane",
     exportedAt: now,
     schemaUpdatedAt: now,

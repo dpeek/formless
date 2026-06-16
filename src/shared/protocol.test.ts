@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  STORE_SNAPSHOT_KIND,
-  STORE_SNAPSHOT_VERSION,
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
   isSyncSocketAttachment,
   isSyncSocketClientMessage,
   isSyncSocketServerMessage,
   parseCreateAppInstallRequest,
   parseOwnerSetupCompleteRequest,
   parseOwnerSetupToken,
-  parseStoreSnapshot,
+  parseStorageSnapshot,
   type ChangeRow,
   type OwnerSetupCompleteRequest,
-  type StoreSnapshot,
+  type StorageSnapshot,
   type StoredRecord,
   type SyncResponse,
 } from "./protocol.ts";
@@ -220,9 +220,9 @@ describe("app install protocol", () => {
   });
 });
 
-describe("store snapshot protocol", () => {
+describe("storage snapshot protocol", () => {
   it("parses the supported version 1 envelope", () => {
-    const snapshot = storeSnapshot({
+    const snapshot = storageSnapshot({
       records: [
         record("record-1"),
         {
@@ -232,64 +232,81 @@ describe("store snapshot protocol", () => {
       ],
     });
 
-    expect(parseStoreSnapshot(snapshot, "tasks")).toEqual(snapshot);
+    expect(
+      parseStorageSnapshot(snapshot, {
+        schemaKey: "tasks",
+        storageIdentity: "app:work",
+      }),
+    ).toEqual(snapshot);
   });
 
-  it("rejects bad kind, version, and schema key shape", () => {
+  it("rejects bad kind, version, storage identity, and schema key shape", () => {
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         kind: "formless.other",
       }),
-    ).toThrow('Store snapshot kind must be "formless.storeSnapshot".');
+    ).toThrow('Storage snapshot kind must be "formless.storageSnapshot".');
 
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         version: 2,
       }),
-    ).toThrow("Store snapshot version must be 1.");
+    ).toThrow("Storage snapshot version must be 1.");
 
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
+        storageIdentity: "",
+      }),
+    ).toThrow("Storage snapshot storageIdentity must be a non-empty string.");
+
+    expect(() => parseStorageSnapshot(storageSnapshot(), { storageIdentity: "app:other" })).toThrow(
+      'Storage snapshot storageIdentity must be "app:other".',
+    );
+
+    expect(() =>
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         schemaKey: "",
       }),
-    ).toThrow("Store snapshot schemaKey must be a non-empty string.");
+    ).toThrow("Storage snapshot schemaKey must be a non-empty string.");
 
-    expect(() => parseStoreSnapshot(storeSnapshot(), "rates")).toThrow(
-      'Store snapshot schemaKey must be "rates".',
+    expect(() => parseStorageSnapshot(storageSnapshot(), { schemaKey: "rates" })).toThrow(
+      'Storage snapshot schemaKey must be "rates".',
     );
   });
 
   it("rejects unsupported envelope shapes", () => {
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         sourceCursor: 1.5,
       }),
-    ).toThrow("Store snapshot sourceCursor must be a non-negative integer.");
+    ).toThrow("Storage snapshot sourceCursor must be a non-negative integer.");
 
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         records: [{ ...record("record-1"), createdAt: 123 }],
       }),
-    ).toThrow("Store snapshot records[0] must be a stored record.");
+    ).toThrow("Storage snapshot records[0] must be a stored record.");
 
     expect(() =>
-      parseStoreSnapshot({
-        ...storeSnapshot(),
+      parseStorageSnapshot({
+        ...storageSnapshot(),
         extra: true,
       }),
-    ).toThrow('Store snapshot has unsupported key "extra".');
+    ).toThrow('Storage snapshot has unsupported key "extra".');
   });
 });
 
-function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
-    kind: STORE_SNAPSHOT_KIND,
-    version: STORE_SNAPSHOT_VERSION,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "app:work",
     schemaKey: "tasks",
     exportedAt: "2026-04-28T00:00:00.000Z",
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",

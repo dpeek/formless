@@ -4,9 +4,10 @@ import type {
   BootstrapResponse,
   MutationResponse,
   OwnerIdentity,
-  StoreSnapshot,
+  StorageSnapshot,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
@@ -129,7 +130,7 @@ describe("authority admin guard", () => {
   });
 
   it("keeps public Site tree reads open while guarding Site writes", async () => {
-    await postAdminJson<BootstrapResponse>("/api/site/snapshot/restore", siteStoreSnapshot());
+    await postAdminJson<BootstrapResponse>("/api/site/snapshot/restore", siteStorageSnapshot());
 
     const tree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
@@ -155,10 +156,11 @@ describe("authority admin guard", () => {
   });
 });
 
-function siteStoreSnapshot(): StoreSnapshot {
+function siteStorageSnapshot(): StorageSnapshot {
   return {
-    kind: "formless.storeSnapshot",
-    version: 1,
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: "site",
     schemaKey: "site",
     exportedAt: "2026-05-07T00:00:00.000Z",
     schemaUpdatedAt: "2026-05-07T00:00:00.000Z",

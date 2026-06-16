@@ -1,6 +1,6 @@
 import { createRecordId } from "../shared/ids.ts";
 import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
-import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -10,8 +10,8 @@ import type {
   PatchMutation,
   MutationResponse,
   RecordValues,
+  StorageSnapshot,
   StoredRecord,
-  StoreSnapshot,
 } from "../shared/protocol.ts";
 import type {
   OperationInvocationEnvelope,
@@ -636,18 +636,20 @@ export function resetStorageToEmpty(storage: DurableObjectStorage) {
 
 export function exportStorageSnapshot(
   storage: DurableObjectStorage,
+  storageIdentity: string,
   schemaKey: string,
-): StoreSnapshot {
+): StorageSnapshot {
   return storage.transactionSync(() => {
     const storedSchema = readStoredSchema(storage);
 
     if (!storedSchema) {
-      throw new Error("Cannot export store snapshot before storage is initialized.");
+      throw new Error("Cannot export storage snapshot before storage is initialized.");
     }
 
     return {
-      kind: STORE_SNAPSHOT_KIND,
-      version: STORE_SNAPSHOT_VERSION,
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity,
       schemaKey,
       exportedAt: nowIsoString(),
       schemaUpdatedAt: storedSchema.updatedAt,
@@ -660,14 +662,14 @@ export function exportStorageSnapshot(
 
 export function restoreStorageSnapshot(
   storage: DurableObjectStorage,
-  snapshot: StoreSnapshot,
+  snapshot: StorageSnapshot,
 ): BootstrapResponse {
   return writeOutcomeResponse(restoreStorageSnapshotOutcome(storage, snapshot));
 }
 
 export function restoreStorageSnapshotOutcome(
   storage: DurableObjectStorage,
-  snapshot: StoreSnapshot,
+  snapshot: StorageSnapshot,
 ): WriteOutcome<BootstrapResponse> {
   return storage.transactionSync(() => {
     assertSnapshotRecordIdsAreUnique(snapshot.records);
@@ -2292,7 +2294,7 @@ function assertSnapshotRecordIdsAreUnique(records: StoredRecord[]) {
 
   for (const record of records) {
     if (seen.has(record.id)) {
-      throw new Error(`Store snapshot includes duplicate record id "${record.id}".`);
+      throw new Error(`Storage snapshot includes duplicate record id "${record.id}".`);
     }
 
     seen.add(record.id);
