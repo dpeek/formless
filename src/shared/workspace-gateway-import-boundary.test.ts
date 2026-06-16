@@ -16,9 +16,9 @@ describe("workspace package import boundaries", () => {
       }
     }
 
-    for (const path of forbiddenLegacyWorkspaceFiles) {
+    for (const path of removedSiteWorkspaceModulePaths) {
       if (await fileExists(resolve(repoRoot, path))) {
-        failures.push(`${path}: legacy workspace module still exists`);
+        failures.push(`${path}: removed Site workspace module still exists`);
       }
     }
 
@@ -35,8 +35,8 @@ describe("workspace package import boundaries", () => {
           failures.push(`${path}: deep-imports gateway package ${specifier}`);
         }
 
-        if (forbiddenLegacyWorkspaceImport(specifier)) {
-          failures.push(`${path}: imports legacy workspace module ${specifier}`);
+        if (forbiddenRemovedWorkspaceSurfaceImport(specifier)) {
+          failures.push(`${path}: imports removed workspace surface ${specifier}`);
         }
 
         if (forbiddenWorkspacePackageImport(specifier)) {
@@ -72,7 +72,7 @@ const forbiddenLegacyGatewayFiles = [
   "src/site/local-workspace-gateway.test.ts",
 ];
 
-const forbiddenLegacyWorkspaceFiles = [
+const removedSiteWorkspaceModulePaths = [
   "src/site/instance-workspace-config.ts",
   "src/site/instance-workspace-config.test.ts",
   "src/site/instance-workspace-record-source.ts",
@@ -88,7 +88,8 @@ const legacyGatewayImportPatterns = [
   /(^|\/)local-workspace-gateway(\.test)?(\.ts)?$/,
 ];
 
-const legacyWorkspaceImportPatterns = [
+const removedWorkspaceSurfaceImportPatterns = [
+  /(^|\/)record-source(\.test)?(\.ts)?$/,
   /(^|\/)instance-workspace-config(\.test)?(\.ts)?$/,
   /(^|\/)instance-workspace-record-source(\.test)?(\.ts)?$/,
   /(^|\/)instance-workspace-secrets(\.test)?(\.ts)?$/,
@@ -157,8 +158,8 @@ function forbiddenGatewayPackageImport(specifier: string): boolean {
   );
 }
 
-function forbiddenLegacyWorkspaceImport(specifier: string): boolean {
-  return legacyWorkspaceImportPatterns.some((pattern) => pattern.test(specifier));
+function forbiddenRemovedWorkspaceSurfaceImport(specifier: string): boolean {
+  return removedWorkspaceSurfaceImportPatterns.some((pattern) => pattern.test(specifier));
 }
 
 function forbiddenWorkspacePackageImport(specifier: string): boolean {

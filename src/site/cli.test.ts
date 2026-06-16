@@ -708,7 +708,7 @@ describe("Formless Site CLI", () => {
     expect(logs.join("\n")).not.toContain("/setup/capability");
   });
 
-  it("pulls instance workspace archives from the control-plane target URL", async () => {
+  it("pulls instance workspace state from the control-plane target URL", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -881,7 +881,7 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
-  it("pushes workspace app archives to the control-plane target URL as a dry-run by default", async () => {
+  it("pushes workspace app state to the control-plane target URL as a dry-run by default", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -957,7 +957,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("drift: drift.");
   });
 
-  it("pushes redirect route storage snapshot records through the composed workspace archive", async () => {
+  it("pushes redirect route storage snapshot records through the composed instance archive restore payload", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -1851,7 +1851,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("rejects missing local app archive before local dev restore", async () => {
+  it("rejects missing local app state before local dev restore", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
@@ -1881,7 +1881,7 @@ describe("Formless Site CLI", () => {
     expect(requests).toEqual([]);
   });
 
-  it("rejects mismatched app archive identity and package facts before local dev restore", async () => {
+  it("rejects mismatched app state identity and package facts before local dev restore", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
@@ -2128,7 +2128,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("saves browser-created local Authority installed apps into deterministic workspace archives", async () => {
+  it("saves browser-created local Authority installed apps into deterministic workspace state", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -4325,7 +4325,7 @@ function workspaceApp(installId: string, label: string) {
     installId,
     packageAppKey: "site",
     label,
-    archivePath: `state/apps/${installId}.json`,
+    statePath: `state/apps/${installId}.json`,
   };
 }
 

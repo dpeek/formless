@@ -771,9 +771,9 @@ function reviewableControlPlaneStorageSnapshot(
   });
 
   return reviewableInstanceControlPlaneStorageSnapshot(parsed, {
-    context: options.context ?? "Workspace control-plane record source records",
+    context: options.context ?? "Workspace control-plane storage snapshot records",
     publicSitePackageFallback: "site",
-    sourceLabel: options.sourceLabel ?? "Workspace control-plane record source",
+    sourceLabel: options.sourceLabel ?? "Workspace control-plane storage snapshot",
   });
 }
 

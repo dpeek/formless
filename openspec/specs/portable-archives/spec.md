@@ -36,7 +36,7 @@ import, or workspace validation.
 #### Scenario: Reject non-current archive input
 
 - WHEN archive restore, restore dry-run planning, import validation, or
-  workspace archive checks read an unsupported archive kind, archive version
+  workspace validation checks read an unsupported archive kind, archive version
   older or newer than the current archive version, missing package fact fields,
   or unsupported entity-name spelling
 - THEN the archive is rejected before mutation
@@ -180,7 +180,7 @@ package slice.
 
 #### Scenario: Current archive version only
 
-- **GIVEN** archive parsing, restore dry-run planning, or workspace archive
+- **GIVEN** archive parsing, restore dry-run planning, or workspace validation
   checks read an archive envelope
 - **WHEN** the archive version differs from the current portable archive version
 - **THEN** the archive is rejected with an unsupported archive version error
@@ -276,6 +276,19 @@ not portable archive directories.
   storage snapshots, media payloads, and explicit restore policy
 - **AND** workspace `state/instance.json`, `state/apps/<installId>.json`, and
   `state/media` files are not themselves portable archive envelopes
+
+#### Scenario: Workspace state vocabulary
+
+- **WHEN** workspace save, check, pull, push, gateway status, tests, local
+  adapters, or local agent instructions describe reviewable workspace source
+- **THEN** instance and app source files are described as workspace state,
+  storage state, instance state, app state, storage snapshots, or media payloads
+- **AND** archive terminology is reserved for portable archive envelopes,
+  archive restore/export/import/backup workflows, and archive manifest paths
+  inside portable archive payloads
+- **AND** workspace result fields, drift summaries, logs, and package-local
+  instructions do not call `state/instance.json` an instance archive or
+  `state/apps/<installId>.json` app archives
 
 ### Requirement: Workspace App Package Links
 

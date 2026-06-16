@@ -241,6 +241,16 @@ state back to reviewable workspace storage snapshots and media payloads.
 - **AND** remote pull, push, deploy, and destroy remain explicit CLI or gateway
   operations
 
+#### Scenario: Workspace operation state vocabulary
+
+- **WHEN** CLI output, gateway operation state, browser workspace status, or
+  tests report workspace save, check, pull, or push results
+- **THEN** reviewable workspace source paths and counts are reported with
+  workspace state, storage state, app state, instance state, storage snapshot,
+  or media payload terminology
+- **AND** archive terminology is used only when the operation exports, imports,
+  restores, backs up, or composes a portable archive envelope
+
 #### Scenario: Check workspace source
 
 - **WHEN** a user runs `formless save --check` and local Authority state differs
@@ -340,9 +350,9 @@ intent lives in schema-owned storage snapshots.
 
 - **WHEN** `formless pull` runs and then `formless deploy --dry-run` runs
   for a workspace targeting a remote Formless instance
-- **THEN** target control-plane records, app archives, and media payloads are
-  written into workspace source
-- **AND** deploy dry-run reports archive, control-plane record, deployment,
+- **THEN** target control-plane records, app storage snapshots, and media
+  payloads are written into workspace source
+- **AND** deploy dry-run reports storage-state, control-plane record, deployment,
   custom-domain, and DNS drift against the selected target
 - **AND** redirect route drift is reported as route intent drift
 - **AND** pull, push, deploy dry-run, and deploy select the remote HTTP origin

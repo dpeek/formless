@@ -21,7 +21,7 @@ Read this when editing `lib/schema/*`.
 - Schema Builder UI state or generated React rendering.
 - Authority table mutation, Durable Object storage, or browser replica persistence.
 - Archive restore execution.
-- Workspace record source or Gateway transport.
+- Workspace state, storage snapshot handling, or Gateway transport.
 - Instance control-plane runtime execution.
 - Package app migrations or provider execution.
 - App records.

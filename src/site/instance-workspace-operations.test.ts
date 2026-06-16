@@ -196,7 +196,7 @@ describe("Formless workspace operations", () => {
     await writeDeployStorageSnapshot(workspaceRoot, {
       credentialRef: "alchemy-profile:personal-profile",
     });
-    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -316,7 +316,7 @@ describe("Formless workspace operations", () => {
       targetUrl: "https://personal-sites.dpeek.workers.dev",
       workerName: null,
     });
-    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -371,7 +371,7 @@ describe("Formless workspace operations", () => {
     await writeDeployStorageSnapshot(workspaceRoot, {
       credentialRef: "alchemy-profile:personal-profile",
     });
-    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -529,7 +529,7 @@ describe("Formless workspace operations", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployStorageSnapshot(workspaceRoot);
-    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
 
     const runtimeFetch = deployApplyFetch(requests);
     const state = await runFormlessWorkspaceOperation(
@@ -702,7 +702,7 @@ describe("Formless workspace operations", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
-    await writeWorkspaceAppArchive(workspaceRoot, "david", "David Peek");
+    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -772,7 +772,7 @@ describe("Formless workspace operations", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
-    await writeWorkspaceAppArchive(workspaceRoot, "site", "Site");
+    await writeWorkspaceAppState(workspaceRoot, "site", "Site");
 
     const state = await runFormlessWorkspaceOperation(
       {
@@ -1429,12 +1429,12 @@ function parseCapturedBody<T>(init: RequestInit | undefined): T {
   return JSON.parse(typeof init?.body === "string" ? init.body : "{}") as T;
 }
 
-async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string, label: string) {
+async function writeWorkspaceAppState(workspaceRoot: string, installId: string, label: string) {
   const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
   const archive = appArchive(installId, label);
 
   if (archive.data.kind !== STORAGE_SNAPSHOT_KIND) {
-    throw new Error("Expected app archive data to be a storage snapshot.");
+    throw new Error("Expected app state data to be a storage snapshot.");
   }
 
   await writeInstanceWorkspaceAppStorageSnapshot({

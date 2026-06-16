@@ -639,6 +639,17 @@ workspace operation contracts, and local Node filesystem adapters.
   `@dpeek/formless-workspace/node`
 - AND they do not deep-import workspace package internals
 
+#### Scenario: Workspace package docs follow current source model
+
+- GIVEN package-local `AGENTS.md` files, import-boundary tests, or local agent
+  instructions describe workspace source responsibilities
+- WHEN workspace source is represented as storage snapshot state and media
+  payloads
+- THEN those docs and tests name current workspace source, state, operation,
+  manifest, local state, secret state, and storage snapshot helpers
+- AND they do not direct agents or import allowlists toward removed
+  record-source helpers or old `src/site` workspace modules
+
 ### Requirement: Workspace Package Non-Ownership
 
 The Workspace package SHALL own reusable Formless workspace source, state, and

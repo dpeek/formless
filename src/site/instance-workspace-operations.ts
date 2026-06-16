@@ -321,19 +321,19 @@ function summarizeStatusResult(
 function summarizeSaveResult(result: SaveLocalFormlessWorkspaceResult): WorkspaceOperationResult {
   return {
     details: {
-      appState: result.appArchives.map((archive) => ({
-        installId: archive.installId,
-        mediaCount: archive.mediaCount,
-        recordCount: archive.recordCount,
+      appState: result.appState.map((state) => ({
+        installId: state.installId,
+        mediaCount: state.mediaCount,
+        recordCount: state.recordCount,
       })),
       source: result.source,
     },
     summary: {
       fields: {
-        appCount: result.instanceArchive.appCount,
-        mediaCount: result.instanceArchive.mediaCount,
+        appCount: result.instanceState.appCount,
+        mediaCount: result.instanceState.mediaCount,
         mode: result.mode,
-        recordCount: result.instanceArchive.recordCount,
+        recordCount: result.instanceState.recordCount,
       },
       title: result.mode === "check" ? "Workspace source current" : "Workspace saved",
     },
@@ -380,17 +380,19 @@ function summarizeCheckResult(result: CheckLocalFormlessWorkspaceResult): Worksp
 function summarizePullResult(
   result: PullFormlessInstanceWorkspaceResult,
 ): WorkspaceOperationResult {
+  const pulledAppState = result.appState;
+
   return {
     details: {
-      appState: result.appArchives.map((archive) => archive.installId),
+      appState: pulledAppState.map((state) => state.installId),
       domainCount: result.domains.length,
       target: result.selectedTarget.alias,
     },
     summary: {
       fields: {
-        appCount: result.instanceArchive.appCount,
-        mediaCount: result.instanceArchive.mediaCount,
-        recordCount: result.instanceArchive.recordCount,
+        appCount: pulledAppState.length,
+        mediaCount: pulledAppState.reduce((count, state) => count + state.mediaCount, 0),
+        recordCount: pulledAppState.reduce((count, state) => count + state.recordCount, 0),
       },
       title: "Workspace pulled",
     },
@@ -889,7 +891,7 @@ function summarizeDrift(
   drift: FormlessInstanceWorkspaceDriftSummary,
 ): WorkspaceOperationDisplayObject {
   return {
-    changedArchivePathCount: drift.changedArchivePaths.length,
+    changedStatePathCount: drift.changedStatePaths.length,
     changedControlPlaneRecordCount: drift.changedControlPlaneRecords.length,
     changedDomainCount: drift.domainDesiredDrift.length,
     changedMediaCount: drift.changedMedia.length,

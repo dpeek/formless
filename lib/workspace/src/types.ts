@@ -1,7 +1,7 @@
 /**
  * Versioned public workspace contract declarations.
  *
- * This file is intentionally import-free. Workspace manifest, record-source,
+ * This file is intentionally import-free. Workspace manifest, workspace state,
  * local state, and operation declarations move here as their surfaces are
  * extracted into this package.
  */
@@ -848,7 +848,7 @@ export type InstanceWorkspaceApp = {
   installId: string;
   packageAppKey: string;
   label: string;
-  archivePath: string;
+  statePath: string;
   routes?: InstanceWorkspaceAppRoutes;
 };
 

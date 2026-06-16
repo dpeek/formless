@@ -217,7 +217,7 @@ export {
   type InitFormlessInstanceWorkspaceDependencies,
   type InitFormlessInstanceWorkspaceInput,
   type InitFormlessInstanceWorkspaceResult,
-  type PullFormlessInstanceWorkspaceAppArchiveResult,
+  type PullFormlessInstanceWorkspaceAppStateResult,
   type PlanFormlessInstanceWorkspaceDomainsDependencies,
   type PlanFormlessInstanceWorkspaceDomainsInput,
   type PlanFormlessInstanceWorkspaceDomainsResult,

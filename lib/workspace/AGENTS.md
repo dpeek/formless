@@ -7,8 +7,8 @@ Read this when editing `lib/workspace/*`.
 ## Owns
 
 - Public workspace source, state, and operation contract declarations and constants in `src/types.ts`.
-- Runtime-neutral workspace manifest, record-source, operation, redaction, parse, format, and validation helpers exported from the package root.
-- Local Node filesystem adapters for workspace source, ignored local state, secret state, and operation state.
+- Runtime-neutral workspace manifest, operation, redaction, parse, format, and validation helpers exported from the package root.
+- Local Node filesystem adapters for workspace source, storage snapshots, media payloads, ignored local state, secret state, and operation state.
 - Canonical semantic operation input, result, event, log, summary, redaction, and persistence contracts used by Gateway transport and Site runtime adapters.
 - Package-local tests for workspace contracts and deterministic Node adapters.
 
@@ -29,16 +29,15 @@ Read this when editing `lib/workspace/*`.
 - `src/types.ts`: import-free versioned public contract declarations.
 - `src/manifest.ts`: runtime-neutral manifest defaults, parse, format, path, and target URL helpers.
 - `src/operation-state.ts`: runtime-neutral operation kind, display, state, and redaction helpers.
-- `src/record-source.ts`: runtime-neutral control-plane record-source parse, format, and validation helpers.
 - `src/index.ts`: runtime-neutral root export entrypoint.
-- `src/node.ts`: local Node filesystem and ignored-state adapter entrypoint; no React import.
+- `src/node.ts`: local Node filesystem, workspace state, storage snapshot, media payload, ignored-state, and secret-state adapter entrypoint; no React import.
 - `src/*.test.ts`: package-local contract and adapter coverage.
 
 ## Read Path
 
 1. Read this file.
 2. Read `src/types.ts` for public contract facts.
-3. Read only the relevant helper or adapter file for the task: `src/manifest.ts`, `src/operation-state.ts`, `src/record-source.ts`, or `src/node.ts`.
+3. Read only the relevant helper or adapter file for the task: `src/manifest.ts`, `src/operation-state.ts`, or `src/node.ts`.
 4. Read matching package-local tests when changing behavior.
 
 ## Rules
