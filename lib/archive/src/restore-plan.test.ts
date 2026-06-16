@@ -36,6 +36,11 @@ const tasksSourceSchemaHash =
   "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 const crmSourceSchemaHash =
   "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+const editableMutations = {
+  create: { enabled: true },
+  patch: { enabled: true },
+  delete: { enabled: true },
+};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -48,6 +53,7 @@ const siteSourceSchema = parseAppSchema({
       constraints: {
         uniqueKey: { kind: "unique", fields: ["key"] },
       },
+      mutations: editableMutations,
     },
     block: {
       label: "Block",
@@ -59,6 +65,7 @@ const siteSourceSchema = parseAppSchema({
         width: { type: "number", required: false, label: "Width", integer: true },
         height: { type: "number", required: false, label: "Height", integer: true },
       },
+      mutations: editableMutations,
     },
     "block-placement": {
       label: "Block Placement",
@@ -79,12 +86,41 @@ const siteSourceSchema = parseAppSchema({
         },
         order: { type: "number", required: true, label: "Order", integer: true },
       },
+      mutations: editableMutations,
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    siteAll: { label: "Sites", entity: "site", expression: { kind: "all" } },
+  },
+  itemViews: {
+    siteItem: {
+      entity: "site",
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    siteList: {
+      type: "collection",
+      label: "Sites",
+      entity: "site",
+      queries: [{ query: "siteAll" }],
+      defaultQuery: "siteAll",
+      result: { type: "list", itemView: "siteItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "sites", type: "collection", view: "siteList" }],
+      },
+    },
+  },
 });
 const taskSourceSchema = parseAppSchema({
   version: 1,
@@ -95,12 +131,41 @@ const taskSourceSchema = parseAppSchema({
         title: { type: "text", required: true, label: "Title" },
         done: { type: "boolean", required: true, label: "Done" },
       },
+      mutations: editableMutations,
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    taskAll: { label: "Tasks", entity: "task", expression: { kind: "all" } },
+  },
+  itemViews: {
+    taskItem: {
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    taskList: {
+      type: "collection",
+      label: "Tasks",
+      entity: "task",
+      queries: [{ query: "taskAll" }],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskList" }],
+      },
+    },
+  },
 });
 const crmSourceSchema = parseAppSchema({
   version: 1,
@@ -110,12 +175,41 @@ const crmSourceSchema = parseAppSchema({
       fields: {
         name: { type: "text", required: true, label: "Name" },
       },
+      mutations: editableMutations,
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    companyAll: { label: "Companies", entity: "company", expression: { kind: "all" } },
+  },
+  itemViews: {
+    companyItem: {
+      entity: "company",
+      fields: {
+        name: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    companyList: {
+      type: "collection",
+      label: "Companies",
+      entity: "company",
+      queries: [{ query: "companyAll" }],
+      defaultQuery: "companyAll",
+      result: { type: "list", itemView: "companyItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "companies", type: "collection", view: "companyList" }],
+      },
+    },
+  },
 });
 const taskSeedRecords: StoredRecord[] = [
   taskRecord("rec_task_overdue", "Review overdue proposal", false),

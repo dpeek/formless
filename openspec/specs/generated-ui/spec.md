@@ -436,6 +436,20 @@ cache, provider evidence, view, screen, read model, and action models.
 - **AND** custom-domain desired route state and provider applied evidence remain
   visually separate
 
+#### Scenario: Instance overview surface
+
+- **GIVEN** an owner opens `/` on the product instance shell
+- **WHEN** app install, route, workspace gateway, deployment config,
+  deployment observation, desired-state projection, and provider evidence data
+  are available
+- **THEN** the overview renders app install management, route management,
+  workspace source status, workspace source actions, and first-app onboarding
+- **AND** the overview does not render deployment setup, deployment status,
+  desired-state summaries, deployment operation controls, deployment config
+  management tables, or standalone provider evidence cleanup panels
+- **AND** deployment and provider runtime reads are not required to render the
+  overview
+
 #### Scenario: Browser secret boundary
 
 - **GIVEN** deployment management UI reads control-plane records or desired
@@ -557,6 +571,9 @@ management.
   management affordances but are not the primary first-run deployment surface
 - **AND** app install management, route management, owner auth, and app-local
   navigation remain outside the deployment workflow
+- **AND** deployment setup, deployment status, desired-state summaries,
+  deployment operation controls, and deployment config management are not
+  duplicated on the instance overview
 
 #### Scenario: App-less deployment entry
 

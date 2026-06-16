@@ -20,22 +20,13 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
-import { AddIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon } from "@dpeek/formless-ui/icons";
 import {
   AppInstallApiError,
   createInstanceAppInstall,
   fetchInstanceAppInstalls,
 } from "../../client/app-installs.ts";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
-import { fetchInstanceDomainMappings } from "../../client/domain-mappings.ts";
-import {
-  deleteInstanceDomainProviderResource,
-  DomainProviderApiError,
-  fetchInstanceDomainProviderDeleteJob,
-  fetchInstanceDomainProviderPlan,
-  fetchInstanceDomainProviderRedirects,
-  markInstanceDomainProviderResourceManuallyRemoved,
-} from "../../client/domain-provider.ts";
 import {
   DeploymentRuntimeApiError,
   fetchInstanceDeploymentDesiredState,
@@ -84,13 +75,6 @@ import {
 } from "@dpeek/formless-instance-control-plane";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
-import type {
-  InstanceDomainProviderAppliedResourceState,
-  InstanceDomainProviderDeleteJob,
-  InstanceDomainProviderDeleteTarget,
-  InstanceDomainProviderPlanResponse,
-} from "../../shared/domain-provider-api.ts";
-import type { InstanceDomainMappingAppliedState } from "../../shared/instance-domain-mappings.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { HomeRoute } from "./home.tsx";
 
@@ -101,34 +85,10 @@ export type PackageInstallDraft = {
 
 export type PackageInstallDrafts = Partial<Record<PackageAppKey, PackageInstallDraft>>;
 
-type DomainProviderDeleteActionInput = {
-  host: string;
-  kind?: InstanceDomainProviderAppliedResourceState["kind"];
-  logicalId?: string;
-};
-
-type DomainProviderCleanupActionInput = {
-  host: string;
-  kind: InstanceDomainProviderAppliedResourceState["kind"];
-  logicalId: string;
-};
-
 export type InstanceShellRouteState =
   | { status: "failed"; message: string }
   | { status: "loading" }
   | {
-      domainAppliedStates: InstanceDomainMappingAppliedState[];
-      domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
-      domainProviderCleanupError?: string;
-      domainProviderCleanupKey?: string;
-      domainProviderCleanupMessage?: string;
-      domainProviderDeleteJob?: InstanceDomainProviderDeleteJob;
-      domainProviderDeleteError?: string;
-      domainProviderDeleteMessage?: string;
-      domainProviderDeletingKey?: string;
-      domainProviderPlan?: InstanceDomainProviderPlanResponse;
-      domainProviderPlanError?: string;
-      domainProviderPlanLoading?: boolean;
       deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
       deploymentStatus?: InstanceDeploymentStatusResponse;
       installError?: string;
@@ -183,6 +143,20 @@ const localBrowserWorkspaceGatewayRuntimeFacts = {
     "workspace-source-write",
   ],
 } as const satisfies WorkspaceGatewayRuntimeCapabilityFacts;
+
+export type InstanceShellInitialReadScope = {
+  deploymentRuntime: boolean;
+  providerRuntime: boolean;
+};
+
+export function instanceShellInitialReadScope(currentPath: string): InstanceShellInitialReadScope {
+  const pathname = currentPath.split("?")[0] ?? currentPath;
+
+  return {
+    deploymentRuntime: pathname === runtimeTopologyRoutes.deploymentsRoute,
+    providerRuntime: false,
+  };
+}
 
 export function selectWorkspaceGatewayOperationControls({
   operationGroup = "all",
@@ -271,6 +245,7 @@ export function InstanceShellRoute() {
   const [location, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
+  const initialReadScope = useMemo(() => instanceShellInitialReadScope(location), [location]);
   const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
   const [workspaceGatewayState, setWorkspaceGatewayState] = useState<WorkspaceGatewayRouteState>(
     () => (workspaceGatewayConfig ? { status: "loading" } : { status: "unavailable" }),
@@ -330,20 +305,15 @@ export function InstanceShellRoute() {
           }
         }
 
-        const [
-          appResponse,
-          domainResponse,
-          redirectResponse,
-          providerPlanResponse,
-          deploymentDesiredState,
-          deploymentStatus,
-        ] = await Promise.all([
+        const deploymentRuntimePromise = initialReadScope.deploymentRuntime
+          ? Promise.all([
+              fetchOptionalInstanceDeploymentDesiredState(controller.signal),
+              fetchOptionalInstanceDeploymentStatus(controller.signal),
+            ])
+          : Promise.resolve([undefined, undefined] as const);
+        const [appResponse, [deploymentDesiredState, deploymentStatus]] = await Promise.all([
           fetchInstanceAppInstalls({ signal: controller.signal }),
-          fetchInstanceDomainMappings({ signal: controller.signal }),
-          fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
-          fetchInstanceDomainProviderPlan({ signal: controller.signal }),
-          fetchOptionalInstanceDeploymentDesiredState(controller.signal),
-          fetchOptionalInstanceDeploymentStatus(controller.signal),
+          deploymentRuntimePromise,
         ]);
 
         if (stopped) {
@@ -351,11 +321,6 @@ export function InstanceShellRoute() {
         }
 
         setState({
-          domainAppliedStates: domainResponse.appliedStates,
-          domainProviderAppliedResources: redirectResponse.appliedResources,
-          domainProviderDeletingKey: undefined,
-          domainProviderPlan: providerPlanResponse,
-          domainProviderPlanLoading: false,
           ...(deploymentDesiredState === undefined ? {} : { deploymentDesiredState }),
           ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
           installing: false,
@@ -386,7 +351,7 @@ export function InstanceShellRoute() {
       stopped = true;
       controller.abort();
     };
-  }, [workspaceGatewayConfig]);
+  }, [initialReadScope.deploymentRuntime, workspaceGatewayConfig]);
 
   useEffect(() => {
     if (
@@ -398,8 +363,17 @@ export function InstanceShellRoute() {
       return;
     }
 
+    const operation = workspaceGatewayState.currentOperation;
+
+    if (
+      !initialReadScope.deploymentRuntime &&
+      isDeploymentWorkspaceOperationKind(operation.operation)
+    ) {
+      return;
+    }
+
     const operationId = workspaceGatewayState.activeOperationId;
-    const operationKind = workspaceGatewayState.currentOperation.operation;
+    const operationKind = operation.operation;
     const intervalId = window.setInterval(() => {
       void refreshWorkspaceGatewayOperation({
         config: workspaceGatewayConfig,
@@ -411,7 +385,7 @@ export function InstanceShellRoute() {
     }, 1500);
 
     return () => window.clearInterval(intervalId);
-  }, [workspaceGatewayConfig, workspaceGatewayState]);
+  }, [initialReadScope.deploymentRuntime, workspaceGatewayConfig, workspaceGatewayState]);
 
   const autoSaveDisplayState =
     workspaceGatewayState.status === "ready"
@@ -468,18 +442,6 @@ export function InstanceShellRoute() {
       });
 
       setState({
-        domainAppliedStates: state.domainAppliedStates,
-        domainProviderAppliedResources: state.domainProviderAppliedResources,
-        domainProviderCleanupError: state.domainProviderCleanupError,
-        domainProviderCleanupKey: state.domainProviderCleanupKey,
-        domainProviderCleanupMessage: state.domainProviderCleanupMessage,
-        domainProviderDeleteJob: state.domainProviderDeleteJob,
-        domainProviderDeleteError: state.domainProviderDeleteError,
-        domainProviderDeleteMessage: state.domainProviderDeleteMessage,
-        domainProviderDeletingKey: state.domainProviderDeletingKey,
-        domainProviderPlan: state.domainProviderPlan,
-        domainProviderPlanError: state.domainProviderPlanError,
-        domainProviderPlanLoading: state.domainProviderPlanLoading,
         deploymentDesiredState: state.deploymentDesiredState,
         deploymentStatus: state.deploymentStatus,
         installing: false,
@@ -574,183 +536,10 @@ export function InstanceShellRoute() {
     });
   }
 
-  async function submitDeleteDomainProviderResource(input: DomainProviderDeleteActionInput) {
-    if (state.status !== "ready" || state.domainProviderDeletingKey) {
-      return;
-    }
-
-    const key = domainProviderDeleteKey(input);
-
-    if (!window.confirm(`Delete recorded provider resources for ${input.host}?`)) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainProviderDeleteError: undefined,
-      domainProviderDeleteMessage: undefined,
-      domainProviderDeletingKey: key,
-    });
-
-    try {
-      const response = await deleteInstanceDomainProviderResource({
-        host: input.host,
-        ...(input.kind === undefined ? {} : { kind: input.kind }),
-        ...(input.logicalId === undefined ? {} : { logicalId: input.logicalId }),
-      });
-
-      setState({
-        ...state,
-        domainProviderDeleteError: undefined,
-        domainProviderDeleteJob:
-          response.status === "ready" ? response.job : state.domainProviderDeleteJob,
-        domainProviderDeleteMessage:
-          response.status === "ready"
-            ? `Provider delete job ready for ${input.host}.`
-            : "Provider delete request did not create a job.",
-        domainProviderDeletingKey: undefined,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Provider delete failed.";
-
-      setState({
-        ...state,
-        domainProviderDeleteError: message,
-        domainProviderDeleteMessage: undefined,
-        domainProviderDeletingKey: undefined,
-      });
-    }
-  }
-
-  async function submitMarkDomainProviderResourceManuallyRemoved(
-    input: DomainProviderCleanupActionInput,
-  ) {
-    if (state.status !== "ready" || state.domainProviderCleanupKey) {
-      return;
-    }
-
-    const key = domainProviderDeleteKey(input);
-
-    if (
-      !window.confirm(
-        `Mark provider resource for ${input.host} as manually removed? This clears Formless provider evidence only.`,
-      )
-    ) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainProviderCleanupError: undefined,
-      domainProviderCleanupKey: key,
-      domainProviderCleanupMessage: undefined,
-    });
-
-    try {
-      const response = await markInstanceDomainProviderResourceManuallyRemoved(input);
-
-      setState({
-        ...state,
-        domainAppliedStates: removeCleanedDomainAppliedState(
-          state.domainAppliedStates,
-          response.target,
-        ),
-        domainProviderAppliedResources: removeCleanedProviderAppliedResource(
-          state.domainProviderAppliedResources ?? [],
-          response.target,
-        ),
-        domainProviderCleanupError: undefined,
-        domainProviderCleanupKey: undefined,
-        domainProviderCleanupMessage: `Marked provider evidence for ${input.host} manually removed.`,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Manual provider cleanup failed.";
-
-      setState({
-        ...state,
-        domainProviderCleanupError: message,
-        domainProviderCleanupKey: undefined,
-        domainProviderCleanupMessage: undefined,
-      });
-    }
-  }
-
-  async function refreshDomainProviderPlan() {
-    if (state.status !== "ready" || state.domainProviderPlanLoading) {
-      return;
-    }
-
-    setState({
-      ...state,
-      domainProviderPlanError: undefined,
-      domainProviderPlanLoading: true,
-    });
-
-    try {
-      const response = await fetchInstanceDomainProviderPlan();
-
-      setState({
-        ...state,
-        domainProviderPlan: response,
-        domainProviderPlanError: undefined,
-        domainProviderPlanLoading: false,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Provider plan failed.";
-
-      setState({
-        ...state,
-        domainProviderPlanError: message,
-        domainProviderPlanLoading: false,
-      });
-    }
-  }
-
-  async function refreshDomainProviderDeleteJob() {
-    if (state.status !== "ready" || !state.domainProviderDeleteJob) {
-      return;
-    }
-
-    try {
-      const response = await fetchInstanceDomainProviderDeleteJob({
-        jobId: state.domainProviderDeleteJob.jobId,
-      });
-
-      setState({
-        ...state,
-        domainProviderDeleteError: undefined,
-        domainProviderDeleteJob: response.job,
-      });
-    } catch (error) {
-      const message =
-        error instanceof DomainProviderApiError || error instanceof Error
-          ? error.message
-          : "Provider delete job refresh failed.";
-
-      setState({
-        ...state,
-        domainProviderDeleteError: message,
-      });
-    }
-  }
-
   return (
     <InstanceShellRouteView
       currentPath={location}
       installDrafts={installDrafts}
-      onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
-      onMarkDomainProviderResourceManuallyRemoved={submitMarkDomainProviderResourceManuallyRemoved}
-      onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
-      onRefreshDomainProviderPlan={refreshDomainProviderPlan}
       onPollWorkspaceOperation={pollWorkspaceOperation}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
@@ -960,7 +749,6 @@ export function instanceShellUninitializedWorkspaceInstallState(appResponse: App
 } {
   return {
     state: {
-      domainAppliedStates: [],
       installing: false,
       installs: appResponse.installs,
       packages: appResponse.packages,
@@ -1033,11 +821,7 @@ async function fetchOptionalInstanceDeploymentStatus(
 export function InstanceShellRouteView({
   currentPath = runtimeTopologyRoutes.instanceRootRoute,
   installDrafts = {},
-  onDeleteDomainProviderResource,
-  onMarkDomainProviderResourceManuallyRemoved,
   onPollWorkspaceOperation,
-  onRefreshDomainProviderDeleteJob,
-  onRefreshDomainProviderPlan,
   onInstallDraftChange,
   onSubmitInstall,
   onStartWorkspaceOperation,
@@ -1046,14 +830,10 @@ export function InstanceShellRouteView({
 }: {
   currentPath?: string;
   installDrafts?: PackageInstallDrafts;
-  onDeleteDomainProviderResource?: (input: DomainProviderDeleteActionInput) => void;
-  onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
   onPollWorkspaceOperation?: (
     operationId: string,
     operationKind?: WorkspaceGatewayOperationKind,
   ) => void;
-  onRefreshDomainProviderDeleteJob?: () => void;
-  onRefreshDomainProviderPlan?: () => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
   onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
@@ -1114,13 +894,6 @@ export function InstanceShellRouteView({
         onInstall={() => setInstallDialogOpen(true)}
       />
       <GeneratedInstanceRoutesSection />
-      <RouteProviderOperationsSection
-        onDeleteProvider={onDeleteDomainProviderResource}
-        onManualCleanup={onMarkDomainProviderResourceManuallyRemoved}
-        onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
-        onRefreshPlan={onRefreshDomainProviderPlan}
-        state={state}
-      />
       <InstallAppDialog
         installDrafts={installDrafts}
         onDraftChange={onInstallDraftChange}
@@ -2261,302 +2034,6 @@ function GeneratedInstanceRoutesSection() {
   );
 }
 
-function RouteProviderOperationsSection({
-  onDeleteProvider,
-  onManualCleanup,
-  onRefreshDeleteJob,
-  onRefreshPlan,
-  state,
-}: {
-  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  onRefreshDeleteJob?: () => void;
-  onRefreshPlan?: () => void;
-  state: Extract<InstanceShellRouteState, { status: "ready" }>;
-}) {
-  const providerAppliedResources = state.domainProviderAppliedResources ?? [];
-  const providerPlanLoading = state.domainProviderPlanLoading ?? false;
-  const evidenceCount = state.domainAppliedStates.length + providerAppliedResources.length;
-
-  return (
-    <section className="space-y-3" aria-labelledby="route-provider-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-        <div className="flex items-center gap-2">
-          <h2 id="route-provider-heading" className="text-sm font-semibold">
-            Route provider state
-          </h2>
-          <span className="text-xs text-muted-fg">{evidenceCount}</span>
-        </div>
-      </div>
-      <DomainProviderControlPanel
-        deleteJob={state.domainProviderDeleteJob}
-        onRefreshDeleteJob={onRefreshDeleteJob}
-        onRefreshPlan={onRefreshPlan}
-        plan={state.domainProviderPlan}
-        planLoading={providerPlanLoading}
-        refreshError={state.domainProviderPlanError}
-      />
-      <div className="grid gap-3 rounded-md border border-border bg-overlay p-4">
-        {state.domainProviderDeleteError ? (
-          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-            {state.domainProviderDeleteError}
-          </p>
-        ) : null}
-        {state.domainProviderDeleteMessage ? (
-          <p className="text-xs text-muted-fg" role="status">
-            {state.domainProviderDeleteMessage}
-          </p>
-        ) : null}
-        {state.domainProviderCleanupError ? (
-          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-            {state.domainProviderCleanupError}
-          </p>
-        ) : null}
-        {state.domainProviderCleanupMessage ? (
-          <p className="text-xs text-muted-fg" role="status">
-            {state.domainProviderCleanupMessage}
-          </p>
-        ) : null}
-        {evidenceCount === 0 ? (
-          <p className="text-sm text-muted-fg">No provider evidence.</p>
-        ) : null}
-        <div className="grid gap-3">
-          {state.domainAppliedStates.map((appliedState) => (
-            <AppliedDomainStateRow
-              appliedState={appliedState}
-              install={state.installs.find(
-                (install) => install.installId === appliedState.targetInstallId,
-              )}
-              key={`applied:${appliedState.profile}:${appliedState.host}`}
-              onDeleteProvider={onDeleteProvider}
-              onManualCleanup={onManualCleanup}
-              providerCleanupKey={state.domainProviderCleanupKey}
-              providerDeletingKey={state.domainProviderDeletingKey}
-            />
-          ))}
-          {providerAppliedResources.map((resource) => (
-            <AppliedProviderResourceRow
-              key={`resource:${resource.kind}:${resource.logicalId}`}
-              onDeleteProvider={onDeleteProvider}
-              onManualCleanup={onManualCleanup}
-              providerCleanupKey={state.domainProviderCleanupKey}
-              providerDeletingKey={state.domainProviderDeletingKey}
-              resource={resource}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DomainProviderControlPanel({
-  deleteJob,
-  onRefreshDeleteJob,
-  onRefreshPlan,
-  plan,
-  planLoading,
-  refreshError,
-}: {
-  deleteJob?: InstanceDomainProviderDeleteJob;
-  onRefreshDeleteJob?: () => void;
-  onRefreshPlan?: () => void;
-  plan?: InstanceDomainProviderPlanResponse;
-  planLoading: boolean;
-  refreshError?: string;
-}) {
-  return (
-    <div className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-[minmax(0,1fr)_auto]">
-      <div className="min-w-0 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-semibold">Provider</h3>
-          <span className="text-xs text-muted-fg">
-            {plan ? domainProviderConfigLabel(plan) : "not loaded"}
-          </span>
-        </div>
-        {plan ? (
-          <div className="grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
-            <p>{domainProviderTargetLabel(plan)}</p>
-            <p>{domainProviderResourceSummary(plan)}</p>
-            <p>{domainProviderBlockerSummary(plan)}</p>
-            <p>{domainProviderIssueSummary(plan)}</p>
-            <p>{domainProviderRunnerSummary(plan)}</p>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-fg">Provider plan unavailable.</p>
-        )}
-        {deleteJob ? (
-          <DomainProviderJobStatus
-            jobId={deleteJob.jobId}
-            kind="Delete"
-            onRefresh={onRefreshDeleteJob}
-            result={deleteJob.result}
-            status={deleteJob.status}
-          />
-        ) : null}
-        {refreshError ? (
-          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-            {refreshError}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-start justify-end gap-2">
-        <Button
-          intent="outline"
-          isDisabled={planLoading || !onRefreshPlan}
-          onPress={onRefreshPlan}
-          size="sm"
-          type="button"
-        >
-          {planLoading ? "Planning..." : "Refresh plan"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function DomainProviderJobStatus({
-  jobId,
-  kind,
-  onRefresh,
-  result,
-  status,
-}: {
-  jobId: string;
-  kind: "Apply" | "Delete";
-  onRefresh?: () => void;
-  result?: { error?: string; evidenceCount: number };
-  status: InstanceDomainProviderDeleteJob["status"];
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-fg">
-      <span>
-        {kind} job: {status} · <code>{jobId}</code>
-        {result ? ` · evidence ${result.evidenceCount}` : ""}
-      </span>
-      {result?.error ? <span className="text-danger-subtle-fg">{result.error}</span> : null}
-      <Button intent="outline" isDisabled={!onRefresh} onPress={onRefresh} size="sm" type="button">
-        Refresh job
-      </Button>
-    </div>
-  );
-}
-
-function AppliedDomainStateRow({
-  appliedState,
-  install,
-  onDeleteProvider,
-  onManualCleanup,
-  providerCleanupKey,
-  providerDeletingKey,
-}: {
-  appliedState: InstanceDomainMappingAppliedState;
-  install: AppInstall | undefined;
-  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  providerCleanupKey?: string;
-  providerDeletingKey?: string;
-}) {
-  const providerDelete = providerDeleteInputForAppliedState(appliedState);
-  const providerCleanup = providerCleanupInputForAppliedState(appliedState);
-  const providerDeleting = providerDeletingKey === domainProviderDeleteKey(providerDelete);
-  const providerCleaning =
-    providerCleanup !== undefined &&
-    providerCleanupKey === domainProviderDeleteKey(providerCleanup);
-
-  return (
-    <article className="rounded-md border border-dashed border-border bg-overlay p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="truncate text-sm font-semibold">{appliedState.host}</h3>
-          <p className="text-xs text-muted-fg">
-            <code>{appliedRouteTargetLabel(appliedState)}</code>
-            {install ? ` · ${install.label}` : ""} · Applied: {appliedState.workerName}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button
-            intent="outline"
-            isDisabled={providerDeleting}
-            onPress={() => onDeleteProvider?.(providerDelete)}
-            size="sm"
-            type="button"
-          >
-            <RemoveIcon />
-            {providerDeleting ? "Deleting..." : "Delete provider"}
-          </Button>
-          {providerCleanup ? (
-            <Button
-              intent="outline"
-              isDisabled={providerCleaning}
-              onPress={() => onManualCleanup?.(providerCleanup)}
-              size="sm"
-              type="button"
-            >
-              <RemoveIcon />
-              {providerCleaning ? "Marking..." : "Mark manually removed"}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function AppliedProviderResourceRow({
-  onDeleteProvider,
-  onManualCleanup,
-  providerCleanupKey,
-  providerDeletingKey,
-  resource,
-}: {
-  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
-  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
-  providerCleanupKey?: string;
-  providerDeletingKey?: string;
-  resource: InstanceDomainProviderAppliedResourceState;
-}) {
-  const providerDelete = providerDeleteInputForAppliedResource(resource);
-  const providerCleanup = providerCleanupInputForAppliedResource(resource);
-  const providerDeleting = providerDeletingKey === domainProviderDeleteKey(providerDelete);
-  const providerCleaning = providerCleanupKey === domainProviderDeleteKey(providerCleanup);
-
-  return (
-    <article className="rounded-md border border-dashed border-border bg-overlay p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="truncate text-sm font-semibold">{resource.host}</h3>
-          <p className="text-xs text-muted-fg">
-            {domainProviderResourceKindLabel(resource.kind)} · Applied: {resource.action}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button
-            intent="outline"
-            isDisabled={providerDeleting}
-            onPress={() => onDeleteProvider?.(providerDelete)}
-            size="sm"
-            type="button"
-          >
-            <RemoveIcon />
-            {providerDeleting ? "Deleting..." : "Delete provider"}
-          </Button>
-          <Button
-            intent="outline"
-            isDisabled={providerCleaning}
-            onPress={() => onManualCleanup?.(providerCleanup)}
-            size="sm"
-            type="button"
-          >
-            <RemoveIcon />
-            {providerCleaning ? "Marking..." : "Mark manually removed"}
-          </Button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 function ShellHeader({ currentPath }: { currentPath: string }) {
   const pathname = currentPath.split("?")[0] ?? currentPath;
 
@@ -2886,163 +2363,4 @@ function availableDefaultInstallId(
   }
 
   return appPackage.defaultInstallId;
-}
-
-function appliedRouteTargetLabel(appliedState: InstanceDomainMappingAppliedState): string {
-  return appliedState.targetInstallId === undefined
-    ? appliedState.profile
-    : `${appliedState.profile}:${appliedState.targetInstallId}`;
-}
-
-function domainProviderConfigLabel(plan: InstanceDomainProviderPlanResponse): string {
-  if (plan.config.deleteReady) {
-    return "cleanup ready";
-  }
-
-  return plan.config.planReady ? "plan ready" : "setup needed";
-}
-
-function domainProviderTargetLabel(plan: InstanceDomainProviderPlanResponse): string {
-  const account = plan.config.accountId ?? "missing account";
-  const worker = plan.config.workerName ?? plan.plan.workerName;
-
-  return `Account ${account} · Worker ${worker}`;
-}
-
-function domainProviderResourceSummary(plan: InstanceDomainProviderPlanResponse): string {
-  const customDomains = plan.plan.resources.filter(
-    (resource) => resource.kind === "cloudflare-worker-custom-domain",
-  ).length;
-  const redirects = plan.plan.resources.filter(
-    (resource) => resource.kind === "cloudflare-redirect-rule",
-  ).length;
-  const dns = plan.plan.resources.filter(
-    (resource) => resource.kind === "cloudflare-dns-records",
-  ).length;
-
-  return `Resources ${plan.plan.resources.length} · domains ${customDomains} · redirects ${redirects} · DNS ${dns}`;
-}
-
-function domainProviderBlockerSummary(plan: InstanceDomainProviderPlanResponse): string {
-  if (plan.plan.blockers.length === 0) {
-    return "Blockers none";
-  }
-
-  return `Blockers ${plan.plan.blockers
-    .map((blocker) => (blocker.host ? `${blocker.host}:${blocker.code}` : blocker.code))
-    .join(", ")}`;
-}
-
-function domainProviderIssueSummary(plan: InstanceDomainProviderPlanResponse): string {
-  const issues = plan.config.issues.filter((issue) => !isRunnerMutationConfigIssue(issue.code));
-
-  if (issues.length === 0) {
-    return `Zones ${plan.config.zones.map((zone) => zone.name).join(", ") || "none"}`;
-  }
-
-  return `Config blockers ${issues.map((issue) => issue.code).join(", ")}`;
-}
-
-function domainProviderRunnerSummary(plan: InstanceDomainProviderPlanResponse): string {
-  return `Runner mutation checked by ${plan.config.runnerMutation.checkedBy}`;
-}
-
-function isRunnerMutationConfigIssue(code: string): boolean {
-  return code === "missing-alchemy-password" || code === "missing-cloudflare-api-token";
-}
-
-function providerDeleteInputForAppliedState(appliedState: InstanceDomainMappingAppliedState): {
-  host: string;
-  kind: InstanceDomainProviderAppliedResourceState["kind"];
-  logicalId?: string;
-} {
-  return {
-    host: appliedState.host,
-    kind: "cloudflare-worker-custom-domain",
-    ...(appliedState.alchemyResourceId === undefined
-      ? {}
-      : { logicalId: appliedState.alchemyResourceId }),
-  };
-}
-
-function providerCleanupInputForAppliedState(
-  appliedState: InstanceDomainMappingAppliedState,
-): DomainProviderCleanupActionInput | undefined {
-  if (appliedState.alchemyResourceId === undefined) {
-    return undefined;
-  }
-
-  return {
-    host: appliedState.host,
-    kind: "cloudflare-worker-custom-domain",
-    logicalId: appliedState.alchemyResourceId,
-  };
-}
-
-function providerDeleteInputForAppliedResource(
-  resource: InstanceDomainProviderAppliedResourceState,
-): DomainProviderDeleteActionInput {
-  return {
-    host: resource.host,
-    kind: resource.kind,
-    logicalId: resource.logicalId,
-  };
-}
-
-function providerCleanupInputForAppliedResource(
-  resource: InstanceDomainProviderAppliedResourceState,
-): DomainProviderCleanupActionInput {
-  return {
-    host: resource.host,
-    kind: resource.kind,
-    logicalId: resource.logicalId,
-  };
-}
-
-function domainProviderDeleteKey(input: {
-  host: string;
-  kind?: InstanceDomainProviderAppliedResourceState["kind"];
-  logicalId?: string;
-}): string {
-  return input.logicalId ?? `${input.kind ?? "host"}:${input.host}`;
-}
-
-function domainProviderResourceKindLabel(
-  kind: InstanceDomainProviderAppliedResourceState["kind"],
-): string {
-  switch (kind) {
-    case "cloudflare-dns-records":
-      return "DNS records";
-    case "cloudflare-redirect-rule":
-      return "Redirect rule";
-    case "cloudflare-worker-custom-domain":
-      return "Custom domain";
-  }
-}
-
-function removeCleanedDomainAppliedState(
-  appliedStates: readonly InstanceDomainMappingAppliedState[],
-  target: InstanceDomainProviderDeleteTarget,
-): InstanceDomainMappingAppliedState[] {
-  if (target.kind !== "cloudflare-worker-custom-domain") {
-    return [...appliedStates];
-  }
-
-  return appliedStates.filter(
-    (state) =>
-      state.host !== target.host ||
-      state.alchemyResourceId !== (target.alchemyResourceId ?? target.logicalId),
-  );
-}
-
-function removeCleanedProviderAppliedResource(
-  resources: readonly InstanceDomainProviderAppliedResourceState[],
-  target: InstanceDomainProviderDeleteTarget,
-): InstanceDomainProviderAppliedResourceState[] {
-  return resources.filter(
-    (resource) =>
-      resource.host !== target.host ||
-      resource.kind !== target.kind ||
-      resource.logicalId !== target.logicalId,
-  );
 }

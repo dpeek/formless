@@ -43,6 +43,38 @@ const appSchema = parseAppSchema({
       },
     },
   },
+  queries: {
+    taskAll: { label: "Tasks", entity: "task", expression: { kind: "all" } },
+  },
+  itemViews: {
+    taskItem: {
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
+  tableViews: {},
+  views: {
+    taskList: {
+      type: "collection",
+      label: "Tasks",
+      entity: "task",
+      queries: [{ query: "taskAll" }],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskList" }],
+      },
+    },
+  },
 });
 
 describe("storage snapshot package", () => {

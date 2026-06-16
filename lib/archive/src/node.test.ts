@@ -17,6 +17,11 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const editableMutations = {
+  create: { enabled: true },
+  patch: { enabled: true },
+  delete: { enabled: true },
+};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -26,12 +31,41 @@ const siteSourceSchema = parseAppSchema({
         key: { type: "text", required: true, label: "Key" },
         label: { type: "text", required: true, label: "Label" },
       },
+      mutations: editableMutations,
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    siteAll: { label: "Sites", entity: "site", expression: { kind: "all" } },
+  },
+  itemViews: {
+    siteItem: {
+      entity: "site",
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    siteList: {
+      type: "collection",
+      label: "Sites",
+      entity: "site",
+      queries: [{ query: "siteAll" }],
+      defaultQuery: "siteAll",
+      result: { type: "list", itemView: "siteItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "sites", type: "collection", view: "siteList" }],
+      },
+    },
+  },
 });
 
 describe("archive node adapter", () => {

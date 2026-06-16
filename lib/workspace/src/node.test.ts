@@ -82,12 +82,45 @@ const workspaceFixtureTaskSourceSchema = {
         title: { type: "text", required: true, label: "Title" },
         done: { type: "boolean", required: true, label: "Done" },
       },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: true },
+      },
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    taskAll: { label: "Tasks", entity: "task", expression: { kind: "all" } },
+  },
+  itemViews: {
+    taskItem: {
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    taskList: {
+      type: "collection",
+      label: "Tasks",
+      entity: "task",
+      queries: [{ query: "taskAll" }],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskList" }],
+      },
+    },
+  },
 };
 const workspaceFixtureTaskSeedRecords = [
   workspaceFixtureTaskRecord("rec_task_overdue", "Review overdue proposal", false),
