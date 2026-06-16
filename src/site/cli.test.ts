@@ -2744,6 +2744,7 @@ describe("Formless Site CLI", () => {
   it("deploys a local-first workspace, records target source, preserves layout manifest, and pushes saved archives", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal");
+    const packageRoot = path.join(tempDir, "app");
     const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
@@ -2757,17 +2758,22 @@ describe("Formless Site CLI", () => {
       "cloudflare-redirect-rule": 1,
       "cloudflare-worker-custom-domain": 1,
     };
+    const sourceSchemaHash = await computeSourceSchemaHash(taskSourceSchema);
     const controlPlaneSourceRecords = [
       ...controlPlaneRecords().filter((record) => record.entity !== "deployment-config"),
+      ...privateControlPlaneRecords(sourceSchemaHash),
       redirectRouteRecord("old.dpeek.com", "dpeek.com"),
     ];
 
     await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
+    await writePrivatePackageFixture(packageRoot, sourceSchemaHash);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
-      instanceArchive([localDavid]),
+      instanceArchive([localDavid, privateAppArchive(sourceSchemaHash)]),
     );
     await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, privateAppArchive(sourceSchemaHash));
     await writeFile(
       path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
       formatFormlessInstanceWorkspaceManifest({
@@ -2864,6 +2870,10 @@ describe("Formless Site CLI", () => {
 
     expect(accountDiscoveryInputs).toEqual([{ credentialProfile: null }]);
     expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.workspaceAppPackages).toContain('"packageAppKey": "private-labs"');
+    expect(deployInputs[0]?.workspaceAppPackages).toContain('"sourceSchema"');
+    expect(deployInputs[0]?.workspaceAppPackages).not.toContain("../app/formless.app.json");
+    expect(deployInputs[0]?.workspaceAppPackages).not.toContain(packageRoot);
     expect(deployInputs[0]).toMatchObject({
       credentialProfile: null,
       packageRoot: "/package",
@@ -3010,6 +3020,19 @@ describe("Formless Site CLI", () => {
       ...controlPlaneRecords(),
       redirectRouteRecord("old.dpeek.com", "dpeek.com"),
     ];
+    const remoteControlPlaneRecords = controlPlaneSourceRecords.map((record) =>
+      record.entity === "deployment-config"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              observedAt: "2026-05-26T01:00:00.000Z",
+              observedStatus: "in-sync",
+              observedSummary: "Deployment is in sync.",
+            },
+          }
+        : record,
+    );
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneSourceRecords);
@@ -3035,7 +3058,7 @@ describe("Formless Site CLI", () => {
           { david: { records: [] } },
           [],
           [domainMapping("dpeek.com", "david")],
-          controlPlaneSourceRecords,
+          remoteControlPlaneRecords,
         ),
         healthInputs,
         logs,
@@ -3175,6 +3198,130 @@ describe("Formless Site CLI", () => {
     ).rejects.toThrow("Formless deploy refused because remote drift was detected");
     expect(deployInputs).toEqual([]);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
+  });
+
+  it("reports existing target drift during top-level deploy dry-run", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const remoteRecords: StoredRecord[] = [
+      {
+        id: "remote-only",
+        entity: "block",
+        values: { title: "Remote" },
+        createdAt: "2026-05-01T00:00:00.000Z",
+      },
+    ];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+
+    await runFormlessCli(
+      ["deploy", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: archiveFetch(
+          requests,
+          [installedSite("david", "David Peek")],
+          {
+            david: { records: remoteRecords },
+          },
+          [],
+          [],
+          controlPlaneRecords(),
+        ),
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    expect(logs.at(-1)).toContain("Workspace operation: deploy plan (succeeded).");
+    expect(logs.at(-1)).toContain("drift: drift.");
+  });
+
+  it("retries top-level deploy against an empty selected runtime as initial population", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const controlPlaneSourceRecords = controlPlaneRecords().filter(
+      (record) => record.id !== "route:host:publicSite:dpeek.com",
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneSourceRecords);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+
+    await runFormlessCli(
+      ["deploy", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: deploymentApplyFetch(
+          requests,
+          pushArchiveFetch(
+            requests,
+            [],
+            {},
+            [
+              restorePlan({ createdInstalls: ["david"] }),
+              restoreReport({ createdInstalls: ["david"] }),
+            ],
+            [],
+            [],
+            [],
+          ),
+        ),
+        setupInputs,
+      }),
+    );
+
+    const restoreRequests = requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        request.url === "https://personal.dpeek.workers.dev/api/formless/archive/restore",
+    );
+
+    expect(deployInputs).toHaveLength(1);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "local-token",
+        deploymentUrl: "https://personal.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(restoreRequests).toHaveLength(2);
+    expect(
+      restoreRequests.map(
+        (request) =>
+          capturedRequestJson<{ archive: InstanceArchive }>(request).archive.restorePolicy,
+      ),
+    ).toEqual([
+      { dryRun: true, installCollisions: "replace" },
+      { dryRun: false, installCollisions: "replace" },
+    ]);
   });
 
   it("guards top-level deploy against missing Cloudflare accounts and target identity mismatch", async () => {

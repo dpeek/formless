@@ -20,6 +20,10 @@ import type {
   DomainProviderRedirectRuleResource,
   DomainProviderResource,
 } from "../shared/domain-provider-protocol.ts";
+import {
+  cloudflareRedirectRuleExpressionForRequestUrl,
+  cloudflareRedirectRuleTargetExpressionForTargetUrl,
+} from "../shared/cloudflare-redirect-rules.ts";
 
 export type AlchemyDomainProviderPhase = "destroy" | "read" | "up";
 
@@ -37,7 +41,14 @@ export type AlchemyDomainProviderRunner = <T>(
 export type AlchemyDomainProviderFactories = {
   CustomDomain: (id: string, props: CustomDomainProps) => Promise<CustomDomain>;
   DnsRecords: (id: string, props: DnsRecordsProps) => Promise<DnsRecords>;
-  RedirectRule: (id: string, props: RedirectRuleProps) => Promise<RedirectRule>;
+  RedirectRule: (
+    id: string,
+    props: AlchemyDomainProviderRedirectRuleProps,
+  ) => Promise<RedirectRule>;
+};
+
+export type AlchemyDomainProviderRedirectRuleProps = RedirectRuleProps & {
+  targetUrlExpression?: string;
 };
 
 export type AlchemyDeployResourceZoneResolverInput = {
@@ -244,7 +255,7 @@ function applyRedirectRuleResource(
   resource: DomainProviderRedirectRuleResource,
   factories: AlchemyDomainProviderFactories,
 ): Promise<RedirectRule> {
-  return factories.RedirectRule(resource.logicalId, resource.props);
+  return factories.RedirectRule(resource.logicalId, redirectRuleProviderProps(resource.props));
 }
 
 function applyDnsRecordsResource(
@@ -323,7 +334,7 @@ async function dnsRecordsPropsFromDeployResource(
 async function redirectRulePropsFromDeployResource(
   resource: DeployResource,
   resolveZoneIdForHost: AlchemyDeployResourceZoneResolver | undefined,
-): Promise<RedirectRuleProps> {
+): Promise<AlchemyDomainProviderRedirectRuleProps> {
   const targetUrl = requiredStringInput(resource, "targetUrl");
   const requestUrl = optionalStringInput(resource, "requestUrl");
   const fromHost =
@@ -342,7 +353,7 @@ async function redirectRulePropsFromDeployResource(
     );
   }
 
-  return {
+  return redirectRuleProviderProps({
     ...(optionalStringInput(resource, "description") === undefined
       ? {}
       : { description: optionalStringInput(resource, "description") }),
@@ -351,6 +362,25 @@ async function redirectRulePropsFromDeployResource(
     statusCode: redirectStatusCodeInput(resource),
     targetUrl,
     zone,
+  });
+}
+
+function redirectRuleProviderProps(
+  props: RedirectRuleProps,
+): AlchemyDomainProviderRedirectRuleProps {
+  const expression = cloudflareRedirectRuleExpressionForRequestUrl(props.requestUrl);
+  const targetUrlExpression = cloudflareRedirectRuleTargetExpressionForTargetUrl(props.targetUrl);
+
+  if (expression === undefined || targetUrlExpression === undefined) {
+    return props;
+  }
+
+  const { requestUrl: _requestUrl, ...rest } = props;
+
+  return {
+    ...rest,
+    expression,
+    targetUrlExpression,
   };
 }
 

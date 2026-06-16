@@ -300,12 +300,11 @@ describe("Cloudflare domain API client", () => {
         listRedirectRules: async () => [
           {
             description: "Formless redirect www.dpeek.com to dpeek.com",
-            expression:
-              'http.host == "www.dpeek.com" and http.request.uri.path starts_with "/" and ssl',
+            expression: 'http.host == "www.dpeek.com" and ssl',
             id: "rule-1",
             preserveQueryString: true,
             statusCode: 301,
-            targetUrl: "https://dpeek.com/${1}",
+            targetUrlExpression: 'concat("https://dpeek.com", http.request.uri.path)',
           },
         ],
       },

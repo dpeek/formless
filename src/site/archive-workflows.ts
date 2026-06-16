@@ -29,6 +29,7 @@ import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   parseInstanceControlPlaneStorageSnapshot,
+  reviewableInstanceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-instance-control-plane";
 import {
   CORE_IMAGE_KEY_PREFIX,
@@ -159,7 +160,13 @@ async function fetchRemoteControlPlaneArchive(input: {
     { headers: archiveExportRequestHeaders(input.auth, "application/json") },
   );
 
-  return parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", snapshot);
+  return parseInstanceControlPlaneStorageSnapshot(
+    "Instance archive controlPlane",
+    reviewableInstanceControlPlaneStorageSnapshot(snapshot, {
+      context: "Instance archive controlPlane records",
+      sourceLabel: "Instance archive controlPlane",
+    }),
+  );
 }
 
 function instanceArchiveCapabilities(

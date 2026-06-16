@@ -190,6 +190,7 @@ async function runWorkspaceOperationBody(
       return summarizeDeployPlanResult(
         await planDeployLocalFormlessWorkspace(
           {
+            allowRemoteDrift: true,
             migrationPolicy: input.migrationPolicy,
             targetAlias: input.targetAlias,
             workspacePath: input.workspacePath ?? undefined,

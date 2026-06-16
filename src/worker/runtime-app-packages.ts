@@ -23,6 +23,8 @@ import {
   type WorkerSchemaAppDefinition,
 } from "./schema-apps.ts";
 
+declare const __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: string | undefined;
+
 export type ActiveRuntimeAppPackageEnv = {
   [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?: string;
 };
@@ -66,7 +68,7 @@ export function activeWorkerSourceSchemas(
 }
 
 function activeRuntimeAppPackages(env?: ActiveRuntimeAppPackageEnv): ActiveRuntimeAppPackages {
-  const contents = env?.[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?.trim();
+  const contents = activeRuntimeAppPackagesContents(env);
 
   if (!contents) {
     return bundledRuntimeAppPackages();
@@ -122,6 +124,23 @@ function activeRuntimeAppPackages(env?: ActiveRuntimeAppPackageEnv): ActiveRunti
   activeRuntimeAppPackagesCache.set(contents, result);
 
   return result;
+}
+
+function activeRuntimeAppPackagesContents(env?: ActiveRuntimeAppPackageEnv): string | undefined {
+  const envContents = env?.[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?.trim();
+
+  if (envContents) {
+    return envContents;
+  }
+
+  if (
+    typeof __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__ === "string" &&
+    __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__.trim()
+  ) {
+    return __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__.trim();
+  }
+
+  return undefined;
 }
 
 function bundledRuntimeAppPackages(): ActiveRuntimeAppPackages {

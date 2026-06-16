@@ -33,6 +33,11 @@ const siteSourceSchema = parseAppSchema({
         key: { type: "text", required: true, label: "Key" },
         label: { type: "text", required: true, label: "Label" },
       },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
       constraints: {
         uniqueKey: { kind: "unique", fields: ["key"] },
       },

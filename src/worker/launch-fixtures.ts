@@ -18,7 +18,7 @@ import {
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
 } from "@dpeek/formless-instance-control-plane";
-import type { AppPackageResolver } from "../shared/app-packages.ts";
+import { bundledAppPackageResolver, type AppPackageResolver } from "../shared/app-packages.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   ensureStorageTables,
@@ -82,10 +82,11 @@ export function initializeControlPlaneFromLaunchFixture(
 ): LaunchFixtureInstanceInitializationResult {
   ensureStorageTables(storage);
   const initialized = readCurrentStoredSchema(storage) !== undefined;
+  const resolver = packageResolver ?? bundledAppPackageResolver;
   initializeStorageFromSource(storage, launchFixtureControlPlaneStorageSource(plan));
   const installs = instanceControlPlaneAppInstallsFromRecords(
     getBootstrapRecords(storage),
-    packageResolver,
+    resolver,
   );
 
   return {

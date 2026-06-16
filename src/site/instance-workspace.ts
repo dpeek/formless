@@ -551,6 +551,7 @@ export type DeployFormlessInstanceWorkspaceDependencies = {
 };
 
 export type DeployLocalFormlessWorkspaceInput = {
+  allowRemoteDrift?: boolean;
   migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   targetAlias?: string | null;
   workspacePath?: string;
@@ -574,6 +575,7 @@ export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPla
   existingSelectedTarget?: FormlessInstanceWorkspaceTarget;
   manifestPath: string;
   preflight?: CheckFormlessInstanceWorkspaceResult;
+  workspaceAppPackages?: string;
   workspaceRoot: string;
 };
 
@@ -586,6 +588,7 @@ export type PlanDeployFormlessInstanceWorkspaceResult = {
   credentialProfile: string | null;
   plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceAppPackages?: string;
   workspaceRoot: string;
 };
 
@@ -1769,6 +1772,9 @@ export async function deployLocalFormlessWorkspace(
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
       stateRoot: deploymentStateRoot,
+      ...(planned.workspaceAppPackages === undefined
+        ? {}
+        : { workspaceAppPackages: planned.workspaceAppPackages }),
     });
     const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
 
@@ -2133,10 +2139,18 @@ export async function planDeployLocalFormlessWorkspace(
     }
   }
 
-  if (preflight?.drift.status === "drift") {
+  if (
+    preflight?.drift.status === "drift" &&
+    !isEmptyRemoteInitialPopulationDrift(preflight.drift) &&
+    !input.allowRemoteDrift
+  ) {
     throw new Error(
       "Formless deploy refused because remote drift was detected; review `formless check` and retry after saving or pulling the workspace source.",
     );
+  }
+
+  if (preflight && isEmptyRemoteInitialPopulationDrift(preflight.drift)) {
+    existingSelectedTarget = undefined;
   }
 
   const account = await resolveLocalWorkspaceDeploymentAccount({
@@ -2158,6 +2172,7 @@ export async function planDeployLocalFormlessWorkspace(
     plan: planned.plan,
     targetId: planned.selectedTarget.alias,
   });
+  const workspaceAppPackages = runtimeWorkspaceAppPackagesEnvValue(activePackages);
 
   return {
     ...planned,
@@ -2165,6 +2180,7 @@ export async function planDeployLocalFormlessWorkspace(
     ...(existingSelectedTarget === undefined ? {} : { existingSelectedTarget }),
     manifestPath,
     ...(preflight === undefined ? {} : { preflight }),
+    ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
     workspaceRoot,
   };
 }
@@ -2175,6 +2191,21 @@ function isMissingWorkersDevScriptError(error: unknown): boolean {
   return (
     message.includes("workers_dev_script_not_found") ||
     (message.includes("error 1042") && message.includes("no workers script"))
+  );
+}
+
+function isEmptyRemoteInitialPopulationDrift(
+  drift: FormlessInstanceWorkspaceDriftSummary,
+): boolean {
+  return (
+    drift.status === "drift" &&
+    drift.remoteAppCount === 0 &&
+    drift.remoteControlPlaneRecordCount === 0 &&
+    drift.remoteDomainCount === 0 &&
+    drift.remoteMediaCount === 0 &&
+    drift.remoteRecordCount === 0 &&
+    drift.extraInstalls.length === 0 &&
+    drift.packageMismatches.length === 0
   );
 }
 
@@ -2211,6 +2242,9 @@ export async function deployFormlessInstanceWorkspace(
       FORMLESS_ADMIN_TOKEN: adminToken,
     },
     stateRoot: deploymentStateRoot,
+    ...(planned.workspaceAppPackages === undefined
+      ? {}
+      : { workspaceAppPackages: planned.workspaceAppPackages }),
   });
   const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
 
@@ -2275,11 +2309,13 @@ export async function planDeployFormlessInstanceWorkspace(
     packageVersion: dependencies.packageVersion,
     selectedTarget,
   });
+  const workspaceAppPackages = runtimeWorkspaceAppPackagesEnvValue(activePackages);
 
   return {
     credentialProfile: deploymentSource.credentialProfile ?? null,
     plan,
     selectedTarget,
+    ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
     workspaceRoot,
   };
 }

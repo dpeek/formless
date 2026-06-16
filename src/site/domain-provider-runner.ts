@@ -20,6 +20,7 @@ import {
   requestFormlessInstanceDomainProviderDelete,
   type FormlessInstanceTargetClientDependencies,
 } from "./instance-target-client.ts";
+import { FormlessCloudflareRedirectRule } from "./cloudflare-redirect-rule.ts";
 
 export const ALCHEMY_STATE_TOKEN_ENV_NAME = "ALCHEMY_STATE_TOKEN";
 
@@ -259,10 +260,16 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
           ...credentialOptions,
         }),
       RedirectRule: (id, props) =>
-        cloudflare.RedirectRule(id, {
-          ...props,
-          ...credentialOptions,
-        }),
+        props.targetUrlExpression === undefined
+          ? cloudflare.RedirectRule(id, {
+              ...props,
+              ...credentialOptions,
+            })
+          : FormlessCloudflareRedirectRule(id, {
+              ...props,
+              targetUrlExpression: props.targetUrlExpression,
+              ...credentialOptions,
+            }),
     },
     password: alchemyPassword,
     ...(input.rootDir === undefined ? {} : { rootDir: input.rootDir }),

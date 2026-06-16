@@ -7,6 +7,7 @@ import {
   type DomainProviderPlan,
   type DomainProviderResource,
 } from "../shared/domain-provider-protocol.ts";
+import { cloudflareRedirectRuleTargetExpressionForTargetUrl } from "../shared/cloudflare-redirect-rules.ts";
 
 export const CLOUDFLARE_API_TOKEN_ENV_NAME = "CLOUDFLARE_API_TOKEN";
 export const CF_API_TOKEN_ENV_NAME = "CF_API_TOKEN";
@@ -54,6 +55,7 @@ export type CloudflareRedirectRule = {
   preserveQueryString?: boolean;
   statusCode?: number;
   targetUrl?: string;
+  targetUrlExpression?: string;
 };
 
 export type CloudflareDomainClient = {
@@ -726,6 +728,12 @@ function parseCloudflareRedirectRule(value: unknown): CloudflareRedirectRule {
   const targetUrl = isRecord(fromValue?.target_url)
     ? parseOptionalString(fromValue.target_url.value, "Cloudflare redirect rule target URL")
     : undefined;
+  const targetUrlExpression = isRecord(fromValue?.target_url)
+    ? parseOptionalString(
+        fromValue.target_url.expression,
+        "Cloudflare redirect rule target URL expression",
+      )
+    : undefined;
   const statusCode = typeof fromValue?.status_code === "number" ? fromValue.status_code : undefined;
   const preserveQueryString =
     typeof fromValue?.preserve_query_string === "boolean"
@@ -746,6 +754,7 @@ function parseCloudflareRedirectRule(value: unknown): CloudflareRedirectRule {
     ...(preserveQueryString === undefined ? {} : { preserveQueryString }),
     ...(statusCode === undefined ? {} : { statusCode }),
     ...(targetUrl === undefined ? {} : { targetUrl }),
+    ...(targetUrlExpression === undefined ? {} : { targetUrlExpression }),
   };
 }
 
@@ -770,9 +779,15 @@ function isExpectedRedirectRule(
   rule: CloudflareRedirectRule,
   resource: Extract<DomainProviderResource, { kind: "cloudflare-redirect-rule" }>,
 ): boolean {
+  const expectedTargetUrlExpression = cloudflareRedirectRuleTargetExpressionForTargetUrl(
+    resource.props.targetUrl,
+  );
+
   return (
     rule.description === resource.props.description &&
-    rule.targetUrl === resource.targetUrl &&
+    (rule.targetUrl === resource.targetUrl ||
+      (expectedTargetUrlExpression !== undefined &&
+        rule.targetUrlExpression === expectedTargetUrlExpression)) &&
     rule.statusCode === resource.props.statusCode &&
     rule.preserveQueryString === resource.props.preserveQueryString
   );

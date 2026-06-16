@@ -262,7 +262,13 @@ describe("Alchemy domain provider adapter", () => {
       ["CustomDomain", "primary-custom-domain-app-example-com-publicsite-site"],
     ]);
     expect(calls[0]?.props).toMatchObject({ zoneId: "zone-example" });
-    expect(calls[1]?.props).toMatchObject({ zone: "zone-example", statusCode: 308 });
+    expect(calls[1]?.props).toMatchObject({
+      expression: 'http.host == "www.example.com" and ssl',
+      statusCode: 308,
+      targetUrlExpression: 'concat("https://example.com", http.request.uri.path)',
+      zone: "zone-example",
+    });
+    expect(calls[1]?.props).not.toHaveProperty("requestUrl");
     expect(calls[2]?.props).toMatchObject({
       adopt: true,
       name: "app.example.com",

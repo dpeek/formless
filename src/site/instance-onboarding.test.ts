@@ -6,6 +6,7 @@ import {
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
+import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
   checkFormlessInstanceDeployMetadata,
   createFormlessInstanceOwnerSetupCapability,
@@ -912,6 +913,7 @@ describe("Alchemy Formless instance deployment", () => {
           FORMLESS_ADMIN_TOKEN: "admin-secret",
         },
         stateRoot: "/state",
+        workspaceAppPackages: "runtime-package-payload",
       },
       dependencies,
     );
@@ -999,7 +1001,13 @@ describe("Alchemy Formless instance deployment", () => {
               FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
               FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
               FORMLESS_RUNTIME_PROFILE: "instance",
+              [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: "runtime-package-payload",
               VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+            },
+          },
+          bundle: {
+            define: {
+              __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: JSON.stringify("runtime-package-payload"),
             },
           },
           compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,

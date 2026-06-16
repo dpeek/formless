@@ -15,6 +15,7 @@ import {
   FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
   FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
 } from "../shared/turnstile-config.ts";
+import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
   applyAlchemyDeployResourceGraph,
   type AlchemyDeployResourceZoneResolver,
@@ -26,6 +27,7 @@ import {
   type TurnstileWidgetOutput,
   type TurnstileWidgetProps,
 } from "./turnstile-alchemy.ts";
+import { FormlessCloudflareRedirectRule } from "./cloudflare-redirect-rule.ts";
 
 export const ALCHEMY_PASSWORD_ENV_NAME = "ALCHEMY_PASSWORD";
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
@@ -155,6 +157,7 @@ export type DeployFormlessInstanceInput = {
   plan: FormlessInstanceDeploymentPlan;
   secrets: FormlessInstanceDeploymentSecrets;
   stateRoot: string;
+  workspaceAppPackages?: string;
 };
 
 export type DeployFormlessInstanceResult = {
@@ -284,7 +287,14 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
   bindings: Record<string, unknown>;
   build: {
     command: "bun run build";
-    env: FormlessInstanceDeploymentPlan["runtimeVars"];
+    env: FormlessInstanceDeploymentPlan["runtimeVars"] & {
+      [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?: string;
+    };
+  };
+  bundle: {
+    define: {
+      __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: string;
+    };
   };
   compatibilityDate: typeof FORMLESS_WORKER_COMPATIBILITY_DATE;
   cwd: string;
@@ -350,6 +360,7 @@ type DeclareFormlessInstanceAlchemyResourceTreeInput = {
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
   resourceGraph?: DeployResourceGraph;
+  workspaceAppPackages?: string;
 };
 
 type DeclareFormlessInstanceAlchemyResourceTreeResult = {
@@ -862,7 +873,17 @@ async function declareFormlessInstanceAlchemyResourceTree(
     },
     build: {
       command: "bun run build",
-      env: input.plan.runtimeVars,
+      env: {
+        ...input.plan.runtimeVars,
+        ...(input.workspaceAppPackages === undefined
+          ? {}
+          : { [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: input.workspaceAppPackages }),
+      },
+    },
+    bundle: {
+      define: {
+        __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: JSON.stringify(input.workspaceAppPackages ?? ""),
+      },
     },
     compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
     cwd: input.packageRoot,
@@ -943,6 +964,9 @@ export async function deployFormlessInstanceWithAlchemy(
     ...(input.deploymentResourceGraph === undefined
       ? {}
       : { resourceGraph: input.deploymentResourceGraph }),
+    ...(input.workspaceAppPackages === undefined
+      ? {}
+      : { workspaceAppPackages: input.workspaceAppPackages }),
   });
 
   await app.finalize();
@@ -1334,7 +1358,13 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
     createDurableObjectNamespace: (id, props) => cloudflare.DurableObjectNamespace(id, props),
     createDnsRecords: (id, props) => cloudflare.DnsRecords(id, props),
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
-    createRedirectRule: (id, props) => cloudflare.RedirectRule(id, props),
+    createRedirectRule: (id, props) =>
+      props.targetUrlExpression === undefined
+        ? cloudflare.RedirectRule(id, props)
+        : FormlessCloudflareRedirectRule(id, {
+            ...props,
+            targetUrlExpression: props.targetUrlExpression,
+          }),
     createSecret: (value) => alchemy.secret(value),
     createTurnstileWidget: (id, props) => CloudflareTurnstileWidget(id, props),
     deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),
