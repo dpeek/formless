@@ -25,14 +25,19 @@ Common commands:
   reviewable workspace source without mutating Cloudflare.
 - `formless save` writes local Authority-backed instance state to reviewable workspace archives.
 - `formless save --check` fails when reviewable workspace source is stale.
-- `formless check` compares workspace source and configured target drift.
+- `formless pull` fetches remote instance state into reviewable workspace source.
+- `formless push --apply` applies reviewable workspace source to a configured
+  deployed instance without redeploying runtime code.
+- `formless deploy --dry-run` inspects source freshness, target drift,
+  upgrades, and desired provider resources without mutating Cloudflare.
 - `formless deploy` is the explicit Cloudflare boundary: it deploys the
   instance from workspace source, applies control-plane desired resources through
   deployment attempts, keeps secrets under `.formless/`, and pushes saved
   archives.
 - `formless destroy` is the explicit Cloudflare boundary for tearing down the configured deployment.
-- `formless instance ...` manages advanced instance workspace pull, check,
-  push, dev, deploy, and destroy flows.
+- `formless owner setup` creates an owner setup capability for the selected target.
+- `formless token adopt` and `formless token rotate` manage ignored workspace
+  admin-token state for automation.
 
 ## Packages
 
@@ -52,7 +57,7 @@ The runtime already has:
 - HTTP cursor sync and push sync;
 - generated React UI for schema-declared screens, views, tables, trees, fields, and actions;
 - Site records projected into public trees and SSR documents;
-- local-first workspace CLI for dev, save, check, deploy, and destroy;
+- local-first workspace CLI for dev, save, pull, push, deploy, and destroy;
 - portable app and instance archives;
 - installed app identity and routes;
 - schema-owned instance control-plane records for installs, routes, domain

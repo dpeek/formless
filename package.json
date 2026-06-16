@@ -41,7 +41,7 @@
     "instance:onboarding:save": "bun run scripts/formless.ts save --workspace instances/onboarding",
     "instance:onboarding:check": "bun run scripts/formless.ts save --workspace instances/onboarding --check",
     "instance:onboarding:reset": "bun run scripts/onboarding-workspace.ts reset",
-    "instance:onboarding:destroy": "bun run scripts/formless.ts instance destroy --workspace instances/onboarding --target instance.primary --confirm onboarding",
+    "instance:onboarding:destroy": "bun run scripts/formless.ts destroy --workspace instances/onboarding --target instance.primary --confirm onboarding",
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {

@@ -509,27 +509,18 @@ describe("workspace operation contracts", () => {
       ),
     );
     expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual([
-      "check",
-      "deploymentRefresh",
       "deployApply",
-      "init",
+      "deployPlan",
       "pull",
       "push",
       "save",
-      "status",
     ]);
     expect(WORKSPACE_CLI_OPERATION_COMMANDS).toEqual([
-      "formless check",
-      "formless instance check",
-      "formless instance refresh",
       "formless deploy",
-      "formless instance deploy",
-      "formless instance init-workspace",
-      "formless instance pull",
-      "formless instance push",
+      "formless deploy --dry-run",
+      "formless pull",
+      "formless push",
       "formless save",
-      "formless instance dev",
-      "formless instance status",
     ]);
     expect(WORKSPACE_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceOperationKind("init")).toBe(true);
@@ -537,7 +528,8 @@ describe("workspace operation contracts", () => {
     expect(isWorkspaceBrowserOperationKind("deploymentRefresh")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("credentialSetup")).toBe(true);
     expect(isWorkspaceCliOperationKind("push")).toBe(true);
-    expect(isWorkspaceCliCommandName("formless instance push")).toBe(true);
+    expect(isWorkspaceCliCommandName("formless push")).toBe(true);
+    expect(isWorkspaceCliCommandName("formless instance push")).toBe(false);
     expect(isWorkspaceCliCommandName("formless instance owner setup")).toBe(false);
 
     expect(workspaceOperationDefinitionForKey("workspace.status")).toMatchObject({
@@ -554,11 +546,14 @@ describe("workspace operation contracts", () => {
     expect(workspaceOperationDefinitionForKind("save").bindings.cli?.commands).toEqual([
       "formless save",
     ]);
-    expect(workspaceOperationDefinitionForCliCommand("formless instance deploy")).toMatchObject({
+    expect(workspaceOperationDefinitionForCliCommand("formless deploy")).toMatchObject({
       handlerKey: "deployment.apply",
       kind: "deployApply",
     });
-    expect("cli" in workspaceOperationDefinitionForKind("deployPlan").bindings).toBe(false);
+    expect(workspaceOperationDefinitionForCliCommand("formless deploy --dry-run")).toMatchObject({
+      handlerKey: "deployment.plan",
+      kind: "deployPlan",
+    });
     expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
     expect(workspaceOperationDefinitionForKind("status").bindings.gateway).toEqual({
       bootstrap: true,

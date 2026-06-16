@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Portable archives move Formless app and instance data through reviewable export,
-restore, import, and workspace workflows. They are backup, restore, import, and
-ejection plumbing, not bidirectional instance sync.
+Portable archives move Formless app and instance data through reviewable save,
+pull, push, deploy, backup, restore, import, and ejection workflows. They are
+internal data-movement plumbing, not a separate public CLI command family.
 
 ## Requirements
 
@@ -127,7 +127,8 @@ restore command supports retargeting.
 #### Scenario: Retarget Site app archive
 
 - GIVEN a Site app archive exists
-- WHEN `restore-app` runs with a target install id
+- WHEN a workspace or restore workflow applies the archive with a target
+  install id
 - THEN the app archive can be restored to that install id
 - AND install-scoped storage and routes use the target install id
 
@@ -289,9 +290,9 @@ semantic operation contracts through the Workspace package slice.
 
 #### Scenario: Package does not own runtime mutation
 
-- **WHEN** workspace save, check, pull, push, deploy, credential setup, export,
-  restore, app install, control-plane mutation, Authority reads, provider
-  mutation, Gateway authorization, or runtime topology selection is needed
+- **WHEN** workspace save, pull, push, deploy, credential setup, app install,
+  control-plane mutation, Authority reads, provider mutation, Gateway
+  authorization, or runtime topology selection is needed
 - **THEN** those behaviors remain owned by CLI, Site runtime, Archive
   workflows, Deploy runtime, Worker runtime, Gateway runtime adapters, or
   provider adapters
@@ -304,9 +305,9 @@ semantic operation contracts through the Workspace package slice.
 
 ### Requirement: Instance Workspaces
 
-The system SHALL let a local Formless workspace review, save, pull, check,
-push, dev, and deploy instance state without storing instance intent or secrets
-in the manifest.
+The system SHALL let a local Formless workspace save, pull, push, dev, and
+deploy instance state without storing instance intent or secrets in the
+manifest.
 
 #### Scenario: Workspace manifest
 
@@ -325,7 +326,7 @@ in the manifest.
 
 #### Scenario: Workspace push apply
 
-- **WHEN** `formless instance push --apply` runs
+- **WHEN** `formless push --apply` runs
 - **THEN** the workflow composes an instance archive from workspace
   control-plane record source, app archives, and media payloads
 - **AND** a fresh whole-instance backup is taken
@@ -339,7 +340,7 @@ workspace source.
 
 #### Scenario: Check drift
 
-- **WHEN** a workspace targeting a remote instance runs `formless instance check`
+- **WHEN** a workspace targeting a remote instance runs `formless deploy --dry-run`
 - **THEN** remote target archive state is compared with local app archives and
   local schema-owned control-plane record source
 - **AND** `app-install`, unified `route`, `deployment-config`, app record, and
@@ -355,7 +356,7 @@ workspace source.
 #### Scenario: Refuse stale push
 
 - **WHEN** current target state has drifted from the workspace source and
-  `formless instance push --apply` runs without stale acknowledgement
+  `formless push --apply` runs without stale acknowledgement
 - **THEN** the push is refused
 - **AND** target data remains unchanged
 
@@ -436,7 +437,7 @@ schema-owned control-plane records.
 
 #### Scenario: Check control-plane drift
 
-- **GIVEN** `formless instance check` compares instance control-plane state
+- **GIVEN** `formless deploy --dry-run` compares instance control-plane state
 - **WHEN** remote and local control-plane records differ
 - **THEN** drift is reported from schema-owned app install, route, and
   deployment config records

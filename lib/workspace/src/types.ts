@@ -168,7 +168,6 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless check", "formless instance check"] },
       gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "check" },
     },
     handlerKey: "workspace.source.check",
@@ -212,7 +211,6 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless instance refresh"] },
       gateway: {
         bootstrap: false,
         inputFields: ["targetAlias"],
@@ -230,7 +228,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless deploy", "formless instance deploy"] },
+      cli: { commands: ["formless deploy"] },
       gateway: {
         bootstrap: false,
         inputFields: ["migrationPolicy", "targetAlias"],
@@ -248,6 +246,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
+      cli: { commands: ["formless deploy --dry-run"] },
       gateway: {
         bootstrap: false,
         inputFields: ["migrationPolicy", "targetAlias"],
@@ -264,9 +263,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   },
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
-    bindings: {
-      cli: { commands: ["formless instance init-workspace"] },
-    },
+    bindings: {},
     handlerKey: "workspace.init",
     input: {
       fields: [
@@ -283,7 +280,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless instance pull"] },
+      cli: { commands: ["formless pull"] },
       gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "pull" },
     },
     handlerKey: "workspace.source.pull",
@@ -297,7 +294,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless instance push"] },
+      cli: { commands: ["formless push"] },
       gateway: {
         bootstrap: false,
         inputFields: ["allowStale", "apply", "replace", "replaceInstallSet", "targetAlias"],
@@ -349,7 +346,6 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless instance dev", "formless instance status"] },
       gateway: {
         bootstrap: true,
         inputFields: ["includeDeploymentStatus", "targetAlias"],

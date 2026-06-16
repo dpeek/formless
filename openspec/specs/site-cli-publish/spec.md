@@ -2,52 +2,55 @@
 
 ## Purpose
 
-Site CLI publish behavior lets a local Formless workspace initialize, run,
-save, deploy, move data through portable archives, and manage instance and
-custom-domain intent.
+Site CLI publish behavior lets a local Formless workspace run, save, sync,
+deploy, and manage selected instance access.
 
 ## Requirements
 
 ### Requirement: CLI Command Families
 
-The package SHALL expose local workspace runtime, workspace operation, archive,
-explicit cleanup, owner setup, token, and destroy command families from the
-`formless` CLI while keeping top-level workspace commands as the normal product
-path.
+The package SHALL expose one top-level `formless` command spelling for each
+normal workspace operation and SHALL keep raw archive movement, instance
+aliases, status, check, refresh, init, reset, and domain repair commands out of
+the public CLI surface.
 
 #### Scenario: Local workspace commands
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs `formless dev`, `formless save`, `formless check`,
-  `formless deploy`, or `formless destroy`
+- **WHEN** a user runs `formless dev`, `formless save`, `formless pull`,
+  `formless push`, `formless deploy`, or `formless destroy`
 - **THEN** the command operates on the local Formless workspace selected by
   `formless.json`
-- **AND** `formless dev`, `formless save`, and `formless check` do not mutate
+- **AND** `formless dev`, `formless save`, and `formless pull` do not mutate
   Cloudflare resources
+- **AND** `formless push` mutates only deployed instance data through runtime
+  APIs after explicit apply input
 - **AND** `formless deploy` and `formless destroy` are explicit Cloudflare
-  deployment boundaries
+  runtime and provider-resource boundaries
 
-#### Scenario: Archive commands
+#### Scenario: Deploy dry-run
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs archive export or restore commands
-- **THEN** portable archive data movement remains available
-- **AND** those commands stay scoped to archive data movement
+- **WHEN** a user runs `formless deploy --dry-run`
+- **THEN** the command plans workspace source freshness, target drift, upgrade
+  requirements, deployment desired resources, and custom-domain, DNS, and
+  redirect reconciliation without mutating local source, remote data,
+  Cloudflare resources, or Alchemy state
 
-#### Scenario: Explicit cleanup commands
+#### Scenario: Removed command families
 
-- **GIVEN** recorded provider evidence exists
-- **WHEN** a user runs a supported explicit cleanup or delete command with the
-  required host, resource kind, logical id, target, and authorization inputs
-- **THEN** the command targets recorded provider evidence only
-- **AND** route intent, workspace source, and app data are not mutated by the
-  cleanup command
+- **GIVEN** the package CLI is installed
+- **WHEN** a user runs a removed archive, instance alias, status, check,
+  refresh, init, reset, or domain command
+- **THEN** the command is handled by ordinary unsupported-command behavior
+- **AND** provider, Authority, filesystem, deploy adapter, command, and state
+  mutation code is not run for the removed command name
 
 #### Scenario: Owner setup command
 
 - **GIVEN** the package CLI is installed and a Formless instance workspace has a
   selected deployed target
-- **WHEN** a user runs `formless instance owner setup ... [--open]`
+- **WHEN** a user runs `formless owner setup ... [--open]`
 - **THEN** the CLI reads the selected target owner setup status before minting a
   setup capability
 - **AND** if owner setup is incomplete, the CLI uses the selected admin token
@@ -60,6 +63,13 @@ path.
   browser
 - **AND** the admin token is not displayed and the setup token is displayed only
   as part of the intended setup URL
+
+#### Scenario: Token commands
+
+- **GIVEN** an instance workspace needs automation write access
+- **WHEN** a user runs `formless token adopt` or `formless token rotate`
+- **THEN** ignored workspace secret state stores the automation admin token
+- **AND** reviewable workspace source does not store the secret
 
 ### Requirement: Workspace Operation Definitions
 
@@ -98,6 +108,7 @@ local execution binding handles it.
 - **WHEN** the CLI exposes a workspace command for a defined operation
 - **THEN** command arguments and defaults are selected from the operation input
   contract and CLI binding
+- **AND** each public workspace operation has one CLI binding name
 - **AND** the command invokes the operation through the local workspace
   operation runner with actor `cli`
 - **AND** execution may continue to dispatch to existing local workspace
@@ -151,8 +162,8 @@ optional first app install, credential setup, and deploy operations.
 - **AND** before a local owner session is established, the browser can only read
   gateway status through bootstrap authorization and exchange a CLI-minted local
   session bootstrap token for an owner session
-- **AND** app install, save, check, credential setup, deploy plan, and deploy
-  apply entry points are available through browser-owned local runtime flows
+- **AND** app install, save, credential setup, deploy plan, and deploy apply
+  entry points are available through browser-owned local runtime flows
   after local session bootstrap
 
 #### Scenario: Open authenticated local session
@@ -188,7 +199,7 @@ optional first app install, credential setup, and deploy operations.
 
 - **GIVEN** `formless.packages.json` points at a missing or invalid package
   manifest, source schema, or seed record file
-- **WHEN** `formless dev`, `formless check`, `formless deploy`, or a workspace
+- **WHEN** `formless dev`, `formless push`, `formless deploy`, or a workspace
   operation builds the active package resolver
 - **THEN** the command fails before starting local runtime mutation, remote
   mutation, deploy planning, or provider mutation
@@ -284,37 +295,19 @@ Instance deploy workflows SHALL verify upgrade metadata after code deploy.
 
 #### Scenario: Verify deployed metadata
 
-- WHEN `formless deploy` or `formless instance deploy` deploys runtime code
+- WHEN `formless deploy` deploys runtime code
 - THEN it verifies package version, runtime protocol, storage migration set, and
   package app revision/hash facts from deployed metadata
 - AND verification failure stops subsequent data migration steps
 
-### Requirement: Portable Archives
-
-The system SHALL export, restore, and import Site and instance data as portable archive directories that include declared capabilities and referenced core media.
-
-#### Scenario: Export app archive
-
-- GIVEN a target Formless instance contains an installed Site app
-- WHEN `formless archive export-app --target <url> --install <id> --out <dir>` runs
-- THEN one app archive directory is written
-- AND referenced core image media is included as archive media payloads
-
-#### Scenario: Restore dry-run
-
-- GIVEN a portable archive directory exists
-- WHEN archive restore runs without `--apply`
-- THEN the restore is a dry-run
-- AND no remote app or instance data is mutated
-
 ### Requirement: Site CLI Media Package Boundary
 
-The system SHALL keep Site CLI save, import, and archive behavior stable
+The system SHALL keep Site CLI save, pull, push, and deploy behavior stable
 while consuming Media contracts from public package subpaths.
 
 #### Scenario: Archive workflows use Media contract
 
-- GIVEN Site CLI save, import, export, or restore workflows validate or
+- GIVEN Site CLI save, pull, push, or deploy workflows validate or
   move core media payloads
 - WHEN they need media asset, storage key, delivery, or restore result shapes
 - THEN they use public Media package contracts
@@ -322,7 +315,7 @@ while consuming Media contracts from public package subpaths.
 #### Scenario: Existing archive behavior remains stable
 
 - GIVEN Site CLI workflows move referenced owned image media
-- WHEN media is represented in an archive
+- WHEN media is represented in workspace source or sync payloads
 - THEN media is represented with core media objects and the `core-media-assets`
   capability
 - AND records do not receive provider-specific URLs
@@ -333,29 +326,30 @@ The system SHALL manage reviewable Formless workspaces whose `formless.json`
 manifests describe workspace layout and local configuration while instance
 intent lives in schema-owned record source.
 
-#### Scenario: Pull and check
+#### Scenario: Pull and deploy dry-run
 
-- **WHEN** `formless instance pull` runs and then `formless instance check` runs
+- **WHEN** `formless pull` runs and then `formless deploy --dry-run` runs
   for a workspace targeting a remote Formless instance
 - **THEN** target control-plane records, app archives, and media payloads are
   written into workspace source
-- **AND** check reports archive and control-plane record drift against the
-  selected target
-- **AND** status, pull, check, and push select the remote HTTP origin from an
-  enabled `deployment-config.targetUrl` record rather than `formless.json`
+- **AND** deploy dry-run reports archive, control-plane record, deployment,
+  custom-domain, DNS, and redirect drift against the selected target
+- **AND** pull, push, deploy dry-run, and deploy select the remote HTTP origin
+  from an enabled `deployment-config.targetUrl` record rather than
+  `formless.json`
 
 #### Scenario: Push apply
 
-- **WHEN** `formless instance push --apply` runs with ready workspace source and
+- **WHEN** `formless push --apply` runs with ready workspace source and
   target drift acknowledged when needed
 - **THEN** the workflow takes a fresh whole-instance backup
 - **AND** dry-runs before applying the composed instance archive restore
 
-### Requirement: Domain And Deploy Commands
+### Requirement: Deploy Commands
 
-The system SHALL keep deployment, destroy, and explicit provider repair cleanup
-credential-scoped while making projected deployment resource graphs the normal
-provider mutation input for workspace-controlled deploy intent.
+The system SHALL keep deployment and destroy credential-scoped while making
+projected deployment resource graphs the only normal provider mutation input
+for workspace-controlled deploy intent.
 
 #### Scenario: First workspace deploy
 
@@ -412,17 +406,10 @@ provider mutation input for workspace-controlled deploy intent.
   selected deployment Worker name
 - **THEN** the command fails before Cloudflare or Alchemy mutation
 
-#### Scenario: Automation admin token
-
-- **GIVEN** an instance workspace needs automation write access
-- **WHEN** a supported token adopt or rotate command runs
-- **THEN** ignored workspace secret state stores the automation admin token
-- **AND** reviewable workspace source does not store the secret
-
 #### Scenario: Authenticated instance target context
 
-- **WHEN** CLI status, check, pull, push, deploy, owner setup, archive export,
-  or domain workflows contact a selected deployed instance target
+- **WHEN** CLI pull, push, deploy dry-run, deploy, or owner setup workflows
+  contact a selected deployed instance target
 - **THEN** the CLI resolves one target context containing the normalized target
   URL, ignored local secret state, environment overrides, and optional explicit
   admin token
@@ -439,24 +426,6 @@ provider mutation input for workspace-controlled deploy intent.
 - **AND** it does not require installed app registry, route, deployment status,
   archive, or browser owner session reads before the first owner passkey exists
 
-### Requirement: Provider Cleanup CLI
-
-The Site CLI SHALL keep explicit provider repair cleanup available for recorded
-evidence while route-derived provider resources reconcile through workspace
-deploy reconciliation.
-
-#### Scenario: Domain cleanup remains repair-only
-
-- **GIVEN** recorded provider evidence exists for a host, resource kind, and
-  logical id that cannot be reconciled through tracked Alchemy state
-- **WHEN** a supported explicit provider delete or manual cleanup command runs
-- **THEN** the command mutates only the selected provider evidence or selected
-  recorded provider resource
-- **AND** cleanup output includes the deployment or provider evidence ids needed
-  for audit when available
-- **AND** route removal during normal operation is handled by `formless deploy`
-  reconciliation, not by explicit cleanup commands
-
 ### Requirement: Schema Control-Plane Protocol
 
 The Site CLI SHALL use the instance protocol and local workspace operation layer
@@ -465,8 +434,8 @@ deployment intent records.
 
 #### Scenario: CLI reads deployment records
 
-- **WHEN** CLI status, check, pull, push, plan, deploy, or domain workflows need
-  instance control-plane state
+- **WHEN** CLI pull, push, deploy dry-run, or deploy workflows need instance
+  control-plane state
 - **THEN** they read allowed `app-install`, `route`, and
   `deployment-config` records through the instance control-plane protocol or
   workspace record source
@@ -488,19 +457,12 @@ deployment intent records.
 - **AND** runner-held credentials remain outside browser, archive, record
   source, and workspace manifest responses
 
-#### Scenario: CLI check remains read-only
+#### Scenario: Deploy dry-run remains read-only
 
-- **WHEN** a check command compares local workspace source, remote instance
-  source, deployment projection, or provider state
+- **WHEN** `formless deploy --dry-run` compares local workspace source, remote
+  instance source, deployment projection, or provider state
 - **THEN** it reports fresh deployment observations without patching deployment
   config observation cache fields
-
-#### Scenario: CLI refresh persists observation
-
-- **WHEN** a refresh or status-write command explicitly persists latest
-  deployment observation
-- **THEN** it patches only deployment config observation cache fields
-- **AND** deployment intent fields remain unchanged
 
 #### Scenario: CLI reads app routes
 
@@ -508,25 +470,3 @@ deployment intent records.
 - **THEN** the CLI reads `app-install` and `route` records
 - **AND** route drift is reported by comparing route records rather than
   hand-derived install route strings or manifest route summaries
-
-### Requirement: Compatible Domain Commands
-
-The Site CLI SHALL keep domain inspection and explicit cleanup command surfaces
-available where they expose behavior not replaced by workspace deploy.
-
-#### Scenario: Domain inspection output
-
-- **GIVEN** users inspect domain, route, deployment, drift, or provider evidence
-  state
-- **WHEN** a supported non-mutating command executes
-- **THEN** output may include schema-owned route ids, deployment config ids,
-  desired-state hashes, latest observation summaries, and provider evidence ids
-- **AND** the command does not mutate provider resources
-
-#### Scenario: Removed direct fallback commands are unsupported
-
-- **GIVEN** users run a removed direct fallback or domain apply command
-- **WHEN** the command executes
-- **THEN** the command is handled by ordinary unsupported-command behavior
-- **AND** provider, Authority, filesystem, deploy adapter, command, and state
-  mutation code is not run for the removed command name

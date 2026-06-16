@@ -48,7 +48,7 @@ defaults and clear escape hatches.
   collections, tables, trees, fields, and actions.
 - Site already proves one definition can produce generated admin UI and public
   HTML output.
-- `formless onboard` already creates a local Formless workspace before
+- `formless dev` already creates a local Formless workspace before
   Cloudflare mutation.
 - `formless deploy` is the explicit Cloudflare deployment boundary for a saved
   workspace.
@@ -207,11 +207,10 @@ The happy path should be terse. The advanced path should be explicit.
 The target first impression:
 
 ```sh
-formless onboard
 formless dev
 ```
 
-Those commands should create a reviewable local Formless workspace, run the
+That command should create a reviewable local Formless workspace, run the
 product instance locally, and let the user explore before deploying.
 
 From the browser, the user should be able to:
