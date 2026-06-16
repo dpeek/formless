@@ -627,7 +627,7 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
     expect(html).toContain("Instance");
     expect(html).toContain('aria-label="Instance navigation"');
-    expect(html).toContain('href="/deployments"');
+    expect(html).not.toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
     expect(html).toContain('href="/tasks"');
     expect(html).toContain('href="/site"');
@@ -644,7 +644,7 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
     expect(html).toContain("Instance");
     expect(html).toContain('aria-label="Instance navigation"');
-    expect(linkHtml(html, "/deployments")).toContain('aria-current="page"');
+    expect(html).not.toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
   });
 
@@ -803,7 +803,7 @@ describe("App smoke routes", () => {
     expect(deploymentsHtml).toContain("Loading installed apps...");
     expect(deploymentsHtml).not.toContain('data-frame="workbench"');
     expect(deploymentsHtml).not.toContain('aria-label="Runtime apps"');
-    expect(linkHtml(deploymentsHtml, "/deployments")).toContain('aria-current="page"');
+    expect(deploymentsHtml).not.toContain('href="/deployments"');
     expect(shellHtml).not.toContain('data-frame="workbench"');
     expect(shellHtml).not.toContain('aria-label="Runtime apps"');
     expect(legacyHtml).toContain("Not found");

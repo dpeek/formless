@@ -169,6 +169,7 @@ export function selectWorkspaceGatewayOperationControls({
 
   return WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceBrowserGatewayBinding)
     .filter((definition) => definition.mode === "write")
+    .filter((definition) => definition.kind !== "save")
     .filter((definition) => definition.actorPolicy.allowedActors.includes(runtime.actor))
     .filter((definition) => capabilities.has(definition.requiredCapability))
     .map(workspaceGatewayOperationControlFromDefinition)
@@ -303,9 +304,13 @@ export function InstanceShellRoute() {
             );
             return;
           }
+        } else {
+          setWorkspaceGatewayState({ status: "unavailable" });
         }
 
-        const deploymentRuntimePromise = initialReadScope.deploymentRuntime
+        const deploymentRuntimeAvailable =
+          initialReadScope.deploymentRuntime && workspaceGatewayResponse !== undefined;
+        const deploymentRuntimePromise = deploymentRuntimeAvailable
           ? Promise.all([
               fetchOptionalInstanceDeploymentDesiredState(controller.signal),
               fetchOptionalInstanceDeploymentStatus(controller.signal),
@@ -843,11 +848,20 @@ export function InstanceShellRouteView({
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const pathname = currentPath.split("?")[0] ?? currentPath;
   const isDeploymentsRoute = pathname === runtimeTopologyRoutes.deploymentsRoute;
+  const deploymentRouteAvailable = localWorkspaceGatewayProxyAvailable(workspaceGatewayState);
+  const renderDeploymentsRoute = isDeploymentsRoute && deploymentRouteAvailable;
+  const shellCurrentPath =
+    isDeploymentsRoute && !deploymentRouteAvailable
+      ? runtimeTopologyRoutes.instanceRootRoute
+      : currentPath;
 
   if (state.status === "loading") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader currentPath={currentPath} />
+        <ShellHeader
+          currentPath={shellCurrentPath}
+          showDeploymentsLink={deploymentRouteAvailable}
+        />
         <p className="text-sm text-muted-fg">Loading installed apps...</p>
       </section>
     );
@@ -856,7 +870,10 @@ export function InstanceShellRouteView({
   if (state.status === "failed") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader currentPath={currentPath} />
+        <ShellHeader
+          currentPath={shellCurrentPath}
+          showDeploymentsLink={deploymentRouteAvailable}
+        />
         <p className="text-sm text-red-700" role="alert">
           {state.message}
         </p>
@@ -864,10 +881,13 @@ export function InstanceShellRouteView({
     );
   }
 
-  if (isDeploymentsRoute) {
+  if (renderDeploymentsRoute) {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-        <ShellHeader currentPath={currentPath} />
+        <ShellHeader
+          currentPath={shellCurrentPath}
+          showDeploymentsLink={deploymentRouteAvailable}
+        />
         <GeneratedDeploymentManagementSection
           deploymentDesiredState={state.deploymentDesiredState}
           deploymentStatus={state.deploymentStatus}
@@ -881,7 +901,7 @@ export function InstanceShellRouteView({
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <ShellHeader currentPath={currentPath} />
+      <ShellHeader currentPath={shellCurrentPath} showDeploymentsLink={deploymentRouteAvailable} />
       <WorkspaceGatewayManagementSection
         installCount={state.installs.length}
         onInstallFirstApp={() => setInstallDialogOpen(true)}
@@ -904,6 +924,10 @@ export function InstanceShellRouteView({
       />
     </section>
   );
+}
+
+function localWorkspaceGatewayProxyAvailable(state: WorkspaceGatewayRouteState): boolean {
+  return state.status !== "unavailable";
 }
 
 function WorkspaceGatewayManagementSection({
@@ -966,13 +990,7 @@ function WorkspaceGatewayManagementSection({
       />
       <WorkspaceAutoSaveStatusPanel
         autoSave={state.status === "ready" ? state.autoSave : undefined}
-        canStartSave={workspaceGatewayCanStartPostBootstrapOperation(state, onStartOperation)}
         error={state.status === "ready" ? state.autoSaveError : undefined}
-        onStartSave={() =>
-          onStartOperation?.(
-            workspaceGatewayStartInputFromDefinition(workspaceOperationDefinitionForKind("save")),
-          )
-        }
       />
       <WorkspaceOnboardingFlowSection
         installCount={installCount}
@@ -986,19 +1004,6 @@ function WorkspaceGatewayManagementSection({
         />
       ) : null}
     </section>
-  );
-}
-
-function workspaceGatewayCanStartPostBootstrapOperation(
-  state: WorkspaceGatewayRouteState,
-  onStartOperation?: (input: WorkspaceGatewayStartInput) => void,
-): boolean {
-  if (state.status !== "ready" || !state.csrfToken || onStartOperation === undefined) {
-    return false;
-  }
-
-  return !(
-    state.currentOperation !== undefined && operationPollsAutomatically(state.currentOperation)
   );
 }
 
@@ -1046,22 +1051,16 @@ function WorkspaceGatewayOperationControls({
 
 function WorkspaceAutoSaveStatusPanel({
   autoSave,
-  canStartSave,
   error,
-  onStartSave,
 }: {
   autoSave?: WorkspaceGatewayAutoSaveState;
-  canStartSave: boolean;
   error?: string;
-  onStartSave: () => void;
 }) {
   if (!autoSave && !error) {
     return null;
   }
 
   const summary = autoSave ? workspaceAutoSaveDisplaySummary(autoSave) : undefined;
-  const showManualSave = autoSave?.displayState === "dirty" || autoSave?.displayState === "queued";
-  const showRetrySave = autoSave?.displayState === "failed";
 
   return (
     <div
@@ -1097,33 +1096,6 @@ function WorkspaceAutoSaveStatusPanel({
         <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
           {displaySafeText(error)}
         </p>
-      ) : null}
-      {showManualSave || showRetrySave ? (
-        <div className="flex flex-wrap gap-2">
-          {showRetrySave ? (
-            <Button
-              data-formless-workspace-auto-save-control="retry"
-              isDisabled={!canStartSave}
-              onPress={onStartSave}
-              size="sm"
-              type="button"
-            >
-              Retry save
-            </Button>
-          ) : null}
-          {showManualSave ? (
-            <Button
-              data-formless-workspace-auto-save-control="manual-save"
-              intent="outline"
-              isDisabled={!canStartSave}
-              onPress={onStartSave}
-              size="sm"
-              type="button"
-            >
-              Save now
-            </Button>
-          ) : null}
-        </div>
       ) : null}
     </div>
   );
@@ -1584,7 +1556,6 @@ function GeneratedDeploymentManagementSection({
   onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
   workspaceGatewayState: WorkspaceGatewayRouteState;
 }) {
-  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
   const deploymentConfigs = useDeploymentConfigRecords();
   const deploymentSummary =
     deploymentStatus === undefined
@@ -1618,21 +1589,6 @@ function GeneratedDeploymentManagementSection({
         onStartOperation={onStartWorkspaceOperation}
         state={workspaceGatewayState}
       />
-      <details
-        className="rounded-md border border-border bg-overlay p-4"
-        data-formless-deployment-config-management="secondary"
-      >
-        <summary className="cursor-pointer text-sm font-semibold">
-          Deployment config records
-        </summary>
-        <div className="mt-4" data-formless-control-plane-screen="deployments">
-          <HomeRoute
-            schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-            screenPath="/deployments"
-            target={controlPlaneTarget}
-          />
-        </div>
-      </details>
     </section>
   );
 }
@@ -1686,7 +1642,6 @@ function DeploymentSetupProgressSurface({
 }) {
   const primaryConfig =
     deploymentConfigs.find((config) => config.values.enabled) ?? deploymentConfigs[0];
-  const enabledCount = deploymentConfigs.filter((config) => config.values.enabled).length;
   const operation = deploymentWorkspaceOperation(workspaceGatewayState);
   const deploymentSummary =
     deploymentStatus === undefined
@@ -1702,12 +1657,16 @@ function DeploymentSetupProgressSurface({
         <div className="space-y-1">
           <h3 className="text-sm font-semibold">Deployment setup</h3>
           <p className="text-xs text-muted-fg">
-            {deploymentConfigs.length === 0
-              ? "No deployment configs"
-              : `Enabled ${enabledCount}/${deploymentConfigs.length}`}
+            {primaryConfig ? "Primary target configured" : "Primary target not configured"}
           </p>
         </div>
-        {primaryConfig ? <DeploymentConfigFacts config={primaryConfig} /> : null}
+        {primaryConfig ? (
+          <DeploymentConfigFacts config={primaryConfig} />
+        ) : (
+          <p className="text-xs text-muted-fg" data-formless-deployment-config-empty="true">
+            Run credential setup to prepare the primary deployment target.
+          </p>
+        )}
       </div>
       <div className="min-w-0 space-y-3" data-formless-deployment-operation-status="true">
         <div className="space-y-1">
@@ -1721,7 +1680,7 @@ function DeploymentSetupProgressSurface({
         <dl className="grid gap-2 text-xs text-muted-fg">
           {deploymentStatus ? (
             <div className="min-w-0">
-              <dt className="font-medium text-fg">Target</dt>
+              <dt className="font-medium text-fg">Primary target</dt>
               <dd className="break-words">
                 {deploymentStatus.target.label} · <code>{deploymentStatus.target.targetId}</code>
               </dd>
@@ -1757,7 +1716,7 @@ function DeploymentConfigFacts({ config }: { config: DeploymentConfigStoredRecor
   return (
     <dl className="grid gap-2 text-xs text-muted-fg">
       <div className="min-w-0">
-        <dt className="font-medium text-fg">Config</dt>
+        <dt className="font-medium text-fg">Primary target</dt>
         <dd className="break-words">
           {config.values.label} · <code>{config.values.targetId}</code>
         </dd>
@@ -1818,9 +1777,9 @@ function DeploymentDesiredStateFacts({
   return (
     <dl className="grid gap-2 text-xs text-muted-fg">
       <div className="min-w-0">
-        <dt className="font-medium text-fg">Target</dt>
+        <dt className="font-medium text-fg">Primary target</dt>
         <dd className="break-words">
-          {desiredState.target.label ?? "Deployment target"} ·{" "}
+          {desiredState.target.label ?? "Primary deployment target"} ·{" "}
           <code>{desiredState.target.targetId}</code>
         </dd>
       </div>
@@ -2034,7 +1993,13 @@ function GeneratedInstanceRoutesSection() {
   );
 }
 
-function ShellHeader({ currentPath }: { currentPath: string }) {
+function ShellHeader({
+  currentPath,
+  showDeploymentsLink,
+}: {
+  currentPath: string;
+  showDeploymentsLink: boolean;
+}) {
   const pathname = currentPath.split("?")[0] ?? currentPath;
 
   return (
@@ -2050,12 +2015,14 @@ function ShellHeader({ currentPath }: { currentPath: string }) {
         >
           Overview
         </InstanceNavigationLink>
-        <InstanceNavigationLink
-          href={runtimeTopologyRoutes.deploymentsRoute}
-          isCurrent={pathname === runtimeTopologyRoutes.deploymentsRoute}
-        >
-          Deployments
-        </InstanceNavigationLink>
+        {showDeploymentsLink ? (
+          <InstanceNavigationLink
+            href={runtimeTopologyRoutes.deploymentsRoute}
+            isCurrent={pathname === runtimeTopologyRoutes.deploymentsRoute}
+          >
+            Deployments
+          </InstanceNavigationLink>
+        ) : null}
       </nav>
     </header>
   );

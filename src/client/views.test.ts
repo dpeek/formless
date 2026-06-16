@@ -2358,16 +2358,9 @@ describe("home view model collections", () => {
           viewName: "routeList",
           entityName: "route",
         },
-        {
-          id: "routes-by-deployment-config",
-          label: "Routes by deployment config",
-          viewName: "routesByDeploymentConfigList",
-          entityName: "route",
-        },
       ],
     });
     const routeSection = routes.layout.sections[0];
-    const providerRouteSection = routes.layout.sections[1];
 
     expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual([
       "Routes",
@@ -2385,21 +2378,13 @@ describe("home view model collections", () => {
         ? routeSection.collection.result.columns.some((column) => column.type === "invokeAction")
         : false,
     ).toBe(true);
-    expect(providerRouteSection?.collection.context).toMatchObject({
-      name: "deploymentConfig",
-      entityName: "deployment-config",
-      queryName: "deploymentConfigAll",
-      labelField: "label",
-      presentation: "listDetail",
-      relatedCollection: {
-        relationshipName: "deploymentConfigRoutes",
-        entityName: "route",
-        referenceFieldName: "deploymentConfig",
-      },
-    });
-    expect(providerRouteSection?.collection.queries.defaultQueryName).toBe(
-      "routesForSelectedDeploymentConfig",
-    );
+    expect(
+      routeSection?.collection.result.type === "table"
+        ? routeSection.collection.result.columns
+            .filter((column): column is FieldTableColumnConfig => column.type === "field")
+            .map((column) => column.fieldName)
+        : [],
+    ).not.toContain("deploymentConfig");
   });
 
   it("selects deployment control-plane intent collections as generated UI sections", () => {

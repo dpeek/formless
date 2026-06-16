@@ -295,8 +295,13 @@ describe("instance control-plane schema contracts", () => {
   it("marks generated install and route editor fields by ownership", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const routeTable = schema.tableViews.routeTable;
-    const routesByDeploymentConfigList = schema.views.routesByDeploymentConfigList;
     const routesScreen = schema.screens?.routes;
+    const routeCreateFields =
+      schema.views.routeCreate?.type === "create"
+        ? Object.keys(schema.views.routeCreate.fields)
+        : [];
+    const routeEditFields =
+      schema.views.routeEdit?.type === "edit" ? Object.keys(schema.views.routeEdit.fields) : [];
 
     expect(schema.views.appInstallList?.type === "collection").toBe(true);
     expect(
@@ -322,25 +327,8 @@ describe("instance control-plane schema contracts", () => {
       "routeAppMount",
       "routePublicSiteMount",
     ]);
-    expect(
-      routesByDeploymentConfigList?.type === "collection"
-        ? {
-            context: routesByDeploymentConfigList.context,
-            defaultQuery: routesByDeploymentConfigList.defaultQuery,
-          }
-        : undefined,
-    ).toMatchObject({
-      context: {
-        name: "deploymentConfig",
-        entity: "deployment-config",
-        relationship: "deploymentConfigRoutes",
-      },
-      defaultQuery: "routesForSelectedDeploymentConfig",
-    });
-    expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual([
-      "routeList",
-      "routesByDeploymentConfigList",
-    ]);
+    expect(schema.views.routesByDeploymentConfigList).toBeUndefined();
+    expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual(["routeList"]);
     expect(JSON.stringify(routesScreen)).not.toContain("deployEvidenceSummaryList");
     expect(JSON.stringify(routesScreen)).not.toContain("deployDriftReportList");
     expect(
@@ -367,7 +355,6 @@ describe("instance control-plane schema contracts", () => {
       { field: "appInstall", display: "readOnly" },
       { field: "surface", display: "readOnly" },
       { field: "access", display: "readOnly" },
-      { field: "deploymentConfig", display: "readOnly" },
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
       { field: "statusCode", display: "readOnly" },
@@ -375,6 +362,8 @@ describe("instance control-plane schema contracts", () => {
       { field: "updatedAt", display: "readOnly" },
       { type: "invokeAction", actions: ["editRoute"] },
     ]);
+    expect(routeCreateFields).not.toContain("deploymentConfig");
+    expect(routeEditFields).not.toContain("deploymentConfig");
     expect(
       schema.views.routeEdit?.type === "edit" ? schema.views.routeEdit.fields : undefined,
     ).toMatchObject({

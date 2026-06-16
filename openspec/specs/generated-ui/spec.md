@@ -58,8 +58,11 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
   default
 - **AND** custom domain management shows desired route state and provider applied
   evidence separately
-- **AND** instance-level navigation includes a deployments destination that is
-  separate from app-local generated navigation
+- **AND** instance-level navigation includes a deployments destination only when
+  a local workspace gateway proxy is available, and that destination is separate
+  from app-local generated navigation
+- **AND** deployed instance profiles or profiles without an available local
+  workspace gateway proxy do not show the deployments destination
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
@@ -68,8 +71,9 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **GIVEN** the product instance shell renders in a local workspace profile with
   workspace gateway auto-save available
 - **WHEN** workspace source is clean, dirty, queued, saving, saved, or failed
-- **THEN** the shell shows display-safe workspace save state and retry or manual
-  save affordance where appropriate
+- **THEN** the shell shows display-safe workspace save state without manual
+  browser save or retry controls
+- **AND** CLI save remains the fallback for explicit flush or retry behavior
 - **AND** raw filesystem paths, provider credentials, admin tokens, and secret
   state are not exposed
 
@@ -443,10 +447,12 @@ cache, provider evidence, view, screen, read model, and action models.
   deployment observation, desired-state projection, and provider evidence data
   are available
 - **THEN** the overview renders app install management, route management,
-  workspace source status, workspace source actions, and first-app onboarding
+  workspace source status, and first-app onboarding
 - **AND** the overview does not render deployment setup, deployment status,
   desired-state summaries, deployment operation controls, deployment config
-  management tables, or standalone provider evidence cleanup panels
+  management tables, route grouping by deployment config, deployment target
+  selectors, deployment target links, or standalone provider evidence cleanup
+  panels
 - **AND** deployment and provider runtime reads are not required to render the
   overview
 
@@ -519,10 +525,12 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **GIVEN** owner or admin users inspect routes
 - **WHEN** route records render
 - **THEN** routes show match host, match path, match prefix, kind, target
-  profile, app install target, surface, redirect target, deployment config,
-  enabled state, and timestamps where applicable
+  profile, app install target, surface, redirect target, enabled state, and
+  timestamps where applicable
 - **AND** routes are grouped or filterable by instance paths, host mappings,
-  public Site routes, redirects, app install, and deployment config
+  public Site routes, redirects, and app install
+- **AND** browser route management does not expose deployment config grouping,
+  deployment config table columns, or target-selection controls
 
 #### Scenario: Edit mount route
 
@@ -533,6 +541,8 @@ that covers instance paths, host mappings, public Site routes, and redirects.
   and enabled-route uniqueness
 - **AND** route edits do not change the app install's storage identity or app
   data
+- **AND** the browser editor omits deployment config selection so route writes
+  use the primary deployment target by default
 
 #### Scenario: Edit redirect route
 
@@ -553,27 +563,53 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **AND** deployment config observation cache fields may be displayed for status
   but are not editable route intent
 
+#### Scenario: Primary deployment target default
+
+- **GIVEN** a browser owner or admin creates or edits a route that needs
+  provider-managed DNS, custom-domain, or redirect resources
+- **WHEN** the route write commits without a deployment config field
+- **THEN** deployment projection uses the enabled primary instance deployment
+  config
+- **AND** browser UI does not expose multiple deployment targets, target ids,
+  enabled target counts, or route-to-target assignment controls
+
 ### Requirement: Instance Deployment Surface
 
-The product instance shell SHALL expose `/deployments` as the deployment setup,
-status, and progress surface for local onboarding and ongoing instance
+The product instance shell SHALL expose `/deployments` as the single-target
+deployment setup, status, and progress surface only when a local workspace
+gateway proxy is available for local onboarding and ongoing instance
 management.
 
 #### Scenario: Deployment route surface
 
 - **GIVEN** an owner opens `/deployments` on the product instance shell
-- **WHEN** deployment config records, deployment observation cache fields,
-  read-only desired-state projection, and local gateway status are available
+- **WHEN** a local workspace gateway proxy is available and deployment config
+  records, deployment observation cache fields, read-only desired-state
+  projection, and local gateway status are available
 - **THEN** the page renders deployment target setup, current deployment status,
   desired-state summary, local workspace operation controls, and recent
   operation progress as one deployment workflow
-- **AND** raw generated `deployment-config` tables may be available behind
-  management affordances but are not the primary first-run deployment surface
+- **AND** the page presents one primary deployment target and hides deployment
+  config record multiplicity, target pickers, enabled target counts, and raw
+  generated `deployment-config` tables
 - **AND** app install management, route management, owner auth, and app-local
   navigation remain outside the deployment workflow
 - **AND** deployment setup, deployment status, desired-state summaries,
   deployment operation controls, and deployment config management are not
   duplicated on the instance overview
+
+#### Scenario: Deployment route unavailable without local gateway
+
+- **GIVEN** the product instance shell renders in a deployed instance profile
+  or any profile without an available local workspace gateway proxy
+- **WHEN** an owner opens `/deployments` or reviews instance-level navigation
+  and overview entry points
+- **THEN** React routing does not select the deployment surface
+- **AND** instance-level navigation and overview entry points do not link to
+  `/deployments`
+- **AND** deployment config records may still exist, but credential setup,
+  deploy plan, deploy apply, and deployment operation progress controls remain
+  unavailable in browser UI
 
 #### Scenario: App-less deployment entry
 
@@ -593,6 +629,9 @@ management.
 - **THEN** the UI can create or update one primary deployment config with target
   id, target URL when known, provider family, account id, worker name, and
   display-safe credential reference
+- **AND** if multiple deployment config records exist, the browser deployment
+  surface still operates on the primary instance target instead of exposing a
+  target selector
 - **AND** credential setup may auto-select existing local Alchemy credentials
   when the gateway reports one usable profile/account
 - **AND** secret values, raw provider state, and filesystem paths are not
@@ -629,9 +668,13 @@ workspace gateway proxy is available through the local runtime.
 
 - **WHEN** the product instance shell renders in a local workspace runtime with
   gateway proxy status available
-- **THEN** the UI can start workspace save, check, pull, push, deploy
-  credential setup, deploy plan, and deploy apply operations through the
+- **THEN** the UI can start workspace check, pull, push, deploy credential
+  setup, deploy plan, and deploy apply operations through the
   same-origin gateway API family
+- **AND** the browser UI does not expose a user-triggered workspace save action
+  because browser writes enqueue workspace auto-save
+- **AND** CLI save remains available outside the browser as an explicit flush or
+  retry fallback
 - **AND** the available controls are selected from workspace operation
   definitions that expose browser gateway bindings for the current actor and
   runtime capability
@@ -691,9 +734,12 @@ local workspace from the browser.
 
 - **WHEN** a browser owner or admin edits app install, route, domain, or deploy
   intent records
-- **THEN** the UI can invoke workspace save through the gateway
+- **THEN** the UI enqueues workspace auto-save through the gateway after the
+  Authority-backed write commits
 - **AND** the saved workspace source is generated from Authority-backed records,
   not from manifest app, route, domain, or deploy fields
+- **AND** the UI does not expose a separate user-triggered save action for the
+  same committed browser edit
 
 ### Requirement: Onboarding Form Reuse
 
@@ -714,7 +760,7 @@ behavior for onboarding steps that write schema records.
 
 #### Scenario: Gateway operation step
 
-- **WHEN** an onboarding step starts credential setup, runs save/check, or
+- **WHEN** an onboarding step starts credential setup, runs workspace check, or
   starts deploy plan/apply
 - **THEN** the step invokes the workspace gateway operation model and renders
   operation progress

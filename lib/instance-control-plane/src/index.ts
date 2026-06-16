@@ -476,7 +476,6 @@ export const instanceControlPlaneSchema = {
         { field: "appInstall", display: "readOnly" },
         { field: "surface", display: "readOnly" },
         { field: "access", display: "readOnly" },
-        { field: "deploymentConfig", display: "readOnly" },
         { field: "toHost", display: "readOnly" },
         { field: "toUrl", display: "readOnly" },
         { field: "statusCode", display: "readOnly" },
@@ -549,7 +548,6 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
-      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -573,7 +571,6 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
-      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -593,24 +590,6 @@ export const instanceControlPlaneSchema = {
       ],
       navigation: true,
     }),
-    routesByDeploymentConfigList: collectionView(
-      "Routes by deployment config",
-      "route",
-      "routesForSelectedDeploymentConfig",
-      "routeTable",
-      {
-        context: {
-          name: "deploymentConfig",
-          entity: "deployment-config",
-          query: "deploymentConfigAll",
-          labelField: "label",
-          presentation: "listDetail",
-          relationship: "deploymentConfigRoutes",
-          createView: "deploymentConfigCreate",
-          itemView: "deploymentConfigItem",
-        },
-      },
-    ),
     deploymentConfigCreate: createView("deployment-config", [
       "targetId",
       "targetKind",
@@ -653,15 +632,7 @@ export const instanceControlPlaneSchema = {
       navigation: { primary: true },
       layout: {
         type: "stack",
-        sections: [
-          { id: "routes", type: "collection", view: "routeList" },
-          {
-            id: "routes-by-deployment-config",
-            label: "Routes by deployment config",
-            type: "collection",
-            view: "routesByDeploymentConfigList",
-          },
-        ],
+        sections: [{ id: "routes", type: "collection", view: "routeList" }],
       },
     },
     deployments: {
