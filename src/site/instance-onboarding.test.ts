@@ -936,6 +936,7 @@ describe("Alchemy Formless instance deployment", () => {
         props: {
           adopt: false,
           accountId: "account-123",
+          empty: true,
           name: "brother-instance-media",
           profile: "personal",
         },
@@ -1372,6 +1373,99 @@ describe("Alchemy Formless instance deployment", () => {
     expect(customDomains[0]?.props).toMatchObject({ adopt: true });
     expect(turnstiles[0]?.props).toMatchObject({ adopt: true });
     expect(workers[0]?.props).toMatchObject({ adopt: true });
+  });
+
+  it("declares the same core Alchemy resource tree for deploy and destroy", async () => {
+    type CapturedResourceTree = {
+      authority?: unknown;
+      media?: unknown;
+      turnstile?: unknown;
+      worker?: unknown;
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      packageVersion: "0.1.8",
+    });
+    const captureTree = async (operation: "deploy" | "destroy"): Promise<CapturedResourceTree> => {
+      const tree: CapturedResourceTree = {};
+      const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+        createApp: async () => ({
+          finalize: async () => {},
+        }),
+        createDurableObjectNamespace: (id, props) => {
+          tree.authority = { id, props };
+
+          return { type: "durable-object-namespace" };
+        },
+        createR2Bucket: async (id, props) => {
+          tree.media = { id, props };
+
+          return { type: "r2-bucket" };
+        },
+        createSecret: () => ({ type: "secret" }),
+        createTurnstileWidget: async (id, props) => {
+          tree.turnstile = { id, props };
+
+          return fakeTurnstileWidgetOutput({
+            domains: props.domains,
+            name: props.name,
+            verificationSecret: { type: "secret" },
+          });
+        },
+        deployViteWorker: async (id, props) => {
+          tree.worker = { id, props };
+
+          return { url: "https://brother-instance.dpeek.workers.dev" };
+        },
+      };
+
+      if (operation === "deploy") {
+        await deployFormlessInstanceWithAlchemy(
+          {
+            credentialProfile: "personal",
+            packageRoot: "/package",
+            plan,
+            secrets: {
+              ALCHEMY_PASSWORD: "alchemy-password",
+              FORMLESS_ADMIN_TOKEN: "admin-secret",
+            },
+            stateRoot: "/state",
+          },
+          dependencies,
+        );
+      } else {
+        await destroyFormlessInstanceWithAlchemy(
+          {
+            credentialProfile: "personal",
+            domainProviderPlan: planDomainProviderResources({
+              instanceId: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+              mappings: [],
+              redirectIntents: [],
+              workerName: plan.resources.worker.name,
+              zones: [],
+            }),
+            packageRoot: "/package",
+            plan,
+            secrets: {
+              ALCHEMY_PASSWORD: "alchemy-password",
+            },
+            stateRoot: "/state",
+          },
+          dependencies,
+        );
+      }
+
+      return tree;
+    };
+
+    const deployTree = await captureTree("deploy");
+    const destroyTree = await captureTree("destroy");
+
+    expect(destroyTree).toEqual(deployTree);
   });
 
   it("destroys the existing instance app and state root without exposing provider credentials in Worker props", async () => {

@@ -300,8 +300,16 @@ async function readTurnstileApiResponse(
 
 function turnstileApiError(response: Response, action: string, label: string): Error {
   return new Error(
-    `Cloudflare Turnstile widget ${action} for "${label}" failed: HTTP ${response.status}.`,
+    `Cloudflare Turnstile widget ${action} for "${label}" failed: HTTP ${response.status}${turnstileCredentialHint(response.status)}.`,
   );
+}
+
+function turnstileCredentialHint(status: number): string {
+  if (status !== 401 && status !== 403) {
+    return "";
+  }
+
+  return ". Cloudflare credential requires Turnstile widget read/write access for this account; set CLOUDFLARE_API_TOKEN to an account token with Turnstile access, then retry deployment";
 }
 
 type NormalizedTurnstileWidgetProps = {

@@ -45,6 +45,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { activeAppPackageResolver } from "./runtime-app-packages.ts";
+import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
 
 export { FormlessAuthority } from "./authority.ts";
 
@@ -115,6 +116,7 @@ export default {
     );
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
     const workspaceGatewayResponse = await handleWorkspaceGatewayProxyRequest(request, env, {
+      capabilities: WORKSPACE_OPERATION_CAPABILITIES,
       readOwnerSetupStatus: (setupRequest) => readOwnerSetupStatus(setupRequest, env),
       routeAvailable:
         requestTopology.routePolicy.workspaceGatewayApiRoutes &&

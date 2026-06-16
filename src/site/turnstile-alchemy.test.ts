@@ -213,6 +213,32 @@ describe("Cloudflare Turnstile Alchemy resource", () => {
     ]);
   });
 
+  it("explains Cloudflare Turnstile credential failures", async () => {
+    const api = fakeTurnstileApi([
+      response(
+        "GET",
+        "/accounts/account-123/challenges/widgets?filter=name%3AFormless%20public%20actions&per_page=1000",
+        {
+          errors: [{ code: 10000, message: "Authentication error" }],
+          success: false,
+        },
+        403,
+      ),
+    ]);
+
+    await expect(
+      applyTurnstileWidgetLifecycle({
+        api,
+        context: fakeContext("create"),
+        createSecret: (value) => fakeSecret(value),
+        logicalId: "turnstile",
+        props: widgetProps(),
+      }),
+    ).rejects.toThrow(
+      'Cloudflare Turnstile widget list for "Formless public actions" failed: HTTP 403. Cloudflare credential requires Turnstile widget read/write access for this account; set CLOUDFLARE_API_TOKEN to an account token with Turnstile access, then retry deployment.',
+    );
+  });
+
   it("deletes the provider widget by site key and treats missing widgets as already deleted", async () => {
     const deleted = fakeTurnstileApi([
       response("DELETE", "/accounts/account-123/challenges/widgets/0xsitekey", {

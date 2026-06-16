@@ -3261,6 +3261,15 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless/local"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/local/dev.env"),
+      "FORMLESS_ADMIN_TOKEN=local-save-token\nFORMLESS_OWNER_SESSION_SECRET=local-owner-secret\n",
+    );
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=stored-instance-token\n",
+    );
 
     await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
 
@@ -3309,6 +3318,12 @@ describe("Formless Site CLI", () => {
       "GET http://localhost:5173/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
       "GET http://localhost:5173/api/app-installs/site/david/snapshot",
       "GET http://localhost:5173/api/formless/media/media/images/cover.png",
+    ]);
+    expect(requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer local-save-token",
+      "Bearer local-save-token",
+      "Bearer local-save-token",
+      "Bearer local-save-token",
     ]);
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain("Workspace operation: save (succeeded).");

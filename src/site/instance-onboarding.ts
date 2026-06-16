@@ -340,6 +340,23 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
   }>;
 };
 
+type DeclareFormlessInstanceAlchemyResourceTreeInput = {
+  adminToken: string;
+  adoptExistingDeployment: boolean;
+  alchemyPassword: string;
+  cloudflareApiToken?: string;
+  credentialProfile: string | null;
+  dependencies: AlchemyFormlessInstanceDeploymentDependencies;
+  packageRoot: string;
+  plan: FormlessInstanceDeploymentPlan;
+  resourceGraph?: DeployResourceGraph;
+};
+
+type DeclareFormlessInstanceAlchemyResourceTreeResult = {
+  resourceEvidence?: DeployEvidenceSummary[];
+  url: string;
+};
+
 export type RunFormlessInstanceOnboardingInput = {
   credentialProfile?: string | null;
   instanceName?: string | null;
@@ -778,6 +795,111 @@ export async function checkFormlessInstanceDeployMetadata(
   };
 }
 
+async function declareFormlessInstanceAlchemyResourceTree(
+  input: DeclareFormlessInstanceAlchemyResourceTreeInput,
+): Promise<DeclareFormlessInstanceAlchemyResourceTreeResult> {
+  const profileOptions = input.credentialProfile ? { profile: input.credentialProfile } : {};
+  let cloudflareApiTokenSecret: unknown;
+  const secretCloudflareApiToken = (): unknown => {
+    if (input.cloudflareApiToken === undefined) {
+      return undefined;
+    }
+
+    if (cloudflareApiTokenSecret === undefined) {
+      cloudflareApiTokenSecret = input.dependencies.createSecret(input.cloudflareApiToken);
+    }
+
+    return cloudflareApiTokenSecret;
+  };
+  const mediaBucket = await input.dependencies.createR2Bucket("media", {
+    adopt: input.adoptExistingDeployment,
+    accountId: input.plan.account.id,
+    ...profileOptions,
+    empty: true,
+    name: input.plan.resources.mediaBucket.name,
+  });
+  const authorityNamespace = input.dependencies.createDurableObjectNamespace("authority", {
+    className: input.plan.resources.authority.className,
+    sqlite: true,
+  });
+  const turnstileWidget = await input.dependencies.createTurnstileWidget("turnstile", {
+    adopt: input.adoptExistingDeployment,
+    ...turnstileCloudflareResourceOptions({
+      accountId: input.plan.account.id,
+      apiToken: secretCloudflareApiToken(),
+      credentialProfile: input.credentialProfile,
+    }),
+    domains: turnstileWidgetDomains({
+      deploymentResourceGraph: input.resourceGraph,
+      plan: input.plan,
+    }),
+    mode: "managed",
+    name: turnstileWidgetName(input.plan),
+  });
+  const worker = await input.dependencies.deployViteWorker("worker", {
+    adopt: input.adoptExistingDeployment,
+    accountId: input.plan.account.id,
+    assets: formlessInstanceAlchemyAssets(),
+    bindings: {
+      [input.plan.resources.authority.bindingName]: authorityNamespace,
+      [input.plan.resources.mediaBucket.bindingName]: mediaBucket,
+      ALCHEMY_PASSWORD: input.dependencies.createSecret(input.alchemyPassword),
+      ...(input.cloudflareApiToken === undefined
+        ? {}
+        : { CLOUDFLARE_API_TOKEN: secretCloudflareApiToken() }),
+      FORMLESS_ADMIN_TOKEN: input.dependencies.createSecret(input.adminToken),
+      FORMLESS_DEPLOY_VERSION: input.plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
+        input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID,
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID:
+        input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME:
+        input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
+      FORMLESS_INSTANCE_AUTH_ORIGIN: input.plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
+      FORMLESS_RUNTIME_PROFILE: input.plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
+      [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: turnstileWidget.verificationSecret,
+      [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,
+    },
+    build: {
+      command: "bun run build",
+      env: input.plan.runtimeVars,
+    },
+    compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
+    cwd: input.packageRoot,
+    entrypoint: "src/worker/index.ts",
+    name: input.plan.resources.worker.name,
+    previewSubdomains: false,
+    ...profileOptions,
+    url: input.plan.resources.worker.workersDevEnabled,
+  });
+  let resourceEvidence: DeployEvidenceSummary[] | undefined;
+
+  if (input.resourceGraph !== undefined && input.resourceGraph.resources.length > 0) {
+    const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
+      accountId: input.plan.account.id,
+      apiToken: secretCloudflareApiToken(),
+      credentialProfile: input.credentialProfile,
+    });
+
+    resourceEvidence = (
+      await applyAlchemyDeployResourceGraph({
+        adopt: input.adoptExistingDeployment,
+        factories: deploymentResourceFactories(input.dependencies, cloudflareResourceOptions),
+        resolveZoneIdForHost: deploymentResourceZoneResolver(
+          input.dependencies,
+          cloudflareResourceOptions,
+        ),
+        resourceGraph: input.resourceGraph,
+      })
+    ).evidence;
+  }
+
+  return {
+    ...(resourceEvidence === undefined ? {} : { resourceEvidence }),
+    url: worker.url ?? input.plan.expectedUrl.url,
+  };
+}
+
 export async function deployFormlessInstanceWithAlchemy(
   input: DeployFormlessInstanceInput,
   dependencies?: AlchemyFormlessInstanceDeploymentDependencies,
@@ -800,18 +922,6 @@ export async function deployFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
-  let cloudflareApiTokenSecret: unknown;
-  const secretCloudflareApiToken = (): unknown => {
-    if (cloudflareApiToken === undefined) {
-      return undefined;
-    }
-
-    if (cloudflareApiTokenSecret === undefined) {
-      cloudflareApiTokenSecret = resolvedDependencies.createSecret(cloudflareApiToken);
-    }
-
-    return cloudflareApiTokenSecret;
-  };
   const adoptExistingDeployment = plan.migrationPolicy === "existing";
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     adopt: adoptExistingDeployment,
@@ -821,95 +931,23 @@ export async function deployFormlessInstanceWithAlchemy(
     rootDir: stateRoot,
     stage: plan.instanceName,
   });
-  const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
-    adopt: adoptExistingDeployment,
-    accountId: plan.account.id,
-    ...profileOptions,
-    name: plan.resources.mediaBucket.name,
+  const resourceTree = await declareFormlessInstanceAlchemyResourceTree({
+    adminToken,
+    adoptExistingDeployment,
+    alchemyPassword,
+    ...(cloudflareApiToken === undefined ? {} : { cloudflareApiToken }),
+    credentialProfile,
+    dependencies: resolvedDependencies,
+    packageRoot,
+    plan,
+    ...(input.deploymentResourceGraph === undefined
+      ? {}
+      : { resourceGraph: input.deploymentResourceGraph }),
   });
-  const authorityNamespace = resolvedDependencies.createDurableObjectNamespace("authority", {
-    className: plan.resources.authority.className,
-    sqlite: true,
-  });
-  const turnstileWidget = await resolvedDependencies.createTurnstileWidget("turnstile", {
-    adopt: adoptExistingDeployment,
-    ...turnstileCloudflareResourceOptions({
-      accountId: plan.account.id,
-      apiToken: secretCloudflareApiToken(),
-      credentialProfile,
-    }),
-    domains: turnstileWidgetDomains({
-      deploymentResourceGraph: input.deploymentResourceGraph,
-      plan,
-    }),
-    mode: "managed",
-    name: turnstileWidgetName(plan),
-  });
-  const worker = await resolvedDependencies.deployViteWorker("worker", {
-    adopt: adoptExistingDeployment,
-    accountId: plan.account.id,
-    assets: formlessInstanceAlchemyAssets(),
-    bindings: {
-      [plan.resources.authority.bindingName]: authorityNamespace,
-      [plan.resources.mediaBucket.bindingName]: mediaBucket,
-      ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
-      ...(cloudflareApiToken === undefined
-        ? {}
-        : { CLOUDFLARE_API_TOKEN: secretCloudflareApiToken() }),
-      FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret(adminToken),
-      FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
-      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
-        plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID,
-      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
-      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
-      FORMLESS_INSTANCE_AUTH_ORIGIN: plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
-      FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
-      [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: turnstileWidget.verificationSecret,
-      [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,
-    },
-    build: {
-      command: "bun run build",
-      env: plan.runtimeVars,
-    },
-    compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
-    cwd: packageRoot,
-    entrypoint: "src/worker/index.ts",
-    name: plan.resources.worker.name,
-    previewSubdomains: false,
-    ...profileOptions,
-    url: plan.resources.worker.workersDevEnabled,
-  });
-  let resourceEvidence: DeployEvidenceSummary[] | undefined;
-
-  if (
-    input.deploymentResourceGraph !== undefined &&
-    input.deploymentResourceGraph.resources.length > 0
-  ) {
-    const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
-      accountId: plan.account.id,
-      apiToken: secretCloudflareApiToken(),
-      credentialProfile,
-    });
-
-    resourceEvidence = (
-      await applyAlchemyDeployResourceGraph({
-        adopt: adoptExistingDeployment,
-        factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
-        resolveZoneIdForHost: deploymentResourceZoneResolver(
-          resolvedDependencies,
-          cloudflareResourceOptions,
-        ),
-        resourceGraph: input.deploymentResourceGraph,
-      })
-    ).evidence;
-  }
 
   await app.finalize();
 
-  return parseDeployFormlessInstanceResult({
-    ...(resourceEvidence === undefined ? {} : { resourceEvidence }),
-    url: worker.url ?? plan.expectedUrl.url,
-  });
+  return parseDeployFormlessInstanceResult(resourceTree);
 }
 
 export async function destroyFormlessInstanceWithAlchemy(
@@ -931,18 +969,6 @@ export async function destroyFormlessInstanceWithAlchemy(
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.migrationPolicy === "existing";
-  let cloudflareApiTokenSecret: unknown;
-  const secretCloudflareApiToken = (): unknown => {
-    if (cloudflareApiToken === undefined) {
-      return undefined;
-    }
-
-    if (cloudflareApiTokenSecret === undefined) {
-      cloudflareApiTokenSecret = resolvedDependencies.createSecret(cloudflareApiToken);
-    }
-
-    return cloudflareApiTokenSecret;
-  };
 
   try {
     const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
@@ -953,86 +979,19 @@ export async function destroyFormlessInstanceWithAlchemy(
       rootDir: stateRoot,
       stage: plan.instanceName,
     });
-    const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
-      adopt: adoptExistingDeployment,
-      accountId: plan.account.id,
-      empty: true,
-      ...profileOptions,
-      name: plan.resources.mediaBucket.name,
+    await declareFormlessInstanceAlchemyResourceTree({
+      adminToken: "destroy-placeholder",
+      adoptExistingDeployment,
+      alchemyPassword,
+      ...(cloudflareApiToken === undefined ? {} : { cloudflareApiToken }),
+      credentialProfile,
+      dependencies: resolvedDependencies,
+      packageRoot,
+      plan,
+      ...(input.domainProviderResources === undefined
+        ? {}
+        : { resourceGraph: input.domainProviderResources }),
     });
-    const authorityNamespace = resolvedDependencies.createDurableObjectNamespace("authority", {
-      className: plan.resources.authority.className,
-      sqlite: true,
-    });
-
-    await resolvedDependencies.createTurnstileWidget("turnstile", {
-      adopt: adoptExistingDeployment,
-      ...turnstileCloudflareResourceOptions({
-        accountId: plan.account.id,
-        apiToken: secretCloudflareApiToken(),
-        credentialProfile,
-      }),
-      domains: turnstileWidgetDomains({
-        deploymentResourceGraph: input.domainProviderResources,
-        plan,
-      }),
-      mode: "managed",
-      name: turnstileWidgetName(plan),
-    });
-
-    await resolvedDependencies.deployViteWorker("worker", {
-      adopt: adoptExistingDeployment,
-      accountId: plan.account.id,
-      assets: formlessInstanceAlchemyAssets(),
-      bindings: {
-        [plan.resources.authority.bindingName]: authorityNamespace,
-        [plan.resources.mediaBucket.bindingName]: mediaBucket,
-        ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
-        ...(cloudflareApiToken === undefined
-          ? {}
-          : { CLOUDFLARE_API_TOKEN: secretCloudflareApiToken() }),
-        FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret("destroy-placeholder"),
-        FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
-        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
-          plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID,
-        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
-        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
-        FORMLESS_INSTANCE_AUTH_ORIGIN: plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
-        FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
-      },
-      build: {
-        command: "bun run build",
-        env: plan.runtimeVars,
-      },
-      compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
-      cwd: packageRoot,
-      entrypoint: "src/worker/index.ts",
-      name: plan.resources.worker.name,
-      previewSubdomains: false,
-      ...profileOptions,
-      url: plan.resources.worker.workersDevEnabled,
-    });
-
-    if (
-      input.domainProviderResources !== undefined &&
-      input.domainProviderResources.resources.length > 0
-    ) {
-      const cloudflareResourceOptions = cloudflareAlchemyResourceOptions({
-        accountId: plan.account.id,
-        apiToken: secretCloudflareApiToken(),
-        credentialProfile,
-      });
-
-      await applyAlchemyDeployResourceGraph({
-        adopt: adoptExistingDeployment,
-        factories: deploymentResourceFactories(resolvedDependencies, cloudflareResourceOptions),
-        resolveZoneIdForHost: deploymentResourceZoneResolver(
-          resolvedDependencies,
-          cloudflareResourceOptions,
-        ),
-        resourceGraph: input.domainProviderResources,
-      });
-    }
 
     await app.finalize();
 

@@ -831,7 +831,7 @@ export async function saveLocalFormlessWorkspace(
   input: SaveLocalFormlessWorkspaceInput,
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "fetch" | "now"
+    "cwd" | "env" | "fetch" | "now"
   > = nodeFormlessCliDependencies(),
 ): Promise<SaveLocalFormlessWorkspaceResult> {
   return saveLocalFormlessWorkspaceCommand(input, dependencies);

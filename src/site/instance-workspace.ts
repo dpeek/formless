@@ -105,6 +105,7 @@ import {
   instanceWorkspaceSecretStatePath as formlessInstanceWorkspaceSecretStatePath,
   parseWorkspaceDotEnv as parseDotEnv,
   readInstanceWorkspaceControlPlaneRecordSource,
+  readInstanceWorkspaceLocalDevSecretState as readFormlessInstanceWorkspaceLocalDevSecretState,
   readInstanceWorkspaceSecretState as readFormlessInstanceWorkspaceSecretState,
   resolveInstanceWorkspaceAdminToken as resolveFormlessInstanceWorkspaceAdminToken,
   writeInstanceWorkspaceSecretState as writeFormlessInstanceWorkspaceSecretState,
@@ -290,6 +291,7 @@ export type CheckFormlessInstanceWorkspaceDependencies = {
 
 export type SaveLocalFormlessWorkspaceDependencies = {
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   now: () => string;
 };
@@ -1151,11 +1153,17 @@ export async function saveLocalFormlessWorkspace(
     manifest,
     workspaceRoot,
   });
+  const adminToken = await readWorkspaceLocalAuthorityAdminToken(
+    workspaceRoot,
+    manifest,
+    dependencies,
+  );
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "save");
 
   try {
     const exported = await exportWorkspaceSourceFromLocalAuthority(
       {
+        adminToken,
         packageResolver: activePackages.resolver,
         source,
         tempRoot,
@@ -3066,6 +3074,7 @@ async function readArchiveDirectoryForCheck(
 
 async function exportWorkspaceSourceFromLocalAuthority(
   input: {
+    adminToken?: string | null;
     packageResolver: AppPackageResolver;
     source: string;
     tempRoot: string;
@@ -3076,6 +3085,7 @@ async function exportWorkspaceSourceFromLocalAuthority(
 
   await exportInstanceArchive(
     {
+      adminToken: input.adminToken,
       outDir: archiveRoot,
       packageResolver: input.packageResolver,
       target: input.source,
@@ -4742,6 +4752,31 @@ async function readWorkspaceAdminToken(
     env: dependencies.env,
     secretState,
   });
+}
+
+async function readWorkspaceLocalAuthorityAdminToken(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+  dependencies: { env?: NodeJS.ProcessEnv },
+): Promise<string | null> {
+  const envAdminToken = resolveFormlessInstanceWorkspaceAdminToken({ env: dependencies.env });
+
+  if (envAdminToken) {
+    return envAdminToken;
+  }
+
+  const localDevSecretState = await readFormlessInstanceWorkspaceLocalDevSecretState(
+    formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest),
+  );
+  const localDevAdminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    explicitAdminToken: localDevSecretState.adminToken,
+  });
+
+  if (localDevAdminToken) {
+    return localDevAdminToken;
+  }
+
+  return readWorkspaceAdminToken(workspaceRoot, dependencies);
 }
 
 function rotateCommandEnv(
