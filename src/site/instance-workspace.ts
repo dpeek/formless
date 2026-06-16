@@ -94,10 +94,12 @@ import {
 import {
   DEFAULT_INSTANCE_WORKSPACE_ARCHIVE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_APP_STATE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_STATE_ROOT,
+  DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES as LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  nextWorkspaceAutoSaveSavedState,
   normalizeInstanceWorkspaceTargetUrl as normalizeFormlessInstanceWorkspaceTargetUrl,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
   type InstanceWorkspaceApp as FormlessInstanceWorkspaceApp,
@@ -119,6 +121,7 @@ import {
   instanceWorkspaceAppStateRelativePath,
   instanceWorkspaceInstanceStateRelativePath,
   readInstanceWorkspaceAppStorageSnapshot,
+  readInstanceWorkspaceAutoSaveState,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   instanceWorkspaceSecretStatePath as formlessInstanceWorkspaceSecretStatePath,
   parseWorkspaceDotEnv as parseDotEnv,
@@ -128,6 +131,7 @@ import {
   replaceInstanceWorkspaceAppStorageSnapshots,
   replaceInstanceWorkspaceMediaFiles,
   resolveInstanceWorkspaceAdminToken as resolveFormlessInstanceWorkspaceAdminToken,
+  writeInstanceWorkspaceAutoSaveState,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceSecretState as writeFormlessInstanceWorkspaceSecretState,
   type InstanceWorkspaceLocalDevSecretState as FormlessInstanceWorkspaceLocalDevSecretState,
@@ -1281,6 +1285,10 @@ export async function saveLocalFormlessWorkspace(
       manifestPath,
       nextManifest,
       sourceControlPlane,
+      workspaceRoot,
+    });
+    await markWorkspaceAutoSaveSavedAfterWorkspaceSourceWrite({
+      now: dependencies.now,
       workspaceRoot,
     });
 
@@ -3330,6 +3338,27 @@ async function writeSavedWorkspaceSource(input: {
   });
 
   await writeFile(input.manifestPath, formatFormlessInstanceWorkspaceManifest(input.nextManifest));
+}
+
+async function markWorkspaceAutoSaveSavedAfterWorkspaceSourceWrite(input: {
+  now: () => string;
+  workspaceRoot: string;
+}) {
+  const localStateRoot = path.join(
+    input.workspaceRoot,
+    DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
+  );
+  const current = await readInstanceWorkspaceAutoSaveState(localStateRoot);
+
+  if (current === undefined || current.dirtyGeneration <= current.savedGeneration) {
+    return;
+  }
+
+  await writeInstanceWorkspaceAutoSaveState({
+    localStateRoot,
+    state: nextWorkspaceAutoSaveSavedState(current, { now: input.now }),
+    workspaceRoot: input.workspaceRoot,
+  });
 }
 
 function workspaceAppArchiveDirectoryFromInstanceExport(

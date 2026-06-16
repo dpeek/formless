@@ -49,10 +49,12 @@ import {
 } from "../../shared/app-installs.ts";
 import {
   WorkspaceGatewayApiError,
+  fetchWorkspaceGatewayAutoSaveStatus,
   fetchWorkspaceGatewayOperation,
   fetchWorkspaceGatewayStatus,
   workspaceGatewayBrowserConfig,
   startWorkspaceGatewayOperation,
+  type WorkspaceGatewayAutoSaveState,
   type WorkspaceGatewayConfig,
   type WorkspaceGatewayDisplayObject,
   type WorkspaceGatewayDisplayValue,
@@ -142,6 +144,8 @@ export type WorkspaceGatewayRouteState =
   | { status: "loading" }
   | {
       activeOperationId?: string;
+      autoSave?: WorkspaceGatewayAutoSaveState;
+      autoSaveError?: string;
       csrfToken?: string;
       currentOperation?: WorkspaceGatewayOperation;
       error?: string;
@@ -287,8 +291,21 @@ export function InstanceShellRoute() {
         }
 
         if (workspaceGatewayResponse) {
+          const autoSaveUpdate = await loadWorkspaceGatewayAutoSaveState({
+            config: workspaceGatewayConfig,
+            signal: controller.signal,
+          });
+
+          if (stopped) {
+            return;
+          }
+
           setWorkspaceGatewayState((current) =>
-            workspaceGatewayReadyStateFromResponse(workspaceGatewayResponse, current),
+            workspaceGatewayReadyStateFromResponse(
+              workspaceGatewayResponse,
+              current,
+              autoSaveUpdate,
+            ),
           );
 
           if (workspaceInitialized(workspaceGatewayResponse.operation) === false) {
@@ -394,6 +411,26 @@ export function InstanceShellRoute() {
 
     return () => window.clearInterval(intervalId);
   }, [workspaceGatewayConfig, workspaceGatewayState]);
+
+  const autoSaveDisplayState =
+    workspaceGatewayState.status === "ready"
+      ? workspaceGatewayState.autoSave?.displayState
+      : undefined;
+
+  useEffect(() => {
+    if (autoSaveDisplayState !== "queued" && autoSaveDisplayState !== "saving") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshWorkspaceGatewayAutoSave({
+        config: workspaceGatewayConfig,
+        setWorkspaceGatewayState,
+      });
+    }, 1500);
+
+    return () => window.clearInterval(intervalId);
+  }, [autoSaveDisplayState, workspaceGatewayConfig]);
 
   async function submitInstall(
     packageAppKey: PackageAppKey,
@@ -504,6 +541,12 @@ export function InstanceShellRoute() {
         }),
       );
       await refreshDeploymentRuntimeAfterWorkspaceOperation(response.operation, setState);
+      if (!operationPollsAutomatically(response.operation)) {
+        await refreshWorkspaceGatewayAutoSave({
+          config: workspaceGatewayConfig,
+          setWorkspaceGatewayState,
+        });
+      }
     } catch (error) {
       const message =
         error instanceof WorkspaceGatewayApiError || error instanceof Error
@@ -744,6 +787,68 @@ async function loadInitialWorkspaceGatewayStatus({
   }
 }
 
+async function loadWorkspaceGatewayAutoSaveState({
+  config,
+  signal,
+}: {
+  config?: WorkspaceGatewayConfig;
+  signal?: AbortSignal;
+}): Promise<Partial<Extract<WorkspaceGatewayRouteState, { status: "ready" }>>> {
+  if (!config) {
+    return {};
+  }
+
+  try {
+    const response = await fetchWorkspaceGatewayAutoSaveStatus({ config, signal });
+
+    if (!response) {
+      return {};
+    }
+
+    return {
+      autoSave: response.autoSave,
+      autoSaveError: undefined,
+      ...(response.csrfToken === undefined ? {} : { csrfToken: response.csrfToken }),
+    };
+  } catch (error) {
+    if (error instanceof WorkspaceGatewayApiError && error.status === 404) {
+      return {};
+    }
+
+    const message =
+      error instanceof WorkspaceGatewayApiError || error instanceof Error
+        ? error.message
+        : "Workspace auto-save status could not load.";
+
+    return {
+      autoSaveError: displaySafeText(message),
+    };
+  }
+}
+
+async function refreshWorkspaceGatewayAutoSave({
+  config,
+  setWorkspaceGatewayState,
+}: {
+  config?: WorkspaceGatewayConfig;
+  setWorkspaceGatewayState: Dispatch<SetStateAction<WorkspaceGatewayRouteState>>;
+}): Promise<void> {
+  const update = await loadWorkspaceGatewayAutoSaveState({ config });
+
+  if (Object.keys(update).length === 0) {
+    return;
+  }
+
+  setWorkspaceGatewayState((current) =>
+    current.status === "ready"
+      ? {
+          ...current,
+          ...update,
+        }
+      : current,
+  );
+}
+
 async function refreshWorkspaceGatewayOperation({
   config,
   operationId,
@@ -781,6 +886,9 @@ async function refreshWorkspaceGatewayOperation({
       response.operation,
       setInstanceShellState,
     );
+    if (!operationPollsAutomatically(response.operation)) {
+      await refreshWorkspaceGatewayAutoSave({ config, setWorkspaceGatewayState });
+    }
   } catch (error) {
     const message =
       error instanceof WorkspaceGatewayApiError || error instanceof Error
@@ -869,6 +977,8 @@ function workspaceGatewayReadyStateFromResponse(
 
   return {
     activeOperationId: currentReady?.activeOperationId,
+    autoSave: currentReady?.autoSave,
+    autoSaveError: currentReady?.autoSaveError,
     csrfToken: response.csrfToken ?? currentReady?.csrfToken,
     currentOperation: currentReady?.currentOperation ?? response.operation,
     status: "ready",
@@ -1080,6 +1190,16 @@ function WorkspaceGatewayManagementSection({
         operationGroup="workspace"
         state={state}
       />
+      <WorkspaceAutoSaveStatusPanel
+        autoSave={state.status === "ready" ? state.autoSave : undefined}
+        canStartSave={workspaceGatewayCanStartPostBootstrapOperation(state, onStartOperation)}
+        error={state.status === "ready" ? state.autoSaveError : undefined}
+        onStartSave={() =>
+          onStartOperation?.(
+            workspaceGatewayStartInputFromDefinition(workspaceOperationDefinitionForKind("save")),
+          )
+        }
+      />
       <WorkspaceOnboardingFlowSection
         installCount={installCount}
         onInstallFirstApp={onInstallFirstApp}
@@ -1092,6 +1212,19 @@ function WorkspaceGatewayManagementSection({
         />
       ) : null}
     </section>
+  );
+}
+
+function workspaceGatewayCanStartPostBootstrapOperation(
+  state: WorkspaceGatewayRouteState,
+  onStartOperation?: (input: WorkspaceGatewayStartInput) => void,
+): boolean {
+  if (state.status !== "ready" || !state.csrfToken || onStartOperation === undefined) {
+    return false;
+  }
+
+  return !(
+    state.currentOperation !== undefined && operationPollsAutomatically(state.currentOperation)
   );
 }
 
@@ -1135,6 +1268,145 @@ function WorkspaceGatewayOperationControls({
       ))}
     </div>
   );
+}
+
+function WorkspaceAutoSaveStatusPanel({
+  autoSave,
+  canStartSave,
+  error,
+  onStartSave,
+}: {
+  autoSave?: WorkspaceGatewayAutoSaveState;
+  canStartSave: boolean;
+  error?: string;
+  onStartSave: () => void;
+}) {
+  if (!autoSave && !error) {
+    return null;
+  }
+
+  const summary = autoSave ? workspaceAutoSaveDisplaySummary(autoSave) : undefined;
+  const showManualSave = autoSave?.displayState === "dirty" || autoSave?.displayState === "queued";
+  const showRetrySave = autoSave?.displayState === "failed";
+
+  return (
+    <div
+      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
+      data-formless-workspace-auto-save-status="true"
+      data-formless-workspace-auto-save-state={autoSave?.displayState ?? "unavailable"}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-semibold">Auto-save</h3>
+          <p className="text-xs text-muted-fg">{summary?.detail ?? "Status unavailable"}</p>
+        </div>
+        {summary ? (
+          <span className={`rounded border px-2 py-1 text-xs ${summary.className}`}>
+            {summary.label}
+          </span>
+        ) : null}
+      </div>
+      {autoSave && autoSave.writeSources.length > 0 ? (
+        <p className="text-xs text-muted-fg">
+          Sources: {autoSave.writeSources.map(workspaceAutoSaveWriteSourceLabel).join(", ")}
+        </p>
+      ) : null}
+      {autoSave?.lastSavedAt ? (
+        <p className="text-xs text-muted-fg">Last saved {displaySafeText(autoSave.lastSavedAt)}</p>
+      ) : null}
+      {autoSave?.error ? (
+        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+          {displaySafeText(autoSave.error.message)}
+        </p>
+      ) : null}
+      {error ? (
+        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+          {displaySafeText(error)}
+        </p>
+      ) : null}
+      {showManualSave || showRetrySave ? (
+        <div className="flex flex-wrap gap-2">
+          {showRetrySave ? (
+            <Button
+              data-formless-workspace-auto-save-control="retry"
+              isDisabled={!canStartSave}
+              onPress={onStartSave}
+              size="sm"
+              type="button"
+            >
+              Retry save
+            </Button>
+          ) : null}
+          {showManualSave ? (
+            <Button
+              data-formless-workspace-auto-save-control="manual-save"
+              intent="outline"
+              isDisabled={!canStartSave}
+              onPress={onStartSave}
+              size="sm"
+              type="button"
+            >
+              Save now
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function workspaceAutoSaveDisplaySummary(autoSave: WorkspaceGatewayAutoSaveState): {
+  className: string;
+  detail: string;
+  label: string;
+} {
+  switch (autoSave.displayState) {
+    case "clean":
+      return {
+        className: "border-border text-muted-fg",
+        detail: "Workspace source has no pending local writes.",
+        label: "Clean",
+      };
+    case "dirty":
+      return {
+        className: "border-amber-300 text-amber-700",
+        detail: "Local writes are waiting for workspace save.",
+        label: "Dirty",
+      };
+    case "queued":
+      return {
+        className: "border-amber-300 text-amber-700",
+        detail: "Workspace save is queued.",
+        label: "Queued",
+      };
+    case "saving":
+      return {
+        className: "border-blue-300 text-blue-700",
+        detail: "Workspace save is running.",
+        label: "Saving",
+      };
+    case "saved":
+      return {
+        className: "border-green-300 text-green-700",
+        detail: "Workspace source is saved.",
+        label: "Saved",
+      };
+    case "failed":
+      return {
+        className: "border-red-300 text-red-700",
+        detail:
+          autoSave.retryCount > 0
+            ? `Workspace save failed after ${autoSave.retryCount} attempt${autoSave.retryCount === 1 ? "" : "s"}.`
+            : "Workspace save failed.",
+        label: "Failed",
+      };
+  }
+}
+
+function workspaceAutoSaveWriteSourceLabel(
+  source: WorkspaceGatewayAutoSaveState["writeSources"][number],
+): string {
+  return fieldKeyLabel(source);
 }
 
 function WorkspaceOnboardingFlowSection({
@@ -1430,6 +1702,7 @@ export function displaySafeText(value: string): string {
       /([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY|APIKEY)[A-Z0-9_]*=)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
       "$1[redacted]",
     )
+    .replace(/(owner[-_\s]?setup[-_\s]?token[:=]?\s*)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
     .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
     .replace(/lease:[A-Za-z0-9._:-]+/gi, "[redacted]")
     .replace(/CF_API_TOKEN[_A-Za-z0-9-]*/g, "[redacted]")

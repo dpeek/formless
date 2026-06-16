@@ -10,6 +10,9 @@ import {
   WORKSPACE_BROWSER_OPERATION_KINDS,
 } from "@dpeek/formless-workspace";
 import type {
+  WorkspaceAutoSaveEnqueueInput,
+  WorkspaceAutoSaveState,
+  WorkspaceAutoSaveWriteSource,
   WorkspaceBrowserOperationKind,
   WorkspaceOperationCheckOrPullStartInput,
   WorkspaceOperationCredentialSetupStartInput,
@@ -37,6 +40,7 @@ import type {
 export const WORKSPACE_GATEWAY_API_ROUTE_PREFIX = "/api/formless/workspace";
 export const WORKSPACE_GATEWAY_STATUS_API_PATH = `${WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/status`;
 export const WORKSPACE_GATEWAY_OPERATIONS_API_PATH = `${WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/operations`;
+export const WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH = `${WORKSPACE_GATEWAY_API_ROUTE_PREFIX}/auto-save`;
 export const LOCAL_SESSION_BOOTSTRAP_API_PATH = "/api/formless/local-session/bootstrap";
 
 export const WORKSPACE_GATEWAY_ENABLED_ENV = "FORMLESS_LOCAL_WORKSPACE_GATEWAY";
@@ -100,6 +104,12 @@ export type WorkspaceGatewayOperationResult = WorkspaceOperationResult;
 
 export type WorkspaceGatewayOperationStep = WorkspaceOperationStep;
 
+export type WorkspaceGatewayAutoSaveState = WorkspaceAutoSaveState;
+
+export type WorkspaceGatewayAutoSaveWriteSource = WorkspaceAutoSaveWriteSource;
+
+export type WorkspaceGatewayAutoSaveEnqueueInput = WorkspaceAutoSaveEnqueueInput;
+
 /**
  * Gateway transport alias for Workspace-owned display-safe operation state.
  */
@@ -126,6 +136,11 @@ export type WorkspaceGatewayResponse = {
   operation: WorkspaceGatewayOperation;
 };
 
+export type WorkspaceGatewayAutoSaveResponse = {
+  autoSave: WorkspaceGatewayAutoSaveState;
+  csrfToken?: string;
+};
+
 export type WorkspaceGatewayApiErrorBody = {
   error: string;
 };
@@ -146,4 +161,8 @@ export type WorkspaceGatewayOperationIdParseResult = WorkspaceOperationIdParseRe
 
 export type WorkspaceGatewayStartInputParseResult =
   | { input: WorkspaceGatewayStartInput; ok: true }
+  | { error: string; ok: false };
+
+export type WorkspaceGatewayAutoSaveEnqueueInputParseResult =
+  | { input: WorkspaceGatewayAutoSaveEnqueueInput; ok: true }
   | { error: string; ok: false };

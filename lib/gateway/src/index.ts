@@ -4,6 +4,7 @@ import {
 } from "./types.ts";
 import {
   WORKSPACE_OPERATION_DEFINITIONS,
+  isWorkspaceAutoSaveWriteSource,
   isWorkspaceBrowserOperationKind,
   parseWorkspaceOperationId,
   workspaceOperationExecutionDecision,
@@ -20,6 +21,7 @@ import type {
   WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
 import type {
+  WorkspaceGatewayAutoSaveEnqueueInputParseResult,
   WorkspaceGatewayOperationIdParseResult,
   WorkspaceGatewayOperationIntent,
   WorkspaceGatewayOperationKind,
@@ -33,6 +35,7 @@ export {
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
@@ -54,6 +57,11 @@ export type {
   WorkspaceGatewayActor,
   WorkspaceGatewayActorFacts,
   WorkspaceGatewayApiErrorBody,
+  WorkspaceGatewayAutoSaveEnqueueInput,
+  WorkspaceGatewayAutoSaveEnqueueInputParseResult,
+  WorkspaceGatewayAutoSaveResponse,
+  WorkspaceGatewayAutoSaveState,
+  WorkspaceGatewayAutoSaveWriteSource,
   WorkspaceGatewayAuthorizationVia,
   WorkspaceGatewayCheckOrPullStartInput,
   WorkspaceGatewayCredentialSetupStartInput,
@@ -109,6 +117,12 @@ export function workspaceGatewayOperationsApiPath(
   apiBasePath = WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
 ): string {
   return `${trimWorkspaceGatewayApiBasePath(apiBasePath)}/operations`;
+}
+
+export function workspaceGatewayAutoSaveApiPath(
+  apiBasePath = WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
+): string {
+  return `${trimWorkspaceGatewayApiBasePath(apiBasePath)}/auto-save`;
 }
 
 export function workspaceGatewayOperationApiPath(
@@ -192,6 +206,14 @@ export function workspaceGatewayReadOperationIntent(
   };
 }
 
+export function workspaceGatewayAutoSaveStatusIntent(): WorkspaceGatewayOperationIntent {
+  return workspaceGatewayReadOperationIntent("status");
+}
+
+export function workspaceGatewayAutoSaveEnqueueIntent(): WorkspaceGatewayOperationIntent {
+  return workspaceGatewayStartOperationIntent("save");
+}
+
 export function workspaceGatewayOperationExecutionDecision(input: {
   actor: WorkspaceOperationActor;
   capabilities: readonly WorkspaceOperationRequiredCapability[];
@@ -202,6 +224,51 @@ export function workspaceGatewayOperationExecutionDecision(input: {
     capabilities: input.capabilities,
     kind: input.intent.operation,
   });
+}
+
+export function parseWorkspaceGatewayAutoSaveEnqueueInput(
+  body: unknown,
+): WorkspaceGatewayAutoSaveEnqueueInputParseResult {
+  const forbidden = forbiddenWorkspaceGatewayInput(body);
+
+  if (forbidden) {
+    return { error: forbidden, ok: false };
+  }
+
+  if (!isRecord(body)) {
+    return { error: "Workspace auto-save enqueue request must be an object.", ok: false };
+  }
+
+  const unsupportedField = Object.keys(body).find(
+    (field) => field !== "source" && field !== "storageIdentity",
+  );
+
+  if (unsupportedField) {
+    return {
+      error: `Workspace auto-save enqueue does not allow field "${unsupportedField}".`,
+      ok: false,
+    };
+  }
+
+  if (!isWorkspaceAutoSaveWriteSource(body.source)) {
+    return { error: "Workspace auto-save write source is invalid.", ok: false };
+  }
+
+  if ("storageIdentity" in body && body.storageIdentity !== undefined) {
+    if (typeof body.storageIdentity !== "string" || body.storageIdentity.trim() === "") {
+      return { error: "Workspace auto-save storage identity is invalid.", ok: false };
+    }
+  }
+
+  return {
+    input: {
+      source: body.source,
+      ...(typeof body.storageIdentity === "string"
+        ? { storageIdentity: body.storageIdentity }
+        : {}),
+    },
+    ok: true,
+  };
 }
 
 export function parseWorkspaceGatewayStartInput(

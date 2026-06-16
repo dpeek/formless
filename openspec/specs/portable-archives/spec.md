@@ -240,6 +240,14 @@ not portable archive directories.
 - **AND** `state/instance.json` uses storage identity `instance:control-plane`
 - **AND** app snapshot files use storage identity `app:<installId>`
 
+#### Scenario: Auto-save uses compact workspace state
+
+- **WHEN** local workspace auto-save persists source from local Authority
+- **THEN** it writes the same `state/instance.json`, `state/apps/<installId>.json`,
+  and `state/media` source shape as manual workspace save
+- **AND** it does not write portable archive envelopes as workspace source
+- **AND** it does not read browser IndexedDB as source
+
 #### Scenario: Workspace media state
 
 - **WHEN** workspace source contains core media referenced by app records

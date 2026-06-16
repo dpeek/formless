@@ -29,7 +29,10 @@ import {
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
-import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
+import type {
+  WorkspaceGatewayAutoSaveState,
+  WorkspaceGatewayOperation,
+} from "@dpeek/formless-gateway/client";
 import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
 
 beforeEach(() => {
@@ -224,6 +227,102 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain("workspacePath");
     expect(html).not.toContain("/Users/");
+  });
+
+  it("renders local workspace auto-save states with manual save and retry controls", () => {
+    const states: Array<[WorkspaceGatewayAutoSaveState["displayState"], string]> = [
+      ["clean", "Workspace source has no pending local writes."],
+      ["dirty", "Local writes are waiting for workspace save."],
+      ["queued", "Workspace save is queued."],
+      ["saving", "Workspace save is running."],
+      ["saved", "Workspace source is saved."],
+      ["failed", "Workspace save failed after 2 attempts."],
+    ];
+
+    for (const [displayState, detail] of states) {
+      const html = renderWithRouter(
+        <InstanceShellRouteView
+          onStartWorkspaceOperation={() => undefined}
+          state={readyState({ installs: [] })}
+          workspaceGatewayState={workspaceGatewayState({
+            autoSave: autoSaveState(
+              displayState === "failed"
+                ? {
+                    dirtyGeneration: 2,
+                    displayState,
+                    error: {
+                      at: "2026-06-16T03:45:01.000Z",
+                      message:
+                        'Failed at /Users/dpeek/workspace with CLOUDFLARE_API_TOKEN="secret-token" and owner setup token owner-token.',
+                    },
+                    retryCount: 2,
+                    writeSources: ["schema-save"],
+                  }
+                : {
+                    dirtyGeneration: displayState === "clean" ? 0 : 1,
+                    displayState,
+                    ...(displayState === "saved"
+                      ? { lastSavedAt: "2026-06-16T03:45:00.000Z" }
+                      : {}),
+                    writeSources:
+                      displayState === "dirty" || displayState === "queued" ? ["schema-save"] : [],
+                  },
+            ),
+            csrfToken: "csrf-token",
+          })}
+        />,
+      );
+
+      expect(html).toContain('data-formless-workspace-auto-save-status="true"');
+      expect(html).toContain(`data-formless-workspace-auto-save-state="${displayState}"`);
+      expect(html).toContain(detail);
+    }
+
+    const dirtyHtml = renderWithRouter(
+      <InstanceShellRouteView
+        onStartWorkspaceOperation={() => undefined}
+        state={readyState({ installs: [] })}
+        workspaceGatewayState={workspaceGatewayState({
+          autoSave: autoSaveState({
+            dirtyGeneration: 1,
+            displayState: "dirty",
+            writeSources: ["schema-save"],
+          }),
+          csrfToken: "csrf-token",
+        })}
+      />,
+    );
+    const failedHtml = renderWithRouter(
+      <InstanceShellRouteView
+        onStartWorkspaceOperation={() => undefined}
+        state={readyState({ installs: [] })}
+        workspaceGatewayState={workspaceGatewayState({
+          autoSave: autoSaveState({
+            dirtyGeneration: 2,
+            displayState: "failed",
+            error: {
+              at: "2026-06-16T03:45:01.000Z",
+              message:
+                'Failed at /Users/dpeek/workspace with CLOUDFLARE_API_TOKEN="secret-token" and owner setup token owner-token.',
+            },
+            retryCount: 2,
+            writeSources: ["schema-save"],
+          }),
+          csrfToken: "csrf-token",
+        })}
+      />,
+    );
+
+    expect(dirtyHtml).toContain('data-formless-workspace-auto-save-control="manual-save"');
+    expect(dirtyHtml).toContain("Save now");
+    expect(dirtyHtml).toContain("Sources: Schema save");
+    expect(failedHtml).toContain('data-formless-workspace-auto-save-control="retry"');
+    expect(failedHtml).toContain("Retry save");
+    expect(failedHtml).toContain("&lt;path&gt;");
+    expect(failedHtml).toContain("[redacted]");
+    expect(failedHtml).not.toContain("/Users/dpeek");
+    expect(failedHtml).not.toContain("secret-token");
+    expect(failedHtml).not.toContain("owner-token");
   });
 
   it("uses fetched active registry packages for uninitialized workspace install state", () => {
@@ -1043,6 +1142,23 @@ function workspaceOperation(
     updatedAt: "2026-06-02T00:00:01.000Z",
     version: 1,
     workspace: { label: "personal-sites" },
+    ...overrides,
+  };
+}
+
+function autoSaveState(
+  overrides: Partial<WorkspaceGatewayAutoSaveState> = {},
+): WorkspaceGatewayAutoSaveState {
+  return {
+    dirtyGeneration: 0,
+    displayState: "clean",
+    kind: "formless.workspaceAutoSaveState",
+    retryCount: 0,
+    savedGeneration: 0,
+    storageIdentities: [],
+    updatedAt: "2026-06-16T03:45:00.000Z",
+    version: 1,
+    writeSources: [],
     ...overrides,
   };
 }

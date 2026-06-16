@@ -36,6 +36,67 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 - **AND** it cannot request arbitrary filesystem reads, arbitrary filesystem
   writes, shell commands, or path traversal
 
+### Requirement: Local Workspace Auto-Save
+
+The system SHALL automatically persist committed local runtime writes to
+reviewable workspace source when a local workspace gateway is available.
+
+#### Scenario: Enqueue auto-save after committed browser writes
+
+- **WHEN** a browser-originated app operation, schema save, app install,
+  control-plane write, reset schema, reset seed, storage snapshot restore, or
+  deployment intent write commits through local Authority
+- **OR** a core media upload is accepted and then referenced by a committed app
+  record
+- **THEN** the browser or runtime enqueues workspace auto-save through the
+  same-origin local gateway
+- **AND** the enqueue records a dirty generation and write source without
+  writing workspace files from browser code
+- **AND** failed writes, replayed writes, read-only requests, bootstrap reads,
+  sync catch-up, and browser replica merges do not enqueue auto-save
+
+#### Scenario: Auto-save executes through sidecar
+
+- **WHEN** queued auto-save work runs
+- **THEN** the gateway sidecar executes the existing workspace save behavior
+  against local Authority-backed storage snapshots and referenced media payloads
+- **AND** browser IndexedDB is not read as source
+- **AND** deployed instance, mapped-host, site-authoring, and published Site
+  profiles do not expose auto-save enqueue or execution
+
+#### Scenario: Coalesce and retry auto-save
+
+- **WHEN** multiple write sources enqueue auto-save while another debounce or
+  save is pending
+- **THEN** the scheduler coalesces them into one pending generation and
+  serializes save execution
+- **AND** a successful save clears dirty state only through the generation it
+  persisted
+- **AND** a failed save leaves workspace state dirty, records display-safe
+  failure state, and retries only through bounded retry/backoff, the next
+  committed local write, or an explicit manual save
+
+#### Scenario: Display auto-save status
+
+- **WHEN** the local instance shell reads workspace auto-save status through the
+  same-origin gateway
+- **THEN** the gateway returns display-safe clean, dirty, queued, saving, saved,
+  or failed state for the current workspace
+- **AND** the shell can offer explicit save or retry controls through the
+  existing workspace save operation
+- **AND** raw filesystem paths, provider credentials, admin tokens, owner setup
+  tokens, and ignored secret state are not exposed
+
+#### Scenario: Suppress auto-save loops
+
+- **WHEN** local dev bootstraps Authority from workspace source, workspace pull
+  restores local Authority, workspace restore or import applies snapshots, push
+  or deploy writes remote targets, manual save writes workspace source, or
+  auto-save writes workspace source
+- **THEN** auto-save enqueue is suppressed for those internal write phases
+- **AND** no workspace file write, push sync catch-up, or broadcast caused by
+  those phases starts another auto-save loop
+
 #### Scenario: Sidecar owns local execution
 
 - **WHEN** a workspace gateway operation reads or writes workspace source,

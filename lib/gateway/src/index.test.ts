@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
 import {
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
@@ -9,6 +10,10 @@ import {
   isWorkspaceGatewayMutatingStartOperationKind,
   isWorkspaceGatewayOperationKind,
   parseWorkspaceGatewayOperationId,
+  parseWorkspaceGatewayAutoSaveEnqueueInput,
+  workspaceGatewayAutoSaveApiPath,
+  workspaceGatewayAutoSaveEnqueueIntent,
+  workspaceGatewayAutoSaveStatusIntent,
   parseWorkspaceGatewayStartInput,
   workspaceGatewayOperationPath,
   workspaceGatewayReadOperationIntent,
@@ -154,6 +159,60 @@ describe("Gateway runtime-neutral contracts", () => {
     ).toBeUndefined();
   });
 
+  it("parses auto-save enqueue input without filesystem, shell, or secret fields", () => {
+    expect(workspaceGatewayAutoSaveApiPath()).toBe(WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH);
+    expect(workspaceGatewayAutoSaveApiPath("/local/workspace/")).toBe("/local/workspace/auto-save");
+    expect(
+      parseWorkspaceGatewayAutoSaveEnqueueInput({
+        source: "app-operation",
+        storageIdentity: "app:site",
+      }),
+    ).toEqual({
+      input: { source: "app-operation", storageIdentity: "app:site" },
+      ok: true,
+    });
+    expect(parseWorkspaceGatewayAutoSaveEnqueueInput({ source: "raw-upload" })).toEqual({
+      error: "Workspace auto-save write source is invalid.",
+      ok: false,
+    });
+    expect(
+      parseWorkspaceGatewayAutoSaveEnqueueInput({
+        path: "/Users/dpeek/workspace",
+        source: "schema-save",
+      }),
+    ).toEqual({
+      error: 'Workspace gateway request includes forbidden key "path".',
+      ok: false,
+    });
+    expect(
+      parseWorkspaceGatewayAutoSaveEnqueueInput({
+        source: "schema-save",
+        token: "secret",
+      }),
+    ).toEqual({
+      error: 'Workspace gateway request includes forbidden key "token".',
+      ok: false,
+    });
+    expect(
+      parseWorkspaceGatewayAutoSaveEnqueueInput({
+        source: "schema-save",
+        storageIdentity: "",
+      }),
+    ).toEqual({
+      error: "Workspace auto-save storage identity is invalid.",
+      ok: false,
+    });
+    expect(
+      parseWorkspaceGatewayAutoSaveEnqueueInput({
+        extra: true,
+        source: "schema-save",
+      }),
+    ).toEqual({
+      error: 'Workspace auto-save enqueue does not allow field "extra".',
+      ok: false,
+    });
+  });
+
   it("classifies bootstrap-limited and mutating operation intent", () => {
     expect(isWorkspaceGatewayBootstrapOperationKind("status")).toBe(true);
     expect(isWorkspaceGatewayBootstrapOperationKind("save")).toBe(false);
@@ -180,6 +239,18 @@ describe("Gateway runtime-neutral contracts", () => {
       mutating: false,
       operation: "status",
       requiredCapability: "workspace-read",
+    });
+    expect(workspaceGatewayAutoSaveStatusIntent()).toEqual({
+      bootstrapAllowed: true,
+      mutating: false,
+      operation: "status",
+      requiredCapability: "workspace-read",
+    });
+    expect(workspaceGatewayAutoSaveEnqueueIntent()).toEqual({
+      bootstrapAllowed: false,
+      mutating: true,
+      operation: "save",
+      requiredCapability: "workspace-source-write",
     });
   });
 });

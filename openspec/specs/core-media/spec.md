@@ -128,3 +128,12 @@ capabilities.
 - THEN core media objects are restored before app records
 - AND media object keys, content types, byte sizes, asset metadata, and files are
   validated before mutation
+
+#### Scenario: Referenced upload participates in workspace auto-save
+
+- GIVEN a local generated media editor uploads a core image and commits an app
+  record reference to that image
+- WHEN local workspace auto-save persists workspace source
+- THEN the referenced media payload is written with workspace media state
+- AND standalone uploaded media that is not referenced by active app records is
+  not written as reviewable workspace source

@@ -229,6 +229,18 @@ state back to reviewable workspace storage snapshots and media payloads.
 - **AND** secrets are not written to `formless.json`, storage snapshots, or
   media files
 
+#### Scenario: Auto-save local workspace state
+
+- **WHEN** a local workspace runtime with a gateway sidecar receives a
+  committed browser-originated local write
+- **THEN** workspace auto-save writes the same deterministic storage snapshots
+  and referenced media payloads as `formless save`
+- **AND** browser IndexedDB state is not used as the source of truth
+- **AND** `formless save` remains available as an explicit flush or retry
+  action
+- **AND** remote pull, push, deploy, and destroy remain explicit CLI or gateway
+  operations
+
 #### Scenario: Check workspace source
 
 - **WHEN** a user runs `formless save --check` and local Authority state differs

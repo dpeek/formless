@@ -63,6 +63,16 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
+#### Scenario: Local workspace save status
+
+- **GIVEN** the product instance shell renders in a local workspace profile with
+  workspace gateway auto-save available
+- **WHEN** workspace source is clean, dirty, queued, saving, saved, or failed
+- **THEN** the shell shows display-safe workspace save state and retry or manual
+  save affordance where appropriate
+- **AND** raw filesystem paths, provider credentials, admin tokens, and secret
+  state are not exposed
+
 #### Scenario: App-local settings
 
 - **GIVEN** app settings are opened for the active app
@@ -238,6 +248,16 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 - THEN hidden literal defaults are submitted
 - AND hidden `visibleWhen` fields are not submitted
 - AND active union variant fields follow draft discriminator values
+
+#### Scenario: Local workspace auto-save after generated writes
+
+- GIVEN generated UI runs in a local workspace profile with auto-save available
+- WHEN a generated create, update, delete, command, ordering, media-backed
+  patch, schema edit, or control-plane edit commits successfully
+- THEN generated UI reports the committed write to the local workspace
+  auto-save client hook
+- AND generated UI does not write workspace files or read browser IndexedDB as
+  workspace source
 
 #### Scenario: Delete control availability
 

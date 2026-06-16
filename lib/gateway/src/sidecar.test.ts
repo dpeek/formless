@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
@@ -18,6 +19,7 @@ import {
   handleWorkspaceGatewayLocalProxyRequest,
   handleWorkspaceGatewaySidecarRequest,
   startWorkspaceGatewaySidecar,
+  type WorkspaceGatewayAutoSaveState,
   type WorkspaceGatewayOperation,
   type WorkspaceGatewaySidecar,
   type WorkspaceGatewaySidecarOperationHandlers,
@@ -200,6 +202,106 @@ describe("sidecar workspace gateway adapter", () => {
     expect(headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("save");
   });
 
+  it("proxies auto-save status and enqueue with bootstrap, owner session, CSRF, and capability checks", async () => {
+    const captured: Array<{ body?: unknown; headers: Record<string, string>; url: string }> = [];
+    const status = await handleWorkspaceGatewayLocalProxyRequest(
+      new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        headers: {
+          Origin: "http://local.test",
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+        },
+      }),
+      {
+        ...gatewayEnv(),
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+      },
+      {
+        proxyFetch: async (url, init) => {
+          captured.push(await capturedProxyRequest(url, init));
+
+          return Response.json({ autoSave: autoSaveState({ displayState: "clean" }) });
+        },
+      },
+    );
+    const missingCsrf = await handleWorkspaceGatewayLocalProxyRequest(
+      autoSaveRequest({ source: "app-operation" }, { Origin: "http://local.test" }),
+      {
+        ...gatewayEnv(),
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+      },
+      {
+        proxyFetch: async () => Response.json({ autoSave: autoSaveState() }),
+        validateOwnerSession: async () => ({ ok: true }),
+      },
+    );
+    const enqueued = await handleWorkspaceGatewayLocalProxyRequest(
+      autoSaveRequest(
+        { source: "app-operation", storageIdentity: "app:site" },
+        {
+          Cookie: `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          Origin: "http://local.test",
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+        },
+      ),
+      {
+        ...gatewayEnv(),
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+      },
+      {
+        proxyFetch: async (url, init) => {
+          captured.push(await capturedProxyRequest(url, init));
+
+          return Response.json({ autoSave: autoSaveState({ displayState: "queued" }) });
+        },
+        validateOwnerSession: async () => ({ ok: true }),
+      },
+    );
+    const gated = await handleWorkspaceGatewayLocalProxyRequest(
+      autoSaveRequest(
+        { source: "app-operation" },
+        {
+          Cookie: `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          Origin: "http://local.test",
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+        },
+      ),
+      {
+        ...gatewayEnv(),
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+      },
+      {
+        capabilities: ["workspace-read"],
+        proxyFetch: async () => Response.json({ autoSave: autoSaveState() }),
+        validateOwnerSession: async () => ({ ok: true }),
+      },
+    );
+
+    expect(status?.status).toBe(200);
+    expect(missingCsrf?.status).toBe(403);
+    expect(enqueued?.status).toBe(200);
+    expect(gated?.status).toBe(403);
+    await expect(status?.json()).resolves.toMatchObject({
+      autoSave: { displayState: "clean" },
+    });
+    await expect(enqueued?.json()).resolves.toMatchObject({
+      autoSave: { displayState: "queued" },
+      csrfToken,
+    });
+    await expect(gated?.json()).resolves.toEqual({
+      error: 'Workspace operation "save" requires execution capability "workspace-source-write".',
+    });
+    expect(captured.map((call) => call.url)).toEqual([
+      `http://127.0.0.1:9999${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
+      `http://127.0.0.1:9999${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
+    ]);
+    expect(captured[0]?.headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("status");
+    expect(captured[1]?.headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("save");
+    expect(captured[1]?.body).toEqual({
+      source: "app-operation",
+      storageIdentity: "app:site",
+    });
+  });
+
   it("requires operation intent for bootstrap reads and validates sidecar read intent", async () => {
     const bootstrapWithoutIntent = await handleWorkspaceGatewayLocalProxyRequest(
       new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_save_00000001`, {
@@ -272,16 +374,79 @@ function operationRequest(body: unknown, headers: Record<string, string> = {}): 
   });
 }
 
+function autoSaveRequest(body: unknown, headers: Record<string, string> = {}): Request {
+  return new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    method: "POST",
+  });
+}
+
 function operationHandlers(
   overrides: Partial<WorkspaceGatewaySidecarOperationHandlers> = {},
 ): WorkspaceGatewaySidecarOperationHandlers {
   return {
+    autoSaveStatus: async () => autoSaveState(),
+    enqueueAutoSave: async () => autoSaveState({ displayState: "queued" }),
     readOperation: async ({ authorization }) => operation("status", { actor: authorization.actor }),
     startOperation: async ({ authorization, operationInput }) =>
       operation(operationInput.kind, { actor: authorization.actor }),
     status: async ({ authorization }) => operation("status", { actor: authorization.actor }),
     ...overrides,
   };
+}
+
+function autoSaveState(
+  overrides: Partial<WorkspaceGatewayAutoSaveState> = {},
+): WorkspaceGatewayAutoSaveState {
+  return {
+    dirtyGeneration: 0,
+    displayState: "clean",
+    kind: "formless.workspaceAutoSaveState",
+    retryCount: 0,
+    savedGeneration: 0,
+    storageIdentities: [],
+    updatedAt: "2026-06-02T01:00:00.000Z",
+    version: 1,
+    writeSources: [],
+    ...overrides,
+  };
+}
+
+async function capturedProxyRequest(
+  url: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+): Promise<{ body?: unknown; headers: Record<string, string>; url: string }> {
+  const body = await requestBodyJson(init?.body);
+
+  return {
+    ...(body === undefined ? {} : { body }),
+    headers: Object.fromEntries(new Headers(init?.headers).entries()),
+    url: typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
+  };
+}
+
+async function requestBodyJson(body: BodyInit | null | undefined): Promise<unknown> {
+  if (body === null || body === undefined) {
+    return undefined;
+  }
+
+  if (typeof body === "string") {
+    return JSON.parse(body);
+  }
+
+  if (body instanceof ArrayBuffer) {
+    return JSON.parse(new TextDecoder().decode(body));
+  }
+
+  if (body instanceof Uint8Array) {
+    return JSON.parse(new TextDecoder().decode(body));
+  }
+
+  return undefined;
 }
 
 function operation(

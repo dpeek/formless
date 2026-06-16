@@ -3,6 +3,11 @@ import type {
   CreateAppInstallRequest,
   CreateAppInstallResponse,
 } from "../shared/protocol.ts";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "../shared/instance-control-plane.ts";
+import {
+  enqueueLocalWorkspaceAutoSave,
+  type LocalWorkspaceAutoSaveOptions,
+} from "./workspace-auto-save.ts";
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 
@@ -43,9 +48,11 @@ export async function fetchInstanceAppInstalls({
 export async function createInstanceAppInstall(
   input: CreateAppInstallRequest,
   {
+    autoSave,
     fetcher = fetch,
     signal,
   }: {
+    autoSave?: LocalWorkspaceAutoSaveOptions["autoSave"];
     fetcher?: typeof fetch;
     signal?: AbortSignal;
   } = {},
@@ -61,7 +68,14 @@ export async function createInstanceAppInstall(
     signal,
   });
 
-  return readJsonResponse<CreateAppInstallResponse>(response);
+  const body = await readJsonResponse<CreateAppInstallResponse>(response);
+
+  await enqueueLocalWorkspaceAutoSave(
+    { source: "app-install", storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY },
+    { autoSave },
+  );
+
+  return body;
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

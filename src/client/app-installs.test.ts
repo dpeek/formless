@@ -5,6 +5,7 @@ import {
   fetchInstanceAppInstalls,
   INSTANCE_APP_INSTALLS_API_PATH,
 } from "./app-installs.ts";
+import type { LocalWorkspaceAutoSaveClient } from "./workspace-auto-save.ts";
 
 describe("client app install API helpers", () => {
   it("fetches installed app registry state", async () => {
@@ -19,6 +20,7 @@ describe("client app install API helpers", () => {
   });
 
   it("creates an app install and surfaces API errors", async () => {
+    const autoSave = captureAutoSave();
     const created = await createInstanceAppInstall(
       {
         packageAppKey: "site",
@@ -40,10 +42,14 @@ describe("client app install API helpers", () => {
           },
           { expectedMethod: "POST", status: 201 },
         ),
+        autoSave,
       },
     );
 
     expect(created.install).toEqual({ installId: "personal" });
+    expect(autoSave.inputs).toEqual([
+      { source: "app-install", storageIdentity: "instance:control-plane" },
+    ]);
 
     await expect(
       createInstanceAppInstall(
@@ -62,6 +68,7 @@ describe("client app install API helpers", () => {
             },
             { expectedMethod: "POST", status: 409 },
           ),
+          autoSave,
         },
       ),
     ).rejects.toMatchObject({
@@ -74,6 +81,9 @@ describe("client app install API helpers", () => {
       name: "AppInstallApiError",
       status: 409,
     } satisfies Partial<AppInstallApiError>);
+    expect(autoSave.inputs).toEqual([
+      { source: "app-install", storageIdentity: "instance:control-plane" },
+    ]);
   });
 
   it("uses same-origin browser credentials without admin bearer headers", async () => {
@@ -136,6 +146,19 @@ describe("client app install API helpers", () => {
     ]);
   });
 });
+
+type AutoSaveInput = Parameters<LocalWorkspaceAutoSaveClient["enqueue"]>[0];
+
+function captureAutoSave(): LocalWorkspaceAutoSaveClient & { inputs: AutoSaveInput[] } {
+  const inputs: AutoSaveInput[] = [];
+
+  return {
+    inputs,
+    enqueue: async (input) => {
+      inputs.push(input);
+    },
+  };
+}
 
 function jsonFetcher(
   expectedPath: string,

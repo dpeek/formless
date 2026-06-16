@@ -1,6 +1,7 @@
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
@@ -14,8 +15,11 @@ import {
   WORKSPACE_GATEWAY_STATUS_API_PATH,
   isWorkspaceGatewayOperationKind,
   isWorkspaceGatewayPath,
+  parseWorkspaceGatewayAutoSaveEnqueueInput,
   parseWorkspaceGatewayOperationId,
   parseWorkspaceGatewayStartInput,
+  workspaceGatewayAutoSaveEnqueueIntent,
+  workspaceGatewayAutoSaveStatusIntent,
   workspaceGatewayOperationPath,
   workspaceGatewayOperationExecutionDecision,
   workspaceGatewayReadOperationIntent,
@@ -31,6 +35,7 @@ import type { WorkspaceOperationRequiredCapability } from "@dpeek/formless-works
 export {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
   WORKSPACE_GATEWAY_CSRF_HEADER,
@@ -111,6 +116,42 @@ export async function handleWorkspaceGatewayProxyRequest(
     return proxyWorkspaceGatewayRequest(request, env, options, proxyTarget, authorization, {
       intent,
     });
+  }
+
+  if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
+    if (request.method === "GET") {
+      const intent = workspaceGatewayAutoSaveStatusIntent();
+      const authorization = await authorizeGatewayRequest(request, env, options, intent);
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return proxyWorkspaceGatewayRequest(request, env, options, proxyTarget, authorization, {
+        intent,
+      });
+    }
+
+    if (request.method === "POST") {
+      const parsed = await parseGatewayAutoSaveEnqueueInput(request.clone());
+
+      if (!parsed.ok) {
+        return displaySafeJson({ error: parsed.error }, 400);
+      }
+
+      const intent = workspaceGatewayAutoSaveEnqueueIntent();
+      const authorization = await authorizeGatewayRequest(request, env, options, intent);
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return proxyWorkspaceGatewayRequest(request, env, options, proxyTarget, authorization, {
+        intent,
+      });
+    }
+
+    return methodNotAllowed(["GET", "POST"]);
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
@@ -373,6 +414,10 @@ async function proxyWorkspaceGatewayRequest(
     return gatewayOperationResponse(request, env, authorization, body.operation);
   }
 
+  if (response.status === 200 && typeof body === "object" && body !== null && "autoSave" in body) {
+    return gatewayAutoSaveResponse(request, env, authorization, body.autoSave);
+  }
+
   return displaySafeJson(body, response.status, displaySafeProxyHeaders(response.headers));
 }
 
@@ -398,6 +443,34 @@ function gatewayOperationResponse(
     {
       ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
       operation,
+    },
+    200,
+    headers,
+  );
+}
+
+function gatewayAutoSaveResponse(
+  request: Request,
+  env: WorkspaceGatewayWorkerProxyEnv,
+  authorization: Exclude<GatewayAuthorization, { error: string }>,
+  autoSave: unknown,
+): Response {
+  const headers = new Headers();
+  const csrfToken = env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
+  const includeCsrfToken =
+    authorization.via === "owner-session" && authorization.actor === "browser";
+
+  if (includeCsrfToken && csrfToken) {
+    headers.set(
+      "Set-Cookie",
+      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; Path=/; SameSite=Lax${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`,
+    );
+  }
+
+  return displaySafeJson(
+    {
+      ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
+      autoSave,
     },
     200,
     headers,
@@ -535,6 +608,18 @@ async function parseGatewayStartInput(request: {
   }
 
   return parseWorkspaceGatewayStartInput(body);
+}
+
+async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<unknown> }) {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return { error: "Workspace auto-save enqueue request must be JSON.", ok: false } as const;
+  }
+
+  return parseWorkspaceGatewayAutoSaveEnqueueInput(body);
 }
 
 function displaySafeProxyHeaders(headers: Headers): Headers {

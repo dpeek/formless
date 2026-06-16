@@ -2,12 +2,17 @@ import {
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_CSRF_HEADER,
   WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
+  workspaceGatewayAutoSaveApiPath,
+  workspaceGatewayAutoSaveEnqueueIntent,
+  workspaceGatewayAutoSaveStatusIntent,
   workspaceGatewayOperationApiPath,
   workspaceGatewayOperationsApiPath,
   workspaceGatewayReadOperationIntent,
   workspaceGatewayStartOperationIntent,
   workspaceGatewayStatusApiPath,
   type WorkspaceGatewayApiErrorBody,
+  type WorkspaceGatewayAutoSaveEnqueueInput,
+  type WorkspaceGatewayAutoSaveResponse,
   type WorkspaceGatewayOperationKind,
   type WorkspaceGatewayResponse,
   type WorkspaceGatewayStartInput,
@@ -16,6 +21,10 @@ import {
 export { WORKSPACE_GATEWAY_BOOTSTRAP_HEADER, WORKSPACE_GATEWAY_CSRF_HEADER } from "./index.ts";
 export type {
   WorkspaceGatewayApiErrorBody,
+  WorkspaceGatewayAutoSaveEnqueueInput,
+  WorkspaceGatewayAutoSaveResponse,
+  WorkspaceGatewayAutoSaveState,
+  WorkspaceGatewayAutoSaveWriteSource,
   WorkspaceGatewayDisplayObject,
   WorkspaceGatewayDisplayValue,
   WorkspaceGatewayExternalAuthorizationEvent,
@@ -80,7 +89,7 @@ export async function fetchWorkspaceGatewayStatus({
     return undefined;
   }
 
-  return gatewayRequestWithBootstrapRetry(
+  return gatewayRequestWithBootstrapRetry<WorkspaceGatewayResponse>(
     () =>
       fetcher(workspaceGatewayStatusApiPath(config.apiBasePath), {
         credentials: "same-origin",
@@ -89,6 +98,37 @@ export async function fetchWorkspaceGatewayStatus({
       }),
     () =>
       fetcher(workspaceGatewayStatusApiPath(config.apiBasePath), {
+        credentials: "same-origin",
+        headers: gatewayHeaders(config, { allowBootstrap: false }),
+        signal,
+      }),
+  );
+}
+
+export async function fetchWorkspaceGatewayAutoSaveStatus({
+  config = workspaceGatewayBrowserConfig(),
+  fetcher = fetch,
+  signal,
+}: {
+  config?: WorkspaceGatewayConfig;
+  fetcher?: typeof fetch;
+  signal?: AbortSignal;
+} = {}): Promise<WorkspaceGatewayAutoSaveResponse | undefined> {
+  if (!config) {
+    return undefined;
+  }
+
+  const { bootstrapAllowed } = workspaceGatewayAutoSaveStatusIntent();
+
+  return gatewayRequestWithBootstrapRetry<WorkspaceGatewayAutoSaveResponse>(
+    () =>
+      fetcher(workspaceGatewayAutoSaveApiPath(config.apiBasePath), {
+        credentials: "same-origin",
+        headers: gatewayHeaders(config, { allowBootstrap: bootstrapAllowed }),
+        signal,
+      }),
+    () =>
+      fetcher(workspaceGatewayAutoSaveApiPath(config.apiBasePath), {
         credentials: "same-origin",
         headers: gatewayHeaders(config, { allowBootstrap: false }),
         signal,
@@ -116,7 +156,7 @@ export async function startWorkspaceGatewayOperation(
 
   const { bootstrapAllowed } = workspaceGatewayStartOperationIntent(input);
 
-  return gatewayRequestWithBootstrapRetry(
+  return gatewayRequestWithBootstrapRetry<WorkspaceGatewayResponse>(
     () =>
       fetcher(workspaceGatewayOperationsApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
@@ -131,6 +171,54 @@ export async function startWorkspaceGatewayOperation(
       }),
     () =>
       fetcher(workspaceGatewayOperationsApiPath(config.apiBasePath), {
+        body: JSON.stringify(input),
+        credentials: "same-origin",
+        headers: gatewayHeaders(config, {
+          allowBootstrap: false,
+          csrfToken,
+          includeJsonContentType: true,
+        }),
+        method: "POST",
+        signal,
+      }),
+  );
+}
+
+export async function enqueueWorkspaceGatewayAutoSave(
+  input: WorkspaceGatewayAutoSaveEnqueueInput,
+  {
+    config = workspaceGatewayBrowserConfig(),
+    csrfToken,
+    fetcher = fetch,
+    signal,
+  }: {
+    config?: WorkspaceGatewayConfig;
+    csrfToken?: string;
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<WorkspaceGatewayAutoSaveResponse | undefined> {
+  if (!config) {
+    return undefined;
+  }
+
+  const { bootstrapAllowed } = workspaceGatewayAutoSaveEnqueueIntent();
+
+  return gatewayRequestWithBootstrapRetry<WorkspaceGatewayAutoSaveResponse>(
+    () =>
+      fetcher(workspaceGatewayAutoSaveApiPath(config.apiBasePath), {
+        body: JSON.stringify(input),
+        credentials: "same-origin",
+        headers: gatewayHeaders(config, {
+          allowBootstrap: bootstrapAllowed,
+          csrfToken,
+          includeJsonContentType: true,
+        }),
+        method: "POST",
+        signal,
+      }),
+    () =>
+      fetcher(workspaceGatewayAutoSaveApiPath(config.apiBasePath), {
         body: JSON.stringify(input),
         credentials: "same-origin",
         headers: gatewayHeaders(config, {
@@ -165,7 +253,7 @@ export async function fetchWorkspaceGatewayOperation(
     : false;
   const operationPath = workspaceGatewayOperationApiPath(input.operationId, config.apiBasePath);
 
-  return gatewayRequestWithBootstrapRetry(
+  return gatewayRequestWithBootstrapRetry<WorkspaceGatewayResponse>(
     () =>
       fetcher(operationPath, {
         credentials: "same-origin",
@@ -184,14 +272,14 @@ export async function fetchWorkspaceGatewayOperation(
   );
 }
 
-async function gatewayRequestWithBootstrapRetry(
+async function gatewayRequestWithBootstrapRetry<T>(
   request: () => Promise<Response>,
   retryWithoutBootstrap: () => Promise<Response>,
-): Promise<WorkspaceGatewayResponse> {
+): Promise<T> {
   const first = await request();
 
   if (first.status !== 403) {
-    return readJsonResponse(first);
+    return readJsonResponse<T>(first);
   }
 
   const firstBody = await readResponseBody(first);
@@ -203,7 +291,7 @@ async function gatewayRequestWithBootstrapRetry(
     });
   }
 
-  return readJsonResponse(await retryWithoutBootstrap());
+  return readJsonResponse<T>(await retryWithoutBootstrap());
 }
 
 function gatewayHeaders(
@@ -236,7 +324,7 @@ function gatewayHeaders(
   return headers;
 }
 
-async function readJsonResponse(response: Response): Promise<WorkspaceGatewayResponse> {
+async function readJsonResponse<T>(response: Response): Promise<T> {
   const body = await readResponseBody(response);
 
   if (!response.ok) {
@@ -246,7 +334,7 @@ async function readJsonResponse(response: Response): Promise<WorkspaceGatewayRes
     });
   }
 
-  return body as unknown as WorkspaceGatewayResponse;
+  return body as unknown as T;
 }
 
 async function readResponseBody(response: Response): Promise<WorkspaceGatewayApiErrorBody> {

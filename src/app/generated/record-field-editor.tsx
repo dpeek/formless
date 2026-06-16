@@ -131,7 +131,11 @@ function EditableRecordFieldEditor({
 
   async function commitPatch(
     values: Partial<RecordValues>,
-    options: { allowWhilePending?: boolean; managePending?: boolean } = {},
+    options: {
+      allowWhilePending?: boolean;
+      autoSaveSource?: "media-reference";
+      managePending?: boolean;
+    } = {},
   ): Promise<boolean> {
     const managePending = options.managePending ?? true;
 
@@ -157,10 +161,17 @@ function EditableRecordFieldEditor({
     setSyncStatus({ state: "syncing", message: `Updating ${patchFieldNames.join(", ")}...` });
 
     try {
-      await submitOperation(appTarget, entityName, updateOperation.operationName, {
-        recordId,
-        input: patchValues,
-      });
+      await submitOperation(
+        appTarget,
+        entityName,
+        updateOperation.operationName,
+        {
+          recordId,
+          input: patchValues,
+        },
+        undefined,
+        options.autoSaveSource ? { autoSaveSource: options.autoSaveSource } : {},
+      );
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
       return true;
@@ -256,7 +267,7 @@ function EditableRecordFieldEditor({
           ...mediaAuthoring.uploadPatchFields,
           upload,
         }),
-        { allowWhilePending: true, managePending: false },
+        { allowWhilePending: true, autoSaveSource: "media-reference", managePending: false },
       );
 
       if (saved) {

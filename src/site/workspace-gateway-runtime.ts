@@ -1,4 +1,5 @@
 import packageJson from "../../package.json";
+import path from "node:path";
 import {
   createWorkspaceGatewayLocalProxyMiddleware,
   type WorkspaceGatewayLocalProxyDependencies,
@@ -14,10 +15,21 @@ import type {
 } from "@dpeek/formless-gateway";
 import { isWorkspaceGatewayOperationKind } from "@dpeek/formless-gateway";
 import {
+  DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   WORKSPACE_OPERATION_CAPABILITIES,
   assertWorkspaceOperationExecutionAllowed,
+  initialWorkspaceAutoSaveState,
+  nextWorkspaceAutoSaveEnqueuedState,
+  nextWorkspaceAutoSaveFailedState,
+  nextWorkspaceAutoSaveSavedState,
+  nextWorkspaceAutoSaveSavingState,
+  nextWorkspaceAutoSaveSuppressedState,
   workspaceOperationInputDisplay,
   type RunnableWorkspaceOperationInput,
+  type WorkspaceAutoSaveEnqueueInput,
+  type WorkspaceAutoSaveState,
+  type WorkspaceAutoSaveSuppressionReason,
+  type WorkspaceAutoSaveWriteSource,
   type WorkspaceOperationEvent,
   type WorkspaceOperationRequiredCapability,
   type WorkspaceOperationResult,
@@ -26,8 +38,10 @@ import {
 } from "@dpeek/formless-workspace";
 import {
   createWorkspaceOperationState,
+  readInstanceWorkspaceAutoSaveState,
   readWorkspaceOperationState,
   updateWorkspaceOperationState,
+  writeInstanceWorkspaceAutoSaveState,
 } from "@dpeek/formless-workspace/node";
 
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
@@ -59,6 +73,10 @@ export type WorkspaceGatewayCredentialSetupAdapterResult = {
 };
 
 export type WorkspaceGatewayRuntimeDependencies = RunFormlessWorkspaceOperationDependencies & {
+  autoSaveDebounceMs?: number;
+  autoSaveMaxRetries?: number;
+  autoSaveRetryBackoffMs?: (retryCount: number) => number;
+  autoSaveScheduler?: WorkspaceAutoSaveScheduler;
   createOperationId?: () => string;
   credentialSetup?: (
     input: WorkspaceGatewayCredentialSetupAdapterInput,
@@ -75,11 +93,50 @@ export type StartWorkspaceGatewaySidecarDependencies = WorkspaceGatewayRuntimeDe
   createProxyToken?: () => string;
 };
 
+export type WorkspaceAutoSaveSchedulerSaveInput = {
+  dirtyGeneration: number;
+  storageIdentities: readonly string[];
+  workspaceRoot: string;
+  writeSources: readonly WorkspaceAutoSaveWriteSource[];
+};
+
+export type WorkspaceAutoSaveScheduler = {
+  enqueue: (
+    input: WorkspaceAutoSaveEnqueueInput & { workspaceRoot: string },
+  ) => Promise<WorkspaceAutoSaveState>;
+  recordSuppressed: (input: {
+    reason: WorkspaceAutoSaveSuppressionReason;
+    workspaceRoot: string;
+  }) => Promise<WorkspaceAutoSaveState>;
+  runNow: (workspaceRoot: string) => Promise<WorkspaceAutoSaveState>;
+  status: (input: { workspaceRoot: string }) => Promise<WorkspaceAutoSaveState>;
+};
+
+export type WorkspaceAutoSaveSchedulerDependencies = {
+  clearTimeout?: (timer: WorkspaceAutoSaveTimer) => void;
+  debounceMs?: number;
+  maxRetries?: number;
+  now: () => string;
+  retryBackoffMs?: (retryCount: number) => number;
+  save: (input: WorkspaceAutoSaveSchedulerSaveInput) => Promise<void>;
+  setTimeout?: (callback: () => void, delayMs: number) => WorkspaceAutoSaveTimer;
+};
+
+type WorkspaceAutoSaveTimer = unknown;
+
 export function createWorkspaceGatewayOperationHandlers(
   dependencies: WorkspaceGatewayRuntimeDependencies,
 ): WorkspaceGatewaySidecarOperationHandlers {
+  const autoSaveScheduler =
+    dependencies.autoSaveScheduler ?? createDefaultWorkspaceAutoSaveScheduler(dependencies);
+
   return {
+    autoSaveStatus: async ({ workspaceRoot }) => autoSaveScheduler.status({ workspaceRoot }),
+    enqueueAutoSave: async ({ enqueue, workspaceRoot }) =>
+      autoSaveScheduler.enqueue({ ...enqueue, workspaceRoot }),
     readOperation: async ({ operationId, workspaceRoot }) => {
+      await recordAutoSaveSuppression(autoSaveScheduler, workspaceRoot, "gateway-operation-state");
+
       try {
         const operation = await readWorkspaceOperationState({
           operationId,
@@ -95,8 +152,15 @@ export function createWorkspaceGatewayOperationHandlers(
         throw error;
       }
     },
-    startOperation: async ({ authorization, operationInput, workspaceRoot }) =>
-      requireWorkspaceGatewayOperation(
+    startOperation: async ({ authorization, operationInput, workspaceRoot }) => {
+      await recordAutoSaveSuppression(autoSaveScheduler, workspaceRoot, "gateway-operation-state");
+      await recordWorkspaceOperationAutoSaveSuppression(
+        autoSaveScheduler,
+        workspaceRoot,
+        operationInput,
+      );
+
+      return requireWorkspaceGatewayOperation(
         operationInput.kind === "credentialSetup"
           ? await runCredentialSetupGatewayOperation(
               operationInput,
@@ -112,9 +176,12 @@ export function createWorkspaceGatewayOperationHandlers(
                 capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
               },
             ),
-      ),
-    status: async ({ authorization, workspaceRoot }) =>
-      requireWorkspaceGatewayOperation(
+      );
+    },
+    status: async ({ authorization, workspaceRoot }) => {
+      await recordAutoSaveSuppression(autoSaveScheduler, workspaceRoot, "workspace-check-status");
+
+      return requireWorkspaceGatewayOperation(
         await runFormlessWorkspaceOperation(
           {
             includeDeploymentStatus: false,
@@ -127,8 +194,249 @@ export function createWorkspaceGatewayOperationHandlers(
             capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
           },
         ),
-      ),
+      );
+    },
   };
+}
+
+export function createWorkspaceAutoSaveScheduler(
+  dependencies: WorkspaceAutoSaveSchedulerDependencies,
+): WorkspaceAutoSaveScheduler {
+  const entries = new Map<
+    string,
+    { running?: Promise<void>; runAfterCurrent?: boolean; timer?: WorkspaceAutoSaveTimer }
+  >();
+  const debounceMs = dependencies.debounceMs ?? 250;
+  const maxRetries = dependencies.maxRetries ?? 2;
+  const retryBackoffMs = dependencies.retryBackoffMs ?? ((retryCount: number) => retryCount * 1000);
+  const setTimer =
+    dependencies.setTimeout ??
+    ((callback: () => void, delayMs: number): WorkspaceAutoSaveTimer =>
+      setTimeout(callback, delayMs));
+  const clearTimer =
+    dependencies.clearTimeout ??
+    ((timer: WorkspaceAutoSaveTimer) => {
+      clearTimeout(timer as ReturnType<typeof setTimeout>);
+    });
+
+  const status = async (input: { workspaceRoot: string }) => readAutoSaveState(input.workspaceRoot);
+
+  const writeState = (workspaceRoot: string, state: WorkspaceAutoSaveState) =>
+    writeInstanceWorkspaceAutoSaveState({
+      localStateRoot: workspaceAutoSaveLocalStateRoot(workspaceRoot),
+      state,
+      workspaceRoot,
+    });
+
+  const schedule = (workspaceRoot: string, delayMs: number) => {
+    const entry = schedulerEntry(entries, workspaceRoot);
+
+    if (entry.timer !== undefined) {
+      clearTimer(entry.timer);
+    }
+
+    entry.timer = setTimer(() => {
+      entry.timer = undefined;
+      void runAutoSave(workspaceRoot).catch(() => undefined);
+    }, delayMs);
+  };
+
+  const runAutoSave = async (workspaceRoot: string): Promise<void> => {
+    const entry = schedulerEntry(entries, workspaceRoot);
+
+    if (entry.running) {
+      entry.runAfterCurrent = true;
+      await entry.running;
+      return;
+    }
+
+    const running = runAutoSaveOnce(workspaceRoot).finally(() => {
+      entry.running = undefined;
+
+      if (entry.runAfterCurrent) {
+        entry.runAfterCurrent = false;
+        schedule(workspaceRoot, 0);
+      }
+    });
+
+    entry.running = running;
+    await running;
+  };
+
+  const runAutoSaveOnce = async (workspaceRoot: string) => {
+    let state = await readAutoSaveState(workspaceRoot);
+
+    if (state.dirtyGeneration <= state.savedGeneration) {
+      return;
+    }
+
+    state = nextWorkspaceAutoSaveSuppressedState(
+      nextWorkspaceAutoSaveSavingState(state, dependencies),
+      {
+        now: dependencies.now,
+        reason: "auto-save",
+      },
+    );
+    await writeState(workspaceRoot, state);
+
+    try {
+      await dependencies.save({
+        dirtyGeneration: state.inFlightGeneration ?? state.dirtyGeneration,
+        storageIdentities: state.storageIdentities,
+        workspaceRoot,
+        writeSources: state.writeSources,
+      });
+
+      state = nextWorkspaceAutoSaveSavedState(await readAutoSaveState(workspaceRoot), dependencies);
+      await writeState(workspaceRoot, state);
+    } catch (error) {
+      state = nextWorkspaceAutoSaveFailedState(await readAutoSaveState(workspaceRoot), {
+        error,
+        now: dependencies.now,
+        workspaceRoot,
+      });
+      await writeState(workspaceRoot, state);
+
+      if (state.retryCount <= maxRetries) {
+        schedule(workspaceRoot, retryBackoffMs(state.retryCount));
+      }
+    }
+  };
+
+  const readAutoSaveState = async (workspaceRoot: string): Promise<WorkspaceAutoSaveState> =>
+    (await readInstanceWorkspaceAutoSaveState(workspaceAutoSaveLocalStateRoot(workspaceRoot))) ??
+    initialWorkspaceAutoSaveState(dependencies);
+
+  return {
+    enqueue: async (input) => {
+      const state = nextWorkspaceAutoSaveEnqueuedState(
+        await readAutoSaveState(input.workspaceRoot),
+        {
+          now: dependencies.now,
+          source: input.source,
+          ...(input.storageIdentity === undefined
+            ? {}
+            : { storageIdentity: input.storageIdentity }),
+        },
+      );
+
+      await writeState(input.workspaceRoot, state);
+      schedule(input.workspaceRoot, debounceMs);
+
+      return state;
+    },
+    recordSuppressed: async (input) => {
+      const state = nextWorkspaceAutoSaveSuppressedState(
+        await readAutoSaveState(input.workspaceRoot),
+        {
+          now: dependencies.now,
+          reason: input.reason,
+        },
+      );
+
+      await writeState(input.workspaceRoot, state);
+
+      return state;
+    },
+    runNow: async (workspaceRoot) => {
+      await runAutoSave(workspaceRoot);
+
+      return readAutoSaveState(workspaceRoot);
+    },
+    status,
+  };
+}
+
+function createDefaultWorkspaceAutoSaveScheduler(
+  dependencies: WorkspaceGatewayRuntimeDependencies,
+): WorkspaceAutoSaveScheduler {
+  return createWorkspaceAutoSaveScheduler({
+    debounceMs: dependencies.autoSaveDebounceMs,
+    maxRetries: dependencies.autoSaveMaxRetries,
+    now: dependencies.now,
+    retryBackoffMs: dependencies.autoSaveRetryBackoffMs,
+    save: async ({ workspaceRoot }) => {
+      const operation = await runFormlessWorkspaceOperation(
+        {
+          kind: "save",
+          workspacePath: workspaceRoot,
+        },
+        operationDependencies(dependencies, workspaceRoot),
+        {
+          actor: "system",
+          capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
+        },
+      );
+
+      if (operation.status === "failed") {
+        throw new Error(operation.errors[0]?.message ?? "Workspace auto-save failed.");
+      }
+    },
+  });
+}
+
+async function recordWorkspaceOperationAutoSaveSuppression(
+  autoSaveScheduler: WorkspaceAutoSaveScheduler,
+  workspaceRoot: string,
+  operationInput: WorkspaceGatewayStartInput,
+): Promise<void> {
+  const reason = autoSaveSuppressionReasonForWorkspaceOperation(operationInput);
+
+  if (reason === undefined) {
+    return;
+  }
+
+  await recordAutoSaveSuppression(autoSaveScheduler, workspaceRoot, reason);
+}
+
+async function recordAutoSaveSuppression(
+  autoSaveScheduler: WorkspaceAutoSaveScheduler,
+  workspaceRoot: string,
+  reason: WorkspaceAutoSaveSuppressionReason,
+): Promise<void> {
+  await autoSaveScheduler.recordSuppressed({ reason, workspaceRoot });
+}
+
+function autoSaveSuppressionReasonForWorkspaceOperation(
+  operationInput: WorkspaceGatewayStartInput,
+): WorkspaceAutoSaveSuppressionReason | undefined {
+  switch (operationInput.kind) {
+    case "check":
+    case "status":
+      return "workspace-check-status";
+    case "deployApply":
+    case "deploymentRefresh":
+    case "push":
+      return "push-deploy-remote-apply";
+    case "pull":
+      return "workspace-pull";
+    case "save":
+      return operationInput.check ? "workspace-check-status" : "manual-save";
+    case "credentialSetup":
+    case "deployPlan":
+      return undefined;
+  }
+}
+
+function schedulerEntry(
+  entries: Map<
+    string,
+    { running?: Promise<void>; runAfterCurrent?: boolean; timer?: WorkspaceAutoSaveTimer }
+  >,
+  workspaceRoot: string,
+) {
+  let entry = entries.get(workspaceRoot);
+
+  if (!entry) {
+    entry = {};
+    entries.set(workspaceRoot, entry);
+  }
+
+  return entry;
+}
+
+function workspaceAutoSaveLocalStateRoot(workspaceRoot: string): string {
+  return path.join(workspaceRoot, DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT);
 }
 
 export function createWorkspaceGatewayProxyDependencies(

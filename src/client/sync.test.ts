@@ -52,6 +52,7 @@ import {
   rateSourceSchema as rateCardSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
+import type { LocalWorkspaceAutoSaveClient } from "./workspace-auto-save.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
@@ -949,6 +950,210 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(2);
   });
 
+  it("enqueues local workspace auto-save after committed browser writes", async () => {
+    const autoSave = captureAutoSave();
+    const acceptedRecord = record("record-1", "First");
+    const nextSchema = schemaWithSummary();
+    const restoredRecord = record("record-2", "Restored");
+    const resetSchemaRecord = record("record-3", "Reset schema");
+    const resetSeedRecord = record("record-4", "Reset seed");
+
+    await submitOperation(
+      "tasks",
+      "task",
+      "create",
+      { input: { title: "First", done: false } },
+      async (_input, init) => {
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(1, operation.idempotencyKey, acceptedRecord, "create")];
+
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: acceptedRecord,
+          }),
+        );
+      },
+      { autoSave },
+    );
+
+    await saveActiveSchema(
+      "tasks",
+      nextSchema,
+      jsonFetcher("/api/tasks/schema", {
+        schema: nextSchema,
+        updatedAt: "2026-04-28T00:01:00.000Z",
+      } satisfies SchemaUpdateResponse),
+      { autoSave },
+    );
+
+    await restoreStorageSnapshot(
+      "tasks",
+      storageSnapshot({ records: [restoredRecord] }),
+      jsonFetcher("/api/tasks/snapshot/restore", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:02:00.000Z",
+        records: [restoredRecord],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+      { autoSave },
+    );
+
+    await resetSourceSchema(
+      "tasks",
+      jsonFetcher("/api/tasks/reset/schema", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:03:00.000Z",
+        records: [resetSchemaRecord],
+        cursor: 3,
+      } satisfies BootstrapResponse),
+      { autoSave },
+    );
+
+    await resetSeedData(
+      "tasks",
+      jsonFetcher("/api/tasks/reset/seed", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:04:00.000Z",
+        records: [resetSeedRecord],
+        cursor: 4,
+      } satisfies BootstrapResponse),
+      { autoSave },
+    );
+
+    expect(autoSave.inputs).toEqual([
+      { source: "app-operation", storageIdentity: "tasks" },
+      { source: "schema-save", storageIdentity: "tasks" },
+      { source: "snapshot-restore", storageIdentity: "tasks" },
+      { source: "reset-schema", storageIdentity: "tasks" },
+      { source: "reset-seed", storageIdentity: "tasks" },
+    ]);
+  });
+
+  it("classifies control-plane, deployment intent, and media reference writes", async () => {
+    const autoSave = captureAutoSave();
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+    const routeRecord: StoredRecord = {
+      createdAt: "2026-04-28T00:00:01.000Z",
+      entity: "route",
+      id: "route-1",
+      values: { enabled: true, kind: "mount" },
+    };
+    const deploymentRecord: StoredRecord = {
+      createdAt: "2026-04-28T00:00:02.000Z",
+      entity: "deployment-config",
+      id: "deployment-1",
+      values: { enabled: true, label: "Primary" },
+    };
+    const mediaRecord: StoredRecord = {
+      createdAt: "2026-04-28T00:00:03.000Z",
+      entity: "block",
+      id: "block-1",
+      values: { mediaAsset: "hero.webp" },
+    };
+
+    await submitOperation(
+      controlPlaneTarget,
+      "route",
+      "update",
+      { input: { enabled: true }, recordId: routeRecord.id },
+      async (_input, init) => {
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(1, operation.idempotencyKey, routeRecord, "patch")];
+
+        return Response.json(
+          operationResponse({
+            type: "update",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: routeRecord,
+          }),
+        );
+      },
+      { autoSave },
+    );
+
+    await submitOperation(
+      controlPlaneTarget,
+      "deployment-config",
+      "update",
+      { input: { enabled: true }, recordId: deploymentRecord.id },
+      async (_input, init) => {
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(2, operation.idempotencyKey, deploymentRecord, "patch")];
+
+        return Response.json(
+          operationResponse({
+            type: "update",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 2,
+            record: deploymentRecord,
+          }),
+        );
+      },
+      { autoSave },
+    );
+
+    await submitOperation(
+      "site",
+      "block",
+      "update",
+      { input: { mediaAsset: "hero.webp" }, recordId: mediaRecord.id },
+      async (_input, init) => {
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [mutationChange(3, operation.idempotencyKey, mediaRecord, "patch")];
+
+        return Response.json(
+          operationResponse({
+            type: "update",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 3,
+            record: mediaRecord,
+          }),
+        );
+      },
+      { autoSave, autoSaveSource: "media-reference" },
+    );
+
+    expect(autoSave.inputs).toEqual([
+      { source: "control-plane-write", storageIdentity: "instance:control-plane" },
+      { source: "deployment-intent", storageIdentity: "instance:control-plane" },
+      { source: "media-reference", storageIdentity: "site" },
+    ]);
+  });
+
+  it("does not enqueue local workspace auto-save for failed writes", async () => {
+    const autoSave = captureAutoSave();
+
+    await expect(
+      submitOperation(
+        "tasks",
+        "task",
+        "create",
+        { input: { title: "Rejected", done: false } },
+        async () => Response.json({ error: "Rejected." }, { status: 400 }),
+        { autoSave },
+      ),
+    ).rejects.toThrow("Rejected.");
+
+    await expect(
+      saveActiveSchema(
+        "tasks",
+        schemaWithSummary(),
+        async () => Response.json({ error: "Invalid schema." }, { status: 400 }),
+        { autoSave },
+      ),
+    ).rejects.toThrow("Invalid schema.");
+
+    expect(autoSave.inputs).toEqual([]);
+  });
+
   it("uses installed Tasks API paths for sync, operation writes, snapshots, and resets", async () => {
     const work = installedTasksIdentity("work");
     const createdRecord = record("record-2", "Created in work");
@@ -1735,6 +1940,19 @@ function parseSocketClientMessage(data: string | undefined): SyncSocketClientMes
   }
 
   return JSON.parse(data) as SyncSocketClientMessage;
+}
+
+type AutoSaveInput = Parameters<LocalWorkspaceAutoSaveClient["enqueue"]>[0];
+
+function captureAutoSave(): LocalWorkspaceAutoSaveClient & { inputs: AutoSaveInput[] } {
+  const inputs: AutoSaveInput[] = [];
+
+  return {
+    inputs,
+    enqueue: async (input) => {
+      inputs.push(input);
+    },
+  };
 }
 
 function jsonFetcher(expectedPath: string, body: unknown): typeof fetch {

@@ -17,6 +17,11 @@ import {
   resetClientStore,
 } from "./store.ts";
 import { setSyncStatus } from "./sync-status.ts";
+import {
+  enqueueLocalWorkspaceAutoSave,
+  type LocalWorkspaceAutoSaveOptions,
+  type LocalWorkspaceAutoSaveWriteSource,
+} from "./workspace-auto-save.ts";
 import { createOperationId } from "../shared/ids.ts";
 import type {
   OperationInvocationRequest,
@@ -58,6 +63,12 @@ type StartPushSyncOptions = {
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
   socketFactory?: (url: string) => SyncWebSocket;
+};
+
+type BrowserWriteOptions = LocalWorkspaceAutoSaveOptions;
+
+type SubmitOperationOptions = BrowserWriteOptions & {
+  autoSaveSource?: LocalWorkspaceAutoSaveWriteSource;
 };
 
 export async function bootstrapClient(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
@@ -124,6 +135,7 @@ export async function saveActiveSchema(
   target: ClientAppTarget,
   schema: AppSchema,
   fetcher: typeof fetch = fetch,
+  options: BrowserWriteOptions = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<SchemaUpdateResponse>(fetcher, apiPath(identity, "schema"), {
@@ -133,6 +145,10 @@ export async function saveActiveSchema(
   await saveSchema(identity, response.schema, response.updatedAt);
   applySchemaSave(response.schema, response.updatedAt, identity);
   notifySchemaChanged(identity);
+  await enqueueLocalWorkspaceAutoSave(
+    { source: "schema-save", storageIdentity: identity.authorityName },
+    options,
+  );
 
   return response;
 }
@@ -150,6 +166,7 @@ export async function restoreStorageSnapshot(
   target: ClientAppTarget,
   snapshot: unknown,
   fetcher: typeof fetch = fetch,
+  options: BrowserWriteOptions = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<BootstrapResponse>(
@@ -161,6 +178,10 @@ export async function restoreStorageSnapshot(
   await saveBootstrapResponse(identity, response);
   applyBootstrapResponse(response, identity);
   notifyLocalDataChanged(identity, { schemaChanged: true });
+  await enqueueLocalWorkspaceAutoSave(
+    { source: "snapshot-restore", storageIdentity: identity.authorityName },
+    options,
+  );
 
   return response;
 }
@@ -171,6 +192,7 @@ export async function submitOperation(
   operationName: string,
   request: OperationInvocationRequest = {},
   fetcher: typeof fetch = fetch,
+  options: SubmitOperationOptions = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<OperationInvocationResponse>(
@@ -194,12 +216,23 @@ export async function submitOperation(
     await mergeChanges(identity, response.output.changes, response.output.cursor);
     applyChanges(response.output.changes, response.output.cursor, identity);
     notifyLocalDataChanged(identity);
+    await enqueueLocalWorkspaceAutoSave(
+      {
+        source: options.autoSaveSource ?? autoSaveSourceForOperation(identity, entity),
+        storageIdentity: identity.authorityName,
+      },
+      options,
+    );
   }
 
   return response;
 }
 
-export async function resetSourceSchema(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+export async function resetSourceSchema(
+  target: ClientAppTarget,
+  fetcher: typeof fetch = fetch,
+  options: BrowserWriteOptions = {},
+) {
   const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<BootstrapResponse>(
     fetcher,
@@ -210,11 +243,19 @@ export async function resetSourceSchema(target: ClientAppTarget, fetcher: typeof
   await saveBootstrapResponse(identity, response);
   applyBootstrapResponse(response, identity);
   notifyLocalDataChanged(identity, { schemaChanged: true });
+  await enqueueLocalWorkspaceAutoSave(
+    { source: "reset-schema", storageIdentity: identity.authorityName },
+    options,
+  );
 
   return response;
 }
 
-export async function resetSeedData(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+export async function resetSeedData(
+  target: ClientAppTarget,
+  fetcher: typeof fetch = fetch,
+  options: BrowserWriteOptions = {},
+) {
   const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<BootstrapResponse>(fetcher, apiPath(identity, "reset/seed"), {});
 
@@ -223,6 +264,10 @@ export async function resetSeedData(target: ClientAppTarget, fetcher: typeof fet
   await saveBootstrapResponse(identity, response);
   applyBootstrapResponse(response, identity);
   notifyLocalDataChanged(identity, { schemaChanged: true });
+  await enqueueLocalWorkspaceAutoSave(
+    { source: "reset-seed", storageIdentity: identity.authorityName },
+    options,
+  );
 
   return response;
 }
@@ -511,6 +556,17 @@ function notifyLocalDataChanged(
 
 function notifySchemaChanged(target: ClientAppTarget) {
   publishClientEvent(target, "schema-updated");
+}
+
+function autoSaveSourceForOperation(
+  identity: ReturnType<typeof appStorageIdentityForClientTarget>,
+  entity: EntityName,
+): LocalWorkspaceAutoSaveWriteSource {
+  if (identity.kind !== "instanceControlPlane") {
+    return "app-operation";
+  }
+
+  return entity === "deployment-config" ? "deployment-intent" : "control-plane-write";
 }
 
 function isErrorResponse(value: unknown): value is { error: string } {

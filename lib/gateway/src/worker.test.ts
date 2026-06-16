@@ -7,6 +7,7 @@ import {
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
   WORKSPACE_GATEWAY_CSRF_HEADER,
@@ -199,6 +200,63 @@ describe("Worker workspace gateway proxy", () => {
     expect(calls[0]?.headers.get("Cookie")).toBeNull();
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER)).toBeNull();
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_CSRF_HEADER)).toBeNull();
+  });
+
+  it("proxies auto-save status and enqueue with the same authorization boundaries", async () => {
+    const calls: ProxyCall[] = [];
+    const status = await handleWorkspaceGatewayProxyRequest(
+      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        headers: {
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          Origin: "https://example.com",
+        },
+      }),
+      baseEnv,
+      {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("clean")),
+        readOwnerSetupStatus: async () => ({ setupComplete: false }),
+      },
+    );
+    const enqueued = await handleWorkspaceGatewayProxyRequest(
+      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        body: JSON.stringify({ source: "app-operation", storageIdentity: "app:site" }),
+        headers: {
+          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+          "Content-Type": "application/json",
+          Origin: "https://example.com",
+        },
+        method: "POST",
+      }),
+      baseEnv,
+      {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("queued")),
+        validateOwnerSession,
+      },
+    );
+    const statusBody = await jsonBody(status);
+    const enqueuedBody = await jsonBody(enqueued);
+
+    expect(status?.status).toBe(200);
+    expect(statusBody.autoSave).toMatchObject({ displayState: "clean" });
+    expect(enqueued?.status).toBe(200);
+    expect(enqueuedBody).toMatchObject({
+      autoSave: { displayState: "queued" },
+      csrfToken,
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      `${sidecarEndpoint}${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
+      `${sidecarEndpoint}${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
+    ]);
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("bootstrap");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("status");
+    expect(calls[1]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("owner-session");
+    expect(calls[1]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("save");
+    expect(calls[1]?.body).toBe(
+      JSON.stringify({ source: "app-operation", storageIdentity: "app:site" }),
+    );
   });
 
   it("requires matching CSRF cookie and header before forwarding browser mutations", async () => {
@@ -474,6 +532,22 @@ function captureProxyCalls(
   };
 }
 
+function captureAutoSaveProxyCalls(
+  calls: ProxyCall[],
+  autoSave: ReturnType<typeof autoSaveState>,
+): typeof fetch {
+  return async (input, init) => {
+    calls.push({
+      ...(init?.body == null ? {} : { body: await requestBodyText(init.body) }),
+      headers: new Headers(init?.headers),
+      method: init?.method,
+      url: requestUrl(input),
+    });
+
+    return Response.json({ autoSave });
+  };
+}
+
 async function jsonBody(response: Response | undefined): Promise<Record<string, unknown>> {
   expect(response).toBeDefined();
 
@@ -529,5 +603,19 @@ function operation(operationKind: WorkspaceGatewayOperationKind): WorkspaceGatew
     updatedAt: "2026-06-03T00:00:01.000Z",
     version: 1,
     workspace: { label: "workspace" },
+  };
+}
+
+function autoSaveState(displayState: "clean" | "queued") {
+  return {
+    dirtyGeneration: displayState === "queued" ? 1 : 0,
+    displayState,
+    kind: "formless.workspaceAutoSaveState",
+    retryCount: 0,
+    savedGeneration: 0,
+    storageIdentities: displayState === "queued" ? ["app:site"] : [],
+    updatedAt: "2026-06-03T00:00:01.000Z",
+    version: 1,
+    writeSources: displayState === "queued" ? ["app-operation"] : [],
   };
 }

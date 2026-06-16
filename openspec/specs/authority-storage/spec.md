@@ -152,6 +152,18 @@ The system MUST commit writes only when Authority validation succeeds.
 - AND duplicate changes are not inserted
 - AND no push notification is emitted for the replay
 
+#### Scenario: Committed write classification
+
+- GIVEN a local workspace runtime needs to decide whether workspace source is
+  dirty
+- WHEN an app operation, schema save, reset schema, reset seed, snapshot
+  restore, app install, or control-plane write commits through Authority
+- THEN the committed storage outcome is the write classification boundary
+- AND the local runtime may enqueue workspace auto-save for the affected storage
+  identity
+- AND failed validation, failed authorization, read-only requests, and replayed
+  writes do not classify as new workspace source changes
+
 #### Scenario: Delete with active references
 
 - GIVEN an active record references a target record through a schema reference field

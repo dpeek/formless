@@ -186,6 +186,34 @@ sync notification policy.
 - WHEN a write fails validation before storage commit
 - THEN the Authority does not broadcast a committed-write push notification
 
+### Requirement: Local Workspace Dirty Signals
+
+The system SHALL derive local workspace dirty signals from committed write
+outcomes, not browser replica cache mutation.
+
+#### Scenario: Successful browser write marks workspace dirty
+
+- GIVEN local workspace auto-save is available
+- WHEN a browser operation, schema save, app install, control-plane operation,
+  reset schema, reset seed, snapshot restore, or deployment intent write returns
+  a committed local write response
+- OR a core media upload is accepted and then referenced by a committed app
+  record
+- THEN the client emits a local workspace dirty signal with the storage identity
+  and write source
+- AND the dirty signal is emitted after Authority or media storage accepts the
+  write
+- AND the dirty signal does not make browser IndexedDB a workspace source of
+  truth
+
+#### Scenario: Replica-only updates do not mark workspace dirty
+
+- GIVEN a browser replica catches up from bootstrap, HTTP sync, push sync,
+  broadcast sync request, or local IndexedDB migration
+- WHEN records or schema are merged into IndexedDB from Authority
+- THEN no workspace dirty signal is emitted
+- AND failed or replayed writes do not mark workspace source dirty
+
 ### Requirement: Push Sync Limits
 
 The system MUST NOT depend on push sync for validation or replay behavior.

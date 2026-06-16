@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
@@ -19,8 +20,11 @@ import {
   WORKSPACE_GATEWAY_STATUS_API_PATH,
   isWorkspaceGatewayOperationKind,
   isWorkspaceGatewayPath,
+  parseWorkspaceGatewayAutoSaveEnqueueInput,
   parseWorkspaceGatewayOperationId,
   parseWorkspaceGatewayStartInput,
+  workspaceGatewayAutoSaveEnqueueIntent,
+  workspaceGatewayAutoSaveStatusIntent,
   workspaceGatewayOperationExecutionDecision,
   workspaceGatewayOperationPath,
   workspaceGatewayReadOperationIntent,
@@ -28,6 +32,8 @@ import {
   workspaceGatewayStatusIntent,
   type WorkspaceGatewayActor,
   type WorkspaceGatewayActorFacts,
+  type WorkspaceGatewayAutoSaveEnqueueInput,
+  type WorkspaceGatewayAutoSaveState,
   type WorkspaceGatewayAuthorizationVia,
   type WorkspaceGatewayOperation,
   type WorkspaceGatewayOperationIntent,
@@ -44,6 +50,7 @@ export {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_API_ROUTE_PREFIX,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
@@ -61,6 +68,9 @@ export {
 export type {
   WorkspaceGatewayActor,
   WorkspaceGatewayActorFacts,
+  WorkspaceGatewayAutoSaveEnqueueInput,
+  WorkspaceGatewayAutoSaveResponse,
+  WorkspaceGatewayAutoSaveState,
   WorkspaceGatewayAuthorizationVia,
   WorkspaceGatewayOperation,
   WorkspaceGatewayOperationKind,
@@ -90,6 +100,17 @@ export type WorkspaceGatewaySidecarAuthorization = {
 };
 
 export type WorkspaceGatewaySidecarOperationHandlers = {
+  autoSaveStatus: (input: {
+    authorization: WorkspaceGatewaySidecarAuthorization;
+    request: Request;
+    workspaceRoot: string;
+  }) => Promise<WorkspaceGatewayAutoSaveState>;
+  enqueueAutoSave: (input: {
+    authorization: WorkspaceGatewaySidecarAuthorization;
+    enqueue: WorkspaceGatewayAutoSaveEnqueueInput;
+    request: Request;
+    workspaceRoot: string;
+  }) => Promise<WorkspaceGatewayAutoSaveState>;
   readOperation: (input: {
     authorization: WorkspaceGatewaySidecarAuthorization;
     operationId: string;
@@ -174,6 +195,42 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
     return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
       intent,
     });
+  }
+
+  if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
+    if (request.method === "GET") {
+      const intent = workspaceGatewayAutoSaveStatusIntent();
+      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
+        intent,
+      });
+    }
+
+    if (request.method === "POST") {
+      const parsed = await parseGatewayAutoSaveEnqueueInput(request.clone());
+
+      if (!parsed.ok) {
+        return displaySafeJson({ error: parsed.error }, 400);
+      }
+
+      const intent = workspaceGatewayAutoSaveEnqueueIntent();
+      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
+        intent,
+      });
+    }
+
+    return methodNotAllowed(["GET", "POST"]);
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
@@ -277,6 +334,53 @@ export async function handleWorkspaceGatewaySidecarRequest(
     return sidecarOperationResponse(
       await handlers.status({ authorization, request, workspaceRoot }),
     );
+  }
+
+  if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
+    if (request.method === "GET") {
+      const authorization = authorizeSidecarGatewayRequest(
+        request,
+        env,
+        workspaceGatewayAutoSaveStatusIntent(),
+      );
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return sidecarAutoSaveResponse(
+        await handlers.autoSaveStatus({ authorization, request, workspaceRoot }),
+      );
+    }
+
+    if (request.method === "POST") {
+      const parsed = await parseGatewayAutoSaveEnqueueInput(request);
+
+      if (!parsed.ok) {
+        return displaySafeJson({ error: parsed.error }, 400);
+      }
+
+      const authorization = authorizeSidecarGatewayRequest(
+        request,
+        env,
+        workspaceGatewayAutoSaveEnqueueIntent(),
+      );
+
+      if ("error" in authorization) {
+        return displaySafeJson({ error: authorization.error }, authorization.status);
+      }
+
+      return sidecarAutoSaveResponse(
+        await handlers.enqueueAutoSave({
+          authorization,
+          enqueue: parsed.input,
+          request,
+          workspaceRoot,
+        }),
+      );
+    }
+
+    return methodNotAllowed(["GET", "POST"]);
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
@@ -785,6 +889,10 @@ async function proxyWorkspaceGatewayRequest(
     return gatewayOperationResponse(request, env, authorization, body.operation);
   }
 
+  if (response.status === 200 && typeof body === "object" && body !== null && "autoSave" in body) {
+    return gatewayAutoSaveResponse(request, env, authorization, body.autoSave);
+  }
+
   return displaySafeJson(body, response.status, displaySafeProxyHeaders(response.headers));
 }
 
@@ -816,8 +924,53 @@ function gatewayOperationResponse(
   );
 }
 
+function gatewayAutoSaveResponse(
+  request: Request,
+  env: WorkspaceGatewaySidecarEnv,
+  authorization: Exclude<GatewayAuthorization, { error: string }>,
+  autoSave: unknown,
+): Response {
+  const headers = gatewayBrowserResponseHeaders(request, env, authorization);
+
+  return displaySafeJson(
+    {
+      ...(headers.csrfToken === undefined ? {} : { csrfToken: headers.csrfToken }),
+      autoSave,
+    },
+    200,
+    headers.headers,
+  );
+}
+
 function sidecarOperationResponse(operation: unknown): Response {
   return displaySafeJson({ operation }, 200);
+}
+
+function sidecarAutoSaveResponse(autoSave: unknown): Response {
+  return displaySafeJson({ autoSave }, 200);
+}
+
+function gatewayBrowserResponseHeaders(
+  request: Request,
+  env: WorkspaceGatewaySidecarEnv,
+  authorization: Exclude<GatewayAuthorization, { error: string }>,
+): { csrfToken?: string; headers: Headers } {
+  const headers = new Headers();
+  const csrfToken = env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
+  const includeCsrfToken =
+    authorization.via === "owner-session" && authorization.actor === "browser";
+
+  if (includeCsrfToken && csrfToken) {
+    headers.set(
+      "Set-Cookie",
+      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; Path=/; SameSite=Lax${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`,
+    );
+  }
+
+  return {
+    ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
+    headers,
+  };
 }
 
 function sidecarRequestUrl(request: Request, proxyTarget: WorkspaceGatewayProxyTarget): string {
@@ -892,6 +1045,18 @@ async function parseGatewayStartInput(request: {
   }
 
   return parseWorkspaceGatewayStartInput(body);
+}
+
+async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<unknown> }) {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return { error: "Workspace auto-save enqueue request must be JSON.", ok: false } as const;
+  }
+
+  return parseWorkspaceGatewayAutoSaveEnqueueInput(body);
 }
 
 async function ownerSetupComplete(

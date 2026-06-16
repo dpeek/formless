@@ -6,8 +6,16 @@ import {
   WORKSPACE_OPERATION_KINDS,
   WORKSPACE_OPERATION_STATE_FILE_KIND,
   WORKSPACE_OPERATION_STATE_FILE_VERSION,
+  WORKSPACE_AUTO_SAVE_STATE_FILE_KIND,
+  WORKSPACE_AUTO_SAVE_STATE_FILE_VERSION,
+  WORKSPACE_AUTO_SAVE_SUPPRESSION_REASONS,
+  WORKSPACE_AUTO_SAVE_WRITE_SOURCES,
 } from "./types.ts";
 import type {
+  WorkspaceAutoSaveEnqueueInput,
+  WorkspaceAutoSaveState,
+  WorkspaceAutoSaveSuppressionReason,
+  WorkspaceAutoSaveWriteSource,
   InitialWorkspaceOperationStateInput,
   UpdateWorkspaceOperationStateInput,
   WorkspaceBrowserOperationKind,
@@ -40,6 +48,10 @@ const workspaceOperationKindSet = new Set<string>(WORKSPACE_OPERATION_KINDS);
 const workspaceBrowserOperationKindSet = new Set<string>(WORKSPACE_BROWSER_OPERATION_KINDS);
 const workspaceCliOperationKindSet = new Set<string>(WORKSPACE_CLI_OPERATION_KINDS);
 const workspaceCliCommandSet = new Set<string>(WORKSPACE_CLI_OPERATION_COMMANDS);
+const workspaceAutoSaveWriteSourceSet = new Set<string>(WORKSPACE_AUTO_SAVE_WRITE_SOURCES);
+const workspaceAutoSaveSuppressionReasonSet = new Set<string>(
+  WORKSPACE_AUTO_SAVE_SUPPRESSION_REASONS,
+);
 const workspaceOperationDefinitionsByKind = new Map<
   WorkspaceOperationKind,
   WorkspaceOperationDefinition
@@ -76,6 +88,18 @@ export function isWorkspaceCliOperationKind(value: unknown): value is WorkspaceC
 
 export function isWorkspaceCliCommandName(value: unknown): value is WorkspaceCliCommandName {
   return typeof value === "string" && workspaceCliCommandSet.has(value);
+}
+
+export function isWorkspaceAutoSaveWriteSource(
+  value: unknown,
+): value is WorkspaceAutoSaveWriteSource {
+  return typeof value === "string" && workspaceAutoSaveWriteSourceSet.has(value);
+}
+
+export function isWorkspaceAutoSaveSuppressionReason(
+  value: unknown,
+): value is WorkspaceAutoSaveSuppressionReason {
+  return typeof value === "string" && workspaceAutoSaveSuppressionReasonSet.has(value);
 }
 
 export function workspaceOperationDefinitionForKind<TKind extends WorkspaceOperationKind>(
@@ -370,6 +394,187 @@ export function formatWorkspaceOperationState(state: WorkspaceOperationState): s
   return `${JSON.stringify(parseWorkspaceOperationState(state), null, 2)}\n`;
 }
 
+export function initialWorkspaceAutoSaveState(input: {
+  now: () => string;
+}): WorkspaceAutoSaveState {
+  const now = input.now();
+
+  return {
+    dirtyGeneration: 0,
+    displayState: "clean",
+    kind: WORKSPACE_AUTO_SAVE_STATE_FILE_KIND,
+    retryCount: 0,
+    savedGeneration: 0,
+    storageIdentities: [],
+    updatedAt: now,
+    version: WORKSPACE_AUTO_SAVE_STATE_FILE_VERSION,
+    writeSources: [],
+  };
+}
+
+export function nextWorkspaceAutoSaveEnqueuedState(
+  current: WorkspaceAutoSaveState,
+  input: WorkspaceAutoSaveEnqueueInput & { now: () => string },
+): WorkspaceAutoSaveState {
+  if (!isWorkspaceAutoSaveWriteSource(input.source)) {
+    throw new Error("Workspace auto-save write source is invalid.");
+  }
+
+  const now = input.now();
+  const next: WorkspaceAutoSaveState = {
+    ...current,
+    dirtyGeneration: current.dirtyGeneration + 1,
+    displayState: current.inFlightGeneration === undefined ? "queued" : "saving",
+    lastEnqueueAt: now,
+    retryCount: current.displayState === "failed" ? 0 : current.retryCount,
+    storageIdentities: sortedUnique([
+      ...current.storageIdentities,
+      ...(input.storageIdentity === undefined ? [] : [input.storageIdentity]),
+    ]),
+    updatedAt: now,
+    writeSources: sortedUnique([...current.writeSources, input.source]),
+  };
+
+  delete next.error;
+  return next;
+}
+
+export function nextWorkspaceAutoSaveSavingState(
+  current: WorkspaceAutoSaveState,
+  input: { now: () => string },
+): WorkspaceAutoSaveState {
+  const now = input.now();
+  const next: WorkspaceAutoSaveState = {
+    ...current,
+    displayState: "saving",
+    inFlightGeneration: current.dirtyGeneration,
+    lastAttemptAt: now,
+    updatedAt: now,
+  };
+
+  delete next.error;
+  return next;
+}
+
+export function nextWorkspaceAutoSaveSavedState(
+  current: WorkspaceAutoSaveState,
+  input: { now: () => string },
+): WorkspaceAutoSaveState {
+  const now = input.now();
+  const persistedGeneration = current.inFlightGeneration ?? current.dirtyGeneration;
+  const hasNewerDirtyGeneration = current.dirtyGeneration > persistedGeneration;
+  const next: WorkspaceAutoSaveState = {
+    ...current,
+    displayState: hasNewerDirtyGeneration ? "queued" : "saved",
+    dirtyGeneration: current.dirtyGeneration,
+    lastSavedAt: now,
+    retryCount: hasNewerDirtyGeneration ? current.retryCount : 0,
+    savedGeneration: Math.max(current.savedGeneration, persistedGeneration),
+    storageIdentities: hasNewerDirtyGeneration ? current.storageIdentities : [],
+    updatedAt: now,
+    writeSources: hasNewerDirtyGeneration ? current.writeSources : [],
+  };
+
+  delete next.error;
+  delete next.inFlightGeneration;
+  return next;
+}
+
+export function nextWorkspaceAutoSaveFailedState(
+  current: WorkspaceAutoSaveState,
+  input: { error: unknown; now: () => string; workspaceRoot: string },
+): WorkspaceAutoSaveState {
+  const now = input.now();
+  const message = input.error instanceof Error ? input.error.message : String(input.error);
+  const next: WorkspaceAutoSaveState = {
+    ...current,
+    displayState: "failed",
+    error: {
+      at: now,
+      message: redactWorkspaceOperationDisplayText(message, input.workspaceRoot),
+    },
+    retryCount: current.retryCount + 1,
+    updatedAt: now,
+  };
+
+  delete next.inFlightGeneration;
+  return next;
+}
+
+export function nextWorkspaceAutoSaveSuppressedState(
+  current: WorkspaceAutoSaveState,
+  input: { now: () => string; reason: WorkspaceAutoSaveSuppressionReason },
+): WorkspaceAutoSaveState {
+  if (!isWorkspaceAutoSaveSuppressionReason(input.reason)) {
+    throw new Error("Workspace auto-save suppression reason is invalid.");
+  }
+
+  const now = input.now();
+
+  return {
+    ...current,
+    suppressed: {
+      at: now,
+      reason: input.reason,
+    },
+    updatedAt: now,
+  };
+}
+
+export function parseWorkspaceAutoSaveStateJson(contents: string): WorkspaceAutoSaveState {
+  return parseWorkspaceAutoSaveState(JSON.parse(contents) as unknown);
+}
+
+export function parseWorkspaceAutoSaveState(value: unknown): WorkspaceAutoSaveState {
+  if (!isRecord(value)) {
+    throw new Error("Workspace auto-save state file is invalid.");
+  }
+
+  if (
+    value.kind !== WORKSPACE_AUTO_SAVE_STATE_FILE_KIND ||
+    value.version !== WORKSPACE_AUTO_SAVE_STATE_FILE_VERSION ||
+    !isWorkspaceAutoSaveDisplayState(value.displayState) ||
+    !isNonNegativeInteger(value.dirtyGeneration) ||
+    !isNonNegativeInteger(value.savedGeneration) ||
+    !isNonNegativeInteger(value.retryCount) ||
+    typeof value.updatedAt !== "string" ||
+    !Array.isArray(value.writeSources) ||
+    !value.writeSources.every(isWorkspaceAutoSaveWriteSource) ||
+    !Array.isArray(value.storageIdentities) ||
+    !value.storageIdentities.every((identity) => typeof identity === "string")
+  ) {
+    throw new Error("Workspace auto-save state file is invalid.");
+  }
+
+  if ("inFlightGeneration" in value && !isNonNegativeInteger(value.inFlightGeneration)) {
+    throw new Error("Workspace auto-save state file is invalid.");
+  }
+
+  if (
+    "error" in value &&
+    (!isRecord(value.error) ||
+      typeof value.error.at !== "string" ||
+      typeof value.error.message !== "string")
+  ) {
+    throw new Error("Workspace auto-save state file is invalid.");
+  }
+
+  if (
+    "suppressed" in value &&
+    (!isRecord(value.suppressed) ||
+      typeof value.suppressed.at !== "string" ||
+      !isWorkspaceAutoSaveSuppressionReason(value.suppressed.reason))
+  ) {
+    throw new Error("Workspace auto-save state file is invalid.");
+  }
+
+  return value as WorkspaceAutoSaveState;
+}
+
+export function formatWorkspaceAutoSaveState(state: WorkspaceAutoSaveState): string {
+  return `${JSON.stringify(parseWorkspaceAutoSaveState(state), null, 2)}\n`;
+}
+
 export function redactWorkspaceOperationResult(
   result: WorkspaceOperationResult,
   workspaceRoot: string,
@@ -595,4 +800,23 @@ function isAllowlistedOwnerSetupUrlDisplayValue(key: string, value: string): boo
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sortedUnique<T extends string>(values: readonly T[]): T[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function isWorkspaceAutoSaveDisplayState(value: unknown): boolean {
+  return (
+    value === "clean" ||
+    value === "dirty" ||
+    value === "failed" ||
+    value === "queued" ||
+    value === "saved" ||
+    value === "saving"
+  );
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
