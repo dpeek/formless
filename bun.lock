@@ -35,7 +35,7 @@
         "@types/node": "^25.6.0",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
-        "devstate": "^0.1.8",
+        "devstate": "^0.1.9",
         "esbuild": "^0.28.0",
         "fake-indexeddb": "^6.2.5",
         "miniflare": "^4.20260424.0",
@@ -806,7 +806,7 @@
 
     "devlop": ["devlop@1.1.0", "", { "dependencies": { "dequal": "^2.0.0" } }, "sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA=="],
 
-    "devstate": ["devstate@0.1.8", "", { "dependencies": { "@clack/prompts": "^1.3.0" }, "bin": { "devstate": "dist/cli.js" } }, "sha512-yLRrJnA31gJQTnN5RJ46CfePAzbYj0J5upht0tnDmDaLCD4GciU5k849OSa9787LWSdgNEVQkHR5YP6R8CvkAQ=="],
+    "devstate": ["devstate@0.1.9", "", { "dependencies": { "@clack/prompts": "^1.3.0" }, "bin": { "devstate": "dist/cli.js" } }, "sha512-brwTJ/j4xkQU7oltjYNz+lBbuqWDNCse1HHMtrl/TbdniVNEDJqlqcD8c4FYi2gEDjJytGsIkZS4cMIgw5ipSg=="],
 
     "direction": ["direction@1.0.4", "", { "bin": { "direction": "cli.js" } }, "sha512-GYqKi1aH7PJXxdhTeZBFrg8vUBeKXi+cNprXsC1kpJcbcVnV9wBsrOu1cQEdG0WeQwlfHiy3XvnKfIrJ2R0NzQ=="],
 
