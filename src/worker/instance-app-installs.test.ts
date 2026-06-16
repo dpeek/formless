@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import { readFile } from "node:fs/promises";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
   AppInstallsResponse,
@@ -20,18 +21,16 @@ import { operationWriteRequest } from "../test/authority-write.ts";
 import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
-  type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
 import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "../shared/instance-control-plane.ts";
-import {
-  appPackageManifestKind,
-  appPackageManifestVersion,
-  type AppPackageManifest,
-} from "../shared/app-packages.ts";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
+import {
+  workspaceAppPackageManifestFixture,
+  writeWorkspaceAppPackageFixture,
+} from "../test/workspace-app-package.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
@@ -63,6 +62,7 @@ const owner: OwnerIdentity = {
   email: "ada@example.com",
   createdAt: "2026-06-09T00:00:00.000Z",
 };
+const tempDirs: string[] = [];
 
 let harness: Harness;
 
@@ -80,6 +80,12 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetWorkerState();
+});
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map((tempDir) => rm(tempDir, { force: true, recursive: true })),
+  );
 });
 
 afterAll(async () => {
@@ -155,7 +161,13 @@ describe("instance app install API routes", () => {
           FORMLESS_ADMIN_TOKEN: adminToken,
           [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
             {
-              manifest: privatePackageManifest(sourceSchemaHash),
+              manifest: workspaceAppPackageManifestFixture({
+                capabilities: [
+                  { kind: "generatedAdmin", routeBase: "/apps" },
+                  { kind: "publicSite", routeBase: "/sites" },
+                ],
+                sourceSchemaHash,
+              }),
               sourceSchema: taskSourceSchema,
               seedRecords: taskSeedRecords,
             },
@@ -508,8 +520,14 @@ describe("instance app install API routes", () => {
     expect(bootstrap.body.cursor).toBe(crmSeedRecords.length);
   });
 
-  it("persists ClearTrace installs and bootstraps from a linked workspace package", async () => {
-    const cleartracePackage = await readCleartraceWorkspacePackage();
+  it("persists generated-admin-only installs and bootstraps from a workspace package", async () => {
+    const packageRoot = path.join(await makeTempDir(), "client-orders");
+    const workspacePackage = await writeWorkspaceAppPackageFixture(packageRoot, {
+      defaultInstallId: "orders",
+      label: "Client Orders",
+      packageAppKey: "client-orders",
+      packageRevision: 3,
+    });
     const privateHarness = await createWorkerHarness(
       "src/worker/index.ts",
       {
@@ -519,7 +537,7 @@ describe("instance app install API routes", () => {
         bindings: {
           FORMLESS_ADMIN_TOKEN: adminToken,
           [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
-            cleartracePackage,
+            workspacePackage,
           ]),
         },
       },
@@ -534,9 +552,9 @@ describe("instance app install API routes", () => {
         privateHarness,
         "/api/formless/app-installs",
         {
-          packageAppKey: "cleartrace",
-          installId: "cleartrace",
-          label: "ClearTrace",
+          packageAppKey: "client-orders",
+          installId: "orders",
+          label: "Client Orders",
         },
       );
       const controlPlane = await getHarnessJson<BootstrapResponse>(
@@ -545,28 +563,28 @@ describe("instance app install API routes", () => {
       );
       const bootstrap = await getHarnessJson<BootstrapResponse>(
         privateHarness,
-        "/api/app-installs/cleartrace/cleartrace/bootstrap",
+        "/api/app-installs/client-orders/orders/bootstrap",
       );
 
       expect(before.body.packages.map((appPackage) => appPackage.packageAppKey)).toContain(
-        "cleartrace",
+        "client-orders",
       );
       expect(created.response.status).toBe(201);
       expect(created.body.initialization).toEqual({
-        installId: "cleartrace",
-        packageAppKey: "cleartrace",
-        seedRecordsKey: "cleartrace",
-        sourceSchemaKey: "cleartrace",
+        installId: "orders",
+        packageAppKey: "client-orders",
+        seedRecordsKey: "client-orders",
+        sourceSchemaKey: "client-orders",
       });
       expect(created.body.install).toEqual(
         expect.objectContaining({
-          adminRoute: "/apps/cleartrace",
-          installId: "cleartrace",
-          label: "ClearTrace",
-          packageAppKey: "cleartrace",
-          packageRevision: 1,
-          schemaRoute: "/apps/cleartrace/schema",
-          sourceSchemaHash: cleartracePackage.manifest.sourceSchemaHash,
+          adminRoute: "/apps/orders",
+          installId: "orders",
+          label: "Client Orders",
+          packageAppKey: "client-orders",
+          packageRevision: 3,
+          schemaRoute: "/apps/orders/schema",
+          sourceSchemaHash: workspacePackage.manifest.sourceSchemaHash,
           status: "installed",
         }),
       );
@@ -582,12 +600,12 @@ describe("instance app install API routes", () => {
           ])
           .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
       ).toEqual([
-        ["cleartrace", "/apps/cleartrace", "admin"],
-        ["cleartrace", "/apps/cleartrace/schema", "schema"],
+        ["orders", "/apps/orders", "admin"],
+        ["orders", "/apps/orders/schema", "schema"],
       ]);
-      expect(bootstrap.body.schema).toEqual(cleartracePackage.sourceSchema);
-      expect(bootstrap.body.records).toEqual(cleartracePackage.seedRecords);
-      expect(bootstrap.body.cursor).toBe(cleartracePackage.seedRecords.length);
+      expect(bootstrap.body.schema).toEqual(workspacePackage.sourceSchema);
+      expect(bootstrap.body.records).toEqual(workspacePackage.seedRecords);
+      expect(bootstrap.body.cursor).toBe(workspacePackage.seedRecords.length);
     } finally {
       await privateHarness.dispose();
     }
@@ -810,47 +828,10 @@ function cookiePair(cookie: string) {
   return cookie.split(";")[0] ?? cookie;
 }
 
-function privatePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageManifest {
-  return {
-    kind: appPackageManifestKind,
-    version: appPackageManifestVersion,
-    packageAppKey: "private-labs",
-    label: "Private Labs",
-    description: "Private lab package fixture.",
-    defaultInstallId: "labs",
-    supportsMultipleInstalls: false,
-    packageRevision: 7,
-    sourceSchema: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "source/schema.json",
-    },
-    seedRecords: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "source/seed-records.json",
-    },
-    sourceSchemaHash,
-    capabilities: [
-      { kind: "generatedAdmin", routeBase: "/apps" },
-      { kind: "publicSite", routeBase: "/sites" },
-    ],
-  };
-}
+async function makeTempDir(): Promise<string> {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "instance-app-installs-test-"));
 
-async function readCleartraceWorkspacePackage(): Promise<{
-  manifest: AppPackageManifest;
-  seedRecords: unknown[];
-  sourceSchema: unknown;
-}> {
-  const packageRoot = "/Users/dpeek/code/cleartrace";
-  const manifest = JSON.parse(
-    await readFile(path.join(packageRoot, "formless.app.json"), "utf8"),
-  ) as AppPackageManifest;
+  tempDirs.push(tempDir);
 
-  return {
-    manifest,
-    sourceSchema: JSON.parse(await readFile(path.join(packageRoot, "schema.json"), "utf8")),
-    seedRecords: JSON.parse(await readFile(path.join(packageRoot, "seed-records.json"), "utf8")),
-  };
+  return tempDir;
 }

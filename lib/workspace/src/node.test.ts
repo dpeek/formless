@@ -5,14 +5,8 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import rawTaskSeedRecords from "../../../schema/apps/tasks/seed-records.json";
-import rawTaskSourceSchema from "../../../schema/apps/tasks/schema.json";
-import {
-  appPackageManifestKind,
-  appPackageManifestVersion,
-  findResolvedAppPackage,
-} from "../../../src/shared/app-packages.ts";
-import { computeSourceSchemaHash } from "../../../src/shared/upgrade-migrations.ts";
+import { findResolvedAppPackage } from "../../../src/shared/app-packages.ts";
+import { writeWorkspaceAppPackageFixture } from "../../../src/test/workspace-app-package.ts";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
@@ -220,10 +214,9 @@ describe("workspace app package source resolver", () => {
     const root = await makeTempDir();
     const workspaceRoot = path.join(root, "instance");
     const packageRoot = path.join(root, "app");
-    const sourceSchemaHash = await computeSourceSchemaHash(rawTaskSourceSchema);
 
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
-    await writePrivatePackageFixture(packageRoot);
+    const fixture = await writeWorkspaceAppPackageFixture(packageRoot);
 
     const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
     const linkedPackage = result.linkedPackages[0];
@@ -236,7 +229,7 @@ describe("workspace app package source resolver", () => {
       packageRevision: 7,
       seedRecordsKey: "private-labs",
       sourceOrigin: "workspace",
-      sourceSchemaHash,
+      sourceSchemaHash: fixture.sourceSchemaHash,
       sourceSchemaKey: "private-labs",
     });
     expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
@@ -251,7 +244,7 @@ describe("workspace app package source resolver", () => {
       manifestPath: path.join(packageRoot, "formless.app.json"),
       packageRoot,
       seedRecordsPath: path.join(packageRoot, "source/seed-records.json"),
-      sourceSchemaHash,
+      sourceSchemaHash: fixture.sourceSchemaHash,
       sourceSchemaPath: path.join(packageRoot, "source/schema.json"),
     });
     expect(linkedPackage?.sourceSchema.entities.task).toBeDefined();
@@ -264,46 +257,51 @@ describe("workspace app package source resolver", () => {
     ]);
   });
 
-  it("links the sibling ClearTrace package through workspace package links", async () => {
-    const workspaceRoot = await makeTempDir();
-    const manifestPath = "/Users/dpeek/code/cleartrace/formless.app.json";
-    const manifestLink = path.relative(workspaceRoot, manifestPath);
+  it("links a package outside the workspace root through workspace package links", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "instance");
+    const packageRoot = path.join(root, "packages/client-orders");
+    const fixture = await writeWorkspaceAppPackageFixture(packageRoot, {
+      defaultInstallId: "orders",
+      label: "Client Orders",
+      packageAppKey: "client-orders",
+      packageRevision: 3,
+    });
+    const manifestLink = path.relative(workspaceRoot, fixture.manifestPath);
 
     await writeWorkspacePackageLinks(workspaceRoot, manifestLink);
 
     const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
     const linkedPackage = result.linkedPackages[0];
 
-    expect(findResolvedAppPackage("cleartrace")).toBeUndefined();
-    expect(result.resolver.findPackage("cleartrace")).toMatchObject({
-      defaultInstallId: "cleartrace",
-      label: "ClearTrace",
-      packageAppKey: "cleartrace",
-      packageRevision: 1,
-      seedRecordsKey: "cleartrace",
+    expect(findResolvedAppPackage("client-orders")).toBeUndefined();
+    expect(result.resolver.findPackage("client-orders")).toMatchObject({
+      defaultInstallId: "orders",
+      label: "Client Orders",
+      packageAppKey: "client-orders",
+      packageRevision: 3,
+      seedRecordsKey: "client-orders",
       sourceOrigin: "workspace",
-      sourceSchemaHash: "sha256:534fa538ac1bc45409c12dfdb0f798520c1824d1f81dc37c7695b8eba4adaade",
-      sourceSchemaKey: "cleartrace",
+      sourceSchemaHash: fixture.sourceSchemaHash,
+      sourceSchemaKey: "client-orders",
     });
     expect(result.resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
       "site",
       "tasks",
       "crm",
-      "cleartrace",
+      "client-orders",
     ]);
     expect(linkedPackage).toMatchObject({
-      appPackage: expect.objectContaining({ packageAppKey: "cleartrace" }),
-      manifest: expect.objectContaining({ packageAppKey: "cleartrace" }),
-      manifestPath,
-      packageRoot: "/Users/dpeek/code/cleartrace",
-      seedRecordsPath: "/Users/dpeek/code/cleartrace/seed-records.json",
-      sourceSchemaHash: "sha256:534fa538ac1bc45409c12dfdb0f798520c1824d1f81dc37c7695b8eba4adaade",
-      sourceSchemaPath: "/Users/dpeek/code/cleartrace/schema.json",
+      appPackage: expect.objectContaining({ packageAppKey: "client-orders" }),
+      manifest: expect.objectContaining({ packageAppKey: "client-orders" }),
+      manifestPath: fixture.manifestPath,
+      packageRoot,
+      seedRecordsPath: fixture.seedRecordsPath,
+      sourceSchemaHash: fixture.sourceSchemaHash,
+      sourceSchemaPath: fixture.sourceSchemaPath,
     });
-    expect(linkedPackage?.sourceSchema.entities.order?.label).toBe("Order");
-    expect(
-      linkedPackage?.seedRecords.some((record) => record.id === "rec_cleartrace_customer_ada"),
-    ).toBe(true);
+    expect(linkedPackage?.sourceSchema.entities.task).toBeDefined();
+    expect(linkedPackage?.seedRecords).toEqual(fixture.seedRecords);
   });
 
   it("rejects linked source schemas that do not parse as app schemas", async () => {
@@ -313,7 +311,7 @@ describe("workspace app package source resolver", () => {
     const invalidSchema = { version: 1 };
 
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
-    await writePrivatePackageFixture(packageRoot, { sourceSchema: invalidSchema });
+    await writeWorkspaceAppPackageFixture(packageRoot, { sourceSchema: invalidSchema });
 
     await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
       'Schema must include "entities".',
@@ -326,7 +324,7 @@ describe("workspace app package source resolver", () => {
     const packageRoot = path.join(root, "app");
 
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
-    await writePrivatePackageFixture(packageRoot, {
+    await writeWorkspaceAppPackageFixture(packageRoot, {
       seedRecords: [
         {
           id: "rec_private_invalid",
@@ -348,7 +346,7 @@ describe("workspace app package source resolver", () => {
     const packageRoot = path.join(root, "app");
 
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
-    await writePrivatePackageFixture(packageRoot, {
+    await writeWorkspaceAppPackageFixture(packageRoot, {
       sourceSchemaHash: `sha256:${"2".repeat(64)}`,
     });
 
@@ -438,69 +436,6 @@ async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: strin
       links: [{ manifest }],
     }),
   );
-}
-
-async function writePrivatePackageFixture(
-  packageRoot: string,
-  options: {
-    manifestOverrides?: Record<string, unknown>;
-    seedRecords?: unknown;
-    sourceSchema?: unknown;
-    sourceSchemaHash?: string;
-  } = {},
-): Promise<void> {
-  const sourceRoot = path.join(packageRoot, "source");
-  const sourceSchema = options.sourceSchema ?? rawTaskSourceSchema;
-  const seedRecords = options.seedRecords ?? rawTaskSeedRecords;
-  const sourceSchemaHash =
-    options.sourceSchemaHash ?? (await computeSourceSchemaHash(sourceSchema));
-
-  await mkdir(sourceRoot, { recursive: true });
-  await writeJsonFile(path.join(sourceRoot, "schema.json"), sourceSchema);
-  await writeJsonFile(path.join(sourceRoot, "seed-records.json"), seedRecords);
-  await writeJsonFile(
-    path.join(packageRoot, "formless.app.json"),
-    privatePackageManifest({
-      sourceSchemaHash,
-      ...options.manifestOverrides,
-    }),
-  );
-}
-
-function privatePackageManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    kind: appPackageManifestKind,
-    version: appPackageManifestVersion,
-    packageAppKey: "private-labs",
-    label: "Private Labs",
-    description: "Private lab package fixture.",
-    defaultInstallId: "labs",
-    supportsMultipleInstalls: false,
-    packageRevision: 7,
-    sourceSchema: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "source/schema.json",
-    },
-    seedRecords: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "source/seed-records.json",
-    },
-    sourceSchemaHash: `sha256:${"0".repeat(64)}`,
-    capabilities: [
-      {
-        kind: "generatedAdmin",
-        routeBase: "/apps",
-      },
-    ],
-    ...overrides,
-  };
-}
-
-async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function timestampSequence(...timestamps: string[]): () => string {
