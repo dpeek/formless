@@ -3,7 +3,7 @@ import type {
   RecordFieldConfig,
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
-import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
+import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
 import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 
 type ActiveRecordUnionPresentation =

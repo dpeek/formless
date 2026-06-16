@@ -1,4 +1,4 @@
-import type { StoredRecord } from "./protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 export type OrderingMoveDirection = "top" | "up" | "down" | "bottom";
 

@@ -8,21 +8,16 @@ import {
   type InstanceArchive,
 } from "@dpeek/formless-archive";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
-import type {
-  ActionResponse,
-  AppInstallsResponse,
-  BootstrapResponse,
-  RecordValues,
-  StoredRecord,
-} from "../shared/protocol.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
+import type { ActionResponse, AppInstallsResponse, BootstrapResponse } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   crmSeedRecords,

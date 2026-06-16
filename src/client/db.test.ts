@@ -11,7 +11,8 @@ import {
   readLocalSnapshot,
 } from "./db.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
-import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";

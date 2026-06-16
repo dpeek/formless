@@ -23,7 +23,8 @@ import type { Env } from "./index.ts";
 import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
 import type { MappedSiteHost } from "./mapped-site-host.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
-import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse } from "../shared/protocol.ts";
 import { schemaApps } from "../shared/schema-apps.ts";
 import {
   shouldBlockMappedSiteHostBrowserRoute,

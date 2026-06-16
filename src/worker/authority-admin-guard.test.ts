@@ -1,13 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-
-import type {
-  BootstrapResponse,
-  MutationResponse,
-  OwnerIdentity,
-  StorageSnapshot,
-  StoredRecord,
-} from "../shared/protocol.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse, MutationResponse, OwnerIdentity } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";

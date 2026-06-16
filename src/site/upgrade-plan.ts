@@ -1,4 +1,4 @@
-import type { PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, INSTANCE_ARCHIVE_KIND } from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,

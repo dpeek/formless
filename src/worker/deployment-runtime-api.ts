@@ -24,7 +24,7 @@ import {
   readLatestDeploymentStatus,
 } from "./deployment-runtime-state.ts";
 import { buildPrimaryInstanceDeploymentDesiredStateProjection } from "./deployment-runtime-projection.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 
 type InstanceDeploymentRuntimeApiEnv = AuthorityAdminGuardEnv & {

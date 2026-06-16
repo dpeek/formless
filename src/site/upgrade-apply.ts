@@ -1,5 +1,5 @@
 import packageJson from "../../package.json";
-import type { PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import type {
   InstanceUpgradeApplyResponse,
   InstanceUpgradeStatusResponse,

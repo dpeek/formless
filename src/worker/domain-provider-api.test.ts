@@ -18,7 +18,7 @@ import {
   INSTANCE_DEPLOYMENT_STATUS_API_PATH,
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
-import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import type {
   CreateInstanceDomainMappingResponse,
   InstanceDomainMappingsResponse,

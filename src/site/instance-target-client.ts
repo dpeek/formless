@@ -61,15 +61,16 @@ import {
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
-import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   packageAppFactsForKey,
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
-} from "../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import {
+  bundledAppPackageResolver,
   findResolvedAppPackage,
   listResolvedAppPackages,
   type AppPackageResolver,
@@ -1260,7 +1261,8 @@ function parsePackageMigrationApplyResponse(
   );
   const sourceSchemaHash = parseOptionalSourceSchemaHash(
     value.sourceSchemaHash,
-    packageAppFactsForKey(packageAppKey, packageResolver)?.sourceSchemaHash ?? undefined,
+    packageAppFactsForKey(packageAppKey, packageResolver ?? bundledAppPackageResolver)
+      ?.sourceSchemaHash ?? undefined,
     `${context} sourceSchemaHash`,
   );
 
@@ -1314,7 +1316,8 @@ function parsePackageAppMigrationAppliedState(
   );
   const sourceSchemaHash = parseOptionalSourceSchemaHash(
     value.sourceSchemaHash,
-    packageAppFactsForKey(packageAppKey, packageResolver)?.sourceSchemaHash ?? undefined,
+    packageAppFactsForKey(packageAppKey, packageResolver ?? bundledAppPackageResolver)
+      ?.sourceSchemaHash ?? undefined,
     `${context} sourceSchemaHash`,
   );
 
@@ -1373,7 +1376,7 @@ function parseDeployPackageApp(
     `${context} packageAppKey`,
     packageResolver,
   );
-  const facts = packageAppFactsForKey(packageAppKey, packageResolver);
+  const facts = packageAppFactsForKey(packageAppKey, packageResolver ?? bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
@@ -1545,7 +1548,10 @@ function parsePackageAppKey(
   context: string,
   packageResolver?: AppPackageResolver,
 ): PackageAppKey {
-  if (typeof value !== "string" || !packageAppFactsForKey(value, packageResolver)) {
+  if (
+    typeof value !== "string" ||
+    !packageAppFactsForKey(value, packageResolver ?? bundledAppPackageResolver)
+  ) {
     throw new Error(`${context} failed: package app key is unsupported.`);
   }
 

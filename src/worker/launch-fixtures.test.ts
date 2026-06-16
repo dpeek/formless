@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
-import type { AppInstall } from "../shared/app-installs.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema } from "@dpeek/formless-schema";
 import {
   crmSeedRecords,

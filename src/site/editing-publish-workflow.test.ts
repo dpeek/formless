@@ -1,12 +1,11 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vite-plus/test";
-
 import {
   STORAGE_SNAPSHOT_KIND,
   STORAGE_SNAPSHOT_VERSION,
   parseStorageSnapshot,
-} from "../shared/protocol.ts";
+} from "@dpeek/formless-storage";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 
 type PackageJson = {

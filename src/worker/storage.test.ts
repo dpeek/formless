@@ -4,14 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
   ActionResponse,
   BootstrapResponse,
   ChangeRow,
   MutationResponse,
-  StorageSnapshot,
-  StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";

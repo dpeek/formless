@@ -18,7 +18,7 @@ import {
   type CreateUnionPresentationConfig,
   type HomeOperationConfig,
 } from "../../client/views.ts";
-import type { RecordValues } from "../../shared/protocol.ts";
+import type { RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import {

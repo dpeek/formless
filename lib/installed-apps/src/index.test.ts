@@ -1,0 +1,641 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  appInstallInitializationPlan,
+  appInstallRegistryError,
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  computeSourceSchemaHash,
+  createAppInstall,
+  createAppPackageResolver,
+  findAppInstall,
+  findResolvedAppPackage,
+  isPackageAppRevision,
+  isSourceSchemaHash,
+  listAppInstalls,
+  listInstallableAppPackages,
+  listResolvedAppPackages,
+  packageAppFactsForKey,
+  parseAppPackageManifest,
+  sourceSchemaCanonicalJson,
+  validateAppInstallId,
+  type AppInstall,
+  type CreateAppInstallResult,
+  type SourceSchemaHash,
+} from "./index.ts";
+
+const now = "2026-05-22T08:00:00.000Z";
+const siteSourceSchemaHash =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const tasksSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+const crmSourceSchemaHash =
+  "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+const privateSourceSchemaHash =
+  "sha256:4444444444444444444444444444444444444444444444444444444444444444";
+
+type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
+type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
+
+describe("app package manifests", () => {
+  it("parses runtime-neutral package source facts", () => {
+    expect(parseAppPackageManifest(privatePackageManifest())).toEqual({
+      kind: appPackageManifestKind,
+      version: appPackageManifestVersion,
+      packageAppKey: "private-labs",
+      label: "Private Labs",
+      description: "Private lab package fixture.",
+      defaultInstallId: "labs",
+      supportsMultipleInstalls: false,
+      packageRevision: 7,
+      sourceSchema: {
+        kind: "workspace",
+        key: "private-labs",
+        path: "packages/private-labs/schema.json",
+      },
+      seedRecords: {
+        kind: "workspace",
+        key: "private-labs",
+        path: "packages/private-labs/seed-records.json",
+      },
+      sourceSchemaHash: privateSourceSchemaHash,
+      capabilities: [
+        {
+          kind: "generatedAdmin",
+          routeBase: "/apps",
+        },
+        {
+          kind: "publicSite",
+          routeBase: "/sites",
+        },
+      ],
+    });
+  });
+
+  it("validates package keys, install ids, revisions, locations, and capabilities", () => {
+    const invalidCases: [string, unknown, RegExp][] = [
+      ["package key", privatePackageManifest({ packageAppKey: "PrivateLabs" }), /packageAppKey/],
+      [
+        "default install id",
+        privatePackageManifest({ defaultInstallId: "api" }),
+        /defaultInstallId/,
+      ],
+      ["package revision", privatePackageManifest({ packageRevision: 0 }), /packageRevision/],
+      [
+        "source schema location",
+        privatePackageManifest({
+          sourceSchema: {
+            kind: "workspace",
+            key: "private-labs",
+            path: "../schema.json",
+          },
+        }),
+        /sourceSchema path/,
+      ],
+      [
+        "seed records location",
+        privatePackageManifest({
+          seedRecords: {
+            kind: "workspace",
+            key: "private-labs",
+            path: "packages/private-labs/schema.json",
+          },
+        }),
+        /seedRecords path/,
+      ],
+      [
+        "capability",
+        privatePackageManifest({
+          capabilities: [
+            {
+              kind: "generatedAdmin",
+              routeBase: "/admin",
+            },
+          ],
+        }),
+        /capabilities/,
+      ],
+      [
+        "source-only boundary",
+        {
+          ...privatePackageManifest(),
+          appInstalls: [],
+        },
+        /unsupported field "appInstalls"/,
+      ],
+    ];
+
+    for (const [label, manifest, message] of invalidCases) {
+      expect(() => parseAppPackageManifest(manifest), label).toThrow(message);
+    }
+  });
+
+  it("resolves caller-supplied package manifests without global package facts", () => {
+    const resolver = bundledFixtureResolver();
+
+    expect(listResolvedAppPackages(resolver)).toEqual([
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "site",
+        label: "Site",
+        packageAppKey: "site",
+        packageRevision: 1,
+        publicRouteBase: "/sites",
+        seedRecordsKey: "site",
+        sourceOrigin: "bundled",
+        sourceSchemaKey: "site",
+        sourceSchemaHash: siteSourceSchemaHash,
+      }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+        packageRevision: 1,
+        seedRecordsKey: "tasks",
+        sourceOrigin: "bundled",
+        sourceSchemaKey: "tasks",
+        sourceSchemaHash: tasksSourceSchemaHash,
+      }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "crm",
+        label: "CRM",
+        packageAppKey: "crm",
+        packageRevision: 1,
+        seedRecordsKey: "crm",
+        sourceOrigin: "bundled",
+        sourceSchemaKey: "crm",
+        sourceSchemaHash: crmSourceSchemaHash,
+      }),
+    ]);
+    expect(findResolvedAppPackage("missing", resolver)).toBeUndefined();
+    expect(packageAppFactsForKey("tasks", resolver)).toEqual({
+      packageRevision: 1,
+      sourceSchemaHash: tasksSourceSchemaHash,
+    });
+  });
+
+  it("keeps private package fixtures scoped to the active resolver", () => {
+    const defaultResolver = bundledFixtureResolver();
+    const activeResolver = createAppPackageResolver([
+      ...bundledPackageManifests(),
+      privatePackageManifest(),
+    ]);
+
+    expect(findResolvedAppPackage("private-labs", defaultResolver)).toBeUndefined();
+    expect(activeResolver.findPackage("private-labs")).toEqual(
+      expect.objectContaining({
+        defaultInstallId: "labs",
+        label: "Private Labs",
+        packageAppKey: "private-labs",
+        packageRevision: 7,
+        publicRouteBase: "/sites",
+        seedRecordsKey: "private-labs",
+        sourceOrigin: "workspace",
+        sourceSchemaHash: privateSourceSchemaHash,
+        sourceSchemaKey: "private-labs",
+      }),
+    );
+    expect(activeResolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
+      "site",
+      "tasks",
+      "crm",
+      "private-labs",
+    ]);
+  });
+});
+
+describe("app install registry", () => {
+  it("lists caller-supplied installable app packages", () => {
+    expect(
+      listInstallableAppPackages(bundledFixtureResolver()).map((appPackage) => ({
+        label: appPackage.label,
+        packageAppKey: appPackage.packageAppKey,
+      })),
+    ).toEqual([
+      { label: "Site", packageAppKey: "site" },
+      { label: "Tasks", packageAppKey: "tasks" },
+      { label: "CRM", packageAppKey: "crm" },
+    ]);
+  });
+
+  it("validates route-safe install ids", () => {
+    expect(validateAppInstallId(" docs-site ")).toEqual({
+      ok: true,
+      installId: "docs-site",
+    });
+    expect(validateAppInstallId("d1")).toEqual({
+      ok: true,
+      installId: "d1",
+    });
+    expect(validateAppInstallId("project-site-2026")).toEqual({
+      ok: true,
+      installId: "project-site-2026",
+    });
+    expect(validateAppInstallId("site")).toEqual({
+      ok: true,
+      installId: "site",
+    });
+
+    for (const value of [
+      "",
+      "a",
+      "Docs",
+      "-docs",
+      "docs-",
+      "docs--site",
+      "docs/site",
+      "api",
+      "apps",
+      "setup",
+      "sites",
+      "x".repeat(49),
+    ]) {
+      expect(validateAppInstallId(value).ok).toBe(false);
+    }
+  });
+
+  it("creates flat installs with route metadata and source initialization", () => {
+    const resolver = bundledFixtureResolver();
+    const site = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "personal",
+        label: " Personal Site ",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+      }),
+    );
+    const tasks = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "tasks",
+        label: " Tasks ",
+        now,
+        packageAppKey: "tasks",
+        packageResolver: resolver,
+      }),
+    );
+
+    expect(site.install).toEqual({
+      adminRoute: "/apps/personal",
+      createdAt: now,
+      installId: "personal",
+      label: "Personal Site",
+      packageAppKey: "site",
+      packageRevision: 1,
+      publicRoute: "/sites/personal",
+      publicRoutePrefix: "/sites/personal/",
+      schemaRoute: "/apps/personal/schema",
+      sourceSchemaHash: siteSourceSchemaHash,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(site.initialization).toEqual({
+      installId: "personal",
+      packageAppKey: "site",
+      seedRecordsKey: "site",
+      sourceSchemaKey: "site",
+    });
+    expect(tasks.install).toEqual({
+      adminRoute: "/apps/tasks",
+      createdAt: now,
+      installId: "tasks",
+      label: "Tasks",
+      packageAppKey: "tasks",
+      packageRevision: 1,
+      schemaRoute: "/apps/tasks/schema",
+      sourceSchemaHash: tasksSourceSchemaHash,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(appInstallInitializationPlan(site.install, resolver)).toEqual(site.initialization);
+  });
+
+  it("creates a private package install only through the active resolver", () => {
+    const defaultResolver = bundledFixtureResolver();
+    const activeResolver = createAppPackageResolver([
+      ...bundledPackageManifests(),
+      privatePackageManifest(),
+    ]);
+    const unavailable = expectFailure(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "labs",
+        label: "Private Labs",
+        now,
+        packageAppKey: "private-labs",
+        packageResolver: defaultResolver,
+      }),
+    );
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "labs",
+        label: " Private Labs ",
+        now,
+        packageAppKey: "private-labs",
+        packageResolver: activeResolver,
+        validateInitialSource: (context) => {
+          expect(context.packageApp.sourceSchemaLocation).toEqual({
+            kind: "workspace",
+            key: "private-labs",
+            path: "packages/private-labs/schema.json",
+          });
+          expect(context.initialization).toEqual({
+            installId: "labs",
+            packageAppKey: "private-labs",
+            seedRecordsKey: "private-labs",
+            sourceSchemaKey: "private-labs",
+          });
+
+          return undefined;
+        },
+      }),
+    );
+
+    expect(unavailable.error.code).toBe("unsupported-package");
+    expect(result.install).toEqual({
+      adminRoute: "/apps/labs",
+      createdAt: now,
+      installId: "labs",
+      label: "Private Labs",
+      packageAppKey: "private-labs",
+      packageRevision: 7,
+      publicRoute: "/sites/labs",
+      publicRoutePrefix: "/sites/labs/",
+      schemaRoute: "/apps/labs/schema",
+      sourceSchemaHash: privateSourceSchemaHash,
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(JSON.stringify(result.install)).not.toContain("packages/private-labs");
+    expect(JSON.stringify(result.install)).not.toContain("workspace");
+  });
+
+  it("lists and finds installed apps without mutating registry state", () => {
+    const docs = siteInstallFixture({
+      createdAt: "2026-05-22T08:02:00.000Z",
+      installId: "docs",
+      label: "Docs",
+    });
+    const personal = siteInstallFixture({
+      createdAt: "2026-05-22T08:01:00.000Z",
+      installId: "personal",
+      label: "Personal",
+    });
+    const installs = [docs, personal] as const;
+
+    expect(listAppInstalls(installs).map((install) => install.installId)).toEqual([
+      "personal",
+      "docs",
+    ]);
+    expect(findAppInstall(installs, "docs")).toBe(docs);
+    expect(findAppInstall(installs, "missing")).toBeUndefined();
+  });
+
+  it("rejects unsupported packages, invalid labels, and duplicate install ids", () => {
+    const resolver = bundledFixtureResolver();
+    const existing = [siteInstallFixture({ installId: "personal", label: "Personal" })] as const;
+
+    const unsupportedPackage = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "tasks",
+        label: "Tasks",
+        now,
+        packageAppKey: "missing",
+        packageResolver: resolver,
+      }),
+    );
+    const invalidLabel = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "docs",
+        label: " ",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+      }),
+    );
+    const duplicateInstallId = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "personal",
+        label: "Personal Tasks",
+        now,
+        packageAppKey: "tasks",
+        packageResolver: resolver,
+      }),
+    );
+
+    expect(unsupportedPackage.error.code).toBe("unsupported-package");
+    expect(invalidLabel.error.code).toBe("invalid-label");
+    expect(duplicateInstallId.error.code).toBe("duplicate-install-id");
+    expect(unsupportedPackage.installs).toBe(existing);
+    expect(invalidLabel.installs).toBe(existing);
+    expect(duplicateInstallId.installs).toBe(existing);
+  });
+
+  it("keeps existing installs unchanged when initial source validation fails", () => {
+    const resolver = bundledFixtureResolver();
+    const existing = Object.freeze([
+      siteInstallFixture({
+        installId: "personal",
+        label: "Personal",
+      }),
+    ]);
+    const sourceError = appInstallRegistryError(
+      "source-validation-failed",
+      "source",
+      "Bundled Site seed records are invalid.",
+    );
+    const result = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "docs",
+        label: "Docs",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+        validateInitialSource: (context) => {
+          expect(context.initialization).toEqual({
+            installId: "docs",
+            packageAppKey: "site",
+            seedRecordsKey: "site",
+            sourceSchemaKey: "site",
+          });
+
+          return sourceError;
+        },
+      }),
+    );
+
+    expect(result.error).toEqual(sourceError);
+    expect(result.installs).toBe(existing);
+    expect(existing).toHaveLength(1);
+  });
+});
+
+describe("source schema hash contracts", () => {
+  it("hashes source schemas from stable canonical JSON", async () => {
+    expect(sourceSchemaCanonicalJson({ b: { d: 4, c: 3 }, a: 1 })).toBe(
+      '{"a":1,"b":{"c":3,"d":4}}',
+    );
+    expect(sourceSchemaCanonicalJson({ a: 1, b: [2, { d: 4, c: 3 }] })).toBe(
+      sourceSchemaCanonicalJson({ b: [2, { c: 3, d: 4 }], a: 1 }),
+    );
+
+    await expect(computeSourceSchemaHash({ b: { d: 4, c: 3 }, a: 1 })).resolves.toBe(
+      "sha256:8d463b4d44d84c3a5f01c287245d254181e5d88e0f520c14c325a33422ed9331",
+    );
+    expect(isSourceSchemaHash(siteSourceSchemaHash)).toBe(true);
+    expect(isSourceSchemaHash("sha256:BAD")).toBe(false);
+    expect(isPackageAppRevision(1)).toBe(true);
+    expect(isPackageAppRevision(0)).toBe(false);
+  });
+});
+
+function expectSuccess(result: CreateAppInstallResult): CreateAppInstallSuccess {
+  expect(result.ok).toBe(true);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result;
+}
+
+function expectFailure(result: CreateAppInstallResult): CreateAppInstallFailure {
+  expect(result.ok).toBe(false);
+
+  if (result.ok) {
+    throw new Error(`Expected install creation to fail for ${result.install.installId}.`);
+  }
+
+  return result;
+}
+
+function bundledFixtureResolver() {
+  return createAppPackageResolver(bundledPackageManifests());
+}
+
+function bundledPackageManifests() {
+  return [
+    packageManifest({
+      packageAppKey: "site",
+      label: "Site",
+      defaultInstallId: "site",
+      sourceSchemaHash: siteSourceSchemaHash,
+      publicSite: true,
+    }),
+    packageManifest({
+      packageAppKey: "tasks",
+      label: "Tasks",
+      defaultInstallId: "tasks",
+      sourceSchemaHash: tasksSourceSchemaHash,
+    }),
+    packageManifest({
+      packageAppKey: "crm",
+      label: "CRM",
+      defaultInstallId: "crm",
+      sourceSchemaHash: crmSourceSchemaHash,
+    }),
+  ];
+}
+
+function siteInstallFixture(input: {
+  createdAt?: string;
+  installId: string;
+  label: string;
+}): AppInstall {
+  const createdAt = input.createdAt ?? now;
+
+  return {
+    adminRoute: `/apps/${input.installId}`,
+    createdAt,
+    installId: input.installId,
+    label: input.label,
+    packageAppKey: "site",
+    packageRevision: 1,
+    publicRoute: `/sites/${input.installId}`,
+    publicRoutePrefix: `/sites/${input.installId}/`,
+    schemaRoute: `/apps/${input.installId}/schema`,
+    sourceSchemaHash: siteSourceSchemaHash,
+    status: "installed",
+    updatedAt: createdAt,
+  };
+}
+
+function privatePackageManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...packageManifest({
+      packageAppKey: "private-labs",
+      label: "Private Labs",
+      defaultInstallId: "labs",
+      sourceSchemaHash: privateSourceSchemaHash,
+      publicSite: true,
+      sourceOrigin: "workspace",
+      sourcePathPrefix: "packages/private-labs",
+    }),
+    description: "Private lab package fixture.",
+    supportsMultipleInstalls: false,
+    packageRevision: 7,
+    ...overrides,
+  };
+}
+
+function packageManifest(input: {
+  defaultInstallId: string;
+  label: string;
+  packageAppKey: string;
+  publicSite?: boolean;
+  sourceOrigin?: "bundled" | "workspace";
+  sourcePathPrefix?: string;
+  sourceSchemaHash: SourceSchemaHash;
+}): Record<string, unknown> {
+  const sourceOrigin = input.sourceOrigin ?? "bundled";
+  const sourcePathPrefix = input.sourcePathPrefix;
+  const sourceSchemaPath =
+    sourcePathPrefix === undefined ? "schema.json" : `${sourcePathPrefix}/schema.json`;
+  const seedRecordsPath =
+    sourcePathPrefix === undefined ? "seed-records.json" : `${sourcePathPrefix}/seed-records.json`;
+
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: input.packageAppKey,
+    label: input.label,
+    description: `${input.label} package fixture.`,
+    defaultInstallId: input.defaultInstallId,
+    supportsMultipleInstalls: true,
+    packageRevision: 1,
+    sourceSchema: {
+      kind: sourceOrigin,
+      key: input.packageAppKey,
+      path: sourceSchemaPath,
+    },
+    seedRecords: {
+      kind: sourceOrigin,
+      key: input.packageAppKey,
+      path: seedRecordsPath,
+    },
+    sourceSchemaHash: input.sourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      ...(input.publicSite
+        ? [
+            {
+              kind: "publicSite",
+              routeBase: "/sites",
+            },
+          ]
+        : []),
+    ],
+  };
+}

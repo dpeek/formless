@@ -5,7 +5,7 @@ import {
   siteSourceSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
-import { instanceControlPlaneSchema } from "../shared/instance-control-plane.ts";
+import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import {
   selectCollectionModels,

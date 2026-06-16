@@ -21,7 +21,7 @@ import { useRef } from "react";
 import { MediaFieldControl, type ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type {
   FieldPresentationEnumContent,
   FieldPresentationSchema,

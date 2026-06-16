@@ -46,7 +46,7 @@ import {
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
-} from "../../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import {
   WorkspaceGatewayApiError,
   fetchWorkspaceGatewayAutoSaveStatus,
@@ -81,8 +81,9 @@ import {
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   type InstanceControlPlaneDeploymentConfigValues,
-} from "../../shared/instance-control-plane.ts";
-import type { AppInstallsResponse, StoredRecord } from "../../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderDeleteJob,

@@ -8,7 +8,7 @@ import type {
   RecordPlanStepSchema,
 } from "@dpeek/formless-schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   BootstrapResponse,
   ChangeRow,
@@ -16,7 +16,6 @@ import type {
   PublicOperationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
-  StoredRecord,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { operationWriteRequest } from "../test/authority-write.ts";

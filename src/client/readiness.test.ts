@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { getRecordReadinessWarnings } from "./readiness.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 describe("record readiness warnings", () => {
   it("warns when post blocks are missing a route or body", () => {

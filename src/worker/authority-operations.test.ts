@@ -3,12 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-
+import type { StorageSnapshot } from "@dpeek/formless-storage";
 import {
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
   type BootstrapResponse,
-  type StorageSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";

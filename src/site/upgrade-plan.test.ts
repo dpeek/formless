@@ -3,7 +3,8 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { listInstallableAppPackages } from "../shared/app-installs.ts";
+import { listInstallableAppPackages } from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   buildCliUpgradePlanningReport,
@@ -325,7 +326,7 @@ function upgradeStatus(
     deployedMetadata: {
       cacheControl: "no-store",
       metadataUrl: "https://live.example/api/formless/deploy",
-      packageApps: listInstallableAppPackages().map((appPackage) => ({
+      packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
         packageAppKey: appPackage.packageAppKey,
         packageRevision: appPackage.packageRevision,
         sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -336,7 +337,7 @@ function upgradeStatus(
       version: "0.1.9",
     },
     installedApps: [],
-    localPackages: listInstallableAppPackages().map((appPackage) => ({
+    localPackages: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
       packageAppKey: appPackage.packageAppKey,
       packageRevision: appPackage.packageRevision,
       sourceSchemaHash: appPackage.sourceSchemaHash,

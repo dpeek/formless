@@ -11,9 +11,12 @@
         "@dpeek/formless-archive": "^0.1.0",
         "@dpeek/formless-deploy": "^0.1.0",
         "@dpeek/formless-gateway": "^0.1.0",
+        "@dpeek/formless-installed-apps": "^0.1.0",
+        "@dpeek/formless-instance-control-plane": "^0.1.0",
         "@dpeek/formless-media": "^0.1.0",
         "@dpeek/formless-schema": "^0.1.0",
         "@dpeek/formless-site-app": "^0.1.0",
+        "@dpeek/formless-storage": "^0.1.0",
         "@dpeek/formless-ui": "^0.1.3",
         "@dpeek/formless-workspace": "^0.1.0",
         "@internationalized/date": "^3.12.1",
@@ -45,6 +48,13 @@
     "lib/archive": {
       "name": "@dpeek/formless-archive",
       "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-installed-apps": "^0.1.0",
+        "@dpeek/formless-instance-control-plane": "^0.1.0",
+        "@dpeek/formless-media": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-storage": "^0.1.0",
+      },
     },
     "lib/deploy": {
       "name": "@dpeek/formless-deploy",
@@ -55,6 +65,20 @@
       "version": "0.1.0",
       "dependencies": {
         "@dpeek/formless-workspace": "^0.1.0",
+      },
+    },
+    "lib/installed-apps": {
+      "name": "@dpeek/formless-installed-apps",
+      "version": "0.1.0",
+    },
+    "lib/instance-control-plane": {
+      "name": "@dpeek/formless-instance-control-plane",
+      "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-deploy": "^0.1.0",
+        "@dpeek/formless-installed-apps": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-storage": "^0.1.0",
       },
     },
     "lib/media": {
@@ -75,6 +99,13 @@
         "@dpeek/formless-ui": "^0.1.3",
         "react": "^19.2.5",
         "react-dom": "^19.2.5",
+      },
+    },
+    "lib/storage": {
+      "name": "@dpeek/formless-storage",
+      "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-schema": "^0.1.0",
       },
     },
     "lib/ui": {
@@ -119,6 +150,12 @@
     "lib/workspace": {
       "name": "@dpeek/formless-workspace",
       "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-installed-apps": "^0.1.0",
+        "@dpeek/formless-instance-control-plane": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-storage": "^0.1.0",
+      },
     },
   },
   "overrides": {
@@ -218,11 +255,17 @@
 
     "@dpeek/formless-gateway": ["@dpeek/formless-gateway@workspace:lib/gateway"],
 
+    "@dpeek/formless-installed-apps": ["@dpeek/formless-installed-apps@workspace:lib/installed-apps"],
+
+    "@dpeek/formless-instance-control-plane": ["@dpeek/formless-instance-control-plane@workspace:lib/instance-control-plane"],
+
     "@dpeek/formless-media": ["@dpeek/formless-media@workspace:lib/media"],
 
     "@dpeek/formless-schema": ["@dpeek/formless-schema@workspace:lib/schema"],
 
     "@dpeek/formless-site-app": ["@dpeek/formless-site-app@workspace:lib/site-app"],
+
+    "@dpeek/formless-storage": ["@dpeek/formless-storage@workspace:lib/storage"],
 
     "@dpeek/formless-ui": ["@dpeek/formless-ui@workspace:lib/ui"],
 

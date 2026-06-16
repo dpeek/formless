@@ -25,13 +25,13 @@ import {
   syncClient,
 } from "./sync.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
 } from "../shared/protocol.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
@@ -40,8 +40,6 @@ import type {
   ChangeRow,
   SchemaResponse,
   SchemaUpdateResponse,
-  StorageSnapshot,
-  StoredRecord,
   SyncSocketClientMessage,
   SyncSocketServerMessage,
   SyncResponse,

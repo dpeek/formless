@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";

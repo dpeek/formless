@@ -25,7 +25,7 @@ import type {
   InvokeActionTableColumnConfig,
   TableActionConfig,
 } from "../../client/views.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { RecordTransitionActionControls } from "./state-machine-ui.tsx";

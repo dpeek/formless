@@ -63,6 +63,45 @@ records.
 - THEN those facts remain in that install's app storage identity
 - AND the `app-install` record does not contain the installed app's data records
 
+### Requirement: Instance Control Plane Package Boundary
+
+The system SHALL expose reusable schema-owned instance control-plane contracts
+through the Instance Control Plane package slice.
+
+#### Scenario: Package owns control-plane contracts
+
+- GIVEN Archive, Workspace, Worker runtime, Site runtime, Deploy runtime, or
+  tests need control-plane schema keys, storage identity constants, API route
+  constants, entity names, entity contracts, schema contracts, reviewable record
+  validation, display-safe canonicalization, or control-plane storage snapshot
+  validation
+- WHEN those contracts are imported
+- THEN they come from `@dpeek/formless-instance-control-plane`
+- AND code does not import those contracts from root runtime modules
+
+#### Scenario: Package consumes related public contracts
+
+- GIVEN the Instance Control Plane package needs app install identity,
+  package app metadata, deployment projection field contracts, App schema
+  behavior, or storage snapshot contracts
+- WHEN those dependencies are imported
+- THEN they come from public package exports such as
+  `@dpeek/formless-installed-apps`, `@dpeek/formless-deploy`,
+  `@dpeek/formless-schema`, and `@dpeek/formless-storage`
+- AND the package does not redefine compatible local shapes for those
+  contracts
+
+#### Scenario: Runtime owns control-plane execution
+
+- GIVEN app install mutation, route mutation, deployment-config mutation,
+  Authority writes, owner authorization, deployment projection execution,
+  provider execution, or runtime observation persistence is needed
+- WHEN those behaviors are implemented
+- THEN Worker runtime, Site runtime, Deploy runtime, Gateway runtime adapters,
+  or provider adapters own the execution
+- AND the Instance Control Plane package supplies schema contracts, reviewable
+  validation, pure helpers, and package-local deterministic tests
+
 ### Requirement: Deployment Projection Boundary
 
 The system SHALL build deployment runtime desired-state projections from

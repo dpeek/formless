@@ -12,26 +12,18 @@ import {
 } from "@dpeek/formless-schema";
 
 import {
-  bundledAppPackageManifests,
+  computeSourceSchemaHash,
   createAppPackageResolver,
   parseAppPackageManifest,
   type AppPackageManifest,
   type AppPackageResolver,
   type ResolvedAppPackage,
-} from "../../../src/shared/app-packages.ts";
-import {
-  parseStorageSnapshot,
-  type RecordValues,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../../../src/shared/protocol.ts";
-import {
-  computeSourceSchemaHash,
   type SourceSchemaHash,
-} from "../../../src/shared/upgrade-migrations.ts";
+} from "@dpeek/formless-installed-apps";
+import { parseStorageSnapshot } from "@dpeek/formless-storage";
+import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
-  INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY,
   WORKSPACE_AUTO_SAVE_STATE_FILE,
   WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_OPERATION_STATE_ROOT,
@@ -48,9 +40,10 @@ import {
   workspaceOperationStateFileName,
 } from "./index.ts";
 import {
-  instanceWorkspaceControlPlaneRecordSourceRecords,
-  parseInstanceWorkspaceControlPlaneRecordSourceControlPlane,
-} from "./record-source.ts";
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  reviewableInstanceControlPlaneStorageSnapshot,
+} from "@dpeek/formless-instance-control-plane";
 import type {
   InitialWorkspaceOperationStateInput,
   InstanceWorkspaceManifest,
@@ -119,7 +112,7 @@ export type WorkspaceAppPackageSource = {
 };
 
 export type CreateWorkspaceAppPackageResolverInput = {
-  bundledManifests?: readonly unknown[];
+  bundledManifests: readonly unknown[];
   packageLinks?: WorkspacePackageLinks;
   workspaceRoot: string;
 };
@@ -272,6 +265,8 @@ export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
 export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
   manifest: InstanceWorkspaceManifest;
   snapshot: StorageSnapshot | undefined;
+  sourceLabel?: string;
+  validationContext?: string;
   workspaceRoot: string;
 }): Promise<void> {
   const filePath = instanceWorkspaceInstanceStatePath(input.workspaceRoot, input.manifest);
@@ -282,7 +277,10 @@ export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
     return;
   }
 
-  const snapshot = reviewableControlPlaneStorageSnapshot(input.snapshot);
+  const snapshot = reviewableControlPlaneStorageSnapshot(input.snapshot, {
+    context: input.validationContext,
+    sourceLabel: input.sourceLabel,
+  });
 
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, formatInstanceWorkspaceStorageSnapshot(snapshot));
@@ -433,7 +431,7 @@ export async function createWorkspaceAppPackageResolver(
     linkedPackages,
     packageLinks,
     resolver: createAppPackageResolver([
-      ...(input.bundledManifests ?? bundledAppPackageManifests),
+      ...input.bundledManifests,
       ...linkedPackages.map((appPackage) => appPackage.manifest),
     ]),
   };
@@ -741,8 +739,8 @@ function parseInstanceWorkspaceControlPlaneStorageSnapshot(
 ): StorageSnapshot {
   return reviewableControlPlaneStorageSnapshot(
     parseInstanceWorkspaceStorageSnapshotFile(contents, context, {
-      schemaKey: INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY,
-      storageIdentity: "instance:control-plane",
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     }),
   );
 }
@@ -763,22 +761,20 @@ function parseInstanceWorkspaceStorageSnapshotFile(
   }
 }
 
-function reviewableControlPlaneStorageSnapshot(snapshot: StorageSnapshot): StorageSnapshot {
+function reviewableControlPlaneStorageSnapshot(
+  snapshot: StorageSnapshot,
+  options: { context?: string; sourceLabel?: string } = {},
+): StorageSnapshot {
   const parsed = parseStorageSnapshot(snapshot, {
-    schemaKey: INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY,
-    storageIdentity: "instance:control-plane",
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   });
-  const controlPlane = parseInstanceWorkspaceControlPlaneRecordSourceControlPlane(
-    "Workspace instance state",
-    parsed.schemaUpdatedAt,
-    instanceWorkspaceControlPlaneRecordSourceRecords(parsed.records),
-  );
 
-  return {
-    ...parsed,
-    records: controlPlane.records,
-    sourceCursor: controlPlane.records.length,
-  };
+  return reviewableInstanceControlPlaneStorageSnapshot(parsed, {
+    context: options.context ?? "Workspace control-plane record source records",
+    publicSitePackageFallback: "site",
+    sourceLabel: options.sourceLabel ?? "Workspace control-plane record source",
+  });
 }
 
 function formatInstanceWorkspaceStorageSnapshot(snapshot: StorageSnapshot): string {

@@ -46,7 +46,7 @@ import {
   clientTargetSourceSchemaKey,
   type ClientAppTarget,
 } from "./client/app-target.ts";
-import type { AppInstall, PackageAppKey } from "./shared/app-installs.ts";
+import type { AppInstall, PackageAppKey } from "@dpeek/formless-installed-apps";
 import {
   ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,

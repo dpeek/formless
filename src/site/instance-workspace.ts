@@ -54,8 +54,12 @@ import {
   isRestorableImageMediaKey,
   type MediaAsset,
 } from "@dpeek/formless-media";
-import { packageAppFactsForKey, type AppInstall } from "../shared/app-installs.ts";
-import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
+import { packageAppFactsForKey, type AppInstall } from "@dpeek/formless-installed-apps";
+import {
+  bundledAppPackageManifests,
+  findResolvedAppPackage,
+  type AppPackageResolver,
+} from "../shared/app-packages.ts";
 import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
@@ -68,16 +72,10 @@ import {
   instanceControlPlaneSchema,
   instanceControlPlaneDeploymentConfigObservedFields,
   isInstanceControlPlaneEntityName,
-} from "../shared/instance-control-plane.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  parseOwnerSetupToken,
-  type AppInstallsResponse,
-  type RecordValues,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import { parseOwnerSetupToken, type AppInstallsResponse } from "../shared/protocol.ts";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
@@ -999,6 +997,8 @@ export async function pullFormlessInstanceWorkspace(
     await writeInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest,
       snapshot: pulledInstanceArchive.archive.controlPlane,
+      sourceLabel: "Instance archive controlPlane",
+      validationContext: "Instance archive controlPlane records",
       workspaceRoot,
     });
 
@@ -2780,7 +2780,10 @@ type ActiveWorkspaceAppPackages = WorkspaceAppPackageResolverResult;
 async function createActiveWorkspaceAppPackages(
   workspaceRoot: string,
 ): Promise<ActiveWorkspaceAppPackages> {
-  return createWorkspaceAppPackageResolver({ workspaceRoot });
+  return createWorkspaceAppPackageResolver({
+    bundledManifests: bundledAppPackageManifests,
+    workspaceRoot,
+  });
 }
 
 function runtimeWorkspaceAppPackagesEnvValue(
@@ -4050,6 +4053,12 @@ async function writeInitialInstanceWorkspaceState(input: {
         records: controlPlaneRecords,
         schemaUpdatedAt: archiveControlPlane?.schemaUpdatedAt ?? "1970-01-01T00:00:00.000Z",
       }),
+      ...(archiveRecords.length === 0
+        ? {}
+        : {
+            sourceLabel: "Instance archive controlPlane",
+            validationContext: "Instance archive controlPlane records",
+          }),
       workspaceRoot: input.workspaceRoot,
     });
   }

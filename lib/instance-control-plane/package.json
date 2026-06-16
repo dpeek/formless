@@ -1,0 +1,20 @@
+{
+  "name": "@dpeek/formless-instance-control-plane",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@dpeek/formless-deploy": "^0.1.0",
+    "@dpeek/formless-installed-apps": "^0.1.0",
+    "@dpeek/formless-schema": "^0.1.0",
+    "@dpeek/formless-storage": "^0.1.0"
+  }
+}

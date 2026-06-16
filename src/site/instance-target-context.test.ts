@@ -16,13 +16,9 @@ import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   resolveSiteCliTargetContext,
   siteCliTargetAcceptHeaders,

@@ -12,7 +12,7 @@ import { useRecord } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 

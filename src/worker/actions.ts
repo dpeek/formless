@@ -1,3 +1,4 @@
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type {
   ActionRequest,
   ActionRequestInput,
@@ -8,8 +9,6 @@ import type {
   RemoveTreePlacementActionInput,
   CreateMutation,
   PublicActionExecutionEnvelope,
-  RecordValues,
-  StoredRecord,
   TransitionStateActionInput,
 } from "../shared/protocol.ts";
 import type {

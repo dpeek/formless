@@ -4,7 +4,7 @@ import type {
   HomeSummarySlotConfig,
   ReferenceFieldTableColumnConfig,
 } from "../../client/views.ts";
-import type { FieldValue } from "../../shared/protocol.ts";
+import type { FieldValue } from "@dpeek/formless-storage";
 import {
   createInputValueToFieldValue as createInputValueToFieldValuePrimitive,
   fieldInputAttributes,

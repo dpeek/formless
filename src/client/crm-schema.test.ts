@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawCrmSeedRecords from "../../schema/apps/crm/seed-records.json";
 import rawCrmSchema from "../../schema/apps/crm/schema.json";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { isValidStoredFieldValue, parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { selectPrimaryScreenModels } from "./views.ts";
 

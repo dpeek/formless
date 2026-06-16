@@ -4,11 +4,12 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { listInstallableAppPackages } from "../shared/app-installs.ts";
+import { listInstallableAppPackages } from "@dpeek/formless-installed-apps";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
   bundledAppPackageManifests,
+  bundledAppPackageResolver,
   createAppPackageResolver,
 } from "../shared/app-packages.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
@@ -154,11 +155,13 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/deploy") {
             return Response.json(
               {
-                packageApps: listInstallableAppPackages().map((appPackage) => ({
-                  packageAppKey: appPackage.packageAppKey,
-                  packageRevision: appPackage.packageRevision,
-                  sourceSchemaHash: appPackage.sourceSchemaHash,
-                })),
+                packageApps: listInstallableAppPackages(bundledAppPackageResolver).map(
+                  (appPackage) => ({
+                    packageAppKey: appPackage.packageAppKey,
+                    packageRevision: appPackage.packageRevision,
+                    sourceSchemaHash: appPackage.sourceSchemaHash,
+                  }),
+                ),
                 packageVersion: "0.1.8",
                 runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
                 storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -175,7 +178,7 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/app-installs") {
             expect(headers.get("authorization")).toBe("Bearer status-token");
             return Response.json({
-              packages: listInstallableAppPackages(),
+              packages: listInstallableAppPackages(bundledAppPackageResolver),
               installs: [
                 {
                   adminRoute: "/apps/site",
@@ -238,7 +241,7 @@ describe("Formless instance target client", () => {
       version: 1,
     });
     expect(result.upgradeStatus.localPackages).toEqual(
-      listInstallableAppPackages().map((appPackage) => ({
+      listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
         packageAppKey: appPackage.packageAppKey,
         packageRevision: appPackage.packageRevision,
         sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -275,11 +278,13 @@ describe("Formless instance target client", () => {
           if (pathname === "/api/formless/deploy") {
             return Response.json(
               {
-                packageApps: listInstallableAppPackages().map((appPackage) => ({
-                  packageAppKey: appPackage.packageAppKey,
-                  packageRevision: appPackage.packageRevision,
-                  sourceSchemaHash: appPackage.sourceSchemaHash,
-                })),
+                packageApps: listInstallableAppPackages(bundledAppPackageResolver).map(
+                  (appPackage) => ({
+                    packageAppKey: appPackage.packageAppKey,
+                    packageRevision: appPackage.packageRevision,
+                    sourceSchemaHash: appPackage.sourceSchemaHash,
+                  }),
+                ),
                 packageVersion: "0.1.8",
                 runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
                 storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -295,7 +300,7 @@ describe("Formless instance target client", () => {
 
           if (pathname === "/api/formless/app-installs") {
             return Response.json({
-              packages: listInstallableAppPackages(),
+              packages: listInstallableAppPackages(bundledAppPackageResolver),
               installs: [],
             });
           }
@@ -337,7 +342,7 @@ describe("Formless instance target client", () => {
 
           if (pathname === "/api/formless/app-installs") {
             return Response.json({
-              packages: listInstallableAppPackages(),
+              packages: listInstallableAppPackages(bundledAppPackageResolver),
               installs: [
                 {
                   adminRoute: "/apps/site",

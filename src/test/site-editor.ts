@@ -1,5 +1,5 @@
 import { applyBootstrapResponse } from "../client/store.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { siteSourceSchema } from "./schema-apps.ts";
 import { requiredCollectionModel, requiredTableModel } from "./generated-table.tsx";
 import { bootstrapResponse } from "./protocol-builders.ts";

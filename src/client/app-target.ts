@@ -4,7 +4,7 @@ import {
   type AppStorageIdentity,
   type InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import { findSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
 
 export type ClientAppSchemaKey = string;

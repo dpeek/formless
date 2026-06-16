@@ -7,7 +7,7 @@ import {
   type HomeQueryTabConfig,
   type HomeViewModel,
 } from "../../client/views.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { SchemaKey } from "../../shared/schema-apps.ts";
 import {

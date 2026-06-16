@@ -1,4 +1,4 @@
-import type { PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import {
   createUpgradeMigrationRegistry,
   upgradeMigrationFamilyKey,
@@ -11,7 +11,7 @@ import {
   type UpgradeMigrationOwner,
   type UpgradeMigrationSafetyClass,
 } from "../shared/upgrade-migrations.ts";
-import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema } from "@dpeek/formless-schema";
 
 export type PackageAppMigrationContext = {

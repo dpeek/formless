@@ -1,4 +1,4 @@
-import { findAppInstall, type AppInstall } from "../shared/app-installs.ts";
+import { findAppInstall, type AppInstall } from "@dpeek/formless-installed-apps";
 import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,

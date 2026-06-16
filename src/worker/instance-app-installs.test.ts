@@ -22,7 +22,7 @@ import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
-import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,

@@ -4,7 +4,7 @@ import {
   type UploadedImageMedia,
 } from "@dpeek/formless-media/client";
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type { AppSchema, FieldSchema, TableColumnFormat } from "@dpeek/formless-schema";
 import {
   decodeNumberEditorInputValue,

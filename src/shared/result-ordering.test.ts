@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { StoredRecord } from "./protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   calculateOrderingDragMovePlan,
   calculateOrderingMovePlan,

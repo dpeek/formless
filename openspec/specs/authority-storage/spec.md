@@ -57,6 +57,31 @@ The system SHALL expose app storage operations through schema-key and installed-
 - THEN the installed app API route remains available
 - AND schema-key API routes remain blocked by the profile policy
 
+### Requirement: Storage Snapshot Contract Boundary
+
+The system SHALL expose storage snapshot contracts and parsing through the
+Storage package while keeping Authority storage execution in runtime modules.
+
+#### Scenario: Runtime code consumes storage snapshot contracts
+
+- GIVEN Authority storage, browser replicas, portable archive workflows,
+  workspace source, Site runtime, Worker runtime, or tests need storage
+  snapshot kind constants, version constants, stored-record contracts,
+  flat record value contracts, or snapshot parsing
+- WHEN those contracts are imported
+- THEN they come from `@dpeek/formless-storage`
+- AND they do not come from root runtime protocol modules
+
+#### Scenario: Storage package stays execution-free
+
+- GIVEN storage snapshot contracts are provided by the Storage package
+- WHEN Authority bootstrap, schema storage, change rows, operation invocations,
+  sync protocol, mutation routes, reset, restore, or Durable Object storage is
+  implemented
+- THEN those behaviors remain owned by Authority storage runtime modules
+- AND the Storage package does not own runtime protocol routes, app records,
+  browser replica persistence, or restore execution
+
 ### Requirement: Instance Management APIs
 
 The system SHALL expose instance-level management APIs separately from app

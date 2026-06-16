@@ -7,7 +7,7 @@ import {
   projectDeployControlPlaneDesiredState,
   type DeployResourceGraph,
 } from "@dpeek/formless-deploy";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 
 export type PrimaryInstanceDeploymentProjectionEnv = {

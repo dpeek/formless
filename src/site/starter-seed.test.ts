@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { resolveIconCatalogSvg } from "../shared/icon-catalog.ts";
-import type { FieldValue, StoredRecord } from "../shared/protocol.ts";
+import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
 import { siteSeedRecords } from "../test/schema-apps.ts";
 
 describe("Site starter seed", () => {

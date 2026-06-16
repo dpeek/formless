@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   ORDERING_DND_TYPE,
   calculateOrderingDragMovePlanForContext,

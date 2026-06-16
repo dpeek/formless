@@ -1,10 +1,10 @@
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { RecordValues } from "@dpeek/formless-storage";
 import type {
   PublicActionChallengeVerification,
   PublicActionProof,
   PublicActionRequestSource,
   PublicOperationResponse,
-  RecordValues,
 } from "../shared/protocol.ts";
 import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
 import { formatEntityOperationKey } from "@dpeek/formless-schema";

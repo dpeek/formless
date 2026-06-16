@@ -10,7 +10,7 @@ import {
   EMPTY_RECORD_IDS,
   type BrowserReplicaProjectionSnapshot,
 } from "./projections.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 describe("browser replica projections", () => {
   it("selects matching entity record IDs and keeps deleted records out", () => {

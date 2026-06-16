@@ -11,5 +11,12 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dpeek/formless-installed-apps": "^0.1.0",
+    "@dpeek/formless-instance-control-plane": "^0.1.0",
+    "@dpeek/formless-media": "^0.1.0",
+    "@dpeek/formless-schema": "^0.1.0",
+    "@dpeek/formless-storage": "^0.1.0"
   }
 }

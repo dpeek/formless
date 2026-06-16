@@ -4,16 +4,15 @@ import {
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneRouteValues,
-} from "../shared/instance-control-plane.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
   ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
   MutationResponse,
   OwnerIdentity,
-  StorageSnapshot,
-  StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
 import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";

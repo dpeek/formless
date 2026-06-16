@@ -20,7 +20,8 @@ import {
   type ReferenceOption,
 } from "./projections.ts";
 import { nowIsoString } from "../shared/clock.ts";
-import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
+import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import type { QueryEvaluationContext, QueryExpression } from "@dpeek/formless-schema";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AggregateSchema, AppSchema, ComputedValueSchema } from "@dpeek/formless-schema";

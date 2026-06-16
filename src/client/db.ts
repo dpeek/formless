@@ -1,5 +1,6 @@
 import type { AppSchema } from "@dpeek/formless-schema";
-import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 

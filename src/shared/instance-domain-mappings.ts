@@ -3,7 +3,7 @@ import {
   validateAppInstallId,
   type AppInstall,
   type AppInstallId,
-} from "./app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 
 export type InstanceDomainMappingProfile = "instance" | "app" | "publicSite";
 

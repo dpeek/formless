@@ -3,7 +3,7 @@ import {
   type AppPackageResolver,
   type ResolvedAppPackage,
 } from "./app-packages.ts";
-import type { PackageAppKey } from "./app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export const FORMLESS_DEPLOY_METADATA_PATH = "/api/formless/deploy";

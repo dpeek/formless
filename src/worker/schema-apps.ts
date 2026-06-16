@@ -16,7 +16,7 @@ import {
   validateAuthorityFieldValue,
   type AppSchema,
 } from "@dpeek/formless-schema";
-import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 
 export type WorkerSchemaAppDefinition = Omit<SchemaAppDefinition, "key"> & {
   key: string;

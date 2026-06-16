@@ -6,24 +6,22 @@ import {
   validateAuthorityFieldValue,
 } from "@dpeek/formless-schema";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
-import { instanceControlPlaneReservedRoutePaths } from "../shared/instance-control-plane.ts";
+import { instanceControlPlaneReservedRoutePaths } from "@dpeek/formless-instance-control-plane";
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type {
   AppSchema,
   EntitySchema,
   RuntimeSchemaRouteValidationSchema,
 } from "@dpeek/formless-schema";
+import { parseStorageSnapshot } from "@dpeek/formless-storage";
+import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
   CreateMutation,
   DeleteMutation,
   Mutation,
   MutationResponse,
   PatchMutation,
-  RecordValues,
-  StorageSnapshot,
-  StoredRecord,
 } from "../shared/protocol.ts";
-import { parseStorageSnapshot } from "../shared/protocol.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {

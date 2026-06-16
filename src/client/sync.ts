@@ -1,6 +1,7 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
-import { packageAppFactsForKey } from "../shared/app-installs.ts";
+import { packageAppFactsForKey } from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import {
   deleteClientDb,
@@ -27,6 +28,7 @@ import type {
   OperationInvocationRequest,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
+import type { StorageSnapshot } from "@dpeek/formless-storage";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
@@ -37,7 +39,6 @@ import {
   type EntityName,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StorageSnapshot,
   type SyncResponse,
   type SyncSocketClientMessage,
   type SyncSocketServerMessage,
@@ -529,7 +530,7 @@ async function addBrowserReplicaWriteHeaders(headers: Headers, target: ClientApp
   const packageFacts =
     identity.kind === "instanceControlPlane"
       ? undefined
-      : packageAppFactsForKey(identity.packageAppKey);
+      : packageAppFactsForKey(identity.packageAppKey, bundledAppPackageResolver);
 
   headers.set(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER, String(FORMLESS_RUNTIME_PROTOCOL_VERSION));
 

@@ -10,7 +10,8 @@ import {
   subscribeToClientStoreSelector,
 } from "./store.ts";
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
-import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 

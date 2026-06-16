@@ -11,7 +11,8 @@ import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "./app-storage-identity.ts";
-import type { ActionResponse, ChangeRow, StoredRecord } from "./protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { ActionResponse, ChangeRow } from "./protocol.ts";
 
 export type OperationInvocationActor = {
   kind: EntityOperationActorKind;

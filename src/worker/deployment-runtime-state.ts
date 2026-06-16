@@ -9,7 +9,7 @@ import {
   materializeDeployDesiredStateVersion,
   type DeployResourceGraph,
 } from "@dpeek/formless-deploy";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 export const INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID = "instance.primary" as DeploymentTargetId;
 

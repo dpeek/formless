@@ -3,7 +3,8 @@ import {
   type AppInstall,
   type AppInstallInitializationPlan,
   type PackageAppKey,
-} from "./app-installs.ts";
+} from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "./app-packages.ts";
 import type { SchemaKey } from "./schema-apps.ts";
 
 export type LaunchFixtureName = "empty" | "multi-site" | "mixed-apps" | "crm";
@@ -140,6 +141,7 @@ export function createLaunchFixtureInitializationPlan(
       label: app.label,
       now: input.now,
       packageAppKey: app.packageAppKey,
+      packageResolver: bundledAppPackageResolver,
     });
 
     if (!result.ok) {

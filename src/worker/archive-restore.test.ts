@@ -7,21 +7,17 @@ import {
   type AppArchiveMediaObject,
   type InstanceArchive,
 } from "@dpeek/formless-archive";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type BootstrapResponse,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import { type BootstrapResponse } from "../shared/protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
   applyPortableArchiveRestore,

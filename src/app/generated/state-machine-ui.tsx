@@ -9,7 +9,7 @@ import type { ClientAppTarget } from "../../client/app-target.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
 import type { StateMachineFieldConfig, TransitionStateActionConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { enumValuePresentation, GeneratedFieldPresentationIcon } from "./field-presentation.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import type { FieldSchema } from "@dpeek/formless-schema";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AppInstall } from "../shared/app-installs.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { resolveInstanceRuntimeRouteFromRecords } from "./instance-runtime-routes.ts";

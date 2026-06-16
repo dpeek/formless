@@ -8,13 +8,14 @@ import {
   listInstallableAppPackages,
   type AppInstall,
   type InstallableAppPackage,
-} from "../../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../../shared/app-packages.ts";
 import type { InstanceDeploymentDesiredStateResponse } from "../../shared/deployment-runtime.ts";
 import {
   instanceControlPlaneSchema,
   type InstanceControlPlaneDeploymentConfigValues,
-} from "../../shared/instance-control-plane.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+} from "@dpeek/formless-instance-control-plane";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
 import {
   InstallAppDialogForm,
@@ -782,7 +783,7 @@ describe("instance shell route view", () => {
   });
 
   it("renders CRM package defaults in the install dialog when CRM is selected", () => {
-    const packages = listInstallableAppPackages();
+    const packages = listInstallableAppPackages(bundledAppPackageResolver);
     const crmPackage = packages.find((appPackage) => appPackage.packageAppKey === "crm");
 
     if (!crmPackage) {
@@ -1091,7 +1092,7 @@ function readyState(
     domainAppliedStates: [],
     installing: false,
     installs: [siteInstall({ installId: "site", label: "Site" })],
-    packages: listInstallableAppPackages(),
+    packages: listInstallableAppPackages(bundledAppPackageResolver),
     status: "ready",
     ...overrides,
   };

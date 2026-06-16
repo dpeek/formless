@@ -23,10 +23,13 @@ import {
   findAppInstall,
   type AppInstall,
   type InstallableAppPackage,
-} from "../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
-import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  parseInstanceControlPlaneStorageSnapshot,
+} from "@dpeek/formless-instance-control-plane";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
@@ -36,7 +39,8 @@ import {
   isRestorableImageMediaKey,
   type MediaAsset,
 } from "@dpeek/formless-media";
-import type { AppInstallsResponse, StorageSnapshot, StoredRecord } from "../shared/protocol.ts";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import type { AppInstallsResponse } from "../shared/protocol.ts";
 import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
@@ -146,7 +150,7 @@ async function fetchRemoteControlPlaneArchive(input: {
   fetcher: typeof fetch;
   target: string;
 }): Promise<InstanceArchiveControlPlane | undefined> {
-  return fetchJson<StorageSnapshot>(
+  const snapshot = await fetchJson<StorageSnapshot>(
     input.fetcher,
     apiUrl(
       input.target,
@@ -154,6 +158,8 @@ async function fetchRemoteControlPlaneArchive(input: {
     ),
     { headers: archiveExportRequestHeaders(input.auth, "application/json") },
   );
+
+  return parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", snapshot);
 }
 
 function instanceArchiveCapabilities(

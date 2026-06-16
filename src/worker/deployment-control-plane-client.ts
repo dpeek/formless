@@ -1,11 +1,11 @@
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import type { DeploymentTarget } from "../shared/deployment-runtime.ts";
 import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
 import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   INTERNAL_READ_RECORDS_PATH,
   INTERNAL_SYNC_DOMAIN_INTENT_PATH,

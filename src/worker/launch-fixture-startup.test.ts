@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import type { AppInstallsResponse, BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { AppInstallsResponse, BootstrapResponse } from "../shared/protocol.ts";
 import {
   crmSeedRecords,
   crmSourceSchema,

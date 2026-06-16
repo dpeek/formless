@@ -34,7 +34,7 @@ import type {
 import type { CollectionResultModel } from "../../client/collection-result-model.ts";
 import type { ListResultModel, RecordResultModel } from "../../client/list-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { HomeOperationRow } from "./actions.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";

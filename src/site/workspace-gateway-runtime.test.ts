@@ -11,18 +11,15 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { packageAppFactsForKey, listInstallableAppPackages } from "../shared/app-installs.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+import { packageAppFactsForKey, listInstallableAppPackages } from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../shared/app-packages.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
@@ -1648,7 +1645,7 @@ function workspaceSaveFetch(requests: CapturedRequest[], installId: string): typ
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs: [installedSite(installId, "Site")],
-        packages: listInstallableAppPackages(),
+        packages: listInstallableAppPackages(bundledAppPackageResolver),
       });
     }
 
@@ -1679,7 +1676,7 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
 
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json({
-        packageApps: listInstallableAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1694,7 +1691,7 @@ function deployApplyFetch(requests: CapturedRequest[], installId: string): typeo
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs: [installedSite(installId, "Site")],
-        packages: listInstallableAppPackages(),
+        packages: listInstallableAppPackages(bundledAppPackageResolver),
       });
     }
 
@@ -1846,7 +1843,7 @@ async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string
 }
 
 function appArchive(installId: string, label: string): AppArchive {
-  const facts = packageAppFactsForKey("site");
+  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error("Missing bundled package facts for site.");
@@ -1875,7 +1872,7 @@ function appArchive(installId: string, label: string): AppArchive {
 }
 
 function installedSite(installId: string, label: string) {
-  const facts = packageAppFactsForKey("site");
+  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error("Missing bundled package facts for site.");

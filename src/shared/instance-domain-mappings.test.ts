@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { AppInstall } from "./app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   buildInstanceDomainMappingAppliedState,

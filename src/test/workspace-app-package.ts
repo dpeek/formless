@@ -7,11 +7,12 @@ import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
+  computeSourceSchemaHash,
   parseAppPackageManifest,
   type AppPackageCapability,
   type AppPackageManifest,
-} from "../shared/app-packages.ts";
-import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 
 export type WorkspaceAppPackageFixture = {
   manifest: AppPackageManifest;

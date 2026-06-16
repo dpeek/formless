@@ -2,7 +2,7 @@ import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts
 import { submitOperation } from "../../client/sync.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
-import type { StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   calculateOrderingDragMovePlan,
   calculateOrderingMovePlan,

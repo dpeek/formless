@@ -15,7 +15,7 @@ import {
   readInstanceWorkspaceSecretState,
   type InstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 export type SiteCliAdminTokenSource = "env" | "explicit" | "missing" | "stored";
 

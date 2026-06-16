@@ -31,6 +31,14 @@ compare before mutating a Formless instance.
   active workspace or runtime, including private packages available through the
   active package resolver
 
+#### Scenario: Import package revision and hash contracts
+
+- WHEN upgrade planning, migration registration, browser reload checks, archive
+  compatibility checks, or tests need package app revision contracts, source
+  schema hash parsing, or deterministic source schema hash computation
+- THEN those contracts come from `@dpeek/formless-installed-apps`
+- AND migration code does not import those contracts from root runtime modules
+
 ### Requirement: Migration Registry
 
 The system SHALL register code-backed migrations through manifest metadata.

@@ -90,6 +90,41 @@ app install can be created.
 - **THEN** the request is rejected
 - **AND** no app install metadata or initial app data is committed
 
+### Requirement: Installed Apps Package Boundary
+
+The system SHALL expose reusable installed-app and app-package metadata
+contracts through the Installed Apps package slice.
+
+#### Scenario: Package owns install and package metadata contracts
+
+- GIVEN app, client, Worker, archive, workspace, upgrade, Site runtime, or tests
+  need app install id validation, app install metadata shapes, package app
+  manifest parsing, active package resolver behavior, package revision
+  contracts, source schema hash parsing, or deterministic source schema hash
+  computation
+- WHEN those contracts are imported
+- THEN they come from `@dpeek/formless-installed-apps`
+- AND code does not import those contracts from root runtime modules
+
+#### Scenario: Runtime supplies bundled package manifests
+
+- GIVEN the default runtime resolver needs bundled Site, Tasks, and CRM package
+  metadata
+- WHEN the resolver is composed
+- THEN root runtime code supplies bundled package manifests as resolver input
+- AND the Installed Apps package does not import bundled app schema JSON, seed
+  records, root-only bundled package lists, or package-specific runtime
+  adapters
+
+#### Scenario: Workspace resolver has explicit defaults
+
+- GIVEN a workspace package resolver is built from optional
+  `formless.packages.json` links
+- WHEN bundled package metadata should be part of that resolver
+- THEN the caller supplies bundled manifests explicitly
+- AND the Workspace package does not import root bundled package lists as an
+  implicit fallback
+
 ### Requirement: Flat App Install Metadata
 
 The system SHALL store app installs as flat instance metadata that binds install

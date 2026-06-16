@@ -1,3 +1,4 @@
+import type { StorageSnapshot } from "@dpeek/formless-storage";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
@@ -7,7 +8,6 @@ import {
   type BootstrapResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StorageSnapshot,
   type SyncResponse,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
@@ -19,7 +19,7 @@ import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";

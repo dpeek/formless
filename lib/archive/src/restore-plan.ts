@@ -9,9 +9,9 @@ import {
   type PortableArchive,
 } from "./types.ts";
 import { parseAppArchive, parseInstanceArchive, parsePortableArchive } from "./types.ts";
-import { type AppInstall, type InstallableAppPackage } from "../../../src/shared/app-installs.ts";
+import { type AppInstall, type InstallableAppPackage } from "@dpeek/formless-installed-apps";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
-import { type RecordValues, type StoredRecord } from "../../../src/shared/protocol.ts";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
 import {
   CORE_IMAGE_KEY_PREFIX,

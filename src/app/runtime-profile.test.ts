@@ -27,7 +27,7 @@ import {
   selectBrowserRuntimeProfileHint,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 

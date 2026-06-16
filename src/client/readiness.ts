@@ -1,4 +1,4 @@
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 export type RecordReadinessWarning = {
   code: string;

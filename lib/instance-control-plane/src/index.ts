@@ -1,29 +1,41 @@
 import {
+  findResolvedAppPackage,
+  isSourceSchemaHash,
   listAppInstalls,
   type AppInstall,
   type AppInstallId,
+  type AppInstallRouteAccess,
   type AppInstallRoute,
   type AppInstallRouteKind,
+  type AppPackageResolver,
   type PackageAppKey,
-} from "./app-installs.ts";
-import { findResolvedAppPackage, type AppPackageResolver } from "./app-packages.ts";
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 import {
   CONTROL_PLANE_DEPLOYMENT_CONFIG_OBSERVED_FIELDS,
   type ControlPlaneDeploymentConfigObservedStatus,
 } from "@dpeek/formless-deploy";
-import { formatQualifiedEntityName, parseQualifiedEntityName } from "@dpeek/formless-schema";
+import {
+  formatQualifiedEntityName,
+  isRuntimeControlPlaneObservedField,
+  isRuntimeControlPlaneSecretReferenceField,
+  isValidStoredFieldValue,
+  parseQualifiedEntityName,
+} from "@dpeek/formless-schema";
 import type {
   AppSchema,
   EntityMutationPolicy,
   FieldEditor,
   FieldSchema,
 } from "@dpeek/formless-schema";
-import type { RuntimeRouteAccess } from "./runtime-topology.ts";
 import {
-  isSourceSchemaHash,
-  type PackageAppRevision,
-  type SourceSchemaHash,
-} from "./upgrade-migrations.ts";
+  parseStorageSnapshot,
+  type RecordValues,
+  type StorageSnapshot,
+  type StoredRecord,
+} from "@dpeek/formless-storage";
+export * from "./types.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
 export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
@@ -108,7 +120,7 @@ export type InstanceControlPlaneAppRouteSurface = "admin" | "publicSite" | "sche
 export type InstanceControlPlaneRouteKind = "mount" | "redirect";
 export type InstanceControlPlaneRouteSurface = "admin" | "public-site" | "schema";
 export type InstanceControlPlaneRouteTargetProfile = "app" | "instance" | "public-site";
-export type InstanceControlPlaneRouteAccess = RuntimeRouteAccess;
+export type InstanceControlPlaneRouteAccess = AppInstallRouteAccess;
 
 export type InstanceControlPlaneRouteValues = {
   enabled: boolean;
@@ -760,9 +772,10 @@ function appInstallFromControlPlaneValues(
   packageResolver?: AppPackageResolver,
 ): AppInstall {
   const packageAppKey = stringControlPlaneValue(values.packageAppKey);
-  const packageApp = packageAppKey
-    ? findResolvedAppPackage(packageAppKey, packageResolver)
-    : undefined;
+  const packageApp =
+    packageAppKey && packageResolver
+      ? findResolvedAppPackage(packageAppKey, packageResolver)
+      : undefined;
 
   if (!packageApp) {
     throw new Error(`Stored app install "${String(values.installId)}" has unsupported package.`);
@@ -924,7 +937,9 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
   packageResolver?: AppPackageResolver;
   now: string;
 }): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
-  const packageApp = findResolvedAppPackage(input.packageAppKey, input.packageResolver);
+  const packageApp = input.packageResolver
+    ? findResolvedAppPackage(input.packageAppKey, input.packageResolver)
+    : undefined;
   const adminRouteBase = packageApp?.adminRouteBase ?? "/apps";
   const publicRouteBase = packageApp?.publicRouteBase;
   const routeInput = { install: { installId: input.installId }, now: input.now };
@@ -1058,6 +1073,1193 @@ export function instanceControlPlaneEffectiveRouteAccess(
 ): InstanceControlPlaneRouteAccess {
   return route.access ?? instanceControlPlaneDefaultRouteAccess(route);
 }
+
+export const instanceControlPlaneRecordSourceExcludedEntityNames = [
+  "deploy-desired-resource",
+  "deploy-target",
+  "deploy-attempt",
+  "deploy-evidence-summary",
+  "deploy-drift-report",
+  "provider-config-ref",
+] as const;
+
+export type InstanceControlPlaneRecordSourceExcludedEntityName =
+  (typeof instanceControlPlaneRecordSourceExcludedEntityNames)[number];
+
+export type InstanceControlPlaneRecordValidationOptions = {
+  context?: string;
+  packageResolver?: AppPackageResolver;
+  publicSitePackageFallback?: "allow" | "site";
+  sourceLabel?: string;
+};
+
+export function parseInstanceControlPlaneStorageSnapshot(
+  context: string,
+  value: unknown,
+  options: InstanceControlPlaneRecordValidationOptions = {},
+): StorageSnapshot {
+  const snapshot = parseStorageSnapshot(value, {
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  });
+
+  validateInstanceControlPlaneRecords(`${context} records`, snapshot.records, options);
+
+  return snapshot;
+}
+
+export function reviewableInstanceControlPlaneStorageSnapshot(
+  snapshot: StorageSnapshot,
+  options: InstanceControlPlaneRecordValidationOptions = {},
+): StorageSnapshot {
+  const parsed = parseStorageSnapshot(snapshot, {
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  });
+  const records = reviewableInstanceControlPlaneRecords(parsed.records, options);
+
+  return {
+    ...parsed,
+    records,
+    sourceCursor: records.length,
+  };
+}
+
+export function canonicalizeInstanceControlPlaneStorageSnapshot(
+  snapshot: StorageSnapshot,
+  options: InstanceControlPlaneRecordValidationOptions = {},
+): StorageSnapshot {
+  const reviewable = reviewableInstanceControlPlaneStorageSnapshot(snapshot, options);
+
+  return {
+    kind: reviewable.kind,
+    version: reviewable.version,
+    storageIdentity: reviewable.storageIdentity,
+    schemaKey: reviewable.schemaKey,
+    exportedAt: reviewable.exportedAt,
+    schemaUpdatedAt: reviewable.schemaUpdatedAt,
+    sourceCursor: reviewable.sourceCursor,
+    schema: stableJsonValue(reviewable.schema) as AppSchema,
+    records: reviewable.records.map(canonicalInstanceControlPlaneRecord).sort(compareRecords),
+  };
+}
+
+export function parseInstanceControlPlaneRecords(context: string, value: unknown): StoredRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  return value.map((record, index) =>
+    parseInstanceControlPlaneRecord(`${context}[${index}]`, record),
+  );
+}
+
+export function reviewableInstanceControlPlaneRecords(
+  records: readonly StoredRecord[],
+  options: InstanceControlPlaneRecordValidationOptions = {},
+): StoredRecord[] {
+  const context = options.context ?? "Instance control-plane record source records";
+  const sourceLabel = options.sourceLabel ?? "Instance control-plane record source";
+  const sourceRecords: StoredRecord[] = [];
+
+  for (const record of records) {
+    const entity = instanceControlPlaneRecordSourceEntityName(record.entity);
+
+    if (entity !== undefined) {
+      sourceRecords.push(
+        canonicalInstanceControlPlaneRecord({
+          ...record,
+          entity,
+          values: reviewableInstanceControlPlaneRecordValues(entity, record.values),
+        }),
+      );
+      continue;
+    }
+
+    if (excludedInstanceControlPlaneRecordSourceEntityName(record.entity) !== undefined) {
+      continue;
+    }
+
+    throw new Error(
+      `${sourceLabel} does not support entity "${controlPlaneEntityLabel(record.entity)}".`,
+    );
+  }
+
+  validateInstanceControlPlaneRecords(context, sourceRecords, options);
+
+  return sourceRecords;
+}
+
+export function validateInstanceControlPlaneRecords(
+  context: string,
+  records: readonly StoredRecord[],
+  options: InstanceControlPlaneRecordValidationOptions = {},
+) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`${context} includes duplicate control-plane record id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const record of records) {
+    validateInstanceControlPlaneRecord(context, record, recordsById, options);
+  }
+
+  validateInstanceControlPlaneUniqueConstraints(context, records);
+  assertInstanceControlPlaneRoutesAreValid(context, records, options);
+}
+
+export function reviewableInstanceControlPlaneRecordValues(
+  entity: InstanceControlPlaneEntityName,
+  values: RecordValues,
+): RecordValues {
+  if (entity !== "deployment-config") {
+    return values;
+  }
+
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) =>
+        !isRuntimeControlPlaneObservedField(instanceControlPlaneSchema, entity, fieldName),
+    ),
+  ) as RecordValues;
+}
+
+export function parseInstanceControlPlaneEntityName(
+  context: string,
+  value: unknown,
+): InstanceControlPlaneEntityName {
+  const entity = parseNonEmptyString(context, value);
+
+  if (isInstanceControlPlaneEntityName(entity)) {
+    return entity;
+  }
+
+  return parseInstanceControlPlaneBoundaryEntityName(context, entity);
+}
+
+export function instanceControlPlaneRecordSourceEntityName(
+  value: string,
+): InstanceControlPlaneEntityName | undefined {
+  const localEntity = value.startsWith(`${INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY}:`)
+    ? tryParseBoundaryEntityName(value)
+    : isInstanceControlPlaneEntityName(value)
+      ? value
+      : undefined;
+
+  return localEntity !== undefined && isInstanceControlPlaneEntityName(localEntity)
+    ? localEntity
+    : undefined;
+}
+
+export function excludedInstanceControlPlaneRecordSourceEntityName(
+  value: string,
+): InstanceControlPlaneRecordSourceExcludedEntityName | undefined {
+  const localEntity = value.startsWith(`${INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY}:`)
+    ? tryParseBoundaryEntityName(value)
+    : value;
+
+  return localEntity !== undefined &&
+    instanceControlPlaneRecordSourceExcludedEntityNames.includes(
+      localEntity as InstanceControlPlaneRecordSourceExcludedEntityName,
+    )
+    ? (localEntity as InstanceControlPlaneRecordSourceExcludedEntityName)
+    : undefined;
+}
+
+export function normalizeInstanceControlPlaneTargetUrl(value: string): string {
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("invalid protocol");
+    }
+
+    return url.origin;
+  } catch {
+    throw new Error(`Instance control-plane target URL is invalid: ${value}`);
+  }
+}
+
+function parseInstanceControlPlaneRecord(context: string, value: unknown): StoredRecord {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["id", "entity", "values", "createdAt"], ["deletedAt"]);
+
+  const id = parseNonEmptyString(`${context} id`, value.id);
+  const entity = parseInstanceControlPlaneEntityName(
+    `${context} record "${id}" entity`,
+    value.entity,
+  );
+
+  return {
+    id,
+    entity,
+    values: parseRecordValues(`${context} values`, value.values),
+    createdAt: parseIsoTimestamp(`${context} createdAt`, value.createdAt),
+    ...(value.deletedAt === undefined
+      ? {}
+      : { deletedAt: parseIsoTimestamp(`${context} deletedAt`, value.deletedAt) }),
+  };
+}
+
+function validateInstanceControlPlaneRecord(
+  context: string,
+  record: StoredRecord,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+  options: InstanceControlPlaneRecordValidationOptions,
+) {
+  const entity = instanceControlPlaneRecordSourceEntityName(record.entity);
+
+  if (entity === undefined) {
+    throw new Error(
+      `${context} record "${record.id}" references unknown entity "${controlPlaneEntityLabel(record.entity)}".`,
+    );
+  }
+
+  const entitySchema = instanceControlPlaneSchema.entities[entity];
+  const fields = entitySchema.fields as Record<string, FieldSchema>;
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (isRuntimeControlPlaneObservedField(instanceControlPlaneSchema, entity, fieldName)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store runtime-observed deployment cache fields.`,
+      );
+    }
+
+    if (!fields[fieldName]) {
+      throw new Error(
+        `${context} record "${record.id}" includes unknown field "${controlPlaneFieldLabel(record, fieldName)}".`,
+      );
+    }
+  }
+
+  assertControlPlaneRecordValuesAreReviewable(context, record);
+
+  for (const [fieldName, field] of Object.entries(fields)) {
+    const value = record.values[fieldName];
+
+    if (!isValidStoredFieldValue(value, field)) {
+      throw new Error(
+        `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, fieldName)}".`,
+      );
+    }
+
+    if (
+      entity === "app-install" &&
+      fieldName === "packageAppKey" &&
+      typeof value === "string" &&
+      !schemaLocalEntityKeyPattern.test(value)
+    ) {
+      throw new Error(
+        `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, fieldName)}".`,
+      );
+    }
+
+    if (field.type === "reference" && value !== undefined) {
+      validateInstanceControlPlaneReference(
+        context,
+        record,
+        fieldName,
+        field.to,
+        value,
+        recordsById,
+      );
+    }
+  }
+
+  if (entity === "app-install") {
+    validateAppInstallImmutableIdentity(context, record);
+  }
+
+  if (entity === "deployment-config") {
+    validateDeploymentConfigImmutableIdentity(context, record);
+  }
+
+  if (entity === "app-install" && options.packageResolver !== undefined) {
+    const packageAppKey = requiredStringValue(context, record, "packageAppKey");
+
+    if (!findResolvedAppPackage(packageAppKey, options.packageResolver)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "packageAppKey")}" references unsupported package "${packageAppKey}".`,
+      );
+    }
+  }
+}
+
+function validateInstanceControlPlaneReference(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  entityName: string,
+  value: RecordValues[string],
+  recordsById: ReadonlyMap<string, StoredRecord>,
+) {
+  if (typeof value !== "string") {
+    return;
+  }
+
+  const target = recordsById.get(value);
+
+  if (!target) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" references unknown ${controlPlaneEntityLabel(entityName)} record "${value}".`,
+    );
+  }
+
+  if (instanceControlPlaneRecordSourceEntityName(target.entity) !== entityName) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must reference a ${controlPlaneEntityLabel(entityName)} record.`,
+    );
+  }
+
+  if (target.deletedAt) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot reference tombstoned record "${value}".`,
+    );
+  }
+}
+
+function validateInstanceControlPlaneUniqueConstraints(
+  context: string,
+  records: readonly StoredRecord[],
+) {
+  for (const [entityName, entity] of Object.entries(instanceControlPlaneSchema.entities)) {
+    const activeRecords = records.filter(
+      (record) =>
+        instanceControlPlaneRecordSourceEntityName(record.entity) === entityName &&
+        !record.deletedAt,
+    );
+    const constraints = ("constraints" in entity ? entity.constraints : {}) as Record<
+      string,
+      { fields: readonly string[]; kind: string }
+    >;
+
+    for (const [constraintName, constraint] of Object.entries(constraints)) {
+      if (constraint.kind !== "unique") {
+        continue;
+      }
+
+      const seen = new Set<string>();
+
+      for (const record of activeRecords) {
+        const key = JSON.stringify(
+          constraint.fields.map((fieldName) => record.values[fieldName] ?? null),
+        );
+
+        if (seen.has(key)) {
+          throw new Error(
+            `${context} violates unique constraint "${controlPlaneEntityLabel(entityName)}.${constraintName}".`,
+          );
+        }
+
+        seen.add(key);
+      }
+    }
+  }
+}
+
+function validateAppInstallImmutableIdentity(context: string, record: StoredRecord) {
+  const installId = requiredStringValue(context, record, "installId");
+  const storageIdentity = requiredStringValue(context, record, "storageIdentity");
+
+  if (record.id !== installId) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "installId")}" must match record id.`,
+    );
+  }
+
+  if (storageIdentity !== `app:${installId}`) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "storageIdentity")}" must be "app:${installId}".`,
+    );
+  }
+}
+
+function validateDeploymentConfigImmutableIdentity(context: string, record: StoredRecord) {
+  const targetId = requiredStringValue(context, record, "targetId");
+  const targetUrl = requiredStringValue(context, record, "targetUrl");
+
+  if (record.id !== targetId) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "targetId")}" must match record id.`,
+    );
+  }
+
+  if (targetUrl !== normalizeInstanceControlPlaneTargetUrl(targetUrl)) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "targetUrl")}" must be a normalized HTTP origin.`,
+    );
+  }
+}
+
+function assertInstanceControlPlaneRoutesAreValid(
+  context: string,
+  records: readonly StoredRecord[],
+  options: InstanceControlPlaneRecordValidationOptions,
+) {
+  const activeRecords = new Map(
+    records.filter((record) => !record.deletedAt).map((record) => [record.id, record]),
+  );
+  const routes = records.filter(
+    (record) =>
+      instanceControlPlaneRecordSourceEntityName(record.entity) === "route" && !record.deletedAt,
+  );
+
+  for (const route of routes) {
+    validateSourceRoute(context, route, activeRecords, routes, options);
+  }
+}
+
+function validateSourceRoute(
+  context: string,
+  route: StoredRecord,
+  activeRecords: ReadonlyMap<string, StoredRecord>,
+  routes: readonly StoredRecord[],
+  options: InstanceControlPlaneRecordValidationOptions,
+) {
+  const matchHost = optionalStringValue(context, route, "matchHost");
+  const matchPath = requiredStringValue(context, route, "matchPath");
+  const matchPrefix = optionalStringValue(context, route, "matchPrefix");
+  const kind = requiredStringValue(context, route, "kind");
+  const deploymentConfig = optionalStringValue(context, route, "deploymentConfig");
+
+  if (matchHost !== undefined) {
+    assertNormalizedExactHost(context, route, "matchHost", matchHost);
+  }
+
+  assertNormalizedAbsoluteMatchPath(context, route, "matchPath", matchPath);
+
+  if (matchPrefix !== undefined) {
+    assertNormalizedMatchPrefix(context, route, matchPath, matchPrefix);
+  }
+
+  if (deploymentConfig !== undefined && matchHost === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "deploymentConfig")}" can only be set on exact-host route records.`,
+    );
+  }
+
+  if (kind === "mount") {
+    validateSourceMountRoute(
+      context,
+      route,
+      activeRecords,
+      matchHost,
+      matchPath,
+      matchPrefix,
+      options,
+    );
+  } else if (kind === "redirect") {
+    validateSourceRedirectRoute(context, route, matchHost);
+  } else {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "kind")}" must be "mount" or "redirect".`,
+    );
+  }
+
+  if (route.values.enabled === true) {
+    assertEnabledSourceRouteIsUnique(context, route, routes);
+  }
+}
+
+function validateSourceMountRoute(
+  context: string,
+  route: StoredRecord,
+  activeRecords: ReadonlyMap<string, StoredRecord>,
+  matchHost: string | undefined,
+  matchPath: string,
+  matchPrefix: string | undefined,
+  options: InstanceControlPlaneRecordValidationOptions,
+) {
+  const targetProfile = optionalStringValue(context, route, "targetProfile");
+  const appInstall = optionalStringValue(context, route, "appInstall");
+  const surface = optionalStringValue(context, route, "surface");
+
+  for (const fieldName of ["toHost", "toUrl", "statusCode"] as const) {
+    if (optionalStringValue(context, route, fieldName) !== undefined) {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" is incompatible with mount routes.`,
+      );
+    }
+  }
+
+  if (targetProfile === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "targetProfile")}" is required for mount routes.`,
+    );
+  }
+
+  if (targetProfile === "instance") {
+    if (appInstall !== undefined) {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" is incompatible with instance mount routes.`,
+      );
+    }
+
+    if (surface !== undefined && surface !== "admin") {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "surface")}" is incompatible with instance mount routes.`,
+      );
+    }
+
+    return;
+  }
+
+  if (targetProfile !== "app" && targetProfile !== "public-site") {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "targetProfile")}" is invalid for mount routes.`,
+    );
+  }
+
+  if (appInstall === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" is required for ${targetProfile} mount routes.`,
+    );
+  }
+
+  const install = activeRecords.get(appInstall);
+
+  if (!install || instanceControlPlaneRecordSourceEntityName(install.entity) !== "app-install") {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references unknown instance:app-install record "${appInstall}".`,
+    );
+  }
+
+  if (install.values.status !== "installed") {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references non-installed instance:app-install record "${appInstall}".`,
+    );
+  }
+
+  if (targetProfile === "app") {
+    if (surface !== "admin" && surface !== "schema") {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "surface")}" must be "admin" or "schema" for app mount routes.`,
+      );
+    }
+
+    return;
+  }
+
+  if (surface !== "public-site") {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "surface")}" must be "public-site" for public-site mount routes.`,
+    );
+  }
+
+  if (!installSupportsPublicSiteRoute(install, options)) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references app-install record "${appInstall}" without public Site capability.`,
+    );
+  }
+
+  if (matchHost !== undefined && (matchPath !== "/" || matchPrefix !== "/")) {
+    throw new Error(
+      `${context} route "${route.id}" host-mounted public Site routes must set field "${controlPlaneFieldLabel(route, "matchPath")}" to "/" and field "${controlPlaneFieldLabel(route, "matchPrefix")}" to "/".`,
+    );
+  }
+}
+
+function validateSourceRedirectRoute(
+  context: string,
+  route: StoredRecord,
+  matchHost: string | undefined,
+) {
+  if (matchHost === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "matchHost")}" is required for redirect routes.`,
+    );
+  }
+
+  for (const fieldName of ["targetProfile", "appInstall", "surface"] as const) {
+    if (optionalStringValue(context, route, fieldName) !== undefined) {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" is incompatible with redirect routes.`,
+      );
+    }
+  }
+
+  const toHost = optionalStringValue(context, route, "toHost");
+  const toUrl = optionalStringValue(context, route, "toUrl");
+
+  if (
+    (toHost === undefined && toUrl === undefined) ||
+    (toHost !== undefined && toUrl !== undefined)
+  ) {
+    throw new Error(
+      `${context} route "${route.id}" must set exactly one of field "${controlPlaneFieldLabel(route, "toHost")}" or field "${controlPlaneFieldLabel(route, "toUrl")}".`,
+    );
+  }
+
+  if (toHost !== undefined) {
+    assertNormalizedExactHost(context, route, "toHost", toHost);
+  }
+
+  if (toUrl !== undefined) {
+    assertNormalizedHttpsUrl(context, route, "toUrl", toUrl);
+  }
+
+  if (optionalStringValue(context, route, "statusCode") === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "statusCode")}" is required for redirect routes.`,
+    );
+  }
+
+  for (const fieldName of ["preservePath", "preserveQueryString"] as const) {
+    if (typeof route.values[fieldName] !== "boolean") {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" is required for redirect routes.`,
+      );
+    }
+  }
+}
+
+function installSupportsPublicSiteRoute(
+  install: StoredRecord,
+  options: InstanceControlPlaneRecordValidationOptions,
+): boolean {
+  const packageAppKey =
+    typeof install.values.packageAppKey === "string" ? install.values.packageAppKey : "";
+
+  if (options.packageResolver === undefined) {
+    return options.publicSitePackageFallback === "site" ? packageAppKey === "site" : true;
+  }
+
+  return (
+    findResolvedAppPackage(packageAppKey, options.packageResolver)?.publicRouteBase !== undefined
+  );
+}
+
+function assertEnabledSourceRouteIsUnique(
+  context: string,
+  route: StoredRecord,
+  routes: readonly StoredRecord[],
+) {
+  const candidate = sourceRouteMatch(context, route);
+
+  for (const record of routes) {
+    if (record.id === route.id || record.values.enabled !== true) {
+      continue;
+    }
+
+    const existing = sourceRouteMatch(context, record);
+
+    if (candidate.host !== existing.host || !sourceRoutesOverlap(candidate, existing)) {
+      continue;
+    }
+
+    throw new Error(
+      `${context} route "${route.id}" enabled route match "${formatSourceRouteMatch(candidate)}" conflicts with enabled route "${record.id}".`,
+    );
+  }
+}
+
+function sourceRouteMatch(
+  context: string,
+  route: StoredRecord,
+): {
+  host: string;
+  path: string;
+  prefix?: string;
+} {
+  const prefix = optionalStringValue(context, route, "matchPrefix");
+
+  return {
+    host: optionalStringValue(context, route, "matchHost") ?? "<hostless>",
+    path: requiredStringValue(context, route, "matchPath"),
+    ...(prefix === undefined ? {} : { prefix }),
+  };
+}
+
+function sourceRoutesOverlap(
+  left: { path: string; prefix?: string },
+  right: { path: string; prefix?: string },
+) {
+  return (
+    left.path === right.path ||
+    (left.prefix !== undefined && routePathMatchesPrefix(right.path, left.prefix)) ||
+    (right.prefix !== undefined && routePathMatchesPrefix(left.path, right.prefix)) ||
+    (left.prefix !== undefined &&
+      right.prefix !== undefined &&
+      routePrefixesOverlap(left.prefix, right.prefix))
+  );
+}
+
+function routePathMatchesPrefix(path: string, prefix: string) {
+  return prefix === "/" || path.startsWith(prefix);
+}
+
+function routePrefixesOverlap(left: string, right: string) {
+  return left === "/" || right === "/" || left.startsWith(right) || right.startsWith(left);
+}
+
+function formatSourceRouteMatch(match: { host: string; path: string; prefix?: string }) {
+  return `${match.host}${match.path}${match.prefix === undefined ? "" : ` ${match.prefix}`}`;
+}
+
+function assertNormalizedExactHost(
+  context: string,
+  route: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  const normalized = normalizeExactHost(value);
+
+  if (normalized !== value) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" must be a normalized exact host.`,
+    );
+  }
+}
+
+function assertNormalizedHttpsUrl(
+  context: string,
+  route: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  try {
+    const url = new URL(value);
+    const normalizedHost = normalizeExactHost(url.hostname);
+    const normalized = url.toString().replace(/\/$/, "");
+
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== "" ||
+      normalizedHost !== url.hostname ||
+      normalized !== value
+    ) {
+      throw new Error("invalid URL");
+    }
+  } catch {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" must be a normalized absolute HTTPS URL without credentials or fragment.`,
+    );
+  }
+}
+
+function assertNormalizedAbsoluteMatchPath(
+  context: string,
+  route: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  if (!isNormalizedAbsoluteRoutePath(value)) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" must be a normalized absolute path.`,
+    );
+  }
+}
+
+function assertNormalizedMatchPrefix(
+  context: string,
+  route: StoredRecord,
+  matchPath: string,
+  matchPrefix: string,
+) {
+  const normalizedPrefix =
+    matchPrefix === "/" ? matchPrefix : matchPrefix.endsWith("/") ? matchPrefix.slice(0, -1) : "";
+
+  if (matchPrefix !== "/" && !matchPrefix.endsWith("/")) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "matchPrefix")}" must be a normalized absolute path prefix.`,
+    );
+  }
+
+  if (matchPrefix !== "/" && !isNormalizedAbsoluteRoutePath(normalizedPrefix)) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "matchPrefix")}" must be a normalized absolute path prefix.`,
+    );
+  }
+
+  if (matchPath === "/") {
+    if (matchPrefix !== "/") {
+      throw new Error(
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "matchPrefix")}" must begin at or below field "${controlPlaneFieldLabel(route, "matchPath")}".`,
+      );
+    }
+
+    return;
+  }
+
+  if (!matchPrefix.startsWith(`${matchPath}/`)) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "matchPrefix")}" must begin at or below field "${controlPlaneFieldLabel(route, "matchPath")}".`,
+    );
+  }
+}
+
+function isNormalizedAbsoluteRoutePath(value: string) {
+  if (value === "/") {
+    return true;
+  }
+
+  if (!/^\/[a-z0-9._~-]+(?:\/[a-z0-9._~-]+)*$/.test(value)) {
+    return false;
+  }
+
+  const segments = value.slice(1).split("/");
+
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return false;
+  }
+
+  return !instanceControlPlaneReservedRoutePaths.some(
+    (reservedPath) => value === reservedPath || value.startsWith(`${reservedPath}/`),
+  );
+}
+
+function assertControlPlaneRecordValuesAreReviewable(context: string, record: StoredRecord) {
+  for (const [fieldName, value] of Object.entries(record.values)) {
+    const entity = instanceControlPlaneRecordSourceEntityName(record.entity) ?? record.entity;
+    const isSecretReference = isRuntimeControlPlaneSecretReferenceField(
+      instanceControlPlaneSchema,
+      entity,
+      fieldName,
+    );
+
+    if (!isSecretReference && isForbiddenControlPlaneFieldName(fieldName)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    if (typeof value === "string") {
+      assertControlPlaneStringValueIsReviewable(context, record, fieldName, value);
+    }
+  }
+}
+
+function assertControlPlaneStringValueIsReviewable(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  if (containsForbiddenControlPlaneSecretValue(value)) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secret values.`,
+    );
+  }
+
+  const parsed = parseMaybeJson(value);
+
+  if (parsed !== undefined) {
+    assertControlPlaneJsonValueIsReviewable(context, record, fieldName, parsed);
+  }
+}
+
+function assertControlPlaneJsonValueIsReviewable(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: unknown,
+) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertControlPlaneJsonValueIsReviewable(context, record, fieldName, item);
+    }
+
+    return;
+  }
+
+  if (typeof value === "string") {
+    assertControlPlaneStringValueIsReviewable(context, record, fieldName, value);
+    return;
+  }
+
+  if (!isPlainRecord(value)) {
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (isForbiddenControlPlaneFieldName(key)) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    assertControlPlaneJsonValueIsReviewable(context, record, fieldName, item);
+  }
+}
+
+function parseMaybeJson(value: string): Record<string, unknown> | unknown[] | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+
+    return isPlainRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function tryParseBoundaryEntityName(value: string): string | undefined {
+  try {
+    return parseQualifiedEntityName("Instance control-plane record entity", value).entityKey;
+  } catch {
+    return undefined;
+  }
+}
+
+function canonicalInstanceControlPlaneRecord(record: StoredRecord): StoredRecord {
+  const entity = parseInstanceControlPlaneEntityName(
+    `Instance control-plane record "${record.id}" entity`,
+    record.entity,
+  );
+
+  return {
+    id: record.id,
+    entity,
+    values: stableJsonValue(
+      reviewableInstanceControlPlaneRecordValues(entity, record.values),
+    ) as RecordValues,
+    createdAt: record.createdAt,
+    ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
+  };
+}
+
+function requiredStringValue(context: string, record: StoredRecord, fieldName: string): string {
+  const value = record.values[fieldName];
+
+  if (typeof value !== "string") {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a string.`,
+    );
+  }
+
+  return value;
+}
+
+function optionalStringValue(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+): string | undefined {
+  const value = record.values[fieldName];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a string.`,
+    );
+  }
+
+  return value;
+}
+
+function controlPlaneEntityLabel(entityName: string): string {
+  const sourceEntity = instanceControlPlaneRecordSourceEntityName(entityName);
+
+  if (sourceEntity !== undefined) {
+    return formatInstanceControlPlaneBoundaryEntityName(sourceEntity);
+  }
+
+  return entityName;
+}
+
+function controlPlaneFieldLabel(record: Pick<StoredRecord, "entity">, fieldName: string): string {
+  return `${controlPlaneEntityLabel(record.entity)}.${fieldName}`;
+}
+
+function parseRecordValues(context: string, value: unknown): RecordValues {
+  if (!isPlainRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const values: RecordValues = {};
+
+  for (const [fieldName, fieldValue] of Object.entries(value)) {
+    if (
+      typeof fieldValue !== "string" &&
+      typeof fieldValue !== "boolean" &&
+      !isFiniteNumber(fieldValue)
+    ) {
+      throw new Error(`${context} field "${fieldName}" must be a scalar value.`);
+    }
+
+    values[fieldName] = fieldValue;
+  }
+
+  return values;
+}
+
+function parseIsoTimestamp(context: string, value: unknown): string {
+  const timestamp = parseNonEmptyString(context, value);
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.valueOf()) || date.toISOString() !== timestamp) {
+    throw new Error(`${context} must be an ISO timestamp.`);
+  }
+
+  return timestamp;
+}
+
+function parseNonEmptyString(context: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function assertExactKeys(
+  context: string,
+  value: Record<string, unknown>,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[] = [],
+) {
+  const allowedKeys = new Set([...requiredKeys, ...optionalKeys]);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${context} has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`${context} must include "${key}".`);
+    }
+  }
+}
+
+function compareRecords(left: StoredRecord, right: StoredRecord): number {
+  const entityOrder = left.entity.localeCompare(right.entity);
+
+  return entityOrder === 0 ? left.id.localeCompare(right.id) : entityOrder;
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableJsonValue);
+  }
+
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, stableJsonValue(child)]),
+  );
+}
+
+function isForbiddenControlPlaneFieldName(fieldName: string) {
+  const normalized = normalizeControlPlaneSecretText(fieldName);
+
+  return (
+    normalized.includes("api_token") ||
+    normalized.includes("access_token") ||
+    normalized.includes("auth_token") ||
+    normalized.includes("password") ||
+    normalized.includes("secret_value") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("provider_truth") ||
+    normalized.includes("provider_state") ||
+    normalized.includes("provider_resource_json") ||
+    normalized.includes("provider_resources_json")
+  );
+}
+
+function containsForbiddenControlPlaneSecretValue(value: string) {
+  const normalized = normalizeControlPlaneSecretText(value);
+
+  return (
+    normalized.includes("cf_api_token") ||
+    normalized.includes("cloudflare_api_token") ||
+    normalized.includes("alchemy_password") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    value.includes("-----BEGIN PRIVATE KEY-----")
+  );
+}
+
+function normalizeControlPlaneSecretText(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function normalizeExactHost(value: string): string | undefined {
+  const raw = value.trim().toLowerCase();
+
+  if (raw === "" || raw.includes("://")) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(`https://${raw}`);
+    const normalized = stripTrailingDots(url.hostname.toLowerCase());
+
+    if (
+      url.username !== "" ||
+      url.password !== "" ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !isValidDnsHostname(normalized)
+    ) {
+      return undefined;
+    }
+
+    return normalized;
+  } catch {
+    return undefined;
+  }
+}
+
+function stripTrailingDots(value: string): string {
+  return value.replaceAll(/\.+$/g, "");
+}
+
+function isValidDnsHostname(value: string): boolean {
+  if (value === "" || value.length > 253 || value.includes("_")) {
+    return false;
+  }
+
+  return value
+    .split(".")
+    .every((label) => label.length > 0 && label.length <= 63 && hostnameLabelPattern.test(label));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const schemaLocalEntityKeyPattern = /^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*$/;
+const hostnameLabelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 function textField(label: string, format?: "href" | "longText"): FieldSchema {
   return { type: "text", required: true, label, ...(format === undefined ? {} : { format }) };

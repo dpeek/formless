@@ -21,17 +21,15 @@ import type {
 import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { createRecordId } from "../shared/ids.ts";
+import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type {
   ActionResponse,
   CreateMutation,
   DeleteMutation,
-  FieldValue,
   MutationResponse,
   PatchMutation,
   PublicActionExecutionEnvelope,
   PublicActionProof,
-  RecordValues,
-  StoredRecord,
 } from "../shared/protocol.ts";
 import type {
   OperationInvocationEnvelope,

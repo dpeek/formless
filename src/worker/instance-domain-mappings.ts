@@ -33,7 +33,7 @@ import {
   readControlPlaneRecords,
   syncDomainIntentToControlPlane,
 } from "./deployment-control-plane-client.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 export const INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH =

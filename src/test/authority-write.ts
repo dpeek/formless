@@ -1,6 +1,6 @@
 import { expect } from "vite-plus/test";
-
-import type { ChangeRow, StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { ChangeRow } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { createWorkerHarness } from "../worker/miniflare-test.ts";

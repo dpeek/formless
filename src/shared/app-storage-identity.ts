@@ -1,10 +1,14 @@
-import { validateAppInstallId, type AppInstallId, type PackageAppKey } from "./app-installs.ts";
+import {
+  validateAppInstallId,
+  type AppInstallId,
+  type PackageAppKey,
+} from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "./app-packages.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-} from "./instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import { findSchemaAppDefinition, getSchemaAppDefinition, type SchemaKey } from "./schema-apps.ts";
 
 export type AppStorageIdentity = SchemaKeyStorageIdentity | InstalledAppStorageIdentity;

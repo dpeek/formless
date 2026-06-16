@@ -5,8 +5,17 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { findResolvedAppPackage } from "../../../src/shared/app-packages.ts";
-import { writeWorkspaceAppPackageFixture } from "../../../src/test/workspace-app-package.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  computeSourceSchemaHash,
+  createAppPackageResolver,
+  findResolvedAppPackage,
+  parseAppPackageManifest,
+  type AppPackageCapability,
+  type AppPackageManifest,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
   INSTANCE_WORKSPACE_AUTO_SAVE_STATE_PATH,
@@ -46,6 +55,47 @@ import {
 } from "./node.ts";
 
 const tempDirs: string[] = [];
+const workspaceTestBundledManifests = [
+  workspaceTestPackageManifest({
+    label: "Site",
+    packageAppKey: "site",
+    publicSite: true,
+    sourceSchemaHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  }),
+  workspaceTestPackageManifest({
+    label: "Tasks",
+    packageAppKey: "tasks",
+    sourceSchemaHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  }),
+  workspaceTestPackageManifest({
+    label: "CRM",
+    packageAppKey: "crm",
+    sourceSchemaHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  }),
+];
+const workspaceFixtureTaskSourceSchema = {
+  version: 1,
+  entities: {
+    task: {
+      label: "Task",
+      fields: {
+        title: { type: "text", required: true, label: "Title" },
+        done: { type: "boolean", required: true, label: "Done" },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+};
+const workspaceFixtureTaskSeedRecords = [
+  workspaceFixtureTaskRecord("rec_task_overdue", "Review overdue proposal", false),
+  workspaceFixtureTaskRecord("rec_task_today", "Plan today's delivery", false),
+  workspaceFixtureTaskRecord("rec_task_later", "Schedule design review", false),
+  workspaceFixtureTaskRecord("rec_task_completed", "Send signed kickoff notes", true),
+  workspaceFixtureTaskRecord("rec_task_backlog", "Capture research notes", false),
+];
 
 afterEach(async () => {
   await Promise.all(
@@ -206,7 +256,10 @@ describe("Formless instance workspace secret state", () => {
 describe("workspace app package source resolver", () => {
   it("defaults to bundled packages when package links are omitted", async () => {
     const workspaceRoot = await makeTempDir();
-    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+    const result = await createWorkspaceAppPackageResolver({
+      bundledManifests: workspaceTestBundledManifests,
+      workspaceRoot,
+    });
 
     await expect(readWorkspacePackageLinks(workspaceRoot)).resolves.toEqual(
       defaultWorkspacePackageLinks(),
@@ -228,10 +281,18 @@ describe("workspace app package source resolver", () => {
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     const fixture = await writeWorkspaceAppPackageFixture(packageRoot);
 
-    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+    const result = await createWorkspaceAppPackageResolver({
+      bundledManifests: workspaceTestBundledManifests,
+      workspaceRoot,
+    });
     const linkedPackage = result.linkedPackages[0];
 
-    expect(findResolvedAppPackage("private-labs")).toBeUndefined();
+    expect(
+      findResolvedAppPackage(
+        "private-labs",
+        createAppPackageResolver(workspaceTestBundledManifests),
+      ),
+    ).toBeUndefined();
     expect(result.resolver.findPackage("private-labs")).toMatchObject({
       defaultInstallId: "labs",
       label: "Private Labs",
@@ -281,10 +342,18 @@ describe("workspace app package source resolver", () => {
 
     await writeWorkspacePackageLinks(workspaceRoot, manifestLink);
 
-    const result = await createWorkspaceAppPackageResolver({ workspaceRoot });
+    const result = await createWorkspaceAppPackageResolver({
+      bundledManifests: workspaceTestBundledManifests,
+      workspaceRoot,
+    });
     const linkedPackage = result.linkedPackages[0];
 
-    expect(findResolvedAppPackage("client-orders")).toBeUndefined();
+    expect(
+      findResolvedAppPackage(
+        "client-orders",
+        createAppPackageResolver(workspaceTestBundledManifests),
+      ),
+    ).toBeUndefined();
     expect(result.resolver.findPackage("client-orders")).toMatchObject({
       defaultInstallId: "orders",
       label: "Client Orders",
@@ -323,9 +392,12 @@ describe("workspace app package source resolver", () => {
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writeWorkspaceAppPackageFixture(packageRoot, { sourceSchema: invalidSchema });
 
-    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
-      'Schema must include "entities".',
-    );
+    await expect(
+      createWorkspaceAppPackageResolver({
+        bundledManifests: workspaceTestBundledManifests,
+        workspaceRoot,
+      }),
+    ).rejects.toThrow('Schema must include "entities".');
   });
 
   it("rejects linked seed records that do not match the source schema", async () => {
@@ -345,9 +417,12 @@ describe("workspace app package source resolver", () => {
       ],
     });
 
-    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
-      'values include unknown field "task.missing"',
-    );
+    await expect(
+      createWorkspaceAppPackageResolver({
+        bundledManifests: workspaceTestBundledManifests,
+        workspaceRoot,
+      }),
+    ).rejects.toThrow('values include unknown field "task.missing"');
   });
 
   it("rejects linked source schema hash mismatches", async () => {
@@ -360,9 +435,12 @@ describe("workspace app package source resolver", () => {
       sourceSchemaHash: `sha256:${"2".repeat(64)}`,
     });
 
-    await expect(createWorkspaceAppPackageResolver({ workspaceRoot })).rejects.toThrow(
-      /does not match manifest sourceSchemaHash/,
-    );
+    await expect(
+      createWorkspaceAppPackageResolver({
+        bundledManifests: workspaceTestBundledManifests,
+        workspaceRoot,
+      }),
+    ).rejects.toThrow(/does not match manifest sourceSchemaHash/);
   });
 });
 
@@ -488,9 +566,161 @@ async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: strin
   );
 }
 
+type WorkspaceAppPackageFixture = {
+  manifest: AppPackageManifest;
+  manifestPath: string;
+  packageRoot: string;
+  seedRecords: unknown[];
+  seedRecordsPath: string;
+  sourceSchema: unknown;
+  sourceSchemaHash: SourceSchemaHash;
+  sourceSchemaPath: string;
+};
+
+type WorkspaceAppPackageFixtureOptions = {
+  capabilities?: AppPackageCapability[];
+  defaultInstallId?: string;
+  description?: string;
+  label?: string;
+  packageAppKey?: string;
+  packageRevision?: number;
+  seedRecords?: unknown[];
+  seedRecordsPath?: string;
+  sourceSchema?: unknown;
+  sourceSchemaHash?: SourceSchemaHash;
+  sourceSchemaPath?: string;
+  supportsMultipleInstalls?: boolean;
+};
+
+async function writeWorkspaceAppPackageFixture(
+  packageRoot: string,
+  options: WorkspaceAppPackageFixtureOptions = {},
+): Promise<WorkspaceAppPackageFixture> {
+  const sourceSchema = options.sourceSchema ?? workspaceFixtureTaskSourceSchema;
+  const seedRecords = options.seedRecords ?? workspaceFixtureTaskSeedRecords;
+  const sourceSchemaHash =
+    options.sourceSchemaHash ?? (await computeSourceSchemaHash(sourceSchema));
+  const sourceSchemaPath = options.sourceSchemaPath ?? "source/schema.json";
+  const seedRecordsPath = options.seedRecordsPath ?? "source/seed-records.json";
+  const manifest = workspaceAppPackageManifestFixture({
+    ...options,
+    seedRecordsPath,
+    sourceSchemaHash,
+    sourceSchemaPath,
+  });
+  const manifestPath = path.join(packageRoot, "formless.app.json");
+  const resolvedSourceSchemaPath = path.join(packageRoot, sourceSchemaPath);
+  const resolvedSeedRecordsPath = path.join(packageRoot, seedRecordsPath);
+
+  await writeJsonFile(resolvedSourceSchemaPath, sourceSchema);
+  await writeJsonFile(resolvedSeedRecordsPath, seedRecords);
+  await writeJsonFile(manifestPath, manifest);
+
+  return {
+    manifest,
+    manifestPath,
+    packageRoot,
+    seedRecords,
+    seedRecordsPath: resolvedSeedRecordsPath,
+    sourceSchema,
+    sourceSchemaHash,
+    sourceSchemaPath: resolvedSourceSchemaPath,
+  };
+}
+
+function workspaceAppPackageManifestFixture(
+  options: WorkspaceAppPackageFixtureOptions & { sourceSchemaHash: SourceSchemaHash },
+): AppPackageManifest {
+  const packageAppKey = options.packageAppKey ?? "private-labs";
+  const label = options.label ?? "Private Labs";
+  const defaultInstallId = options.defaultInstallId ?? "labs";
+  const sourceSchemaPath = options.sourceSchemaPath ?? "source/schema.json";
+  const seedRecordsPath = options.seedRecordsPath ?? "source/seed-records.json";
+
+  return parseAppPackageManifest({
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey,
+    label,
+    description: options.description ?? "Private lab package fixture.",
+    defaultInstallId,
+    supportsMultipleInstalls: options.supportsMultipleInstalls ?? false,
+    packageRevision: options.packageRevision ?? 7,
+    sourceSchema: {
+      kind: "workspace",
+      key: packageAppKey,
+      path: sourceSchemaPath,
+    },
+    seedRecords: {
+      kind: "workspace",
+      key: packageAppKey,
+      path: seedRecordsPath,
+    },
+    sourceSchemaHash: options.sourceSchemaHash,
+    capabilities: options.capabilities ?? [{ kind: "generatedAdmin", routeBase: "/apps" }],
+  });
+}
+
+async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function workspaceFixtureTaskRecord(id: string, title: string, done: boolean) {
+  return {
+    id,
+    entity: "task",
+    values: { done, title },
+    createdAt: "2026-06-01T00:00:00.000Z",
+  };
+}
+
 function timestampSequence(...timestamps: string[]): () => string {
   let index = 0;
 
   return () =>
     timestamps[index++ % timestamps.length] ?? timestamps.at(-1) ?? new Date(0).toISOString();
+}
+
+function workspaceTestPackageManifest(input: {
+  label: string;
+  packageAppKey: string;
+  publicSite?: boolean;
+  sourceSchemaHash: string;
+}): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: input.packageAppKey,
+    label: input.label,
+    description: `${input.label} package fixture.`,
+    defaultInstallId: input.packageAppKey,
+    supportsMultipleInstalls: true,
+    packageRevision: 1,
+    sourceSchema: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: "schema.json",
+    },
+    seedRecords: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: "seed-records.json",
+    },
+    sourceSchemaHash: input.sourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      ...(input.publicSite
+        ? [
+            {
+              kind: "publicSite",
+              routeBase: "/sites",
+            },
+          ]
+        : []),
+    ],
+  };
 }

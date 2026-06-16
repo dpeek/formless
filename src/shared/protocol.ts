@@ -1,23 +1,14 @@
-import { parseAppSchema, type AppSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
+import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";
+import { isStoredRecord, type RecordValues, type StoredRecord } from "@dpeek/formless-storage";
 import type {
   AppInstall,
   AppInstallInitializationPlan,
   InstallableAppPackage,
   PackageAppKey,
-} from "./app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export type EntityName = string;
-export type FieldValue = string | boolean | number;
-export type RecordValues = Record<string, FieldValue>;
-
-export type StoredRecord = {
-  id: string;
-  entity: EntityName;
-  values: RecordValues;
-  createdAt: string;
-  deletedAt?: string;
-};
 
 export type CreateMutation = {
   mutationId: string;
@@ -209,21 +200,6 @@ export type BootstrapResponse = {
   schemaUpdatedAt: string;
   records: StoredRecord[];
   cursor: number;
-};
-
-export const STORAGE_SNAPSHOT_KIND = "formless.storageSnapshot";
-export const STORAGE_SNAPSHOT_VERSION = 1;
-
-export type StorageSnapshot = {
-  kind: typeof STORAGE_SNAPSHOT_KIND;
-  version: typeof STORAGE_SNAPSHOT_VERSION;
-  storageIdentity: string;
-  schemaKey: string;
-  exportedAt: string;
-  schemaUpdatedAt: string;
-  sourceCursor: number;
-  schema: AppSchema;
-  records: StoredRecord[];
 };
 
 export type SyncResponse = {
@@ -444,52 +420,6 @@ export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRe
   };
 }
 
-export function parseStorageSnapshot(
-  value: unknown,
-  expected?: { schemaKey?: string; storageIdentity?: string },
-): StorageSnapshot {
-  if (!isRecord(value)) {
-    throw new Error("Storage snapshot must be an object.");
-  }
-
-  assertStorageSnapshotKeys(value);
-
-  if (value.kind !== STORAGE_SNAPSHOT_KIND) {
-    throw new Error(`Storage snapshot kind must be "${STORAGE_SNAPSHOT_KIND}".`);
-  }
-
-  if (value.version !== STORAGE_SNAPSHOT_VERSION) {
-    throw new Error(`Storage snapshot version must be ${STORAGE_SNAPSHOT_VERSION}.`);
-  }
-
-  const storageIdentity = parseNonEmptyString(
-    "Storage snapshot storageIdentity",
-    value.storageIdentity,
-  );
-  if (expected?.storageIdentity !== undefined && storageIdentity !== expected.storageIdentity) {
-    throw new Error(`Storage snapshot storageIdentity must be "${expected.storageIdentity}".`);
-  }
-
-  const schemaKey = parseNonEmptyString("Storage snapshot schemaKey", value.schemaKey);
-  if (expected?.schemaKey !== undefined && schemaKey !== expected.schemaKey) {
-    throw new Error(`Storage snapshot schemaKey must be "${expected.schemaKey}".`);
-  }
-
-  const records = parseStorageSnapshotRecords(value.records);
-
-  return {
-    kind: STORAGE_SNAPSHOT_KIND,
-    version: STORAGE_SNAPSHOT_VERSION,
-    storageIdentity,
-    schemaKey,
-    exportedAt: parseNonEmptyString("Storage snapshot exportedAt", value.exportedAt),
-    schemaUpdatedAt: parseNonEmptyString("Storage snapshot schemaUpdatedAt", value.schemaUpdatedAt),
-    sourceCursor: parseCursor("Storage snapshot sourceCursor", value.sourceCursor),
-    schema: parseAppSchema(value.schema),
-    records,
-  };
-}
-
 function isSyncResponse(value: unknown): value is SyncResponse {
   if (!isRecord(value) || !Array.isArray(value.changes) || !isCursor(value.cursor)) {
     return false;
@@ -526,25 +456,6 @@ function isChangeRow(value: unknown): value is ChangeRow {
   );
 }
 
-function isStoredRecord(value: unknown): value is StoredRecord {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.entity === "string" &&
-    isRecordValues(value.values) &&
-    typeof value.createdAt === "string" &&
-    (!("deletedAt" in value) || typeof value.deletedAt === "string")
-  );
-}
-
-function isRecordValues(value: unknown): value is RecordValues {
-  return isRecord(value) && Object.values(value).every(isFieldValue);
-}
-
-function isFieldValue(value: unknown): value is FieldValue {
-  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
-}
-
 function isCursor(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
@@ -553,39 +464,8 @@ function isNullableString(value: unknown): value is string | null {
   return typeof value === "string" || value === null;
 }
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function assertStorageSnapshotKeys(value: Record<string, unknown>) {
-  const requiredKeys = [
-    "kind",
-    "version",
-    "storageIdentity",
-    "schemaKey",
-    "exportedAt",
-    "schemaUpdatedAt",
-    "sourceCursor",
-    "schema",
-    "records",
-  ];
-  const allowedKeys = new Set(requiredKeys);
-
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`Storage snapshot has unsupported key "${key}".`);
-    }
-  }
-
-  for (const key of requiredKeys) {
-    if (!(key in value)) {
-      throw new Error(`Storage snapshot must include "${key}".`);
-    }
-  }
 }
 
 function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
@@ -647,26 +527,6 @@ function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {
   };
 }
 
-function parseStorageSnapshotRecords(value: unknown): StoredRecord[] {
-  if (!Array.isArray(value)) {
-    throw new Error("Storage snapshot records must be an array.");
-  }
-
-  return value.map((record, index) => {
-    if (!isStoredRecord(record)) {
-      throw new Error(`Storage snapshot records[${index}] must be a stored record.`);
-    }
-
-    return {
-      id: record.id,
-      entity: record.entity,
-      values: { ...record.values },
-      createdAt: record.createdAt,
-      ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
-    };
-  });
-}
-
 function parseNonEmptyString(context: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${context} must be a non-empty string.`);
@@ -677,12 +537,4 @@ function parseNonEmptyString(context: string, value: unknown): string {
 
 function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   return parseNonEmptyString(context, value).trim();
-}
-
-function parseCursor(context: string, value: unknown): number {
-  if (!isCursor(value)) {
-    throw new Error(`${context} must be a non-negative integer.`);
-  }
-
-  return value;
 }

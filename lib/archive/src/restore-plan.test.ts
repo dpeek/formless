@@ -7,8 +7,15 @@ import {
   type AppArchiveMediaObject,
   type InstanceArchive,
 } from "./index.ts";
-import { listInstallableAppPackages, type AppInstall } from "../../../src/shared/app-installs.ts";
-import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  createAppPackageResolver,
+  listInstallableAppPackages,
+  parseAppPackageManifest,
+  type AppInstall,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 import {
   planAppArchiveRestore,
   planInstanceArchiveRestore,
@@ -18,22 +25,128 @@ import {
   type ArchiveRestorePlanError,
   type ArchiveRestorePlanResult,
 } from "./index.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../../../src/shared/protocol.ts";
-import { cloneTestValue } from "../../../src/test/schema-builders.ts";
-import {
-  crmSeedRecords,
-  crmSourceSchema,
-  siteSourceSchema,
-  taskSeedRecords,
-  taskSourceSchema,
-} from "../../../src/test/schema-apps.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import { parseAppSchema } from "@dpeek/formless-schema";
 
 const now = "2026-05-23T00:00:00.000Z";
+const siteSourceSchemaHash =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const tasksSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+const crmSourceSchemaHash =
+  "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+const siteSourceSchema = parseAppSchema({
+  version: 1,
+  entities: {
+    site: {
+      label: "Site",
+      fields: {
+        key: { type: "text", required: true, label: "Key" },
+        label: { type: "text", required: true, label: "Label" },
+      },
+      constraints: {
+        uniqueKey: { kind: "unique", fields: ["key"] },
+      },
+    },
+    block: {
+      label: "Block",
+      fields: {
+        type: { type: "text", required: true, label: "Type" },
+        label: { type: "text", required: true, label: "Label" },
+        href: { type: "text", required: false, label: "Href", format: "href" },
+        mediaAssetId: { type: "text", required: false, label: "Media asset id" },
+        width: { type: "number", required: false, label: "Width", integer: true },
+        height: { type: "number", required: false, label: "Height", integer: true },
+      },
+    },
+    "block-placement": {
+      label: "Block Placement",
+      fields: {
+        parent: {
+          type: "reference",
+          required: true,
+          label: "Parent",
+          to: "block",
+          displayField: "label",
+        },
+        block: {
+          type: "reference",
+          required: true,
+          label: "Block",
+          to: "block",
+          displayField: "label",
+        },
+        order: { type: "number", required: true, label: "Order", integer: true },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+});
+const taskSourceSchema = parseAppSchema({
+  version: 1,
+  entities: {
+    task: {
+      label: "Task",
+      fields: {
+        title: { type: "text", required: true, label: "Title" },
+        done: { type: "boolean", required: true, label: "Done" },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+});
+const crmSourceSchema = parseAppSchema({
+  version: 1,
+  entities: {
+    company: {
+      label: "Company",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+});
+const taskSeedRecords: StoredRecord[] = [
+  taskRecord("rec_task_overdue", "Review overdue proposal", false),
+  taskRecord("rec_task_today", "Plan today's delivery", false),
+  taskRecord("rec_task_later", "Schedule design review", false),
+  taskRecord("rec_task_completed", "Send signed kickoff notes", true),
+  taskRecord("rec_task_backlog", "Capture research notes", false),
+];
+const crmSeedRecords: StoredRecord[] = [companyRecord("rec_company_primary", "Example Co")];
+const archiveTestPackageResolver = createAppPackageResolver([
+  packageManifest({
+    defaultInstallId: "site",
+    label: "Site",
+    packageAppKey: "site",
+    publicSite: true,
+    sourceSchemaHash: siteSourceSchemaHash,
+  }),
+  packageManifest({
+    defaultInstallId: "tasks",
+    label: "Tasks",
+    packageAppKey: "tasks",
+    sourceSchemaHash: tasksSourceSchemaHash,
+  }),
+  packageManifest({
+    defaultInstallId: "crm",
+    label: "CRM",
+    packageAppKey: "crm",
+    sourceSchemaHash: crmSourceSchemaHash,
+  }),
+]);
+const archiveTestInstallablePackages = listInstallableAppPackages(archiveTestPackageResolver);
 
 describe("archive restore planner", () => {
   it("rejects old app-scoped Site media archive input", () => {
@@ -65,7 +178,7 @@ describe("archive restore planner", () => {
 
     const errors = expectFailure(
       planInstanceArchiveRestore(archive, {
-        packages: listInstallableAppPackages(),
+        packages: archiveTestInstallablePackages,
         mediaFiles: [legacySiteMediaFile("personal", "hero")],
         sourceSchemas: { site: siteSourceSchema },
       }),
@@ -130,7 +243,7 @@ describe("archive restore planner", () => {
 
     const plan = expectPlan(
       planInstanceArchiveRestore(archive, {
-        packages: listInstallableAppPackages(),
+        packages: archiveTestInstallablePackages,
         mediaFiles: [coreMediaFile("hero")],
         sourceSchemas: {
           crm: crmSourceSchema,
@@ -160,7 +273,7 @@ describe("archive restore planner", () => {
     const rejected = expectFailure(
       planAppArchiveRestore(appArchive({ app: archivedInstall("personal", "Personal") }), {
         installedApps: existing,
-        packages: listInstallableAppPackages(),
+        packages: archiveTestInstallablePackages,
         sourceSchemas: { site: siteSourceSchema },
       }),
     );
@@ -175,7 +288,7 @@ describe("archive restore planner", () => {
         }),
         {
           installedApps: existing,
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
@@ -207,22 +320,22 @@ describe("archive restore planner", () => {
           },
         }),
         {
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
     );
     const missingSource = expectFailure(
       planAppArchiveRestore(appArchive(), {
-        packages: listInstallableAppPackages(),
+        packages: archiveTestInstallablePackages,
         sourceSchemas: {},
       }),
     );
-    const mismatchedSchema = cloneTestValue(siteSourceSchema);
+    const mismatchedSchema = structuredClone(siteSourceSchema);
     mismatchedSchema.entities.site.label = "Different Site";
     const schemaMismatch = expectFailure(
       planAppArchiveRestore(appArchive(), {
-        packages: listInstallableAppPackages(),
+        packages: archiveTestInstallablePackages,
         sourceSchemas: { site: mismatchedSchema },
       }),
     );
@@ -257,7 +370,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           sourceSchemas: { site: siteSourceSchema },
         },
       ),
@@ -292,7 +405,7 @@ describe("archive restore planner", () => {
           media: { objects: [] },
         }),
         {
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           mediaFiles: [],
           sourceSchemas: { site: siteSourceSchema },
         },
@@ -323,7 +436,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           mediaFiles: [],
           sourceSchemas: { site: siteSourceSchema },
         },
@@ -357,7 +470,7 @@ describe("archive restore planner", () => {
           },
         }),
         {
-          packages: listInstallableAppPackages(),
+          packages: archiveTestInstallablePackages,
           mediaFiles: [coreMediaFile("hero")],
           sourceSchemas: { site: siteSourceSchema },
         },
@@ -458,10 +571,14 @@ function archivedInstall(
 
 function sourceSchemaHashForPackageAppKey(packageAppKey: string) {
   if (packageAppKey === "tasks") {
-    return bundledSourceSchemaHashFixtures.tasks;
+    return tasksSourceSchemaHash;
   }
 
-  return bundledSourceSchemaHashFixtures.site;
+  if (packageAppKey === "crm") {
+    return crmSourceSchemaHash;
+  }
+
+  return siteSourceSchemaHash;
 }
 
 function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
@@ -606,8 +723,60 @@ function siteInstall(installId: string): AppInstall {
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
     schemaRoute: `/apps/${installId}/schema`,
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaHash: siteSourceSchemaHash,
     status: "installed",
     updatedAt: now,
+  };
+}
+
+function packageManifest(input: {
+  defaultInstallId: string;
+  label: string;
+  packageAppKey: string;
+  publicSite?: boolean;
+  sourceSchemaHash: SourceSchemaHash;
+}) {
+  return parseAppPackageManifest({
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: input.packageAppKey,
+    label: input.label,
+    description: `${input.label} test package.`,
+    defaultInstallId: input.defaultInstallId,
+    supportsMultipleInstalls: true,
+    packageRevision: 1,
+    sourceSchema: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: `${input.packageAppKey}/schema.json`,
+    },
+    seedRecords: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: `${input.packageAppKey}/seed-records.json`,
+    },
+    sourceSchemaHash: input.sourceSchemaHash,
+    capabilities: [
+      { kind: "generatedAdmin", routeBase: "/apps" },
+      ...(input.publicSite ? [{ kind: "publicSite", routeBase: "/sites" } as const] : []),
+    ],
+  });
+}
+
+function taskRecord(id: string, title: string, done: boolean): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { done, title },
+    createdAt: now,
+  };
+}
+
+function companyRecord(id: string, name: string): StoredRecord {
+  return {
+    id,
+    entity: "company",
+    values: { name },
+    createdAt: now,
   };
 }

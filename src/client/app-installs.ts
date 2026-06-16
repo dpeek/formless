@@ -3,7 +3,7 @@ import type {
   CreateAppInstallRequest,
   CreateAppInstallResponse,
 } from "../shared/protocol.ts";
-import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import {
   enqueueLocalWorkspaceAutoSave,
   type LocalWorkspaceAutoSaveOptions,

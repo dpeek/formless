@@ -32,23 +32,23 @@ import {
   listInstallableAppPackages,
   packageAppFactsForKey,
   type InstallableAppPackage,
-} from "../shared/app-installs.ts";
-import { appPackageManifestKind, appPackageManifestVersion } from "../shared/app-packages.ts";
+} from "@dpeek/formless-installed-apps";
+import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  bundledAppPackageResolver,
+} from "../shared/app-packages.ts";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
@@ -432,7 +432,7 @@ describe("Formless Site CLI", () => {
       },
     });
     responses.queueJson({
-      packages: listInstallableAppPackages(),
+      packages: listInstallableAppPackages(bundledAppPackageResolver),
       installs: [installedSite("david", "David Peek"), installedSite("james", "James Peek")],
     });
 
@@ -3280,7 +3280,7 @@ describe("Formless Site CLI", () => {
     const sourceSnapshotRecords = mediaRecords();
 
     responses.queueJson({
-      packages: listInstallableAppPackages(),
+      packages: listInstallableAppPackages(bundledAppPackageResolver),
       installs: [
         {
           adminRoute: "/apps/personal",
@@ -3480,7 +3480,7 @@ describe("Formless Site CLI", () => {
     const responses = responseQueue();
 
     responses.queueJson({
-      packages: listInstallableAppPackages(),
+      packages: listInstallableAppPackages(bundledAppPackageResolver),
       installs: [
         {
           adminRoute: "/apps/work",
@@ -3488,7 +3488,7 @@ describe("Formless Site CLI", () => {
           installId: "work",
           label: "Work Tasks",
           packageAppKey: "tasks",
-          ...packageAppFactsForKey("tasks")!,
+          ...packageAppFactsForKey("tasks", bundledAppPackageResolver)!,
           schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3520,9 +3520,9 @@ describe("Formless Site CLI", () => {
     expect(archive.app).toMatchObject({
       installId: "work",
       packageAppKey: "tasks",
-      packageRevision: packageAppFactsForKey("tasks")!.packageRevision,
+      packageRevision: packageAppFactsForKey("tasks", bundledAppPackageResolver)!.packageRevision,
       sourceSchemaKey: "tasks",
-      sourceSchemaHash: packageAppFactsForKey("tasks")!.sourceSchemaHash,
+      sourceSchemaHash: packageAppFactsForKey("tasks", bundledAppPackageResolver)!.sourceSchemaHash,
     });
     expect(archive.data).toEqual(taskSnapshot(taskSeedRecords));
     expect(archive.media.objects).toEqual([]);
@@ -3540,7 +3540,7 @@ describe("Formless Site CLI", () => {
     const sourceSnapshotRecords = mediaRecords();
 
     responses.queueJson({
-      packages: listInstallableAppPackages(),
+      packages: listInstallableAppPackages(bundledAppPackageResolver),
       installs: [
         {
           adminRoute: "/apps/personal",
@@ -3548,7 +3548,7 @@ describe("Formless Site CLI", () => {
           installId: "personal",
           label: "Personal",
           packageAppKey: "site",
-          ...packageAppFactsForKey("site")!,
+          ...packageAppFactsForKey("site", bundledAppPackageResolver)!,
           publicRoute: "/sites/personal",
           publicRoutePrefix: "/sites/personal/",
           schemaRoute: "/apps/personal/schema",
@@ -3561,7 +3561,7 @@ describe("Formless Site CLI", () => {
           installId: "work",
           label: "Work Tasks",
           packageAppKey: "tasks",
-          ...packageAppFactsForKey("tasks")!,
+          ...packageAppFactsForKey("tasks", bundledAppPackageResolver)!,
           schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3572,7 +3572,7 @@ describe("Formless Site CLI", () => {
           installId: "sales",
           label: "Sales CRM",
           packageAppKey: "crm",
-          ...packageAppFactsForKey("crm")!,
+          ...packageAppFactsForKey("crm", bundledAppPackageResolver)!,
           schemaRoute: "/apps/sales/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -3620,20 +3620,20 @@ describe("Formless Site CLI", () => {
       [
         "personal",
         "site",
-        packageAppFactsForKey("site")!.packageRevision,
-        packageAppFactsForKey("site")!.sourceSchemaHash,
+        packageAppFactsForKey("site", bundledAppPackageResolver)!.packageRevision,
+        packageAppFactsForKey("site", bundledAppPackageResolver)!.sourceSchemaHash,
       ],
       [
         "sales",
         "crm",
-        packageAppFactsForKey("crm")!.packageRevision,
-        packageAppFactsForKey("crm")!.sourceSchemaHash,
+        packageAppFactsForKey("crm", bundledAppPackageResolver)!.packageRevision,
+        packageAppFactsForKey("crm", bundledAppPackageResolver)!.sourceSchemaHash,
       ],
       [
         "work",
         "tasks",
-        packageAppFactsForKey("tasks")!.packageRevision,
-        packageAppFactsForKey("tasks")!.sourceSchemaHash,
+        packageAppFactsForKey("tasks", bundledAppPackageResolver)!.packageRevision,
+        packageAppFactsForKey("tasks", bundledAppPackageResolver)!.sourceSchemaHash,
       ],
     ]);
     expect(archive.capabilities).toEqual([
@@ -3735,7 +3735,7 @@ describe("Formless Site CLI", () => {
     await writeArchiveDirectory(outDir, instanceArchive([appArchive("david", "David Peek")]));
     responses.queueJson(
       {
-        packageApps: listInstallableAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -3750,7 +3750,7 @@ describe("Formless Site CLI", () => {
     );
     responses.queueJson({ setupComplete: true });
     responses.queueJson({
-      packages: listInstallableAppPackages(),
+      packages: listInstallableAppPackages(bundledAppPackageResolver),
       installs: [installedSite("david", "David Peek")],
     });
     responses.queueJson(restorePlan({ replacedInstalls: ["david"] }));
@@ -4220,7 +4220,7 @@ function installedSite(installId: string, label: string) {
 }
 
 function installedApp(installId: string, label: string, packageAppKey: "site" | "tasks") {
-  const facts = packageAppFactsForKey(packageAppKey);
+  const facts = packageAppFactsForKey(packageAppKey, bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
@@ -4345,7 +4345,7 @@ function appArchive(
   } = {},
 ): AppArchive {
   const packageAppKey = options.packageAppKey ?? "site";
-  const packageFacts = packageAppFactsForKey(packageAppKey);
+  const packageFacts = packageAppFactsForKey(packageAppKey, bundledAppPackageResolver);
 
   if (!packageFacts) {
     throw new Error(`Missing bundled package facts for ${packageAppKey}.`);
@@ -4559,7 +4559,7 @@ function archiveFetch(
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json(
         {
-          packageApps: listInstallableAppPackages().map((appPackage) => ({
+          packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
             packageAppKey: appPackage.packageAppKey,
             packageRevision: appPackage.packageRevision,
             sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -4579,7 +4579,7 @@ function archiveFetch(
 
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
-        packages: [...listInstallableAppPackages(), ...extraPackages],
+        packages: [...listInstallableAppPackages(bundledAppPackageResolver), ...extraPackages],
         installs,
       });
     }
@@ -5034,7 +5034,7 @@ function localInstanceDevFetch(
 
     if (method === "GET" && parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
-        packages: listInstallableAppPackages(),
+        packages: listInstallableAppPackages(bundledAppPackageResolver),
         installs,
       });
     }

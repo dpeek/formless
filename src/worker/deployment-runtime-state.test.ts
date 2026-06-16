@@ -3,7 +3,7 @@ import {
   deriveDeployLatestStatus,
   materializeDeployDesiredStateVersion,
 } from "@dpeek/formless-deploy";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   buildDeploymentDesiredStateVersion,
   INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,

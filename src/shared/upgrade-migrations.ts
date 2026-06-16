@@ -1,11 +1,22 @@
-import type { PackageAppKey } from "./app-installs.ts";
+import {
+  isPackageAppRevision,
+  type PackageAppKey,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 import type { SchemaKey } from "./schema-apps.ts";
+
+export {
+  computeSourceSchemaHash,
+  isSourceSchemaHash,
+  sourceSchemaCanonicalJson,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 
 export type UpgradeMigrationId = string;
 export type UpgradeMigrationOwner = string;
 export type UpgradeMigrationChecksum = `sha256:${string}`;
-export type SourceSchemaHash = `sha256:${string}`;
-export type PackageAppRevision = number;
 
 export const upgradeMigrationSafetyClasses = [
   "auto-safe",
@@ -136,26 +147,6 @@ export const bundledSourceSchemaHashFixtures = {
   site: "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
   crm: "sha256:4e6fd52a8278a8f315beae8fd45b493e454bf3d2f553a78aeac7c651e0d8aebf",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
-
-export function sourceSchemaCanonicalJson(schema: unknown): string {
-  return JSON.stringify(stableJsonValue(schema));
-}
-
-export async function computeSourceSchemaHash(schema: unknown): Promise<SourceSchemaHash> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(sourceSchemaCanonicalJson(schema)),
-  );
-  const hex = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-
-  return `sha256:${hex}`;
-}
-
-export function isSourceSchemaHash(value: unknown): value is SourceSchemaHash {
-  return typeof value === "string" && sha256DigestPattern.test(value);
-}
 
 export function isUpgradeMigrationChecksum(value: unknown): value is UpgradeMigrationChecksum {
   return typeof value === "string" && sha256DigestPattern.test(value);
@@ -319,25 +310,4 @@ function isPackageAppUpgradeMigration(
   migration: UpgradeMigrationDefinition,
 ): migration is PackageAppUpgradeMigration {
   return migration.family.kind === "package-app";
-}
-
-function isPackageAppRevision(value: unknown): value is PackageAppRevision {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function stableJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stableJsonValue);
-  }
-
-  if (typeof value !== "object" || value === null) {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => [key, stableJsonValue(child)]),
-  );
 }

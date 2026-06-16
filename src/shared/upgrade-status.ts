@@ -1,5 +1,5 @@
 import type { AppStorageIdentity } from "./app-storage-identity.ts";
-import type { PackageAppKey } from "./app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import type {
   PackageAppRevision,
   SourceSchemaHash,

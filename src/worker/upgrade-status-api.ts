@@ -2,7 +2,7 @@ import {
   installedAppStorageIdentity,
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
   APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX,
   INSTANCE_UPGRADE_APPLY_API_PATH,

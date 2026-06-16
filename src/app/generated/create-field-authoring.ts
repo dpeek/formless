@@ -10,7 +10,7 @@ import {
   selectCreateFieldsForDiscriminator,
   selectCreateFieldsForInputValues,
 } from "@dpeek/formless-schema";
-import type { RecordValues } from "../../shared/protocol.ts";
+import type { RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 

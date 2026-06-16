@@ -12,9 +12,27 @@ import {
   writePortableArchiveDirectory,
   type AppArchive,
 } from "./node.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../../../src/shared/protocol.ts";
-import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
-import { siteSourceSchema } from "../../../src/test/schema-apps.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import { parseAppSchema } from "@dpeek/formless-schema";
+
+const siteSourceSchemaHash =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const siteSourceSchema = parseAppSchema({
+  version: 1,
+  entities: {
+    site: {
+      label: "Site",
+      fields: {
+        key: { type: "text", required: true, label: "Key" },
+        label: { type: "text", required: true, label: "Label" },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+});
 
 describe("archive node adapter", () => {
   it("writes and reads portable archive directories with media files", async () => {
@@ -75,7 +93,7 @@ function appArchive(byteSize: number): AppArchive {
       packageAppKey: "site",
       packageRevision: 1,
       sourceSchemaKey: "site",
-      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      sourceSchemaHash: siteSourceSchemaHash,
       label: "Site",
       status: "installed",
       createdAt: "2026-05-23T00:00:00.000Z",

@@ -4,12 +4,9 @@ import {
   type InstanceArchiveControlPlane,
 } from "@dpeek/formless-archive";
 import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
-import type { AppInstall } from "../shared/app-installs.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type BootstrapResponse,
-} from "../shared/protocol.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import { type BootstrapResponse } from "../shared/protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -17,7 +14,7 @@ import {
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import {
   applyPortableArchiveRestore,
   dryRunPortableArchiveRestore,

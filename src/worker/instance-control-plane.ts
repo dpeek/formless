@@ -6,7 +6,7 @@ import {
   type AppInstall,
   type AppInstallId,
   type PackageAppKey,
-} from "../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
@@ -23,19 +23,18 @@ import {
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneRedirectStatusCode,
   type InstanceControlPlaneRouteValues,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import type { DeploymentTarget } from "../shared/deployment-runtime.ts";
 import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
 import type {
   InstanceDomainMapping,
   InstanceDomainMappingProfile,
 } from "../shared/instance-domain-mappings.ts";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import {
   parseCreateAppInstallRequest,
   type ActionResponse,
   type CreateAppInstallRequest,
-  type RecordValues,
-  type StoredRecord,
 } from "../shared/protocol.ts";
 import { parseAppSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
 import {

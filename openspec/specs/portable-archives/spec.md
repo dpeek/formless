@@ -152,6 +152,18 @@ package slice.
 - **AND** they do not import package-owned archive behavior from old
   `src/shared/archive*` modules or unexported package internals
 
+#### Scenario: Package consumes public contract packages
+
+- **WHEN** Archive package parsing, formatting, restore planning, local archive
+  IO, or package-local tests need storage snapshot contracts, installed app
+  metadata contracts, app package resolver contracts, package revision/hash
+  contracts, instance control-plane schema contracts, or App schema behavior
+- **THEN** those dependencies come from public package exports such as
+  `@dpeek/formless-storage`, `@dpeek/formless-installed-apps`,
+  `@dpeek/formless-instance-control-plane`, and `@dpeek/formless-schema`
+- **AND** the Archive package does not import repo-root `src/shared/*` or
+  `src/test/*` modules
+
 #### Scenario: Package does not own archive execution
 
 - **WHEN** archive export, archive restore apply, app install mutation,
@@ -239,6 +251,8 @@ not portable archive directories.
   cursor, schema, and records
 - **AND** `state/instance.json` uses storage identity `instance:control-plane`
 - **AND** app snapshot files use storage identity `app:<installId>`
+- **AND** snapshot kind constants, version constants, and parsing behavior come
+  from the Storage package contract
 
 #### Scenario: Auto-save uses compact workspace state
 
@@ -328,6 +342,18 @@ semantic operation contracts through the Workspace package slice.
   `@dpeek/formless-workspace/node`
 - **AND** they do not import package-owned workspace behavior from old
   `src/site` workspace modules or unexported package internals
+
+#### Scenario: Package consumes public contract packages
+
+- **WHEN** the Workspace package local Node adapter or package-local tests need
+  storage snapshot contracts, app package manifest parsing, active package
+  resolver behavior, package revision/hash contracts, source schema parsing, or
+  field value validation
+- **THEN** those dependencies come from public package exports such as
+  `@dpeek/formless-storage`, `@dpeek/formless-installed-apps`, and
+  `@dpeek/formless-schema`
+- **AND** the Workspace package does not import repo-root `src/shared/*` or
+  `src/test/*` modules
 
 #### Scenario: Package does not own runtime mutation
 

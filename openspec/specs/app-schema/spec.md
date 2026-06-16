@@ -64,6 +64,17 @@ archive, or deploy workflows.
 - AND the package is not exposed to install, upgrade, archive, or deploy
   workflows until the manifest and source schema agree
 
+#### Scenario: Import app package manifest contracts
+
+- GIVEN app, client, Worker, archive, workspace, upgrade, Site runtime, or tests
+  need app package manifest types, manifest parsing, package resolver behavior,
+  package revision contracts, source schema hash parsing, or deterministic
+  source schema hash computation
+- WHEN those contracts are imported
+- THEN they come from `@dpeek/formless-installed-apps`
+- AND bundled source app facts are supplied by runtime code rather than imported
+  by package slices
+
 #### Scenario: Resolve bundled app packages from manifests
 
 - GIVEN the current bundled package app keys `site`, `tasks`, and `crm`

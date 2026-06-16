@@ -1,28 +1,27 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { WebSocketEventMap } from "miniflare";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   FORMLESS_CLIENT_PACKAGE_REVISION_HEADER,
   FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER,
   FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER,
   FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER,
   FORMLESS_RELOAD_REQUIRED_ERROR_CODE,
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
   type BootstrapResponse,
   type MutationResponse,
   type SchemaResponse,
   type SchemaUpdateResponse,
-  type StorageSnapshot,
-  type StoredRecord,
   type SyncResponse,
   type SyncSocketServerMessage,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import { packageAppFactsForKey } from "../shared/app-installs.ts";
+import { packageAppFactsForKey } from "@dpeek/formless-installed-apps";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
+  bundledAppPackageResolver,
   type AppPackageManifest,
 } from "../shared/app-packages.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
@@ -96,7 +95,7 @@ describe("authority", () => {
       ),
     );
     const syncBody = (await sync.json()) as SyncResponse;
-    const packageFacts = packageAppFactsForKey("tasks");
+    const packageFacts = packageAppFactsForKey("tasks", bundledAppPackageResolver);
 
     expect(bootstrap.status).toBe(200);
     expect(sync.status).toBe(200);

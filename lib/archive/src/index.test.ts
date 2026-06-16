@@ -12,22 +12,37 @@ import {
   type AppArchiveMediaObject,
   type InstanceArchive,
 } from "./index.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../../../src/shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../../../src/shared/instance-control-plane.ts";
-import { bundledSourceSchemaHashFixtures } from "../../../src/shared/upgrade-migrations.ts";
-import { siteSourceSchema } from "../../../src/test/schema-apps.ts";
-import { testSiteSeedRecords } from "../../../src/test/site-records.ts";
+} from "@dpeek/formless-instance-control-plane";
+import { parseAppSchema } from "@dpeek/formless-schema";
 
 const now = "2026-05-23T00:00:00.000Z";
+const siteSourceSchemaHash =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const siteSourceSchema = parseAppSchema({
+  version: 1,
+  entities: {
+    site: {
+      label: "Site",
+      fields: {
+        key: { type: "text", required: true, label: "Key" },
+        label: { type: "text", required: true, label: "Label" },
+      },
+      constraints: {
+        uniqueKey: { kind: "unique", fields: ["key"] },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+});
 
 describe("portable archive protocol", () => {
   it("parses the supported version 2 app archive envelope", () => {
@@ -382,7 +397,7 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
     packageAppKey: "site",
     packageRevision: 1,
     sourceSchemaKey: "site",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaHash: siteSourceSchemaHash,
     label,
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
@@ -502,13 +517,12 @@ function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): Storage
 }
 
 function activeSiteRecord(id: string, values: StoredRecord["values"] = {}): StoredRecord {
-  const fixture = testSiteSeedRecords[0] as StoredRecord;
-
   return {
     id,
-    entity: fixture.entity,
+    entity: "site",
     values: {
-      ...fixture.values,
+      key: "primary",
+      label: "Primary Site",
       ...values,
     },
     createdAt: id.endsWith("alpha") ? "2026-05-23T00:00:01.000Z" : "2026-05-23T00:00:02.000Z",

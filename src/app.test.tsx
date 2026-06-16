@@ -70,7 +70,8 @@ import {
   type TableOrderingConfig,
 } from "./client/views.ts";
 import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts";
-import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
 import { parseAppSchema } from "@dpeek/formless-schema";
@@ -94,7 +95,7 @@ import {
   sitePlacementRecord,
 } from "./test/site-editor.ts";
 import { testSiteSeedRecords } from "./test/site-records.ts";
-import type { AppInstall } from "./shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 
 function renderRoute(
   path: string,

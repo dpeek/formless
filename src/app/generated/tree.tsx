@@ -20,7 +20,7 @@ import type {
   TreeResultModel,
 } from "../../client/tree-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type { FieldValue, RecordValues, StoredRecord } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { GeneratedCreateDialogForm, type CreateHomeOperationConfig } from "./create.tsx";

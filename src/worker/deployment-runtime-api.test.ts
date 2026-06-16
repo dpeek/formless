@@ -4,7 +4,7 @@ import type {
   CreateAppInstallResponse,
   MutationResponse,
 } from "../shared/protocol.ts";
-import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import {
   INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
   INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,

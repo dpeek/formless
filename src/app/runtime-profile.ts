@@ -10,7 +10,7 @@ import {
   installedAppStorageIdentity,
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { AppInstall, AppInstallRoute, PackageAppKey } from "../shared/app-installs.ts";
+import type { AppInstall, AppInstallRoute, PackageAppKey } from "@dpeek/formless-installed-apps";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,

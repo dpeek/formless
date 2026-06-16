@@ -21,18 +21,15 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
-import { listInstallableAppPackages, packageAppFactsForKey } from "../shared/app-installs.ts";
-import {
-  STORAGE_SNAPSHOT_KIND,
-  STORAGE_SNAPSHOT_VERSION,
-  type StorageSnapshot,
-  type StoredRecord,
-} from "../shared/protocol.ts";
+import { listInstallableAppPackages, packageAppFactsForKey } from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../shared/app-packages.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import {
   createWorkspaceOperationState,
   listWorkspaceOperationStates,
@@ -1103,7 +1100,7 @@ function authorityExportFetch(
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json(
         {
-          packageApps: listInstallableAppPackages().map((appPackage) => ({
+          packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
             packageAppKey: appPackage.packageAppKey,
             packageRevision: appPackage.packageRevision,
             sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1120,7 +1117,7 @@ function authorityExportFetch(
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs,
-        packages: listInstallableAppPackages(),
+        packages: listInstallableAppPackages(bundledAppPackageResolver),
       });
     }
 
@@ -1171,7 +1168,7 @@ function authorityExportFetch(
 }
 
 function installedSite(installId: string, label: string) {
-  const facts = packageAppFactsForKey("site");
+  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error("Missing bundled package facts for site.");
@@ -1250,7 +1247,7 @@ function deployApplyFetch(
 
     if (parsedUrl.pathname === "/api/formless/deploy") {
       return Response.json({
-        packageApps: listInstallableAppPackages().map((appPackage) => ({
+        packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
           packageAppKey: appPackage.packageAppKey,
           packageRevision: appPackage.packageRevision,
           sourceSchemaHash: appPackage.sourceSchemaHash,
@@ -1265,7 +1262,7 @@ function deployApplyFetch(
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
         installs: [installedSite("david", "David Peek")],
-        packages: listInstallableAppPackages(),
+        packages: listInstallableAppPackages(bundledAppPackageResolver),
       });
     }
 
@@ -1457,7 +1454,7 @@ async function writeWorkspaceAppArchive(workspaceRoot: string, installId: string
 }
 
 function appArchive(installId: string, label: string): AppArchive {
-  const facts = packageAppFactsForKey("site");
+  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
 
   if (!facts) {
     throw new Error("Missing bundled package facts for site.");

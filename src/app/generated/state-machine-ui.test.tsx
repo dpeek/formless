@@ -13,7 +13,8 @@ import {
   selectTransitionStateActions,
 } from "../../client/state-machine-model.ts";
 import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
-import type { ChangeRow, StoredRecord } from "../../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { ChangeRow } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {

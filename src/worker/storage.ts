@@ -1,6 +1,7 @@
 import { createRecordId } from "../shared/ids.ts";
 import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -9,9 +10,6 @@ import type {
   DeleteMutation,
   PatchMutation,
   MutationResponse,
-  RecordValues,
-  StorageSnapshot,
-  StoredRecord,
 } from "../shared/protocol.ts";
 import type {
   OperationInvocationEnvelope,
@@ -27,7 +25,7 @@ import type {
 } from "@dpeek/formless-schema";
 import { parseAppSchema, stringifySchema } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
-import type { PackageAppKey } from "../shared/app-installs.ts";
+import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import type {
   PackageAppRevision,
   SourceSchemaHash,

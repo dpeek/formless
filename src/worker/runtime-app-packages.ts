@@ -15,7 +15,7 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   parseRuntimeWorkspaceAppPackagesJson,
 } from "../shared/workspace-runtime-packages.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   findWorkerSchemaAppDefinition,
   parseWorkerSeedRecords,

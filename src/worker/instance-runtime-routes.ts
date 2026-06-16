@@ -1,4 +1,4 @@
-import { findAppInstall, type AppInstall } from "../shared/app-installs.ts";
+import { findAppInstall, type AppInstall } from "@dpeek/formless-installed-apps";
 import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,
@@ -12,9 +12,9 @@ import {
   type InstanceControlPlaneRouteSurface,
   type InstanceControlPlaneRouteTargetProfile,
   type InstanceControlPlaneRouteValues,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import { parseRuntimeRouteAccess, type RuntimeRouteAccess } from "../shared/runtime-topology.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppPackageResolver } from "../shared/app-packages.ts";
 
 export const INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH = "/_internal/resolve-runtime-route";

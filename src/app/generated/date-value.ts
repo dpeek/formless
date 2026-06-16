@@ -1,5 +1,5 @@
 import { CalendarDate, type DateValue } from "@internationalized/date";
-import type { FieldValue } from "../../shared/protocol.ts";
+import type { FieldValue } from "@dpeek/formless-storage";
 
 const storedDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const invalidStoredDateMessage = "Enter a YYYY-MM-DD date.";

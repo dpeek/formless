@@ -1,5 +1,5 @@
 import { parseAppSchema } from "@dpeek/formless-schema";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
   type AppStorageIdentity,
   type InstalledAppStorageIdentity,
@@ -17,7 +17,7 @@ import {
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {

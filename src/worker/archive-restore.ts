@@ -12,7 +12,7 @@ import {
   type InstanceArchiveControlPlane,
   type PortableArchive,
 } from "@dpeek/formless-archive";
-import type { AppInstall, InstallableAppPackage } from "../shared/app-installs.ts";
+import type { AppInstall, InstallableAppPackage } from "@dpeek/formless-installed-apps";
 import {
   installedAppStorageIdentity,
   type InstalledAppStorageIdentity,

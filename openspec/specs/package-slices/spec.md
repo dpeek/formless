@@ -203,6 +203,29 @@ subpaths.
 - AND wildcard exports or direct imports from private source files are not
   required
 
+### Requirement: Package Internal Import Boundary
+
+Package source SHALL depend only on package-local source, documented public
+workspace package exports, npm dependencies, or Node built-ins.
+
+#### Scenario: Package source avoids root runtime internals
+
+- GIVEN a source file under `lib/<package>/src/` imports another module
+- WHEN the import path is resolved
+- THEN the dependency is package-local, a documented public workspace package
+  root or subpath, an external package, or a Node built-in
+- AND it does not resolve into repo-root `src/`, `src/test/`, or another
+  package's unexported `lib/<other-package>/src/` internals
+
+#### Scenario: Package tests stay package-local
+
+- GIVEN tests live under `lib/<package>/src/`
+- WHEN they need schemas, records, package manifests, storage snapshots, or
+  media examples
+- THEN they use package-local fixtures or public package exports
+- AND they do not import repo-root `src/test/*` fixtures or root runtime-only
+  modules
+
 ### Requirement: Package-Local Verification
 
 Package tests SHALL be fast, deterministic, and local.
@@ -221,6 +244,165 @@ Package tests SHALL be fast, deterministic, and local.
 - WHEN package verification runs
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
+
+### Requirement: Storage Package Slice
+
+The system SHALL provide a Storage package slice under `lib/storage/` for
+runtime-neutral storage snapshot and stored-record contracts.
+
+#### Scenario: Storage package scaffold
+
+- GIVEN the Storage package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and runtime-neutral helpers
+- AND the package is published as `@dpeek/formless-storage` with a root public
+  subpath
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, Node, or sidecar subpaths
+
+#### Scenario: Storage package exports
+
+- GIVEN Authority storage, browser replicas, archive packages, workspace
+  packages, Site runtime, Worker runtime, or tests need storage snapshot kind
+  constants, storage snapshot parsing, stored-record contracts, or flat record
+  value contracts
+- WHEN they import storage snapshot behavior
+- THEN they import from `@dpeek/formless-storage`
+- AND they do not import those contracts from root runtime protocol modules
+
+### Requirement: Storage Package Non-Ownership
+
+The Storage package SHALL own reusable storage snapshot contracts and parsers
+without owning Authority execution or runtime protocol routes.
+
+#### Scenario: Package owns snapshot contracts
+
+- GIVEN storage snapshot kind constants, storage snapshot version constants,
+  storage snapshot parsing, storage identity checks, stored-record contracts, or
+  flat record value contracts are needed
+- WHEN runtime-neutral code consumes storage snapshot behavior
+- THEN they come from `lib/storage`
+- AND App schema parsing and field behavior come from the Schema package
+
+#### Scenario: Package does not own storage execution
+
+- GIVEN Authority bootstrap, schema storage, change rows, operation
+  invocations, sync protocol, mutation routes, Durable Object storage, browser
+  replica persistence, or restore execution is needed
+- WHEN those behaviors are implemented
+- THEN Authority storage, browser replica, Worker runtime, or Site runtime own
+  the execution
+- AND the Storage package supplies only snapshot contracts, pure parsing, and
+  package-local deterministic tests
+
+### Requirement: Installed Apps Package Slice
+
+The system SHALL provide an Installed Apps package slice under
+`lib/installed-apps/` for app install identity, package app manifest, package
+resolver, package revision, and source schema hash contracts.
+
+#### Scenario: Installed Apps package scaffold
+
+- GIVEN the Installed Apps package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and runtime-neutral helpers
+- AND the package is published as `@dpeek/formless-installed-apps` with a root
+  public subpath
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, Node, or sidecar subpaths
+
+#### Scenario: Installed Apps package exports
+
+- GIVEN app, client, Worker, archive, workspace, upgrade, Site runtime, or tests
+  need app install id validation, app install contracts, app package manifest
+  parsing, package resolver behavior, package revision contracts, or source
+  schema hash helpers
+- WHEN they import installed-app or app-package behavior
+- THEN they import from `@dpeek/formless-installed-apps`
+- AND they do not import those contracts from root runtime modules
+
+### Requirement: Installed Apps Package Non-Ownership
+
+The Installed Apps package SHALL own reusable install and package metadata
+contracts without owning bundled app sources, app install storage mutation, or
+runtime adapter execution.
+
+#### Scenario: Package owns install and package metadata contracts
+
+- GIVEN app install id validation, app install metadata shapes, package app
+  manifest parsing, active resolver helpers, package revision contracts, source
+  schema hash parsing, or deterministic source schema hash computation are
+  needed
+- WHEN runtime-neutral code consumes installed-app behavior
+- THEN they come from `lib/installed-apps`
+- AND source schema parsing comes from the Schema package
+
+#### Scenario: Package does not own bundled defaults
+
+- GIVEN the default runtime resolver needs bundled Site, Tasks, or CRM package
+  manifests
+- WHEN bundled package metadata is composed
+- THEN root runtime code supplies bundled manifests to the Installed Apps
+  package resolver
+- AND package source does not import bundled schema JSON, seed records, or
+  root-only bundled package lists
+
+### Requirement: Instance Control Plane Package Slice
+
+The system SHALL provide an Instance Control Plane package slice under
+`lib/instance-control-plane/` for schema-owned instance management contracts and
+reviewable control-plane storage snapshot validation.
+
+#### Scenario: Instance Control Plane package scaffold
+
+- GIVEN the Instance Control Plane package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and runtime-neutral helpers
+- AND the package is published as `@dpeek/formless-instance-control-plane`
+  with a root public subpath
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose client, React, Worker, Node, or sidecar subpaths
+
+#### Scenario: Instance Control Plane package exports
+
+- GIVEN Archive, Workspace, Worker runtime, Site runtime, Deploy runtime, or
+  tests need instance control-plane schema keys, storage identity constants,
+  entity contracts, schema contracts, reviewable record validation, or
+  display-safe control-plane storage snapshot canonicalization
+- WHEN they import instance control-plane behavior
+- THEN they import from `@dpeek/formless-instance-control-plane`
+- AND they do not import those contracts from root runtime modules
+
+### Requirement: Instance Control Plane Package Non-Ownership
+
+The Instance Control Plane package SHALL own reusable schema-owned instance
+management contracts without owning Authority writes, app records, deployment
+execution, or provider state.
+
+#### Scenario: Package owns schema-owned control-plane contracts
+
+- GIVEN app-install, route, or deployment-config entity contracts,
+  control-plane schema constants, reviewable storage snapshot validation, or
+  display-safe canonicalization are needed
+- WHEN runtime-neutral code consumes instance control-plane behavior
+- THEN they come from `lib/instance-control-plane`
+- AND app install metadata contracts come from the Installed Apps package
+- AND deployment projection contracts come from the Deploy package
+- AND storage snapshot contracts come from the Storage package
+
+#### Scenario: Package does not own control-plane execution
+
+- GIVEN app install mutation, route mutation, deployment-config mutation,
+  Authority storage, owner authorization, deployment projection execution,
+  provider execution, or runtime observation persistence is needed
+- WHEN those behaviors are implemented
+- THEN Worker runtime, Site runtime, Deploy runtime, Gateway runtime adapters,
+  or provider adapters own the execution
+- AND the Instance Control Plane package supplies only schema contracts,
+  reviewable validation, pure helpers, and package-local deterministic tests
 
 ### Requirement: Archive Package Slice
 

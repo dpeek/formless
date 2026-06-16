@@ -14,24 +14,45 @@ import {
   isInstanceControlPlaneEntityName,
   isInstanceControlPlaneRouteSafePath,
   parseInstanceControlPlaneBoundaryEntityName,
-} from "./instance-control-plane.ts";
-import { createAppInstall, type CreateAppInstallResult } from "./app-installs.ts";
+  parseInstanceControlPlaneStorageSnapshot,
+  reviewableInstanceControlPlaneStorageSnapshot,
+} from "./index.ts";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
-  bundledAppPackageManifests,
+  createAppInstall,
   createAppPackageResolver,
-} from "./app-packages.ts";
+  type CreateAppInstallResult,
+} from "@dpeek/formless-installed-apps";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import { parseAppSchema } from "@dpeek/formless-schema";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
 } from "@dpeek/formless-schema";
 
+const siteSourceSchemaHash =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const cleartraceSourceSchemaHash =
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 const privateSourceSchemaHash =
   "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+const controlPlanePackageManifests = [
+  packageManifest({
+    label: "Site",
+    packageAppKey: "site",
+    publicSite: true,
+    sourceSchemaHash: siteSourceSchemaHash,
+  }),
+  packageManifest({
+    label: "Cleartrace",
+    packageAppKey: "cleartrace",
+    sourceSchemaHash: cleartraceSourceSchemaHash,
+  }),
+];
+const controlPlanePackageResolver = createAppPackageResolver(controlPlanePackageManifests);
 
 describe("instance control-plane schema contracts", () => {
   it("defines the runtime-owned flat record schema", () => {
@@ -416,7 +437,7 @@ describe("instance control-plane schema contracts", () => {
         publicRoute: "/sites/personal",
         publicRoutePrefix: "/sites/personal/",
         schemaRoute: "/apps/personal/schema",
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+        sourceSchemaHash: siteSourceSchemaHash,
         status: "installed",
         updatedAt: now,
       }),
@@ -429,7 +450,7 @@ describe("instance control-plane schema contracts", () => {
         installId: "personal",
         packageAppKey: "site",
         packageRevision: 1,
-        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+        sourceSchemaHash: siteSourceSchemaHash,
         label: "Personal Site",
         status: "installed",
         storageIdentity: "app:personal",
@@ -442,6 +463,7 @@ describe("instance control-plane schema contracts", () => {
       instanceControlPlaneDefaultRoutesForInstall({
         installId: "personal",
         packageAppKey: "site",
+        packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values),
     ).toEqual([
@@ -485,6 +507,7 @@ describe("instance control-plane schema contracts", () => {
       instanceControlPlaneDefaultRoutesForInstall({
         installId: "cleartrace",
         packageAppKey: "cleartrace",
+        packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.surface),
     ).toEqual(["admin", "schema"]);
@@ -492,6 +515,7 @@ describe("instance control-plane schema contracts", () => {
       instanceControlPlaneDefaultRoutesForInstall({
         installId: "cleartrace",
         packageAppKey: "cleartrace",
+        packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.access),
     ).toEqual(["owner", "owner"]);
@@ -515,7 +539,7 @@ describe("instance control-plane schema contracts", () => {
   it("derives private package route records from resolved capabilities", () => {
     const now = "2026-05-28T00:00:00.000Z";
     const resolver = createAppPackageResolver([
-      ...bundledAppPackageManifests,
+      ...controlPlanePackageManifests,
       privatePackageManifest(),
     ]);
     const result = expectCreateAppInstallSuccess(
@@ -566,6 +590,33 @@ describe("instance control-plane schema contracts", () => {
     expect(isInstanceControlPlaneRouteSafePath("/api")).toBe(false);
     expect(isInstanceControlPlaneRouteSafePath("/api/jobs")).toBe(false);
   });
+
+  it("validates reviewable control-plane storage snapshots", () => {
+    const snapshot = controlPlaneSnapshot();
+
+    expect(
+      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", snapshot),
+    ).toEqual(snapshot);
+    expect(
+      reviewableInstanceControlPlaneStorageSnapshot({
+        ...snapshot,
+        records: controlPlaneRecords({ observedCache: true }),
+      }).records.find((record) => record.entity === "deployment-config")?.values,
+    ).not.toHaveProperty("observedStatus");
+
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", {
+        ...snapshot,
+        records: controlPlaneRecords({ observedCache: true }),
+      }),
+    ).toThrow("cannot store runtime-observed deployment cache fields");
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", {
+        ...snapshot,
+        records: controlPlaneRecords({ accountId: "CF_API_TOKEN" }),
+      }),
+    ).toThrow("cannot store control-plane secret values");
+  });
 });
 
 function expectCreateAppInstallSuccess(
@@ -581,35 +632,142 @@ function expectCreateAppInstallSuccess(
 }
 
 function privatePackageManifest(): Record<string, unknown> {
+  return packageManifest({
+    label: "Private Labs",
+    packageAppKey: "private-labs",
+    packageRevision: 7,
+    publicSite: true,
+    sourceSchemaHash: privateSourceSchemaHash,
+    sourceSchemaKind: "workspace",
+    sourceSchemaPath: "packages/private-labs/schema.json",
+    seedRecordsPath: "packages/private-labs/seed-records.json",
+  });
+}
+
+function packageManifest(input: {
+  label: string;
+  packageAppKey: string;
+  packageRevision?: number;
+  publicSite?: boolean;
+  sourceSchemaHash: string;
+  sourceSchemaKind?: "bundled" | "workspace";
+  sourceSchemaPath?: string;
+  seedRecordsPath?: string;
+}): Record<string, unknown> {
   return {
     kind: appPackageManifestKind,
     version: appPackageManifestVersion,
-    packageAppKey: "private-labs",
-    label: "Private Labs",
-    description: "Private lab package fixture.",
-    defaultInstallId: "labs",
+    packageAppKey: input.packageAppKey,
+    label: input.label,
+    description: `${input.label} package fixture.`,
+    defaultInstallId: input.packageAppKey === "private-labs" ? "labs" : input.packageAppKey,
     supportsMultipleInstalls: false,
-    packageRevision: 7,
+    packageRevision: input.packageRevision ?? 1,
     sourceSchema: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "packages/private-labs/schema.json",
+      kind: input.sourceSchemaKind ?? "bundled",
+      key: input.packageAppKey,
+      path: input.sourceSchemaPath ?? "schema.json",
     },
     seedRecords: {
-      kind: "workspace",
-      key: "private-labs",
-      path: "packages/private-labs/seed-records.json",
+      kind: input.sourceSchemaKind ?? "bundled",
+      key: input.packageAppKey,
+      path: input.seedRecordsPath ?? "seed-records.json",
     },
-    sourceSchemaHash: privateSourceSchemaHash,
+    sourceSchemaHash: input.sourceSchemaHash,
     capabilities: [
       {
         kind: "generatedAdmin",
         routeBase: "/apps",
       },
-      {
-        kind: "publicSite",
-        routeBase: "/sites",
-      },
+      ...(input.publicSite
+        ? [
+            {
+              kind: "publicSite",
+              routeBase: "/sites",
+            },
+          ]
+        : []),
     ],
   };
+}
+
+function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: "instance-control-plane",
+    exportedAt: "2026-05-28T00:00:00.000Z",
+    schemaUpdatedAt: "2026-05-28T00:00:00.000Z",
+    sourceCursor: controlPlaneRecords().length,
+    schema: instanceControlPlaneSchema,
+    records: controlPlaneRecords(),
+    ...overrides,
+  };
+}
+
+function controlPlaneRecords(
+  options: { accountId?: string; observedCache?: boolean } = {},
+): StoredRecord[] {
+  const now = "2026-05-28T00:00:00.000Z";
+
+  return [
+    {
+      id: "site",
+      entity: "app-install",
+      values: {
+        installId: "site",
+        packageAppKey: "site",
+        label: "Site",
+        status: "installed",
+        storageIdentity: "app:site",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "route:site:public-site",
+      entity: "route",
+      values: {
+        enabled: true,
+        matchPath: "/sites/site",
+        matchPrefix: "/sites/site/",
+        kind: "mount",
+        targetProfile: "public-site",
+        appInstall: "site",
+        surface: "public-site",
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+    {
+      id: "instance.primary",
+      entity: "deployment-config",
+      values: {
+        targetId: "instance.primary",
+        targetKind: "instance",
+        label: "instance.primary",
+        enabled: true,
+        targetUrl: "https://personal.dpeek.workers.dev",
+        providerFamily: "cloudflare",
+        ...(options.accountId === undefined ? {} : { accountId: options.accountId }),
+        ...(options.observedCache
+          ? {
+              observedAt: now,
+              observedDesiredStateHash:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              observedError: "none",
+              observedRunnerId: "local-gateway",
+              observedStatus: "deployed",
+              observedSummary: "Deployed revision 2",
+            }
+          : {}),
+        createdAt: now,
+        updatedAt: now,
+      },
+      createdAt: now,
+    },
+  ];
 }

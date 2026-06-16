@@ -1,5 +1,5 @@
 import { resolveIconCatalogSvg } from "../shared/icon-catalog.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 const githubIconSource = requiredIconCatalogSvg("github");
 const linkedInIconSource = requiredIconCatalogSvg("linkedin");

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
-import { instanceControlPlaneSchema } from "../shared/instance-control-plane.ts";
+import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema } from "../test/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";

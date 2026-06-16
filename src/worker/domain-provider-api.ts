@@ -67,7 +67,7 @@ import {
   syncDomainIntentToControlPlane,
 } from "./deployment-control-plane-client.ts";
 import { readControlPlaneAppInstallsForRequest } from "./instance-app-installs.ts";
-import type { StoredRecord } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   domainProviderRedirectIntentFromRow as redirectIntentFromRow,
   ensureDomainProviderRedirectIntentsTable,

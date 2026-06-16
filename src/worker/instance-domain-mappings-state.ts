@@ -23,7 +23,7 @@ import {
   type InstanceDomainMappingSurface,
   type RecordInstanceDomainMappingApplyEvidenceRequest,
 } from "../shared/instance-domain-mappings.ts";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
   createSqlStorageMigrationRegistry,
   runSqlStorageMigrations,

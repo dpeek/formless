@@ -9,7 +9,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import {
   fieldValueToRecordFieldEditorInputValue,

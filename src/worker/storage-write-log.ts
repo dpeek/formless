@@ -1,10 +1,5 @@
-import type {
-  ActionResponse,
-  ChangeRow,
-  MutationResponse,
-  RecordValues,
-  StoredRecord,
-} from "../shared/protocol.ts";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
+import type { ActionResponse, ChangeRow, MutationResponse } from "../shared/protocol.ts";
 
 type ChangeSqlRow = {
   seq: number;

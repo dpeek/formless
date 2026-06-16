@@ -2,12 +2,12 @@ import {
   appInstallInitializationPlan,
   findAppInstall,
   type AppInstall,
-} from "../shared/app-installs.ts";
+} from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneAppInstallsFromRecords,
-} from "../shared/instance-control-plane.ts";
+} from "@dpeek/formless-instance-control-plane";
 import {
   parseCreateAppInstallRequest,
   type AppInstallsResponse,
