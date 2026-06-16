@@ -90,6 +90,7 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain("Loading Instance control plane");
     expect(html).not.toContain("Deployments");
+    expect(html).not.toContain('href="/deployments"');
     expect(html).not.toContain('data-formless-control-plane-screen="deployments"');
     expect(html).not.toContain('data-formless-deployment-setup-progress="true"');
     expect(html).not.toContain('data-formless-deployment-config-summary="true"');
@@ -162,6 +163,12 @@ describe("instance shell route view", () => {
     });
     expect(instanceShellInitialReadScope("/deployments?panel=config")).toEqual({
       deploymentRuntime: true,
+      providerRuntime: false,
+    });
+    expect(
+      instanceShellInitialReadScope("/deployments", { localWorkspaceGatewayAvailable: false }),
+    ).toEqual({
+      deploymentRuntime: false,
       providerRuntime: false,
     });
   });
@@ -354,6 +361,7 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain('data-formless-workspace-gateway="local"');
+    expect(html).toContain('href="/deployments"');
     expect(html).toContain('data-formless-workspace-operation-controls="true"');
     expect(html).toContain('data-formless-workspace-operation-control="check"');
     expect(html).toContain('data-formless-workspace-operation-control="pull"');
@@ -568,8 +576,8 @@ describe("instance shell route view", () => {
     const html = renderWithRouter(<InstanceShellRouteView state={readyState({ installs: [] })} />);
 
     expect(html).not.toContain('data-formless-workspace-gateway="local"');
-    expect(html).not.toContain('data-formless-workspace-operation-controls="true"');
     expect(html).not.toContain('href="/deployments"');
+    expect(html).not.toContain('data-formless-workspace-operation-controls="true"');
     expect(html).not.toContain("Initialize workspace");
     expect(html).not.toContain("Refresh deploy");
     expect(html).not.toContain("Plan deploy");

@@ -90,7 +90,6 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
-      instanceDeploymentsRoute: "/deployments",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppScreenRoutePattern: "/apps/:installId/*",
@@ -99,6 +98,10 @@ describe("runtime profile resolver", () => {
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });
+    expect(
+      runtimeBrowserRoutePatterns(profile, { localWorkspaceGatewayAvailable: true })
+        .instanceDeploymentsRoute,
+    ).toBe("/deployments");
   });
 
   it("resolves the dev workbench profile with schema-keyed app mounts", () => {
@@ -136,7 +139,6 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: true,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
-      instanceDeploymentsRoute: "/deployments",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppSchemaRoutePattern: "/apps/:installId/schema",
@@ -146,6 +148,10 @@ describe("runtime profile resolver", () => {
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });
+    expect(
+      runtimeBrowserRoutePatterns(profile, { localWorkspaceGatewayAvailable: true })
+        .instanceDeploymentsRoute,
+    ).toBe("/deployments");
     expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(true);
   });
 

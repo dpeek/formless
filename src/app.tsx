@@ -41,6 +41,7 @@ import {
 } from "./app/runtime-profile.ts";
 import { fetchInstanceAppInstalls } from "./client/app-installs.ts";
 import { useActiveClientStorageName, useActiveSchemaKey, useSchema } from "./client/store.ts";
+import { workspaceGatewayBrowserConfig } from "@dpeek/formless-gateway/client";
 import {
   appStorageIdentityForClientTarget,
   clientTargetSourceSchemaKey,
@@ -81,10 +82,12 @@ const defaultRouteComponents: AppRouteComponents = {
 
 export function App({
   installedAppRouteInstalls: installedAppRouteInstallsProp,
+  localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
   routeComponents = defaultRouteComponents,
   runtimeProfile: runtimeProfileProp,
 }: {
   installedAppRouteInstalls?: readonly AppInstall[];
+  localWorkspaceGatewayAvailable?: boolean;
   routeComponents?: AppRouteComponents;
   runtimeProfile?: RuntimeProfile;
 } = {}) {
@@ -98,14 +101,16 @@ export function App({
     installedAppRouteInstallsProp,
     location,
   );
+  const localWorkspaceGatewayAvailable =
+    localWorkspaceGatewayAvailableProp ?? workspaceGatewayBrowserConfig() !== undefined;
   const routeContext = useMemo(
-    () => ({ appInstalls: installedAppRouteInstalls }),
-    [installedAppRouteInstalls],
+    () => ({ appInstalls: installedAppRouteInstalls, localWorkspaceGatewayAvailable }),
+    [installedAppRouteInstalls, localWorkspaceGatewayAvailable],
   );
   const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location, routeContext);
   const browserRoutes = useMemo(
-    () => runtimeBrowserRoutePatterns(runtimeProfile),
-    [runtimeProfile],
+    () => runtimeBrowserRoutePatterns(runtimeProfile, routeContext),
+    [routeContext, runtimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
   const routeApp = routeWorld?.app;
@@ -151,6 +156,7 @@ export function App({
       <main className="min-h-dvh">
         <AppRoutes
           installedAppRouteInstalls={installedAppRouteInstalls}
+          localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
           routeComponents={routeComponents}
           runtimeProfile={runtimeProfile}
         />
@@ -168,6 +174,7 @@ export function App({
     >
       <AppRoutes
         installedAppRouteInstalls={installedAppRouteInstalls}
+        localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
         routeComponents={routeComponents}
         runtimeProfile={runtimeProfile}
       />
@@ -185,6 +192,7 @@ export function App({
         <main className="bg-bg" data-frame="instance-shell">
           <AppRoutes
             installedAppRouteInstalls={installedAppRouteInstalls}
+            localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
             routeComponents={routeComponents}
             runtimeProfile={runtimeProfile}
           />
@@ -193,6 +201,7 @@ export function App({
         <main className="bg-bg">
           <AppRoutes
             installedAppRouteInstalls={installedAppRouteInstalls}
+            localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
             routeComponents={routeComponents}
             runtimeProfile={runtimeProfile}
           />
@@ -420,10 +429,12 @@ function useRuntimeShellInstalledAppLinks(
 
 function AppRoutes({
   installedAppRouteInstalls,
+  localWorkspaceGatewayAvailable,
   routeComponents,
   runtimeProfile,
 }: {
   installedAppRouteInstalls: readonly AppInstall[] | undefined;
+  localWorkspaceGatewayAvailable: boolean;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
@@ -432,7 +443,9 @@ function AppRoutes({
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
-  const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
+  const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile, {
+    localWorkspaceGatewayAvailable,
+  });
   const publishedSite = runtimeProfile.publishedSite;
   const publicSitePreview = runtimeProfile.publicSitePreview;
   const hasLazyGeneratedRoutes =
@@ -457,14 +470,14 @@ function AppRoutes({
       {browserRoutes.instanceDeploymentsRoute ? (
         <Route path={browserRoutes.instanceDeploymentsRoute}>
           <OwnerRouteGuard access="owner">
-            <InstanceShellRoute />
+            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
           </OwnerRouteGuard>
         </Route>
       ) : null}
       {browserRoutes.instanceShellRoute ? (
         <Route path={browserRoutes.instanceShellRoute}>
           <OwnerRouteGuard access="owner">
-            <InstanceShellRoute />
+            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
           </OwnerRouteGuard>
         </Route>
       ) : null}

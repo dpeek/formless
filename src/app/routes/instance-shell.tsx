@@ -149,11 +149,17 @@ export type InstanceShellInitialReadScope = {
   providerRuntime: boolean;
 };
 
-export function instanceShellInitialReadScope(currentPath: string): InstanceShellInitialReadScope {
+export function instanceShellInitialReadScope(
+  currentPath: string,
+  {
+    localWorkspaceGatewayAvailable = true,
+  }: { localWorkspaceGatewayAvailable?: boolean | undefined } = {},
+): InstanceShellInitialReadScope {
   const pathname = currentPath.split("?")[0] ?? currentPath;
 
   return {
-    deploymentRuntime: pathname === runtimeTopologyRoutes.deploymentsRoute,
+    deploymentRuntime:
+      pathname === runtimeTopologyRoutes.deploymentsRoute && localWorkspaceGatewayAvailable,
     providerRuntime: false,
   };
 }
@@ -242,14 +248,21 @@ function hasWorkspaceBrowserGatewayBinding(
   return "gateway" in definition.bindings;
 }
 
-export function InstanceShellRoute() {
+export function InstanceShellRoute({
+  localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
+}: { localWorkspaceGatewayAvailable?: boolean | undefined } = {}) {
   const [location, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
-  const initialReadScope = useMemo(() => instanceShellInitialReadScope(location), [location]);
   const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
+  const localWorkspaceGatewayAvailable =
+    localWorkspaceGatewayAvailableProp ?? workspaceGatewayConfig !== undefined;
+  const initialReadScope = useMemo(
+    () => instanceShellInitialReadScope(location, { localWorkspaceGatewayAvailable }),
+    [localWorkspaceGatewayAvailable, location],
+  );
   const [workspaceGatewayState, setWorkspaceGatewayState] = useState<WorkspaceGatewayRouteState>(
-    () => (workspaceGatewayConfig ? { status: "loading" } : { status: "unavailable" }),
+    () => (localWorkspaceGatewayAvailable ? { status: "loading" } : { status: "unavailable" }),
   );
 
   useEffect(() => {

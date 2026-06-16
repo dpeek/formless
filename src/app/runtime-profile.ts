@@ -57,6 +57,7 @@ export type RuntimeInstalledSitePublicSurface = {
 
 export type RuntimeInstalledAppRouteContext = {
   appInstalls?: readonly AppInstall[] | undefined;
+  localWorkspaceGatewayAvailable?: boolean | undefined;
 };
 
 export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
@@ -236,10 +237,14 @@ export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy 
   };
 }
 
-export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBrowserRoutePatterns {
+export function runtimeBrowserRoutePatterns(
+  profile: RuntimeProfile,
+  context: Pick<RuntimeInstalledAppRouteContext, "localWorkspaceGatewayAvailable"> = {},
+): RuntimeBrowserRoutePatterns {
   const policy = runtimeRoutePolicy(profile);
   const installedAppRoutes = runtimeInstalledAppRoutesForProfile(profile);
   const installedSitePublicRoutes = runtimeInstalledSitePublicRoutesForProfile(profile);
+  const hasInstanceBrowserShell = profile.instanceShell && policy.instanceBrowserRoutes;
 
   return {
     ...(policy.ownerSessionBrowserRoutes
@@ -248,10 +253,14 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
           ownerSetupRoute: runtimeTopologyRoutes.setupRoute,
         }
       : {}),
-    ...(profile.instanceShell && policy.instanceBrowserRoutes
+    ...(hasInstanceBrowserShell
+      ? {
+          instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
+        }
+      : {}),
+    ...(hasInstanceBrowserShell && context.localWorkspaceGatewayAvailable
       ? {
           instanceDeploymentsRoute: runtimeTopologyRoutes.deploymentsRoute,
-          instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
         }
       : {}),
     ...(installedAppRoutes

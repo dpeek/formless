@@ -448,6 +448,8 @@ cache, provider evidence, view, screen, read model, and action models.
   are available
 - **THEN** the overview renders app install management, route management,
   workspace source status, and first-app onboarding
+- **AND** overview links or entry points to `/deployments` render only when a
+  local workspace gateway proxy is available
 - **AND** the overview does not render deployment setup, deployment status,
   desired-state summaries, deployment operation controls, deployment config
   management tables, route grouping by deployment config, deployment target

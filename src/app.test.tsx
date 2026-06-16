@@ -101,11 +101,13 @@ function renderRoute(
   path: string,
   runtimeProfile?: RuntimeProfile,
   installedAppRouteInstalls?: readonly AppInstall[],
+  options: { localWorkspaceGatewayAvailable?: boolean } = {},
 ) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
       <App
         installedAppRouteInstalls={installedAppRouteInstalls}
+        localWorkspaceGatewayAvailable={options.localWorkspaceGatewayAvailable}
         routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
       />
@@ -634,8 +636,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Loading Tasks...");
   });
 
-  it('renders the "/deployments" route as an owner instance shell route', () => {
-    const html = renderRoute("/deployments");
+  it('renders the "/deployments" route as an owner instance shell route with local gateway', () => {
+    const html = renderRoute("/deployments", undefined, undefined, {
+      localWorkspaceGatewayAvailable: true,
+    });
 
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="instance-shell"');
@@ -644,8 +648,21 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
     expect(html).toContain("Instance");
     expect(html).toContain('aria-label="Instance navigation"');
-    expect(html).not.toContain('href="/deployments"');
+    expect(linkHtml(html, "/deployments")).toContain('aria-current="page"');
     expect(html).toContain("Loading installed apps...");
+  });
+
+  it('does not select the "/deployments" instance shell route without local gateway', () => {
+    const html = renderRoute("/deployments");
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="instance-shell"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('href="/deployments"');
+    expect(html).not.toContain("Deployment setup and progress");
   });
 
   it("does not mark app management current on unknown dev routes", () => {
@@ -781,7 +798,10 @@ describe("App smoke routes", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const shellHtml = renderRoute("/", instanceProfile);
-    const deploymentsHtml = renderRoute("/deployments", instanceProfile);
+    const deploymentsHtml = renderRoute("/deployments", instanceProfile, undefined, {
+      localWorkspaceGatewayAvailable: true,
+    });
+    const unavailableDeploymentsHtml = renderRoute("/deployments", instanceProfile);
     const legacyHtml = renderRoute("/site", instanceProfile);
     const adminHtml = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
@@ -803,7 +823,10 @@ describe("App smoke routes", () => {
     expect(deploymentsHtml).toContain("Loading installed apps...");
     expect(deploymentsHtml).not.toContain('data-frame="workbench"');
     expect(deploymentsHtml).not.toContain('aria-label="Runtime apps"');
-    expect(deploymentsHtml).not.toContain('href="/deployments"');
+    expect(linkHtml(deploymentsHtml, "/deployments")).toContain('aria-current="page"');
+    expect(unavailableDeploymentsHtml).toContain("Not found");
+    expect(unavailableDeploymentsHtml).not.toContain('href="/deployments"');
+    expect(unavailableDeploymentsHtml).not.toContain("Deployment setup and progress");
     expect(shellHtml).not.toContain('data-frame="workbench"');
     expect(shellHtml).not.toContain('aria-label="Runtime apps"');
     expect(legacyHtml).toContain("Not found");
