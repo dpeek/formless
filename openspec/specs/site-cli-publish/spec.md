@@ -370,12 +370,6 @@ for workspace-controlled deploy intent.
 - **THEN** the deployment uses the instance runtime profile
 - **AND** the deployment does not require installed app records or app archives
 - **AND** deploy metadata is verified after upload
-- **AND** linked workspace app package manifests, source schemas, and seed records
-  are bundled into the deployed runtime package resolver without copying local
-  filesystem paths into install records, deploy state, or Cloudflare text
-  bindings
-- **AND** a retry against an empty selected runtime treats missing local installs
-  as initial workspace population rather than unsafe remote drift
 - **AND** display-safe target facts are copied to ignored `.formless/` deploy
   state
 - **AND** provider credentials, Alchemy secrets, automation admin tokens, and

@@ -24,6 +24,11 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 const now = "2026-05-23T00:00:00.000Z";
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const editableMutations = {
+  create: { enabled: true },
+  patch: { enabled: true },
+  delete: { enabled: false },
+};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -33,20 +38,44 @@ const siteSourceSchema = parseAppSchema({
         key: { type: "text", required: true, label: "Key" },
         label: { type: "text", required: true, label: "Label" },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
+      mutations: editableMutations,
       constraints: {
         uniqueKey: { kind: "unique", fields: ["key"] },
       },
     },
   },
-  queries: {},
-  itemViews: {},
+  queries: {
+    siteAll: { label: "Sites", entity: "site", expression: { kind: "all" } },
+  },
+  itemViews: {
+    siteItem: {
+      entity: "site",
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+      },
+    },
+  },
   tableViews: {},
-  views: {},
+  views: {
+    siteList: {
+      type: "collection",
+      label: "Sites",
+      entity: "site",
+      queries: [{ query: "siteAll" }],
+      defaultQuery: "siteAll",
+      result: { type: "list", itemView: "siteItem" },
+    },
+  },
+  screens: {
+    home: {
+      type: "workspace",
+      label: "Home",
+      layout: {
+        type: "stack",
+        sections: [{ id: "sites", type: "collection", view: "siteList" }],
+      },
+    },
+  },
 });
 
 describe("portable archive protocol", () => {
