@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-  type DomainProviderProfileMappingIntent,
-  type DomainProviderRedirectIntent,
+import type {
+  DomainProviderProfileMappingIntent,
+  DomainProviderRedirectIntent,
 } from "./domain-provider-protocol.ts";
 import { planDomainProviderResources } from "./domain-provider-planner.ts";
 
@@ -74,7 +73,7 @@ describe("domain provider planner", () => {
     });
   });
 
-  it("turns redirect intents into RedirectRule resources plus proxied placeholder DNS", () => {
+  it("turns redirect intents into Worker Custom Domain resources", () => {
     const redirects: DomainProviderRedirectIntent[] = [
       {
         fromHost: "www.example.com",
@@ -100,32 +99,21 @@ describe("domain provider planner", () => {
     expect(plan.blockers).toEqual([]);
     expect(plan.resources).toEqual([
       expect.objectContaining({
-        kind: "cloudflare-dns-records",
-        logicalId: "primary-redirect-dns-www-example-com",
-        props: {
-          records: [
-            {
-              ...CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-              name: "www.example.com",
-            },
-          ],
-          zoneId: "zone-example",
-        },
-      }),
-      expect.objectContaining({
-        kind: "cloudflare-redirect-rule",
-        logicalId: "primary-redirect-rule-www-example-com-example-com",
-        props: expect.objectContaining({
-          preserveQueryString: true,
-          requestUrl: "https://www.example.com/*",
-          statusCode: 301,
-          targetUrl: "https://example.com/${1}",
-          zone: "zone-example",
-        }),
-      }),
-      expect.objectContaining({
         kind: "cloudflare-worker-custom-domain",
         logicalId: "primary-custom-domain-example-com-publicsite-site",
+      }),
+      expect.objectContaining({
+        host: "www.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-www-example-com",
+        props: {
+          adopt: false,
+          name: "www.example.com",
+          overrideExistingOrigin: false,
+          workerName: "formless-prod",
+          zoneId: "zone-example",
+        },
+        routeKind: "redirect",
       }),
     ]);
   });

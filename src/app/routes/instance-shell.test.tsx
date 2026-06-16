@@ -976,7 +976,6 @@ function deploymentDesiredStateResponse(): InstanceDeploymentDesiredStateRespons
         resourceCount: 1,
         resourcesByKind: {
           "cloudflare-dns-records": 0,
-          "cloudflare-redirect-rule": 0,
           "cloudflare-worker-custom-domain": 1,
         },
         title: "Instance deployment desired state",

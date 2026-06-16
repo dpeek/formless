@@ -2511,18 +2511,14 @@ describe("Formless Site CLI", () => {
     });
     expect(
       destroyInputs[0]?.domainProviderResources?.resources.map((resource) => resource.kind),
-    ).toEqual([
-      "cloudflare-dns-records",
-      "cloudflare-redirect-rule",
-      "cloudflare-worker-custom-domain",
-    ]);
+    ).toEqual(["cloudflare-worker-custom-domain", "cloudflare-worker-custom-domain"]);
     expect(
       destroyInputs[0]?.domainProviderResources?.resources.map((resource) => {
         const host = resource.inputs.host ?? resource.inputs.fromHost;
 
         return typeof host === "string" ? host : "<missing>";
       }),
-    ).toEqual(["old.dpeek.com", "old.dpeek.com", "dpeek.com"]);
+    ).toEqual(["dpeek.com", "old.dpeek.com"]);
     expect(JSON.stringify(destroyInputs[0]?.domainProviderResources)).not.toContain(
       "draft.dpeek.com",
     );
@@ -2548,8 +2544,8 @@ describe("Formless Site CLI", () => {
         "Worker: personal.",
         "Durable Object namespace: personal-authority.",
         "Media bucket: personal-media.",
-        "Route provider resources: 3 provider resources from 2 routes (instance:route; dpeek.com, old.dpeek.com).",
-        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Turnstile widget destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 1, DNS records 1, redirects 1, Alchemy state destroyed.",
+        "Route provider resources: 2 provider resources from 2 routes (instance:route; dpeek.com, old.dpeek.com).",
+        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Turnstile widget destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 2, DNS records 0, Alchemy state destroyed.",
         `Ignored deploy state: ${path.relative(tempDir, deploymentStateRoot)}.`,
         `Deployment facts: ${path.relative(
           tempDir,
@@ -2754,9 +2750,7 @@ describe("Formless Site CLI", () => {
     const localDavid = appArchive("david", "David Peek");
     const ownerSetupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
     const desiredResourcesByKind = {
-      "cloudflare-dns-records": 1,
-      "cloudflare-redirect-rule": 1,
-      "cloudflare-worker-custom-domain": 1,
+      "cloudflare-worker-custom-domain": 2,
     };
     const sourceSchemaHash = await computeSourceSchemaHash(taskSourceSchema);
     const controlPlaneSourceRecords = [
@@ -2968,7 +2962,7 @@ describe("Formless Site CLI", () => {
       input: {
         observedDesiredStateHash: desiredState.hash,
         observedStatus: "deployed",
-        observedSummary: "3 deployment resources applied from workspace source.",
+        observedSummary: "2 deployment resources applied from workspace source.",
       },
     });
     expect(
@@ -2991,13 +2985,13 @@ describe("Formless Site CLI", () => {
     ).not.toContain("generated-token");
     expect(logs.at(-1)).toContain("Workspace operation: deploy apply (succeeded).");
     expect(logs.at(-1)).toContain(`ownerSetupUrl: ${ownerSetupUrl}.`);
+    expect(logs.at(-1)).toContain('resourcesByKind: {"cloudflare-worker-custom-domain":2}.');
     expect(logs.at(-1)).toContain("turnstileWidget: provisioned.");
     expect(logs.at(-1)).toContain("url: https://personal.dpeek.workers.dev.");
     expect(logs.at(-1)).toContain('"turnstileWidget":"provisioned"');
     expect(logs.at(-1)).toContain('"resourcesByKind":');
-    expect(logs.at(-1)).toContain('"cloudflare-worker-custom-domain":1');
-    expect(logs.at(-1)).toContain('"cloudflare-dns-records":1');
-    expect(logs.at(-1)).toContain('"cloudflare-redirect-rule":1');
+    expect(logs.at(-1)).toContain('"cloudflare-worker-custom-domain":2');
+    expect(logs.at(-1)).not.toContain("cloudflare-dns-records");
     expect(logs.at(-1)).toContain('"applyRestoreOk":true');
     expect(logs.join("\n")).not.toContain("cf-token");
     expect(logs.join("\n")).not.toContain("alchemy-state-token");
@@ -3085,10 +3079,10 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("Summary: Deploy planned.");
     expect(logs[0]).toContain("drift: no-drift.");
     expect(logs[0]).toContain("observationStatus: not-run.");
+    expect(logs[0]).toContain('resourcesByKind: {"cloudflare-worker-custom-domain":2}.');
     expect(logs[0]).toContain("turnstileWidget: planned.");
-    expect(logs[0]).toContain('"cloudflare-worker-custom-domain":1');
-    expect(logs[0]).toContain('"cloudflare-dns-records":1');
-    expect(logs[0]).toContain('"cloudflare-redirect-rule":1');
+    expect(logs[0]).toContain('"cloudflare-worker-custom-domain":2');
+    expect(logs[0]).not.toContain("cloudflare-dns-records");
     expect(logs.join("\n")).not.toContain("local-token");
   });
 
@@ -5247,7 +5241,6 @@ function fakeCloudflareDomainClient(input: {
   return {
     listActiveZonesForName: async ({ name }) => input.zonesByName[name] ?? [],
     listDnsRecords: async ({ name }) => input.dnsRecords[name] ?? [],
-    listRedirectRules: async () => [],
     listWorkerDomains: async () => input.workerDomains,
     listWorkerRoutes: async ({ zoneId }) => input.workerRoutes[zoneId] ?? [],
   };
@@ -5268,8 +5261,6 @@ function destroyedResourceSummary(
       dnsRecords: resources.filter((resource) => resource.kind === "cloudflare-dns-records").length,
       durableObjectNamespace: "destroyed",
       mediaBucket: "destroyed",
-      redirectRules: resources.filter((resource) => resource.kind === "cloudflare-redirect-rule")
-        .length,
       turnstileWidget: "destroyed",
       worker: "destroyed",
       workerAssets: "destroyed",
@@ -5283,7 +5274,6 @@ function destroyedResourceSummary(
     dnsRecords: 1,
     durableObjectNamespace: "destroyed",
     mediaBucket: "destroyed",
-    redirectRules: 0,
     turnstileWidget: "destroyed",
     worker: "destroyed",
     workerAssets: "destroyed",

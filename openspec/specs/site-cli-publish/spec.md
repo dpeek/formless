@@ -33,8 +33,8 @@ the public CLI surface.
 - **GIVEN** the package CLI is installed
 - **WHEN** a user runs `formless deploy --dry-run`
 - **THEN** the command plans workspace source freshness, target drift, upgrade
-  requirements, deployment desired resources, and custom-domain, DNS, and
-  redirect reconciliation without mutating local source, remote data,
+  requirements, deployment desired resources, and DNS and custom-domain
+  reconciliation without mutating local source, remote data,
   Cloudflare resources, or Alchemy state
 
 #### Scenario: Removed command families
@@ -343,7 +343,8 @@ intent lives in schema-owned storage snapshots.
 - **THEN** target control-plane records, app archives, and media payloads are
   written into workspace source
 - **AND** deploy dry-run reports archive, control-plane record, deployment,
-  custom-domain, DNS, and redirect drift against the selected target
+  custom-domain, and DNS drift against the selected target
+- **AND** redirect route drift is reported as route intent drift
 - **AND** pull, push, deploy dry-run, and deploy select the remote HTTP origin
   from an enabled `deployment-config.targetUrl` record rather than
   `formless.json`
@@ -378,14 +379,16 @@ for workspace-controlled deploy intent.
   the intended owner setup URL for passkey-backed first-owner setup
 - **AND** workspace source is restored or pushed through runtime APIs before
   remote data mutation is considered complete
-- **AND** Worker, Durable Object, R2, DNS, custom-domain, and redirect resources
-  are reconciled through tracked Alchemy desired state in the generic deployment
+- **AND** Worker, Durable Object, R2, DNS, and custom-domain resources are
+  reconciled through tracked Alchemy desired state in the generic deployment
   path
+- **AND** redirect source hosts are reconciled as Worker custom-domain
+  resources in the generic deployment path
 
 #### Scenario: Route removal deploys provider deletion
 
 - **GIVEN** workspace source no longer contains an enabled route that previously
-  projected custom-domain, DNS, or redirect provider resources
+  projected custom-domain or DNS provider resources
 - **WHEN** `formless deploy` runs with required provider credentials and ignored
   deploy state available
 - **THEN** the CLI or trusted local deployer omits those resources from tracked
@@ -401,7 +404,7 @@ for workspace-controlled deploy intent.
   credentials and ignored deploy state available
 - **THEN** the selected target's Worker, Durable Object namespace, R2 media
   bucket, Worker assets, Worker secrets, custom-domain provider resources, DNS
-  provider resources, redirect provider resources, and Alchemy deploy state are
+  provider resources, and Alchemy deploy state are
   destroyed through tracked selected deploy state
 - **AND** `formless.json`, instance archives, and app archives remain in place
 - **AND** ignored deploy state for the selected target is removed or marked

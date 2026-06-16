@@ -47,9 +47,6 @@ describe("domain provider Alchemy runner", () => {
         DnsRecords: async () => {
           throw new Error("DNS records are outside this test.");
         },
-        RedirectRule: async () => {
-          throw new Error("Redirect rules are outside this test.");
-        },
       },
       password: "alchemy-password",
       runner: async (appName, options, apply) => {
@@ -198,9 +195,6 @@ describe("domain provider Alchemy runner", () => {
         },
         DnsRecords: async () => {
           throw new Error("DNS records are outside this test.");
-        },
-        RedirectRule: async () => {
-          throw new Error("Redirect rules are outside this test.");
         },
       },
       password: "alchemy-password",

@@ -27,7 +27,6 @@ import {
   type TurnstileWidgetOutput,
   type TurnstileWidgetProps,
 } from "./turnstile-alchemy.ts";
-import { FormlessCloudflareRedirectRule } from "./cloudflare-redirect-rule.ts";
 
 export const ALCHEMY_PASSWORD_ENV_NAME = "ALCHEMY_PASSWORD";
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
@@ -183,7 +182,6 @@ export type DestroyFormlessInstanceResourceSummary = {
   dnsRecords: number;
   durableObjectNamespace: DestroyFormlessInstanceResourceStatus;
   mediaBucket: DestroyFormlessInstanceResourceStatus;
-  redirectRules: number;
   turnstileWidget: DestroyFormlessInstanceResourceStatus;
   worker: DestroyFormlessInstanceResourceStatus;
   workerAssets: DestroyFormlessInstanceResourceStatus;
@@ -336,7 +334,6 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
       profile?: string;
     },
   ) => Promise<unknown>;
-  createRedirectRule?: AlchemyDomainProviderFactories["RedirectRule"];
   createSecret: (value: string) => unknown;
   createTurnstileWidget: (
     id: "turnstile",
@@ -1176,13 +1173,8 @@ function deploymentResourceFactories(
 ): AlchemyDomainProviderFactories {
   const createCustomDomain = dependencies.createCustomDomain;
   const createDnsRecords = dependencies.createDnsRecords;
-  const createRedirectRule = dependencies.createRedirectRule;
 
-  if (
-    createCustomDomain === undefined ||
-    createDnsRecords === undefined ||
-    createRedirectRule === undefined
-  ) {
+  if (createCustomDomain === undefined || createDnsRecords === undefined) {
     throw new Error("Formless instance deploy requires Alchemy route resource factories.");
   }
 
@@ -1197,11 +1189,6 @@ function deploymentResourceFactories(
         ...props,
         ...cloudflareOptions,
       } as Parameters<AlchemyDomainProviderFactories["DnsRecords"]>[1]),
-    RedirectRule: (id, props) =>
-      createRedirectRule(id, {
-        ...props,
-        ...cloudflareOptions,
-      } as Parameters<AlchemyDomainProviderFactories["RedirectRule"]>[1]),
   };
 }
 
@@ -1324,9 +1311,6 @@ function destroyResourceSummary(
     ).length,
     durableObjectNamespace: status,
     mediaBucket: status,
-    redirectRules: domainProviderResources.filter(
-      (resource) => resource.kind === "cloudflare-redirect-rule",
-    ).length,
     turnstileWidget: status,
     worker: status,
     workerAssets: status,
@@ -1358,13 +1342,6 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
     createDurableObjectNamespace: (id, props) => cloudflare.DurableObjectNamespace(id, props),
     createDnsRecords: (id, props) => cloudflare.DnsRecords(id, props),
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
-    createRedirectRule: (id, props) =>
-      props.targetUrlExpression === undefined
-        ? cloudflare.RedirectRule(id, props)
-        : FormlessCloudflareRedirectRule(id, {
-            ...props,
-            targetUrlExpression: props.targetUrlExpression,
-          }),
     createSecret: (value) => alchemy.secret(value),
     createTurnstileWidget: (id, props) => CloudflareTurnstileWidget(id, props),
     deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),

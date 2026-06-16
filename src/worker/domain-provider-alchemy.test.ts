@@ -39,21 +39,6 @@ describe("Alchemy domain provider adapter", () => {
 
         return { ...props, records: [] };
       },
-      RedirectRule: async (id, props) => {
-        calls.push({ id, kind: "RedirectRule", props });
-
-        return {
-          ...props,
-          description: props.description ?? "redirect",
-          enabled: true,
-          lastUpdated: "2026-05-26T00:00:00.000Z",
-          preserveQueryString: props.preserveQueryString ?? true,
-          ruleId: "rule-output",
-          rulesetId: "ruleset-output",
-          statusCode: props.statusCode ?? 301,
-          zoneId: typeof props.zone === "string" ? props.zone : JSON.stringify(props.zone),
-        };
-      },
     };
     const plan = planDomainProviderResources({
       instanceId: "primary",
@@ -89,13 +74,11 @@ describe("Alchemy domain provider adapter", () => {
       },
     ]);
     expect(calls.map((call) => [call.kind, call.id])).toEqual([
-      ["DnsRecords", "primary-redirect-dns-www-example-com"],
-      ["RedirectRule", "primary-redirect-rule-www-example-com-example-com"],
       ["CustomDomain", "primary-custom-domain-example-com-instance"],
+      ["CustomDomain", "primary-redirect-custom-domain-www-example-com"],
     ]);
     expect(result.resources.map((resource) => resource.kind)).toEqual([
-      "cloudflare-dns-records",
-      "cloudflare-redirect-rule",
+      "cloudflare-worker-custom-domain",
       "cloudflare-worker-custom-domain",
     ]);
   });
@@ -157,22 +140,6 @@ describe("Alchemy domain provider adapter", () => {
           })),
         } as Awaited<ReturnType<AlchemyDomainProviderFactories["DnsRecords"]>>;
       },
-      RedirectRule: async (id, props) => {
-        calls.push({ id, kind: "RedirectRule", props });
-
-        return {
-          description: props.description ?? "redirect",
-          enabled: true,
-          lastUpdated: "2026-06-04T00:00:00.000Z",
-          preserveQueryString: props.preserveQueryString ?? true,
-          requestUrl: props.requestUrl,
-          ruleId: "redirect-rule-output",
-          rulesetId: "redirect-ruleset-output",
-          statusCode: props.statusCode ?? 301,
-          targetUrl: props.targetUrl,
-          zoneId: typeof props.zone === "string" ? props.zone : props.zone.id,
-        };
-      },
     };
     const resourceGraph: DeployResourceGraph = {
       targetId: "instance.primary",
@@ -180,34 +147,32 @@ describe("Alchemy domain provider adapter", () => {
         {
           dependencies: [],
           inputs: {
-            fromHost: "www.example.com",
             records: [
               {
-                content: "100::",
-                name: "www.example.com",
+                content: "192.0.2.1",
+                name: "dns.example.com",
                 proxied: true,
                 ttl: 1,
-                type: "AAAA",
+                type: "A",
               },
             ],
           },
           kind: "cloudflare-dns-records",
-          logicalId: "primary-redirect-dns-www-example-com",
+          logicalId: "primary-dns-dns-example-com",
           providerFamily: "cloudflare",
           targetId: "instance.primary",
         },
         {
-          dependencies: [{ logicalId: "primary-redirect-dns-www-example-com" }],
+          dependencies: [],
           inputs: {
-            description: "Formless redirect www.example.com to example.com",
-            fromHost: "www.example.com",
-            preserveQueryString: true,
-            requestUrl: "https://www.example.com/*",
-            statusCode: 308,
-            targetUrl: "https://example.com/${1}",
+            adopt: false,
+            host: "www.example.com",
+            name: "www.example.com",
+            overrideExistingOrigin: false,
+            workerName: "formless-prod",
           },
-          kind: "cloudflare-redirect-rule",
-          logicalId: "primary-redirect-rule-www-example-com-example-com",
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "primary-redirect-custom-domain-www-example-com",
           providerFamily: "cloudflare",
           targetId: "instance.primary",
         },
@@ -257,18 +222,16 @@ describe("Alchemy domain provider adapter", () => {
     ]);
     expect(runnerCalls[0]?.options).not.toHaveProperty("noTrack");
     expect(calls.map((call) => [call.kind, call.id])).toEqual([
-      ["DnsRecords", "primary-redirect-dns-www-example-com"],
-      ["RedirectRule", "primary-redirect-rule-www-example-com-example-com"],
+      ["DnsRecords", "primary-dns-dns-example-com"],
+      ["CustomDomain", "primary-redirect-custom-domain-www-example-com"],
       ["CustomDomain", "primary-custom-domain-app-example-com-publicsite-site"],
     ]);
     expect(calls[0]?.props).toMatchObject({ zoneId: "zone-example" });
     expect(calls[1]?.props).toMatchObject({
-      expression: 'http.host == "www.example.com" and ssl',
-      statusCode: 308,
-      targetUrlExpression: 'concat("https://example.com", http.request.uri.path)',
-      zone: "zone-example",
+      adopt: true,
+      name: "www.example.com",
+      workerName: "formless-prod",
     });
-    expect(calls[1]?.props).not.toHaveProperty("requestUrl");
     expect(calls[2]?.props).toMatchObject({
       adopt: true,
       name: "app.example.com",
@@ -277,22 +240,22 @@ describe("Alchemy domain provider adapter", () => {
     expect(result.evidence).toEqual([
       {
         action: "updated",
-        alchemyResourceId: "primary-redirect-dns-www-example-com",
-        displayName: "www.example.com",
+        alchemyResourceId: "primary-dns-dns-example-com",
+        displayName: "dns.example.com",
         kind: "cloudflare-dns-records",
-        logicalId: "primary-redirect-dns-www-example-com",
+        logicalId: "primary-dns-dns-example-com",
         providerFamily: "cloudflare",
         providerResourceIds: ["dns-output-0"],
         targetId: "instance.primary",
       },
       {
         action: "updated",
-        alchemyResourceId: "primary-redirect-rule-www-example-com-example-com",
+        alchemyResourceId: "primary-redirect-custom-domain-www-example-com",
         displayName: "www.example.com",
-        kind: "cloudflare-redirect-rule",
-        logicalId: "primary-redirect-rule-www-example-com-example-com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-www-example-com",
         providerFamily: "cloudflare",
-        providerResourceIds: ["redirect-rule-output", "redirect-ruleset-output"],
+        providerResourceIds: ["custom-domain-output"],
         targetId: "instance.primary",
       },
       {
@@ -358,21 +321,6 @@ describe("Alchemy domain provider adapter", () => {
           zoneId: props.zoneId,
         } as Awaited<ReturnType<AlchemyDomainProviderFactories["DnsRecords"]>>;
       },
-      RedirectRule: async (id, props) => {
-        declare(id);
-
-        return {
-          description: props.description ?? "redirect",
-          enabled: true,
-          lastUpdated: "2026-06-04T00:00:00.000Z",
-          preserveQueryString: props.preserveQueryString ?? true,
-          ruleId: `${id}-rule`,
-          rulesetId: `${id}-ruleset`,
-          statusCode: props.statusCode ?? 301,
-          targetUrl: props.targetUrl,
-          zoneId: typeof props.zone === "string" ? props.zone : props.zone.id,
-        };
-      },
     };
     const routeResources: DeployResourceGraph = {
       targetId: "instance.primary",
@@ -380,34 +328,13 @@ describe("Alchemy domain provider adapter", () => {
         {
           dependencies: [],
           inputs: {
-            fromHost: "old.example.com",
-            records: [
-              {
-                content: "100::",
-                name: "old.example.com",
-                proxied: true,
-                ttl: 1,
-                type: "AAAA",
-              },
-            ],
+            host: "old.example.com",
+            name: "old.example.com",
+            workerName: "formless-prod",
             zoneId: "zone-example",
           },
-          kind: "cloudflare-dns-records",
-          logicalId: "primary-redirect-dns-old-example-com",
-          providerFamily: "cloudflare",
-          targetId: "instance.primary",
-        },
-        {
-          dependencies: [{ logicalId: "primary-redirect-dns-old-example-com" }],
-          inputs: {
-            fromHost: "old.example.com",
-            requestUrl: "https://old.example.com/*",
-            statusCode: 308,
-            targetUrl: "https://example.com/${1}",
-            zoneId: "zone-example",
-          },
-          kind: "cloudflare-redirect-rule",
-          logicalId: "primary-redirect-rule-old-example-com-example-com",
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "primary-redirect-custom-domain-old-example-com",
           providerFamily: "cloudflare",
           targetId: "instance.primary",
         },
@@ -429,7 +356,7 @@ describe("Alchemy domain provider adapter", () => {
     const afterRouteRemoval: DeployResourceGraph = {
       ...routeResources,
       resources: routeResources.resources.filter(
-        (resource) => resource.kind === "cloudflare-worker-custom-domain",
+        (resource) => resource.logicalId !== "primary-redirect-custom-domain-old-example-com",
       ),
     };
 
@@ -448,8 +375,7 @@ describe("Alchemy domain provider adapter", () => {
 
     expect(declaredByRun).toEqual([
       [
-        "primary-redirect-dns-old-example-com",
-        "primary-redirect-rule-old-example-com-example-com",
+        "primary-redirect-custom-domain-old-example-com",
         "primary-custom-domain-app-example-com-instance",
       ],
       ["primary-custom-domain-app-example-com-instance"],
@@ -457,12 +383,7 @@ describe("Alchemy domain provider adapter", () => {
     expect(destroyed).toEqual([
       {
         appName: "formless-deployment-instance-primary",
-        logicalId: "primary-redirect-dns-old-example-com",
-        stage: "personal",
-      },
-      {
-        appName: "formless-deployment-instance-primary",
-        logicalId: "primary-redirect-rule-old-example-com-example-com",
+        logicalId: "primary-redirect-custom-domain-old-example-com",
         stage: "personal",
       },
     ]);
@@ -507,9 +428,6 @@ function throwingFactories(): AlchemyDomainProviderFactories {
     },
     DnsRecords: async () => {
       throw new Error("DnsRecords should not be called.");
-    },
-    RedirectRule: async () => {
-      throw new Error("RedirectRule should not be called.");
     },
   };
 }

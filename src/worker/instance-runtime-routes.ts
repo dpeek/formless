@@ -43,9 +43,16 @@ export type InstanceRuntimeRedirectRouteResolution = {
   status: InstanceRuntimeRedirectStatus;
 };
 
+export type InstanceRuntimeNotFoundRouteResolution = {
+  kind: "not-found";
+  matchHost: string;
+  reason: "captured-redirect-host";
+};
+
 export type InstanceRuntimeRouteResolution =
   | InstanceRuntimeMountRouteResolution
-  | InstanceRuntimeRedirectRouteResolution;
+  | InstanceRuntimeRedirectRouteResolution
+  | InstanceRuntimeNotFoundRouteResolution;
 
 export type InstanceRuntimeRouteRequest = {
   host: string;
@@ -137,7 +144,7 @@ function selectInstanceRuntimeRouteCandidate(input: {
   records: readonly StoredRecord[];
   request: InstanceRuntimeRouteRequest;
   options?: InstanceRuntimeRouteResolutionOptions;
-}): RouteCandidate | undefined {
+}): RouteCandidate | InstanceRuntimeNotFoundRouteResolution | undefined {
   const normalizedHost = normalizedRequestHost(input.request.host);
   const candidates = input.records
     .flatMap((record) => {
@@ -150,6 +157,23 @@ function selectInstanceRuntimeRouteCandidate(input: {
       return candidate ? [candidate] : [];
     })
     .sort(compareRouteCandidates);
+
+  const exactHostCandidate = candidates.find((candidate) => candidate.matchHost !== undefined);
+
+  if (exactHostCandidate) {
+    return exactHostCandidate;
+  }
+
+  if (
+    normalizedHost &&
+    redirectRouteCapturesHost(input.records, normalizedHost, input.request.pathname)
+  ) {
+    return {
+      kind: "not-found",
+      matchHost: normalizedHost,
+      reason: "captured-redirect-host",
+    };
+  }
 
   return candidates[0];
 }
@@ -274,11 +298,15 @@ function hostRank(candidate: RouteCandidate): number {
 }
 
 function runtimeRouteResolutionFromCandidate(
-  candidate: RouteCandidate,
+  candidate: RouteCandidate | InstanceRuntimeNotFoundRouteResolution,
   appInstalls: readonly AppInstall[],
   request: InstanceRuntimeRouteRequest,
   packageResolver?: AppPackageResolver,
 ): InstanceRuntimeRouteResolution | undefined {
+  if (!("values" in candidate)) {
+    return candidate;
+  }
+
   const values = candidate.values;
 
   if (values.kind === "redirect") {
@@ -344,6 +372,34 @@ function installTarget(
         packageResolver,
       )
     : undefined;
+}
+
+function redirectRouteCapturesHost(
+  records: readonly StoredRecord[],
+  normalizedHost: string,
+  pathname: string,
+): boolean {
+  return records.some((record) => {
+    const candidate = routeCandidateFromRecord(record, {
+      includeHostless: false,
+      normalizedHost,
+      pathname,
+    });
+
+    if (candidate?.matchHost !== undefined) {
+      return false;
+    }
+
+    if (record.deletedAt || record.entity !== "route") {
+      return false;
+    }
+
+    const values = routeValues(record.values);
+
+    return (
+      values?.enabled === true && values.kind === "redirect" && values.matchHost === normalizedHost
+    );
+  });
 }
 
 function redirectLocation(

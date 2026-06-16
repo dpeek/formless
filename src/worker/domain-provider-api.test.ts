@@ -342,9 +342,13 @@ describe("instance domain provider API routes", () => {
         toHost: "example.com",
       }),
     ]);
-    expect(plan.body.plan.resources.map((resource) => resource.kind)).toEqual([
-      "cloudflare-dns-records",
-      "cloudflare-redirect-rule",
+    expect(plan.body.plan.resources).toEqual([
+      expect.objectContaining({
+        host: "www.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-www-example-com",
+        routeKind: "redirect",
+      }),
     ]);
     expect(controlPlaneIntent.body.records).toEqual(
       expect.arrayContaining([

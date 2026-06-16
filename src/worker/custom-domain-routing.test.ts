@@ -357,15 +357,92 @@ describe("installed Site custom-domain Worker routing", () => {
       createdAt: "2026-06-02T00:00:00.000Z",
       updatedAt: "2026-06-02T00:00:00.000Z",
     });
+    await createRouteRecord("route:redirect:docs.example.com", {
+      enabled: true,
+      matchHost: "docs.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "redirect",
+      toUrl: "https://new.example.com/archive?keep=target",
+      statusCode: "302",
+      preservePath: false,
+      preserveQueryString: false,
+      createdAt: "2026-06-02T00:00:00.000Z",
+      updatedAt: "2026-06-02T00:00:00.000Z",
+    });
 
     const redirected = await fetchHost("old.example.com", "/docs/start?ref=old", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const targetUrlRedirected = await fetchHost("docs.example.com", "/docs/start?ref=old", {
       headers: { Accept: "text/html" },
       redirect: "manual",
     });
 
     expect(redirected.status).toBe(308);
     expect(redirected.headers.get("Location")).toBe("https://new.example.com/docs/start?ref=old");
+    expect(targetUrlRedirected.status).toBe(302);
+    expect(targetUrlRedirected.headers.get("Location")).toBe(
+      "https://new.example.com/archive?keep=target",
+    );
     expect(assetRequests).toEqual([]);
+  });
+
+  it("returns not found for unmatched paths on redirect-captured hosts", async () => {
+    await createRouteRecord("route:redirect:old.example.com", {
+      enabled: true,
+      matchHost: "old.example.com",
+      matchPath: "/old",
+      kind: "redirect",
+      toHost: "new.example.com",
+      statusCode: "308",
+      preservePath: true,
+      preserveQueryString: true,
+      createdAt: "2026-06-02T00:00:00.000Z",
+      updatedAt: "2026-06-02T00:00:00.000Z",
+    });
+    assetRequests = [];
+
+    const hostlessMount = await fetchHost("old.example.com", "/apps/site", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+
+    expect(hostlessMount.status).toBe(404);
+    expect(assetRequests).toEqual([]);
+
+    await withHarness(await createCustomDomainHarness("publishedSite"), async () => {
+      await createRouteRecord("route:redirect:old.example.com", {
+        enabled: true,
+        matchHost: "old.example.com",
+        matchPath: "/old",
+        kind: "redirect",
+        toHost: "new.example.com",
+        statusCode: "308",
+        preservePath: true,
+        preserveQueryString: true,
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      });
+      assetRequests = [];
+
+      const ordinaryProfile = await fetchHost("old.example.com", "/blog/starter-post", {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+      const matchedRedirect = await fetchHost("old.example.com", "/old?ref=legacy", {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+
+      expect(ordinaryProfile.status).toBe(404);
+      expect(matchedRedirect.status).toBe(308);
+      expect(matchedRedirect.headers.get("Location")).toBe(
+        "https://new.example.com/old?ref=legacy",
+      );
+      expect(assetRequests).toEqual([]);
+    });
   });
 
   it("stops mapped public Site routing after desired mapping deletion", async () => {

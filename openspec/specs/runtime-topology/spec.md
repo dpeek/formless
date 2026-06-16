@@ -287,6 +287,18 @@ source for hostless mounts, exact-host mounts, and redirects.
 - **THEN** the runtime returns the configured redirect status code and target
 - **AND** preservePath and preserveQueryString policy are applied to the
   redirect location
+- **AND** the redirect response is produced by the Worker when the request is
+  delivered through the redirect source host custom domain
+
+#### Scenario: Captured redirect host without matching path
+
+- **GIVEN** an enabled redirect route captures a request host
+- **AND** no enabled exact-host route matches the request path
+- **WHEN** runtime topology resolves the request
+- **THEN** the request does not fall through to hostless mounts or ordinary host
+  profile behavior
+- **AND** the runtime returns no route for normal not-found handling unless
+  another exact-host route matches
 
 ### Requirement: Local Workspace Gateway Route Policy
 

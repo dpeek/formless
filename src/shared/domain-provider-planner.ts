@@ -1,17 +1,14 @@
-import {
-  CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-  type DomainProviderCustomDomainResource,
-  type DomainProviderDnsRecordsResource,
-  type DomainProviderPlan,
-  type DomainProviderPlanInput,
-  type DomainProviderPlanIssue,
-  type DomainProviderPlanPolicy,
-  type DomainProviderProfileMappingIntent,
-  type DomainProviderRedirectIntent,
-  type DomainProviderRedirectRuleResource,
-  type DomainProviderRedirectStatusCode,
-  type DomainProviderResource,
-  type DomainProviderZone,
+import type {
+  DomainProviderCustomDomainResource,
+  DomainProviderPlan,
+  DomainProviderPlanInput,
+  DomainProviderPlanIssue,
+  DomainProviderPlanPolicy,
+  DomainProviderProfileMappingIntent,
+  DomainProviderRedirectIntent,
+  DomainProviderRedirectStatusCode,
+  DomainProviderResource,
+  DomainProviderZone,
 } from "./domain-provider-protocol.ts";
 import { normalizeInstanceDomainHost } from "./instance-domain-mappings.ts";
 
@@ -62,8 +59,15 @@ export function planDomainProviderResources(input: DomainProviderPlanInput): Dom
       continue;
     }
 
-    resources.push(redirectRuleResource({ instanceId, redirect, zone }));
-    resources.push(redirectDnsResource({ instanceId, redirect, zone }));
+    resources.push(
+      redirectCustomDomainResource({
+        instanceId,
+        policy,
+        redirect,
+        workerName: input.workerName,
+        zone,
+      }),
+    );
   }
 
   return {
@@ -219,59 +223,30 @@ function customDomainResource(input: {
   };
 }
 
-function redirectRuleResource(input: {
+function redirectCustomDomainResource(input: {
   instanceId: string;
+  policy: DomainProviderPlanPolicy;
   redirect: NormalizedDomainProviderRedirectIntent;
+  workerName: string;
   zone: DomainProviderZone;
-}): DomainProviderRedirectRuleResource {
+}): DomainProviderCustomDomainResource {
   const logicalId = domainProviderLogicalResourceId(
     input.instanceId,
-    "redirect-rule",
+    "redirect-custom-domain",
     input.redirect.fromHost,
-    input.redirect.targetHost,
   );
-  const targetUrl = domainProviderRedirectTargetUrl(input.redirect);
 
   return {
-    kind: "cloudflare-redirect-rule",
+    kind: "cloudflare-worker-custom-domain",
     logicalId,
-    fromHost: input.redirect.fromHost,
-    targetUrl,
+    host: input.redirect.fromHost,
+    routeKind: "redirect",
     zone: input.zone,
     props: {
-      description: `Formless redirect ${input.redirect.fromHost} to ${input.redirect.targetHost}`,
-      preserveQueryString: input.redirect.preserveQueryString,
-      requestUrl: input.redirect.preservePath
-        ? `https://${input.redirect.fromHost}/*`
-        : `https://${input.redirect.fromHost}/`,
-      statusCode: input.redirect.statusCode,
-      targetUrl,
-      zone: input.zone.id,
-    },
-  };
-}
-
-function redirectDnsResource(input: {
-  instanceId: string;
-  redirect: NormalizedDomainProviderRedirectIntent;
-  zone: DomainProviderZone;
-}): DomainProviderDnsRecordsResource {
-  return {
-    kind: "cloudflare-dns-records",
-    logicalId: domainProviderLogicalResourceId(
-      input.instanceId,
-      "redirect-dns",
-      input.redirect.fromHost,
-    ),
-    fromHost: input.redirect.fromHost,
-    zone: input.zone,
-    props: {
-      records: [
-        {
-          ...CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-          name: input.redirect.fromHost,
-        },
-      ],
+      adopt: input.policy === "adopt" || input.policy === "override",
+      name: input.redirect.fromHost,
+      overrideExistingOrigin: input.policy === "override",
+      workerName: input.workerName,
       zoneId: input.zone.id,
     },
   };
@@ -348,16 +323,6 @@ function invalidRedirectTarget(
       message,
     },
   };
-}
-
-export function domainProviderRedirectTargetUrl(
-  redirect: NormalizedDomainProviderRedirectIntent,
-): string {
-  if (!redirect.preservePath) {
-    return redirect.targetUrlBase;
-  }
-
-  return `${redirect.targetUrlBase}/${"$"}{1}`;
 }
 
 function redirectCreatesLoop(start: string, edges: ReadonlyMap<string, string>): boolean {

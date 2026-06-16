@@ -108,13 +108,6 @@ export type {
   MaterializeDeployDesiredStateVersionInput,
 } from "./types.ts";
 
-const redirectPlaceholderDnsRecord = {
-  content: "100::",
-  proxied: true,
-  ttl: 1,
-  type: "AAAA",
-} as const;
-
 type DeploymentConfigProjectionRecord = ControlPlaneProviderConfigProjectionRecord & {
   targetId: string;
 };
@@ -833,7 +826,9 @@ function projectRouteProviderResources(
       }
 
       if (route.kind === "redirect") {
-        return projectRouteRedirectResources(route, input);
+        const resource = projectRouteRedirectCustomDomainResource(route, input);
+
+        return resource === undefined ? [] : [resource];
       }
 
       return [];
@@ -907,73 +902,45 @@ function projectRouteCustomDomainResource(
   };
 }
 
-function projectRouteRedirectResources(
+function projectRouteRedirectCustomDomainResource(
   route: ControlPlaneRouteProjectionRecord,
-  input: { instanceId: string; targetId: string },
-): DeployResource[] {
+  input: {
+    instanceId: string;
+    providerConfigs: ReadonlyMap<string, ProviderConfigProjection>;
+    targetId: string;
+    workerName?: string;
+  },
+): DeployResource | undefined {
   const redirect = redirectRouteIntent(route);
 
   if (redirect === undefined) {
-    return [];
+    return undefined;
   }
 
-  const targetUrl = redirectTargetUrl(redirect);
-  const targetHost = redirect.toHost ?? hostFromUrl(redirect.toUrl) ?? "";
-  const dnsLogicalId = deployLogicalResourceId(input.instanceId, "redirect-dns", redirect.fromHost);
+  const workerName = routeWorkerName(route.providerConfig, input);
 
-  const resources: DeployResource[] = [
-    {
-      dependencies: [],
-      inputs: {
-        fromHost: redirect.fromHost,
-        records: [
-          {
-            ...redirectPlaceholderDnsRecord,
-            name: redirect.fromHost,
-          },
-        ],
-      },
-      kind: "cloudflare-dns-records",
-      logicalId: dnsLogicalId,
-      providerFamily: "cloudflare",
-      targetId: input.targetId,
+  return {
+    dependencies: [],
+    inputs: {
+      adopt: false,
+      host: redirect.fromHost,
+      name: redirect.fromHost,
+      overrideExistingOrigin: false,
+      ...(workerName === undefined ? {} : { workerName }),
     },
-    {
-      dependencies: [{ logicalId: dnsLogicalId, reason: "redirect placeholder dns" }],
-      inputs: {
-        description: `Formless redirect ${redirect.fromHost} to ${targetHost}`,
-        fromHost: redirect.fromHost,
-        preservePath: redirect.preservePath,
-        preserveQueryString: redirect.preserveQueryString,
-        requestUrl: redirect.preservePath
-          ? `https://${redirect.fromHost}/*`
-          : `https://${redirect.fromHost}/`,
-        statusCode: redirect.statusCode,
-        targetHost,
-        targetUrl,
-      },
-      kind: "cloudflare-redirect-rule",
-      logicalId: deployLogicalResourceId(
-        input.instanceId,
-        "redirect-rule",
-        redirect.fromHost,
-        targetHost,
-      ),
-      providerFamily: "cloudflare",
-      targetId: input.targetId,
-    },
-  ];
-
-  return resources.sort(compareDeployResources);
+    kind: "cloudflare-worker-custom-domain",
+    logicalId: deployLogicalResourceId(
+      input.instanceId,
+      "redirect-custom-domain",
+      redirect.fromHost,
+    ),
+    providerFamily: "cloudflare",
+    targetId: input.targetId,
+  };
 }
 
 type RedirectRouteIntent = {
   fromHost: string;
-  preservePath: boolean;
-  preserveQueryString: boolean;
-  statusCode: ControlPlaneRedirectStatusCode;
-  toHost?: string;
-  toUrl?: string;
 };
 
 function redirectRouteIntent(
@@ -985,16 +952,8 @@ function redirectRouteIntent(
     return undefined;
   }
 
-  const toHost = normalizeOptionalHost(route.toHost);
-  const toUrl = optionalText(route.toUrl);
-
   return {
     fromHost,
-    preservePath: route.preservePath !== false,
-    preserveQueryString: route.preserveQueryString !== false,
-    statusCode: redirectStatusCode(route.statusCode),
-    ...(toHost === undefined ? {} : { toHost }),
-    ...(toUrl === undefined ? {} : { toUrl }),
   };
 }
 
@@ -1327,42 +1286,6 @@ function normalizeRouteInputs(
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
 
-function redirectTargetUrl(redirect: RedirectRouteIntent): string {
-  const targetUrlBase =
-    redirect.toUrl === undefined ? undefined : normalizeRedirectTargetUrlBase(redirect.toUrl);
-
-  if (targetUrlBase !== undefined) {
-    return redirect.preservePath ? `${targetUrlBase}/${"$"}{1}` : targetUrlBase;
-  }
-
-  const targetHost = redirect.toHost ?? redirect.fromHost;
-
-  return redirect.preservePath ? `https://${targetHost}/${"$"}{1}` : `https://${targetHost}/`;
-}
-
-function normalizeRedirectTargetUrlBase(value: string): string | undefined {
-  const normalized = optionalText(value);
-
-  if (normalized === undefined) {
-    return undefined;
-  }
-
-  try {
-    const url = new URL(normalized);
-
-    url.pathname = stripTrailingSlash(url.pathname);
-    url.search = "";
-
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return normalized;
-  }
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.length > 1 ? value.replace(/\/+$/, "") || "/" : value;
-}
-
 function normalizeOptionalHost(value: string | undefined): string | undefined {
   const normalized = optionalText(value);
 
@@ -1373,18 +1296,6 @@ function optionalText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
 
   return normalized ? normalized : undefined;
-}
-
-function hostFromUrl(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  try {
-    return new URL(value).host;
-  } catch {
-    return undefined;
-  }
 }
 
 function normalizeHost(value: string): string {

@@ -99,6 +99,10 @@ export default {
       return redirectResponse(runtimeRoute.location, runtimeRoute.status);
     }
 
+    if (runtimeRoute?.kind === "not-found") {
+      return new Response(null, { status: 404 });
+    }
+
     const packageResolver = activeAppPackageResolver(env);
     const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
     const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute, packageResolver);

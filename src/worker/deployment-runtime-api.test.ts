@@ -21,7 +21,6 @@ import {
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type CreateInstanceDomainProviderRedirectIntentResponse,
 } from "../shared/domain-provider-api.ts";
-import { CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS } from "../shared/domain-provider-protocol.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
 import { INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID } from "./deployment-runtime-state.ts";
@@ -240,10 +239,9 @@ describe("instance deployment runtime API routes", () => {
     const serialized = JSON.stringify(desired.body);
 
     expect(desired.body.desiredState.display).toEqual({
-      resourceCount: 4,
+      resourceCount: 2,
       resourcesByKind: {
-        "cloudflare-dns-records": 2,
-        "cloudflare-redirect-rule": 2,
+        "cloudflare-worker-custom-domain": 2,
       },
       title: "Primary instance target",
     });
@@ -260,83 +258,35 @@ describe("instance deployment runtime API routes", () => {
       {
         dependencies: [],
         inputs: {
-          fromHost: "docs.example.com",
-          records: [
-            {
-              ...CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-              name: "docs.example.com",
-            },
-          ],
+          adopt: false,
+          host: "docs.example.com",
+          name: "docs.example.com",
+          overrideExistingOrigin: false,
+          workerName: "formless-primary",
         },
-        kind: "cloudflare-dns-records",
-        logicalId: "primary-redirect-dns-docs-example-com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-docs-example-com",
         providerFamily: "cloudflare",
         targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
       },
       {
         dependencies: [],
         inputs: {
-          fromHost: "www.example.com",
-          records: [
-            {
-              ...CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-              name: "www.example.com",
-            },
-          ],
+          adopt: false,
+          host: "www.example.com",
+          name: "www.example.com",
+          overrideExistingOrigin: false,
+          workerName: "formless-primary",
         },
-        kind: "cloudflare-dns-records",
-        logicalId: "primary-redirect-dns-www-example-com",
-        providerFamily: "cloudflare",
-        targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-      },
-      {
-        dependencies: [
-          {
-            logicalId: "primary-redirect-dns-docs-example-com",
-            reason: "redirect placeholder dns",
-          },
-        ],
-        inputs: {
-          description: "Formless redirect docs.example.com to example.com",
-          fromHost: "docs.example.com",
-          preservePath: false,
-          preserveQueryString: false,
-          requestUrl: "https://docs.example.com/",
-          statusCode: 302,
-          targetHost: "example.com",
-          targetUrl: "https://example.com/docs",
-        },
-        kind: "cloudflare-redirect-rule",
-        logicalId: "primary-redirect-rule-docs-example-com-example-com",
-        providerFamily: "cloudflare",
-        targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-      },
-      {
-        dependencies: [
-          {
-            logicalId: "primary-redirect-dns-www-example-com",
-            reason: "redirect placeholder dns",
-          },
-        ],
-        inputs: {
-          description: "Formless redirect www.example.com to example.com",
-          fromHost: "www.example.com",
-          preservePath: true,
-          preserveQueryString: true,
-          requestUrl: "https://www.example.com/*",
-          statusCode: 301,
-          targetHost: "example.com",
-          targetUrl: "https://example.com/${1}",
-        },
-        kind: "cloudflare-redirect-rule",
-        logicalId: "primary-redirect-rule-www-example-com-example-com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-www-example-com",
         providerFamily: "cloudflare",
         targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
       },
     ]);
     expect(desired.body.desiredState.source).toMatchObject({
       fingerprint: expect.stringMatching(/^control-plane:/),
-      intentRevision: 4,
+      intentRevision: 2,
     });
     expect(serialized).not.toContain("disabled.example.com");
     expect(serialized).not.toContain("secret-cloudflare-token");
@@ -363,7 +313,7 @@ describe("instance deployment runtime API routes", () => {
     );
     const serializedControlPlane = JSON.stringify(controlPlane.body.records);
 
-    expect(desired.body.desiredState.resourceGraph.resources).toHaveLength(3);
+    expect(desired.body.desiredState.resourceGraph.resources).toHaveLength(2);
     expect(serializedControlPlane).not.toContain("deploy-desired-resource");
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-cloudflare-token");
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-alchemy-password");

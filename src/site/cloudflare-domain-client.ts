@@ -2,12 +2,6 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMappingProfile,
 } from "../shared/instance-domain-mappings.ts";
-import {
-  CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-  type DomainProviderPlan,
-  type DomainProviderResource,
-} from "../shared/domain-provider-protocol.ts";
-import { cloudflareRedirectRuleTargetExpressionForTargetUrl } from "../shared/cloudflare-redirect-rules.ts";
 
 export const CLOUDFLARE_API_TOKEN_ENV_NAME = "CLOUDFLARE_API_TOKEN";
 export const CF_API_TOKEN_ENV_NAME = "CF_API_TOKEN";
@@ -48,20 +42,9 @@ export type CloudflareDnsRecord = {
   type: string;
 };
 
-export type CloudflareRedirectRule = {
-  description?: string;
-  expression: string;
-  id: string;
-  preserveQueryString?: boolean;
-  statusCode?: number;
-  targetUrl?: string;
-  targetUrlExpression?: string;
-};
-
 export type CloudflareDomainClient = {
   listActiveZonesForName: (input: { accountId: string; name: string }) => Promise<CloudflareZone[]>;
   listDnsRecords: (input: { name: string; zoneId: string }) => Promise<CloudflareDnsRecord[]>;
-  listRedirectRules: (input: { zoneId: string }) => Promise<CloudflareRedirectRule[]>;
   listWorkerDomains: (input: { accountId: string }) => Promise<CloudflareWorkerDomain[]>;
   listWorkerRoutes: (input: { zoneId: string }) => Promise<CloudflareWorkerRoute[]>;
 };
@@ -71,8 +54,6 @@ export type CloudflareDomainPreflightIssueCode =
   | "dns-record-conflict"
   | "existing-worker-domain"
   | "missing-zone"
-  | "redirect-dns-record-conflict"
-  | "redirect-rule-conflict"
   | "override-worker-domain"
   | "worker-domain-owned-by-other-worker"
   | "worker-route-conflict";
@@ -105,11 +86,6 @@ export type CloudflareDomainPreflightPlan = {
 };
 
 const workerCustomDomainDnsConflictTypes = new Set(["A", "AAAA", "CNAME"]);
-
-export type CloudflareDomainProviderResourcePreflightPlan = {
-  blockers: Array<CloudflareDomainPreflightIssue & { host: string }>;
-  resources: DomainProviderResource[];
-};
 
 export type CreateFetchCloudflareDomainClientInput = {
   apiToken: string;
@@ -156,8 +132,6 @@ export function createFetchCloudflareDomainClient(
       fetchCloudflareList(input.fetch, baseUrl, input.apiToken, `/zones/${zoneId}/dns_records`, {
         name,
       }).then((values) => values.map(parseCloudflareDnsRecord)),
-    listRedirectRules: ({ zoneId }) =>
-      listCloudflareRedirectRules(input.fetch, baseUrl, input.apiToken, zoneId),
     listWorkerDomains: ({ accountId }) =>
       fetchCloudflareList(
         input.fetch,
@@ -173,75 +147,6 @@ export function createFetchCloudflareDomainClient(
         `/zones/${zoneId}/workers/routes`,
       ).then((values) => values.map(parseCloudflareWorkerRoute)),
   };
-}
-
-export async function planCloudflareDomainProviderResourcePreflight(input: {
-  client: Pick<CloudflareDomainClient, "listDnsRecords" | "listRedirectRules">;
-  plan: DomainProviderPlan;
-}): Promise<CloudflareDomainProviderResourcePreflightPlan> {
-  const blockers: CloudflareDomainProviderResourcePreflightPlan["blockers"] = [];
-  const redirectRulesByZoneId = new Map<string, CloudflareRedirectRule[]>();
-
-  for (const resource of input.plan.resources) {
-    if (resource.kind === "cloudflare-dns-records") {
-      const existing = await input.client.listDnsRecords({
-        name: resource.fromHost,
-        zoneId: resource.zone.id,
-      });
-      const conflicting = existing.filter((record) => !isExpectedOriginlessPlaceholder(record));
-
-      if (conflicting.length > 0) {
-        blockers.push({
-          code: "redirect-dns-record-conflict",
-          host: resource.fromHost,
-          message: `${resource.fromHost} has existing DNS records that conflict with the redirect placeholder.`,
-        });
-      }
-      continue;
-    }
-
-    if (resource.kind === "cloudflare-redirect-rule") {
-      const rules =
-        redirectRulesByZoneId.get(resource.zone.id) ??
-        (await input.client.listRedirectRules({ zoneId: resource.zone.id }));
-
-      redirectRulesByZoneId.set(resource.zone.id, rules);
-
-      const conflicting = rules.filter(
-        (rule) =>
-          redirectRuleMatchesHost(rule, resource.fromHost) &&
-          !isExpectedRedirectRule(rule, resource),
-      );
-
-      if (conflicting.length > 0) {
-        blockers.push({
-          code: "redirect-rule-conflict",
-          host: resource.fromHost,
-          message: `${resource.fromHost} has an existing Cloudflare redirect rule.`,
-        });
-      }
-    }
-  }
-
-  return {
-    blockers,
-    resources: input.plan.resources,
-  };
-}
-
-export async function assertCloudflareDomainProviderResourcePreflight(input: {
-  client: Pick<CloudflareDomainClient, "listDnsRecords" | "listRedirectRules">;
-  plan: DomainProviderPlan;
-}): Promise<void> {
-  const preflight = await planCloudflareDomainProviderResourcePreflight(input);
-
-  if (preflight.blockers.length > 0) {
-    throw new Error(
-      `Domain provider preflight blocked apply: ${preflight.blockers
-        .map((blocker) => `${blocker.host} ${blocker.code}`)
-        .join(", ")}.`,
-    );
-  }
 }
 
 export async function planCloudflareWorkerDomainPreflight(input: {
@@ -388,10 +293,8 @@ function buildHostPlan(input: {
     });
   }
 
-  const blockingDnsRecords = input.dnsRecords.filter(
-    (record) =>
-      workerCustomDomainDnsConflictTypes.has(record.type.toUpperCase()) &&
-      !isExpectedOriginlessPlaceholder(record),
+  const blockingDnsRecords = input.dnsRecords.filter((record) =>
+    workerCustomDomainDnsConflictTypes.has(record.type.toUpperCase()),
   );
 
   if (blockingDnsRecords.length > 0) {
@@ -610,44 +513,6 @@ async function readCloudflareResult(response: Response, context: string): Promis
   return value.result;
 }
 
-async function listCloudflareRedirectRules(
-  fetcher: typeof fetch,
-  baseUrl: string,
-  apiToken: string,
-  zoneId: string,
-): Promise<CloudflareRedirectRule[]> {
-  const rulesets = await fetchCloudflareList(
-    fetcher,
-    baseUrl,
-    apiToken,
-    `/zones/${zoneId}/rulesets`,
-  );
-  const redirects: CloudflareRedirectRule[] = [];
-
-  for (const ruleset of rulesets) {
-    if (!isRecord(ruleset) || ruleset.phase !== "http_request_dynamic_redirect") {
-      continue;
-    }
-
-    const rulesetId = parseRequiredString(ruleset.id, "Cloudflare redirect ruleset id");
-    const rulesetDetail = await fetchCloudflareValue(
-      fetcher,
-      baseUrl,
-      apiToken,
-      "GET",
-      `/zones/${zoneId}/rulesets/${rulesetId}`,
-    );
-
-    if (!isRecord(rulesetDetail) || !Array.isArray(rulesetDetail.rules)) {
-      continue;
-    }
-
-    redirects.push(...rulesetDetail.rules.map(parseCloudflareRedirectRule));
-  }
-
-  return redirects;
-}
-
 function formatCloudflareErrors(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.errors) || value.errors.length === 0) {
     return "Cloudflare API returned an unsuccessful response";
@@ -714,83 +579,6 @@ function parseCloudflareDnsRecord(value: unknown): CloudflareDnsRecord {
     ...(proxied === undefined ? {} : { proxied }),
     type: parseRequiredString(value.type, "Cloudflare DNS record type"),
   };
-}
-
-function parseCloudflareRedirectRule(value: unknown): CloudflareRedirectRule {
-  if (!isRecord(value)) {
-    throw new Error("Cloudflare redirect rule response is invalid.");
-  }
-
-  const actionParameters = isRecord(value.action_parameters) ? value.action_parameters : undefined;
-  const fromValue = isRecord(actionParameters?.from_value)
-    ? actionParameters.from_value
-    : undefined;
-  const targetUrl = isRecord(fromValue?.target_url)
-    ? parseOptionalString(fromValue.target_url.value, "Cloudflare redirect rule target URL")
-    : undefined;
-  const targetUrlExpression = isRecord(fromValue?.target_url)
-    ? parseOptionalString(
-        fromValue.target_url.expression,
-        "Cloudflare redirect rule target URL expression",
-      )
-    : undefined;
-  const statusCode = typeof fromValue?.status_code === "number" ? fromValue.status_code : undefined;
-  const preserveQueryString =
-    typeof fromValue?.preserve_query_string === "boolean"
-      ? fromValue.preserve_query_string
-      : undefined;
-
-  return {
-    ...(parseOptionalString(value.description, "Cloudflare redirect rule description") === undefined
-      ? {}
-      : {
-          description: parseOptionalString(
-            value.description,
-            "Cloudflare redirect rule description",
-          ),
-        }),
-    expression: parseRequiredString(value.expression, "Cloudflare redirect rule expression"),
-    id: parseRequiredString(value.id, "Cloudflare redirect rule id"),
-    ...(preserveQueryString === undefined ? {} : { preserveQueryString }),
-    ...(statusCode === undefined ? {} : { statusCode }),
-    ...(targetUrl === undefined ? {} : { targetUrl }),
-    ...(targetUrlExpression === undefined ? {} : { targetUrlExpression }),
-  };
-}
-
-function isExpectedOriginlessPlaceholder(record: CloudflareDnsRecord): boolean {
-  return (
-    record.type === CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS.type &&
-    record.content === CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS.content &&
-    record.proxied === CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS.proxied
-  );
-}
-
-function redirectRuleMatchesHost(rule: CloudflareRedirectRule, host: string): boolean {
-  const normalizedHost = normalizeHost(host);
-
-  return (
-    rule.expression.includes(`"${normalizedHost}"`) &&
-    (rule.expression.includes("http.host") || rule.expression.includes("http.request.full_uri"))
-  );
-}
-
-function isExpectedRedirectRule(
-  rule: CloudflareRedirectRule,
-  resource: Extract<DomainProviderResource, { kind: "cloudflare-redirect-rule" }>,
-): boolean {
-  const expectedTargetUrlExpression = cloudflareRedirectRuleTargetExpressionForTargetUrl(
-    resource.props.targetUrl,
-  );
-
-  return (
-    rule.description === resource.props.description &&
-    (rule.targetUrl === resource.targetUrl ||
-      (expectedTargetUrlExpression !== undefined &&
-        rule.targetUrlExpression === expectedTargetUrlExpression)) &&
-    rule.statusCode === resource.props.statusCode &&
-    rule.preserveQueryString === resource.props.preserveQueryString
-  );
 }
 
 function parseRequiredString(value: unknown, context: string): string {

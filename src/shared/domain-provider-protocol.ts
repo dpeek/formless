@@ -35,10 +35,7 @@ export type DomainProviderProfileMappingIntent = {
   targetInstallId?: string;
 };
 
-export type DomainProviderResourceKind =
-  | "cloudflare-dns-records"
-  | "cloudflare-redirect-rule"
-  | "cloudflare-worker-custom-domain";
+export type DomainProviderResourceKind = "cloudflare-worker-custom-domain";
 
 export type DomainProviderPlanIssueCode =
   | "duplicate-redirect-from-host"
@@ -57,7 +54,8 @@ export type DomainProviderCustomDomainResource = {
   kind: "cloudflare-worker-custom-domain";
   logicalId: string;
   host: string;
-  profile: InstanceDomainMappingProfile;
+  profile?: InstanceDomainMappingProfile;
+  routeKind?: "redirect";
   targetInstallId?: string;
   zone: DomainProviderZone;
   props: {
@@ -69,45 +67,7 @@ export type DomainProviderCustomDomainResource = {
   };
 };
 
-export type DomainProviderRedirectRuleResource = {
-  kind: "cloudflare-redirect-rule";
-  logicalId: string;
-  fromHost: string;
-  targetUrl: string;
-  zone: DomainProviderZone;
-  props: {
-    description: string;
-    preserveQueryString: boolean;
-    requestUrl: string;
-    statusCode: DomainProviderRedirectStatusCode;
-    targetUrl: string;
-    zone: string;
-  };
-};
-
-export type DomainProviderDnsRecordsResource = {
-  kind: "cloudflare-dns-records";
-  logicalId: string;
-  fromHost: string;
-  zone: DomainProviderZone;
-  props: {
-    records: [
-      {
-        content: string;
-        name: string;
-        proxied: true;
-        ttl: 1;
-        type: "AAAA";
-      },
-    ];
-    zoneId: string;
-  };
-};
-
-export type DomainProviderResource =
-  | DomainProviderCustomDomainResource
-  | DomainProviderDnsRecordsResource
-  | DomainProviderRedirectRuleResource;
+export type DomainProviderResource = DomainProviderCustomDomainResource;
 
 export type DomainProviderPlan = {
   blockers: DomainProviderPlanIssue[];
@@ -116,10 +76,3 @@ export type DomainProviderPlan = {
   resources: DomainProviderResource[];
   workerName: string;
 };
-
-export const CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS = {
-  content: "100::",
-  proxied: true,
-  ttl: 1,
-  type: "AAAA",
-} as const;

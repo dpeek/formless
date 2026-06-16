@@ -27,17 +27,19 @@ mutation input without storing deployment attempts in runtime SQL tables.
 
 #### Scenario: Route-derived resources share projected deploy graph
 
-- **WHEN** route records project DNS, custom-domain, or redirect resources
+- **WHEN** route records project DNS or custom-domain resources
 - **THEN** those resources are applied through the same projected resource graph
   as Worker and R2 resources
+- **AND** redirect routes project Worker custom-domain resources for their
+  source hosts so the deployed Worker can return redirect responses
 - **AND** latest deployment status remains a cache on the target
   `deployment-config` record, not separate attempt, lease, evidence, or drift
   records
 
 #### Scenario: Removed route resources reconcile through deploy
 
-- **GIVEN** a previous successful deploy tracked route-derived DNS,
-  custom-domain, or redirect resources in Alchemy state
+- **GIVEN** a previous successful deploy tracked route-derived DNS or
+  custom-domain resources in Alchemy state
 - **WHEN** the next desired-state projection omits those resources because a
   route was disabled or deleted
 - **THEN** the deployer declares the new desired resource graph in the same
@@ -71,7 +73,10 @@ supported deployment target.
 - **AND** instance targets project the resource graph from schema-owned
   control-plane records and higher-level runtime intent for that target
 - **AND** host mount routes project custom-domain and DNS resources
-- **AND** redirect routes project redirect and redirect DNS resources
+- **AND** redirect routes project Worker custom-domain resources for redirect
+  source hosts
+- **AND** redirect source-host route-derived resources are limited to Worker
+  custom-domain resources
 - **AND** deployment runtime does not synthesize route-derived resources from
   legacy domain-mapping or redirect-intent stores
 - **AND** if control-plane route records are absent, no route-derived provider
@@ -315,8 +320,8 @@ read-only deployment projection and display status.
   and secrets outside the runtime desired-state response, declares the desired
   graph in tracked Alchemy state or another provider reconciler, and may patch
   the latest deployment observation cache
-- **AND** Worker, R2, DNS, custom-domain, redirect, and other projected
-  provider resources use the same deployer protocol boundary
+- **AND** Worker, R2, DNS, custom-domain, and other projected provider
+  resources use the same deployer protocol boundary
 
 #### Scenario: Shared deployment client contracts
 

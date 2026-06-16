@@ -57,10 +57,7 @@ export type DeployTargetRef = {
   targetId: DeployTargetId;
 };
 
-export type DeployResourceKind =
-  | "cloudflare-dns-records"
-  | "cloudflare-redirect-rule"
-  | "cloudflare-worker-custom-domain";
+export type DeployResourceKind = "cloudflare-dns-records" | "cloudflare-worker-custom-domain";
 
 export type DeployJsonPrimitive = boolean | number | string | null;
 

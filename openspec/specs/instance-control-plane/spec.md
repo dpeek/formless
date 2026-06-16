@@ -114,7 +114,7 @@ schema-owned control-plane intent records.
 - **THEN** the resource graph is projected from the current control-plane
   records
 - **AND** enabled `route` records provide app mount, custom-domain, DNS, and
-  redirect desired route resources
+  Worker-handled redirect source-host resources
 - **AND** `deployment-config` records provide the target URL, provider account,
   worker name, and credential reference needed to project provider-facing
   resources
@@ -285,12 +285,13 @@ The system SHALL represent deploy target and provider selection as one
 
 #### Scenario: Route deployment selection
 
-- **GIVEN** a route needs provider-managed DNS, custom-domain, or redirect
-  resources
+- **GIVEN** a route needs provider-managed DNS or custom-domain resources
 - **WHEN** the route omits an explicit deployment config reference
 - **THEN** projection uses the enabled primary instance deployment config
 - **AND** a route may reference a specific deployment config only when the
   instance has multiple enabled deployment configs
+- **AND** redirect routes that expose source hosts through Worker custom
+  domains use the same deployment config selection
 
 #### Scenario: Deployment config write
 

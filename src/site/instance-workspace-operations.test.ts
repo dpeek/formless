@@ -248,11 +248,9 @@ describe("Formless workspace operations", () => {
             status: "not-run",
           },
           desiredState: {
-            resourceCount: 3,
+            resourceCount: 2,
             resourcesByKind: {
-              "cloudflare-dns-records": 1,
-              "cloudflare-redirect-rule": 1,
-              "cloudflare-worker-custom-domain": 1,
+              "cloudflare-worker-custom-domain": 2,
             },
             routeTargetCount: 2,
             targetId: "instance.primary",
@@ -264,12 +262,10 @@ describe("Formless workspace operations", () => {
             count: 0,
           },
           plan: {
-            changes: { create: 3, delete: 0, noChange: 0, update: 0 },
-            resourceCount: 3,
+            changes: { create: 2, delete: 0, noChange: 0, update: 0 },
+            resourceCount: 2,
             resourcesByKind: {
-              "cloudflare-dns-records": 1,
-              "cloudflare-redirect-rule": 1,
-              "cloudflare-worker-custom-domain": 1,
+              "cloudflare-worker-custom-domain": 2,
             },
             routeTargetCount: 2,
             targetId: "instance.primary",
@@ -281,10 +277,13 @@ describe("Formless workspace operations", () => {
         summary: {
           fields: {
             cleanupStatus: "not-run",
-            desiredResourceCount: 3,
+            desiredResourceCount: 2,
             drift: "no-drift",
             evidenceCount: 0,
             expectedUrl: "https://personal.dpeek.workers.dev",
+            resourcesByKind: {
+              "cloudflare-worker-custom-domain": 2,
+            },
             routeTargetCount: 2,
             turnstileWidget: "planned",
             observationStatus: "not-run",
@@ -298,7 +297,7 @@ describe("Formless workspace operations", () => {
     expect(
       (state.result?.deployment?.plan as { affectedLogicalIds?: unknown[] } | null | undefined)
         ?.affectedLogicalIds,
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(accountDiscoveryInputs).toEqual([{ credentialProfile: "personal-profile" }]);
     await expectNoDeploymentHistoryStorageState(workspaceRoot);
     expect(JSON.stringify(state)).not.toContain("secret");
@@ -461,12 +460,12 @@ describe("Formless workspace operations", () => {
             status: "no-drift",
           },
           evidence: {
-            count: 3,
+            count: 2,
             logicalIds: deploymentEvidence.map((entry) => entry.logicalId),
           },
           observation: {
             desiredState,
-            evidenceCount: 3,
+            evidenceCount: 2,
             observedStatus: "deployed",
             resourceCount: deployedResourceCount,
             resourcesByKind: deployedResourcesByKind,
@@ -479,8 +478,9 @@ describe("Formless workspace operations", () => {
             cleanupStatus: "not-run",
             desiredStateVersion: desiredState.versionId,
             drift: "no-drift",
-            evidenceCount: 3,
+            evidenceCount: 2,
             observationStatus: "deployed",
+            resourcesByKind: deployedResourcesByKind,
             turnstileWidget: "provisioned",
           },
           title: "Deploy applied",
@@ -506,12 +506,8 @@ describe("Formless workspace operations", () => {
     expect(deployInputs[0]?.credentialProfile).toBe("personal-profile");
     expect(
       deployInputs[0]?.deploymentResourceGraph?.resources.map((resource) => resource.kind),
-    ).toEqual([
-      "cloudflare-dns-records",
-      "cloudflare-redirect-rule",
-      "cloudflare-worker-custom-domain",
-    ]);
-    expect(deploymentEvidence).toHaveLength(3);
+    ).toEqual(["cloudflare-worker-custom-domain", "cloudflare-worker-custom-domain"]);
+    expect(deploymentEvidence).toHaveLength(2);
     expect(setupInputs).toEqual([]);
     expect(state.summary.fields).not.toHaveProperty("ownerSetupUrl");
     expect(state.result?.summary.fields).not.toHaveProperty("ownerSetupUrl");
@@ -886,7 +882,6 @@ describe("Formless workspace operations", () => {
           cleanup: {
             customDomains: 1,
             dnsRecords: 1,
-            redirectRules: 0,
             workerSecretBindingCount: 3,
           },
           drift: {
@@ -944,7 +939,6 @@ describe("Formless workspace operations", () => {
       cleanup: {
         customDomains: 1,
         dnsRecords: 1,
-        redirectRules: 0,
         workerSecretBindingCount: 3,
       },
       drift: {
@@ -1307,11 +1301,9 @@ function deployApplyFetch(
           ...desiredState,
           createdAt: "2026-06-02T00:04:02.000Z",
           display: {
-            resourceCount: 3,
+            resourceCount: 2,
             resourcesByKind: {
-              "cloudflare-dns-records": 1,
-              "cloudflare-redirect-rule": 1,
-              "cloudflare-worker-custom-domain": 1,
+              "cloudflare-worker-custom-domain": 2,
             },
             title: "Primary instance target",
           },

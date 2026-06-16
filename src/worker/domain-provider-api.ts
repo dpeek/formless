@@ -35,17 +35,14 @@ import {
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
   DomainProviderCustomDomainResource,
-  DomainProviderDnsRecordsResource,
   DomainProviderPlan,
   DomainProviderPlanPolicy,
   DomainProviderRedirectIntent,
-  DomainProviderRedirectRuleResource,
   DomainProviderResource,
   DomainProviderRedirectStatusCode,
   DomainProviderResourceKind,
   DomainProviderZone,
 } from "../shared/domain-provider-protocol.ts";
-import { CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS } from "../shared/domain-provider-protocol.ts";
 import {
   listInstanceDomainMappings,
   normalizeInstanceDomainHost,
@@ -847,26 +844,6 @@ function readDomainProviderDeleteTargets(
     });
   }
 
-  for (const state of readAppliedProviderResources(storage)) {
-    if (state.action === "deleted" || state.action === "manually-removed") {
-      continue;
-    }
-
-    targets.push({
-      accountId: state.accountId,
-      action: state.action,
-      alchemyResourceId: state.alchemyResourceId,
-      host: state.host,
-      kind: state.kind,
-      logicalId: state.logicalId,
-      resourceId: state.resourceId,
-      resourceJson: state.resourceJson,
-      ...(state.runnerId === undefined ? {} : { runnerId: state.runnerId }),
-      zoneId: state.zoneId,
-      zoneName: state.zoneName,
-    });
-  }
-
   return targets.sort((left, right) =>
     `${left.host}\u0000${left.kind}\u0000${left.logicalId}`.localeCompare(
       `${right.host}\u0000${right.kind}\u0000${right.logicalId}`,
@@ -889,14 +866,7 @@ function resourceFromDeleteTarget(
   target: InstanceDomainProviderDeleteTarget,
   config: DomainProviderConfigStatus,
 ): DomainProviderResource {
-  switch (target.kind) {
-    case "cloudflare-worker-custom-domain":
-      return customDomainResourceFromDeleteTarget(target, config);
-    case "cloudflare-redirect-rule":
-      return redirectRuleResourceFromDeleteTarget(target);
-    case "cloudflare-dns-records":
-      return dnsRecordsResourceFromDeleteTarget(target);
-  }
+  return customDomainResourceFromDeleteTarget(target, config);
 }
 
 function customDomainResourceFromDeleteTarget(
@@ -920,58 +890,6 @@ function customDomainResourceFromDeleteTarget(
       name: target.host,
       overrideExistingOrigin: target.action === "overridden",
       workerName,
-      zoneId: target.zoneId,
-    },
-    zone: { id: target.zoneId, name: target.zoneName },
-  };
-}
-
-function redirectRuleResourceFromDeleteTarget(
-  target: InstanceDomainProviderDeleteTarget,
-): DomainProviderRedirectRuleResource {
-  const evidence = readStoredResourceJson(target.resourceJson);
-  const targetUrl =
-    typeof evidence.targetUrl === "string" && evidence.targetUrl.trim() !== ""
-      ? evidence.targetUrl
-      : `https://${target.host}/${"$"}{1}`;
-  const preserveQueryString =
-    typeof evidence.preserveQueryString === "boolean" ? evidence.preserveQueryString : true;
-  const statusCode = isRedirectStatusCode(evidence.statusCode) ? evidence.statusCode : 301;
-  const targetHost = targetUrlHost(targetUrl) ?? target.host;
-
-  return {
-    kind: "cloudflare-redirect-rule",
-    logicalId: target.logicalId,
-    fromHost: target.host,
-    props: {
-      description: `Formless redirect ${target.host} to ${targetHost}`,
-      preserveQueryString,
-      requestUrl: targetUrl.includes("${1}")
-        ? `https://${target.host}/*`
-        : `https://${target.host}/`,
-      statusCode,
-      targetUrl,
-      zone: target.zoneId,
-    },
-    targetUrl,
-    zone: { id: target.zoneId, name: target.zoneName },
-  };
-}
-
-function dnsRecordsResourceFromDeleteTarget(
-  target: InstanceDomainProviderDeleteTarget,
-): DomainProviderDnsRecordsResource {
-  return {
-    kind: "cloudflare-dns-records",
-    logicalId: target.logicalId,
-    fromHost: target.host,
-    props: {
-      records: [
-        {
-          ...CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS,
-          name: target.host,
-        },
-      ],
       zoneId: target.zoneId,
     },
     zone: { id: target.zoneId, name: target.zoneName },
@@ -1762,19 +1680,10 @@ async function completeDeleteJob(
       };
     }
 
-    if (target.kind === "cloudflare-worker-custom-domain") {
-      deleteInstanceDomainMappingAppliedState(storage, {
-        now: input.now,
-        runnerId: input.result.runnerId ?? job.runnerId,
-        state: customDomainAppliedStateFromDeleteTarget(target, input.now),
-      });
-      continue;
-    }
-
-    deleteDomainProviderAppliedResource(storage, {
+    deleteInstanceDomainMappingAppliedState(storage, {
       now: input.now,
       runnerId: input.result.runnerId ?? job.runnerId,
-      target,
+      state: customDomainAppliedStateFromDeleteTarget(target, input.now),
     });
   }
 
@@ -1869,78 +1778,6 @@ function validateDeleteEvidence(
   return { ok: true };
 }
 
-function deleteDomainProviderAppliedResource(
-  storage: DurableObjectStorage,
-  input: {
-    action?: Extract<
-      InstanceDomainProviderAppliedResourceState["action"],
-      "deleted" | "manually-removed"
-    >;
-    now: string;
-    runnerId?: string;
-    target: InstanceDomainProviderDeleteTarget;
-  },
-) {
-  ensureDomainProviderAppliedResourcesTables(storage);
-  const deletedState: InstanceDomainProviderAppliedResourceState = {
-    accountId: input.target.accountId,
-    action: input.action ?? "deleted",
-    alchemyResourceId: input.target.alchemyResourceId ?? input.target.logicalId,
-    appliedAt: input.now,
-    host: input.target.host,
-    kind: input.target.kind,
-    logicalId: input.target.logicalId,
-    resourceId: input.target.resourceId,
-    resourceJson: input.target.resourceJson,
-    ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
-    updatedAt: input.now,
-    zoneId: input.target.zoneId,
-    zoneName: input.target.zoneName,
-  };
-
-  storage.sql.exec(
-    `
-      DELETE FROM instance_domain_provider_applied_resources
-      WHERE logical_id = ?
-    `,
-    input.target.logicalId,
-  );
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_audit_events (
-        logical_id,
-        kind,
-        host,
-        account_id,
-        alchemy_resource_id,
-        runner_id,
-        zone_id,
-        zone_name,
-        resource_id,
-        resource_json,
-        action,
-        applied_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    deletedState.logicalId,
-    deletedState.kind,
-    deletedState.host,
-    deletedState.accountId,
-    deletedState.alchemyResourceId,
-    deletedState.runnerId ?? null,
-    deletedState.zoneId,
-    deletedState.zoneName,
-    deletedState.resourceId,
-    deletedState.resourceJson,
-    deletedState.action,
-    deletedState.appliedAt,
-    deletedState.updatedAt,
-  );
-}
-
 function markDomainProviderResourceManuallyRemoved(
   storage: DurableObjectStorage,
   input: {
@@ -1981,20 +1818,10 @@ function markDomainProviderResourceManuallyRemoved(
     throw new Error("Domain provider manual cleanup target disappeared.");
   }
 
-  if (target.kind === "cloudflare-worker-custom-domain") {
-    deleteInstanceDomainMappingAppliedState(storage, {
-      action: "manually-removed",
-      now: input.now,
-      state: customDomainAppliedStateFromDeleteTarget(target, input.now),
-    });
-
-    return { ok: true, target };
-  }
-
-  deleteDomainProviderAppliedResource(storage, {
+  deleteInstanceDomainMappingAppliedState(storage, {
     action: "manually-removed",
     now: input.now,
-    target,
+    state: customDomainAppliedStateFromDeleteTarget(target, input.now),
   });
 
   return { ok: true, target };
@@ -2766,17 +2593,13 @@ function parseRequiredResourceKind(
   value: unknown,
   context: string,
 ): { ok: true; value: DomainProviderResourceKind } | { ok: false; error: string } {
-  if (
-    value === "cloudflare-worker-custom-domain" ||
-    value === "cloudflare-redirect-rule" ||
-    value === "cloudflare-dns-records"
-  ) {
+  if (value === "cloudflare-worker-custom-domain") {
     return { ok: true, value };
   }
 
   return {
     ok: false,
-    error: `${context} must be "cloudflare-worker-custom-domain", "cloudflare-redirect-rule", or "cloudflare-dns-records".`,
+    error: `${context} must be "cloudflare-worker-custom-domain".`,
   };
 }
 
@@ -2910,28 +2733,6 @@ function parseRedirectStatusCode(
   }
 
   return { ok: false, error: `${context} must be 301, 302, 303, 307, or 308.` };
-}
-
-function isRedirectStatusCode(value: unknown): value is DomainProviderRedirectStatusCode {
-  return value === 301 || value === 302 || value === 303 || value === 307 || value === 308;
-}
-
-function readStoredResourceJson(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function targetUrlHost(value: string): string | undefined {
-  try {
-    return new URL(value.replace("/${1}", "/")).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
 }
 
 function logicalResourceId(

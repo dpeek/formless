@@ -4,8 +4,6 @@ import type {
   CustomDomainProps,
   DnsRecords,
   DnsRecordsProps,
-  RedirectRule,
-  RedirectRuleProps,
 } from "alchemy/cloudflare";
 import type {
   DeployEvidenceSummary,
@@ -15,15 +13,9 @@ import type {
 } from "@dpeek/formless-deploy";
 import type {
   DomainProviderCustomDomainResource,
-  DomainProviderDnsRecordsResource,
   DomainProviderPlan,
-  DomainProviderRedirectRuleResource,
   DomainProviderResource,
 } from "../shared/domain-provider-protocol.ts";
-import {
-  cloudflareRedirectRuleExpressionForRequestUrl,
-  cloudflareRedirectRuleTargetExpressionForTargetUrl,
-} from "../shared/cloudflare-redirect-rules.ts";
 
 export type AlchemyDomainProviderPhase = "destroy" | "read" | "up";
 
@@ -41,14 +33,6 @@ export type AlchemyDomainProviderRunner = <T>(
 export type AlchemyDomainProviderFactories = {
   CustomDomain: (id: string, props: CustomDomainProps) => Promise<CustomDomain>;
   DnsRecords: (id: string, props: DnsRecordsProps) => Promise<DnsRecords>;
-  RedirectRule: (
-    id: string,
-    props: AlchemyDomainProviderRedirectRuleProps,
-  ) => Promise<RedirectRule>;
-};
-
-export type AlchemyDomainProviderRedirectRuleProps = RedirectRuleProps & {
-  targetUrlExpression?: string;
 };
 
 export type AlchemyDeployResourceZoneResolverInput = {
@@ -237,10 +221,6 @@ function applyDomainProviderResource(
   switch (resource.kind) {
     case "cloudflare-worker-custom-domain":
       return applyCustomDomainResource(resource, factories);
-    case "cloudflare-redirect-rule":
-      return applyRedirectRuleResource(resource, factories);
-    case "cloudflare-dns-records":
-      return applyDnsRecordsResource(resource, factories);
   }
 }
 
@@ -249,20 +229,6 @@ function applyCustomDomainResource(
   factories: AlchemyDomainProviderFactories,
 ): Promise<CustomDomain> {
   return factories.CustomDomain(resource.logicalId, resource.props);
-}
-
-function applyRedirectRuleResource(
-  resource: DomainProviderRedirectRuleResource,
-  factories: AlchemyDomainProviderFactories,
-): Promise<RedirectRule> {
-  return factories.RedirectRule(resource.logicalId, redirectRuleProviderProps(resource.props));
-}
-
-function applyDnsRecordsResource(
-  resource: DomainProviderDnsRecordsResource,
-  factories: AlchemyDomainProviderFactories,
-): Promise<DnsRecords> {
-  return factories.DnsRecords(resource.logicalId, resource.props);
 }
 
 async function applyDeployResourceGraphResource(
@@ -283,11 +249,6 @@ async function applyDeployResourceGraphResource(
       return input.factories.DnsRecords(
         resource.logicalId,
         await dnsRecordsPropsFromDeployResource(resource, input.resolveZoneIdForHost),
-      );
-    case "cloudflare-redirect-rule":
-      return input.factories.RedirectRule(
-        resource.logicalId,
-        await redirectRulePropsFromDeployResource(resource, input.resolveZoneIdForHost),
       );
   }
 }
@@ -331,59 +292,6 @@ async function dnsRecordsPropsFromDeployResource(
   };
 }
 
-async function redirectRulePropsFromDeployResource(
-  resource: DeployResource,
-  resolveZoneIdForHost: AlchemyDeployResourceZoneResolver | undefined,
-): Promise<AlchemyDomainProviderRedirectRuleProps> {
-  const targetUrl = requiredStringInput(resource, "targetUrl");
-  const requestUrl = optionalStringInput(resource, "requestUrl");
-  const fromHost =
-    optionalStringInput(resource, "fromHost") ??
-    (requestUrl === undefined ? undefined : hostFromUrl(requestUrl));
-  const zone =
-    optionalStringInput(resource, "zone") ??
-    optionalStringInput(resource, "zoneId") ??
-    (fromHost === undefined
-      ? undefined
-      : await resolveZoneId(resource, fromHost, resolveZoneIdForHost));
-
-  if (zone === undefined) {
-    throw new Error(
-      `Deployment resource "${resource.logicalId}" requires zone, zoneId, or a resolvable host for redirect rules.`,
-    );
-  }
-
-  return redirectRuleProviderProps({
-    ...(optionalStringInput(resource, "description") === undefined
-      ? {}
-      : { description: optionalStringInput(resource, "description") }),
-    preserveQueryString: booleanInput(resource, "preserveQueryString", true),
-    ...(requestUrl === undefined ? {} : { requestUrl }),
-    statusCode: redirectStatusCodeInput(resource),
-    targetUrl,
-    zone,
-  });
-}
-
-function redirectRuleProviderProps(
-  props: RedirectRuleProps,
-): AlchemyDomainProviderRedirectRuleProps {
-  const expression = cloudflareRedirectRuleExpressionForRequestUrl(props.requestUrl);
-  const targetUrlExpression = cloudflareRedirectRuleTargetExpressionForTargetUrl(props.targetUrl);
-
-  if (expression === undefined || targetUrlExpression === undefined) {
-    return props;
-  }
-
-  const { requestUrl: _requestUrl, ...rest } = props;
-
-  return {
-    ...rest,
-    expression,
-    targetUrlExpression,
-  };
-}
-
 function deploymentEvidenceFromAlchemyResult(input: {
   resource: DeployResource;
   result: AlchemyDeployResourceGraphResourceResult;
@@ -412,8 +320,6 @@ function providerResourceIdsFromOutput(kind: DeployResource["kind"], output: unk
       return Array.isArray(record.records)
         ? stringValues(record.records.map((entry) => (isRecord(entry) ? entry.id : undefined)))
         : [];
-    case "cloudflare-redirect-rule":
-      return stringValues([record.ruleId, record.rulesetId]);
   }
 }
 
@@ -423,10 +329,6 @@ function resourceDisplayName(resource: DeployResource): string | undefined {
       return optionalStringInput(resource, "host") ?? optionalStringInput(resource, "name");
     case "cloudflare-dns-records":
       return optionalStringInput(resource, "fromHost") ?? dnsRecordsInput(resource)[0]?.name;
-    case "cloudflare-redirect-rule":
-      return (
-        optionalStringInput(resource, "fromHost") ?? optionalStringInput(resource, "requestUrl")
-      );
   }
 }
 
@@ -457,27 +359,6 @@ function dnsRecordsInput(resource: DeployResource): DnsRecordsProps["records"] {
       ) as DnsRecordsProps["records"][number]["type"],
     };
   });
-}
-
-function redirectStatusCodeInput(resource: DeployResource): RedirectRuleProps["statusCode"] {
-  const value = resource.inputs.statusCode;
-
-  switch (value) {
-    case 302:
-    case "302":
-      return 302;
-    case 303:
-    case "303":
-      return 303;
-    case 307:
-    case "307":
-      return 307;
-    case 308:
-    case "308":
-      return 308;
-    default:
-      return 301;
-  }
 }
 
 async function resolveZoneId(
@@ -542,14 +423,6 @@ function stringValues(values: unknown[]): string[] {
 
 function isRecord(value: unknown): value is Record<string, DeployJsonValue> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hostFromUrl(value: string): string | undefined {
-  try {
-    return new URL(value).host;
-  } catch {
-    return undefined;
-  }
 }
 
 function normalizeAlchemyNamePart(value: string): string {

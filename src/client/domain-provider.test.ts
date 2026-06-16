@@ -89,8 +89,8 @@ describe("client domain provider API helpers", () => {
     const deleted = await deleteInstanceDomainProviderResource(
       {
         host: "www.example.com",
-        kind: "cloudflare-dns-records",
-        logicalId: "primary-redirect-dns-www-example-com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-redirect-custom-domain-www-example-com",
       },
       {
         fetcher: jsonFetcher(
@@ -106,8 +106,8 @@ describe("client domain provider API helpers", () => {
           {
             expectedBody: {
               host: "www.example.com",
-              kind: "cloudflare-dns-records",
-              logicalId: "primary-redirect-dns-www-example-com",
+              kind: "cloudflare-worker-custom-domain",
+              logicalId: "primary-redirect-custom-domain-www-example-com",
             },
             expectedMethod: "POST",
           },

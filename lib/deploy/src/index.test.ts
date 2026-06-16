@@ -239,28 +239,33 @@ describe("Deploy control-plane projection helpers", () => {
   it("keeps route-derived redirect projection stable and display-safe", async () => {
     const projection = projectDeployControlPlaneDesiredState({
       instanceId: "demo-instance",
+      providerConfigs,
       routes: redirectRoutes,
       targetId: "instance.primary",
     });
 
-    expect(projection.resourceGraph.resources.map((resource) => resource.kind)).toEqual([
-      "cloudflare-dns-records",
-      "cloudflare-redirect-rule",
+    expect(projection.resourceGraph.resources).toEqual([
+      {
+        dependencies: [],
+        inputs: {
+          adopt: false,
+          host: "old.example.com",
+          name: "old.example.com",
+          overrideExistingOrigin: false,
+          workerName: "demo-worker",
+        },
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "demo-instance-redirect-custom-domain-old-example-com",
+        providerFamily: "cloudflare",
+        targetId: "instance.primary",
+      },
     ]);
-    expect(projection.resourceGraph.resources[1]?.inputs).toMatchObject({
-      fromHost: "old.example.com",
-      preservePath: true,
-      preserveQueryString: true,
-      statusCode: 308,
-      targetHost: "www.example.com",
-      targetUrl: "https://www.example.com/${1}",
-    });
     expect(await computeDeployProjectionHash(projection)).toBe(
-      "sha256:ffe2831e12a71e20db5bd4a1a72251818291485d1ea36e6219c82f2b4530d628",
+      "sha256:545e7fd5af37ddf7e8435b966b178b54f9cb97dd6f5765880fad9d6881c7de92",
     );
   });
 
-  it("normalizes redirect target URL bases", () => {
+  it("projects URL-target redirects as custom domains without legacy redirect inputs", () => {
     const projection = projectDeployControlPlaneDesiredState({
       instanceId: "demo-instance",
       routes: [
@@ -277,12 +282,22 @@ describe("Deploy control-plane projection helpers", () => {
         },
       ],
       targetId: "instance.primary",
+      workerName: "fallback-worker",
     });
 
-    expect(projection.resourceGraph.resources[1]?.inputs).toMatchObject({
-      targetHost: "example.com",
-      targetUrl: "https://example.com/docs",
-    });
+    expect(projection.resourceGraph.resources).toEqual([
+      expect.objectContaining({
+        inputs: {
+          adopt: false,
+          host: "docs.example.com",
+          name: "docs.example.com",
+          overrideExistingOrigin: false,
+          workerName: "fallback-worker",
+        },
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "demo-instance-redirect-custom-domain-docs-example-com",
+      }),
+    ]);
   });
 
   it("keeps route-only projection stable", async () => {
@@ -360,7 +375,7 @@ describe("Deploy desired-state version helpers", () => {
 
   it("hashes equivalent resource graphs the same way and omits secret-like inputs", async () => {
     const first = deployHashInput([
-      redirectRuleResource({
+      dnsRecordsResource({
         dependencies: [
           { reason: "host placeholder", logicalId: "dns:www.example.com" },
           { logicalId: "zone:example", reason: "zone lookup" },
@@ -370,7 +385,7 @@ describe("Deploy desired-state version helpers", () => {
           targetUrl: "https://example.com/${1}",
           zoneId: "zone-example",
         },
-        logicalId: "redirect:www.example.com",
+        logicalId: "dns:www.example.com",
       }),
       customDomainResource({
         dependencies: [{ logicalId: "zone:example" }],
@@ -398,7 +413,7 @@ describe("Deploy desired-state version helpers", () => {
         },
         logicalId: "custom-domain:app.example.com",
       }),
-      redirectRuleResource({
+      dnsRecordsResource({
         dependencies: [
           { logicalId: "zone:example", reason: "zone lookup" },
           { logicalId: "dns:www.example.com", reason: "host placeholder" },
@@ -408,7 +423,7 @@ describe("Deploy desired-state version helpers", () => {
           zoneId: "zone-example",
           statusCode: 301,
         },
-        logicalId: "redirect:www.example.com",
+        logicalId: "dns:www.example.com",
       }),
     ]);
 
@@ -741,6 +756,7 @@ const redirectRoutes = [
     matchPrefix: "/",
     preservePath: true,
     preserveQueryString: true,
+    providerConfig: "cloudflare-primary",
     statusCode: "308",
     toHost: "www.example.com",
   },
@@ -883,24 +899,6 @@ function dnsRecordsResource(
     dependencies: [],
     inputs: {},
     kind: "cloudflare-dns-records",
-    logicalId,
-    providerFamily: "cloudflare",
-    targetId: "instance.primary",
-    ...overrides,
-  };
-}
-
-function redirectRuleResource(
-  input: Partial<DeployResourceGraph["resources"][number]> & {
-    logicalId: string;
-  },
-): DeployResourceGraph["resources"][number] {
-  const { logicalId, ...overrides } = input;
-
-  return {
-    dependencies: [],
-    inputs: {},
-    kind: "cloudflare-redirect-rule",
     logicalId,
     providerFamily: "cloudflare",
     targetId: "instance.primary",

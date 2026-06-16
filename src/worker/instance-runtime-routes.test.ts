@@ -69,6 +69,101 @@ describe("instance runtime route resolution", () => {
     });
   });
 
+  it("builds redirect responses from schema-owned route target fields", () => {
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records: [
+          routeRecord("to-host", {
+            enabled: true,
+            matchHost: "old.example.com",
+            matchPath: "/",
+            matchPrefix: "/",
+            kind: "redirect",
+            toHost: "new.example.com",
+            statusCode: "308",
+            preservePath: true,
+            preserveQueryString: true,
+            createdAt: "2026-06-02T00:00:00.000Z",
+            updatedAt: "2026-06-02T00:00:00.000Z",
+          }),
+        ],
+        request: {
+          host: "old.example.com",
+          pathname: "/docs/start",
+          search: "?ref=old",
+        },
+      }),
+    ).toMatchObject({
+      id: "to-host",
+      kind: "redirect",
+      location: "https://new.example.com/docs/start?ref=old",
+      status: 308,
+    });
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records: [
+          routeRecord("to-url-drop-request-parts", {
+            enabled: true,
+            matchHost: "old.example.com",
+            matchPath: "/",
+            matchPrefix: "/",
+            kind: "redirect",
+            toUrl: "https://new.example.com/archive?keep=target",
+            statusCode: "301",
+            preservePath: false,
+            preserveQueryString: false,
+            createdAt: "2026-06-02T00:00:00.000Z",
+            updatedAt: "2026-06-02T00:00:00.000Z",
+          }),
+        ],
+        request: {
+          host: "old.example.com",
+          pathname: "/docs/start",
+          search: "?ref=old",
+        },
+      }),
+    ).toMatchObject({
+      id: "to-url-drop-request-parts",
+      kind: "redirect",
+      location: "https://new.example.com/archive?keep=target",
+      status: 301,
+    });
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records: [
+          routeRecord("to-url-preserve-request-parts", {
+            enabled: true,
+            matchHost: "old.example.com",
+            matchPath: "/",
+            matchPrefix: "/",
+            kind: "redirect",
+            toUrl: "https://new.example.com/archive?keep=target",
+            statusCode: "302",
+            preservePath: true,
+            preserveQueryString: true,
+            createdAt: "2026-06-02T00:00:00.000Z",
+            updatedAt: "2026-06-02T00:00:00.000Z",
+          }),
+        ],
+        request: {
+          host: "old.example.com",
+          pathname: "/docs/start",
+          search: "?ref=old",
+        },
+      }),
+    ).toMatchObject({
+      id: "to-url-preserve-request-parts",
+      kind: "redirect",
+      location: "https://new.example.com/archive/docs/start?ref=old",
+      status: 302,
+    });
+  });
+
   it("can restrict resolution to exact-host route records", () => {
     const route = resolveInstanceRuntimeRouteFromRecords({
       appInstalls: [],
@@ -90,6 +185,75 @@ describe("instance runtime route resolution", () => {
     });
 
     expect(route).toBeUndefined();
+  });
+
+  it("keeps redirect-captured hosts from falling through to hostless routes", () => {
+    const records = [
+      routeRecord("redirect-capture", {
+        enabled: true,
+        matchHost: "old.example.com",
+        matchPath: "/old",
+        kind: "redirect",
+        toHost: "new.example.com",
+        statusCode: "308",
+        preservePath: true,
+        preserveQueryString: true,
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
+      routeRecord("host-exact-mount", {
+        enabled: true,
+        matchHost: "old.example.com",
+        matchPath: "/allowed",
+        kind: "mount",
+        targetProfile: "instance",
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
+      routeRecord("hostless-mount", {
+        enabled: true,
+        matchPath: "/apps/site",
+        kind: "mount",
+        targetProfile: "instance",
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
+    ];
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "old.example.com", pathname: "/apps/site" },
+      }),
+    ).toEqual({
+      kind: "not-found",
+      matchHost: "old.example.com",
+      reason: "captured-redirect-host",
+    });
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "old.example.com", pathname: "/allowed" },
+      }),
+    ).toMatchObject({
+      id: "host-exact-mount",
+      kind: "mount",
+      matchHost: "old.example.com",
+    });
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "other.example.com", pathname: "/apps/site" },
+      }),
+    ).toMatchObject({
+      id: "hostless-mount",
+      kind: "mount",
+    });
   });
 
   it("resolves enabled app, schema, public Site, exact-host, and disabled mount routes", () => {

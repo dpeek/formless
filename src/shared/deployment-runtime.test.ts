@@ -33,7 +33,7 @@ describe("deployment runtime", () => {
           },
           logicalId: "custom-domain:app.example.com",
         }),
-        redirectRuleResource({
+        dnsRecordsResource({
           dependencies: [
             { reason: "host placeholder", logicalId: "dns:www.example.com" },
             { logicalId: "zone:example", reason: "zone lookup" },
@@ -43,13 +43,13 @@ describe("deployment runtime", () => {
             statusCode: 301,
             targetUrl: "https://example.com/${1}",
           },
-          logicalId: "redirect:www.example.com",
+          logicalId: "dns:www.example.com",
         }),
       ]),
     );
     const second = hashInputWithGraph(
       graphWithResources([
-        redirectRuleResource({
+        dnsRecordsResource({
           dependencies: [
             { reason: "zone lookup", logicalId: "zone:example" },
             { logicalId: "dns:www.example.com", reason: "host placeholder" },
@@ -59,7 +59,7 @@ describe("deployment runtime", () => {
             statusCode: 301,
             zoneId: "zone-example",
           },
-          logicalId: "redirect:www.example.com",
+          logicalId: "dns:www.example.com",
         }),
         customDomainResource({
           dependencies: [{ logicalId: "zone:example" }],
@@ -83,13 +83,13 @@ describe("deployment runtime", () => {
 
   it("canonicalizes resource and dependency ordering deterministically", () => {
     const graph = graphWithResources([
-      redirectRuleResource({
+      customDomainResource({
         dependencies: [
           { reason: "zone lookup", logicalId: "zone:example" },
           { logicalId: "dns:www.example.com", reason: "host placeholder" },
         ],
         inputs: { zoneId: "zone-example" },
-        logicalId: "redirect:www.example.com",
+        logicalId: "custom-domain:redirect.example.com",
       }),
       dnsRecordsResource({
         dependencies: [],
@@ -116,17 +116,17 @@ describe("deployment runtime", () => {
         logicalId: "custom-domain:app.example.com",
       },
       {
-        dependencies: [],
-        kind: "cloudflare-dns-records",
-        logicalId: "dns:www.example.com",
-      },
-      {
         dependencies: [
           { logicalId: "dns:www.example.com", reason: "host placeholder" },
           { logicalId: "zone:example", reason: "zone lookup" },
         ],
-        kind: "cloudflare-redirect-rule",
-        logicalId: "redirect:www.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "custom-domain:redirect.example.com",
+      },
+      {
+        dependencies: [],
+        kind: "cloudflare-dns-records",
+        logicalId: "dns:www.example.com",
       },
     ]);
   });
@@ -275,21 +275,6 @@ function customDomainResource({
     dependencies,
     inputs,
     kind: "cloudflare-worker-custom-domain",
-    logicalId,
-    providerFamily: "cloudflare",
-    targetId: "instance.primary",
-  };
-}
-
-function redirectRuleResource({
-  dependencies = [],
-  inputs = {},
-  logicalId,
-}: TestDeploymentResourceOptions): DeploymentResourceGraph["resources"][number] {
-  return {
-    dependencies,
-    inputs,
-    kind: "cloudflare-redirect-rule",
     logicalId,
     providerFamily: "cloudflare",
     targetId: "instance.primary",

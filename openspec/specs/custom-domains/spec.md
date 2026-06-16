@@ -112,31 +112,33 @@ repair delete jobs guarded by owner or admin writes.
 
 ### Requirement: Redirect Intent
 
-The system SHALL model provider redirects as desired route state.
+The system SHALL model Worker-handled redirects as desired route state.
 
 #### Scenario: Redirect deployment projection
 
 - **GIVEN** a redirect route is enabled
 - **WHEN** deployment desired state is built for a target
-- **THEN** the provider plan can create a redirect rule plus a proxied
-  originless placeholder DNS record
+- **THEN** the provider plan can create a Worker custom-domain resource for
+  the redirect source host
+- **AND** redirect source-host provider resources are limited to Worker
+  custom-domain resources
 - **AND** redirect routes do not require an app install target
 
 #### Scenario: Redirect disablement
 
 - **GIVEN** a redirect route has applied provider evidence
 - **WHEN** the redirect route is disabled
-- **THEN** redirect and redirect DNS resources are removed from deployment
-  desired state
-- **AND** the next deploy reconciliation removes tracked redirect provider
-  resources from Alchemy or provider state
+- **THEN** the redirect source host custom-domain resource is removed from
+  deployment desired state
+- **AND** the next deploy reconciliation removes tracked redirect custom-domain
+  provider resources from Alchemy or provider state
 - **AND** repair cleanup remains available for recorded evidence that cannot be
   reconciled from tracked state
 
 ### Requirement: Deployment Projection
 
-The system SHALL project enabled custom-domain mount routes and redirect routes
-into the generic deployment runtime without changing custom-domain route
+The system SHALL project enabled custom-domain mount routes and redirect source
+hosts into the generic deployment runtime without changing custom-domain route
 semantics.
 
 #### Scenario: Project enabled route mappings
@@ -153,9 +155,11 @@ semantics.
 
 - **GIVEN** enabled redirect routes exist
 - **WHEN** deployment desired state is built for a target
-- **THEN** enabled redirect routes are projected into redirect rule and
-  redirect DNS graph resources
+- **THEN** enabled redirect routes are projected into Worker custom-domain graph
+  resources for their source hosts
 - **AND** disabled redirect routes do not create desired provider resources
+- **AND** redirect source-host graph resources are limited to Worker
+  custom-domain resources
 - **AND** legacy redirect-intent storage is not used as a deployment projection
   fallback
 
@@ -166,12 +170,12 @@ semantics.
 - **WHEN** deployment desired state is built
 - **THEN** those workflows must have synchronized desired state into
   schema-owned `route` records before provider resources can be projected
-- **AND** absent route records mean absent custom-domain or redirect provider
-  resources
+- **AND** absent route records mean absent custom-domain provider resources
 
 #### Scenario: Removed routes disappear from desired state
 
-- **GIVEN** a custom-domain or redirect route was previously deployed
+- **GIVEN** a custom-domain mount route or redirect route source host was
+  previously deployed
 - **WHEN** that route is disabled or deleted
 - **THEN** the next deployment desired state omits the route-derived provider
   resources
@@ -214,13 +218,13 @@ The system SHALL make route forgetting and provider repair cleanup explicit.
 ### Requirement: Domain CLI Workflows
 
 The system SHALL expose domain inspection and explicit provider repair cleanup
-workflows while provider mutation for domain, DNS, and redirect projected
-resources runs through generic deployment attempts.
+workflows while provider mutation for DNS and custom-domain resources runs
+through generic deployment attempts.
 
 #### Scenario: Domain resources deploy through workspace deploy
 
 - **GIVEN** a claimed instance workspace has enabled route records that project
-  DNS, custom-domain, or redirect resources
+  DNS or custom-domain resources
 - **WHEN** `formless deploy` runs
 - **THEN** the CLI or trusted deployer declares those resources in tracked
   Alchemy desired state through the generic deployment path
@@ -230,8 +234,8 @@ resources runs through generic deployment attempts.
 
 #### Scenario: Route removal deploys deletion
 
-- **GIVEN** tracked provider resources exist for a domain, DNS, or redirect
-  route
+- **GIVEN** tracked provider resources exist for a domain, DNS, or
+  route-derived custom-domain route
 - **AND** the route is disabled or deleted
 - **WHEN** `formless deploy` runs
 - **THEN** the CLI or trusted deployer omits those resources from tracked
@@ -241,8 +245,8 @@ resources runs through generic deployment attempts.
 
 #### Scenario: Explicit cleanup remains for repair
 
-- **GIVEN** recorded provider evidence exists for a domain, DNS, or redirect
-  resource that cannot be reconciled through tracked Alchemy state
+- **GIVEN** recorded provider evidence exists for a domain or DNS resource that
+  cannot be reconciled through tracked Alchemy state
 - **WHEN** an authorized explicit cleanup or delete workflow selects that
   recorded resource
 - **THEN** cleanup is limited to the selected recorded provider resource or
