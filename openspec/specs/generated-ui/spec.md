@@ -58,11 +58,10 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
   default
 - **AND** custom domain management shows desired route state and provider applied
   evidence separately
-- **AND** instance-level navigation includes a deployments destination only when
-  a local workspace gateway proxy is available, and that destination is separate
-  from app-local generated navigation
+- **AND** instance-level navigation does not include a standalone deployments,
+  provider, or workspace sync destination
 - **AND** deployed instance profiles or profiles without an available local
-  workspace gateway proxy do not show the deployments destination
+  workspace gateway proxy do not show workspace operation controls
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
@@ -88,12 +87,12 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 
 #### Scenario: Instance management provider actions
 
-- **GIVEN** the product instance shell renders domain, route, deployment, drift,
-  or provider evidence state
+- **GIVEN** the product instance shell renders domain, route, deployment,
+  provider observation, or provider evidence state
 - **WHEN** the user reviews provider resources
 - **THEN** supported explicit provider delete, manual cleanup, or evidence repair
   controls may remain available for selected recorded evidence
-- **AND** provider mutation guidance points to workspace deploy
+- **AND** provider mutation guidance points to workspace push
 
 ### Requirement: Screen Workspaces
 
@@ -408,9 +407,9 @@ entity keys and render clean human labels for those entities.
 #### Scenario: Render entity labels from kebab-case keys
 
 - WHEN generated UI renders an entity whose source key is `app-install`,
-  `domain-mapping`, or `deploy-drift-report`
+  `domain-mapping`, or `deployment-config`
 - THEN human-facing labels are derived from words such as `App install`,
-  `Domain mapping`, or `Deploy drift report`
+  `Domain mapping`, or `Deployment config`
 - AND generated UI does not treat hyphens as namespace separators
 
 #### Scenario: Preserve saved key locking
@@ -435,7 +434,7 @@ cache, provider evidence, view, screen, read model, and action models.
   control-plane schema
 - **AND** latest deployment status comes from deployment config observation
   cache fields and read-only deployment projection
-- **AND** active local operation progress, evidence summaries, and drift
+- **AND** active local operation progress, evidence summaries, and sync
   summaries may come from local gateway operation state
 - **AND** custom-domain desired route state and provider applied evidence remain
   visually separate
@@ -448,13 +447,11 @@ cache, provider evidence, view, screen, read model, and action models.
   are available
 - **THEN** the overview renders app install management, route management,
   workspace source status, and first-app onboarding
-- **AND** overview links or entry points to `/deployments` render only when a
-  local workspace gateway proxy is available
 - **AND** the overview does not render deployment setup, deployment status,
   desired-state summaries, deployment operation controls, deployment config
-  management tables, route grouping by deployment config, deployment target
-  selectors, deployment target links, or standalone provider evidence cleanup
-  panels
+  management tables, routes grouped by deployment config, primary instance
+  target summaries, deployment target selectors, deployment target links,
+  standalone workspace sync panels, or standalone provider evidence cleanup panels
 - **AND** deployment and provider runtime reads are not required to render the
   overview
 
@@ -497,25 +494,27 @@ records that matches current table-driven install management behavior.
 - **AND** install identity, package app key, storage identity, and package
   source initialization facts render as read-only
 
-### Requirement: Actor-Safe Deployment Operations
+### Requirement: Actor-Safe Workspace Sync Operations
 
-Generated UI SHALL render only deployment operations exposed to browser actor
-kinds.
+Generated UI SHALL render only workspace sync operations exposed to browser
+actor kinds.
 
 #### Scenario: Browser-visible operations
 
-- GIVEN an owner or admin views deployment configuration
+- GIVEN an owner or admin views workspace sync controls
 - WHEN generated UI renders operations
-- THEN it renders only operations exposed to owner or admin browser actors
-- AND CLI deployer or runner operations are hidden from the browser surface
+- THEN it renders only push, pull, check, and credential setup operations exposed
+  to owner or admin browser actors
+- AND standalone deploy, deploy plan, deploy apply, drift report, and provider
+  runner operations are hidden from the browser surface
 
 #### Scenario: Read-only deployment observation
 
 - GIVEN deployment config observation cache fields render
 - WHEN generated UI displays deployment state
 - THEN generated UI treats those fields as read-only runtime-observed cache
-- AND generated UI does not require `deploy-attempt`,
-  `deploy-evidence-summary`, or `deploy-drift-report` collection views
+- AND generated UI does not require `deploy-attempt` or
+  `deploy-evidence-summary` collection views
 
 ### Requirement: Routes Editor
 
@@ -556,8 +555,8 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 
 #### Scenario: Evidence remains separate
 
-- **GIVEN** provider evidence, cleanup history, deployment attempts, or drift
-  summaries exist for a route
+- **GIVEN** provider evidence, cleanup history, deployment attempts, or provider
+  observations exist for a route
 - **WHEN** the route editor renders
 - **THEN** desired route fields remain visually separate from provider evidence
   and cleanup state
@@ -575,91 +574,46 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **AND** browser UI does not expose multiple deployment targets, target ids,
   enabled target counts, or route-to-target assignment controls
 
-### Requirement: Instance Deployment Surface
+### Requirement: No Standalone Deployment Surface
 
-The product instance shell SHALL expose `/deployments` as the single-target
-deployment setup, status, and progress surface only when a local workspace
-gateway proxy is available for local onboarding and ongoing instance
-management.
+The product instance shell SHALL not expose deployment as a standalone browser
+destination or public workflow.
 
-#### Scenario: Deployment route surface
+#### Scenario: Deployment route is unavailable
 
-- **GIVEN** an owner opens `/deployments` on the product instance shell
-- **WHEN** a local workspace gateway proxy is available and deployment config
-  records, deployment observation cache fields, read-only desired-state
-  projection, and local gateway status are available
-- **THEN** the page renders deployment target setup, current deployment status,
-  desired-state summary, local workspace operation controls, and recent
-  operation progress as one deployment workflow
-- **AND** the page presents one primary deployment target and hides deployment
-  config record multiplicity, target pickers, enabled target counts, and raw
-  generated `deployment-config` tables
-- **AND** app install management, route management, owner auth, and app-local
-  navigation remain outside the deployment workflow
-- **AND** deployment setup, deployment status, desired-state summaries,
-  deployment operation controls, and deployment config management are not
-  duplicated on the instance overview
-
-#### Scenario: Deployment route unavailable without local gateway
-
-- **GIVEN** the product instance shell renders in a deployed instance profile
-  or any profile without an available local workspace gateway proxy
 - **WHEN** an owner opens `/deployments` or reviews instance-level navigation
   and overview entry points
-- **THEN** React routing does not select the deployment surface
+- **THEN** React routing does not select a deployment surface
 - **AND** instance-level navigation and overview entry points do not link to
   `/deployments`
-- **AND** deployment config records may still exist, but credential setup,
-  deploy plan, deploy apply, and deployment operation progress controls remain
-  unavailable in browser UI
+- **AND** deployment setup, deployment status, desired-state summaries,
+  deployment operation controls, deployment config management tables, routes
+  grouped by deployment config, primary instance target summaries, and provider
+  cleanup panels are not rendered as standalone browser surfaces
 
-#### Scenario: App-less deployment entry
+#### Scenario: Sync controls stay local to workspace operations
 
-- **GIVEN** a local workspace has no installed app records
-- **WHEN** the owner opens `/deployments`
-- **THEN** credential setup, deploy plan, and deploy apply entry points remain
-  available when the workspace gateway and required authorization are available
-- **AND** the page explains status through deployment config, desired-state, and
-  operation summaries rather than requiring a first app install
-- **AND** installing an app remains an optional separate action outside the
-  deployment workflow
+- **GIVEN** the product instance shell renders in a local workspace runtime with
+  gateway proxy status available
+- **WHEN** workspace sync operations are available
+- **THEN** push, pull, check, and credential setup controls may render through
+  the workspace operation controls
+- **AND** app install management, route management, owner auth, and app-local
+  navigation remain outside those controls
+- **AND** deployment config records may exist as schema-owned intent, but the UI
+  does not expose target selectors, enabled target counts, routes-by-target
+  groupings, or raw generated `deployment-config` management tables
 
-#### Scenario: Deployment setup
+#### Scenario: Push progress may include internal deployment step
 
-- **GIVEN** no enabled deployment config exists
-- **WHEN** the owner starts deployment setup from `/deployments`
-- **THEN** the UI can create or update one primary deployment config with target
-  id, target URL when known, provider family, account id, worker name, and
-  display-safe credential reference
-- **AND** if multiple deployment config records exist, the browser deployment
-  surface still operates on the primary instance target instead of exposing a
-  target selector
-- **AND** credential setup may auto-select existing local Alchemy credentials
-  when the gateway reports one usable profile/account
-- **AND** secret values, raw provider state, and filesystem paths are not
-  displayed or stored in schema records
-
-#### Scenario: Deployment progress steps
-
-- **WHEN** the owner starts deploy plan or deploy apply from `/deployments`
-- **THEN** progress is shown as named steps for credential/account resolution,
-  desired-state plan, Worker deploy, health check, owner setup when needed,
-  workspace push/writeback, and deployment observation refresh
-- **AND** each step can show pending, running, succeeded, failed, or skipped
-  state with display-safe details
-- **AND** a first deploy health check failure shows the expected URL, current
-  step, retry guidance, and display-safe provider/deployment evidence without
-  exposing secrets
-
-#### Scenario: Deployment observation refresh
-
-- **WHEN** deploy apply completes or an explicit refresh operation succeeds
-- **THEN** `/deployments` refreshes displayed deployment config observation
-  cache fields from Authority-backed state
-- **AND** check operations can display fresh operation results without
-  persisting observation fields
-- **AND** browser refreshes can recover active or recently completed operation
-  progress from local gateway state when the gateway is available
+- **WHEN** a browser workspace operation displays push progress
+- **THEN** progress is presented as one push operation with display-safe sync
+  planning, optional runtime deploy/provider reconciliation, health check, owner
+  setup when needed, remote data restore, and observation refresh steps
+- **AND** any deploy wording is scoped to an internal push step rather than a
+  standalone command, route, operation, or destination
+- **AND** check operations can display fresh operation results without persisting
+  observation fields
 
 ### Requirement: Browser Workspace Operation Controls
 
@@ -670,8 +624,8 @@ workspace gateway proxy is available through the local runtime.
 
 - **WHEN** the product instance shell renders in a local workspace runtime with
   gateway proxy status available
-- **THEN** the UI can start workspace check, pull, push, deploy credential
-  setup, deploy plan, and deploy apply operations through the
+- **THEN** the UI can start workspace check, pull, push, and credential setup
+  operations through the
   same-origin gateway API family
 - **AND** the browser UI does not expose a user-triggered workspace save action
   because browser writes enqueue workspace auto-save
@@ -717,7 +671,7 @@ workspace gateway proxy is available through the local runtime.
   available
 - **THEN** the UI treats workspace gateway operations as unavailable
 - **AND** it does not offer controls that would imply workspace filesystem,
-  credential setup, deploy plan, or deploy apply execution is available
+  credential setup, push dry-run, or push apply execution is available
 
 ### Requirement: Local Workspace Onboarding UI
 
@@ -763,10 +717,10 @@ behavior for onboarding steps that write schema records.
 #### Scenario: Gateway operation step
 
 - **WHEN** an onboarding step starts credential setup, runs workspace check, or
-  starts deploy plan/apply
+  starts push dry-run/apply
 - **THEN** the step invokes the workspace gateway operation model and renders
   operation progress
-- **AND** deploy apply completion may refresh displayed deployment config
+- **AND** push apply completion may refresh displayed deployment config
   observation cache fields after the authorized cache patch commits
 - **AND** schema field controls are used only for schema-record inputs, not for
   arbitrary filesystem paths, credentials, raw provider state, or shell output

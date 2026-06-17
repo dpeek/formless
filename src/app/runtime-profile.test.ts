@@ -98,10 +98,6 @@ describe("runtime profile resolver", () => {
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });
-    expect(
-      runtimeBrowserRoutePatterns(profile, { localWorkspaceGatewayAvailable: true })
-        .instanceDeploymentsRoute,
-    ).toBe("/deployments");
   });
 
   it("resolves the dev workbench profile with schema-keyed app mounts", () => {
@@ -148,10 +144,6 @@ describe("runtime profile resolver", () => {
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });
-    expect(
-      runtimeBrowserRoutePatterns(profile, { localWorkspaceGatewayAvailable: true })
-        .instanceDeploymentsRoute,
-    ).toBe("/deployments");
     expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(true);
   });
 
@@ -252,9 +244,6 @@ describe("runtime profile resolver", () => {
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
     ).toBeUndefined();
     expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/", undefined)).toBe(true);
-    expect(
-      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/deployments", undefined),
-    ).toBe(true);
     expect(
       shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/apps/task-workspace", world, {
         appInstalls,

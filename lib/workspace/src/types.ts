@@ -160,11 +160,11 @@ const workspacePathInputField = {
   valueType: "string",
 } as const;
 
-const migrationPolicyInputField = {
-  allowedValues: ["existing", "new"],
-  display: "when-present",
-  key: "migrationPolicy",
-  valueType: "enum",
+const dryRunInputField = {
+  defaultValue: false,
+  display: "always",
+  key: "dryRun",
+  valueType: "boolean",
 } as const;
 
 export const WORKSPACE_OPERATION_DEFINITIONS = [
@@ -213,13 +213,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   },
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
-    bindings: {
-      gateway: {
-        bootstrap: false,
-        inputFields: ["targetAlias"],
-        requestKind: "deploymentRefresh",
-      },
-    },
+    bindings: {},
     handlerKey: "deployment.refresh",
     input: { fields: [targetAliasInputField, workspacePathInputField] },
     key: "deployment.refresh",
@@ -227,42 +221,6 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
     label: "Deployment refresh",
     mode: "write",
     requiredCapability: "deployment-observe",
-  },
-  {
-    actorPolicy: { allowedActors: allWorkspaceOperationActors },
-    bindings: {
-      cli: { commands: ["formless deploy"] },
-      gateway: {
-        bootstrap: false,
-        inputFields: ["migrationPolicy", "targetAlias"],
-        requestKind: "deployApply",
-      },
-    },
-    handlerKey: "deployment.apply",
-    input: { fields: [migrationPolicyInputField, targetAliasInputField, workspacePathInputField] },
-    key: "deployment.apply",
-    kind: "deployApply",
-    label: "Deployment apply",
-    mode: "write",
-    requiredCapability: "deployment-apply",
-  },
-  {
-    actorPolicy: { allowedActors: allWorkspaceOperationActors },
-    bindings: {
-      cli: { commands: ["formless deploy --dry-run"] },
-      gateway: {
-        bootstrap: false,
-        inputFields: ["migrationPolicy", "targetAlias"],
-        requestKind: "deployPlan",
-      },
-    },
-    handlerKey: "deployment.plan",
-    input: { fields: [migrationPolicyInputField, targetAliasInputField, workspacePathInputField] },
-    key: "deployment.plan",
-    kind: "deployPlan",
-    label: "Deployment plan",
-    mode: "write",
-    requiredCapability: "deployment-plan",
   },
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
@@ -284,10 +242,10 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
       cli: { commands: ["formless pull"] },
-      gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "pull" },
+      gateway: { bootstrap: false, inputFields: ["dryRun", "targetAlias"], requestKind: "pull" },
     },
     handlerKey: "workspace.source.pull",
-    input: { fields: [targetAliasInputField, workspacePathInputField] },
+    input: { fields: [dryRunInputField, targetAliasInputField, workspacePathInputField] },
     key: "workspace.source.pull",
     kind: "pull",
     label: "Workspace source pull",
@@ -300,26 +258,12 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
       cli: { commands: ["formless push"] },
       gateway: {
         bootstrap: false,
-        inputFields: ["allowStale", "apply", "replace", "replaceInstallSet", "targetAlias"],
+        inputFields: ["dryRun", "targetAlias"],
         requestKind: "push",
       },
     },
     handlerKey: "workspace.source.push",
-    input: {
-      fields: [
-        { defaultValue: false, display: "always", key: "allowStale", valueType: "boolean" },
-        { defaultValue: false, display: "always", key: "apply", valueType: "boolean" },
-        { defaultValue: false, display: "always", key: "replace", valueType: "boolean" },
-        {
-          defaultValue: false,
-          display: "always",
-          key: "replaceInstallSet",
-          valueType: "boolean",
-        },
-        targetAliasInputField,
-        workspacePathInputField,
-      ],
-    },
+    input: { fields: [dryRunInputField, targetAliasInputField, workspacePathInputField] },
     key: "workspace.source.push",
     kind: "push",
     label: "Workspace source push",
@@ -660,31 +604,15 @@ export type CheckWorkspaceOperationInput = {
 };
 
 export type PullWorkspaceOperationInput = {
+  dryRun?: boolean;
   kind: "pull";
   targetAlias?: string | null;
   workspacePath?: string | null;
 };
 
 export type PushWorkspaceOperationInput = {
-  allowStale?: boolean;
-  apply?: boolean;
+  dryRun?: boolean;
   kind: "push";
-  replace?: boolean;
-  replaceInstallSet?: boolean;
-  targetAlias?: string | null;
-  workspacePath?: string | null;
-};
-
-export type DeployPlanWorkspaceOperationInput = {
-  kind: "deployPlan";
-  migrationPolicy?: InstanceWorkspaceMigrationPolicy | null;
-  targetAlias?: string | null;
-  workspacePath?: string | null;
-};
-
-export type DeployApplyWorkspaceOperationInput = {
-  kind: "deployApply";
-  migrationPolicy?: InstanceWorkspaceMigrationPolicy | null;
   targetAlias?: string | null;
   workspacePath?: string | null;
 };
@@ -707,8 +635,6 @@ export type WorkspaceOperationInput =
   | CheckWorkspaceOperationInput
   | CredentialSetupWorkspaceOperationInput
   | DeploymentRefreshWorkspaceOperationInput
-  | DeployApplyWorkspaceOperationInput
-  | DeployPlanWorkspaceOperationInput
   | InitWorkspaceOperationInput
   | PullWorkspaceOperationInput
   | PushWorkspaceOperationInput
@@ -732,16 +658,14 @@ export type WorkspaceOperationStatusStartInput = {
 };
 
 export type WorkspaceOperationCheckOrPullStartInput = {
+  dryRun?: boolean;
   kind: "check" | "pull";
   targetAlias?: string | null;
 };
 
 export type WorkspaceOperationPushStartInput = {
-  allowStale?: boolean;
-  apply?: boolean;
+  dryRun?: boolean;
   kind: "push";
-  replace?: boolean;
-  replaceInstallSet?: boolean;
   targetAlias?: string | null;
 };
 
@@ -752,22 +676,9 @@ export type WorkspaceOperationCredentialSetupStartInput = {
   provider: "cloudflare";
 };
 
-export type WorkspaceOperationDeployStartInput = {
-  kind: "deployApply" | "deployPlan";
-  migrationPolicy?: InstanceWorkspaceMigrationPolicy | null;
-  targetAlias?: string | null;
-};
-
-export type WorkspaceOperationDeploymentRefreshStartInput = {
-  kind: "deploymentRefresh";
-  targetAlias?: string | null;
-};
-
 export type WorkspaceOperationStartInput =
   | WorkspaceOperationCheckOrPullStartInput
   | WorkspaceOperationCredentialSetupStartInput
-  | WorkspaceOperationDeploymentRefreshStartInput
-  | WorkspaceOperationDeployStartInput
   | WorkspaceOperationPushStartInput
   | WorkspaceOperationSaveStartInput
   | WorkspaceOperationStatusStartInput;
@@ -798,8 +709,6 @@ export type UpdateWorkspaceOperationStateInput = {
 };
 
 export type InstanceWorkspaceDefaultAppPolicy = "declared-installs" | "none";
-
-export type InstanceWorkspaceMigrationPolicy = "existing" | "new";
 
 export type InstanceWorkspaceDomainProfile = "app" | "instance" | "publicSite";
 

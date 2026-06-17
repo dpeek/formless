@@ -385,6 +385,72 @@ describe("instance archive restore API", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
   });
 
+  it("exact instance replacement replaces matching installs and prunes absent installs and media", async () => {
+    const beforeTaskRecord = taskRecord({
+      id: "task-before-exact",
+      title: "Before exact replacement",
+    });
+    const afterTaskRecord = taskRecord({
+      id: "task-after-exact",
+      title: "After exact replacement",
+    });
+    const bucket = await harness.mf.getR2Bucket("FORMLESS_MEDIA");
+
+    await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
+    await postArchiveRestore(
+      tasksAppArchive({
+        dryRun: false,
+        records: [beforeTaskRecord],
+      }),
+    );
+    await bucket.put("media/images/orphan.png", new Uint8Array([1, 2, 3]));
+
+    const applied = await postArchiveRestore(
+      exactTasksInstanceArchive({
+        dryRun: false,
+        records: [afterTaskRecord],
+      }),
+      [],
+      { exactInstanceReplacement: true },
+    );
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const tasks = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
+    const personal = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
+    const media = await bucket.list({ prefix: "media/images/" });
+
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          replacedInstalls: ["work"],
+        },
+      },
+    });
+    expect(installs.body.installs.map((install) => install.installId)).toEqual(["work"]);
+    expect(tasks.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: beforeTaskRecord.id,
+          deletedAt: expect.any(String),
+        }),
+        afterTaskRecord,
+      ]),
+    );
+    expect(personal.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "rec_site_media_avatar",
+          deletedAt: expect.any(String),
+        }),
+      ]),
+    );
+    expect(personal.body.records.every((record) => record.deletedAt !== undefined)).toBe(true);
+    expect(media.objects.map((object) => object.key)).toEqual([]);
+  });
+
   it("rejects old app-scoped Site media archives before restore mutation", async () => {
     const rejected = await postArchiveRestore(appArchiveWithLegacyMedia({ dryRun: false }), [
       legacyMediaFile(),
@@ -476,9 +542,16 @@ async function postArchiveRestore(
     bytesBase64: string;
     contentType: string;
   }> = [],
+  options: { exactInstanceReplacement?: boolean } = {},
 ) {
   const response = await harness.fetch("/api/formless/archive/restore", {
-    body: JSON.stringify({ archive, mediaFiles }),
+    body: JSON.stringify({
+      archive,
+      ...(options.exactInstanceReplacement === undefined
+        ? {}
+        : { exactInstanceReplacement: options.exactInstanceReplacement }),
+      mediaFiles,
+    }),
     headers: {
       Authorization: `Bearer ${adminToken}`,
       "Content-Type": "application/json",
@@ -554,6 +627,61 @@ function controlPlaneInstanceArchive(input: { dryRun: boolean }): InstanceArchiv
       schema: instanceControlPlaneSchema,
       records: controlPlaneArchiveRecords(),
     },
+  };
+}
+
+function exactTasksInstanceArchive(input: {
+  dryRun: boolean;
+  records?: StoredRecord[];
+}): InstanceArchive {
+  const app = tasksAppArchive({
+    dryRun: input.dryRun,
+    installCollisions: "replace",
+    records: input.records,
+  });
+  const now = "2026-05-12T00:00:00.000Z";
+
+  return {
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: now,
+    capabilities: [
+      "installed-app-registry",
+      "schema-owned-control-plane",
+      "app-store-snapshots",
+      "core-media-assets",
+    ],
+    restorePolicy: { dryRun: input.dryRun, installCollisions: "replace" },
+    apps: [app],
+    controlPlane: {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: now,
+      schemaUpdatedAt: now,
+      sourceCursor: 1,
+      schema: instanceControlPlaneSchema,
+      records: instanceControlPlaneRecordsForAppInstall({
+        install: tasksInstall(),
+        now,
+      }).map(storedControlPlaneRecord),
+    },
+  };
+}
+
+function tasksInstall(): AppInstall {
+  return {
+    installId: "work",
+    packageAppKey: "tasks",
+    packageRevision: 1,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
+    label: "Work Tasks",
+    status: "installed",
+    createdAt: "2026-05-12T00:00:00.000Z",
+    updatedAt: "2026-05-12T00:00:00.000Z",
+    adminRoute: "/apps/work",
+    schemaRoute: "/apps/work/schema",
   };
 }
 

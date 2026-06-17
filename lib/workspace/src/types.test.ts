@@ -464,8 +464,6 @@ describe("workspace operation contracts", () => {
       "workspace.source.check",
       "workspace.credentials.setup",
       "deployment.refresh",
-      "deployment.apply",
-      "deployment.plan",
       "workspace.init",
       "workspace.source.pull",
       "workspace.source.push",
@@ -476,8 +474,6 @@ describe("workspace operation contracts", () => {
       "check",
       "credentialSetup",
       "deploymentRefresh",
-      "deployApply",
-      "deployPlan",
       "init",
       "pull",
       "push",
@@ -490,9 +486,6 @@ describe("workspace operation contracts", () => {
     expect(WORKSPACE_BROWSER_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",
-      "deploymentRefresh",
-      "deployApply",
-      "deployPlan",
       "pull",
       "push",
       "save",
@@ -503,16 +496,8 @@ describe("workspace operation contracts", () => {
         (definition) => definition.kind,
       ),
     );
-    expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual([
-      "deployApply",
-      "deployPlan",
-      "pull",
-      "push",
-      "save",
-    ]);
+    expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual(["pull", "push", "save"]);
     expect(WORKSPACE_CLI_OPERATION_COMMANDS).toEqual([
-      "formless deploy",
-      "formless deploy --dry-run",
       "formless pull",
       "formless push",
       "formless save",
@@ -520,10 +505,11 @@ describe("workspace operation contracts", () => {
     expect(WORKSPACE_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceOperationKind("init")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("init")).toBe(false);
-    expect(isWorkspaceBrowserOperationKind("deploymentRefresh")).toBe(true);
+    expect(isWorkspaceBrowserOperationKind("deploymentRefresh")).toBe(false);
     expect(isWorkspaceBrowserOperationKind("credentialSetup")).toBe(true);
     expect(isWorkspaceCliOperationKind("push")).toBe(true);
     expect(isWorkspaceCliCommandName("formless push")).toBe(true);
+    expect(isWorkspaceCliCommandName("formless deploy")).toBe(false);
     expect(isWorkspaceCliCommandName("formless instance push")).toBe(false);
     expect(isWorkspaceCliCommandName("formless instance owner setup")).toBe(false);
 
@@ -533,23 +519,16 @@ describe("workspace operation contracts", () => {
       mode: "read",
       requiredCapability: "workspace-read",
     });
-    expect(workspaceOperationDefinitionForKind("deployApply")).toMatchObject({
-      handlerKey: "deployment.apply",
-      key: "deployment.apply",
-      requiredCapability: "deployment-apply",
-    });
     expect(workspaceOperationDefinitionForKind("save").bindings.cli?.commands).toEqual([
       "formless save",
     ]);
-    expect(workspaceOperationDefinitionForCliCommand("formless deploy")).toMatchObject({
-      handlerKey: "deployment.apply",
-      kind: "deployApply",
-    });
-    expect(workspaceOperationDefinitionForCliCommand("formless deploy --dry-run")).toMatchObject({
-      handlerKey: "deployment.plan",
-      kind: "deployPlan",
-    });
+    expect(() => workspaceOperationDefinitionForCliCommand("formless deploy")).toThrow(
+      'Workspace CLI command "formless deploy" is not bound to an operation definition.',
+    );
     expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
+    expect("gateway" in workspaceOperationDefinitionForKind("deploymentRefresh").bindings).toBe(
+      false,
+    );
     expect(workspaceOperationDefinitionForKind("status").bindings.gateway).toEqual({
       bootstrap: true,
       inputFields: ["includeDeploymentStatus", "targetAlias"],
@@ -558,33 +537,23 @@ describe("workspace operation contracts", () => {
     expect(workspaceOperationDefinitionForKind("save").bindings.gateway?.inputFields).toEqual([
       "check",
     ]);
-    expect(workspaceOperationDefinitionForKind("push").bindings.gateway?.inputFields).toEqual([
-      "allowStale",
-      "apply",
-      "replace",
-      "replaceInstallSet",
+    expect(workspaceOperationDefinitionForKind("pull").bindings.gateway?.inputFields).toEqual([
+      "dryRun",
       "targetAlias",
     ]);
-    expect(workspaceOperationInputDefaults("push")).toEqual({
-      allowStale: false,
-      apply: false,
-      replace: false,
-      replaceInstallSet: false,
-    });
+    expect(workspaceOperationDefinitionForKind("push").bindings.gateway?.inputFields).toEqual([
+      "dryRun",
+      "targetAlias",
+    ]);
+    expect(workspaceOperationInputDefaults("pull")).toEqual({ dryRun: false });
+    expect(workspaceOperationInputDefaults("push")).toEqual({ dryRun: false });
     expect(workspaceOperationInputFieldDefaultValue("save", "check")).toBe(false);
   });
 
   it("matches operations against actor policy and required execution capability", () => {
     expect(
       Object.fromEntries(
-        [
-          "check",
-          "credentialSetup",
-          "deploymentRefresh",
-          "deployApply",
-          "deployPlan",
-          "status",
-        ].map((kind) => [
+        ["check", "credentialSetup", "deploymentRefresh", "status"].map((kind) => [
           kind,
           workspaceOperationRequiredCapability(kind as (typeof WORKSPACE_OPERATION_KINDS)[number]),
         ]),
@@ -593,30 +562,31 @@ describe("workspace operation contracts", () => {
       check: "workspace-read",
       credentialSetup: "credential-setup",
       deploymentRefresh: "deployment-observe",
-      deployApply: "deployment-apply",
-      deployPlan: "deployment-plan",
       status: "workspace-read",
     });
 
-    expect(workspaceOperationActorAllowed("deployPlan", "browser")).toBe(true);
-    expect(workspaceOperationCapabilityAllowed("deployPlan", ["deployment-plan"])).toBe(true);
+    expect(workspaceOperationActorAllowed("deploymentRefresh", "browser")).toBe(true);
+    expect(workspaceOperationCapabilityAllowed("deploymentRefresh", ["deployment-observe"])).toBe(
+      true,
+    );
     expect(
       workspaceOperationExecutionDecision({
         actor: "browser",
-        capabilities: ["deployment-plan"],
-        kind: "deployPlan",
+        capabilities: ["deployment-observe"],
+        kind: "deploymentRefresh",
       }),
     ).toEqual({ ok: true });
     expect(
       workspaceOperationExecutionDecision({
         actor: "browser",
         capabilities: ["deployment-apply"],
-        kind: "deployPlan",
+        kind: "deploymentRefresh",
       }),
     ).toEqual({
-      error: 'Workspace operation "deployPlan" requires execution capability "deployment-plan".',
+      error:
+        'Workspace operation "deploymentRefresh" requires execution capability "deployment-observe".',
       ok: false,
-      requiredCapability: "deployment-plan",
+      requiredCapability: "deployment-observe",
     });
   });
 
@@ -641,25 +611,15 @@ describe("workspace operation contracts", () => {
     expect(workspaceOperationInputDisplay({ kind: "check", targetAlias: "remote" })).toEqual({
       targetAlias: "remote",
     });
-    expect(workspaceOperationInputDisplay({ kind: "pull" })).toEqual({});
+    expect(workspaceOperationInputDisplay({ kind: "pull" })).toEqual({ dryRun: false });
     expect(
       workspaceOperationInputDisplay({
-        apply: true,
+        dryRun: true,
         kind: "push",
-        replaceInstallSet: true,
         targetAlias: "remote",
       }),
     ).toEqual({
-      allowStale: false,
-      apply: true,
-      replace: false,
-      replaceInstallSet: true,
-      targetAlias: "remote",
-    });
-    expect(workspaceOperationInputDisplay({ kind: "deployPlan", migrationPolicy: "new" })).toEqual({
-      migrationPolicy: "new",
-    });
-    expect(workspaceOperationInputDisplay({ kind: "deployApply", targetAlias: "remote" })).toEqual({
+      dryRun: true,
       targetAlias: "remote",
     });
     expect(workspaceOperationInputDisplay({ kind: "deploymentRefresh" })).toEqual({});
@@ -678,7 +638,7 @@ describe("workspace operation contracts", () => {
       id: "op_deploy_00000001",
       input: { targetAlias: "remote" },
       now: () => "2026-06-02T00:00:00.000Z",
-      operation: "deployApply",
+      operation: "push",
       workspaceLabel: "personal-sites",
       workspaceRoot: "/tmp/personal-sites",
     });
@@ -714,7 +674,7 @@ describe("workspace operation contracts", () => {
         workspaceFile: `${workspaceRoot}/logs/output.txt`,
       },
       now: () => "2026-06-02T00:00:00.000Z",
-      operation: "deployApply",
+      operation: "push",
       workspaceLabel: "personal-sites",
       workspaceRoot,
     });
@@ -748,7 +708,7 @@ describe("workspace operation contracts", () => {
             ownerSetupUrl,
             providerStatePayload: "raw",
           },
-          title: "Deploy applied",
+          title: "Workspace push applied",
         },
       },
       status: "running",
@@ -771,7 +731,7 @@ describe("workspace operation contracts", () => {
           providerStatePayload: "raw",
           setupUrl: ownerSetupUrl,
         },
-        title: "Deploy applied",
+        title: "Workspace push applied",
       },
       workspaceRoot,
     });

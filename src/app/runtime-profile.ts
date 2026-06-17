@@ -57,7 +57,6 @@ export type RuntimeInstalledSitePublicSurface = {
 
 export type RuntimeInstalledAppRouteContext = {
   appInstalls?: readonly AppInstall[] | undefined;
-  localWorkspaceGatewayAvailable?: boolean | undefined;
 };
 
 export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
@@ -101,7 +100,6 @@ export type RuntimeRoutePolicy = {
 };
 
 export type RuntimeBrowserRoutePatterns = {
-  instanceDeploymentsRoute?: typeof runtimeTopologyRoutes.deploymentsRoute;
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
   installedAppSchemaRoutePattern?: `/${string}`;
@@ -237,10 +235,7 @@ export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy 
   };
 }
 
-export function runtimeBrowserRoutePatterns(
-  profile: RuntimeProfile,
-  context: Pick<RuntimeInstalledAppRouteContext, "localWorkspaceGatewayAvailable"> = {},
-): RuntimeBrowserRoutePatterns {
+export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBrowserRoutePatterns {
   const policy = runtimeRoutePolicy(profile);
   const installedAppRoutes = runtimeInstalledAppRoutesForProfile(profile);
   const installedSitePublicRoutes = runtimeInstalledSitePublicRoutesForProfile(profile);
@@ -256,11 +251,6 @@ export function runtimeBrowserRoutePatterns(
     ...(hasInstanceBrowserShell
       ? {
           instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
-        }
-      : {}),
-    ...(hasInstanceBrowserShell && context.localWorkspaceGatewayAvailable
-      ? {
-          instanceDeploymentsRoute: runtimeTopologyRoutes.deploymentsRoute,
         }
       : {}),
     ...(installedAppRoutes
@@ -309,10 +299,7 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
     isRuntimePublicSiteRoute(profile, path, context) ||
     isInstalledSitePublicRoutePath(profile, path) ||
     profile.shell === "publishedSite" ||
-    (profile.shell === "instance" &&
-      (path === routes.instanceShellRoute ||
-        path === routes.instanceDeploymentsRoute ||
-        !routeWorld))
+    (profile.shell === "instance" && (path === routes.instanceShellRoute || !routeWorld))
   );
 }
 

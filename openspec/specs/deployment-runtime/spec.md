@@ -4,9 +4,9 @@
 
 Deployment runtime projects Formless deployment intent for supported instance
 targets and derives display status from schema-owned deployment config
-observation cache. Deployers declare tracked Alchemy desired state, Alchemy owns
-provider reconciliation and provider resource state, and `deployment-config`
-records store only the latest display-safe observation.
+observation cache. Push-owned deployers declare tracked Alchemy desired state,
+Alchemy owns provider reconciliation and provider resource state, and
+`deployment-config` records store only the latest display-safe observation.
 
 ## Requirements
 
@@ -33,19 +33,19 @@ mutation input without storing deployment attempts in runtime SQL tables.
 - **AND** redirect routes project Worker custom-domain resources for their
   source hosts so the deployed Worker can return redirect responses
 - **AND** latest deployment status remains a cache on the target
-  `deployment-config` record, not separate attempt, lease, evidence, or drift
-  records
+  `deployment-config` record, not separate attempt, lease, evidence, or
+  provider-difference report records
 
-#### Scenario: Removed route resources reconcile through deploy
+#### Scenario: Removed route resources reconcile through push
 
-- **GIVEN** a previous successful deploy tracked route-derived DNS or
+- **GIVEN** a previous successful push tracked route-derived DNS or
   custom-domain resources in Alchemy state
 - **WHEN** the next desired-state projection omits those resources because a
   route was disabled or deleted
 - **THEN** the deployer declares the new desired resource graph in the same
   tracked Alchemy app, stage, and state scope
-- **AND** Alchemy destroys the omitted tracked provider resources during deploy
-  reconciliation
+- **AND** Alchemy destroys the omitted tracked provider resources during push
+  provider reconciliation
 - **AND** deployment observation records only display-safe latest status and
   summary fields on the deployment config
 
@@ -56,7 +56,7 @@ mutation input without storing deployment attempts in runtime SQL tables.
   or out-of-band repair is required
 - **WHEN** an authorized cleanup workflow selects that evidence
 - **THEN** cleanup may mutate the selected provider resource or evidence outside
-  normal deploy reconciliation
+  normal push provider reconciliation
 - **AND** cleanup does not change control-plane deployment intent unless a
   separate authorized intent write is submitted
 
@@ -95,7 +95,7 @@ supported deployment target.
 - **AND** route-derived resource graph hashes are based on the Deploy package
   control-plane projection output
 - **AND** timestamps, attempt history, evidence summaries, cleanup history,
-  drift reports, deployment config observation cache fields, and status display
+  deployment config observation cache fields, and status display
   data do not change the desired-state hash
 
 #### Scenario: Deploy package owns desired-state versioning
@@ -110,12 +110,12 @@ supported deployment target.
 - AND provider credentials, runtime secrets, Alchemy passwords, and state tokens
   remain outside Deploy package version output
 
-### Requirement: Runtime Upgrade Facts
+### Requirement: Runtime Metadata
 
-The deployment runtime SHALL expose upgrade-relevant runtime facts for exact
-deploy and upgrade planning.
+The deployment runtime SHALL expose display-safe runtime metadata for sync
+diagnostics without making push an upgrade-planning workflow.
 
-#### Scenario: Metadata includes upgrade facts
+#### Scenario: Metadata includes runtime facts
 
 - WHEN a client reads deploy metadata for a Formless instance
 - THEN the response includes package version, runtime protocol version, storage
@@ -124,17 +124,12 @@ deploy and upgrade planning.
   state, raw lease tokens, or runtime secrets
 - AND the response is not cached
 
-#### Scenario: Exact deploy verifies upgrade facts
+#### Scenario: Push does not gate on upgrade planning
 
-- WHEN a CLI deploys runtime code for an instance
-- THEN post-deploy verification compares expected upgrade facts with the
-  deployed metadata response
-- AND data migrations do not run when metadata verification fails
-
-### Requirement: Upgrade-Aware Desired State
-
-The deployment runtime SHALL keep deployment desired-state projection separate
-from runtime upgrade metadata while allowing CLI workflows to display both.
+- WHEN `formless push` deploys runtime code for an instance
+- THEN it may read deployed metadata for diagnostics and health checks
+- AND it does not build upgrade plans, require migration policy, apply data
+  migrations, or block synchronization on migration evidence
 
 #### Scenario: Desired state remains provider intent
 
@@ -177,8 +172,8 @@ configuration for deployed public action forms that require Turnstile.
   route-derived provider resources
 - AND the widget inputs include a deterministic name, widget mode, and the
   deployed workers.dev host plus enabled public Site custom-domain hosts
-- AND changed or removed widget host inputs reconcile through the next deploy
-  without storing Turnstile provider state in app records
+- AND changed or removed widget host inputs reconcile through the next push
+  provider reconciliation without storing Turnstile provider state in app records
 
 #### Scenario: Bind Turnstile runtime configuration
 
@@ -194,8 +189,8 @@ configuration for deployed public action forms that require Turnstile.
 ### Requirement: Deployment Observation Cache
 
 The system SHALL store latest display-safe deployment observation on the target
-`deployment-config` record instead of runtime attempt, lease, evidence, or drift
-tables.
+`deployment-config` record instead of runtime attempt, lease, evidence, or
+provider-difference tables.
 
 #### Scenario: Successful observation
 
@@ -215,7 +210,8 @@ tables.
 
 #### Scenario: Observation replacement
 
-- WHEN a newer deploy or explicit refresh writes an observation
+- WHEN a newer push provider reconciliation or explicit refresh writes an
+  observation
 - THEN it replaces the previous observation fields on the deployment config
 - AND the runtime does not append deployment history records
 
@@ -284,28 +280,8 @@ cache.
 
 - WHEN a local workspace gateway operation is actively deploying a target
 - THEN browser UI may show in-progress state from gateway operation status
-- AND the deployment config observation cache is updated only when deploy or
+- AND the deployment config observation cache is updated only when push or
   refresh writes an observation
-
-### Requirement: Drift Observations
-
-The system SHALL allow deployers or refresh workflows to record latest
-display-safe drift observation without treating it as canonical provider truth.
-
-#### Scenario: Record drift observation
-
-- WHEN a deployer compares desired state with Alchemy/provider state and
-  persists the observation
-- THEN it patches the deployment config with drift status, display-safe summary,
-  desired-state hash, runner, and observed time
-- AND full provider current state is not stored on the deployment config
-
-#### Scenario: Drift does not mutate desired state
-
-- WHEN a drift observation is recorded
-- THEN user intent and desired-state projection are not changed
-- AND future deploys still project provider resources from current schema-owned
-  intent records
 
 ### Requirement: Deployer Protocol Boundary
 
@@ -374,22 +350,22 @@ The system SHALL expose instance deployment runtime reads through the
 
 #### Scenario: Runtime deployment API is read-only
 
-- WHEN a client sends attempt, lease, plan, success, failure, or drift mutation
-  requests through the deployment API
+- WHEN a client sends attempt, lease, plan, success, failure, or provider
+  difference mutation requests through the deployment API
 - THEN the runtime rejects the request
 - AND persisted deployment observations must be written as authorized
   deployment-config cache field patches instead of runtime table writes
 
 ### Requirement: Local Gateway Deployment Operations
 
-The deployment runtime SHALL allow local workspace gateway sidecar deploy
+The deployment runtime SHALL allow local workspace gateway sidecar push
 operations to plan and apply deployment state while preserving projection and
 credential boundaries.
 
 #### Scenario: Browser starts credential setup
 
 - **WHEN** a browser starts Cloudflare credential setup through the local
-  workspace gateway proxy before deploy planning
+  workspace gateway proxy before push planning
 - **THEN** the local gateway sidecar may run the trusted local Alchemy profile
   adapter and return display-safe authorization URL events through the proxy
 - **AND** deployment intent records store only provider references, account
@@ -399,23 +375,24 @@ credential boundaries.
 - **AND** Worker runtime code does not run Alchemy credential setup or read
   local provider credential state
 
-#### Scenario: Browser starts deploy plan
+#### Scenario: Browser starts push dry-run
 
-- **WHEN** a browser starts a deploy plan through the local workspace gateway
+- **WHEN** a browser starts push dry-run through the local workspace gateway
   proxy
 - **THEN** the local gateway sidecar reads schema-owned deployment intent
   records, resolves local credential context outside browser-visible responses,
-  and reads the current desired-state projection
-- **AND** the browser receives display-safe plan output without provider API
+  reads the current desired-state projection, and compares selected workspace
+  source with the target
+- **AND** the browser receives display-safe sync plan output without provider API
   tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens, or runtime
   secrets
 - **AND** Worker runtime code does not read workspace source, ignored secret
   state, or provider credentials to produce the plan
 
-#### Scenario: Deploy operation execution capability
+#### Scenario: Push operation execution capability
 
 - **WHEN** a CLI, browser workspace gateway, trusted deploy node, or future
-  automation runner considers a deploy plan, deploy apply, credential setup, or
+  automation runner considers push dry-run, push apply, credential setup, or
   deployment refresh operation
 - **THEN** the runtime matches the operation definition's required execution
   capability and actor policy before starting execution
@@ -425,22 +402,24 @@ credential boundaries.
   unavailable to Worker runtime actors that do not advertise those capabilities
 - **AND** the operation result boundary remains display-safe operation state and
   summaries, not raw provider output or runner secret state
+- **AND** standalone deploy, deploy plan, deploy apply, drift report, and
+  migration policy operations are not exposed as browser gateway operations
 
-#### Scenario: Browser starts deploy apply
+#### Scenario: Browser starts push apply
 
-- **WHEN** a browser starts deploy apply through the local workspace gateway
+- **WHEN** a browser starts push apply through the local workspace gateway
   proxy
 - **THEN** the local gateway sidecar applies provider mutations as a trusted
   local deployer and patches the target deployment config's latest observation
-  cache after deploy or failure
-- **AND** the local gateway rejects stale desired-state observations before
-  patching the cache when the current projection hash changed during deploy
-- **AND** the gateway returns display-safe operation, evidence, drift, cleanup,
+  cache after provider reconciliation or failure
+- **AND** the gateway returns display-safe operation, evidence, cleanup, sync,
   and observation summaries through operation status or completion responses
+- **AND** any deploy wording is scoped to an internal push step rather than a
+  standalone operation key, command, browser route, or public workflow
 - **AND** deployment execution history is not written to schema-owned workspace
   storage snapshots
 - **AND** Worker runtime code does not perform provider mutation for local
-  workspace gateway deploy apply
+  workspace gateway push apply
 
 ### Requirement: Workspace Deploy Source Boundary
 
@@ -460,17 +439,17 @@ outside reviewable source.
   content, not reviewable control-plane storage snapshot records
 - **AND** `formless.json` does not store deployment intent or target facts
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
-  `deploy-drift-report`, cleanup audit summaries, raw leases, and provider
+  cleanup audit summaries, raw leases, and provider
   state payloads are not written as workspace storage state
 - **AND** deployment config observation cache fields are not written as
   workspace storage state
 
 #### Scenario: Worker name source
 
-- **WHEN** local workspace deploy planning resolves the provider worker name
+- **WHEN** local workspace push planning resolves the provider worker name
 - **THEN** a schema-owned deployment config worker-name value is used when
   present
-- **AND** otherwise the deployment plan may default the worker name from the
+- **AND** otherwise the deployment projection may default the worker name from the
   layout manifest workspace name
 - **AND** `formless.json` does not store a separate worker-name override
 
@@ -484,12 +463,12 @@ outside reviewable source.
 
 #### Scenario: Gateway returns operation summaries
 
-- **WHEN** browser clients inspect local deploy plan, apply, cleanup, or drift
-  operation status through the workspace gateway
+- **WHEN** browser clients inspect local push dry-run, push apply, cleanup, or
+  refresh operation status through the workspace gateway
 - **THEN** responses may include display-safe operation ids, desired-state
   hashes, plan counts, evidence counts, affected logical ids, cleanup results,
-  drift counts, runner ids, timestamps, and user-facing errors
-- **AND** those responses do not require `deploy-attempt`,
-  `deploy-evidence-summary`, or `deploy-drift-report` control-plane records
+  sync counts, runner ids, timestamps, and user-facing errors
+- **AND** those responses do not require `deploy-attempt` or
+  `deploy-evidence-summary` control-plane records
 - **AND** provider credentials, raw provider state, raw lease tokens, Alchemy
   state tokens, and runtime secrets are omitted

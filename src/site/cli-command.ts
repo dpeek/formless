@@ -1,7 +1,6 @@
 import {
   parseInstanceWorkspaceTargetAlias,
   workspaceOperationDefinitionForCliCommand,
-  workspaceOperationInputFieldDefaultValue,
   type WorkspaceOperationKind,
 } from "@dpeek/formless-workspace";
 
@@ -13,13 +12,6 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string | null;
     }
-  | {
-      dryRun: boolean;
-      kind: "workspaceDeploy";
-      migrationPolicy: "existing" | "new" | null;
-      targetAlias: string | null;
-      workspacePath: string | null;
-    }
   | { kind: "workspaceDev"; open: boolean; workspacePath: string | null }
   | {
       adminToken: string | null;
@@ -28,13 +20,15 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string | null;
     }
-  | { kind: "workspacePull"; targetAlias: string | null; workspacePath: string | null }
   | {
-      allowStale: boolean;
-      apply: boolean;
+      dryRun: boolean;
+      kind: "workspacePull";
+      targetAlias: string | null;
+      workspacePath: string | null;
+    }
+  | {
+      dryRun: boolean;
       kind: "workspacePush";
-      replace: boolean;
-      replaceInstallSet: boolean;
       targetAlias: string | null;
       workspacePath: string | null;
     }
@@ -59,12 +53,10 @@ export function formlessCliUsage(): string {
     "Commands:",
     "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
     "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
-    "  pull [--workspace <path>] [--target <alias>]",
-    "                                      Pull remote instance state into workspace source",
-    "  push [--workspace <path>] [--target <alias>]",
-    "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
-    "  deploy [--workspace <path>] [--target <alias>] [--dry-run]",
-    "       [--migration-policy <new|existing>] Deploy workspace source and desired resources",
+    "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
+    "                                      Sync selected target into workspace source",
+    "  push [--workspace <path>] [--target <alias>] [--dry-run]",
+    "                                      Sync workspace source to the selected target",
     "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
     "  owner setup [--workspace <path>] [--target <alias>]",
     "       [--open] [--admin-token <token>]",
@@ -89,8 +81,6 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
       return parseWorkspacePullArgs(rest);
     case "push":
       return parseWorkspacePushArgs(rest);
-    case "deploy":
-      return parseWorkspaceDeployArgs(rest);
     case "destroy":
       return parseWorkspaceDestroyArgs(rest);
     case "owner":
@@ -124,21 +114,6 @@ function requireWorkspaceCliOperation(commandName: string, operationKind: Worksp
   }
 }
 
-function workspaceOperationBooleanDefault(
-  operationKind: WorkspaceOperationKind,
-  fieldKey: string,
-): boolean {
-  const defaultValue = workspaceOperationInputFieldDefaultValue(operationKind, fieldKey);
-
-  if (typeof defaultValue !== "boolean") {
-    throw new Error(
-      `Workspace operation "${operationKind}" input field "${fieldKey}" does not declare a boolean default.`,
-    );
-  }
-
-  return defaultValue;
-}
-
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
   const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>] [--open]");
   let open = false;
@@ -161,7 +136,7 @@ function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
     args,
     "formless save [--workspace <path>] [--check]",
   );
-  let check = workspaceOperationBooleanDefault("save", "check");
+  let check = false;
 
   for (let index = 0; index < options.rest.length; index += 1) {
     const arg = options.rest[index];
@@ -175,51 +150,6 @@ function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
   }
 
   return { check, kind: "workspaceSave", workspacePath: options.workspacePath };
-}
-
-function parseWorkspaceDeployArgs(args: string[]): FormlessCliCommand {
-  const options = parseTopLevelTargetOptions(
-    args,
-    "formless deploy [--workspace <path>] [--target <alias>] [--dry-run] [--migration-policy <new|existing>]",
-  );
-  let dryRun = false;
-  let migrationPolicy: "existing" | "new" | null = null;
-
-  for (let index = 0; index < options.rest.length; index += 1) {
-    const arg = options.rest[index];
-
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-
-    if (arg === "--migration-policy") {
-      const value = readOptionValue(options.rest, index, "--migration-policy");
-
-      if (value !== "existing" && value !== "new") {
-        throw new Error('formless deploy --migration-policy must be "new" or "existing".');
-      }
-
-      migrationPolicy = value;
-      index += 1;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless deploy: ${arg}`);
-  }
-
-  requireWorkspaceCliOperation(
-    dryRun ? "formless deploy --dry-run" : "formless deploy",
-    dryRun ? "deployPlan" : "deployApply",
-  );
-
-  return {
-    dryRun,
-    kind: "workspaceDeploy",
-    migrationPolicy,
-    targetAlias: options.targetAlias,
-    workspacePath: options.workspacePath,
-  };
 }
 
 function parseWorkspaceDestroyArgs(args: string[]): FormlessCliCommand {
@@ -241,14 +171,21 @@ function parseWorkspacePullArgs(args: string[]): FormlessCliCommand {
   requireWorkspaceCliOperation("formless pull", "pull");
   const options = parseTopLevelTargetOptions(
     args,
-    "formless pull [--workspace <path>] [--target <alias>]",
+    "formless pull [--workspace <path>] [--target <alias>] [--dry-run]",
   );
+  let dryRun = false;
 
-  if (options.rest.length > 0) {
-    throw new Error(`Unknown option for formless pull: ${options.rest[0]}`);
+  for (const arg of options.rest) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless pull: ${arg}`);
   }
 
   return {
+    dryRun,
     kind: "workspacePull",
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
@@ -259,36 +196,13 @@ function parseWorkspacePushArgs(args: string[]): FormlessCliCommand {
   requireWorkspaceCliOperation("formless push", "push");
   const options = parseTopLevelTargetOptions(
     args,
-    "formless push [--workspace <path>] [--target <alias>]",
+    "formless push [--workspace <path>] [--target <alias>] [--dry-run]",
   );
-  let allowStale = workspaceOperationBooleanDefault("push", "allowStale");
-  let apply = workspaceOperationBooleanDefault("push", "apply");
-  let replace = workspaceOperationBooleanDefault("push", "replace");
-  let replaceInstallSet = workspaceOperationBooleanDefault("push", "replaceInstallSet");
+  let dryRun = false;
 
   for (const arg of options.rest) {
-    if (arg === "--apply") {
-      apply = true;
-      continue;
-    }
-
     if (arg === "--dry-run") {
-      apply = false;
-      continue;
-    }
-
-    if (arg === "--replace") {
-      replace = true;
-      continue;
-    }
-
-    if (arg === "--replace-install-set") {
-      replaceInstallSet = true;
-      continue;
-    }
-
-    if (arg === "--allow-stale") {
-      allowStale = true;
+      dryRun = true;
       continue;
     }
 
@@ -296,11 +210,8 @@ function parseWorkspacePushArgs(args: string[]): FormlessCliCommand {
   }
 
   return {
-    allowStale,
-    apply,
+    dryRun,
     kind: "workspacePush",
-    replace,
-    replaceInstallSet,
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };

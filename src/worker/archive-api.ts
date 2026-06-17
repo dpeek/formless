@@ -1,11 +1,17 @@
 import {
+  INSTANCE_ARCHIVE_KIND,
   parsePortableArchive,
   type AppArchiveData,
   type InstanceArchiveControlPlane,
+  type PortableArchive,
 } from "@dpeek/formless-archive";
-import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  type InstalledAppStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot } from "@dpeek/formless-storage";
 import { type BootstrapResponse } from "../shared/protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -33,6 +39,7 @@ import {
   type ActiveRuntimeAppPackageEnv,
 } from "./runtime-app-packages.ts";
 import { mediaObjectStoreFromR2Bucket } from "@dpeek/formless-media/worker";
+import { CORE_IMAGE_KEY_PREFIX } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
 
@@ -44,6 +51,7 @@ type InstanceArchiveApiEnv = AuthorityAdminGuardEnv &
 
 type ArchiveRestoreRequest = {
   archive: unknown;
+  exactInstanceReplacement: boolean;
   mediaFiles: ArchiveRestoreMediaRead[];
 };
 
@@ -93,10 +101,31 @@ export async function handleInstanceArchiveDurableObjectRequest(
     const body = parseArchiveRestoreRequest(await readJson(request));
     const archive = parsePortableArchive(body.archive);
     const mediaFilesByPath = new Map(body.mediaFiles.map((file) => [file.archivePath, file]));
+    const existingInstalls = await readControlPlaneAppInstallsForRequest(env, request.url);
     const target = archiveRestoreApiTarget(request, env, mediaFilesByPath);
+
+    if (body.exactInstanceReplacement && archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Exact instance replacement requires an instance archive.");
+    }
+
+    if (
+      body.exactInstanceReplacement &&
+      archive.kind === INSTANCE_ARCHIVE_KIND &&
+      !archive.controlPlane
+    ) {
+      throw new Error("Exact instance replacement requires schema-owned control-plane data.");
+    }
+
     const result = archive.restorePolicy.dryRun
       ? await dryRunPortableArchiveRestore(archive, target)
       : await applyPortableArchiveRestore(archive, target);
+
+    if (result.ok && body.exactInstanceReplacement && !archive.restorePolicy.dryRun) {
+      await applyExactInstanceReplacement(request, env, {
+        archive,
+        existingInstalls,
+      });
+    }
 
     return jsonResponse(result, result.ok ? 200 : 400);
   } catch (error) {
@@ -135,6 +164,135 @@ function archiveRestoreApiTarget(
     packages: listActiveAppPackages(env),
     sourceSchemas: activeWorkerSourceSchemas(env),
   };
+}
+
+async function applyExactInstanceReplacement(
+  request: Request,
+  env: InstanceArchiveApiEnv,
+  input: {
+    archive: PortableArchive;
+    existingInstalls: AppInstall[];
+  },
+): Promise<void> {
+  if (input.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    return;
+  }
+
+  const archiveInstallIds = new Set(input.archive.apps.map((app) => app.app.installId));
+  const sourceSchemas = activeWorkerSourceSchemas(env);
+  const packageResolver = activeAppPackageResolver(env);
+  const removedInstallSnapshots = input.existingInstalls
+    .filter((install) => !archiveInstallIds.has(install.installId))
+    .map((install) =>
+      emptySnapshotForRemovedInstall({
+        install,
+        packageResolver,
+        sourceSchemas,
+        timestamp: input.archive.exportedAt,
+      }),
+    );
+
+  for (const snapshot of removedInstallSnapshots) {
+    await restoreAppDataViaAuthority(request, env, snapshot.data, snapshot.identity);
+  }
+
+  await pruneCoreMediaObjects(env.FORMLESS_MEDIA, archiveCoreMediaKeys(input.archive));
+}
+
+function emptySnapshotForRemovedInstall(input: {
+  install: AppInstall;
+  packageResolver: ReturnType<typeof activeAppPackageResolver>;
+  sourceSchemas: Partial<Record<string, StorageSnapshot["schema"]>>;
+  timestamp: string;
+}): { data: AppArchiveData; identity: InstalledAppStorageIdentity } {
+  const identity = installedAppStorageIdentity(
+    {
+      installId: input.install.installId,
+      packageAppKey: input.install.packageAppKey,
+    },
+    input.packageResolver,
+  );
+
+  if (!identity) {
+    throw new Error(
+      `Removed install "${input.install.installId}" does not resolve to installed app storage.`,
+    );
+  }
+
+  const schema = input.sourceSchemas[identity.sourceSchemaKey];
+
+  if (!schema) {
+    throw new Error(
+      `Removed install "${input.install.installId}" source schema "${identity.sourceSchemaKey}" is unavailable.`,
+    );
+  }
+
+  return {
+    data: {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: identity.authorityName,
+      schemaKey: identity.sourceSchemaKey,
+      exportedAt: input.timestamp,
+      schemaUpdatedAt: input.timestamp,
+      sourceCursor: 0,
+      schema,
+      records: [],
+    },
+    identity,
+  };
+}
+
+async function pruneCoreMediaObjects(
+  bucket: R2Bucket,
+  desiredStorageKeys: ReadonlySet<string>,
+): Promise<void> {
+  const prefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
+  const keysToDelete: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const listing = await bucket.list({
+      prefix,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+
+    for (const object of listing.objects) {
+      if (!desiredStorageKeys.has(object.key)) {
+        keysToDelete.push(object.key);
+      }
+    }
+
+    cursor = listing.truncated ? listing.cursor : undefined;
+  } while (cursor !== undefined);
+
+  for (let index = 0; index < keysToDelete.length; index += 1000) {
+    const chunk = keysToDelete.slice(index, index + 1000);
+
+    if (chunk.length > 0) {
+      await bucket.delete(chunk);
+    }
+  }
+}
+
+function archiveCoreMediaKeys(archive: PortableArchive): ReadonlySet<string> {
+  const keys = new Set<string>();
+  const apps = archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive];
+  const prefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
+
+  for (const app of apps) {
+    for (const object of app.media.objects) {
+      if (object.storageKey.startsWith(prefix)) {
+        keys.add(object.storageKey);
+      }
+    }
+  }
+
+  return keys;
+}
+
+function mediaKeyPrefix(prefix: string): string {
+  return prefix.endsWith("/") ? prefix : `${prefix}/`;
 }
 
 async function restoreInstallViaControlPlane(
@@ -277,6 +435,10 @@ function parseArchiveRestoreRequest(value: unknown): ArchiveRestoreRequest {
 
   return {
     archive: object.archive,
+    exactInstanceReplacement: parseOptionalBoolean(
+      "Archive restore request exactInstanceReplacement",
+      object.exactInstanceReplacement,
+    ),
     mediaFiles: parseArchiveRestoreMediaFiles(object.mediaFiles),
   };
 }
@@ -421,6 +583,18 @@ function parseNonEmptyString(context: string, value: unknown): string {
 function parseNonNegativeInteger(context: string, value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`${context} must be a non-negative integer.`);
+  }
+
+  return value;
+}
+
+function parseOptionalBoolean(context: string, value: unknown): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${context} must be a boolean.`);
   }
 
   return value;

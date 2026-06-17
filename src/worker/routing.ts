@@ -198,7 +198,7 @@ export function shouldBlockMappedSiteHostBrowserRoute(
     topology.readMethod &&
     !topology.apiPath &&
     !topology.staticAssetPath &&
-    (topology.clientShellRoute || topology.pathname === runtimeTopologyRoutes.deploymentsRoute)
+    topology.clientShellRoute
   );
 }
 
@@ -288,7 +288,6 @@ export function ownerBrowserRouteAccessForRequest(
 
   if (
     topology.pathname === runtimeTopologyRoutes.instanceRootRoute ||
-    topology.pathname === runtimeTopologyRoutes.deploymentsRoute ||
     topology.pathname === runtimeTopologyRoutes.appRouteBase ||
     topology.pathname.startsWith(`${runtimeTopologyRoutes.appRouteBase}/`)
   ) {

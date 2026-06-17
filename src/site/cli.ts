@@ -212,8 +212,8 @@ export {
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceDevNameSelectionInput,
   type FormlessInstanceWorkspaceDiscoveryResult,
-  type FormlessInstanceWorkspaceDriftSummary,
   type FormlessInstanceWorkspacePackageMismatch,
+  type FormlessInstanceWorkspaceSyncPlan,
   type InitFormlessInstanceWorkspaceDependencies,
   type InitFormlessInstanceWorkspaceInput,
   type InitFormlessInstanceWorkspaceResult,
@@ -427,44 +427,28 @@ export async function runFormlessCli(
       const result = await runCliWorkspaceOperation(
         "formless pull",
         {
+          dryRun: command.dryRun,
           kind: "pull",
           targetAlias: command.targetAlias,
           workspacePath: command.workspacePath,
         },
         dependencies,
       );
-      dependencies.log(formatCliWorkspaceOperationResult(result));
+      dependencies.log(formatCliWorkspaceOperationOutput(result));
       return;
     }
     case "workspacePush": {
       const result = await runCliWorkspaceOperation(
         "formless push",
         {
-          allowStale: command.allowStale,
-          apply: command.apply,
+          dryRun: command.dryRun,
           kind: "push",
-          replace: command.replace,
-          replaceInstallSet: command.replaceInstallSet,
           targetAlias: command.targetAlias,
           workspacePath: command.workspacePath,
         },
         dependencies,
       );
-      dependencies.log(formatCliWorkspaceOperationResult(result));
-      return;
-    }
-    case "workspaceDeploy": {
-      const result = await runCliWorkspaceOperation(
-        command.dryRun ? "formless deploy --dry-run" : "formless deploy",
-        {
-          kind: command.dryRun ? "deployPlan" : "deployApply",
-          migrationPolicy: command.migrationPolicy,
-          targetAlias: command.targetAlias,
-          workspacePath: command.workspacePath,
-        },
-        dependencies,
-      );
-      dependencies.log(formatCliWorkspaceOperationResult(result));
+      dependencies.log(formatCliWorkspaceOperationOutput(result));
       return;
     }
     case "workspaceDestroy": {
@@ -546,7 +530,9 @@ async function runCliWorkspaceOperation(
 }
 
 function shouldPrintFailedWorkspaceOperation(state: WorkspaceOperationState): boolean {
-  return state.operation === "deployApply" && "drift" in state.summary.fields;
+  void state;
+
+  return false;
 }
 
 function workspaceOperationInputForCliCommand(
@@ -657,6 +643,7 @@ export async function getFormlessInstanceWorkspaceStatus(
 
 export async function pullFormlessInstanceWorkspace(
   input: {
+    dryRun?: boolean;
     targetAlias?: string | null;
     workspacePath?: string;
   },
@@ -693,19 +680,39 @@ export async function saveLocalFormlessWorkspace(
 
 export async function pushFormlessInstanceWorkspace(
   input: {
-    allowStale?: boolean;
     apply?: boolean;
-    replace?: boolean;
-    replaceInstallSet?: boolean;
     targetAlias?: string | null;
     workspacePath?: string;
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "env" | "fetch" | "now"
+    | "accountDiscovery"
+    | "cwd"
+    | "deploymentAdapter"
+    | "env"
+    | "fetch"
+    | "healthCheck"
+    | "localSecretEnv"
+    | "now"
+    | "packageRoot"
+    | "randomToken"
+    | "setupCapability"
   > = nodeFormlessCliDependencies(),
 ): Promise<PushFormlessInstanceWorkspaceResult> {
-  return pushFormlessInstanceWorkspaceCommand(input, dependencies);
+  return pushFormlessInstanceWorkspaceCommand(input, {
+    accountDiscovery: dependencies.accountDiscovery,
+    cwd: dependencies.cwd,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    env: dependencies.env,
+    fetch: dependencies.fetch,
+    healthCheck: dependencies.healthCheck,
+    localSecretEnv: dependencies.localSecretEnv,
+    now: dependencies.now,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
+    randomToken: dependencies.randomToken,
+    setupCapability: dependencies.setupCapability,
+  });
 }
 
 export async function runFormlessInstanceWorkspaceDev(
@@ -1356,14 +1363,24 @@ function formatCliWorkspaceOperationResult(state: WorkspaceOperationState): stri
   ].join("\n");
 }
 
+function formatCliWorkspaceOperationOutput(state: WorkspaceOperationState): string {
+  return isNoopCliWorkspaceOperation(state)
+    ? "Everything up to date."
+    : formatCliWorkspaceOperationResult(state);
+}
+
+function isNoopCliWorkspaceOperation(state: WorkspaceOperationState): boolean {
+  return (
+    state.status === "succeeded" &&
+    (state.operation === "pull" || state.operation === "push") &&
+    state.summary.fields.noop === true
+  );
+}
+
 function formatWorkspaceOperationLabel(operation: WorkspaceOperationState["operation"]) {
   switch (operation) {
     case "credentialSetup":
       return "credential setup";
-    case "deployApply":
-      return "deploy apply";
-    case "deployPlan":
-      return "deploy plan";
     case "deploymentRefresh":
       return "deployment refresh";
     default:

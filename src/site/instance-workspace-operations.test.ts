@@ -4,19 +4,12 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
-  deployDeploymentAppliedSummary,
-  deployResourceCountsByKind,
-  type DeployEvidenceSummary,
-  type DeployResourceGraph,
-} from "@dpeek/formless-deploy";
-import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
 } from "@dpeek/formless-workspace";
 
 import packageJson from "../../package.json";
-import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, type AppArchive } from "@dpeek/formless-archive";
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -36,7 +29,6 @@ import {
   readWorkspaceOperationState,
   updateWorkspaceOperationState,
   workspaceOperationStatePath,
-  writeInstanceWorkspaceAppStorageSnapshot,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-workspace/node";
 import { siteSourceSchema } from "../test/schema-apps.ts";
@@ -51,7 +43,6 @@ import {
 } from "./instance-workspace-operations.ts";
 
 const tempDirs: string[] = [];
-const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 afterEach(async () => {
   await Promise.all(
@@ -127,7 +118,7 @@ describe("Formless workspace operations", () => {
     expect(persistedText).not.toContain(tempDir);
   });
 
-  it("rejects deploy starts without required execution capability before workspace access", async () => {
+  it("rejects removed deploy operation keys before workspace access", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "missing-workspace");
 
@@ -136,13 +127,11 @@ describe("Formless workspace operations", () => {
         {
           kind: "deployApply",
           workspacePath: workspaceRoot,
-        },
+        } as never,
         operationDeps(tempDir),
-        { actor: "browser", capabilities: ["deployment-plan"] },
+        { actor: "browser" },
       ),
-    ).rejects.toThrow(
-      'Workspace operation "deployApply" requires execution capability "deployment-apply".',
-    );
+    ).rejects.toThrow('Workspace operation "deployApply" is not defined.');
     await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -185,434 +174,6 @@ describe("Formless workspace operations", () => {
     await expect(stat(path.join(workspaceRoot, "state/instance.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
-
-  it("plans deploy from schema-owned storage state and desired-state projection", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot, {
-      credentialRef: "alchemy-profile:personal-profile",
-    });
-    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
-
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployPlan",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async (input) => {
-            accountDiscoveryInputs.push(input);
-
-            return [
-              {
-                id: "account-123",
-                workersDevSubdomain: "dpeek",
-              },
-            ];
-          },
-        } satisfies FormlessInstanceAccountDiscoveryAdapter,
-        fetch: authorityExportFetch(
-          [installedSite("david", "David Peek")],
-          { david: { records: [] } },
-          {
-            controlPlaneRecords: deployControlPlaneRecords({
-              credentialRef: "alchemy-profile:personal-profile",
-            }),
-          },
-        ),
-        operationIds: ["op_deploy_plan_00000001"],
-        packageVersion: packageJson.version,
-        timestamps: [
-          "2026-06-02T00:03:00.000Z",
-          "2026-06-02T00:03:01.000Z",
-          "2026-06-02T00:03:02.000Z",
-        ],
-      }),
-      { actor: "browser" },
-    );
-
-    expect(state).toMatchObject({
-      actor: "browser",
-      operation: "deployPlan",
-      result: {
-        deployment: {
-          builtInResources: {
-            turnstileWidget: "planned",
-          },
-          cleanup: {
-            status: "not-run",
-          },
-          desiredState: {
-            resourceCount: 2,
-            resourcesByKind: {
-              "cloudflare-worker-custom-domain": 2,
-            },
-            routeTargetCount: 2,
-            targetId: "instance.primary",
-          },
-          drift: {
-            status: "no-drift",
-          },
-          evidence: {
-            count: 0,
-          },
-          plan: {
-            changes: { create: 2, delete: 0, noChange: 0, update: 0 },
-            resourceCount: 2,
-            resourcesByKind: {
-              "cloudflare-worker-custom-domain": 2,
-            },
-            routeTargetCount: 2,
-            targetId: "instance.primary",
-          },
-          observation: {
-            status: "not-run",
-          },
-        },
-        summary: {
-          fields: {
-            cleanupStatus: "not-run",
-            desiredResourceCount: 2,
-            drift: "no-drift",
-            evidenceCount: 0,
-            expectedUrl: "https://personal.dpeek.workers.dev",
-            resourcesByKind: {
-              "cloudflare-worker-custom-domain": 2,
-            },
-            routeTargetCount: 2,
-            turnstileWidget: "planned",
-            observationStatus: "not-run",
-            workerName: "personal",
-          },
-          title: "Deploy planned",
-        },
-      },
-      status: "succeeded",
-    });
-    expect(
-      (state.result?.deployment?.plan as { affectedLogicalIds?: unknown[] } | null | undefined)
-        ?.affectedLogicalIds,
-    ).toHaveLength(2);
-    expect(accountDiscoveryInputs).toEqual([{ credentialProfile: "personal-profile" }]);
-    await expectNoDeploymentHistoryStorageState(workspaceRoot);
-    expect(JSON.stringify(state)).not.toContain("secret");
-  });
-
-  it("plans deploy from the manifest name when provider config has no worker name", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const controlPlaneRecords = deployControlPlaneRecords({
-      targetUrl: "https://personal-sites.dpeek.workers.dev",
-      workerName: null,
-    });
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot, {
-      targetUrl: "https://personal-sites.dpeek.workers.dev",
-      workerName: null,
-    });
-    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
-
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployPlan",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
-        fetch: authorityExportFetch(
-          [installedSite("david", "David Peek")],
-          { david: { records: [] } },
-          { controlPlaneRecords },
-        ),
-        packageVersion: packageJson.version,
-        timestamps: ["2026-06-02T00:03:00.000Z"],
-      }),
-      { actor: "browser" },
-    );
-
-    expect(state).toMatchObject({
-      result: {
-        summary: {
-          fields: {
-            expectedUrl: "https://personal-sites.dpeek.workers.dev",
-            workerName: "personal-sites",
-          },
-          title: "Deploy planned",
-        },
-      },
-      status: "succeeded",
-    });
-    await expectNoDeploymentHistoryStorageState(workspaceRoot);
-  });
-
-  it("applies deploy with exact desired-state deployment-config observation", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const deployInputs: DeployFormlessInstanceInput[] = [];
-    const deploymentEvidence: DeployEvidenceSummary[] = [];
-    const requests: CapturedRequest[] = [];
-    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
-      [];
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot, {
-      credentialRef: "alchemy-profile:personal-profile",
-    });
-    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
-
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployApply",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
-        deploymentAdapter: {
-          deploy: async (input) => {
-            const resourceEvidence = deploymentResourceEvidenceFromGraph(
-              input.deploymentResourceGraph,
-            );
-
-            deployInputs.push(input);
-            deploymentEvidence.push(...resourceEvidence);
-
-            return { resourceEvidence, url: input.plan.expectedUrl.url };
-          },
-        },
-        fetch: deployApplyFetch(requests, {
-          controlPlaneRecords: deployControlPlaneRecords({
-            credentialRef: "alchemy-profile:personal-profile",
-          }),
-        }),
-        operationIds: ["op_deploy_apply_00000001"],
-        packageRoot: "/package",
-        packageVersion: packageJson.version,
-        randomTokens: ["generated-admin-token", setupToken],
-        setupInputs,
-        timestamps: [
-          "2026-06-02T00:04:00.000Z",
-          "2026-06-02T00:04:01.000Z",
-          "2026-06-02T00:04:02.000Z",
-          "2026-06-02T00:04:03.000Z",
-        ],
-      }),
-      { actor: "browser" },
-    );
-
-    if (state.status !== "succeeded") {
-      throw new Error(JSON.stringify(state.summary.fields));
-    }
-
-    const desiredState = deploymentDesiredStateRef();
-    const deployedResourceGraph = deployInputs[0]?.deploymentResourceGraph ?? {
-      resources: [],
-      targetId: "instance.primary",
-    };
-    const deployedResourcesByKind = deployResourceCountsByKind(deployedResourceGraph);
-    const deployedResourceCount = Object.values(deployedResourcesByKind).reduce(
-      (total, count) => total + count,
-      0,
-    );
-    const observation = capturedRequestJson<{
-      idempotencyKey: string;
-      input: {
-        observedDesiredStateHash: string;
-        observedError: string;
-        observedRunnerId: string;
-        observedStatus: string;
-        observedSummary: string;
-      };
-      recordId: string;
-    }>(requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"));
-
-    expect(state).toMatchObject({
-      actor: "browser",
-      operation: "deployApply",
-      result: {
-        deployment: {
-          builtInResources: {
-            turnstileWidget: "provisioned",
-          },
-          cleanup: {
-            status: "not-run",
-          },
-          drift: {
-            status: "no-drift",
-          },
-          evidence: {
-            count: 2,
-            logicalIds: deploymentEvidence.map((entry) => entry.logicalId),
-          },
-          observation: {
-            desiredState,
-            evidenceCount: 2,
-            observedStatus: "deployed",
-            resourceCount: deployedResourceCount,
-            resourcesByKind: deployedResourcesByKind,
-            runnerId: "local-gateway",
-            targetId: "instance.primary",
-          },
-        },
-        summary: {
-          fields: {
-            cleanupStatus: "not-run",
-            desiredStateVersion: desiredState.versionId,
-            drift: "no-drift",
-            evidenceCount: 2,
-            observationStatus: "deployed",
-            resourcesByKind: deployedResourcesByKind,
-            turnstileWidget: "provisioned",
-          },
-          title: "Deploy applied",
-        },
-      },
-      status: "succeeded",
-    });
-    expect(observation).toMatchObject({
-      idempotencyKey: expect.any(String),
-      recordId: "instance.primary",
-      input: {
-        observedDesiredStateHash: desiredState.hash,
-        observedError: "",
-        observedRunnerId: "local-gateway",
-        observedStatus: "deployed",
-        observedSummary: deployDeploymentAppliedSummary({
-          resourceCount: deployedResourceCount,
-          sourceLabel: "workspace source",
-        }),
-      },
-    });
-    expect(deployInputs).toHaveLength(1);
-    expect(deployInputs[0]?.credentialProfile).toBe("personal-profile");
-    expect(
-      deployInputs[0]?.deploymentResourceGraph?.resources.map((resource) => resource.kind),
-    ).toEqual(["cloudflare-worker-custom-domain", "cloudflare-worker-custom-domain"]);
-    expect(deploymentEvidence).toHaveLength(2);
-    expect(setupInputs).toEqual([]);
-    expect(state.summary.fields).not.toHaveProperty("ownerSetupUrl");
-    expect(state.result?.summary.fields).not.toHaveProperty("ownerSetupUrl");
-    await expectNoDeploymentHistoryStorageState(workspaceRoot);
-    expect(JSON.stringify(state)).not.toContain("/setup?token=");
-    expect(JSON.stringify(state)).not.toContain("generated-admin-token");
-    expect(JSON.stringify(state)).not.toContain("alchemy-password");
-    expect(JSON.stringify(state)).not.toContain("lease:local-gateway");
-  });
-
-  it("treats a missing workers.dev script as a fresh deploy target", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const deployInputs: DeployFormlessInstanceInput[] = [];
-    const requests: CapturedRequest[] = [];
-    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
-      [];
-    let deployed = false;
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot);
-    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
-
-    const runtimeFetch = deployApplyFetch(requests);
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployApply",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
-        deploymentAdapter: {
-          deploy: async (input) => {
-            deployed = true;
-            deployInputs.push(input);
-
-            return { resourceEvidence: [], url: input.plan.expectedUrl.url };
-          },
-        },
-        fetch: async (url, init) => {
-          const requestUrl =
-            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-          const parsedUrl = new URL(requestUrl);
-
-          if (!deployed && parsedUrl.pathname === "/api/formless/app-installs") {
-            requests.push({
-              body: typeof init?.body === "string" ? init.body : undefined,
-              headers: normalizeHeaders(init?.headers),
-              method: init?.method ?? "GET",
-              url: requestUrl,
-            });
-
-            return Response.json(
-              {
-                error_code: 1042,
-                error_name: "workers_dev_script_not_found",
-                title: "Error 1042: Cloudflare Error",
-              },
-              { status: 404 },
-            );
-          }
-
-          return runtimeFetch(url, init);
-        },
-        operationIds: ["op_deploy_apply_00000001"],
-        packageRoot: "/package",
-        packageVersion: packageJson.version,
-        randomTokens: ["generated-admin-token", setupToken],
-        setupInputs,
-        timestamps: [
-          "2026-06-02T00:04:00.000Z",
-          "2026-06-02T00:04:01.000Z",
-          "2026-06-02T00:04:02.000Z",
-          "2026-06-02T00:04:03.000Z",
-        ],
-      }),
-      { actor: "browser" },
-    );
-
-    if (state.status !== "succeeded") {
-      throw new Error(JSON.stringify(state.summary.fields));
-    }
-
-    expect(deployInputs).toHaveLength(1);
-    expect(setupInputs).toEqual([
-      {
-        adminToken: "generated-admin-token",
-        deploymentUrl: "https://personal.dpeek.workers.dev",
-        setupToken,
-      },
-    ]);
-    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      expect.arrayContaining([
-        "GET /api/formless/app-installs",
-        "POST /api/formless/archive/restore",
-      ]),
-    );
-    expect(state.summary.title).toBe("Deploy applied");
   });
 
   it("refreshes deployment observation through an explicit write operation", async () => {
@@ -692,166 +253,13 @@ describe("Formless workspace operations", () => {
     });
   });
 
-  it("surfaces first deploy owner setup URL without capability internals", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const requests: CapturedRequest[] = [];
-    const setupInputs: Array<{ adminToken: string; deploymentUrl: string; setupToken: string }> =
-      [];
-    const ownerSetupUrl = `https://personal-sites.dpeek.workers.dev/setup?token=${setupToken}`;
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
-    await writeWorkspaceAppState(workspaceRoot, "david", "David Peek");
-
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployApply",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
-        deploymentAdapter: {
-          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
-        },
-        fetch: deployApplyFetch(requests),
-        packageRoot: "/package",
-        packageVersion: packageJson.version,
-        randomTokens: ["generated-admin-token", setupToken],
-        setupInputs,
-        timestamps: [
-          "2026-06-02T00:05:00.000Z",
-          "2026-06-02T00:05:01.000Z",
-          "2026-06-02T00:05:02.000Z",
-          "2026-06-02T00:05:03.000Z",
-        ],
-      }),
-      { actor: "browser" },
-    );
-
-    if (state.status !== "succeeded") {
-      throw new Error(JSON.stringify(state.summary.fields));
-    }
-
-    expect(state.summary.fields).toMatchObject({ ownerSetupUrl });
-    expect(state.result?.summary.fields).toMatchObject({ ownerSetupUrl });
-    expect(state.steps).toMatchObject([
-      { id: "credentials", status: "succeeded" },
-      { id: "account-selection", status: "succeeded" },
-      { id: "desired-state-plan", status: "succeeded" },
-      { id: "worker-deploy", status: "succeeded" },
-      { id: "health-check", status: "succeeded" },
-      { id: "owner-setup", status: "succeeded" },
-      { id: "workspace-push-writeback", status: "succeeded" },
-      { id: "observation-refresh", status: "succeeded" },
-    ]);
-    expect(setupInputs).toEqual([
-      {
-        adminToken: "generated-admin-token",
-        deploymentUrl: "https://personal-sites.dpeek.workers.dev",
-        setupToken,
-      },
-    ]);
-    expect(JSON.stringify(state)).toContain(ownerSetupUrl);
-    expect(JSON.stringify(state)).not.toContain("generated-admin-token");
-    expect(JSON.stringify(state)).not.toContain("/setup/capability");
-    expect(JSON.stringify(state)).not.toContain("capabilityCreated");
-  });
-
-  it("surfaces deploy health check failure step with retry-safe diagnostics", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const requests: CapturedRequest[] = [];
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot, { includeDeployTarget: false });
-    await writeWorkspaceAppState(workspaceRoot, "site", "Site");
-
-    const state = await runFormlessWorkspaceOperation(
-      {
-        kind: "deployApply",
-        workspacePath: workspaceRoot,
-      },
-      operationDeps(tempDir, {
-        accountDiscovery: {
-          listAccounts: async () => [
-            {
-              id: "account-123",
-              workersDevSubdomain: "dpeek",
-            },
-          ],
-        },
-        deploymentAdapter: {
-          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
-        },
-        fetch: deployApplyFetch(requests),
-        healthCheck: {
-          check: async () => {
-            throw new Error("raw provider response CF_API_TOKEN=secret-token");
-          },
-        },
-        packageRoot: "/package",
-        packageVersion: packageJson.version,
-        randomTokens: ["generated-admin-token"],
-        timestamps: [
-          "2026-06-02T00:06:00.000Z",
-          "2026-06-02T00:06:01.000Z",
-          "2026-06-02T00:06:02.000Z",
-        ],
-      }),
-      { actor: "browser" },
-    );
-
-    expect(state).toMatchObject({
-      operation: "deployApply",
-      status: "failed",
-      summary: {
-        fields: {
-          currentStep: "Health check",
-          expectedUrl: "https://personal-sites.dpeek.workers.dev",
-          retryGuidance:
-            "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
-        },
-      },
-    });
-    expect(state.steps).toMatchObject([
-      { id: "credentials", status: "succeeded" },
-      { id: "account-selection", status: "succeeded" },
-      { id: "desired-state-plan", status: "succeeded" },
-      { id: "worker-deploy", status: "succeeded" },
-      {
-        id: "health-check",
-        status: "failed",
-      },
-      { id: "owner-setup", status: "skipped" },
-      { id: "workspace-push-writeback", status: "skipped" },
-      { id: "observation-refresh", status: "skipped" },
-    ]);
-    expect(state.steps?.find((step) => step.id === "health-check")?.fields).toMatchObject({
-      expectedUrl: "https://personal-sites.dpeek.workers.dev",
-      providerFamily: "cloudflare",
-      retryGuidance:
-        "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
-      workerName: "personal-sites",
-    });
-    expect(JSON.stringify(state)).not.toContain("secret-token");
-    expect(JSON.stringify(state)).not.toContain("raw provider response");
-  });
-
   it("persists display-safe deployment observation and cleanup summaries with secret redaction", async () => {
     const workspaceRoot = await makeTempDir();
     const state = await createWorkspaceOperationState({
       id: "op_deploy_00000001",
       input: { targetAlias: "remote" },
       now: timestampSequence("2026-06-02T00:02:00.000Z"),
-      operation: "deployApply",
+      operation: "push",
       workspaceRoot,
     });
 
@@ -884,10 +292,6 @@ describe("Formless workspace operations", () => {
             dnsRecords: 1,
             workerSecretBindingCount: 3,
           },
-          drift: {
-            changedResourceCount: 0,
-            status: "in-sync",
-          },
           evidence: {
             count: 2,
             logicalIds: ["custom-domain:www.example.com", "dns-records:example.com"],
@@ -906,18 +310,17 @@ describe("Formless workspace operations", () => {
             evidenceCount: 2,
             observedStatus: "deployed",
           },
-          title: "Deploy applied",
+          title: "Workspace push applied",
         },
       },
       status: "succeeded",
       summary: {
         fields: {
           cleanupCount: 2,
-          drift: "in-sync",
           evidenceCount: 2,
           observedStatus: "deployed",
         },
-        title: "Deploy applied",
+        title: "Workspace push applied",
       },
       workspaceRoot,
     });
@@ -941,10 +344,6 @@ describe("Formless workspace operations", () => {
         dnsRecords: 1,
         workerSecretBindingCount: 3,
       },
-      drift: {
-        changedResourceCount: 0,
-        status: "in-sync",
-      },
       evidence: {
         count: 2,
       },
@@ -957,20 +356,6 @@ describe("Formless workspace operations", () => {
     expect(await listWorkspaceOperationStates(workspaceRoot)).toHaveLength(1);
   });
 });
-
-async function expectNoDeploymentHistoryStorageState(workspaceRoot: string) {
-  const snapshot = JSON.parse(
-    await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
-  ) as { records: Array<{ entity: string }> };
-
-  expect(snapshot.records.map((record) => record.entity)).not.toEqual(
-    expect.arrayContaining([
-      "instance:deploy-attempt",
-      "instance:deploy-evidence-summary",
-      "instance:deploy-drift-report",
-    ]),
-  );
-}
 
 function operationDeps(
   cwd: string,
@@ -994,14 +379,17 @@ function operationDeps(
   const randomTokens = [...(options.randomTokens ?? [])];
 
   return {
-    ...(options.accountDiscovery === undefined
-      ? {}
-      : { accountDiscovery: options.accountDiscovery }),
+    accountDiscovery: options.accountDiscovery ?? {
+      listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
+    },
     createOperationId: () => operationIds.shift() ?? "op_test_00000000",
     cwd,
-    ...(options.deploymentAdapter === undefined
-      ? {}
-      : { deploymentAdapter: options.deploymentAdapter }),
+    deploymentAdapter: options.deploymentAdapter ?? {
+      deploy: async (input: DeployFormlessInstanceInput) => ({
+        resourceEvidence: [],
+        url: input.plan.expectedUrl.url,
+      }),
+    },
     ...(options.env === undefined ? {} : { env: options.env }),
     fetch: options.fetch ?? fetch,
     healthCheck: options.healthCheck ?? {
@@ -1023,8 +411,8 @@ function operationDeps(
       }),
     },
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T00:00:00.000Z"])),
-    ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
-    ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
+    packageRoot: options.packageRoot ?? process.cwd(),
+    packageVersion: options.packageVersion ?? packageJson.version,
     randomToken: () => randomTokens.shift() ?? "generated-token",
     setupCapability: {
       create: async (input: { adminToken: string; deploymentUrl: string; setupToken: string }) => {
@@ -1380,23 +768,6 @@ function deploymentDesiredStateRef() {
   };
 }
 
-function deploymentResourceEvidenceFromGraph(
-  resourceGraph: DeployResourceGraph | undefined,
-): DeployEvidenceSummary[] {
-  return (
-    resourceGraph?.resources.map((resource, index) => ({
-      action: "updated",
-      alchemyResourceId: resource.logicalId,
-      displayName: resource.logicalId,
-      kind: resource.kind,
-      logicalId: resource.logicalId,
-      providerFamily: resource.providerFamily,
-      providerResourceIds: [`provider-resource-${index}`],
-      targetId: resource.targetId,
-    })) ?? []
-  );
-}
-
 function restoreSummary() {
   return {
     appCount: 1,
@@ -1427,51 +798,6 @@ function capturedRequestJson<T>(request: CapturedRequest): T {
 
 function parseCapturedBody<T>(init: RequestInit | undefined): T {
   return JSON.parse(typeof init?.body === "string" ? init.body : "{}") as T;
-}
-
-async function writeWorkspaceAppState(workspaceRoot: string, installId: string, label: string) {
-  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
-  const archive = appArchive(installId, label);
-
-  if (archive.data.kind !== STORAGE_SNAPSHOT_KIND) {
-    throw new Error("Expected app state data to be a storage snapshot.");
-  }
-
-  await writeInstanceWorkspaceAppStorageSnapshot({
-    installId,
-    manifest,
-    snapshot: archive.data,
-    workspaceRoot,
-  });
-}
-
-function appArchive(installId: string, label: string): AppArchive {
-  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
-
-  if (!facts) {
-    throw new Error("Missing bundled package facts for site.");
-  }
-
-  return {
-    kind: APP_ARCHIVE_KIND,
-    version: ARCHIVE_VERSION,
-    exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "core-media-assets"],
-    restorePolicy: { dryRun: true, installCollisions: "reject" },
-    app: {
-      installId,
-      packageAppKey: "site",
-      packageRevision: facts.packageRevision,
-      sourceSchemaKey: "site",
-      sourceSchemaHash: facts.sourceSchemaHash,
-      label,
-      status: "installed",
-      createdAt: "2026-05-01T00:00:00.000Z",
-      updatedAt: "2026-05-01T00:00:00.000Z",
-    },
-    data: snapshot([], `app:${installId}`),
-    media: { objects: [] },
-  };
 }
 
 function controlPlaneRecords(): StoredRecord[] {

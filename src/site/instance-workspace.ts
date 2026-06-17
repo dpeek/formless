@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import type { Dirent } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -102,7 +103,6 @@ import {
   type InstanceWorkspaceDefaultAppPolicy as FormlessInstanceWorkspaceDefaultAppPolicy,
   type InstanceWorkspaceDomainIntent as FormlessInstanceWorkspaceDomainIntent,
   type InstanceWorkspaceManifest as FormlessInstanceWorkspaceManifest,
-  type InstanceWorkspaceMigrationPolicy as FormlessInstanceWorkspaceMigrationPolicy,
   type InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget,
 } from "@dpeek/formless-workspace";
 import {
@@ -155,6 +155,7 @@ import {
 import {
   exportInstanceArchive,
   restorePortableArchive,
+  restoreWorkspacePushArchive,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import {
@@ -267,6 +268,7 @@ export type FormlessInstanceWorkspaceStatusResult = {
 };
 
 export type PullFormlessInstanceWorkspaceInput = {
+  dryRun?: boolean;
   targetAlias?: string | null;
   workspacePath?: string;
 };
@@ -287,11 +289,21 @@ export type PullFormlessInstanceWorkspaceAppStateResult = {
   stateRoot: string;
 };
 
+export type PullFormlessInstanceWorkspaceReplacementPlan = {
+  changedStatePaths: string[];
+  prunedStatePaths: string[];
+  status: "changes" | "no-changes";
+};
+
 export type PullFormlessInstanceWorkspaceResult = {
   appState: PullFormlessInstanceWorkspaceAppStateResult[];
   domains: FormlessInstanceWorkspaceDomainIntent[];
   instanceState: FormlessInstanceWorkspaceStateSummary;
+  mode: "apply" | "dry-run";
+  noop: boolean;
+  replacement: PullFormlessInstanceWorkspaceReplacementPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+  syncPlan: FormlessInstanceWorkspaceSyncPlan;
   workspaceRoot: string;
 };
 
@@ -331,32 +343,44 @@ export type FormlessInstanceWorkspacePackageMismatch = {
   remotePackageAppKey: string;
 };
 
-export type FormlessInstanceWorkspaceDriftSummary = {
+export type FormlessInstanceWorkspaceSyncPlanChangedArea =
+  | "apps"
+  | "control-plane"
+  | "domains"
+  | "media"
+  | "packages"
+  | "records";
+
+export type FormlessInstanceWorkspaceSyncPlanEndpoint = {
+  appCount: number;
+  controlPlaneRecordCount: number;
+  domainCount: number;
+  fingerprint: string;
+  label: string;
+  mediaCount: number;
+  recordCount: number;
+};
+
+export type FormlessInstanceWorkspaceSyncPlan = {
+  changedAreas: FormlessInstanceWorkspaceSyncPlanChangedArea[];
   changedStatePaths: string[];
   changedControlPlaneRecords: string[];
+  changedDomainCount: number;
   domainDesiredDrift: FormlessInstanceWorkspaceDomainDesiredDrift[];
   changedMedia: string[];
   changedRecords: string[];
   extraInstalls: string[];
-  localDomainCount: number;
-  localAppCount: number;
-  localControlPlaneRecordCount: number;
-  localMediaCount: number;
-  localRecordCount: number;
   missingInstalls: string[];
   packageMismatches: FormlessInstanceWorkspacePackageMismatch[];
-  remoteDomainCount: number;
-  remoteAppCount: number;
-  remoteControlPlaneRecordCount: number;
-  remoteMediaCount: number;
-  remoteRecordCount: number;
-  status: "drift" | "no-drift";
+  source: FormlessInstanceWorkspaceSyncPlanEndpoint;
+  target: FormlessInstanceWorkspaceSyncPlanEndpoint;
+  status: "changes" | "up-to-date";
 };
 
 export type CheckFormlessInstanceWorkspaceResult = {
   deploymentStatus?: DeployLatestStatusDisplaySummary;
-  drift: FormlessInstanceWorkspaceDriftSummary;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+  syncPlan: FormlessInstanceWorkspaceSyncPlan;
   workspaceRoot: string;
 };
 
@@ -394,20 +418,25 @@ export type SaveLocalFormlessWorkspaceResult = {
 };
 
 export type PushFormlessInstanceWorkspaceInput = {
-  allowStale?: boolean;
   apply?: boolean;
-  replace?: boolean;
-  replaceInstallSet?: boolean;
   targetAlias?: string | null;
   targetOverride?: FormlessInstanceWorkspaceTarget;
   workspacePath?: string;
 };
 
 export type PushFormlessInstanceWorkspaceDependencies = {
+  accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   cwd: string;
+  deploymentAdapter: FormlessInstanceDeploymentAdapter;
   env?: NodeJS.ProcessEnv;
   fetch: typeof fetch;
+  healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
+  localSecretEnv: FormlessInstanceLocalSecretEnvStore;
   now: () => string;
+  packageRoot: string;
+  packageVersion: string;
+  randomToken: () => string;
+  setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
 export type PushFormlessInstanceWorkspaceSource = {
@@ -420,13 +449,21 @@ export type PushFormlessInstanceWorkspaceSource = {
 export type PushFormlessInstanceWorkspaceResult = {
   applyResult?: RestorePortableArchiveResult;
   backup?: ArchiveDiskWriteResult;
-  drift: FormlessInstanceWorkspaceDriftSummary;
-  dryRun: RestorePortableArchiveResult;
+  deployment?: DeployFormlessInstanceResult;
+  deploymentObservation?: DeployLocalFormlessWorkspaceObservation;
+  deploymentStatePath?: string;
+  deploymentStateRoot?: string;
+  dryRun?: RestorePortableArchiveResult;
+  healthCheck?: CheckFormlessInstanceDeployMetadataResult;
+  localSecretEnv?: EnsureFormlessInstanceLocalSecretEnvResult;
   mode: "apply" | "dry-run";
-  replace: boolean;
-  replaceInstallSet: boolean;
+  noop: boolean;
+  ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
+  plan?: FormlessInstanceDeploymentPlan;
+  secretPath?: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   source: PushFormlessInstanceWorkspaceSource;
+  syncPlan: FormlessInstanceWorkspaceSyncPlan;
   workspaceRoot: string;
 };
 
@@ -535,7 +572,6 @@ export type ResetFormlessInstanceWorkspaceLocalStateResult = {
 };
 
 export type DeployFormlessInstanceWorkspaceInput = {
-  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   targetAlias?: string | null;
   workspacePath?: string;
 };
@@ -552,8 +588,6 @@ export type DeployFormlessInstanceWorkspaceDependencies = {
 };
 
 export type DeployLocalFormlessWorkspaceInput = {
-  allowRemoteDrift?: boolean;
-  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   targetAlias?: string | null;
   workspacePath?: string;
 };
@@ -645,7 +679,6 @@ export type DeployFormlessInstanceWorkspaceResult = {
   deploymentStatePath?: string;
   healthCheck: CheckFormlessInstanceDeployMetadataResult;
   localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
-  migrationPolicy: FormlessInstanceWorkspaceMigrationPolicy;
   ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
   plan: FormlessInstanceDeploymentPlan;
   push?: PushFormlessInstanceWorkspaceResult;
@@ -655,20 +688,6 @@ export type DeployFormlessInstanceWorkspaceResult = {
 };
 
 export type DeployLocalFormlessWorkspaceFailureStepId = "health-check";
-
-export class DeployLocalFormlessWorkspaceRemoteDriftError extends Error {
-  readonly drift: FormlessInstanceWorkspaceDriftSummary;
-  readonly retryGuidance =
-    "Run `formless pull` or `formless save` to align the workspace source with the remote target, then retry deploy.";
-  readonly targetAlias: string;
-
-  constructor(input: { drift: FormlessInstanceWorkspaceDriftSummary; targetAlias: string }) {
-    super("Formless deploy refused because remote drift was detected.");
-    this.name = "DeployLocalFormlessWorkspaceRemoteDriftError";
-    this.drift = input.drift;
-    this.targetAlias = input.targetAlias;
-  }
-}
 
 export class DeployLocalFormlessWorkspaceStepError extends Error {
   readonly evidence: Record<string, boolean | number | string | null>;
@@ -996,7 +1015,6 @@ export async function pullFormlessInstanceWorkspace(
   try {
     const instanceArchiveRoot = path.join(tempRoot, "instance");
 
-    await prepareWorkspaceDirectories(workspaceRoot, manifest);
     await exportInstanceArchive(
       {
         adminToken,
@@ -1012,6 +1030,89 @@ export async function pullFormlessInstanceWorkspace(
       throw new Error("Formless instance pull did not write an instance archive.");
     }
 
+    const pulledInstanceDirectory: WorkspaceInstanceArchiveDirectory = {
+      ...pulledInstanceArchive,
+      archive: pulledInstanceArchive.archive,
+    };
+
+    const localControlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest,
+      workspaceRoot,
+    });
+    assertWorkspaceControlPlanePackagesAvailable({
+      controlPlane: localControlPlane,
+      operation: "check",
+      packageResolver: activePackages.resolver,
+    });
+    const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
+    const domains = await readLiveWorkspaceDomainIntents(
+      { adminToken, target: selectedTarget },
+      dependencies,
+    );
+    const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
+      manifest,
+      localDomainIntents,
+      domains,
+    )
+      ? compareWorkspaceDomainIntentToLive(localDomainIntents, domains)
+      : [];
+    const localAppState = await readWorkspaceAppStateMapForCheck(
+      workspaceRoot,
+      manifest,
+      localControlPlane,
+      activePackages.resolver,
+    );
+    const syncPlan = createWorkspaceSyncPlan({
+      domainDesiredDrift,
+      localControlPlane,
+      localAppState,
+      localDomains: localDomainIntents,
+      manifest,
+      packageResolver: activePackages.resolver,
+      remoteArchive: pulledInstanceDirectory,
+      remoteDomains: domains,
+      sourceLabel: selectedTarget.alias,
+      sourceSide: "remote",
+      targetLabel: "workspace",
+    });
+    const appState = pulledAppStateResults({
+      archive: pulledInstanceArchive.archive,
+      manifest,
+      workspaceRoot,
+    });
+    const replacement = await pullWorkspaceReplacementPlan({
+      localControlPlane,
+      manifest,
+      remoteArchive: pulledInstanceDirectory,
+      syncPlan,
+      workspaceRoot,
+    });
+    const instanceState: FormlessInstanceWorkspaceStateSummary = {
+      appCount: pulledInstanceArchive.archive.apps.length,
+      mediaCount: pulledInstanceArchive.archive.apps.reduce(
+        (count, app) => count + app.media.objects.length,
+        0,
+      ),
+      recordCount: pulledInstanceArchive.archive.controlPlane?.records.length ?? 0,
+      statePath: path.join(workspaceRoot, instanceWorkspaceInstanceStateRelativePath(manifest)),
+    };
+    const noop = replacement.status === "no-changes";
+
+    if (input.dryRun || noop) {
+      return {
+        appState,
+        domains,
+        instanceState,
+        mode: input.dryRun ? "dry-run" : "apply",
+        noop,
+        replacement,
+        selectedTarget,
+        syncPlan,
+        workspaceRoot,
+      };
+    }
+
+    await prepareWorkspaceDirectories(workspaceRoot, manifest);
     await writeInstanceWorkspaceControlPlaneStorageSnapshot({
       manifest,
       snapshot: pulledInstanceArchive.archive.controlPlane,
@@ -1020,27 +1121,10 @@ export async function pullFormlessInstanceWorkspace(
       workspaceRoot,
     });
 
-    const appState: PullFormlessInstanceWorkspaceAppStateResult[] = [];
     const appSnapshots = pulledInstanceArchive.archive.apps.map((app) => ({
       installId: app.app.installId,
       snapshot: appStorageSnapshotFromArchive(app),
     }));
-
-    for (const app of archiveApps(pulledInstanceArchive.archive)) {
-      const statePath = path.join(
-        workspaceRoot,
-        instanceWorkspaceAppStateRelativePath(manifest, app.app.installId),
-      );
-
-      appState.push({
-        appCount: 1,
-        installId: app.app.installId,
-        mediaCount: app.media.objects.length,
-        recordCount: archiveRecordCount(app),
-        statePath,
-        stateRoot: path.dirname(statePath),
-      });
-    }
 
     await replaceInstanceWorkspaceAppStorageSnapshots({
       manifest,
@@ -1053,27 +1137,17 @@ export async function pullFormlessInstanceWorkspace(
       workspaceRoot,
     });
 
-    const domains = await readLiveWorkspaceDomainIntents(
-      { adminToken, target: selectedTarget },
-      dependencies,
-    );
     await writeFile(manifestPath, formatFormlessInstanceWorkspaceManifest(manifest));
 
-    const instanceState: FormlessInstanceWorkspaceStateSummary = {
-      appCount: pulledInstanceArchive.archive.apps.length,
-      mediaCount: pulledInstanceArchive.archive.apps.reduce(
-        (count, app) => count + app.media.objects.length,
-        0,
-      ),
-      recordCount: pulledInstanceArchive.archive.controlPlane?.records.length ?? 0,
-      statePath: path.join(workspaceRoot, instanceWorkspaceInstanceStateRelativePath(manifest)),
-    };
-
     return {
-      appState: appState.sort((left, right) => left.installId.localeCompare(right.installId)),
+      appState,
       domains,
       instanceState,
+      mode: "apply",
+      noop: false,
+      replacement,
       selectedTarget,
+      syncPlan,
       workspaceRoot,
     };
   } finally {
@@ -1151,15 +1225,18 @@ export async function checkFormlessInstanceWorkspace(
 
     return {
       deploymentStatus: deployLatestStatusDisplaySummary(deploymentStatus.status),
-      drift: compareWorkspaceStateToRemoteArchive({
+      syncPlan: createWorkspaceSyncPlan({
         domainDesiredDrift,
         localControlPlane,
-        localDomainCount: localDomainIntents.length,
         localAppState,
+        localDomains: localDomainIntents,
         manifest,
         packageResolver: activePackages.resolver,
-        remoteDomainCount: liveDomains.length,
         remoteArchive,
+        remoteDomains: liveDomains,
+        sourceLabel: "workspace",
+        sourceSide: "local",
+        targetLabel: selectedTarget.alias,
       }),
       selectedTarget,
       workspaceRoot,
@@ -1330,58 +1407,40 @@ export async function pushFormlessInstanceWorkspace(
   input: PushFormlessInstanceWorkspaceInput,
   dependencies: PushFormlessInstanceWorkspaceDependencies,
 ): Promise<PushFormlessInstanceWorkspaceResult> {
-  const context = await requireSiteCliTargetContext(
+  const planned = await planDeployLocalFormlessWorkspace(
     {
-      commandName: "push",
-      cwd: dependencies.cwd,
       targetAlias: input.targetOverride?.alias ?? input.targetAlias,
       workspacePath: input.workspacePath,
     },
-    { env: dependencies.env },
+    dependencies,
   );
-  const { adminToken, manifest, workspaceRoot } = context;
-  const selectedTarget = input.targetOverride ?? context.selectedTarget;
-  const activePackages = await createActiveWorkspaceAppPackages(workspaceRoot);
+  const workspaceRoot = planned.workspaceRoot;
+  const selectedTarget = input.targetOverride ?? planned.selectedTarget;
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
 
   try {
-    const backup = input.apply
-      ? await exportInstanceArchive(
-          {
-            adminToken,
-            outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
-            packageResolver: activePackages.resolver,
-            target: selectedTarget.url,
-          },
-          dependencies,
-        )
-      : undefined;
-    const remoteArchiveRoot = backup
-      ? path.dirname(backup.archivePath)
-      : path.join(tempRoot, "remote-check");
-
-    if (!backup) {
-      await exportInstanceArchive(
-        {
-          adminToken,
-          outDir: remoteArchiveRoot,
-          packageResolver: activePackages.resolver,
-          target: selectedTarget.url,
-        },
-        dependencies,
-      );
-    }
-
-    const remoteArchive = await readArchiveDirectoryForCheck(remoteArchiveRoot);
-
-    if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
-      throw new Error("Formless instance push could not read remote archive state.");
-    }
-
     const exportedAt = dependencies.now();
+    const providerApply =
+      input.apply && planned.existingSelectedTarget === undefined
+        ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
+        : undefined;
+    const adminToken =
+      providerApply?.adminToken ?? (await readWorkspaceAdminToken(workspaceRoot, dependencies));
+
+    if (providerApply?.ownerSetup !== undefined) {
+      await writeLocalWorkspaceDeploymentConfigSource({
+        manifest: planned.manifest,
+        now: dependencies.now(),
+        plan: planned.plan,
+        selectedTarget,
+        workspaceRoot,
+      });
+    }
+
+    const activePackages = await createActiveWorkspaceAppPackages(workspaceRoot);
     const localControlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
-      manifest,
+      manifest: planned.manifest,
       workspaceRoot,
     });
     assertWorkspaceControlPlanePackagesAvailable({
@@ -1389,13 +1448,22 @@ export async function pushFormlessInstanceWorkspace(
       operation: "push",
       packageResolver: activePackages.resolver,
     });
-    const localDomainIntents = workspaceDomainIntentsFromSource(manifest, localControlPlane);
-    const liveDomains = await readLiveWorkspaceDomainIntents(
-      { adminToken, target: selectedTarget },
-      dependencies,
+    const localDomainIntents = workspaceDomainIntentsFromSource(
+      planned.manifest,
+      localControlPlane,
     );
+    const liveDomains =
+      planned.existingSelectedTarget === undefined
+        ? []
+        : await readLiveWorkspaceDomainIntents(
+            {
+              adminToken,
+              target: selectedTarget,
+            },
+            dependencies,
+          );
     const domainDesiredDrift = shouldCompareWorkspaceDomainIntents(
-      manifest,
+      planned.manifest,
       localDomainIntents,
       liveDomains,
     )
@@ -1403,7 +1471,7 @@ export async function pushFormlessInstanceWorkspace(
       : [];
     const localAppState = await readWorkspaceAppStateForPush(
       workspaceRoot,
-      manifest,
+      planned.manifest,
       localControlPlane,
       activePackages.resolver,
     );
@@ -1413,79 +1481,337 @@ export async function pushFormlessInstanceWorkspace(
       controlPlane: localControlPlane,
       exportedAt,
     });
-    const drift = compareWorkspaceStateToRemoteArchive({
+    const remoteArchive =
+      planned.existingSelectedTarget === undefined
+        ? emptyRemoteInstanceArchiveDirectory(exportedAt)
+        : await readRemoteWorkspaceArchiveForPush(
+            {
+              adminToken,
+              packageResolver: activePackages.resolver,
+              remoteArchiveRoot: path.join(tempRoot, "remote-check"),
+              selectedTarget,
+            },
+            dependencies,
+          );
+    const syncPlan = createWorkspaceSyncPlan({
       domainDesiredDrift,
       localControlPlane,
-      localDomainCount: localDomainIntents.length,
       localAppState: new Map(localAppState.map((state) => [state.appArchive.app.installId, state])),
-      manifest,
+      localDomains: localDomainIntents,
+      manifest: planned.manifest,
       packageResolver: activePackages.resolver,
-      remoteDomainCount: liveDomains.length,
       remoteArchive,
+      remoteDomains: liveDomains,
+      sourceLabel: "workspace",
+      sourceSide: "local",
+      targetLabel: selectedTarget.alias,
     });
 
-    if (input.apply && drift.status === "drift" && !input.allowStale) {
-      throw new Error(
-        "Formless instance push apply refused because remote drift was detected; review `formless instance check` and retry with --allow-stale to acknowledge it.",
-      );
+    if (syncPlan.status === "up-to-date") {
+      return {
+        mode: input.apply ? "apply" : "dry-run",
+        noop: true,
+        selectedTarget,
+        source,
+        syncPlan,
+        workspaceRoot,
+      };
     }
 
-    if (input.apply && input.replaceInstallSet && drift.extraInstalls.length > 0) {
-      throw new Error(
-        `Formless instance push cannot replace the remote install set yet; archive restore cannot prune extra remote installs: ${drift.extraInstalls.join(", ")}.`,
-      );
+    const backup = input.apply
+      ? planned.existingSelectedTarget === undefined
+        ? undefined
+        : await exportInstanceArchive(
+            {
+              adminToken: providerApply?.adminToken ?? adminToken,
+              outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
+              packageResolver: activePackages.resolver,
+              target: selectedTarget.url,
+            },
+            dependencies,
+          )
+      : undefined;
+    const dryRunBeforeProvider = planned.existingSelectedTarget !== undefined;
+    const dryRun =
+      !input.apply || dryRunBeforeProvider
+        ? await restoreWorkspacePushArchive(
+            {
+              adminToken: providerApply?.adminToken ?? adminToken,
+              apply: false,
+              archiveDir: composedArchiveRoot,
+              target: selectedTarget.url,
+            },
+            dependencies,
+          )
+        : undefined;
+
+    if (input.apply && dryRun && !dryRun.remote.ok) {
+      throw new Error("Formless instance push apply stopped because dry-run restore failed.");
     }
 
-    const dryRun = await restorePortableArchive(
-      {
-        adminToken,
-        apply: false,
-        archiveDir: composedArchiveRoot,
-        includeUpgradePlanning: !input.apply,
-        packageResolver: activePackages.resolver,
-        replace: input.replace ?? false,
-        target: selectedTarget.url,
-        upgradeTarget: {
-          label: selectedTarget.alias,
-          targetUrl: selectedTarget.url,
-        },
-      },
-      dependencies,
-    );
+    const provider =
+      input.apply && providerApply === undefined
+        ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
+        : providerApply;
+    const firstApplyDryRun =
+      input.apply && dryRun === undefined
+        ? await restoreWorkspacePushArchive(
+            {
+              adminToken: provider?.adminToken ?? adminToken,
+              apply: false,
+              archiveDir: composedArchiveRoot,
+              target: selectedTarget.url,
+            },
+            dependencies,
+          )
+        : undefined;
+    const restoreDryRun = dryRun ?? firstApplyDryRun;
 
-    if (input.apply && !dryRun.remote.ok) {
+    if (input.apply && restoreDryRun && !restoreDryRun.remote.ok) {
       throw new Error("Formless instance push apply stopped because dry-run restore failed.");
     }
 
     const applyResult = input.apply
-      ? await restorePortableArchive(
+      ? await restoreWorkspacePushArchive(
           {
-            adminToken,
+            adminToken: provider?.adminToken ?? adminToken,
             apply: true,
             archiveDir: composedArchiveRoot,
-            packageResolver: activePackages.resolver,
-            replace: input.replace ?? false,
             target: selectedTarget.url,
           },
           dependencies,
         )
       : undefined;
+    const deploymentObservation =
+      provider === undefined
+        ? undefined
+        : await writeLocalWorkspaceDeploymentObservation(
+            {
+              adminToken: provider.adminToken,
+              desiredState: planned.desiredState,
+              observedStatus: "deployed",
+              resourceEvidence: provider.deployment.resourceEvidence ?? [],
+              summary: deployDeploymentAppliedSummary({
+                resourceCount: planned.desiredState.resourceCount,
+                sourceLabel: "workspace source",
+              }),
+              targetUrl: provider.deployment.url,
+            },
+            dependencies,
+          );
 
     return {
       ...(applyResult === undefined ? {} : { applyResult }),
       ...(backup === undefined ? {} : { backup }),
-      drift,
-      dryRun,
+      ...(provider === undefined
+        ? {}
+        : {
+            deployment: provider.deployment,
+            ...(deploymentObservation === undefined ? {} : { deploymentObservation }),
+            deploymentStatePath: provider.deploymentStatePath,
+            deploymentStateRoot: provider.deploymentStateRoot,
+            healthCheck: provider.healthCheck,
+            localSecretEnv: provider.localSecretEnv,
+            ...(provider.ownerSetup === undefined ? {} : { ownerSetup: provider.ownerSetup }),
+            plan: planned.plan,
+            secretPath: provider.secretPath,
+          }),
+      ...(restoreDryRun === undefined ? {} : { dryRun: restoreDryRun }),
       mode: input.apply ? "apply" : "dry-run",
-      replace: input.replace ?? false,
-      replaceInstallSet: input.replaceInstallSet ?? false,
+      noop: false,
       selectedTarget,
       source,
+      syncPlan,
       workspaceRoot,
     };
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
   }
+}
+
+type WorkspacePushProviderReconciliationResult = {
+  adminToken: string;
+  deployment: DeployFormlessInstanceResult;
+  deploymentStatePath: string;
+  deploymentStateRoot: string;
+  healthCheck: CheckFormlessInstanceDeployMetadataResult;
+  localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
+  ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
+  secretPath: string;
+};
+
+async function applyWorkspacePushProviderReconciliation(
+  planned: PlanDeployLocalFormlessWorkspaceResult,
+  dependencies: PushFormlessInstanceWorkspaceDependencies,
+): Promise<WorkspacePushProviderReconciliationResult> {
+  const workspaceRoot = planned.workspaceRoot;
+  const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+  let adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    secretState,
+  });
+
+  await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+
+  if (!adminToken) {
+    if (planned.existingSelectedTarget !== undefined) {
+      throw new Error(missingAdminTokenMessage("push"));
+    }
+
+    adminToken = requiredGeneratedToken(dependencies.randomToken());
+    await writeFormlessInstanceWorkspaceSecretState(workspaceRoot, { adminToken });
+  }
+
+  const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, planned.plan);
+  const localSecretEnv = await dependencies.localSecretEnv.ensure({
+    createSecret: dependencies.randomToken,
+    root: deploymentStateRoot,
+  });
+
+  await copyLocalWorkspaceDeploySecretEnv({
+    adminToken,
+    credentialProfile: planned.credentialProfile,
+    credentialProfileFromConfig: planned.credentialProfileFromConfig,
+    env: dependencies.env,
+    localSecretEnv,
+    plan: planned.plan,
+  });
+
+  const deploymentSecrets = await readDestroyLocalDeploySecretEnv({
+    deploymentStateRoot,
+    env: dependencies.env,
+  });
+  const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
+    credentialProfile: planned.credentialProfile,
+    deploymentStateRoot,
+    plan: planned.plan,
+  });
+
+  try {
+    const deploymentResult = await dependencies.deploymentAdapter.deploy({
+      credentialProfile: planned.credentialProfile,
+      deploymentResourceGraph: planned.desiredState.resourceGraph,
+      packageRoot: dependencies.packageRoot,
+      plan: planned.plan,
+      secrets: {
+        ALCHEMY_PASSWORD: deploymentSecrets.secrets.ALCHEMY_PASSWORD,
+        ...(deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN === undefined
+          ? {}
+          : { CLOUDFLARE_API_TOKEN: deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN }),
+        FORMLESS_ADMIN_TOKEN: adminToken,
+      },
+      stateRoot: deploymentStateRoot,
+      ...(planned.workspaceAppPackages === undefined
+        ? {}
+        : { workspaceAppPackages: planned.workspaceAppPackages }),
+    });
+    const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deploymentResult.url);
+
+    if (deploymentUrl !== planned.plan.expectedUrl.url) {
+      throw new Error(
+        `Formless push provider reconciliation returned ${deploymentUrl}, expected target ${planned.plan.expectedUrl.url}.`,
+      );
+    }
+
+    const healthCheck = await checkLocalWorkspaceDeploymentHealth({
+      dependencies,
+      deploymentUrl,
+      plan: planned.plan,
+      selectedTarget: planned.selectedTarget,
+    });
+    const ownerSetup =
+      planned.existingSelectedTarget === undefined
+        ? await createLocalWorkspaceOwnerSetup({
+            adminToken,
+            deploymentUrl,
+            randomToken: dependencies.randomToken,
+            setupCapability: dependencies.setupCapability,
+          })
+        : undefined;
+
+    return {
+      adminToken,
+      deployment: {
+        ...deploymentResult,
+        url: deploymentUrl,
+      },
+      deploymentStatePath,
+      deploymentStateRoot,
+      healthCheck,
+      localSecretEnv,
+      ...(ownerSetup === undefined ? {} : { ownerSetup }),
+      secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
+    };
+  } catch (error) {
+    await tryWriteLocalWorkspaceDeploymentFailureObservation(
+      {
+        adminToken,
+        desiredState: planned.desiredState,
+        error,
+        targetUrl: planned.selectedTarget.url,
+      },
+      dependencies,
+    );
+
+    throw error;
+  }
+}
+
+async function readRemoteWorkspaceArchiveForPush(
+  input: {
+    adminToken: string | null;
+    packageResolver: AppPackageResolver;
+    remoteArchiveRoot: string;
+    selectedTarget: FormlessInstanceWorkspaceTarget;
+  },
+  dependencies: Pick<PushFormlessInstanceWorkspaceDependencies, "cwd" | "fetch" | "now">,
+): Promise<WorkspaceArchiveDirectory> {
+  await exportInstanceArchive(
+    {
+      adminToken: input.adminToken,
+      outDir: input.remoteArchiveRoot,
+      packageResolver: input.packageResolver,
+      target: input.selectedTarget.url,
+    },
+    dependencies,
+  );
+
+  const remoteArchive = await readArchiveDirectoryForCheck(input.remoteArchiveRoot);
+
+  if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    throw new Error("Formless instance push could not read remote archive state.");
+  }
+
+  return remoteArchive;
+}
+
+function emptyRemoteInstanceArchiveDirectory(exportedAt: string): WorkspaceArchiveDirectory {
+  const controlPlane = workspaceControlPlaneSnapshotFromRecords({
+    current: undefined,
+    exportedAt,
+    records: [],
+    schemaUpdatedAt: exportedAt,
+  });
+
+  return {
+    archive: {
+      kind: INSTANCE_ARCHIVE_KIND,
+      version: ARCHIVE_VERSION,
+      exportedAt,
+      capabilities: [
+        "installed-app-registry",
+        "schema-owned-control-plane",
+        "app-store-snapshots",
+        "core-media-assets",
+      ],
+      restorePolicy: { dryRun: true, installCollisions: "reject" },
+      controlPlane,
+      apps: [],
+    },
+    archivePath: "",
+    mediaFiles: [],
+    missingMediaFiles: [],
+  };
 }
 
 export async function refreshFormlessInstanceDeploymentObservation(
@@ -1800,7 +2126,7 @@ export async function deployLocalFormlessWorkspace(
 
     if (deploymentUrl !== planned.plan.expectedUrl.url) {
       throw new Error(
-        `Formless deploy returned ${deploymentUrl}, expected target ${planned.plan.expectedUrl.url}.`,
+        `Formless provider reconciliation returned ${deploymentUrl}, expected target ${planned.plan.expectedUrl.url}.`,
       );
     }
 
@@ -1828,18 +2154,6 @@ export async function deployLocalFormlessWorkspace(
             setupCapability: dependencies.setupCapability,
           })
         : undefined;
-    const push = await pushFormlessInstanceWorkspace(
-      {
-        allowStale: planned.existingSelectedTarget === undefined,
-        apply: true,
-        replace: true,
-        replaceInstallSet: false,
-        targetAlias: planned.selectedTarget.alias,
-        targetOverride: planned.selectedTarget,
-        workspacePath: workspaceRoot,
-      },
-      dependencies,
-    );
     const deploymentObservation = await writeLocalWorkspaceDeploymentObservation(
       {
         adminToken,
@@ -1864,10 +2178,8 @@ export async function deployLocalFormlessWorkspace(
       deploymentStateRoot,
       healthCheck,
       localSecretEnv,
-      migrationPolicy: planned.plan.migrationPolicy,
       ...(ownerSetup === undefined ? {} : { ownerSetup }),
       plan: planned.plan,
-      push,
       secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
       selectedTarget: planned.selectedTarget,
       workspaceRoot,
@@ -2006,7 +2318,7 @@ async function checkLocalWorkspaceDeploymentHealth(input: {
       },
       expectedUrl: input.plan.expectedUrl.url,
       retryGuidance:
-        "Retry deploy apply after provider propagation, then check the Worker deployment and deploy metadata endpoint if the health check still fails.",
+        "Retry push after provider propagation, then check the Worker runtime and deploy metadata endpoint if the health check still fails.",
       stepId: "health-check",
       stepLabel: "Health check",
     });
@@ -2087,7 +2399,7 @@ function assertRuntimeDesiredStateMatchesLocalProjection(input: {
 }): void {
   if (input.runtime.targetId !== input.local.targetId) {
     throw new Error(
-      `Local deploy apply desired-state target "${input.local.targetId}" did not match runtime target "${input.runtime.targetId}".`,
+      `Local push provider desired-state target "${input.local.targetId}" did not match runtime target "${input.runtime.targetId}".`,
     );
   }
 
@@ -2095,7 +2407,7 @@ function assertRuntimeDesiredStateMatchesLocalProjection(input: {
 
   if (input.runtime.display.resourceCount !== localDisplay.resourceCount) {
     throw new Error(
-      `Local deploy apply desired-state resource count ${localDisplay.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
+      `Local push provider desired-state resource count ${localDisplay.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
     );
   }
 
@@ -2103,14 +2415,14 @@ function assertRuntimeDesiredStateMatchesLocalProjection(input: {
     stableDeployJsonStringify(input.runtime.display.resourcesByKind) !==
     stableDeployJsonStringify(localDisplay.resourcesByKind)
   ) {
-    throw new Error("Local deploy apply desired-state resource kinds did not match runtime.");
+    throw new Error("Local push provider desired-state resource kinds did not match runtime.");
   }
 }
 
 function localWorkspaceDeployFailureSummary(_error: unknown): DeployFailureSummary {
   return deployDisplaySafeFailureSummary({
     code: "local-gateway-deploy-apply-failed",
-    displayMessage: "Local workspace deploy apply failed.",
+    displayMessage: "Local workspace push provider reconciliation failed.",
   });
 }
 
@@ -2133,11 +2445,20 @@ export async function planDeployLocalFormlessWorkspace(
     operation: "deploy",
     packageResolver: activePackages.resolver,
   });
-  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "push",
+  });
+
+  if (deploymentSource.deploymentConfig === undefined) {
+    throw new Error(
+      "Formless instance push requires an enabled instance deployment-config record.",
+    );
+  }
+
   const configuredSelectedTarget =
     deploymentSource.deploymentConfig === undefined
       ? undefined
-      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "deploy");
+      : workspaceTargetFromDeploymentConfig(deploymentSource.deploymentConfig, "push");
   let existingSelectedTarget = configuredSelectedTarget;
   let preflight: CheckFormlessInstanceWorkspaceResult | undefined;
 
@@ -2159,21 +2480,6 @@ export async function planDeployLocalFormlessWorkspace(
     }
   }
 
-  if (
-    preflight?.drift.status === "drift" &&
-    !isEmptyRemoteInitialPopulationDrift(preflight.drift) &&
-    !input.allowRemoteDrift
-  ) {
-    throw new DeployLocalFormlessWorkspaceRemoteDriftError({
-      drift: preflight.drift,
-      targetAlias: preflight.selectedTarget.alias,
-    });
-  }
-
-  if (preflight && isEmptyRemoteInitialPopulationDrift(preflight.drift)) {
-    existingSelectedTarget = undefined;
-  }
-
   const account = await resolveLocalWorkspaceDeploymentAccount({
     accountDiscovery: dependencies.accountDiscovery,
     credentialProfile: deploymentSource.credentialProfile,
@@ -2181,10 +2487,10 @@ export async function planDeployLocalFormlessWorkspace(
   });
   const planned = planLocalWorkspaceDeployment({
     account,
+    adoptExistingDeployment: existingSelectedTarget !== undefined,
     credentialProfile: deploymentSource.credentialProfile,
     deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
-    migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
     targetAlias: input.targetAlias,
   });
@@ -2212,21 +2518,6 @@ function isMissingWorkersDevScriptError(error: unknown): boolean {
   return (
     message.includes("workers_dev_script_not_found") ||
     (message.includes("error 1042") && message.includes("no workers script"))
-  );
-}
-
-function isEmptyRemoteInitialPopulationDrift(
-  drift: FormlessInstanceWorkspaceDriftSummary,
-): boolean {
-  return (
-    drift.status === "drift" &&
-    drift.remoteAppCount === 0 &&
-    drift.remoteControlPlaneRecordCount === 0 &&
-    drift.remoteDomainCount === 0 &&
-    drift.remoteMediaCount === 0 &&
-    drift.remoteRecordCount === 0 &&
-    drift.extraInstalls.length === 0 &&
-    drift.packageMismatches.length === 0
   );
 }
 
@@ -2287,7 +2578,6 @@ export async function deployFormlessInstanceWorkspace(
     deploymentStateRoot,
     healthCheck,
     localSecretEnv,
-    migrationPolicy: plan.migrationPolicy,
     plan,
     secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
     selectedTarget,
@@ -2311,7 +2601,9 @@ export async function planDeployFormlessInstanceWorkspace(
     operation: "deploy",
     packageResolver: activePackages.resolver,
   });
-  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "deploy",
+  });
   const selectedTarget =
     deploymentSource.deploymentConfig === undefined
       ? undefined
@@ -2326,7 +2618,6 @@ export async function planDeployFormlessInstanceWorkspace(
   const plan = formlessInstanceWorkspaceDeploymentPlan({
     deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
-    migrationPolicy: input.migrationPolicy,
     packageVersion: dependencies.packageVersion,
     selectedTarget,
   });
@@ -2438,7 +2729,9 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
     operation: input.commandName,
     packageResolver: activePackages.resolver,
   });
-  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: input.commandName,
+  });
   const selectedTarget =
     deploymentSource.deploymentConfig === undefined
       ? undefined
@@ -2501,7 +2794,9 @@ export async function planFormlessInstanceWorkspaceDomains(
     manifest,
     workspaceRoot,
   });
-  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "domains plan",
+  });
 
   if (deploymentSource.deploymentConfig === undefined) {
     throw new Error(
@@ -2742,7 +3037,9 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
     manifest,
     workspaceRoot,
   });
-  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias);
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "token rotate",
+  });
   const selectedTarget =
     deploymentSource.deploymentConfig === undefined
       ? undefined
@@ -2917,7 +3214,6 @@ async function bootstrapWorkspaceLocalInstance(
         adminToken: input.adminToken,
         apply: true,
         archiveDir: sourceArchive.archiveRoot,
-        packageResolver: input.activePackages.resolver,
         replace: false,
         target: input.source,
       },
@@ -3571,6 +3867,147 @@ function appStorageSnapshotFromArchive(app: AppArchive): StorageSnapshot {
   return app.data;
 }
 
+function pulledAppStateResults(input: {
+  archive: InstanceArchive;
+  manifest: FormlessInstanceWorkspaceManifest;
+  workspaceRoot: string;
+}): PullFormlessInstanceWorkspaceAppStateResult[] {
+  return archiveApps(input.archive)
+    .map((app) => {
+      const statePath = path.join(
+        input.workspaceRoot,
+        instanceWorkspaceAppStateRelativePath(input.manifest, app.app.installId),
+      );
+
+      return {
+        appCount: 1,
+        installId: app.app.installId,
+        mediaCount: app.media.objects.length,
+        recordCount: archiveRecordCount(app),
+        statePath,
+        stateRoot: path.dirname(statePath),
+      };
+    })
+    .sort((left, right) => left.installId.localeCompare(right.installId));
+}
+
+async function pullWorkspaceReplacementPlan(input: {
+  localControlPlane: WorkspaceControlPlaneRecords | undefined;
+  manifest: FormlessInstanceWorkspaceManifest;
+  remoteArchive: WorkspaceInstanceArchiveDirectory;
+  syncPlan: FormlessInstanceWorkspaceSyncPlan;
+  workspaceRoot: string;
+}): Promise<PullFormlessInstanceWorkspaceReplacementPlan> {
+  const changedStatePaths = new Set(input.syncPlan.changedStatePaths);
+  const prunedStatePaths = new Set<string>();
+  const remoteApps = archiveApps(input.remoteArchive.archive);
+  const remoteAppStatePaths = new Set(
+    remoteApps.map((app) =>
+      instanceWorkspaceAppStateRelativePath(input.manifest, app.app.installId),
+    ),
+  );
+  const localAppStatePaths = await listWorkspaceRelativeFiles(
+    path.join(input.workspaceRoot, input.manifest.state.root, "apps"),
+    path.posix.join(input.manifest.state.root, "apps"),
+  );
+
+  for (const installId of input.syncPlan.extraInstalls) {
+    changedStatePaths.add(instanceWorkspaceAppStateRelativePath(input.manifest, installId));
+  }
+
+  for (const statePath of localAppStatePaths) {
+    if (!remoteAppStatePaths.has(statePath)) {
+      changedStatePaths.add(statePath);
+      prunedStatePaths.add(statePath);
+    }
+  }
+
+  const remoteMediaPaths = new Set(
+    input.remoteArchive.mediaFiles.map((file) =>
+      path.posix.join(input.manifest.media.root, file.archivePath),
+    ),
+  );
+  const localMediaPaths = await listWorkspaceRelativeFiles(
+    path.join(input.workspaceRoot, input.manifest.media.root),
+    input.manifest.media.root,
+  );
+  const changedMediaInstalls = new Set([
+    ...input.syncPlan.changedMedia,
+    ...input.syncPlan.extraInstalls,
+  ]);
+
+  for (const app of remoteApps) {
+    if (!changedMediaInstalls.has(app.app.installId)) {
+      continue;
+    }
+
+    for (const file of input.remoteArchive.mediaFiles) {
+      if (app.media.objects.some((object) => object.archivePath === file.archivePath)) {
+        changedStatePaths.add(path.posix.join(input.manifest.media.root, file.archivePath));
+      }
+    }
+  }
+
+  for (const mediaPath of localMediaPaths) {
+    if (!remoteMediaPaths.has(mediaPath)) {
+      changedStatePaths.add(mediaPath);
+      prunedStatePaths.add(mediaPath);
+    }
+  }
+
+  if (
+    input.remoteArchive.archive.controlPlane === undefined &&
+    input.localControlPlane !== undefined
+  ) {
+    const instancePath = instanceWorkspaceInstanceStateRelativePath(input.manifest);
+
+    changedStatePaths.add(instancePath);
+    prunedStatePaths.add(instancePath);
+  }
+
+  const sortedChangedStatePaths = [...changedStatePaths].sort((left, right) =>
+    left.localeCompare(right),
+  );
+
+  return {
+    changedStatePaths: sortedChangedStatePaths,
+    prunedStatePaths: [...prunedStatePaths].sort((left, right) => left.localeCompare(right)),
+    status: sortedChangedStatePaths.length === 0 ? "no-changes" : "changes",
+  };
+}
+
+async function listWorkspaceRelativeFiles(root: string, relativeRoot: string): Promise<string[]> {
+  let entries: Dirent[];
+
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const files: string[] = [];
+
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const entryRoot = path.join(root, entry.name);
+    const entryRelativePath = path.posix.join(relativeRoot, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...(await listWorkspaceRelativeFiles(entryRoot, entryRelativePath)));
+      continue;
+    }
+
+    if (entry.isFile()) {
+      files.push(entryRelativePath);
+    }
+  }
+
+  return files;
+}
+
 function workspaceAppArchiveMediaFiles(
   directory: WorkspaceArchiveDirectory,
   app: AppArchive,
@@ -3684,16 +4121,19 @@ function workspaceAppStateMatches(
   );
 }
 
-function compareWorkspaceStateToRemoteArchive(input: {
+function createWorkspaceSyncPlan(input: {
   domainDesiredDrift: FormlessInstanceWorkspaceDomainDesiredDrift[];
   localControlPlane: WorkspaceControlPlaneRecords | undefined;
-  localDomainCount: number;
   localAppState: ReadonlyMap<string, WorkspaceAppStateArchive>;
+  localDomains: readonly FormlessInstanceWorkspaceDomainIntent[];
   manifest: FormlessInstanceWorkspaceManifest;
   packageResolver: AppPackageResolver;
-  remoteDomainCount: number;
   remoteArchive: WorkspaceArchiveDirectory;
-}): FormlessInstanceWorkspaceDriftSummary {
+  remoteDomains: readonly FormlessInstanceWorkspaceDomainIntent[];
+  sourceLabel: string;
+  sourceSide: "local" | "remote";
+  targetLabel: string;
+}): FormlessInstanceWorkspaceSyncPlan {
   const remoteApps = archiveApps(input.remoteArchive.archive);
   const remoteAppsByInstall = new Map(remoteApps.map((app) => [app.app.installId, app]));
   const localApps = controlPlaneAppInstallRecords(input.localControlPlane);
@@ -3779,47 +4219,215 @@ function compareWorkspaceStateToRemoteArchive(input: {
   const localAppArchivePayloads = [...input.localAppState.values()].map(
     (state) => state.appArchive,
   );
-  const hasDrift =
-    changedStatePaths.size > 0 ||
-    changedControlPlaneRecords.size > 0 ||
-    changedMedia.size > 0 ||
-    changedRecords.size > 0 ||
-    input.domainDesiredDrift.length > 0 ||
-    extraInstalls.length > 0 ||
-    missingInstalls.length > 0 ||
-    packageMismatches.length > 0;
+  const changedDomainCount =
+    input.domainDesiredDrift.length > 0
+      ? input.domainDesiredDrift.length
+      : comparableWorkspaceDomainIntentsJson(input.localDomains) ===
+          comparableWorkspaceDomainIntentsJson(input.remoteDomains)
+        ? 0
+        : Math.max(input.localDomains.length, input.remoteDomains.length);
+  const changedAreas = workspaceSyncPlanChangedAreas({
+    changedControlPlaneRecordCount: changedControlPlaneRecords.size,
+    changedDomainCount,
+    changedMediaCount: changedMedia.size,
+    changedRecordCount: changedRecords.size,
+    extraInstallCount: extraInstalls.length,
+    missingInstallCount: missingInstalls.length,
+    packageMismatchCount: packageMismatches.length,
+  });
+  const localEndpoint = workspaceSyncPlanEndpoint({
+    appCount: localApps.length,
+    apps: localApps.map((app) =>
+      comparableWorkspaceSyncApp(
+        app.installId,
+        input.localAppState.get(app.installId),
+        app.packageAppKey,
+      ),
+    ),
+    controlPlane: input.localControlPlane,
+    controlPlaneRecordCount: input.localControlPlane?.records.length ?? 0,
+    domains: input.localDomains,
+    label: input.sourceSide === "local" ? input.sourceLabel : input.targetLabel,
+    mediaCount: localAppArchivePayloads.reduce((count, app) => count + app.media.objects.length, 0),
+    packageResolver: input.packageResolver,
+    recordCount: localAppArchivePayloads.reduce((count, app) => count + archiveRecordCount(app), 0),
+  });
+  const remoteControlPlaneRecordCount = remoteControlPlane?.records.length ?? 0;
+  const remoteEndpoint = workspaceSyncPlanEndpoint({
+    appCount: remoteApps.length,
+    apps: remoteApps.map((app) =>
+      comparableWorkspaceSyncApp(
+        app.app.installId,
+        workspaceSyncComparableAppSource(input.remoteArchive, app),
+      ),
+    ),
+    controlPlane: remoteControlPlane,
+    controlPlaneRecordCount: remoteControlPlaneRecordCount,
+    domains: input.remoteDomains,
+    label: input.sourceSide === "remote" ? input.sourceLabel : input.targetLabel,
+    mediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
+    packageResolver: input.packageResolver,
+    recordCount: remoteApps.reduce((count, app) => count + archiveRecordCount(app), 0),
+  });
+  const source = input.sourceSide === "local" ? localEndpoint : remoteEndpoint;
+  const target = input.sourceSide === "local" ? remoteEndpoint : localEndpoint;
 
   return {
+    changedAreas,
     changedStatePaths: [...changedStatePaths].sort((left, right) => left.localeCompare(right)),
     changedControlPlaneRecords: [...changedControlPlaneRecords].sort((left, right) =>
       left.localeCompare(right),
     ),
+    changedDomainCount,
     domainDesiredDrift: input.domainDesiredDrift,
     changedMedia: [...changedMedia].sort((left, right) => left.localeCompare(right)),
     changedRecords: [...changedRecords].sort((left, right) => left.localeCompare(right)),
     extraInstalls,
-    localDomainCount: input.localDomainCount,
-    localAppCount: localApps.length,
-    localControlPlaneRecordCount: input.localControlPlane?.records.length ?? 0,
-    localMediaCount: localAppArchivePayloads.reduce(
-      (count, app) => count + app.media.objects.length,
-      0,
-    ),
-    localRecordCount: localAppArchivePayloads.reduce(
-      (count, app) => count + archiveRecordCount(app),
-      0,
-    ),
     missingInstalls,
     packageMismatches: packageMismatches.sort((left, right) =>
       left.installId.localeCompare(right.installId),
     ),
-    remoteDomainCount: input.remoteDomainCount,
-    remoteAppCount: remoteApps.length,
-    remoteControlPlaneRecordCount: remoteControlPlane?.records.length ?? 0,
-    remoteMediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
-    remoteRecordCount: remoteApps.reduce((count, app) => count + archiveRecordCount(app), 0),
-    status: hasDrift ? "drift" : "no-drift",
+    source,
+    target,
+    status: source.fingerprint === target.fingerprint ? "up-to-date" : "changes",
   };
+}
+
+function workspaceSyncPlanChangedAreas(input: {
+  changedControlPlaneRecordCount: number;
+  changedDomainCount: number;
+  changedMediaCount: number;
+  changedRecordCount: number;
+  extraInstallCount: number;
+  missingInstallCount: number;
+  packageMismatchCount: number;
+}): FormlessInstanceWorkspaceSyncPlanChangedArea[] {
+  const areas: FormlessInstanceWorkspaceSyncPlanChangedArea[] = [];
+
+  if (input.extraInstallCount > 0 || input.missingInstallCount > 0) {
+    areas.push("apps");
+  }
+
+  if (input.changedControlPlaneRecordCount > 0) {
+    areas.push("control-plane");
+  }
+
+  if (input.changedDomainCount > 0) {
+    areas.push("domains");
+  }
+
+  if (input.changedMediaCount > 0) {
+    areas.push("media");
+  }
+
+  if (input.packageMismatchCount > 0) {
+    areas.push("packages");
+  }
+
+  if (input.changedRecordCount > 0) {
+    areas.push("records");
+  }
+
+  return areas;
+}
+
+function workspaceSyncPlanEndpoint(input: {
+  appCount: number;
+  apps: WorkspaceSyncComparableApp[];
+  controlPlane: WorkspaceControlPlaneRecords | undefined;
+  controlPlaneRecordCount: number;
+  domains: readonly FormlessInstanceWorkspaceDomainIntent[];
+  label: string;
+  mediaCount: number;
+  packageResolver: AppPackageResolver;
+  recordCount: number;
+}): FormlessInstanceWorkspaceSyncPlanEndpoint {
+  return {
+    appCount: input.appCount,
+    controlPlaneRecordCount: input.controlPlaneRecordCount,
+    domainCount: input.domains.length,
+    fingerprint: workspaceSyncFingerprint({
+      apps: [...input.apps].sort((left, right) => left.installId.localeCompare(right.installId)),
+      controlPlane: comparableControlPlaneIntentRecordsJson(
+        input.controlPlane,
+        input.packageResolver,
+      ),
+      domains: comparableWorkspaceDomainIntentsJson(input.domains),
+    }),
+    label: input.label,
+    mediaCount: input.mediaCount,
+    recordCount: input.recordCount,
+  };
+}
+
+type WorkspaceSyncComparableApp = {
+  installId: string;
+  mediaJson: string | null;
+  missingState: boolean;
+  packageAppKey: string;
+  recordsJson: string | null;
+};
+
+type WorkspaceSyncComparableAppSource = {
+  appArchive: AppArchive;
+  mediaFiles: ArchiveDiskMediaFile[];
+  missingMediaFiles: string[];
+};
+
+function comparableWorkspaceSyncApp(
+  installId: string,
+  archive: WorkspaceSyncComparableAppSource | undefined,
+  packageAppKey = "missing",
+): WorkspaceSyncComparableApp {
+  if (archive === undefined) {
+    return {
+      installId,
+      mediaJson: null,
+      missingState: true,
+      packageAppKey,
+      recordsJson: null,
+    };
+  }
+
+  return {
+    installId,
+    mediaJson: comparableAppMediaJson(archive, archive.appArchive),
+    missingState: false,
+    packageAppKey: archive.appArchive.app.packageAppKey,
+    recordsJson: comparableAppRecordsJson(archive.appArchive),
+  };
+}
+
+function workspaceSyncComparableAppSource(
+  directory: WorkspaceArchiveDirectory,
+  app: AppArchive,
+): WorkspaceSyncComparableAppSource {
+  return {
+    appArchive: app,
+    mediaFiles: workspaceAppArchiveMediaFiles(directory, app),
+    missingMediaFiles: directory.missingMediaFiles,
+  };
+}
+
+function comparableWorkspaceDomainIntentsJson(
+  domains: readonly FormlessInstanceWorkspaceDomainIntent[],
+): string {
+  return JSON.stringify(
+    stableValue(
+      [...domains].sort(compareWorkspaceDomainIntents).map((domain) => ({
+        enabled: domain.enabled,
+        host: domain.host,
+        profile: domain.profile,
+        targetInstallId: domain.targetInstallId ?? null,
+      })),
+    ),
+  );
+}
+
+function workspaceSyncFingerprint(value: unknown): string {
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(stableValue(value)))
+    .digest("hex")}`;
 }
 
 function changedControlPlaneIntentRecordKeys(
@@ -4563,10 +5171,13 @@ function requireWorkspaceDeployAccountId(deploymentConfig: StoredRecord | undefi
 function selectLocalWorkspaceDeploymentSource(
   controlPlane: WorkspaceControlPlaneRecords | undefined,
   targetAlias: string | null | undefined,
+  options: { commandName: WorkspaceTargetCommandName },
 ): LocalWorkspaceDeploymentSource {
   if (!controlPlane) {
     if (targetAlias?.trim()) {
-      throw new Error(`Formless deploy plan target "${targetAlias.trim()}" was not found.`);
+      throw new Error(
+        `Formless instance ${options.commandName} target "${targetAlias.trim()}" was not found.`,
+      );
     }
 
     return {};
@@ -4574,7 +5185,7 @@ function selectLocalWorkspaceDeploymentSource(
 
   const records = controlPlane.records.filter((record) => !record.deletedAt);
   const deploymentConfig = selectLocalWorkspaceDeploymentConfig(records, targetAlias, {
-    commandName: "deploy",
+    commandName: options.commandName,
     required: false,
   });
   const credentialProfile =
@@ -4738,10 +5349,10 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
 
 function planLocalWorkspaceDeployment(input: {
   account: FormlessInstanceDeploymentAccount;
+  adoptExistingDeployment: boolean;
   credentialProfile?: string | null;
   deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
-  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
@@ -4753,8 +5364,8 @@ function planLocalWorkspaceDeployment(input: {
   });
   const plan = planFormlessInstanceDeployment({
     account: input.account,
+    adoptExistingDeployment: input.adoptExistingDeployment,
     instanceName: workerName,
-    migrationPolicy: input.migrationPolicy ?? ("new" as const),
     packageVersion: input.packageVersion,
   });
 
@@ -4774,7 +5385,7 @@ function planLocalWorkspaceDeployment(input: {
 
   if (selectedTarget.url !== plan.expectedUrl.url) {
     throw new Error(
-      `Formless deploy target "${targetAlias}" targetUrl ${selectedTarget.url} does not match planned URL ${plan.expectedUrl.url}.`,
+      `Formless push target "${targetAlias}" targetUrl ${selectedTarget.url} does not match planned URL ${plan.expectedUrl.url}.`,
     );
   }
 
@@ -4817,7 +5428,6 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
   commandName?: "deploy" | "destroy" | "domains run";
   deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
-  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
   packageVersion: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 }): FormlessInstanceDeploymentPlan {
@@ -4834,15 +5444,13 @@ function formlessInstanceWorkspaceDeploymentPlan(input: {
     throw new Error(`Formless instance ${commandName} requires deployment-config.accountId.`);
   }
 
-  const migrationPolicy = input.migrationPolicy ?? ("existing" as const);
-
   return planFormlessInstanceDeployment({
     account: {
       id: accountId,
       workersDevSubdomain: facts.workersDevSubdomain,
     },
+    adoptExistingDeployment: true,
     instanceName: facts.workerName,
-    migrationPolicy,
     packageVersion: input.packageVersion,
   });
 }
@@ -4871,24 +5479,24 @@ function workersDevTargetFacts(
   const suffix = ".workers.dev";
 
   if (url.protocol !== "https:" || !url.hostname.endsWith(suffix)) {
-    throw new Error("Formless instance deploy supports workers.dev target URLs only.");
+    throw new Error("Formless push provider reconciliation supports workers.dev target URLs only.");
   }
 
   const labels = url.hostname.slice(0, -suffix.length).split(".");
 
   if (labels.length !== 2) {
-    throw new Error("Formless instance deploy requires a workers.dev target host.");
+    throw new Error("Formless push provider reconciliation requires a workers.dev target host.");
   }
 
   const [workerName, workersDevSubdomain] = labels;
 
   if (!workerName || !workersDevSubdomain) {
-    throw new Error("Formless instance deploy requires a workers.dev target host.");
+    throw new Error("Formless push provider reconciliation requires a workers.dev target host.");
   }
 
   if (expectedWorkerName !== undefined && expectedWorkerName !== workerName) {
     throw new Error(
-      `Formless instance deploy target worker "${workerName}" does not match deployment-config.workerName or manifest name "${expectedWorkerName}".`,
+      `Formless push provider target worker "${workerName}" does not match deployment-config.workerName or manifest name "${expectedWorkerName}".`,
     );
   }
 
@@ -5802,14 +6410,16 @@ function requiredGeneratedToken(value: string): string {
   return token;
 }
 
-function missingAdminTokenMessage(action: "adopt" | "deploy"): string {
+function missingAdminTokenMessage(action: "adopt" | "deploy" | "push"): string {
   return [
     action === "adopt"
       ? "Formless instance token adopt requires an admin token."
-      : "Formless instance deploy requires an admin token.",
+      : action === "push"
+        ? "Formless push requires an admin token."
+        : "Formless instance deploy requires an admin token.",
     action === "adopt"
       ? `Cloudflare Worker secrets cannot be read back; pass --admin-token or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`
-      : `Cloudflare Worker secrets cannot be read back; run \`formless instance token adopt\`, run \`formless instance token rotate\`, or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`,
+      : `Cloudflare Worker secrets cannot be read back; run \`formless token adopt\`, run \`formless token rotate\`, or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`,
   ].join(" ");
 }
 

@@ -25,41 +25,34 @@ describe("Gateway runtime-neutral contracts", () => {
     expect(WORKSPACE_GATEWAY_OPERATION_KINDS).toEqual([
       "check",
       "credentialSetup",
-      "deploymentRefresh",
-      "deployApply",
-      "deployPlan",
       "pull",
       "push",
       "save",
       "status",
     ]);
     expect(WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
-    expect(isWorkspaceGatewayOperationKind("deployApply")).toBe(true);
-    expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(true);
+    expect(isWorkspaceGatewayOperationKind("deployApply")).toBe(false);
+    expect(isWorkspaceGatewayOperationKind("deployPlan")).toBe(false);
+    expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("init")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("cleanup")).toBe(false);
   });
 
   it("parses operation start input without accepting filesystem, shell, or secret fields", () => {
-    expect(parseWorkspaceGatewayStartInput({ kind: "deployPlan", migrationPolicy: "new" })).toEqual(
-      {
-        input: { kind: "deployPlan", migrationPolicy: "new", targetAlias: undefined },
-        ok: true,
-      },
-    );
     expect(parseWorkspaceGatewayStartInput({ kind: "save" })).toEqual({
       input: { check: false, kind: "save" },
       ok: true,
     });
     expect(parseWorkspaceGatewayStartInput({ kind: "push" })).toEqual({
       input: {
-        allowStale: false,
-        apply: false,
+        dryRun: false,
         kind: "push",
-        replace: false,
-        replaceInstallSet: false,
         targetAlias: undefined,
       },
+      ok: true,
+    });
+    expect(parseWorkspaceGatewayStartInput({ dryRun: true, kind: "pull" })).toEqual({
+      input: { dryRun: true, kind: "pull", targetAlias: undefined },
       ok: true,
     });
     expect(
@@ -73,20 +66,30 @@ describe("Gateway runtime-neutral contracts", () => {
       },
       ok: true,
     });
-    expect(parseWorkspaceGatewayStartInput({ kind: "deploymentRefresh" })).toEqual({
-      input: { kind: "deploymentRefresh", targetAlias: undefined },
-      ok: true,
-    });
     expect(parseWorkspaceGatewayStartInput({ kind: "status" })).toEqual({
       input: { includeDeploymentStatus: false, kind: "status", targetAlias: undefined },
       ok: true,
     });
-    expect(parseWorkspaceGatewayStartInput({ kind: "deployPlan", migrationPolicy: "old" })).toEqual(
-      {
-        error: 'Workspace gateway migrationPolicy must be "new" or "existing".',
-        ok: false,
-      },
-    );
+    expect(parseWorkspaceGatewayStartInput({ kind: "deployPlan" })).toEqual({
+      error: 'Workspace gateway operation "deployPlan" is not supported.',
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "deployApply" })).toEqual({
+      error: 'Workspace gateway operation "deployApply" is not supported.',
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "deploymentRefresh" })).toEqual({
+      error: 'Workspace gateway operation "deploymentRefresh" is not supported.',
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ allowStale: true, kind: "push" })).toEqual({
+      error: 'Workspace gateway operation "push" does not allow field "allowStale".',
+      ok: false,
+    });
+    expect(parseWorkspaceGatewayStartInput({ kind: "push", replaceInstallSet: true })).toEqual({
+      error: 'Workspace gateway operation "push" does not allow field "replaceInstallSet".',
+      ok: false,
+    });
     expect(
       parseWorkspaceGatewayStartInput({ kind: "status", workspacePath: "../outside" }),
     ).toEqual({

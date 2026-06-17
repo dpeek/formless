@@ -20,12 +20,8 @@ import {
 
 import {
   checkLocalFormlessWorkspace,
-  deployLocalFormlessWorkspace,
-  DeployLocalFormlessWorkspaceRemoteDriftError,
-  DeployLocalFormlessWorkspaceStepError,
   getFormlessInstanceWorkspaceStatus,
   initLocalFormlessWorkspaceOnboarding,
-  planDeployLocalFormlessWorkspace,
   pullFormlessInstanceWorkspace,
   pushFormlessInstanceWorkspace,
   refreshFormlessInstanceDeploymentObservation,
@@ -33,12 +29,11 @@ import {
   saveLocalFormlessWorkspace,
   type CheckLocalFormlessWorkspaceResult,
   type DeployLocalFormlessWorkspaceDependencies,
-  type DeployFormlessInstanceWorkspaceResult,
-  type FormlessInstanceWorkspaceDriftSummary,
+  type FormlessInstanceWorkspaceSyncPlan,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
-  type PlanDeployLocalFormlessWorkspaceResult,
   type PullFormlessInstanceWorkspaceResult,
+  type PushFormlessInstanceWorkspaceDependencies,
   type PushFormlessInstanceWorkspaceResult,
   type RefreshFormlessInstanceDeploymentObservationResult,
   type SaveLocalFormlessWorkspaceResult,
@@ -156,6 +151,7 @@ async function runWorkspaceOperationBody(
       return summarizePullResult(
         await pullFormlessInstanceWorkspace(
           {
+            dryRun: input.dryRun,
             targetAlias: input.targetAlias,
             workspacePath: input.workspacePath ?? undefined,
           },
@@ -176,42 +172,71 @@ async function runWorkspaceOperationBody(
       return summarizePushResult(
         await pushFormlessInstanceWorkspace(
           {
-            allowStale: input.allowStale,
-            apply: input.apply,
-            replace: input.replace,
-            replaceInstallSet: input.replaceInstallSet,
+            apply: !input.dryRun,
             targetAlias: input.targetAlias,
             workspacePath: input.workspacePath ?? undefined,
           },
-          dependencies,
-        ),
-      );
-    case "deployPlan":
-      requireDeployPlanDependencies(dependencies);
-      return summarizeDeployPlanResult(
-        await planDeployLocalFormlessWorkspace(
-          {
-            allowRemoteDrift: true,
-            migrationPolicy: input.migrationPolicy,
-            targetAlias: input.targetAlias,
-            workspacePath: input.workspacePath ?? undefined,
-          },
-          dependencies,
-        ),
-      );
-    case "deployApply":
-      requireDeployApplyDependencies(dependencies);
-      return summarizeDeployApplyResult(
-        await deployLocalFormlessWorkspace(
-          {
-            migrationPolicy: input.migrationPolicy,
-            targetAlias: input.targetAlias,
-            workspacePath: input.workspacePath ?? undefined,
-          },
-          dependencies,
+          requirePushWorkspaceOperationDependencies(dependencies),
         ),
       );
   }
+}
+
+function requirePushWorkspaceOperationDependencies(
+  dependencies: RunFormlessWorkspaceOperationDependencies,
+): PushFormlessInstanceWorkspaceDependencies {
+  const {
+    accountDiscovery,
+    deploymentAdapter,
+    healthCheck,
+    localSecretEnv,
+    packageRoot,
+    packageVersion,
+    randomToken,
+    setupCapability,
+  } = dependencies;
+  const missing: string[] = [];
+
+  if (accountDiscovery === undefined) missing.push("accountDiscovery");
+  if (deploymentAdapter === undefined) missing.push("deploymentAdapter");
+  if (healthCheck === undefined) missing.push("healthCheck");
+  if (localSecretEnv === undefined) missing.push("localSecretEnv");
+  if (packageRoot === undefined) missing.push("packageRoot");
+  if (packageVersion === undefined) missing.push("packageVersion");
+  if (randomToken === undefined) missing.push("randomToken");
+  if (setupCapability === undefined) missing.push("setupCapability");
+
+  if (missing.length > 0) {
+    throw new Error(`Workspace push requires operation dependencies: ${missing.join(", ")}.`);
+  }
+
+  if (
+    accountDiscovery === undefined ||
+    deploymentAdapter === undefined ||
+    healthCheck === undefined ||
+    localSecretEnv === undefined ||
+    packageRoot === undefined ||
+    packageVersion === undefined ||
+    randomToken === undefined ||
+    setupCapability === undefined
+  ) {
+    throw new Error("Workspace push dependencies are incomplete.");
+  }
+
+  return {
+    accountDiscovery,
+    cwd: dependencies.cwd,
+    deploymentAdapter,
+    ...(dependencies.env === undefined ? {} : { env: dependencies.env }),
+    fetch: dependencies.fetch,
+    healthCheck,
+    localSecretEnv,
+    now: dependencies.now,
+    packageRoot,
+    packageVersion,
+    randomToken,
+    setupCapability,
+  };
 }
 
 async function readWorkspaceStatus(
@@ -351,7 +376,7 @@ function summarizeCheckResult(result: CheckLocalFormlessWorkspaceResult): Worksp
         fields: {
           initialized: true,
           mode: "local",
-          remoteDrift: "skipped",
+          remoteSync: "skipped",
         },
         title: "Workspace check",
       },
@@ -361,7 +386,7 @@ function summarizeCheckResult(result: CheckLocalFormlessWorkspaceResult): Worksp
   return {
     details: {
       deploymentStatus: result.remote.deploymentStatus ?? null,
-      drift: summarizeDrift(result.remote.drift),
+      syncPlan: summarizeSyncPlan(result.remote.syncPlan),
       target: result.remote.selectedTarget.alias,
     },
     summary: {
@@ -370,8 +395,8 @@ function summarizeCheckResult(result: CheckLocalFormlessWorkspaceResult): Worksp
           result.remote.deploymentStatus === undefined
             ? "unavailable"
             : result.remote.deploymentStatus.state,
-        drift: result.remote.drift.status,
         mode: "remote",
+        sync: result.remote.syncPlan.status,
       },
       title: "Workspace check",
     },
@@ -382,17 +407,26 @@ function summarizePullResult(
   result: PullFormlessInstanceWorkspaceResult,
 ): WorkspaceOperationResult {
   const pulledAppState = result.appState;
+  const details: WorkspaceOperationDisplayObject = {
+    appState: pulledAppState.map((state) => state.installId),
+    domainCount: result.domains.length,
+    syncPlan: summarizeSyncPlan(result.syncPlan),
+    target: result.selectedTarget.alias,
+  };
+
+  if (result.mode === "dry-run") {
+    details.changedStatePaths = result.replacement.changedStatePaths;
+    details.prunedStatePaths = result.replacement.prunedStatePaths;
+  }
 
   return {
-    details: {
-      appState: pulledAppState.map((state) => state.installId),
-      domainCount: result.domains.length,
-      target: result.selectedTarget.alias,
-    },
+    details,
     summary: {
       fields: {
         appCount: pulledAppState.length,
         mediaCount: pulledAppState.reduce((count, state) => count + state.mediaCount, 0),
+        mode: result.mode,
+        noop: result.noop,
         recordCount: pulledAppState.reduce((count, state) => count + state.recordCount, 0),
       },
       title: "Workspace pulled",
@@ -406,19 +440,20 @@ function summarizePushResult(
   return {
     details: {
       applyRestore: result.applyResult ? summarizeRestore(result.applyResult) : null,
-      drift: summarizeDrift(result.drift),
-      dryRunRestore: summarizeRestore(result.dryRun),
+      dryRunRestore: result.dryRun ? summarizeRestore(result.dryRun) : null,
+      syncPlan: summarizeSyncPlan(result.syncPlan),
       target: result.selectedTarget.alias,
     },
     summary: {
       fields: {
         applyRestoreOk: result.applyResult?.remote.ok ?? null,
-        drift: result.drift.status,
-        dryRunRestoreOk: result.dryRun.remote.ok,
+        dryRunRestoreOk: result.dryRun?.remote.ok ?? null,
         mode: result.mode,
+        noop: result.noop,
         sourceApps: result.source.appCount,
         sourceMedia: result.source.mediaCount,
         sourceRecords: result.source.recordCount,
+        sync: result.syncPlan.status,
       },
       title: result.mode === "apply" ? "Workspace push applied" : "Workspace push planned",
     },
@@ -459,129 +494,6 @@ function summarizeDeploymentRefreshResult(
   };
 }
 
-function summarizeDeployPlanResult(
-  result: PlanDeployLocalFormlessWorkspaceResult,
-): WorkspaceOperationResult {
-  return {
-    deployment: {
-      builtInResources: deploymentBuiltInResourceSummary("planned"),
-      cleanup: notRunDeploymentCleanupSummary(),
-      desiredState: {
-        logicalIds: result.desiredState.logicalIds,
-        resourceCount: result.desiredState.resourceCount,
-        resourcesByKind: result.desiredState.resourcesByKind,
-        routeTargetCount: result.desiredState.routeTargetCount,
-        sourceFingerprint: result.desiredState.sourceFingerprint,
-        targetId: result.desiredState.targetId,
-      },
-      drift:
-        result.preflight === undefined
-          ? { status: "not-checked" }
-          : summarizeDrift(result.preflight.drift),
-      evidence: emptyDeploymentEvidenceSummary(),
-      expectedUrl: result.plan.expectedUrl.url,
-      migrationPolicy: result.plan.migrationPolicy,
-      plan: {
-        affectedLogicalIds: result.desiredState.logicalIds,
-        changes: {
-          create: result.desiredState.resourceCount,
-          delete: 0,
-          noChange: 0,
-          update: 0,
-        },
-        resourceCount: result.desiredState.resourceCount,
-        resourcesByKind: result.desiredState.resourcesByKind,
-        routeTargetCount: result.desiredState.routeTargetCount,
-        targetId: result.desiredState.targetId,
-      },
-      targetAlias: result.selectedTarget.alias,
-      observation: {
-        status: "not-run",
-      },
-      workerName: result.plan.resources.worker.name,
-    },
-    summary: {
-      fields: {
-        cleanupStatus: "not-run",
-        desiredResourceCount: result.desiredState.resourceCount,
-        drift: result.preflight?.drift.status ?? "not-checked",
-        evidenceCount: 0,
-        expectedUrl: result.plan.expectedUrl.url,
-        migrationPolicy: result.plan.migrationPolicy,
-        resourcesByKind: result.desiredState.resourcesByKind,
-        routeTargetCount: result.desiredState.routeTargetCount,
-        observationStatus: "not-run",
-        turnstileWidget: "planned",
-        workerName: result.plan.resources.worker.name,
-      },
-      title: "Deploy planned",
-    },
-    steps: deployPlanOperationSteps(result),
-  };
-}
-
-function summarizeDeployApplyResult(
-  result: DeployFormlessInstanceWorkspaceResult,
-): WorkspaceOperationResult {
-  const observation = result.deploymentObservation;
-
-  return {
-    deployment: {
-      builtInResources: deploymentBuiltInResourceSummary("provisioned"),
-      cleanup: notRunDeploymentCleanupSummary(),
-      drift: result.push ? summarizeDrift(result.push.drift) : { status: "not-checked" },
-      evidence: observation?.evidence ?? emptyDeploymentEvidenceSummary(),
-      healthCheckVersion: result.healthCheck.version,
-      migrationPolicy: result.migrationPolicy,
-      observation: observation
-        ? {
-            desiredState: observation.desiredState,
-            evidenceCount: observation.evidenceCount,
-            observedAt: observation.observedAt,
-            ...(observation.observedError === undefined
-              ? {}
-              : { observedError: observation.observedError }),
-            observedStatus: observation.observedStatus,
-            observedSummary: observation.observedSummary,
-            resourceCount: observation.resourceCount,
-            resourcesByKind: observation.resourcesByKind,
-            runnerId: observation.runnerId,
-            targetId: observation.targetId,
-          }
-        : null,
-      push: result.push
-        ? {
-            applyRestoreOk: result.push.applyResult?.remote.ok ?? null,
-            drift: result.push.drift.status,
-            dryRunRestoreOk: result.push.dryRun.remote.ok,
-            mode: result.push.mode,
-          }
-        : null,
-      targetAlias: result.selectedTarget.alias,
-      url: result.deployment.url,
-      workerName: result.plan.resources.worker.name,
-    },
-    summary: {
-      fields: {
-        cleanupStatus: "not-run",
-        desiredStateVersion: observation?.desiredState.versionId ?? null,
-        drift: result.push?.drift.status ?? "not-checked",
-        evidenceCount: observation?.evidenceCount ?? 0,
-        healthCheckVersion: result.healthCheck.version,
-        migrationPolicy: result.migrationPolicy,
-        observationStatus: observation?.observedStatus ?? "not-run",
-        resourcesByKind: observation?.resourcesByKind ?? {},
-        ...(result.ownerSetup === undefined ? {} : { ownerSetupUrl: result.ownerSetup.url }),
-        turnstileWidget: "provisioned",
-        url: result.deployment.url,
-        workerName: result.plan.resources.worker.name,
-      },
-      title: "Deploy applied",
-    },
-    steps: deployApplyOperationSteps(result),
-  };
-}
-
 type DeploymentOperationStepId =
   | "account-selection"
   | "credentials"
@@ -589,7 +501,7 @@ type DeploymentOperationStepId =
   | "health-check"
   | "observation-refresh"
   | "owner-setup"
-  | "worker-deploy"
+  | "provider-reconciliation"
   | "workspace-push-writeback";
 
 type DeploymentOperationStepInput = Omit<WorkspaceOperationStep, "id" | "label">;
@@ -601,7 +513,7 @@ const deploymentOperationStepLabels = {
   "health-check": "Health check",
   "observation-refresh": "Observation refresh",
   "owner-setup": "Owner setup",
-  "worker-deploy": "Worker deploy",
+  "provider-reconciliation": "Provider reconciliation",
   "workspace-push-writeback": "Workspace push/writeback",
 } satisfies Record<DeploymentOperationStepId, string>;
 
@@ -609,143 +521,12 @@ const deploymentOperationStepOrder = [
   "credentials",
   "account-selection",
   "desired-state-plan",
-  "worker-deploy",
+  "provider-reconciliation",
   "health-check",
   "owner-setup",
   "workspace-push-writeback",
   "observation-refresh",
 ] satisfies DeploymentOperationStepId[];
-
-function deployPlanOperationSteps(
-  result: PlanDeployLocalFormlessWorkspaceResult,
-): WorkspaceOperationStep[] {
-  return deploymentOperationSteps({
-    "account-selection": {
-      fields: {
-        cloudflareAccountId: result.plan.account.id,
-        cloudflareAccountName: result.plan.account.name ?? null,
-      },
-      status: "succeeded",
-    },
-    credentials: {
-      fields: {
-        profile: result.credentialProfile ?? "default",
-        source: result.credentialProfileFromConfig ? "deployment-config" : "local",
-      },
-      status: "succeeded",
-    },
-    "desired-state-plan": {
-      fields: {
-        expectedUrl: result.plan.expectedUrl.url,
-        resourceCount: result.desiredState.resourceCount,
-        routeTargetCount: result.desiredState.routeTargetCount,
-        targetId: result.desiredState.targetId,
-        workerName: result.plan.resources.worker.name,
-      },
-      status: "succeeded",
-    },
-    "health-check": {
-      detail: "Health check runs during deploy apply.",
-      status: "skipped",
-    },
-    "observation-refresh": {
-      detail: "Observation refresh runs after deploy apply.",
-      status: "skipped",
-    },
-    "owner-setup": {
-      detail: "Owner setup runs during first deploy apply.",
-      status: "skipped",
-    },
-    "worker-deploy": {
-      detail: "Worker deploy runs during deploy apply.",
-      status: "skipped",
-    },
-    "workspace-push-writeback": {
-      detail: "Workspace push/writeback runs during deploy apply.",
-      status: "skipped",
-    },
-  });
-}
-
-function deployApplyOperationSteps(
-  result: DeployFormlessInstanceWorkspaceResult,
-): WorkspaceOperationStep[] {
-  return deploymentOperationSteps({
-    "account-selection": {
-      fields: {
-        cloudflareAccountId: result.plan.account.id,
-        cloudflareAccountName: result.plan.account.name ?? null,
-      },
-      status: "succeeded",
-    },
-    credentials: {
-      fields: {
-        source: "local workspace",
-      },
-      status: "succeeded",
-    },
-    "desired-state-plan": {
-      fields: {
-        expectedUrl: result.plan.expectedUrl.url,
-        migrationPolicy: result.migrationPolicy,
-        target: result.selectedTarget.alias,
-        workerName: result.plan.resources.worker.name,
-      },
-      status: "succeeded",
-    },
-    "health-check": {
-      fields: {
-        expectedUrl: result.plan.expectedUrl.url,
-        metadataUrl: result.healthCheck.metadataUrl,
-        version: result.healthCheck.version,
-      },
-      status: "succeeded",
-    },
-    "observation-refresh": result.deploymentObservation
-      ? {
-          fields: {
-            observedAt: result.deploymentObservation.observedAt,
-            observedStatus: result.deploymentObservation.observedStatus,
-            runnerId: result.deploymentObservation.runnerId,
-          },
-          status: "succeeded",
-        }
-      : {
-          detail: "No deployment observation was persisted.",
-          status: "skipped",
-        },
-    "owner-setup": result.ownerSetup
-      ? {
-          fields: { ownerSetupUrl: result.ownerSetup.url },
-          status: "succeeded",
-        }
-      : {
-          detail: "Existing owner setup reused.",
-          status: "skipped",
-        },
-    "worker-deploy": {
-      fields: {
-        evidenceCount: result.deployment.resourceEvidence?.length ?? 0,
-        url: result.deployment.url,
-        workerName: result.plan.resources.worker.name,
-      },
-      status: "succeeded",
-    },
-    "workspace-push-writeback": result.push
-      ? {
-          fields: {
-            drift: result.push.drift.status,
-            mode: result.push.mode,
-            target: result.selectedTarget.alias,
-          },
-          status: "succeeded",
-        }
-      : {
-          detail: "Workspace push/writeback was not required.",
-          status: "skipped",
-        },
-  });
-}
 
 function deploymentRefreshOperationSteps(
   result: RefreshFormlessInstanceDeploymentObservationResult,
@@ -782,8 +563,8 @@ function deploymentRefreshOperationSteps(
       detail: "Owner setup is not required for observation refresh.",
       status: "skipped",
     },
-    "worker-deploy": {
-      detail: "Worker deploy is not required for observation refresh.",
+    "provider-reconciliation": {
+      detail: "Provider reconciliation is not required for observation refresh.",
       status: "skipped",
     },
     "workspace-push-writeback": {
@@ -797,61 +578,19 @@ function failureWorkspaceOperationSteps(
   input: RunnableWorkspaceOperationInput,
   error: unknown,
 ): WorkspaceOperationStep[] | undefined {
-  if (input.kind !== "deployApply" || !(error instanceof DeployLocalFormlessWorkspaceStepError)) {
-    return undefined;
-  }
+  void input;
+  void error;
 
-  return deploymentOperationSteps({
-    "account-selection": { status: "succeeded" },
-    credentials: { status: "succeeded" },
-    "desired-state-plan": { status: "succeeded" },
-    "health-check": {
-      error: error.message,
-      fields: {
-        ...error.evidence,
-        retryGuidance: error.retryGuidance,
-      },
-      status: "failed",
-    },
-    "observation-refresh": {
-      detail: "Skipped because deploy apply failed.",
-      status: "skipped",
-    },
-    "owner-setup": {
-      detail: "Skipped because health check failed.",
-      status: "skipped",
-    },
-    "worker-deploy": { status: "succeeded" },
-    "workspace-push-writeback": {
-      detail: "Skipped because health check failed.",
-      status: "skipped",
-    },
-  });
+  return undefined;
 }
 
 function failureWorkspaceOperationSummaryFields(
   message: string,
   error: unknown,
 ): WorkspaceOperationDisplayObject {
-  if (error instanceof DeployLocalFormlessWorkspaceRemoteDriftError) {
-    return {
-      drift: summarizeDrift(error.drift),
-      error: message,
-      retryGuidance: error.retryGuidance,
-      target: error.targetAlias,
-    };
-  }
+  void error;
 
-  if (!(error instanceof DeployLocalFormlessWorkspaceStepError)) {
-    return { error: message };
-  }
-
-  return {
-    currentStep: error.stepLabel,
-    error: message,
-    expectedUrl: error.expectedUrl,
-    retryGuidance: error.retryGuidance,
-  };
+  return { error: message };
 }
 
 function deploymentOperationSteps(
@@ -862,28 +601,6 @@ function deploymentOperationSteps(
     label: deploymentOperationStepLabels[id],
     ...steps[id],
   }));
-}
-
-function emptyDeploymentEvidenceSummary(): WorkspaceOperationDisplayObject {
-  return {
-    actionsByKind: {},
-    count: 0,
-    logicalIds: [],
-    resourcesByKind: {},
-  };
-}
-
-function notRunDeploymentCleanupSummary(): WorkspaceOperationDisplayObject {
-  return {
-    affectedLogicalIds: [],
-    status: "not-run",
-  };
-}
-
-function deploymentBuiltInResourceSummary(status: "planned" | "provisioned") {
-  return {
-    turnstileWidget: status,
-  };
 }
 
 function summarizeRestore(result: RestorePortableArchiveResult): WorkspaceOperationDisplayObject {
@@ -897,46 +614,34 @@ function summarizeRestore(result: RestorePortableArchiveResult): WorkspaceOperat
   };
 }
 
-function summarizeDrift(
-  drift: FormlessInstanceWorkspaceDriftSummary,
+function summarizeSyncPlan(
+  plan: FormlessInstanceWorkspaceSyncPlan,
 ): WorkspaceOperationDisplayObject {
   return {
-    changedStatePathCount: drift.changedStatePaths.length,
-    changedControlPlaneRecordCount: drift.changedControlPlaneRecords.length,
-    changedDomainCount: drift.domainDesiredDrift.length,
-    changedMediaCount: drift.changedMedia.length,
-    changedRecordCount: drift.changedRecords.length,
-    extraInstallCount: drift.extraInstalls.length,
-    missingInstallCount: drift.missingInstalls.length,
-    status: drift.status,
+    changedAreas: plan.changedAreas,
+    changedControlPlaneRecordCount: plan.changedControlPlaneRecords.length,
+    changedDomainCount: plan.changedDomainCount,
+    changedMediaCount: plan.changedMedia.length,
+    changedRecordCount: plan.changedRecords.length,
+    changedStatePathCount: plan.changedStatePaths.length,
+    extraInstallCount: plan.extraInstalls.length,
+    missingInstallCount: plan.missingInstalls.length,
+    source: plan.source.label,
+    sourceAppCount: plan.source.appCount,
+    sourceControlPlaneRecordCount: plan.source.controlPlaneRecordCount,
+    sourceDomainCount: plan.source.domainCount,
+    sourceFingerprint: plan.source.fingerprint,
+    sourceMediaCount: plan.source.mediaCount,
+    sourceRecordCount: plan.source.recordCount,
+    status: plan.status,
+    target: plan.target.label,
+    targetAppCount: plan.target.appCount,
+    targetControlPlaneRecordCount: plan.target.controlPlaneRecordCount,
+    targetDomainCount: plan.target.domainCount,
+    targetFingerprint: plan.target.fingerprint,
+    targetMediaCount: plan.target.mediaCount,
+    targetRecordCount: plan.target.recordCount,
   };
-}
-
-function requireDeployPlanDependencies(
-  dependencies: RunFormlessWorkspaceOperationDependencies,
-): asserts dependencies is RunFormlessWorkspaceOperationDependencies &
-  Pick<DeployLocalFormlessWorkspaceDependencies, "accountDiscovery" | "packageVersion"> {
-  if (!dependencies.accountDiscovery || !dependencies.packageVersion) {
-    throw new Error("Workspace deploy plan operation requires deployment planning dependencies.");
-  }
-}
-
-function requireDeployApplyDependencies(
-  dependencies: RunFormlessWorkspaceOperationDependencies,
-): asserts dependencies is RunFormlessWorkspaceOperationDependencies &
-  DeployLocalFormlessWorkspaceDependencies {
-  if (
-    !dependencies.accountDiscovery ||
-    !dependencies.deploymentAdapter ||
-    !dependencies.healthCheck ||
-    !dependencies.localSecretEnv ||
-    !dependencies.packageRoot ||
-    !dependencies.packageVersion ||
-    !dependencies.randomToken ||
-    !dependencies.setupCapability
-  ) {
-    throw new Error("Workspace deploy apply operation requires deployment apply dependencies.");
-  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

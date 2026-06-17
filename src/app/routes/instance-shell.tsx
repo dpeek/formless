@@ -28,12 +28,6 @@ import {
 } from "../../client/app-installs.ts";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
 import {
-  DeploymentRuntimeApiError,
-  fetchInstanceDeploymentDesiredState,
-  fetchInstanceDeploymentStatus,
-} from "../../client/deployment-runtime.ts";
-import { useRecordsById } from "../../client/store.ts";
-import {
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
@@ -64,16 +58,7 @@ import {
   type WorkspaceOperationInputFieldDefinition,
   type WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
-import {
-  deploymentStatusDisplaySummary,
-  type InstanceDeploymentDesiredStateResponse,
-  type InstanceDeploymentStatusResponse,
-} from "../../shared/deployment-runtime.ts";
-import {
-  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-  type InstanceControlPlaneDeploymentConfigValues,
-} from "@dpeek/formless-instance-control-plane";
-import type { StoredRecord } from "@dpeek/formless-storage";
+import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { HomeRoute } from "./home.tsx";
@@ -89,8 +74,6 @@ export type InstanceShellRouteState =
   | { status: "failed"; message: string }
   | { status: "loading" }
   | {
-      deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
-      deploymentStatus?: InstanceDeploymentStatusResponse;
       installError?: string;
       installErrorPackageAppKey?: PackageAppKey;
       installing: boolean;
@@ -114,7 +97,7 @@ export type WorkspaceGatewayRouteState =
       statusOperation?: WorkspaceGatewayOperation;
     };
 
-export type WorkspaceGatewayOperationControlGroup = "all" | "deployment" | "workspace";
+export type WorkspaceGatewayOperationControlGroup = "all" | "workspace";
 
 export type WorkspaceGatewayRuntimeCapabilityFacts = {
   actor: WorkspaceOperationActor;
@@ -135,34 +118,11 @@ const localBrowserWorkspaceGatewayRuntimeFacts = {
   actor: "browser",
   capabilities: [
     "credential-setup",
-    "deployment-apply",
-    "deployment-observe",
-    "deployment-plan",
     "workspace-read",
     "workspace-source-sync",
     "workspace-source-write",
   ],
 } as const satisfies WorkspaceGatewayRuntimeCapabilityFacts;
-
-export type InstanceShellInitialReadScope = {
-  deploymentRuntime: boolean;
-  providerRuntime: boolean;
-};
-
-export function instanceShellInitialReadScope(
-  currentPath: string,
-  {
-    localWorkspaceGatewayAvailable = true,
-  }: { localWorkspaceGatewayAvailable?: boolean | undefined } = {},
-): InstanceShellInitialReadScope {
-  const pathname = currentPath.split("?")[0] ?? currentPath;
-
-  return {
-    deploymentRuntime:
-      pathname === runtimeTopologyRoutes.deploymentsRoute && localWorkspaceGatewayAvailable,
-    providerRuntime: false,
-  };
-}
 
 export function selectWorkspaceGatewayOperationControls({
   operationGroup = "all",
@@ -186,23 +146,18 @@ function workspaceGatewayOperationControlFromDefinition(
   definition: WorkspaceBrowserOperationDefinition,
 ): WorkspaceGatewayOperationControl {
   return {
-    group: workspaceGatewayOperationControlGroup(definition),
+    group: workspaceGatewayOperationControlGroup(),
     input: workspaceGatewayStartInputFromDefinition(definition),
     inputFields: definition.bindings.gateway.inputFields,
     kind: definition.kind,
     label: definition.label,
     requiredCapability: definition.requiredCapability,
-    style: definition.requiredCapability === "deployment-apply" ? "primary" : "secondary",
+    style: definition.kind === "push" ? "primary" : "secondary",
   };
 }
 
-function workspaceGatewayOperationControlGroup(
-  definition: WorkspaceBrowserOperationDefinition,
-): WorkspaceGatewayOperationControl["group"] {
-  return definition.requiredCapability === "credential-setup" ||
-    definition.requiredCapability.startsWith("deployment-")
-    ? "deployment"
-    : "workspace";
+function workspaceGatewayOperationControlGroup(): WorkspaceGatewayOperationControl["group"] {
+  return "workspace";
 }
 
 export function workspaceGatewayStartInputFromDefinition(
@@ -257,10 +212,6 @@ export function InstanceShellRoute({
   const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
   const localWorkspaceGatewayAvailable =
     localWorkspaceGatewayAvailableProp ?? workspaceGatewayConfig !== undefined;
-  const initialReadScope = useMemo(
-    () => instanceShellInitialReadScope(location, { localWorkspaceGatewayAvailable }),
-    [localWorkspaceGatewayAvailable, location],
-  );
   const [workspaceGatewayState, setWorkspaceGatewayState] = useState<WorkspaceGatewayRouteState>(
     () => (localWorkspaceGatewayAvailable ? { status: "loading" } : { status: "unavailable" }),
   );
@@ -321,26 +272,13 @@ export function InstanceShellRoute({
           setWorkspaceGatewayState({ status: "unavailable" });
         }
 
-        const deploymentRuntimeAvailable =
-          initialReadScope.deploymentRuntime && workspaceGatewayResponse !== undefined;
-        const deploymentRuntimePromise = deploymentRuntimeAvailable
-          ? Promise.all([
-              fetchOptionalInstanceDeploymentDesiredState(controller.signal),
-              fetchOptionalInstanceDeploymentStatus(controller.signal),
-            ])
-          : Promise.resolve([undefined, undefined] as const);
-        const [appResponse, [deploymentDesiredState, deploymentStatus]] = await Promise.all([
-          fetchInstanceAppInstalls({ signal: controller.signal }),
-          deploymentRuntimePromise,
-        ]);
+        const appResponse = await fetchInstanceAppInstalls({ signal: controller.signal });
 
         if (stopped) {
           return;
         }
 
         setState({
-          ...(deploymentDesiredState === undefined ? {} : { deploymentDesiredState }),
-          ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
           installing: false,
           installs: appResponse.installs,
           packages: appResponse.packages,
@@ -369,7 +307,7 @@ export function InstanceShellRoute({
       stopped = true;
       controller.abort();
     };
-  }, [initialReadScope.deploymentRuntime, workspaceGatewayConfig]);
+  }, [workspaceGatewayConfig]);
 
   useEffect(() => {
     if (
@@ -383,13 +321,6 @@ export function InstanceShellRoute({
 
     const operation = workspaceGatewayState.currentOperation;
 
-    if (
-      !initialReadScope.deploymentRuntime &&
-      isDeploymentWorkspaceOperationKind(operation.operation)
-    ) {
-      return;
-    }
-
     const operationId = workspaceGatewayState.activeOperationId;
     const operationKind = operation.operation;
     const intervalId = window.setInterval(() => {
@@ -397,13 +328,12 @@ export function InstanceShellRoute({
         config: workspaceGatewayConfig,
         operationId,
         operationKind,
-        setInstanceShellState: setState,
         setWorkspaceGatewayState,
       });
     }, 1500);
 
     return () => window.clearInterval(intervalId);
-  }, [initialReadScope.deploymentRuntime, workspaceGatewayConfig, workspaceGatewayState]);
+  }, [workspaceGatewayConfig, workspaceGatewayState]);
 
   const autoSaveDisplayState =
     workspaceGatewayState.status === "ready"
@@ -460,8 +390,6 @@ export function InstanceShellRoute({
       });
 
       setState({
-        deploymentDesiredState: state.deploymentDesiredState,
-        deploymentStatus: state.deploymentStatus,
         installing: false,
         installs: response.installs,
         packages: state.packages,
@@ -521,7 +449,6 @@ export function InstanceShellRoute({
           currentOperation: response.operation,
         }),
       );
-      await refreshDeploymentRuntimeAfterWorkspaceOperation(response.operation, setState);
       if (!operationPollsAutomatically(response.operation)) {
         await refreshWorkspaceGatewayAutoSave({
           config: workspaceGatewayConfig,
@@ -549,7 +476,6 @@ export function InstanceShellRoute({
       config: workspaceGatewayConfig,
       operationId,
       operationKind,
-      setInstanceShellState: setState,
       setWorkspaceGatewayState,
     });
   }
@@ -661,13 +587,11 @@ async function refreshWorkspaceGatewayOperation({
   config,
   operationId,
   operationKind,
-  setInstanceShellState,
   setWorkspaceGatewayState,
 }: {
   config?: WorkspaceGatewayConfig;
   operationId: string;
   operationKind?: WorkspaceGatewayOperationKind;
-  setInstanceShellState?: Dispatch<SetStateAction<InstanceShellRouteState>>;
   setWorkspaceGatewayState: Dispatch<SetStateAction<WorkspaceGatewayRouteState>>;
 }) {
   if (!config) {
@@ -690,10 +614,6 @@ async function refreshWorkspaceGatewayOperation({
         currentOperation: response.operation,
       }),
     );
-    await refreshDeploymentRuntimeAfterWorkspaceOperation(
-      response.operation,
-      setInstanceShellState,
-    );
     if (!operationPollsAutomatically(response.operation)) {
       await refreshWorkspaceGatewayAutoSave({ config, setWorkspaceGatewayState });
     }
@@ -712,54 +632,6 @@ async function refreshWorkspaceGatewayOperation({
         : current,
     );
   }
-}
-
-async function refreshDeploymentRuntimeAfterWorkspaceOperation(
-  operation: WorkspaceGatewayOperation,
-  setState?: Dispatch<SetStateAction<InstanceShellRouteState>>,
-): Promise<void> {
-  if (!setState || !workspaceOperationRefreshesDeploymentRuntime(operation)) {
-    return;
-  }
-
-  let deploymentDesiredState: InstanceDeploymentDesiredStateResponse | undefined;
-  let deploymentStatus: InstanceDeploymentStatusResponse | undefined;
-
-  try {
-    [deploymentDesiredState, deploymentStatus] = await Promise.all([
-      fetchOptionalInstanceDeploymentDesiredState(),
-      fetchOptionalInstanceDeploymentStatus(),
-    ]);
-  } catch {
-    return;
-  }
-
-  setState((current) => {
-    if (current.status !== "ready") {
-      return current;
-    }
-
-    const {
-      deploymentDesiredState: _previousDeploymentDesiredState,
-      deploymentStatus: _previousDeploymentStatus,
-      ...rest
-    } = current;
-
-    return {
-      ...rest,
-      ...(deploymentDesiredState === undefined ? {} : { deploymentDesiredState }),
-      ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
-    };
-  });
-}
-
-export function workspaceOperationRefreshesDeploymentRuntime(
-  operation: WorkspaceGatewayOperation,
-): boolean {
-  return (
-    operation.status === "succeeded" &&
-    (operation.operation === "deployApply" || operation.operation === "deploymentRefresh")
-  );
 }
 
 export function instanceShellUninitializedWorkspaceInstallState(appResponse: AppInstallsResponse): {
@@ -808,34 +680,6 @@ export function operationPollsAutomatically(operation: WorkspaceGatewayOperation
   return operation.status === "queued" || operation.status === "running";
 }
 
-async function fetchOptionalInstanceDeploymentDesiredState(
-  signal?: AbortSignal,
-): Promise<InstanceDeploymentDesiredStateResponse | undefined> {
-  try {
-    return await fetchInstanceDeploymentDesiredState(signal ? { signal } : {});
-  } catch (error) {
-    if (error instanceof DeploymentRuntimeApiError && error.status === 404) {
-      return undefined;
-    }
-
-    throw error;
-  }
-}
-
-async function fetchOptionalInstanceDeploymentStatus(
-  signal?: AbortSignal,
-): Promise<InstanceDeploymentStatusResponse | undefined> {
-  try {
-    return await fetchInstanceDeploymentStatus(signal ? { signal } : {});
-  } catch (error) {
-    if (error instanceof DeploymentRuntimeApiError && error.status === 404) {
-      return undefined;
-    }
-
-    throw error;
-  }
-}
-
 export function InstanceShellRouteView({
   currentPath = runtimeTopologyRoutes.instanceRootRoute,
   installDrafts = {},
@@ -859,22 +703,11 @@ export function InstanceShellRouteView({
   workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
-  const pathname = currentPath.split("?")[0] ?? currentPath;
-  const isDeploymentsRoute = pathname === runtimeTopologyRoutes.deploymentsRoute;
-  const deploymentRouteAvailable = localWorkspaceGatewayProxyAvailable(workspaceGatewayState);
-  const renderDeploymentsRoute = isDeploymentsRoute && deploymentRouteAvailable;
-  const shellCurrentPath =
-    isDeploymentsRoute && !deploymentRouteAvailable
-      ? runtimeTopologyRoutes.instanceRootRoute
-      : currentPath;
 
   if (state.status === "loading") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader
-          currentPath={shellCurrentPath}
-          showDeploymentsLink={deploymentRouteAvailable}
-        />
+        <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-muted-fg">Loading installed apps...</p>
       </section>
     );
@@ -883,10 +716,7 @@ export function InstanceShellRouteView({
   if (state.status === "failed") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-        <ShellHeader
-          currentPath={shellCurrentPath}
-          showDeploymentsLink={deploymentRouteAvailable}
-        />
+        <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-red-700" role="alert">
           {state.message}
         </p>
@@ -894,27 +724,9 @@ export function InstanceShellRouteView({
     );
   }
 
-  if (renderDeploymentsRoute) {
-    return (
-      <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-        <ShellHeader
-          currentPath={shellCurrentPath}
-          showDeploymentsLink={deploymentRouteAvailable}
-        />
-        <GeneratedDeploymentManagementSection
-          deploymentDesiredState={state.deploymentDesiredState}
-          deploymentStatus={state.deploymentStatus}
-          onPollWorkspaceOperation={onPollWorkspaceOperation}
-          onStartWorkspaceOperation={onStartWorkspaceOperation}
-          workspaceGatewayState={workspaceGatewayState}
-        />
-      </section>
-    );
-  }
-
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <ShellHeader currentPath={shellCurrentPath} showDeploymentsLink={deploymentRouteAvailable} />
+      <ShellHeader currentPath={currentPath} />
       <WorkspaceGatewayManagementSection
         installCount={state.installs.length}
         onInstallFirstApp={() => setInstallDialogOpen(true)}
@@ -939,10 +751,6 @@ export function InstanceShellRouteView({
   );
 }
 
-function localWorkspaceGatewayProxyAvailable(state: WorkspaceGatewayRouteState): boolean {
-  return state.status !== "unavailable";
-}
-
 function WorkspaceGatewayManagementSection({
   installCount,
   onInstallFirstApp,
@@ -963,12 +771,7 @@ function WorkspaceGatewayManagementSection({
   const operation = state.status === "ready" ? state.currentOperation : undefined;
   const progressOperation =
     state.status === "ready" ? workspaceManagementOperation(state) : undefined;
-  const progressError =
-    state.status === "ready"
-      ? deploymentWorkspaceOperation(state)
-        ? undefined
-        : state.error
-      : undefined;
+  const progressError = state.status === "ready" ? state.error : undefined;
   const initialized =
     state.status === "ready"
       ? workspaceInitialized(state.statusOperation ?? state.currentOperation ?? operation)
@@ -1238,7 +1041,7 @@ export function WorkspaceOperationProgress({
           </div>
           <DisplaySafeObject fields={operation.summary.fields} />
           {operation.result?.deployment ? (
-            <DisplaySafeObject fields={operation.result.deployment} heading="Deployment" />
+            <DisplaySafeObject fields={operation.result.deployment} heading="Provider details" />
           ) : null}
           {operation.result?.details ? (
             <DisplaySafeObject fields={operation.result.details} heading="Details" />
@@ -1553,339 +1356,6 @@ function workspaceProviderLabel(provider: "alchemy" | "cloudflare"): string {
   return provider === "cloudflare" ? "Cloudflare" : "Alchemy";
 }
 
-function GeneratedDeploymentManagementSection({
-  deploymentDesiredState,
-  deploymentStatus,
-  onPollWorkspaceOperation,
-  onStartWorkspaceOperation,
-  workspaceGatewayState,
-}: {
-  deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
-  deploymentStatus?: InstanceDeploymentStatusResponse;
-  onPollWorkspaceOperation?: (
-    operationId: string,
-    operationKind?: WorkspaceGatewayOperationKind,
-  ) => void;
-  onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
-  workspaceGatewayState: WorkspaceGatewayRouteState;
-}) {
-  const deploymentConfigs = useDeploymentConfigRecords();
-  const deploymentSummary =
-    deploymentStatus === undefined
-      ? undefined
-      : deploymentStatusDisplaySummary(deploymentStatus.status);
-
-  return (
-    <section className="space-y-3" aria-labelledby="deployment-management-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-        <div className="min-w-0 space-y-1">
-          <h2 id="deployment-management-heading" className="text-sm font-semibold">
-            Deployments
-          </h2>
-          {deploymentSummary === undefined ? (
-            <p className="text-xs text-muted-fg">Deployment setup and progress</p>
-          ) : (
-            <p className="text-xs text-muted-fg">
-              {deploymentSummary.label} · {deploymentSummary.detail}
-            </p>
-          )}
-        </div>
-      </div>
-      <DeploymentSetupProgressSurface
-        deploymentConfigs={deploymentConfigs}
-        deploymentDesiredState={deploymentDesiredState}
-        deploymentStatus={deploymentStatus}
-        workspaceGatewayState={workspaceGatewayState}
-      />
-      <DeploymentGatewayOperationSection
-        onPollOperation={onPollWorkspaceOperation}
-        onStartOperation={onStartWorkspaceOperation}
-        state={workspaceGatewayState}
-      />
-    </section>
-  );
-}
-
-type DeploymentConfigStoredRecord = StoredRecord & {
-  entity: "deployment-config";
-  values: InstanceControlPlaneDeploymentConfigValues;
-};
-
-function useDeploymentConfigRecords(): DeploymentConfigStoredRecord[] {
-  const recordsById = useRecordsById();
-
-  return useMemo(
-    () =>
-      Object.values(recordsById)
-        .filter(isDeploymentConfigStoredRecord)
-        .toSorted(compareDeploymentConfigRecords),
-    [recordsById],
-  );
-}
-
-function isDeploymentConfigStoredRecord(
-  record: StoredRecord,
-): record is DeploymentConfigStoredRecord {
-  return record.entity === "deployment-config" && record.deletedAt === undefined;
-}
-
-function compareDeploymentConfigRecords(
-  left: DeploymentConfigStoredRecord,
-  right: DeploymentConfigStoredRecord,
-): number {
-  const enabledCompare = Number(right.values.enabled) - Number(left.values.enabled);
-
-  if (enabledCompare !== 0) {
-    return enabledCompare;
-  }
-
-  return left.values.label.localeCompare(right.values.label) || left.id.localeCompare(right.id);
-}
-
-function DeploymentSetupProgressSurface({
-  deploymentConfigs,
-  deploymentDesiredState,
-  deploymentStatus,
-  workspaceGatewayState,
-}: {
-  deploymentConfigs: DeploymentConfigStoredRecord[];
-  deploymentDesiredState?: InstanceDeploymentDesiredStateResponse;
-  deploymentStatus?: InstanceDeploymentStatusResponse;
-  workspaceGatewayState: WorkspaceGatewayRouteState;
-}) {
-  const primaryConfig =
-    deploymentConfigs.find((config) => config.values.enabled) ?? deploymentConfigs[0];
-  const operation = deploymentWorkspaceOperation(workspaceGatewayState);
-  const deploymentSummary =
-    deploymentStatus === undefined
-      ? undefined
-      : deploymentStatusDisplaySummary(deploymentStatus.status);
-
-  return (
-    <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4 lg:grid-cols-3"
-      data-formless-deployment-setup-progress="true"
-    >
-      <div className="min-w-0 space-y-3" data-formless-deployment-config-summary="true">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Deployment setup</h3>
-          <p className="text-xs text-muted-fg">
-            {primaryConfig ? "Primary target configured" : "Primary target not configured"}
-          </p>
-        </div>
-        {primaryConfig ? (
-          <DeploymentConfigFacts config={primaryConfig} />
-        ) : (
-          <p className="text-xs text-muted-fg" data-formless-deployment-config-empty="true">
-            Run credential setup to prepare the primary deployment target.
-          </p>
-        )}
-      </div>
-      <div className="min-w-0 space-y-3" data-formless-deployment-operation-status="true">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Deployment progress</h3>
-          <p className="text-xs text-muted-fg">
-            {deploymentSummary === undefined
-              ? "Runtime status unavailable"
-              : `${deploymentSummary.label} · ${deploymentSummary.detail}`}
-          </p>
-        </div>
-        <dl className="grid gap-2 text-xs text-muted-fg">
-          {deploymentStatus ? (
-            <div className="min-w-0">
-              <dt className="font-medium text-fg">Primary target</dt>
-              <dd className="break-words">
-                {deploymentStatus.target.label} · <code>{deploymentStatus.target.targetId}</code>
-              </dd>
-            </div>
-          ) : null}
-          <div className="min-w-0">
-            <dt className="font-medium text-fg">Gateway</dt>
-            <dd className="break-words">
-              {workspaceGatewayOperationSummary(workspaceGatewayState, operation)}
-            </dd>
-          </div>
-        </dl>
-      </div>
-      <div className="min-w-0 space-y-3" data-formless-deployment-desired-state="true">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Desired state</h3>
-          <p className="text-xs text-muted-fg">
-            {deploymentDesiredState
-              ? (deploymentDesiredState.desiredState.display.title ??
-                `${deploymentDesiredState.desiredState.display.resourceCount} resources`)
-              : "Desired-state projection unavailable"}
-          </p>
-        </div>
-        <DeploymentDesiredStateFacts desiredState={deploymentDesiredState} />
-      </div>
-    </div>
-  );
-}
-
-function DeploymentConfigFacts({ config }: { config: DeploymentConfigStoredRecord }) {
-  const observationEntries = deploymentObservationEntries(config.values);
-
-  return (
-    <dl className="grid gap-2 text-xs text-muted-fg">
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Primary target</dt>
-        <dd className="break-words">
-          {config.values.label} · <code>{config.values.targetId}</code>
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Target URL</dt>
-        <dd className="break-words">{config.values.targetUrl || "Not set"}</dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Provider</dt>
-        <dd className="break-words">
-          {providerFamilyLabel(config.values.providerFamily)}
-          {config.values.accountId ? ` · Account ${displaySafeText(config.values.accountId)}` : ""}
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Worker</dt>
-        <dd className="break-words">
-          {config.values.workerName ? displaySafeText(config.values.workerName) : "Not set"}
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Credential ref</dt>
-        <dd className="break-words">
-          {config.values.credentialRef ? displaySafeText(config.values.credentialRef) : "Not set"}
-        </dd>
-      </div>
-      <div className="min-w-0" data-formless-deployment-observation-cache="true">
-        <dt className="font-medium text-fg">Latest observation</dt>
-        <dd className="break-words">
-          {observationEntries.length === 0
-            ? "No observation cache"
-            : observationEntries.map((entry) => `${entry.label} ${entry.value}`).join(" · ")}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function DeploymentDesiredStateFacts({
-  desiredState,
-}: {
-  desiredState?: InstanceDeploymentDesiredStateResponse;
-}) {
-  if (!desiredState) {
-    return (
-      <p className="text-xs text-muted-fg" data-formless-deployment-desired-state-empty="true">
-        No desired-state projection loaded.
-      </p>
-    );
-  }
-
-  const version = desiredState.desiredState;
-  const resourceKinds = Object.entries(version.display.resourcesByKind)
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-
-  return (
-    <dl className="grid gap-2 text-xs text-muted-fg">
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Primary target</dt>
-        <dd className="break-words">
-          {desiredState.target.label ?? "Primary deployment target"} ·{" "}
-          <code>{desiredState.target.targetId}</code>
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Version</dt>
-        <dd className="break-words">
-          Revision {version.revision} · <code>{version.versionId}</code>
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Desired-state hash</dt>
-        <dd className="break-words">
-          <code>{version.hash}</code>
-        </dd>
-      </div>
-      <div className="min-w-0">
-        <dt className="font-medium text-fg">Resources</dt>
-        <dd className="break-words">
-          {resourceKinds.length === 0
-            ? `${version.display.resourceCount} resources`
-            : resourceKinds.map(([kind, count]) => `${fieldKeyLabel(kind)} ${count}`).join(" · ")}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function DeploymentGatewayOperationSection({
-  onPollOperation,
-  onStartOperation,
-  state,
-}: {
-  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
-  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
-  state: WorkspaceGatewayRouteState;
-}) {
-  const operation = deploymentWorkspaceOperation(state);
-
-  return (
-    <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
-      data-formless-deployment-gateway="local"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold">Local gateway</h3>
-          <p className="text-xs text-muted-fg">
-            {workspaceGatewayOperationSummary(state, operation)}
-          </p>
-        </div>
-      </div>
-      {state.status === "unavailable" ? (
-        <p className="text-xs text-muted-fg">Workspace gateway operations are unavailable.</p>
-      ) : (
-        <div data-formless-deployment-operation-controls="true">
-          <WorkspaceGatewayOperationControls
-            onStartOperation={onStartOperation}
-            operationGroup="deployment"
-            state={state}
-          />
-        </div>
-      )}
-      {state.status === "ready" ? (
-        <WorkspaceOperationProgress
-          error={state.error}
-          onPollOperation={onPollOperation}
-          operation={operation}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function deploymentObservationEntries(
-  values: InstanceControlPlaneDeploymentConfigValues,
-): Array<{ label: string; value: string }> {
-  return [
-    observationEntry("Status", values.observedStatus),
-    observationEntry("Observed at", values.observedAt),
-    observationEntry("Desired-state hash", values.observedDesiredStateHash),
-    observationEntry("Summary", values.observedSummary),
-    observationEntry("Error", values.observedError),
-    observationEntry("Runner", values.observedRunnerId),
-  ].filter((entry): entry is { label: string; value: string } => entry !== undefined);
-}
-
-function observationEntry(
-  label: string,
-  value: string | undefined,
-): { label: string; value: string } | undefined {
-  return value === undefined || value === "" ? undefined : { label, value: displaySafeText(value) };
-}
-
 function workspaceManagementOperation(
   state: WorkspaceGatewayRouteState,
 ): WorkspaceGatewayOperation | undefined {
@@ -1895,63 +1365,11 @@ function workspaceManagementOperation(
 
   const operation = state.currentOperation;
 
-  if (!operation || isDeploymentWorkspaceOperationKind(operation.operation)) {
+  if (!operation) {
     return undefined;
   }
 
   return operation;
-}
-
-function deploymentWorkspaceOperation(
-  state: WorkspaceGatewayRouteState,
-): WorkspaceGatewayOperation | undefined {
-  if (state.status !== "ready") {
-    return undefined;
-  }
-
-  const operation = state.currentOperation;
-
-  if (!operation || !isDeploymentWorkspaceOperationKind(operation.operation)) {
-    return undefined;
-  }
-
-  return operation;
-}
-
-function isDeploymentWorkspaceOperationKind(kind: WorkspaceGatewayOperationKind): boolean {
-  return (
-    kind === "credentialSetup" ||
-    kind === "deploymentRefresh" ||
-    kind === "deployPlan" ||
-    kind === "deployApply"
-  );
-}
-
-function workspaceGatewayOperationSummary(
-  state: WorkspaceGatewayRouteState,
-  operation?: WorkspaceGatewayOperation,
-): string {
-  if (state.status === "loading") {
-    return "Loading";
-  }
-
-  if (state.status === "unavailable") {
-    return "Unavailable";
-  }
-
-  if (operation) {
-    return `${workspaceOperationKindLabel(operation.operation)} · ${workspaceOperationStatusLabel(
-      operation.status,
-    )}`;
-  }
-
-  return state.csrfToken ? "Ready" : "Connected";
-}
-
-function providerFamilyLabel(
-  providerFamily: InstanceControlPlaneDeploymentConfigValues["providerFamily"],
-): string {
-  return providerFamily === "cloudflare" ? "Cloudflare" : fieldKeyLabel(providerFamily);
 }
 
 function GeneratedInstanceAppsSection({
@@ -2006,13 +1424,7 @@ function GeneratedInstanceRoutesSection() {
   );
 }
 
-function ShellHeader({
-  currentPath,
-  showDeploymentsLink,
-}: {
-  currentPath: string;
-  showDeploymentsLink: boolean;
-}) {
+function ShellHeader({ currentPath }: { currentPath: string }) {
   const pathname = currentPath.split("?")[0] ?? currentPath;
 
   return (
@@ -2028,14 +1440,6 @@ function ShellHeader({
         >
           Overview
         </InstanceNavigationLink>
-        {showDeploymentsLink ? (
-          <InstanceNavigationLink
-            href={runtimeTopologyRoutes.deploymentsRoute}
-            isCurrent={pathname === runtimeTopologyRoutes.deploymentsRoute}
-          >
-            Deployments
-          </InstanceNavigationLink>
-        ) : null}
       </nav>
     </header>
   );

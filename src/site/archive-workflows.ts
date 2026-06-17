@@ -1,4 +1,3 @@
-import packageJson from "../../package.json";
 import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
@@ -46,16 +45,10 @@ import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
-import { readFormlessInstanceTargetStatus } from "./instance-target-client.ts";
 import {
   isLegacySiteMediaHref,
   unsupportedLegacySiteMediaMessage,
 } from "@dpeek/formless-site-app/node";
-import {
-  buildCliUpgradePlanningReport,
-  type CliUpgradePlanningReport,
-  type CliUpgradePlanTargetIdentity,
-} from "./upgrade-plan.ts";
 import { resolveSiteCliAdminToken, siteCliTargetFetchHeaders } from "./instance-target-context.ts";
 
 export {
@@ -98,7 +91,6 @@ export type RestorePortableArchiveResult = {
   archiveInput: PortableArchiveInputStatus;
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
-  upgradePlanning?: CliUpgradePlanningReport;
 };
 
 export async function exportInstanceArchive(
@@ -220,11 +212,8 @@ export async function restorePortableArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
-    includeUpgradePlanning?: boolean;
-    packageResolver?: AppPackageResolver;
     replace: boolean;
     target: string;
-    upgradeTarget?: CliUpgradePlanTargetIdentity;
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
@@ -234,14 +223,6 @@ export async function restorePortableArchive(
   });
   const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
   const archive = withRestorePolicy(diskArchive.archive, restorePolicy(input));
-  const upgradePlanning = await readDryRunArchiveRestoreUpgradePlanning(
-    {
-      archiveInput,
-      archivePath: diskArchive.archivePath,
-      input,
-    },
-    dependencies,
-  );
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
@@ -256,7 +237,47 @@ export async function restorePortableArchive(
     archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
-    ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
+  };
+}
+
+export async function restoreWorkspacePushArchive(
+  input: {
+    adminToken?: string | null;
+    apply: boolean;
+    archiveDir: string;
+    target: string;
+  },
+  dependencies: ArchiveWorkflowDependencies,
+): Promise<RestorePortableArchiveResult> {
+  const archiveInput = await readPortableArchiveInputStatus({
+    archiveDir: input.archiveDir,
+    cwd: dependencies.cwd,
+  });
+  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
+
+  if (diskArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    throw new Error("Workspace push restore requires a formless.instanceArchive archive.");
+  }
+
+  const archive = withRestorePolicy(diskArchive.archive, {
+    dryRun: !input.apply,
+    installCollisions: "replace",
+  });
+  const remote = await postRemoteArchiveRestore(
+    {
+      adminToken: input.adminToken,
+      archive,
+      exactInstanceReplacement: true,
+      mediaFiles: diskArchive.mediaFiles,
+      target: input.target,
+    },
+    dependencies,
+  );
+
+  return {
+    archiveInput,
+    archivePath: diskArchive.archivePath,
+    remote,
   };
 }
 
@@ -265,12 +286,9 @@ export async function restoreAppArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
-    includeUpgradePlanning?: boolean;
     installId: string;
-    packageResolver?: AppPackageResolver;
     replace: boolean;
     target: string;
-    upgradeTarget?: CliUpgradePlanTargetIdentity;
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
@@ -288,14 +306,6 @@ export async function restoreAppArchive(
     retargetAppArchive(diskArchive.archive, input.installId),
     restorePolicy(input),
   );
-  const upgradePlanning = await readDryRunArchiveRestoreUpgradePlanning(
-    {
-      archiveInput,
-      archivePath: diskArchive.archivePath,
-      input,
-    },
-    dependencies,
-  );
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
@@ -310,48 +320,7 @@ export async function restoreAppArchive(
     archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
-    ...(upgradePlanning === undefined ? {} : { upgradePlanning }),
   };
-}
-
-async function readDryRunArchiveRestoreUpgradePlanning(
-  input: {
-    archiveInput: PortableArchiveInputStatus;
-    archivePath: string;
-    input: {
-      adminToken?: string | null;
-      apply: boolean;
-      includeUpgradePlanning?: boolean;
-      packageResolver?: AppPackageResolver;
-      target: string;
-      upgradeTarget?: CliUpgradePlanTargetIdentity;
-    };
-  },
-  dependencies: Pick<ArchiveWorkflowDependencies, "fetch">,
-): Promise<CliUpgradePlanningReport | undefined> {
-  if (input.input.apply || input.input.includeUpgradePlanning === false) {
-    return undefined;
-  }
-
-  const targetStatus = await readFormlessInstanceTargetStatus(
-    {
-      adminToken: input.input.adminToken,
-      archiveInput: input.archiveInput,
-      packageResolver: input.input.packageResolver,
-      targetUrl: input.input.target,
-    },
-    { fetch: dependencies.fetch },
-  );
-
-  return buildCliUpgradePlanningReport({
-    localPackageVersion: packageJson.version,
-    status: targetStatus.upgradeStatus,
-    target: {
-      ...input.input.upgradeTarget,
-      archivePath: input.archivePath,
-      targetUrl: input.input.upgradeTarget?.targetUrl ?? input.input.target,
-    },
-  });
 }
 
 function restorePolicy(input: { apply: boolean; replace: boolean }): ArchiveRestorePolicy {
@@ -613,6 +582,7 @@ async function postRemoteArchiveRestore(
   input: {
     adminToken?: string | null;
     archive: PortableArchive;
+    exactInstanceReplacement?: boolean;
     mediaFiles: readonly ArchiveDiskMediaFile[];
     target: string;
   },
@@ -626,6 +596,9 @@ async function postRemoteArchiveRestore(
     {
       body: JSON.stringify({
         archive: JSON.parse(formatPortableArchive(input.archive)) as unknown,
+        ...(input.exactInstanceReplacement === undefined
+          ? {}
+          : { exactInstanceReplacement: input.exactInstanceReplacement }),
         mediaFiles: input.mediaFiles.map(archiveRestoreRequestMediaFile),
       }),
       headers: archiveRestoreRequestHeaders(input.adminToken, dependencies.env),

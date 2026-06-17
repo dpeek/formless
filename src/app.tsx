@@ -109,8 +109,8 @@ export function App({
   );
   const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location, routeContext);
   const browserRoutes = useMemo(
-    () => runtimeBrowserRoutePatterns(runtimeProfile, routeContext),
-    [routeContext, runtimeProfile],
+    () => runtimeBrowserRoutePatterns(runtimeProfile),
+    [runtimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
   const routeApp = routeWorld?.app;
@@ -140,9 +140,7 @@ export function App({
   const activeScreenPath = routeWorld
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
-  const isInstanceShellRoute =
-    normalizedLocation === browserRoutes.instanceShellRoute ||
-    normalizedLocation === browserRoutes.instanceDeploymentsRoute;
+  const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
 
   if (
     shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
@@ -443,9 +441,7 @@ function AppRoutes({
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
-  const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile, {
-    localWorkspaceGatewayAvailable,
-  });
+  const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
   const publishedSite = runtimeProfile.publishedSite;
   const publicSitePreview = runtimeProfile.publicSitePreview;
   const hasLazyGeneratedRoutes =
@@ -465,13 +461,6 @@ function AppRoutes({
       {browserRoutes.ownerLoginRoute ? (
         <Route path={browserRoutes.ownerLoginRoute}>
           <OwnerLoginRoute />
-        </Route>
-      ) : null}
-      {browserRoutes.instanceDeploymentsRoute ? (
-        <Route path={browserRoutes.instanceDeploymentsRoute}>
-          <OwnerRouteGuard access="owner">
-            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
-          </OwnerRouteGuard>
         </Route>
       ) : null}
       {browserRoutes.instanceShellRoute ? (

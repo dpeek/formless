@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Site CLI publish behavior lets a local Formless workspace run, save, sync,
-deploy, and manage selected instance access.
+Site CLI publish behavior lets a local Formless workspace run, save, sync, and
+manage selected instance access.
 
 ## Requirements
 
@@ -18,30 +18,35 @@ the public CLI surface.
 
 - **GIVEN** the package CLI is installed
 - **WHEN** a user runs `formless dev`, `formless save`, `formless pull`,
-  `formless push`, `formless deploy`, or `formless destroy`
+  `formless push`, or `formless destroy`
 - **THEN** the command operates on the local Formless workspace selected by
   `formless.json`
 - **AND** `formless dev`, `formless save`, and `formless pull` do not mutate
-  Cloudflare resources
-- **AND** `formless push` mutates only deployed instance data through runtime
-  APIs after explicit apply input
-- **AND** `formless deploy` and `formless destroy` are explicit Cloudflare
-  runtime and provider-resource boundaries
+  remote instance data or Cloudflare resources unless `formless pull` is run
+  without `--dry-run`, in which case it rewrites reviewable workspace source
+- **AND** `formless push` is the only normal command that reconciles a deployed
+  instance from local workspace source, including runtime code, provider
+  resources, control-plane records, app records, schema, and media
+- **AND** `formless destroy` remains the explicit Cloudflare teardown boundary
 
-#### Scenario: Deploy dry-run
+#### Scenario: Sync dry-runs
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs `formless deploy --dry-run`
-- **THEN** the command plans workspace source freshness, target drift, upgrade
-  requirements, deployment desired resources, and DNS and custom-domain
-  reconciliation without mutating local source, remote data,
-  Cloudflare resources, or Alchemy state
+- **WHEN** a user runs `formless push --dry-run` or `formless pull --dry-run`
+- **THEN** the command reports the source, target, and high-level changes that
+  would be synchronized
+- **AND** it does not mutate local source, remote instance data, Cloudflare
+  resources, or Alchemy state
+- **AND** if source and target are already equivalent, it reports
+  `Everything up to date.`
+- **AND** the no-op message is the exact command output and is not accompanied
+  by sync plan, drift, deploy, migration, retry, or warning text
 
 #### Scenario: Removed command families
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs a removed archive, instance alias, status, check,
-  refresh, init, reset, or domain command
+- **WHEN** a user runs a removed archive, deploy, instance alias, status,
+  check, refresh, init, reset, or domain command
 - **THEN** the command is handled by ordinary unsupported-command behavior
 - **AND** provider, Authority, filesystem, deploy adapter, command, and state
   mutation code is not run for the removed command name
@@ -114,6 +119,14 @@ local execution binding handles it.
 - **AND** execution may continue to dispatch to existing local workspace
   functions while the operation definition remains the source of command shape,
   actor policy, and display-safe input facts
+- **AND** public push and pull bindings expose only `--workspace`, `--target`,
+  and `--dry-run` inputs
+- **AND** public workspace operation definitions do not expose apply, replace,
+  stale acknowledgement, install-set replacement, deploy plan/apply, or
+  migration policy inputs
+- **AND** removed deploy, drift, apply, replace, stale acknowledgement,
+  install-set replacement, and migration policy inputs are deleted rather than
+  translated into push or pull through compatibility aliases or gateway shims
 
 #### Scenario: Gateway binding from operation definition
 
@@ -131,7 +144,7 @@ local execution binding handles it.
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
 before any Cloudflare account or deployment mutation, while the CLI owns fresh
 workspace bootstrap and browser onboarding owns local session bootstrap,
-optional first app install, credential setup, and deploy operations.
+optional first app install, credential setup, and push operations.
 
 #### Scenario: Start local workspace runtime
 
@@ -161,7 +174,7 @@ optional first app install, credential setup, and deploy operations.
 - **AND** before a local owner session is established, the browser can only read
   gateway status through bootstrap authorization and exchange a CLI-minted local
   session bootstrap token for an owner session
-- **AND** app install, save, credential setup, deploy plan, and deploy apply
+- **AND** app install, save, credential setup, push dry-run, and push apply
   entry points are available through browser-owned local runtime flows
   after local session bootstrap
 
@@ -198,22 +211,22 @@ optional first app install, credential setup, and deploy operations.
 
 - **GIVEN** `formless.packages.json` points at a missing or invalid package
   manifest, source schema, or seed record file
-- **WHEN** `formless dev`, `formless push`, `formless deploy`, or a workspace
+- **WHEN** `formless dev`, `formless push`, or a workspace
   operation builds the active package resolver
 - **THEN** the command fails before starting local runtime mutation, remote
-  mutation, deploy planning, or provider mutation
+  mutation, sync planning, or provider mutation
 - **AND** the error identifies the invalid package link path and validation
   reason without exposing secrets
 
-#### Scenario: Deploy before installing an app
+#### Scenario: Push before installing an app
 
-- **WHEN** a local owner opens the deployment flow before any app install exists
-- **THEN** credential setup, deploy plan, and deploy apply remain available
+- **WHEN** a local owner opens the sync flow before any app install exists
+- **THEN** credential setup, push dry-run, and push apply remain available
   through the browser-owned local runtime flow
-- **AND** the deployment can publish the instance runtime with zero
+- **AND** push can publish the instance runtime with zero
   `app-install` records and no app storage snapshots
 - **AND** app installation remains a separate optional local Authority write
-  before or after the first deploy
+  before or after the first push
 
 ### Requirement: Workspace Save From Local Authority
 
@@ -238,7 +251,7 @@ state back to reviewable workspace storage snapshots and media payloads.
 - **AND** browser IndexedDB state is not used as the source of truth
 - **AND** `formless save` remains available as an explicit flush or retry
   action
-- **AND** remote pull, push, deploy, and destroy remain explicit CLI or gateway
+- **AND** remote pull, push, and destroy remain explicit CLI or gateway
   operations
 
 #### Scenario: Workspace operation state vocabulary
@@ -258,76 +271,30 @@ state back to reviewable workspace storage snapshots and media payloads.
 - **THEN** the command fails and reports that workspace source must be refreshed
 - **AND** it does not rewrite storage snapshot or media files
 
-### Requirement: CLI Upgrade Planning
+### Requirement: Sync Omits Upgrade Planning
 
-The Site CLI SHALL plan runtime and data upgrades before mutating remote
-Formless instances.
+The Site CLI SHALL keep push and pull focused on synchronizing current
+workspace and target state rather than running upgrade or migration policy.
 
-#### Scenario: Plan instance upgrade
+#### Scenario: Push does not run upgrade planning
 
-- WHEN a user runs an upgrade-aware CLI command against a target instance
-- THEN the CLI compares local package metadata with deployed runtime metadata,
-  app install package facts, archive state when relevant, and deployment status
-- AND local package metadata comes from the active resolver built from bundled
-  packages plus workspace-linked package manifests when present
-- AND the CLI reports code deploy, SQL migration, package app migration, backup,
-  and browser reload requirements
-- AND older archive compatibility normalization is not part of upgrade planning
-
-#### Scenario: Dry-run remains non-mutating
-
-- WHEN an upgrade-aware CLI command runs without its required apply input
-- THEN it performs planning and validation only
-- AND remote runtime, app data, media, archives, and provider resources are not
-  mutated
-
-### Requirement: CLI Upgrade Apply Boundary
-
-The Site CLI SHALL apply migrations only through deployed runtime or Authority
-APIs.
-
-#### Scenario: Apply data upgrade
-
-- WHEN a CLI command applies an upgrade that requires storage or app data
-  migration
-- THEN it invokes deployed runtime or Authority APIs for the mutation
-- AND it does not directly access Durable Object SQLite
-
-#### Scenario: Backup before user-data migration
-
-- WHEN an upgrade plan includes an `auto-with-backup` migration
-- THEN CLI apply requires backup evidence before applying the migration
-- AND the command reports the backup in its apply output
-- AND backup evidence includes backup kind, scope, artifact path, completion
-  timestamp, and target when available
-
-#### Scenario: Manual approval before manual migration
-
-- WHEN an upgrade plan includes a `manual-approval` migration
-- THEN CLI apply requires approval evidence matching that migration approval key
-  before applying the migration
-- AND manual approval evidence includes approval kind, approval key, approval
-  timestamp, and optional approver or reason
-
-### Requirement: Deploy Verification Uses Upgrade Metadata
-
-Instance deploy workflows SHALL verify upgrade metadata after code deploy.
-
-#### Scenario: Verify deployed metadata
-
-- WHEN `formless deploy` deploys runtime code
-- THEN it verifies package version, runtime protocol, storage migration set, and
-  package app revision/hash facts from deployed metadata
-- AND verification failure stops subsequent data migration steps
+- WHEN `formless push` or `formless push --dry-run` runs
+- THEN it does not build a CLI upgrade plan, require migration policy input,
+  require backup evidence for migrations, require manual migration approval, or
+  apply package app or storage migrations
+- AND unsupported schema, package, runtime, or archive facts fail through the
+  ordinary sync validation path
+- AND migration and upgrade policy can be reintroduced later as a new explicit
+  capability without preserving the removed push/deploy flags
 
 ### Requirement: Site CLI Media Package Boundary
 
-The system SHALL keep Site CLI save, pull, push, and deploy behavior stable
+The system SHALL keep Site CLI save, pull, and push behavior stable
 while consuming Media contracts from public package subpaths.
 
 #### Scenario: Archive workflows use Media contract
 
-- GIVEN Site CLI save, pull, push, or deploy workflows validate or
+- GIVEN Site CLI save, pull, or push workflows validate or
   move core media payloads
 - WHEN they need media asset, storage key, delivery, or restore result shapes
 - THEN they use public Media package contracts
@@ -346,75 +313,84 @@ The system SHALL manage reviewable Formless workspaces whose `formless.json`
 manifests describe workspace layout and local configuration while instance
 intent lives in schema-owned storage snapshots.
 
-#### Scenario: Pull and deploy dry-run
+#### Scenario: Pull from remote target
 
-- **WHEN** `formless pull` runs and then `formless deploy --dry-run` runs
-  for a workspace targeting a remote Formless instance
+- **WHEN** `formless pull` runs for a workspace targeting a remote Formless
+  instance
 - **THEN** target control-plane records, app storage snapshots, and media
   payloads are written into workspace source
-- **AND** deploy dry-run reports storage-state, control-plane record, deployment,
-  custom-domain, and DNS drift against the selected target
-- **AND** app record drift compares records by identity rather than treating
-  storage snapshot serialization order as drift
-- **AND** redirect route drift is reported as route intent drift
-- **AND** pull, push, deploy dry-run, and deploy select the remote HTTP origin
-  from an enabled `deployment-config.targetUrl` record rather than
-  `formless.json`
+- **AND** app storage snapshot files and media payloads absent from the target
+  are removed from workspace source
+- **AND** target schema, app install records, routes, deployment config intent,
+  and other schema-owned control-plane records replace the corresponding local
+  workspace source
+- **AND** raw provider state, Alchemy state, deployment observation cache fields,
+  deployment execution history, and provider evidence are not written into
+  reviewable workspace source
+- **AND** `formless pull --dry-run` reports the local source changes that would
+  be written without rewriting workspace source
+- **AND** if local workspace source already matches the target, pull reports
+  `Everything up to date.`
+- **AND** the no-op message is exact and is not accompanied by sync plan, drift,
+  deploy, migration, retry, or warning text
+- **AND** pull and push select the remote HTTP origin from an enabled
+  `deployment-config.targetUrl` record rather than `formless.json`
 
-#### Scenario: Deploy apply refuses unacknowledged target drift
+#### Scenario: Push to remote target
 
-- **WHEN** `formless deploy` finds target drift before provider mutation
-- **THEN** it refuses deploy before Cloudflare or Alchemy mutation
-- **AND** the CLI prints a display-safe drift summary using the same drift
-  counters reported by `formless deploy --dry-run`
-- **AND** the refusal does not direct the user to removed check commands
+- **WHEN** `formless push` runs with ready workspace source
+- **THEN** it reconciles the selected remote target so remote runtime code,
+  provider resources, control-plane records, app records, schema, and media
+  match local workspace source
+- **AND** if the target already matches workspace source and deployment desired
+  state, push exits without restore or provider mutation and reports
+  `Everything up to date.`
+- **AND** the no-op message is exact and is not accompanied by sync plan, drift,
+  deploy, migration, retry, or warning text
+- **AND** `formless push --dry-run` reports the sync plan without mutating local
+  source, remote data, Cloudflare resources, or Alchemy state
+- **AND** push trusts the local workspace as the selected source and does not
+  refuse because the remote target differs from it
 
-#### Scenario: Push apply
+### Requirement: Push Provider Reconciliation
 
-- **WHEN** `formless push --apply` runs with ready workspace source and
-  target drift acknowledged when needed
-- **THEN** the workflow takes a fresh whole-instance backup
-- **AND** dry-runs before applying the composed instance archive restore
+The system SHALL keep push and destroy credential-scoped while making projected
+deployment resource graphs the only normal provider mutation input for
+workspace-controlled deployment intent.
 
-### Requirement: Deploy Commands
-
-The system SHALL keep deployment and destroy credential-scoped while making
-projected deployment resource graphs the only normal provider mutation input
-for workspace-controlled deploy intent.
-
-#### Scenario: First workspace deploy
+#### Scenario: First workspace push
 
 - **GIVEN** a local Formless workspace has saved workspace source and no remote
   target
-- **WHEN** `formless deploy` runs with required provider credentials available
+- **WHEN** `formless push` runs with required provider credentials available
   to the CLI or trusted local deployer
 - **THEN** the deployment uses the instance runtime profile
-- **AND** the deployment does not require installed app records or app archives
-- **AND** deploy metadata is verified after upload
+- **AND** the deployment does not require installed app records or app storage
+  snapshots
 - **AND** display-safe target facts are copied to ignored `.formless/` deploy
   state
 - **AND** provider credentials, Alchemy secrets, automation admin tokens, and
   owner setup tokens are stored only under ignored secret state
-- **AND** when the deploy creates an owner setup capability, CLI output displays
+- **AND** when push creates an owner setup capability, CLI output displays
   the intended owner setup URL for passkey-backed first-owner setup
 - **AND** workspace source is restored or pushed through runtime APIs before
   remote data mutation is considered complete
 - **AND** Worker, Durable Object, R2, DNS, and custom-domain resources are
-  reconciled through tracked Alchemy desired state in the generic deployment
-  path
+  reconciled through tracked Alchemy desired state as an internal push deploy
+  step
 - **AND** redirect source hosts are reconciled as Worker custom-domain
-  resources in the generic deployment path
+  resources in the internal push deploy step
 
-#### Scenario: Route removal deploys provider deletion
+#### Scenario: Route removal pushes provider deletion
 
 - **GIVEN** workspace source no longer contains an enabled route that previously
   projected custom-domain or DNS provider resources
-- **WHEN** `formless deploy` runs with required provider credentials and ignored
+- **WHEN** `formless push` runs with required provider credentials and ignored
   deploy state available
 - **THEN** the CLI or trusted local deployer omits those resources from tracked
   Alchemy desired state
 - **AND** Alchemy removes the omitted tracked provider resources
-- **AND** deploy may patch the target deployment config's latest observation
+- **AND** push may patch the target deployment config's latest observation
   cache with the exact desired-state hash and display-safe result summary
 
 #### Scenario: Workspace destroy
@@ -441,7 +417,7 @@ for workspace-controlled deploy intent.
 
 #### Scenario: Authenticated instance target context
 
-- **WHEN** CLI pull, push, deploy dry-run, deploy, or owner setup workflows
+- **WHEN** CLI pull, push, push dry-run, pull dry-run, or owner setup workflows
   contact a selected deployed instance target
 - **THEN** the CLI resolves one target context containing the normalized target
   URL, ignored local secret state, environment overrides, and optional explicit
@@ -467,39 +443,39 @@ deployment intent records.
 
 #### Scenario: CLI reads deployment records
 
-- **WHEN** CLI pull, push, deploy dry-run, or deploy workflows need instance
+- **WHEN** CLI pull, push, push dry-run, or pull dry-run workflows need instance
   control-plane state
 - **THEN** they read allowed `app-install`, `route`, and
   `deployment-config` records through the instance control-plane protocol or
   workspace storage snapshots
 - **AND** provider credentials remain in CLI, local gateway, or runner-held
   secret locations
-- **AND** deployment observation, evidence, drift, cleanup, and status summaries
+- **AND** deployment observation, evidence, cleanup, sync, and status summaries
   are read through read-only deployment runtime projection or local gateway
   operation responses rather than control-plane storage snapshots
 - **AND** latest persisted deployment status is read from display-safe
   deployment config observation cache fields
 
-#### Scenario: CLI deploy writes latest observation
+#### Scenario: CLI push writes latest observation
 
-- **WHEN** a deployment command starts against a schema-owned target
+- **WHEN** `formless push` starts against a schema-owned target
 - **THEN** it reads the current desired-state projection and applies the
   projected resource graph through the local deployment adapter
-- **AND** after deploy or failure it patches the target deployment config's
-  display-safe latest observation cache
+- **AND** after provider reconciliation or failure it patches the target
+  deployment config's display-safe latest observation cache
 - **AND** runner-held credentials remain outside browser, archive, record
   source, and workspace manifest responses
 
-#### Scenario: Deploy dry-run remains read-only
+#### Scenario: Push dry-run remains read-only
 
-- **WHEN** `formless deploy --dry-run` compares local workspace source, remote
-  instance source, deployment projection, or provider state
-- **THEN** it reports fresh deployment observations without patching deployment
-  config observation cache fields
+- **WHEN** `formless push --dry-run` compares local workspace source, remote
+  instance source, or deployment projection
+- **THEN** it reports a sync plan without patching deployment config
+  observation cache fields
 
 #### Scenario: CLI reads app routes
 
 - **WHEN** an instance workspace needs installed app or public Site route state
 - **THEN** the CLI reads `app-install` and `route` records
-- **AND** route drift is reported by comparing route records rather than
+- **AND** route changes are reported by comparing route records rather than
   hand-derived install route strings or manifest route summaries

@@ -124,35 +124,46 @@ describe("Worker workspace gateway proxy", () => {
     }
   });
 
-  it("rejects known workspace operations without gateway bindings before forwarding", async () => {
-    let forwarded = false;
-    const response = await handleWorkspaceGatewayProxyRequest(
-      new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ kind: "init", name: "workspace" }),
-        headers: {
-          Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-          "Content-Type": "application/json",
-          Origin: "https://example.com",
-        },
-        method: "POST",
-      }),
-      baseEnv,
-      {
-        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
-        fetch: async () => {
-          forwarded = true;
-          return Response.json({ operation: operation("status") });
-        },
-        validateOwnerSession,
-      },
-    );
-    const body = await jsonBody(response);
-
+  it("rejects operations without gateway bindings before forwarding", async () => {
     expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
-    expect(response?.status).toBe(400);
-    expect(body.error).toBe('Workspace gateway operation "init" is not supported.');
-    expect(forwarded).toBe(false);
+    expect("gateway" in workspaceOperationDefinitionForKind("deploymentRefresh").bindings).toBe(
+      false,
+    );
+
+    for (const bodyInput of [
+      { kind: "init", name: "workspace" },
+      { kind: "deploymentRefresh" },
+      { kind: "deployPlan" },
+      { kind: "deployApply" },
+    ]) {
+      let forwarded = false;
+      const response = await handleWorkspaceGatewayProxyRequest(
+        new Request("https://example.com/api/formless/workspace/operations", {
+          body: JSON.stringify(bodyInput),
+          headers: {
+            Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
+            [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
+            "Content-Type": "application/json",
+            Origin: "https://example.com",
+          },
+          method: "POST",
+        }),
+        baseEnv,
+        {
+          capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+          fetch: async () => {
+            forwarded = true;
+            return Response.json({ operation: operation("status") });
+          },
+          validateOwnerSession,
+        },
+      );
+      const body = await jsonBody(response);
+
+      expect(response?.status).toBe(400);
+      expect(body.error).toBe(`Workspace gateway operation "${bodyInput.kind}" is not supported.`);
+      expect(forwarded).toBe(false);
+    }
   });
 
   it("proxies owner-session browser mutations with internal authorization and display-safe actor facts", async () => {
@@ -164,7 +175,7 @@ describe("Worker workspace gateway proxy", () => {
           Authorization: "Bearer browser-value",
           Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
           [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "deployApply",
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "push",
           [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
           "Content-Type": "application/json",
           Origin: "https://example.com",
@@ -287,7 +298,7 @@ describe("Worker workspace gateway proxy", () => {
       let forwarded = false;
       const response = await handleWorkspaceGatewayProxyRequest(
         new Request("https://example.com/api/formless/workspace/operations", {
-          body: JSON.stringify({ kind: "deployApply" }),
+          body: JSON.stringify({ kind: "push" }),
           headers: {
             ...testCase.headers,
             "Content-Type": "application/json",
@@ -299,7 +310,7 @@ describe("Worker workspace gateway proxy", () => {
         {
           fetch: async () => {
             forwarded = true;
-            return Response.json({ operation: operation("deployApply") });
+            return Response.json({ operation: operation("push") });
           },
           validateOwnerSession,
         },
@@ -428,7 +439,7 @@ describe("Worker workspace gateway proxy", () => {
     const calls: ProxyCall[] = [];
     const response = await handleWorkspaceGatewayProxyRequest(
       new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ kind: "deployPlan" }),
+        body: JSON.stringify({ dryRun: true, kind: "push" }),
         headers: {
           Authorization: `Bearer ${adminToken}`,
           "Content-Type": "application/json",
@@ -438,7 +449,7 @@ describe("Worker workspace gateway proxy", () => {
       baseEnv,
       {
         capabilities: WORKSPACE_OPERATION_CAPABILITIES,
-        fetch: captureProxyCalls(calls, operation("deployPlan")),
+        fetch: captureProxyCalls(calls, operation("push")),
       },
     );
     const body = await jsonBody(response);
@@ -476,9 +487,9 @@ describe("Worker workspace gateway proxy", () => {
       },
       {
         expectedError:
-          'Workspace operation "deployApply" requires execution capability "deployment-apply".',
+          'Workspace operation "push" requires execution capability "workspace-source-sync".',
         request: new Request("https://example.com/api/formless/workspace/operations", {
-          body: JSON.stringify({ kind: "deployApply" }),
+          body: JSON.stringify({ kind: "push" }),
           headers: {
             Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
             [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,

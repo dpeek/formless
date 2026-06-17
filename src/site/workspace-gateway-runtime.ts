@@ -404,8 +404,6 @@ function autoSaveSuppressionReasonForWorkspaceOperation(
     case "check":
     case "status":
       return "workspace-check-status";
-    case "deployApply":
-    case "deploymentRefresh":
     case "push":
       return "push-deploy-remote-apply";
     case "pull":
@@ -413,7 +411,6 @@ function autoSaveSuppressionReasonForWorkspaceOperation(
     case "save":
       return operationInput.check ? "workspace-check-status" : "manual-save";
     case "credentialSetup":
-    case "deployPlan":
       return undefined;
   }
 }

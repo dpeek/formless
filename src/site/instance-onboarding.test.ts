@@ -62,6 +62,7 @@ describe("Formless instance onboarding planner", () => {
         name: "Personal",
         workersDevSubdomain: "dpeek",
       },
+      adoptExistingDeployment: false,
       deploymentTarget: "workers.dev",
       expectedUrl: {
         host: "brothers-remote-instance.dpeek.workers.dev",
@@ -69,7 +70,6 @@ describe("Formless instance onboarding planner", () => {
         url: "https://brothers-remote-instance.dpeek.workers.dev",
       },
       instanceName: "brothers-remote-instance",
-      migrationPolicy: "new",
       packageVersion: "0.1.8",
       resources: {
         assets: {
@@ -1270,9 +1270,9 @@ describe("Alchemy Formless instance deployment", () => {
         id: "account-123",
         workersDevSubdomain: "dpeek",
       },
+      adoptExistingDeployment: true,
       instanceName: "brother-instance",
       mediaBucketName: "existing-media",
-      migrationPolicy: "existing",
       packageVersion: "0.1.8",
     });
     const deploymentResourceGraph: DeployResourceGraph = {
@@ -1313,7 +1313,7 @@ describe("Alchemy Formless instance deployment", () => {
 
     expect(apps[0]?.options).toMatchObject({ adopt: true });
     expect(plan).toMatchObject({
-      migrationPolicy: "existing",
+      adoptExistingDeployment: true,
       resources: {
         mediaBucket: {
           name: "existing-media",

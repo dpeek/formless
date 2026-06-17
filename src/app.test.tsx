@@ -636,20 +636,19 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Loading Tasks...");
   });
 
-  it('renders the "/deployments" route as an owner instance shell route with local gateway', () => {
+  it('does not select the "/deployments" instance shell route with local gateway', () => {
     const html = renderRoute("/deployments", undefined, undefined, {
       localWorkspaceGatewayAvailable: true,
     });
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="instance-shell"');
+    expect(html).not.toContain('data-frame="instance-shell"');
     expect(html).not.toContain('data-frame="generated-app"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
-    expect(html).toContain("Instance");
-    expect(html).toContain('aria-label="Instance navigation"');
-    expect(linkHtml(html, "/deployments")).toContain('aria-current="page"');
-    expect(html).toContain("Loading installed apps...");
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('href="/deployments"');
+    expect(html).not.toContain("Deployment setup and progress");
   });
 
   it('does not select the "/deployments" instance shell route without local gateway', () => {
@@ -819,11 +818,12 @@ describe("App smoke routes", () => {
 
     expect(shellHtml).toContain("Instance");
     expect(shellHtml).toContain("Loading installed apps...");
-    expect(deploymentsHtml).toContain("Instance");
-    expect(deploymentsHtml).toContain("Loading installed apps...");
+    expect(deploymentsHtml).toContain("Not found");
+    expect(deploymentsHtml).not.toContain("Instance");
     expect(deploymentsHtml).not.toContain('data-frame="workbench"');
     expect(deploymentsHtml).not.toContain('aria-label="Runtime apps"');
-    expect(linkHtml(deploymentsHtml, "/deployments")).toContain('aria-current="page"');
+    expect(deploymentsHtml).not.toContain('href="/deployments"');
+    expect(deploymentsHtml).not.toContain("Deployment setup and progress");
     expect(unavailableDeploymentsHtml).toContain("Not found");
     expect(unavailableDeploymentsHtml).not.toContain('href="/deployments"');
     expect(unavailableDeploymentsHtml).not.toContain("Deployment setup and progress");

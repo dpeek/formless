@@ -3,7 +3,7 @@
 ## Purpose
 
 Portable archives move Formless app and instance data through reviewable save,
-pull, push, deploy, backup, restore, import, and ejection workflows. They are
+pull, push, backup, restore, import, and ejection workflows. They are
 internal data-movement plumbing, not a separate public CLI command family.
 
 ## Requirements
@@ -52,7 +52,7 @@ envelope.
 - WHEN an app or instance archive is exported
 - THEN the archive uses the latest supported archive version
 - AND the archive records enough package app revision and schema hash facts for
-  future compatibility planning
+  source identity checks
 - AND each archived app install records package revision and source schema hash
   facts
 
@@ -143,7 +143,7 @@ package slice.
 #### Scenario: Package owns portable archive contracts
 
 - **WHEN** CLI, Site runtime, Worker restore APIs, Workspace operations,
-  upgrade planning, tests, or package slices need archive envelope kinds,
+  sync planning, tests, or package slices need archive envelope kinds,
   archive version constants, archive capability parsing, archive formatting,
   restore dry-run planning, media manifest validation, or deterministic local
   archive directory IO
@@ -169,7 +169,7 @@ package slice.
 - **WHEN** archive export, archive restore apply, app install mutation,
   Authority reads or writes, Durable Object storage, browser replica state,
   media object mutation, provider mutation, workspace save/check/pull/push,
-  deploy, or CLI command policy is needed
+  or CLI command policy is needed
 - **THEN** those behaviors remain owned by CLI, Site runtime, Archive workflows,
   Workspace runtime, Worker runtime, Authority, Media runtime, Deploy runtime,
   or provider adapters
@@ -273,7 +273,8 @@ not portable archive directories.
 
 - **WHEN** workspace export, push, restore, or backup needs a portable archive
 - **THEN** the workflow composes a portable archive envelope from workspace
-  storage snapshots, media payloads, and explicit restore policy
+  storage snapshots, media payloads, and the restore policy selected by the
+  owning workflow
 - **AND** workspace `state/instance.json`, `state/apps/<installId>.json`, and
   `state/media` files are not themselves portable archive envelopes
 
@@ -286,7 +287,7 @@ not portable archive directories.
 - **AND** archive terminology is reserved for portable archive envelopes,
   archive restore/export/import/backup workflows, and archive manifest paths
   inside portable archive payloads
-- **AND** workspace result fields, drift summaries, logs, and package-local
+- **AND** workspace result fields, sync summaries, logs, and package-local
   instructions do not call `state/instance.json` an instance archive or
   `state/apps/<installId>.json` app archives
 
@@ -327,7 +328,7 @@ storing package links in instance control-plane records.
 
 #### Scenario: Package link source is dependency config
 
-- **WHEN** workspace source is saved, checked, pushed, deployed, exported, or
+- **WHEN** workspace source is saved, checked, pushed, exported, or
   restored
 - **THEN** `formless.packages.json` is treated as reviewable dependency
   configuration for resolving package app source
@@ -370,7 +371,7 @@ semantic operation contracts through the Workspace package slice.
 
 #### Scenario: Package does not own runtime mutation
 
-- **WHEN** workspace save, pull, push, deploy, credential setup, app install,
+- **WHEN** workspace save, pull, push, credential setup, app install,
   control-plane mutation, Authority reads, provider mutation, Gateway
   authorization, or runtime topology selection is needed
 - **THEN** those behaviors remain owned by CLI, Site runtime, Archive
@@ -385,8 +386,8 @@ semantic operation contracts through the Workspace package slice.
 
 ### Requirement: Instance Workspaces
 
-The system SHALL let a local Formless workspace save, pull, push, dev, and
-deploy instance state without storing instance intent or secrets in the
+The system SHALL let a local Formless workspace save, pull, push, and dev
+instance state without storing instance intent or secrets in the
 manifest.
 
 #### Scenario: Workspace manifest
@@ -406,39 +407,56 @@ manifest.
 
 #### Scenario: Workspace push apply
 
-- **WHEN** `formless push --apply` runs
+- **WHEN** `formless push` runs
 - **THEN** the workflow composes an instance archive from workspace storage
   snapshots and media payloads
-- **AND** a fresh whole-instance backup is taken
-- **AND** the workflow dry-runs before applying the composed instance archive
-  restore
+- **AND** the workflow applies the composed instance archive restore through
+  runtime APIs without requiring apply, replace, stale acknowledgement, or
+  install-set replacement flags
+- **AND** push does not enter archive restore through public restore CLI policy
+  flags, gateway compatibility adapters, or caller-supplied replacement policy
+  shims
+- **AND** remote app installs, control-plane records, app data, and media are
+  reconciled to match the composed workspace state
+- **AND** `formless push --dry-run` validates and reports the restore plan
+  without mutating the target
 
-### Requirement: Workspace Drift
+### Requirement: Workspace Sync Planning
 
-The system SHALL require explicit acknowledgement before applying stale
-workspace source.
+The system SHALL derive compact push and pull sync plans without treating remote
+differences as a safety blocker.
 
-#### Scenario: Check drift
+#### Scenario: Check sync state
 
-- **WHEN** a workspace targeting a remote instance runs `formless deploy --dry-run`
+- **WHEN** a workspace targeting a remote instance runs `formless push`,
+  `formless push --dry-run`, `formless pull`, or `formless pull --dry-run`
 - **THEN** remote target storage snapshots are compared with local workspace
   storage snapshots
 - **AND** `app-install`, unified `route`, `deployment-config`, app record, and
-  media drift are reported without deriving intent from `formless.json`
-- **AND** remote drift checks select the deployed instance origin from enabled
+  media changes are reported without deriving intent from `formless.json`
+- **AND** pull treats target schema-owned control-plane records, routes,
+  deployment config intent, installed app set, app storage snapshots, schemas,
+  and media payloads as the source for local workspace replacement
+- **AND** pull excludes raw provider state, Alchemy state, deployment observation
+  cache fields, deployment execution history, and provider evidence from
+  reviewable workspace source
+- **AND** remote checks select the deployed instance origin from enabled
   `deployment-config.targetUrl` workspace state
-- **AND** deployment attempt, evidence, drift, cleanup, status summaries, and
+- **AND** deployment attempt, evidence, cleanup, status summaries, and
   deployment config observation cache fields are treated as runtime observation
-  state rather than source drift
+  state rather than source changes
 - **AND** protected remote target reads use the workspace's resolved admin
   bearer authorization when no browser owner session is available to the CLI
 
-#### Scenario: Refuse stale push
+#### Scenario: Up-to-date sync
 
-- **WHEN** current target state has drifted from the workspace source and
-  `formless push --apply` runs without stale acknowledgement
-- **THEN** the push is refused
-- **AND** target data remains unchanged
+- **WHEN** local workspace source and selected remote target state are already
+  equivalent
+- **THEN** push and pull report `Everything up to date.`
+- **AND** the no-op message is the exact command output and is not accompanied
+  by sync plan, drift, deploy, migration, retry, or warning text
+- **AND** push does not run archive restore or provider mutation
+- **AND** pull does not rewrite workspace source
 
 ### Requirement: Storage Snapshot Record Entity Names
 
@@ -474,7 +492,7 @@ deployment execution history.
 - **AND** provider API tokens, Alchemy passwords, Alchemy state tokens, raw lease
   tokens, and full provider resource JSON are excluded
 - **AND** `deploy-attempt`, `deploy-evidence-summary`,
-  `deploy-drift-report`, cleanup audit summaries, and provider state payloads
+  cleanup audit summaries, and provider state payloads
   are excluded from instance archives and workspace state
 - **AND** runtime-observed deployment cache fields on `deployment-config`
   records are excluded from instance archives and workspace state
@@ -491,24 +509,24 @@ deployment execution history.
   `instance-control-plane`, schema timestamp, source cursor, schema, and
   records
 - **AND** `formless.json` does not duplicate that intent
-- **AND** deployment attempts, evidence summaries, drift reports, and cleanup
+- **AND** deployment attempts, evidence summaries, and cleanup
   audit summaries are available only through deployment runtime projection or
   gateway operation status, not reviewable workspace state
 - **AND** deployment config observation cache fields are omitted from reviewable
   workspace state
 - **AND** secret-looking fields are rejected from reviewable workspace state
 
-### Requirement: Schema Control-Plane Drift
+### Requirement: Schema Control-Plane Sync Comparison
 
 The system SHALL compare workspace control-plane intent against remote
-schema-owned control-plane records.
+schema-owned control-plane records for push and pull sync planning.
 
-#### Scenario: Check control-plane drift
+#### Scenario: Check control-plane changes
 
-- **GIVEN** `formless deploy --dry-run` compares instance control-plane state
+- **GIVEN** a sync operation compares instance control-plane state
 - **WHEN** remote and local control-plane records differ
-- **THEN** drift is reported from schema-owned app install, route, and
+- **THEN** changes are reported from schema-owned app install, route, and
   deployment config records
-- **AND** app path, exact-host mapping, and redirect drift are compared through
+- **AND** app path, exact-host mapping, and redirect changes are compared through
   `instance:route` records
-- **AND** provider drift summaries remain separate from desired intent drift
+- **AND** provider observations remain separate from desired intent comparison

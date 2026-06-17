@@ -2,116 +2,58 @@
 
 ## Purpose
 
-Upgrade migrations coordinate deployed runtime metadata, migration registration,
-applied-state tracking, migration safety policy, CLI upgrade flow, and stale
-client compatibility for Formless instances.
+Upgrade migrations are reserved for a future explicit upgrade capability.
+Current push and pull synchronization do not expose migration policy, upgrade
+planning, migration backup requirements, or migration approval gates.
 
 ## Requirements
 
-### Requirement: Upgrade Metadata
+### Requirement: Metadata Helpers
 
-The system SHALL expose deployed runtime upgrade facts that CLI workflows can
-compare before mutating a Formless instance.
+The system MAY expose display-safe package and runtime facts for diagnostics
+and future upgrade work.
 
-#### Scenario: Read deployed upgrade facts
+#### Scenario: Read deployed metadata facts
 
-- WHEN a CLI reads deployed runtime metadata from a target instance
+- WHEN a client reads deployed runtime metadata from a target instance
 - THEN the response includes package version, runtime protocol version, storage
   migration set identity, and resolved package app revision/hash facts
 - AND the response uses `Cache-Control: no-store`
 - AND the response does not include provider credentials, admin tokens, Alchemy
   passwords, raw lease tokens, or storage secrets
 
-#### Scenario: Compare local and deployed facts
-
-- WHEN a CLI has local package metadata and deployed runtime metadata
-- THEN it can derive whether code deploy, storage migration, package app
-  migration, archive compatibility, or browser reload behavior is required
-- AND package app comparisons use resolved local package metadata for the
-  active workspace or runtime, including private packages available through the
-  active package resolver
-
 #### Scenario: Import package revision and hash contracts
 
-- WHEN upgrade planning, migration registration, browser reload checks, archive
-  compatibility checks, or tests need package app revision contracts, source
-  schema hash parsing, or deterministic source schema hash computation
+- WHEN package metadata checks or tests need package app revision contracts,
+  source schema hash parsing, or deterministic source schema hash computation
 - THEN those contracts come from `@dpeek/formless-installed-apps`
-- AND migration code does not import those contracts from root runtime modules
+- AND sync code does not import those contracts from root runtime modules
 
-### Requirement: Migration Registry
+### Requirement: Sync Does Not Run Migrations
 
-The system SHALL register code-backed migrations through manifest metadata.
+The system SHALL keep migration and upgrade behavior out of current push and
+pull synchronization.
 
-#### Scenario: Register migration
+#### Scenario: Push omits migration policy
 
-- WHEN a migration is registered
-- THEN it declares a stable id, owner, affected storage or package app family,
-  checksum, safety class, display summary, and execution function
-- AND package app migrations declare from/to package revisions when they
-  transform package app schema or data
+- WHEN `formless push` or `formless push --dry-run` runs
+- THEN it does not accept migration policy input
+- AND it does not build CLI upgrade plans, classify migration safety, apply
+  storage migrations, apply package app migrations, require backup evidence, or
+  require manual approval evidence
 
-#### Scenario: Reject duplicate migration id
+#### Scenario: Pull omits migration policy
 
-- WHEN two registered migrations share the same stable id for the same
-  migration family
-- THEN migration registry validation fails before any migration is applied
-
-### Requirement: Migration Safety Policy
-
-The system SHALL classify migrations by safety before apply.
-
-#### Scenario: Auto-safe migration
-
-- WHEN a migration is additive or cache-only and classified `auto-safe`
-- THEN upgrade apply can run it without a user-data backup requirement
-- AND the migration still records applied-state evidence
-
-#### Scenario: Auto-with-backup migration
-
-- WHEN a migration changes user data or package app schema and is classified
-  `auto-with-backup`
-- THEN upgrade apply requires backup evidence before mutation
-- AND dry-run output includes the affected storage identities or package app
-  installs
-- AND CLI backup evidence identifies `kind: "backup"`, the backup scope,
-  artifact path, completion timestamp, and target when available
-
-#### Scenario: Manual-approval migration
-
-- WHEN a migration is destructive, irreversible, or replaces provider resources
-  and is classified `manual-approval`
-- THEN upgrade apply refuses to run it without explicit manual approval
-- AND dry-run output reports the destructive or provider-impacting behavior
-- AND CLI manual approval evidence identifies `kind: "manual-approval"`, the
-  approval key, approval timestamp, and optional approver or reason
-
-### Requirement: CLI Upgrade Flow
-
-The system SHALL keep upgrade planning and apply user-facing through CLI
-workflows.
-
-#### Scenario: Plan upgrade
-
-- WHEN a CLI plans an upgrade for a target instance
-- THEN it reads local metadata, deployed runtime metadata, app install facts,
-  archive state when relevant, and deployment status
-- AND it reports required code deploy, SQL migration, package app migration,
-  unsupported archive input, browser reload, and backup steps without mutating
-  data
-
-#### Scenario: Apply upgrade
-
-- WHEN a CLI applies an upgrade
-- THEN it uses deployed runtime or Authority APIs to perform storage and app
-  data migrations
-- AND it does not mutate Durable Object SQLite directly
-- AND it verifies deployed metadata and migration applied state after apply
+- WHEN `formless pull` or `formless pull --dry-run` runs
+- THEN it copies or plans target state into workspace source without applying
+  runtime or data migrations
+- AND unsupported future package, runtime, schema, or archive facts fail through
+  ordinary sync validation until an explicit upgrade capability is reintroduced
 
 ### Requirement: Stale Runtime Compatibility
 
 The system SHALL prefer reload-required behavior over blocking server-side
-migrations for stale browser clients.
+future migrations for stale browser clients.
 
 #### Scenario: Compatible stale read
 

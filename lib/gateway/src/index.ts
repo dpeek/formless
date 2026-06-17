@@ -65,7 +65,6 @@ export type {
   WorkspaceGatewayAuthorizationVia,
   WorkspaceGatewayCheckOrPullStartInput,
   WorkspaceGatewayCredentialSetupStartInput,
-  WorkspaceGatewayDeployStartInput,
   WorkspaceGatewayDisplayObject,
   WorkspaceGatewayDisplayValue,
   WorkspaceGatewayExternalAuthorizationEvent,
@@ -429,10 +428,6 @@ function parseWorkspaceGatewayInputField(
 function invalidWorkspaceGatewayEnumFieldError(
   field: WorkspaceOperationInputFieldDefinition,
 ): string {
-  if (field.key === "migrationPolicy") {
-    return 'Workspace gateway migrationPolicy must be "new" or "existing".';
-  }
-
   if (field.key === "provider" && field.allowedValues?.length === 1) {
     return `Workspace credential setup provider must be "${field.allowedValues[0]}".`;
   }

@@ -154,7 +154,7 @@ describe("Worker document routing", () => {
     ).toBe(true);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/deployments"), instanceProfile),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(
         documentRequest("http://example.com/apps/personal"),
@@ -227,7 +227,7 @@ describe("Worker document routing", () => {
         documentRequest("http://example.com/deployments"),
         instanceProfile,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
         new Request("http://example.com/apps/personal/schema", {
@@ -288,7 +288,7 @@ describe("Worker document routing", () => {
         documentRequest("http://example.com/deployments"),
         instanceProfile,
       ),
-    ).toBe("owner");
+    ).toBe("anonymous");
   });
 
   it("answers schema-key route policy by runtime profile", () => {
@@ -426,12 +426,12 @@ describe("Worker document routing", () => {
     ).toEqual(generatedAppRequests.map(() => false));
   });
 
-  it("blocks instance deployment routes on mapped public Site hosts", () => {
+  it("treats deployments path as a published Site document path", () => {
     expect(
       shouldBlockMappedSiteHostBrowserRoute(documentRequest("http://example.com/deployments"), {
         profile: "publishedSite",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldHandlePublishedSiteDocument(documentRequest("http://example.com/deployments"), {
         profile: "publishedSite",

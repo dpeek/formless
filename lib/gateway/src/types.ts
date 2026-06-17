@@ -16,7 +16,6 @@ import type {
   WorkspaceBrowserOperationKind,
   WorkspaceOperationCheckOrPullStartInput,
   WorkspaceOperationCredentialSetupStartInput,
-  WorkspaceOperationDeployStartInput,
   WorkspaceOperationDisplayObject,
   WorkspaceOperationDisplayValue,
   WorkspaceOperationError,
@@ -126,8 +125,6 @@ export type WorkspaceGatewayCheckOrPullStartInput = WorkspaceOperationCheckOrPul
 export type WorkspaceGatewayPushStartInput = WorkspaceOperationPushStartInput;
 
 export type WorkspaceGatewayCredentialSetupStartInput = WorkspaceOperationCredentialSetupStartInput;
-
-export type WorkspaceGatewayDeployStartInput = WorkspaceOperationDeployStartInput;
 
 export type WorkspaceGatewayStartInput = WorkspaceOperationStartInput;
 

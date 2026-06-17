@@ -3,10 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { deployLatestStatusDisplaySummary } from "@dpeek/formless-deploy";
-
 import packageJson from "../../package.json";
-import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, type AppArchive } from "@dpeek/formless-archive";
+
 import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
@@ -50,8 +48,6 @@ import {
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
-  writeInstanceWorkspaceAppStorageSnapshot,
-  writeInstanceWorkspaceControlPlaneStorageSnapshot,
   readInstanceWorkspaceAutoSaveState,
   writeInstanceWorkspaceAutoSaveState,
 } from "@dpeek/formless-workspace/node";
@@ -70,7 +66,6 @@ const bootstrapToken = "bootstrap-local-token";
 const csrfToken = "csrf-local-token";
 const ownerSecret = "owner-session-secret";
 const adminToken = "admin-local-token";
-const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 const proxyToken = "proxy-local-token";
 
 afterEach(async () => {
@@ -346,8 +341,6 @@ describe("local workspace gateway", () => {
       { kind: "save" },
       { kind: "pull" },
       { kind: "push" },
-      { kind: "deployPlan" },
-      { kind: "deployApply" },
       { kind: "credentialSetup", provider: "cloudflare" },
     ]) {
       const rejected = await gatewayJson(operationRequest(body, bootstrapHeaders()), {
@@ -748,287 +741,29 @@ describe("local workspace gateway", () => {
     expect(browserBearer.response.status).toBe(401);
   });
 
-  it("runs deploy plan through the gateway with storage-state desired-state projection", async () => {
+  it("rejects removed deployment gateway operations before execution", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
+    let executed = false;
 
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot);
-    await writeWorkspaceAppState(workspaceRoot, "site", "Site");
-
-    const planned = await gatewayJson(
-      operationRequest({ kind: "deployPlan" }, browserHeaders({ cookie, csrf: true })),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          accountDiscovery: {
-            listAccounts: async () => [
-              {
-                id: "account-123",
-                workersDevSubdomain: "dpeek",
-              },
-            ],
-          },
-          fetch: deployApplyFetch([], "site"),
-          operationIds: ["op_deploy_plan_00000001"],
-          packageVersion: packageJson.version,
-          timestamps: [
-            "2026-06-02T01:10:00.000Z",
-            "2026-06-02T01:10:01.000Z",
-            "2026-06-02T01:10:02.000Z",
-          ],
-        }),
-      },
-    );
-
-    expect(planned.response.status).toBe(200);
-    expect(planned.body.operation).toMatchObject({
-      actor: "browser",
-      id: "op_deploy_plan_00000001",
-      operation: "deployPlan",
-      result: {
-        deployment: {
-          desiredState: {
-            resourceCount: 1,
-            resourcesByKind: {
-              "cloudflare-worker-custom-domain": 1,
+    for (const kind of ["deployPlan", "deployApply", "deploymentRefresh"]) {
+      const rejected = await gatewayJson(
+        operationRequest({ kind }, browserHeaders({ cookie, csrf: true })),
+        {
+          deps: gatewayDeps(workspaceRoot, {
+            fetch: async () => {
+              executed = true;
+              return Response.json({});
             },
-            targetId: "instance.primary",
-          },
-          expectedUrl: "https://personal.dpeek.workers.dev",
-          workerName: "personal",
+          }),
         },
-      },
-      status: "succeeded",
-    });
-    expect(planned.body.operation).toMatchObject({
-      steps: [
-        { id: "credentials", status: "succeeded" },
-        { id: "account-selection", status: "succeeded" },
-        { id: "desired-state-plan", status: "succeeded" },
-        { id: "worker-deploy", status: "skipped" },
-        { id: "health-check", status: "skipped" },
-        { id: "owner-setup", status: "skipped" },
-        { id: "workspace-push-writeback", status: "skipped" },
-        { id: "observation-refresh", status: "skipped" },
-      ],
-    });
-    expect(JSON.stringify(planned.body)).not.toContain("secret");
-  });
+      );
 
-  it("runs deploy apply through the gateway with exact desired-state observation", async () => {
-    const workspaceRoot = await makeTempDir();
-    const cookie = await ownerCookie();
-    const requests: CapturedRequest[] = [];
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot);
-    await writeWorkspaceAppState(workspaceRoot, "site", "Site");
-
-    const deps = gatewayDeps(workspaceRoot, {
-      accountDiscovery: {
-        listAccounts: async () => [
-          {
-            id: "account-123",
-            workersDevSubdomain: "dpeek",
-          },
-        ],
-      },
-      deploymentAdapter: {
-        deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
-      },
-      fetch: deployApplyFetch(requests, "site"),
-      operationIds: ["op_deploy_apply_00000001"],
-      packageRoot: "/package",
-      packageVersion: packageJson.version,
-      randomTokens: ["generated-admin-token", setupToken],
-      timestamps: [
-        "2026-06-02T01:11:00.000Z",
-        "2026-06-02T01:11:01.000Z",
-        "2026-06-02T01:11:02.000Z",
-        "2026-06-02T01:11:03.000Z",
-      ],
-    });
-    const applied = await gatewayJson(
-      operationRequest({ kind: "deployApply" }, browserHeaders({ cookie, csrf: true })),
-      {
-        deps,
-      },
-    );
-
-    expect(applied.response.status).toBe(200);
-    if (
-      typeof applied.body.operation === "object" &&
-      applied.body.operation !== null &&
-      "status" in applied.body.operation &&
-      applied.body.operation.status !== "succeeded" &&
-      "summary" in applied.body.operation
-    ) {
-      const summary = applied.body.operation.summary;
-      throw new Error(JSON.stringify(summary));
+      expect(rejected.response.status).toBe(400);
+      expect(rejected.body.error).toBe(`Workspace gateway operation "${kind}" is not supported.`);
     }
-    expect(applied.body.operation).toMatchObject({
-      actor: "browser",
-      id: "op_deploy_apply_00000001",
-      operation: "deployApply",
-      result: {
-        deployment: {
-          cleanup: {
-            status: "not-run",
-          },
-          drift: {
-            status: "no-drift",
-          },
-          evidence: {
-            count: 0,
-          },
-          observation: {
-            desiredState: deploymentDesiredStateRef(),
-            evidenceCount: 0,
-            runnerId: "local-gateway",
-            observedStatus: "deployed",
-          },
-        },
-      },
-      status: "succeeded",
-    });
-    expect(applied.body.operation).toMatchObject({
-      steps: [
-        { id: "credentials", status: "succeeded" },
-        { id: "account-selection", status: "succeeded" },
-        { id: "desired-state-plan", status: "succeeded" },
-        { id: "worker-deploy", status: "succeeded" },
-        { id: "health-check", status: "succeeded" },
-        { id: "owner-setup", status: "skipped" },
-        { id: "workspace-push-writeback", status: "succeeded" },
-        { id: "observation-refresh", status: "succeeded" },
-      ],
-    });
-    expect(
-      capturedRequestJson<{ input: { observedStatus: string }; recordId: string }>(
-        requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"),
-      ),
-    ).toMatchObject({ recordId: "instance.primary", input: { observedStatus: "deployed" } });
-    const requestCountAfterApply = requests.length;
-    const read = await gatewayJson(
-      new Request(
-        `http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_deploy_apply_00000001`,
-        {
-          headers: browserHeaders({ cookie }),
-        },
-      ),
-      { deps },
-    );
-    const serializedApplied = JSON.stringify(applied.body);
-    const serializedRead = JSON.stringify(read.body);
 
-    expect(read.response.status).toBe(200);
-    expect(read.body.operation).toMatchObject({
-      id: "op_deploy_apply_00000001",
-      operation: "deployApply",
-      result: {
-        deployment: {
-          observation: {
-            desiredState: deploymentDesiredStateRef(),
-            observedStatus: "deployed",
-          },
-        },
-      },
-      status: "succeeded",
-    });
-    expect(requests).toHaveLength(requestCountAfterApply);
-    await expectNoDeploymentHistoryStorageState(workspaceRoot);
-    for (const serialized of [serializedApplied, serializedRead]) {
-      expect(serialized).not.toContain("generated-admin-token");
-      expect(serialized).not.toContain("alchemy-password");
-      expect(serialized).not.toContain("lease:local-gateway");
-      expect(serialized).not.toContain(applied.sidecar.endpoint);
-      expect(serialized).not.toContain(proxyToken);
-    }
-  });
-
-  it("runs explicit deployment refresh through the gateway", async () => {
-    const workspaceRoot = await makeTempDir();
-    const cookie = await ownerCookie();
-    const requests: CapturedRequest[] = [];
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeDeployStorageSnapshot(workspaceRoot);
-    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
-    await writeFile(
-      path.join(workspaceRoot, ".formless/instance.env"),
-      "FORMLESS_ADMIN_TOKEN=generated-admin-token\n",
-    );
-
-    const refreshed = await gatewayJson(
-      operationRequest(
-        {
-          kind: "deploymentRefresh",
-        },
-        browserHeaders({ cookie, csrf: true }),
-      ),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          fetch: deployApplyFetch(requests, "site"),
-          operationIds: ["op_deployment_refresh_00000001"],
-        }),
-      },
-    );
-
-    expect(refreshed.response.status).toBe(200);
-    expect(refreshed.body.operation).toMatchObject({
-      actor: "browser",
-      id: "op_deployment_refresh_00000001",
-      operation: "deploymentRefresh",
-      result: {
-        deployment: {
-          observation: {
-            observedStatus: "unknown",
-            targetId: "instance.primary",
-          },
-          status: {
-            state: "pending-changes",
-          },
-        },
-      },
-      status: "succeeded",
-    });
-    expect(refreshed.body.operation).toMatchObject({
-      steps: [
-        { id: "credentials", status: "succeeded" },
-        { id: "account-selection", status: "skipped" },
-        { id: "desired-state-plan", status: "succeeded" },
-        { id: "worker-deploy", status: "skipped" },
-        { id: "health-check", status: "skipped" },
-        { id: "owner-setup", status: "skipped" },
-        { id: "workspace-push-writeback", status: "skipped" },
-        { id: "observation-refresh", status: "succeeded" },
-      ],
-    });
-    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      [
-        "GET /api/formless/deployments/desired-state",
-        "GET /api/formless/deployments/status",
-        "POST /api/formless/control-plane/operations/deployment-config/update",
-      ],
-    );
-    const desiredState = deploymentDesiredStateRef();
-    const expectedStatusSummary = deployLatestStatusDisplaySummary({
-      checkedAt: "2026-06-02T01:11:00.000Z",
-      latestDesiredState: desiredState,
-      state: "pending-changes",
-      targetId: "instance.primary",
-    });
-
-    expect(
-      capturedRequestJson<{ input: { observedStatus: string; observedSummary: string } }>(
-        requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"),
-      ),
-    ).toMatchObject({
-      input: {
-        observedStatus: "unknown",
-        observedSummary: expectedStatusSummary.detail,
-      },
-    });
+    expect(executed).toBe(false);
   });
 
   it("scopes operation ids to the configured workspace root", async () => {
@@ -1472,9 +1207,9 @@ function gatewayDeps(
   const randomTokens = [...(options.randomTokens ?? [])];
 
   return {
-    ...(options.accountDiscovery === undefined
-      ? {}
-      : { accountDiscovery: options.accountDiscovery }),
+    accountDiscovery: options.accountDiscovery ?? {
+      listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
+    },
     ...(options.autoSaveDebounceMs === undefined
       ? {}
       : { autoSaveDebounceMs: options.autoSaveDebounceMs }),
@@ -1510,9 +1245,11 @@ function gatewayDeps(
             },
           })),
     cwd: workspaceRoot,
-    ...(options.deploymentAdapter === undefined
-      ? {}
-      : { deploymentAdapter: options.deploymentAdapter }),
+    deploymentAdapter: options.deploymentAdapter ?? {
+      deploy: async (input: { plan: { expectedUrl: { url: string } } }) => ({
+        url: input.plan.expectedUrl.url,
+      }),
+    },
     fetch:
       options.fetch ??
       (async () => Response.json({ setupComplete: options.setupComplete ?? false })),
@@ -1538,8 +1275,8 @@ function gatewayDeps(
     ...(options.operationCapabilities === undefined
       ? {}
       : { operationCapabilities: options.operationCapabilities }),
-    ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
-    ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
+    packageRoot: options.packageRoot ?? process.cwd(),
+    packageVersion: options.packageVersion ?? packageJson.version,
     randomToken: () => randomTokens.shift() ?? "generated-token",
     readOwnerSetupStatus: async () => ({ setupComplete: options.setupComplete ?? false }),
     setupCapability: {
@@ -1665,216 +1402,6 @@ function workspaceSaveFetch(requests: CapturedRequest[], installId: string): typ
   };
 }
 
-function deployApplyFetch(requests: CapturedRequest[], installId: string): typeof fetch {
-  return async (url, init) => {
-    const requestUrl =
-      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-    const parsedUrl = new URL(requestUrl);
-
-    requests.push({
-      body: typeof init?.body === "string" ? init.body : undefined,
-      headers: normalizeHeaders(init?.headers),
-      method: init?.method ?? "GET",
-      url: requestUrl,
-    });
-
-    if (parsedUrl.pathname === "/api/formless/deploy") {
-      return Response.json({
-        packageApps: listInstallableAppPackages(bundledAppPackageResolver).map((appPackage) => ({
-          packageAppKey: appPackage.packageAppKey,
-          packageRevision: appPackage.packageRevision,
-          sourceSchemaHash: appPackage.sourceSchemaHash,
-        })),
-        packageVersion: packageJson.version,
-        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
-        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
-        version: packageJson.version,
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/app-installs") {
-      return Response.json({
-        installs: [installedSite(installId, "Site")],
-        packages: listInstallableAppPackages(bundledAppPackageResolver),
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/control-plane/bootstrap") {
-      return Response.json({
-        cursor: 1,
-        records: deployControlPlaneRecords(installId),
-        schema: {},
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/control-plane/snapshot") {
-      return Response.json(controlPlaneSnapshot(deployControlPlaneRecords(installId)));
-    }
-
-    if (parsedUrl.pathname === `/api/app-installs/site/${installId}/snapshot`) {
-      return Response.json(snapshot([], `app:${installId}`));
-    }
-
-    if (parsedUrl.pathname === "/api/formless/domain-mappings") {
-      return Response.json({ mappings: [] });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/archive/restore") {
-      const body = parseCapturedBody<{ archive?: { restorePolicy?: { dryRun?: boolean } } }>(init);
-      const dryRun = body.archive?.restorePolicy?.dryRun !== false;
-
-      return Response.json(
-        dryRun
-          ? { ok: true, plan: { summary: restoreSummary(installId) } }
-          : { ok: true, report: { applied: true, summary: restoreSummary(installId) } },
-      );
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/desired-state") {
-      const desiredState = deploymentDesiredStateRef();
-
-      return Response.json({
-        desiredState: {
-          ...desiredState,
-          createdAt: "2026-06-02T01:11:02.000Z",
-          display: {
-            resourceCount: 1,
-            resourcesByKind: { "cloudflare-worker-custom-domain": 1 },
-            title: "Primary instance target",
-          },
-          resourceGraph: { resources: [], targetId: desiredState.targetId },
-          schemaVersion: 1,
-          source: { fingerprint: "source-1", intentRevision: 1 },
-        },
-        target: { kind: "instance", targetId: desiredState.targetId },
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/deployments/status") {
-      const desiredState = deploymentDesiredStateRef();
-
-      return Response.json({
-        status: {
-          checkedAt: "2026-06-02T01:11:02.000Z",
-          latestDesiredState: desiredState,
-          state: "pending-changes",
-          targetId: desiredState.targetId,
-        },
-        target: { kind: "instance", targetId: desiredState.targetId },
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/control-plane/operations/deployment-config/update") {
-      const body = parseCapturedBody<{
-        idempotencyKey: string;
-        input: Record<string, unknown>;
-        recordId: string;
-      }>(init);
-      const record = {
-        createdAt: "2026-05-26T00:00:00.000Z",
-        entity: "deployment-config",
-        id: body.recordId,
-        values: {
-          accountId: "account-123",
-          createdAt: "2026-05-26T00:00:00.000Z",
-          enabled: true,
-          label: "Primary instance",
-          providerFamily: "cloudflare",
-          targetId: "instance.primary",
-          targetKind: "instance",
-          targetUrl: "https://personal.dpeek.workers.dev",
-          updatedAt: "2026-05-26T00:00:00.000Z",
-          workerName: "personal",
-          ...body.input,
-        },
-      };
-
-      return Response.json({
-        invocation: {},
-        output: {
-          affectedChangeIds: [],
-          changes: [],
-          cursor: 2,
-          record,
-          type: "update",
-        },
-        status: "committed",
-      });
-    }
-
-    return Response.json({ error: "not found" }, { status: 404 });
-  };
-}
-
-async function writeDeployStorageSnapshot(workspaceRoot: string) {
-  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
-
-  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
-    manifest,
-    snapshot: controlPlaneSnapshot(deployControlPlaneRecords("site")),
-    workspaceRoot,
-  });
-}
-
-async function expectNoDeploymentHistoryStorageState(workspaceRoot: string) {
-  const snapshot = JSON.parse(
-    await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
-  ) as { records: Array<{ entity: string }> };
-
-  expect(snapshot.records.map((record) => record.entity)).not.toEqual(
-    expect.arrayContaining([
-      "instance:deploy-attempt",
-      "instance:deploy-evidence-summary",
-      "instance:deploy-drift-report",
-    ]),
-  );
-}
-
-async function writeWorkspaceAppState(workspaceRoot: string, installId: string, label: string) {
-  const manifest = defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" });
-  const archive = appArchive(installId, label);
-
-  if (archive.data.kind !== STORAGE_SNAPSHOT_KIND) {
-    throw new Error("Expected app state data to be a storage snapshot.");
-  }
-
-  await writeInstanceWorkspaceAppStorageSnapshot({
-    installId,
-    manifest,
-    snapshot: archive.data,
-    workspaceRoot,
-  });
-}
-
-function appArchive(installId: string, label: string): AppArchive {
-  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
-
-  if (!facts) {
-    throw new Error("Missing bundled package facts for site.");
-  }
-
-  return {
-    kind: APP_ARCHIVE_KIND,
-    version: ARCHIVE_VERSION,
-    exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "core-media-assets"],
-    restorePolicy: { dryRun: true, installCollisions: "reject" },
-    app: {
-      installId,
-      packageAppKey: "site",
-      packageRevision: facts.packageRevision,
-      sourceSchemaKey: "site",
-      sourceSchemaHash: facts.sourceSchemaHash,
-      label,
-      status: "installed",
-      createdAt: "2026-05-01T00:00:00.000Z",
-      updatedAt: "2026-05-01T00:00:00.000Z",
-    },
-    data: snapshot([], `app:${installId}`),
-    media: { objects: [] },
-  };
-}
-
 function installedSite(installId: string, label: string) {
   const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
 
@@ -1965,86 +1492,6 @@ function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
   ];
 }
 
-function deployControlPlaneRecords(installId: string): StoredRecord[] {
-  const now = "2026-05-26T00:00:00.000Z";
-
-  return [
-    ...gatewayControlPlaneRecords(installId),
-    {
-      createdAt: now,
-      entity: "route",
-      id: "route:host:public-site:www.example.com",
-      values: {
-        appInstall: installId,
-        createdAt: now,
-        enabled: true,
-        kind: "mount",
-        matchHost: "www.example.com",
-        matchPath: "/",
-        matchPrefix: "/",
-        deploymentConfig: "instance.primary",
-        surface: "public-site",
-        targetProfile: "public-site",
-        updatedAt: now,
-      },
-    },
-    {
-      createdAt: now,
-      entity: "deployment-config",
-      id: "instance.primary",
-      values: {
-        accountId: "account-123",
-        createdAt: now,
-        enabled: true,
-        label: "Primary instance",
-        providerFamily: "cloudflare",
-        targetId: "instance.primary",
-        targetKind: "instance",
-        targetUrl: "https://personal.dpeek.workers.dev",
-        updatedAt: now,
-        workerName: "personal",
-      },
-    },
-  ];
-}
-
-function deploymentDesiredStateRef() {
-  return {
-    hash: `sha256:${"b".repeat(64)}`,
-    revision: 3,
-    targetId: "instance.primary",
-    versionId: "desired.instance.primary.3",
-  };
-}
-
-function restoreSummary(installId: string) {
-  return {
-    appCount: 1,
-    createdInstalls: [],
-    mediaCountsByApp: { [installId]: 0 },
-    recordCountsByApp: { [installId]: { total: 0 } },
-    replacedInstalls: [installId],
-  };
-}
-
 function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
   return Object.fromEntries(new Headers(headers).entries());
-}
-
-function requestByPath(requests: readonly CapturedRequest[], pathname: string): CapturedRequest {
-  const request = requests.find((candidate) => new URL(candidate.url).pathname === pathname);
-
-  if (!request) {
-    throw new Error(`Expected request to ${pathname}.`);
-  }
-
-  return request;
-}
-
-function capturedRequestJson<T>(request: CapturedRequest): T {
-  return JSON.parse(request.body ?? "{}") as T;
-}
-
-function parseCapturedBody<T>(init: RequestInit | undefined): T {
-  return JSON.parse(typeof init?.body === "string" ? init.body : "{}") as T;
 }

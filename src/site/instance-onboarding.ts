@@ -86,17 +86,16 @@ export type AlchemyFormlessInstanceAccountDiscoveryDependencies = {
 
 export type PlanFormlessInstanceDeploymentInput = {
   account: FormlessInstanceDeploymentAccount;
+  adoptExistingDeployment?: boolean;
   defaults?: FormlessInstanceDeploymentDefaults;
   instanceName?: string | null;
   mediaBucketName?: string | null;
-  migrationPolicy?: FormlessInstanceDeploymentMigrationPolicy;
   packageVersion: string;
 };
 
-export type FormlessInstanceDeploymentMigrationPolicy = "existing" | "new";
-
 export type FormlessInstanceDeploymentPlan = {
   account: FormlessInstanceDeploymentAccount;
+  adoptExistingDeployment: boolean;
   deploymentTarget: "workers.dev";
   expectedUrl: {
     host: string;
@@ -104,7 +103,6 @@ export type FormlessInstanceDeploymentPlan = {
     url: string;
   };
   instanceName: string;
-  migrationPolicy: FormlessInstanceDeploymentMigrationPolicy;
   packageVersion: string;
   resources: {
     assets: {
@@ -493,7 +491,7 @@ export function planFormlessInstanceDeployment(
   const instanceName = normalizeFormlessInstanceName(rawInstanceName);
   const account = parseDeploymentAccount(input.account);
   const packageVersion = parseRequiredString("Package version", input.packageVersion);
-  const migrationPolicy = parseDeploymentMigrationPolicy(input.migrationPolicy ?? "new");
+  const adoptExistingDeployment = input.adoptExistingDeployment === true;
   const workerName = instanceName;
   const mediaBucketName =
     parseOptionalString(
@@ -505,6 +503,7 @@ export function planFormlessInstanceDeployment(
 
   return {
     account,
+    adoptExistingDeployment,
     deploymentTarget: "workers.dev",
     expectedUrl: {
       host,
@@ -512,7 +511,6 @@ export function planFormlessInstanceDeployment(
       url: `https://${host}`,
     },
     instanceName,
-    migrationPolicy,
     packageVersion,
     resources: {
       assets: {
@@ -940,7 +938,7 @@ export async function deployFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
-  const adoptExistingDeployment = plan.migrationPolicy === "existing";
+  const adoptExistingDeployment = plan.adoptExistingDeployment;
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     adopt: adoptExistingDeployment,
     phase: "up",
@@ -989,7 +987,7 @@ export async function destroyFormlessInstanceWithAlchemy(
     input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
-  const adoptExistingDeployment = plan.migrationPolicy === "existing";
+  const adoptExistingDeployment = plan.adoptExistingDeployment;
 
   try {
     const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
@@ -1894,14 +1892,6 @@ function parseDeploymentTarget(value: unknown): "workers.dev" {
   }
 
   return "workers.dev";
-}
-
-function parseDeploymentMigrationPolicy(value: unknown): FormlessInstanceDeploymentMigrationPolicy {
-  if (value === "existing" || value === "new") {
-    return value;
-  }
-
-  throw new Error('Formless instance deployment migration policy must be "new" or "existing".');
 }
 
 function parseRequiredString(context: string, value: unknown): string {
