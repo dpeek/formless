@@ -656,6 +656,20 @@ export type DeployFormlessInstanceWorkspaceResult = {
 
 export type DeployLocalFormlessWorkspaceFailureStepId = "health-check";
 
+export class DeployLocalFormlessWorkspaceRemoteDriftError extends Error {
+  readonly drift: FormlessInstanceWorkspaceDriftSummary;
+  readonly retryGuidance =
+    "Run `formless pull` or `formless save` to align the workspace source with the remote target, then retry deploy.";
+  readonly targetAlias: string;
+
+  constructor(input: { drift: FormlessInstanceWorkspaceDriftSummary; targetAlias: string }) {
+    super("Formless deploy refused because remote drift was detected.");
+    this.name = "DeployLocalFormlessWorkspaceRemoteDriftError";
+    this.drift = input.drift;
+    this.targetAlias = input.targetAlias;
+  }
+}
+
 export class DeployLocalFormlessWorkspaceStepError extends Error {
   readonly evidence: Record<string, boolean | number | string | null>;
   readonly expectedUrl: string;
@@ -2150,9 +2164,10 @@ export async function planDeployLocalFormlessWorkspace(
     !isEmptyRemoteInitialPopulationDrift(preflight.drift) &&
     !input.allowRemoteDrift
   ) {
-    throw new Error(
-      "Formless deploy refused because remote drift was detected; review `formless check` and retry after saving or pulling the workspace source.",
-    );
+    throw new DeployLocalFormlessWorkspaceRemoteDriftError({
+      drift: preflight.drift,
+      targetAlias: preflight.selectedTarget.alias,
+    });
   }
 
   if (preflight && isEmptyRemoteInitialPopulationDrift(preflight.drift)) {
@@ -3898,7 +3913,23 @@ function controlPlaneRecordKey(record: Pick<StoredRecord, "entity" | "id">) {
 }
 
 function comparableAppRecordsJson(archive: AppArchive): string {
-  return JSON.stringify(stableValue(normalizeGeneratedArchiveTimestamps(archive).data));
+  const data = normalizeGeneratedArchiveTimestamps(archive).data;
+
+  return JSON.stringify(
+    stableValue({
+      ...data,
+      records: [...data.records].sort(compareRecordsByEntityAndId),
+    }),
+  );
+}
+
+function compareRecordsByEntityAndId(
+  left: Pick<StoredRecord, "entity" | "id">,
+  right: Pick<StoredRecord, "entity" | "id">,
+): number {
+  const entityOrder = left.entity.localeCompare(right.entity);
+
+  return entityOrder === 0 ? left.id.localeCompare(right.id) : entityOrder;
 }
 
 function comparableAppMediaJson(

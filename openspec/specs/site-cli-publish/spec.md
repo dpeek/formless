@@ -354,10 +354,20 @@ intent lives in schema-owned storage snapshots.
   payloads are written into workspace source
 - **AND** deploy dry-run reports storage-state, control-plane record, deployment,
   custom-domain, and DNS drift against the selected target
+- **AND** app record drift compares records by identity rather than treating
+  storage snapshot serialization order as drift
 - **AND** redirect route drift is reported as route intent drift
 - **AND** pull, push, deploy dry-run, and deploy select the remote HTTP origin
   from an enabled `deployment-config.targetUrl` record rather than
   `formless.json`
+
+#### Scenario: Deploy apply refuses unacknowledged target drift
+
+- **WHEN** `formless deploy` finds target drift before provider mutation
+- **THEN** it refuses deploy before Cloudflare or Alchemy mutation
+- **AND** the CLI prints a display-safe drift summary using the same drift
+  counters reported by `formless deploy --dry-run`
+- **AND** the refusal does not direct the user to removed check commands
 
 #### Scenario: Push apply
 

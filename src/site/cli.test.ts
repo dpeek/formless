@@ -3149,6 +3149,7 @@ describe("Formless Site CLI", () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const deployInputs: DeployFormlessInstanceInput[] = [];
+    const logs: string[] = [];
     const requests: CapturedFetchRequest[] = [];
     const localDavid = appArchive("david", "David Peek", { records: [] });
     const remoteRecords: StoredRecord[] = [
@@ -3169,8 +3170,10 @@ describe("Formless Site CLI", () => {
     );
     await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
-    await expect(
-      runFormlessCli(
+    let thrown: unknown;
+
+    try {
+      await runFormlessCli(
         ["deploy", "--workspace", workspaceRoot],
         cliDeps(tempDir, {
           deploy: async (input) => {
@@ -3187,9 +3190,23 @@ describe("Formless Site CLI", () => {
             [],
             controlPlaneRecords(),
           ),
+          logs,
         }),
-      ),
-    ).rejects.toThrow("Formless deploy refused because remote drift was detected");
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = thrown instanceof Error ? thrown.message : "";
+
+    expect(message).toContain("Formless deploy refused because remote drift was detected");
+    expect(message).not.toContain("formless check");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: deploy apply (failed).");
+    expect(logs[0]).toContain("drift: {");
+    expect(logs[0]).toContain('"changedRecordCount":1');
+    expect(logs[0]).toContain("retryGuidance: Run `formless pull` or `formless save`");
     expect(deployInputs).toEqual([]);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
@@ -3244,6 +3261,64 @@ describe("Formless Site CLI", () => {
     expect(requests.some((request) => request.method === "POST")).toBe(false);
     expect(logs.at(-1)).toContain("Workspace operation: deploy plan (succeeded).");
     expect(logs.at(-1)).toContain("drift: drift.");
+  });
+
+  it("ignores app record order during top-level deploy drift detection", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const firstRecord: StoredRecord = {
+      id: "alpha",
+      entity: "block",
+      values: { label: "First", type: "markdown" },
+      createdAt: "2026-05-01T00:00:01.000Z",
+    };
+    const secondRecord: StoredRecord = {
+      id: "zulu",
+      entity: "block",
+      values: { label: "Second", type: "markdown" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+    };
+    const localDavid = appArchive("david", "David Peek", {
+      records: [firstRecord, secondRecord],
+    });
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+
+    await runFormlessCli(
+      ["deploy", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: archiveFetch(
+          requests,
+          [installedSite("david", "David Peek")],
+          {
+            david: { records: [secondRecord, firstRecord] },
+          },
+          [],
+          [],
+          controlPlaneRecords(),
+        ),
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    expect(logs.at(-1)).toContain("Workspace operation: deploy plan (succeeded).");
+    expect(logs.at(-1)).toContain("drift: no-drift.");
   });
 
   it("retries top-level deploy against an empty selected runtime as initial population", async () => {

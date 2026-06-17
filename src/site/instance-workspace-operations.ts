@@ -21,6 +21,7 @@ import {
 import {
   checkLocalFormlessWorkspace,
   deployLocalFormlessWorkspace,
+  DeployLocalFormlessWorkspaceRemoteDriftError,
   DeployLocalFormlessWorkspaceStepError,
   getFormlessInstanceWorkspaceStatus,
   initLocalFormlessWorkspaceOnboarding,
@@ -832,6 +833,15 @@ function failureWorkspaceOperationSummaryFields(
   message: string,
   error: unknown,
 ): WorkspaceOperationDisplayObject {
+  if (error instanceof DeployLocalFormlessWorkspaceRemoteDriftError) {
+    return {
+      drift: summarizeDrift(error.drift),
+      error: message,
+      retryGuidance: error.retryGuidance,
+      target: error.targetAlias,
+    };
+  }
+
   if (!(error instanceof DeployLocalFormlessWorkspaceStepError)) {
     return { error: message };
   }

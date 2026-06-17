@@ -535,10 +535,18 @@ async function runCliWorkspaceOperation(
   );
 
   if (state.status === "failed") {
+    if (shouldPrintFailedWorkspaceOperation(state)) {
+      dependencies.log(formatCliWorkspaceOperationResult(state));
+    }
+
     throw new Error(state.errors[0]?.message ?? "Workspace operation failed.");
   }
 
   return state;
+}
+
+function shouldPrintFailedWorkspaceOperation(state: WorkspaceOperationState): boolean {
+  return state.operation === "deployApply" && "drift" in state.summary.fields;
 }
 
 function workspaceOperationInputForCliCommand(
