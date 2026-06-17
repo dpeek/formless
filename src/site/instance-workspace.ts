@@ -477,6 +477,21 @@ export type PushFormlessInstanceWorkspaceResult = {
   workspaceRoot: string;
 };
 
+export type PushFormlessInstanceWorkspaceCloudflareOAuthPreflightReason =
+  | "alchemy-credential-ref"
+  | "missing-credential-ref"
+  | "missing-local-oauth-secret";
+
+export type PushFormlessInstanceWorkspaceCloudflareOAuthPreflightResult = {
+  credentialId?: string;
+  credentialRef?: string;
+  deploymentConfigId: string;
+  needsSetup: boolean;
+  reason?: PushFormlessInstanceWorkspaceCloudflareOAuthPreflightReason;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
 export type RefreshFormlessInstanceDeploymentObservationInput = {
   targetAlias?: string | null;
   workspacePath?: string | null;
@@ -600,6 +615,10 @@ export type DeployFormlessInstanceWorkspaceDependencies = {
 export type DeployLocalFormlessWorkspaceInput = {
   targetAlias?: string | null;
   workspacePath?: string;
+};
+
+export type PlanDeployLocalFormlessWorkspaceInput = DeployLocalFormlessWorkspaceInput & {
+  credentialAccess?: "mutable" | "read-only";
 };
 
 export type DeployLocalFormlessWorkspaceDependencies =
@@ -1432,6 +1451,7 @@ export async function pushFormlessInstanceWorkspace(
 ): Promise<PushFormlessInstanceWorkspaceResult> {
   const planned = await planDeployLocalFormlessWorkspace(
     {
+      credentialAccess: input.apply ? "mutable" : "read-only",
       targetAlias: input.targetOverride?.alias ?? input.targetAlias,
       workspacePath: input.workspacePath,
     },
@@ -2462,7 +2482,7 @@ function localWorkspaceDeployFailureSummary(_error: unknown): DeployFailureSumma
 }
 
 export async function planDeployLocalFormlessWorkspace(
-  input: DeployLocalFormlessWorkspaceInput,
+  input: PlanDeployLocalFormlessWorkspaceInput,
   dependencies: PlanDeployLocalFormlessWorkspaceDependencies,
 ): Promise<PlanDeployLocalFormlessWorkspaceResult> {
   const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
@@ -2518,6 +2538,7 @@ export async function planDeployLocalFormlessWorkspace(
   const account = await resolveLocalWorkspaceDeploymentAccount({
     accountDiscovery: dependencies.accountDiscovery,
     credential: deploymentSource.credential,
+    credentialAccess: input.credentialAccess ?? "mutable",
     deploymentConfig: deploymentSource.deploymentConfig,
     fetch: dependencies.fetch,
     now: dependencies.now,
@@ -2546,6 +2567,82 @@ export async function planDeployLocalFormlessWorkspace(
     manifestPath,
     ...(preflight === undefined ? {} : { preflight }),
     ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
+    workspaceRoot,
+  };
+}
+
+export async function preflightPushFormlessCloudflareOAuthCredential(
+  input: Pick<PushFormlessInstanceWorkspaceInput, "targetAlias" | "workspacePath">,
+  dependencies: Pick<PushFormlessInstanceWorkspaceDependencies, "cwd">,
+): Promise<PushFormlessInstanceWorkspaceCloudflareOAuthPreflightResult> {
+  const workspaceRoot = await resolveFormlessInstanceWorkspaceRoot({
+    cwd: dependencies.cwd,
+    workspacePath: input.workspacePath,
+  });
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+    manifest,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "push",
+  });
+
+  if (deploymentSource.deploymentConfig === undefined) {
+    throw new Error(
+      "Formless instance push requires an enabled instance deployment-config record.",
+    );
+  }
+
+  const selectedTarget = workspaceTargetFromDeploymentConfig(
+    deploymentSource.deploymentConfig,
+    "push",
+  );
+  const deploymentConfigId = deploymentSource.deploymentConfig.id;
+
+  if (deploymentSource.credential === undefined) {
+    return {
+      deploymentConfigId,
+      needsSetup: true,
+      reason: "missing-credential-ref",
+      selectedTarget,
+      workspaceRoot,
+    };
+  }
+
+  if (deploymentSource.credential.kind === "alchemy-profile") {
+    return {
+      deploymentConfigId,
+      needsSetup: true,
+      reason: "alchemy-credential-ref",
+      selectedTarget,
+      workspaceRoot,
+    };
+  }
+
+  const credential = await readFormlessCloudflareOAuthCredential({
+    id: deploymentSource.credential.credentialId,
+    workspaceRoot,
+  });
+
+  if (credential === undefined) {
+    return {
+      credentialId: deploymentSource.credential.credentialId,
+      credentialRef: deploymentSource.credential.credentialRef,
+      deploymentConfigId,
+      needsSetup: true,
+      reason: "missing-local-oauth-secret",
+      selectedTarget,
+      workspaceRoot,
+    };
+  }
+
+  return {
+    credentialId: deploymentSource.credential.credentialId,
+    credentialRef: deploymentSource.credential.credentialRef,
+    deploymentConfigId,
+    needsSetup: false,
+    selectedTarget,
     workspaceRoot,
   };
 }
@@ -5420,6 +5517,7 @@ type LocalWorkspaceDeploymentSource = {
 
 async function resolveLocalWorkspaceDeploymentAccount(input: {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
+  credentialAccess: "mutable" | "read-only";
   credential?: LocalWorkspaceDeploymentCredential;
   deploymentConfig?: StoredRecord;
   fetch: typeof fetch;
@@ -5431,6 +5529,15 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
   const configuredAccountId = stringRecordValue(input.deploymentConfig, "accountId");
 
   if (credential.kind === "formless-cloudflare-oauth") {
+    if (input.credentialAccess === "read-only") {
+      return resolveReadOnlyLocalWorkspaceCloudflareOAuthAccount({
+        configuredAccountId,
+        credential,
+        deploymentConfig: input.deploymentConfig,
+        workspaceRoot: input.workspaceRoot,
+      });
+    }
+
     const oauth = createNodeFormlessCloudflareOAuthAdapter({
       fetch: input.fetch,
       now: input.now,
@@ -5441,6 +5548,16 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
       oauth,
       workspaceRoot: input.workspaceRoot,
     });
+    const storedAccount = deploymentAccountFromStoredFormlessCloudflareOAuthCredential({
+      configuredAccountId,
+      credential,
+      storedCredential,
+    });
+
+    if (storedAccount !== undefined) {
+      return storedAccount;
+    }
+
     const accounts = await oauth.listAccounts(storedCredential.token);
 
     return selectFormlessCloudflareOAuthDeploymentAccount({
@@ -5469,6 +5586,83 @@ async function resolveLocalWorkspaceDeploymentAccount(input: {
   }
 
   return account;
+}
+
+function deploymentAccountFromStoredFormlessCloudflareOAuthCredential(input: {
+  configuredAccountId: string | undefined;
+  credential: Extract<LocalWorkspaceDeploymentCredential, { kind: "formless-cloudflare-oauth" }>;
+  storedCredential: FormlessCloudflareOAuthCredential;
+}): FormlessInstanceDeploymentAccount | undefined {
+  if (input.storedCredential.selectedAccount === undefined) {
+    return undefined;
+  }
+
+  const selectedAccountId = input.configuredAccountId ?? input.storedCredential.selectedAccount.id;
+
+  if (selectedAccountId === input.storedCredential.selectedAccount.id) {
+    return deploymentAccountFromFormlessCloudflareOAuthAccount(
+      input.storedCredential.selectedAccount,
+    );
+  }
+
+  throw new Error(
+    `Cloudflare account ${selectedAccountId} was not found for Formless credentialRef ${input.credential.credentialRef}.`,
+  );
+}
+
+async function resolveReadOnlyLocalWorkspaceCloudflareOAuthAccount(input: {
+  configuredAccountId: string | undefined;
+  credential: Extract<LocalWorkspaceDeploymentCredential, { kind: "formless-cloudflare-oauth" }>;
+  deploymentConfig: StoredRecord | undefined;
+  workspaceRoot: string;
+}): Promise<FormlessInstanceDeploymentAccount> {
+  const credential = await readFormlessCloudflareOAuthCredential({
+    id: input.credential.credentialId,
+    workspaceRoot: input.workspaceRoot,
+  });
+
+  if (credential === undefined) {
+    throw new Error(
+      `Formless Cloudflare OAuth credential "${input.credential.credentialId}" was not found in ignored local secret state.`,
+    );
+  }
+
+  const selectedAccountId = input.configuredAccountId ?? credential.selectedAccount?.id;
+
+  if (selectedAccountId === undefined || selectedAccountId === "") {
+    throw new Error(
+      "Cloudflare account selection is required before push dry-run can read deployment intent.",
+    );
+  }
+
+  if (credential.selectedAccount?.id === selectedAccountId) {
+    return deploymentAccountFromFormlessCloudflareOAuthAccount(credential.selectedAccount);
+  }
+
+  if (input.configuredAccountId === selectedAccountId) {
+    return deploymentAccountFromDeploymentConfig(input.deploymentConfig, selectedAccountId);
+  }
+
+  throw new Error(
+    `Cloudflare account ${selectedAccountId} was not found for Formless credentialRef ${input.credential.credentialRef}.`,
+  );
+}
+
+function deploymentAccountFromDeploymentConfig(
+  deploymentConfig: StoredRecord | undefined,
+  accountId: string,
+): FormlessInstanceDeploymentAccount {
+  const targetUrl = stringRecordValue(deploymentConfig, "targetUrl");
+  const workerName = stringRecordValue(deploymentConfig, "workerName");
+
+  if (targetUrl === undefined) {
+    throw new Error("Formless push dry-run requires deployment-config.targetUrl.");
+  }
+
+  return {
+    id: accountId,
+    workersDevSubdomain: workersDevTargetFacts(targetUrl, workerName).workersDevSubdomain,
+  };
 }
 
 async function readRefreshedLocalWorkspaceCloudflareOAuthCredential(input: {
@@ -6231,14 +6425,8 @@ async function resolveLocalWorkspaceCloudflareApiToken(input: {
   now?: () => string;
   workspaceRoot: string;
 }): Promise<string | undefined> {
-  const overrideToken = optionalCloudflareApiToken(input.env);
-
-  if (overrideToken !== undefined) {
-    return overrideToken;
-  }
-
   if (input.credential.kind !== "formless-cloudflare-oauth") {
-    return undefined;
+    return optionalCloudflareApiToken(input.env);
   }
 
   const now = input.now ?? (() => new Date().toISOString());

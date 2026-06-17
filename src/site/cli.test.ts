@@ -101,11 +101,20 @@ import {
   type DestroyFormlessInstanceInput,
   type DestroyFormlessInstanceResult,
   type DomainProviderAlchemyRuntime,
+  type FormlessCliCloudflareOAuthAccountSelectionInput,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
   type FormlessInstanceWorkspaceProviderContext,
   type WriteFormlessInstanceStateInput,
 } from "./cli.ts";
+import {
+  FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+  createFormlessCloudflareOAuthCredential,
+  writeFormlessCloudflareOAuthCredential,
+  type FormlessCloudflareOAuthAccount,
+  type FormlessCloudflareOAuthAdapter,
+  type FormlessCloudflareOAuthTokenSet,
+} from "./cloudflare-oauth.ts";
 
 const tempDirs: string[] = [];
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
@@ -850,11 +859,15 @@ describe("Formless Site CLI", () => {
       { david: { records: [] } },
       [],
       [domainMapping("dpeek.com", "david")],
-      controlPlaneRecords(),
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
@@ -1167,7 +1180,11 @@ describe("Formless Site CLI", () => {
     };
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
 
     await runFormlessCli(
@@ -1238,6 +1255,766 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("mode: apply.");
   });
 
+  it("runs Cloudflare OAuth preflight before non-dry-run push with an Alchemy credential ref", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const accountDiscoveryInputs: Array<{ credentialProfile: string | null }> = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const cloudflareAccount = {
+      id: "account-123",
+      name: "Personal",
+      workersDevSubdomain: "dpeek",
+    };
+    const authorizationUrl = "https://dash.cloudflare.com/oauth2/auth?client_id=formless";
+    const fetcher = cloudflareOAuthAccountFetch(
+      pushArchiveFetch(
+        requests,
+        [installedSite("david", "David Peek")],
+        {
+          david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+        },
+        [
+          restorePlan({ replacedInstalls: ["david"] }),
+          restoreReport({ replacedInstalls: ["david"] }),
+        ],
+      ),
+      cloudflareAccount,
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "alchemy-profile:default" }),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        accountDiscoveryInputs,
+        cloudflareOAuth: fakeFormlessCloudflareOAuthAdapter({
+          account: cloudflareAccount,
+          authorizationUrl,
+        }),
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+        openedUrls,
+        selectCloudflareAccount: async () => {
+          throw new Error("Single account OAuth preflight should not prompt.");
+        },
+      }),
+    );
+
+    const snapshot = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest: parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+      workspaceRoot,
+    });
+    const deploymentConfig = snapshot?.records.find(
+      (record) => record.entity === "deployment-config",
+    );
+
+    expect(logs[0]).toBe(`Cloudflare authorization URL: ${authorizationUrl}`);
+    expect(openedUrls).toEqual([authorizationUrl]);
+    expect(accountDiscoveryInputs).toEqual([]);
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.secrets.CLOUDFLARE_API_TOKEN).toBe("formless-access-token");
+    expect(deploymentConfig?.values).toMatchObject({
+      accountId: "account-123",
+      credentialRef: "formless-cloudflare-oauth:default",
+      providerFamily: "cloudflare",
+      targetUrl: "https://personal.dpeek.workers.dev",
+      workerName: "personal",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
+    expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
+    expect(logs.at(-1)).toContain("Workspace operation: push (succeeded).");
+    expect(logs.at(-1)).toContain("mode: apply.");
+  });
+
+  it("onboards a missing local Formless OAuth secret for the selected push target", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const cloudflareAccount = {
+      id: "acct_team",
+      name: "Team",
+      workersDevSubdomain: "team",
+    };
+    const authorizationUrl = "https://dash.cloudflare.com/oauth2/auth?client_id=formless";
+    const now = "2026-05-26T00:00:00.000Z";
+    const stagingControlPlane = [
+      ...controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+      {
+        createdAt: now,
+        entity: "deployment-config",
+        id: "staging",
+        values: {
+          accountId: "old-account",
+          createdAt: now,
+          credentialRef: "formless-cloudflare-oauth:staging",
+          enabled: true,
+          label: "Staging",
+          providerFamily: "cloudflare",
+          targetId: "staging",
+          targetKind: "instance",
+          targetUrl: "https://staging-sites.old.workers.dev",
+          updatedAt: now,
+          workerName: "staging-sites",
+        },
+      },
+    ] satisfies StoredRecord[];
+    const delegate = cloudflareOAuthAccountFetch(
+      pushArchiveFetch(
+        requests,
+        [installedSite("david", "David Peek")],
+        {
+          david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+        },
+        [
+          restorePlan({ replacedInstalls: ["david"] }),
+          restoreReport({ replacedInstalls: ["david"] }),
+        ],
+        [],
+        [],
+        stagingControlPlane,
+      ),
+      cloudflareAccount,
+    );
+    const fetcher: typeof fetch = async (url, init) => {
+      const requestUrl =
+        typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      const parsedUrl = new URL(requestUrl);
+
+      if (
+        parsedUrl.pathname === "/api/formless/deployments/status" ||
+        parsedUrl.pathname === "/api/formless/deployments/desired-state"
+      ) {
+        requests.push({
+          body: init?.body,
+          headers: normalizeHeaders(init?.headers),
+          method: init?.method ?? "GET",
+          url: requestUrl,
+        });
+        const desiredState = {
+          ...deploymentDesiredStateRef(),
+          targetId: "staging",
+          versionId: "desired.staging.3",
+        };
+
+        if (parsedUrl.pathname === "/api/formless/deployments/status") {
+          return Response.json({
+            status: {
+              checkedAt: "2026-05-12T02:00:00.000Z",
+              latestDesiredState: desiredState,
+              state: "pending-changes",
+              targetId: "staging",
+            },
+            target: { kind: "instance", targetId: "staging" },
+          });
+        }
+
+        const resourcesByKind = deploymentDesiredResourcesByKind(stagingControlPlane);
+        const resourceCount = Object.values(resourcesByKind).reduce((sum, count) => sum + count, 0);
+
+        return Response.json({
+          desiredState: {
+            ...desiredState,
+            createdAt: "2026-05-12T02:00:00.000Z",
+            display: {
+              resourceCount,
+              resourcesByKind,
+              title: "Staging instance target",
+            },
+            resourceGraph: { resources: [], targetId: "staging" },
+            schemaVersion: 1,
+            source: { fingerprint: "source-1", intentRevision: 1 },
+          },
+          target: { kind: "instance", targetId: "staging" },
+        });
+      }
+
+      return delegate(url, init);
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, stagingControlPlane);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--target", "staging"],
+      cliDeps(tempDir, {
+        cloudflareOAuth: fakeFormlessCloudflareOAuthAdapter({
+          account: cloudflareAccount,
+          authorizationUrl,
+        }),
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+        openedUrls,
+        selectCloudflareAccount: async () => {
+          throw new Error("Single account OAuth preflight should not prompt.");
+        },
+      }),
+    );
+
+    const snapshot = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest: parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+      workspaceRoot,
+    });
+    const production = snapshot?.records.find((record) => record.id === "instance.primary");
+    const staging = snapshot?.records.find((record) => record.id === "staging");
+
+    expect(logs[0]).toBe(`Cloudflare authorization URL: ${authorizationUrl}`);
+    expect(openedUrls).toEqual([authorizationUrl]);
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.plan.account.id).toBe("acct_team");
+    expect(deployInputs[0]?.plan.expectedUrl.url).toBe("https://staging-sites.team.workers.dev");
+    expect(deployInputs[0]?.secrets.CLOUDFLARE_API_TOKEN).toBe("formless-access-token");
+    expect(production?.values).toMatchObject({
+      accountId: "account-123",
+      credentialRef: "formless-cloudflare-oauth:default",
+      targetId: "instance.primary",
+      targetUrl: "https://personal.dpeek.workers.dev",
+      workerName: "personal",
+    });
+    expect(staging?.values).toMatchObject({
+      accountId: "acct_team",
+      credentialRef: "formless-cloudflare-oauth:staging",
+      providerFamily: "cloudflare",
+      targetId: "staging",
+      targetUrl: "https://staging-sites.team.workers.dev",
+      workerName: "staging-sites",
+    });
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/cloudflare-oauth/staging.json"), "utf8"),
+    ).resolves.toContain("formless-access-token");
+    expect(
+      requests.some(
+        (request) => new URL(request.url).hostname === "staging-sites.team.workers.dev",
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
+    expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
+    expect(logs.at(-1)).toContain("Workspace operation: push (succeeded).");
+    expect(logs.at(-1)).toContain("mode: apply.");
+  });
+
+  it("prompts for display-safe account selection when OAuth sees multiple accounts", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const selectionInputs: FormlessCliCloudflareOAuthAccountSelectionInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const personalAccount = {
+      id: "acct_personal",
+      name: "Personal",
+      workersDevSubdomain: "personal",
+    };
+    const teamAccount = {
+      id: "acct_team",
+      name: "Team",
+      workersDevSubdomain: "team",
+    };
+    const authorizationUrl = "https://dash.cloudflare.com/oauth2/auth?client_id=formless";
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+      },
+      [
+        restorePlan({ replacedInstalls: ["david"] }),
+        restoreReport({ replacedInstalls: ["david"] }),
+      ],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "alchemy-profile:default" }),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        cloudflareOAuth: fakeFormlessCloudflareOAuthAdapter({
+          account: personalAccount,
+          accounts: [personalAccount, teamAccount],
+          authorizationUrl,
+        }),
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+        openedUrls,
+        selectCloudflareAccount: async (input) => {
+          selectionInputs.push(input);
+
+          return "acct_team";
+        },
+      }),
+    );
+
+    const snapshot = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest: parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+      workspaceRoot,
+    });
+    const deploymentConfig = snapshot?.records.find(
+      (record) => record.entity === "deployment-config",
+    );
+
+    expect(openedUrls).toEqual([authorizationUrl]);
+    expect(selectionInputs).toEqual([
+      {
+        accounts: [
+          {
+            id: "acct_personal",
+            name: "Personal",
+            workersDevSubdomain: "personal",
+          },
+          {
+            id: "acct_team",
+            name: "Team",
+            workersDevSubdomain: "team",
+          },
+        ],
+        credentialRef: "formless-cloudflare-oauth:default",
+        targetAlias: "instance.primary",
+      },
+    ]);
+    expect(logs).toContain("Cloudflare account selection required:");
+    expect(logs).toContain("  1. id=acct_personal name=Personal workers.dev=personal.workers.dev");
+    expect(logs).toContain("  2. id=acct_team name=Team workers.dev=team.workers.dev");
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.plan.account.id).toBe("acct_team");
+    expect(deploymentConfig?.values).toMatchObject({
+      accountId: "acct_team",
+      credentialRef: "formless-cloudflare-oauth:default",
+      providerFamily: "cloudflare",
+      targetUrl: "https://personal.team.workers.dev",
+      workerName: "personal",
+    });
+    expect(
+      requests.some((request) => new URL(request.url).hostname === "personal.team.workers.dev"),
+    ).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
+    expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
+  });
+
+  it("fails with display-safe account instructions for non-interactive multiple-account OAuth preflight", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const personalAccount = {
+      id: "acct_personal",
+      name: "Personal",
+      workersDevSubdomain: "personal",
+    };
+    const teamAccount = {
+      id: "acct_team",
+      name: "Team",
+      workersDevSubdomain: "team",
+    };
+    const authorizationUrl = "https://dash.cloudflare.com/oauth2/auth?client_id=formless";
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+      },
+      [
+        restorePlan({ replacedInstalls: ["david"] }),
+        restoreReport({ replacedInstalls: ["david"] }),
+      ],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "alchemy-profile:default" }),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await expect(
+      runFormlessCli(
+        ["push", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          cloudflareOAuth: fakeFormlessCloudflareOAuthAdapter({
+            account: personalAccount,
+            accounts: [personalAccount, teamAccount],
+            authorizationUrl,
+          }),
+          deploy: async (input) => {
+            deployInputs.push(input);
+
+            return { url: input.plan.expectedUrl.url };
+          },
+          fetch: fetcher,
+          logs,
+          openedUrls,
+          selectCloudflareAccount: async () => null,
+        }),
+      ),
+    ).rejects.toThrow(
+      [
+        "Multiple Cloudflare accounts were found for the Formless OAuth credential.",
+        "Run `formless push` from an interactive terminal and select one account before provider mutation.",
+      ].join("\n"),
+    );
+
+    const snapshot = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest: parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+      workspaceRoot,
+    });
+    const deploymentConfig = snapshot?.records.find(
+      (record) => record.entity === "deployment-config",
+    );
+    const output = logs.join("\n");
+
+    expect(openedUrls).toEqual([authorizationUrl]);
+    expect(logs).toContain("Cloudflare account selection required:");
+    expect(output).toContain(
+      "  1. id=acct_personal name=Personal workers.dev=personal.workers.dev",
+    );
+    expect(output).toContain("  2. id=acct_team name=Team workers.dev=team.workers.dev");
+    expect(output).not.toContain("formless-access-token");
+    expect(output).not.toContain("formless-refresh-token");
+    expect(deployInputs).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(deploymentConfig?.values).toMatchObject({
+      accountId: "account-123",
+      credentialRef: "alchemy-profile:default",
+      targetUrl: "https://personal.dpeek.workers.dev",
+    });
+  });
+
+  it("does not start Cloudflare OAuth preflight for push dry-run with an Alchemy credential ref", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "alchemy-profile:default" }),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        cloudflareOAuth: throwingFormlessCloudflareOAuthAdapter(),
+        fetch: fetcher,
+        logs,
+        openedUrls,
+      }),
+    );
+
+    await expect(
+      stat(path.join(workspaceRoot, ".formless/cloudflare-oauth/default.json")),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(openedUrls).toEqual([]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: dry-run.");
+  });
+
+  it("does not refresh existing Formless OAuth credentials during push dry-run", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+    await writeFormlessCloudflareOAuthCredential({
+      credential: createFormlessCloudflareOAuthCredential({
+        id: "default",
+        selectedAccount: {
+          id: "account-123",
+          name: "Personal",
+          workersDevSubdomain: "dpeek",
+        },
+        token: formlessCloudflareOAuthToken({
+          accessToken: "expired-access-token",
+          expiresAt: "2026-05-12T01:00:00.000Z",
+          refreshToken: "expired-refresh-token",
+        }),
+        updatedAt: "2026-05-12T01:00:00.000Z",
+      }),
+      workspaceRoot,
+    });
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/cloudflare-oauth/default.json"), "utf8"),
+    ).resolves.toContain("expired-access-token");
+    expect(requests.some((request) => new URL(request.url).hostname === "api.cloudflare.com")).toBe(
+      false,
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: dry-run.");
+  });
+
+  it("refreshes Formless OAuth credentials before ambient Cloudflare token fallback during push", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const refreshRequests: CapturedFetchRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const delegate = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([1]), records: publishRecords() },
+      },
+      [
+        restorePlan({ replacedInstalls: ["david"] }),
+        restoreReport({ replacedInstalls: ["david"] }),
+      ],
+    );
+    const fetcher: typeof fetch = async (url, init) => {
+      const requestUrl =
+        typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      const parsedUrl = new URL(requestUrl);
+
+      if (parsedUrl.hostname === "dash.cloudflare.com" && parsedUrl.pathname === "/oauth2/token") {
+        refreshRequests.push({
+          body: init?.body,
+          headers: normalizeHeaders(init?.headers),
+          method: init?.method ?? "GET",
+          url: requestUrl,
+        });
+
+        return Response.json({
+          access_token: "refreshed-access-token",
+          expires_in: 3600,
+          refresh_token: "refreshed-refresh-token",
+          scope: FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES.join(" "),
+        });
+      }
+
+      return delegate(url, init);
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeFormlessCloudflareOAuthCredential({
+      credential: createFormlessCloudflareOAuthCredential({
+        id: "default",
+        selectedAccount: {
+          id: "account-123",
+          name: "Personal",
+          workersDevSubdomain: "dpeek",
+        },
+        token: formlessCloudflareOAuthToken({
+          accessToken: "expired-access-token",
+          expiresAt: "2026-05-12T01:00:00.000Z",
+          refreshToken: "expired-refresh-token",
+        }),
+        updatedAt: "2026-05-12T01:00:00.000Z",
+      }),
+      workspaceRoot,
+    });
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return {
+            resourceEvidence: [],
+            url: input.plan.expectedUrl.url,
+          };
+        },
+        env: {
+          CF_API_TOKEN: "fallback-token",
+          CLOUDFLARE_API_TOKEN: "ambient-token",
+        },
+        fetch: fetcher,
+      }),
+    );
+
+    expect(refreshRequests).toHaveLength(1);
+    expect(String(refreshRequests[0]?.body)).toContain("grant_type=refresh_token");
+    expect(String(refreshRequests[0]?.body)).toContain("refresh_token=expired-refresh-token");
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.secrets.CLOUDFLARE_API_TOKEN).toBe("refreshed-access-token");
+
+    const oauthSecret = await readFile(
+      path.join(workspaceRoot, ".formless/cloudflare-oauth/default.json"),
+      "utf8",
+    );
+    expect(oauthSecret).toContain("refreshed-access-token");
+    expect(oauthSecret).toContain("refreshed-refresh-token");
+    expect(oauthSecret).not.toContain("ambient-token");
+    expect(oauthSecret).not.toContain("fallback-token");
+
+    const deploymentSecret = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal/deploy.env"),
+      "utf8",
+    );
+    const deploymentState = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal/formless.instance.json"),
+      "utf8",
+    );
+    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest: parseFormlessInstanceWorkspaceManifestJson(
+        await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+      ),
+      workspaceRoot,
+    });
+    const reviewableControlPlaneSource = JSON.stringify(controlPlane ?? {});
+
+    for (const source of [deploymentSecret, deploymentState, reviewableControlPlaneSource]) {
+      expect(source).not.toContain("refreshed-access-token");
+      expect(source).not.toContain("refreshed-refresh-token");
+      expect(source).not.toContain("expired-access-token");
+      expect(source).not.toContain("expired-refresh-token");
+      expect(source).not.toContain("ambient-token");
+      expect(source).not.toContain("fallback-token");
+    }
+  });
+
   it("prints the exact no-op message for repeat push", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -1251,11 +2028,15 @@ describe("Formless Site CLI", () => {
       [],
       [],
       [domainMapping("dpeek.com", "david")],
-      controlPlaneRecords(),
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
     await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
     await writeFile(
@@ -1363,7 +2144,11 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
@@ -1479,7 +2264,11 @@ describe("Formless Site CLI", () => {
     );
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
@@ -1510,9 +2299,9 @@ describe("Formless Site CLI", () => {
     const requests: CapturedFetchRequest[] = [];
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const localDavid = appArchive("david", "David Peek");
-    const localControlPlaneRecords = controlPlaneRecords().filter(
-      (record) => record.id !== "route:host:publicSite:dpeek.com",
-    );
+    const localControlPlaneRecords = controlPlaneRecords({
+      credentialRef: "formless-cloudflare-oauth:default",
+    }).filter((record) => record.id !== "route:host:publicSite:dpeek.com");
     const fetcher = pushArchiveFetch(
       requests,
       [installedSite("david", "David Peek")],
@@ -1530,6 +2319,7 @@ describe("Formless Site CLI", () => {
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, localControlPlaneRecords);
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
     await writeArchiveDirectory(
       path.join(workspaceRoot, "archives/instance"),
       instanceArchive([localDavid]),
@@ -4532,6 +5322,7 @@ function domainMapping(host: string, installId: string) {
 
 function controlPlaneRecords(
   options: {
+    credentialRef?: string;
     driftStatus?: "drifted" | "in-sync" | "unknown";
     host?: string;
     installId?: string;
@@ -4640,6 +5431,7 @@ function controlPlaneRecords(
         workerName: "personal",
         createdAt: now,
         updatedAt: now,
+        ...(options.credentialRef === undefined ? {} : { credentialRef: options.credentialRef }),
       },
       createdAt: now,
     },
@@ -4788,6 +5580,109 @@ function pushArchiveFetch(
     }
 
     return readFetch(url, init);
+  };
+}
+
+function cloudflareOAuthAccountFetch(
+  delegate: typeof fetch,
+  account: FormlessCloudflareOAuthAccount,
+): typeof fetch {
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+
+    if (
+      parsedUrl.hostname === "api.cloudflare.com" &&
+      parsedUrl.pathname === "/client/v4/accounts"
+    ) {
+      return Response.json({
+        result: [{ id: account.id, ...(account.name === undefined ? {} : { name: account.name }) }],
+        success: true,
+      });
+    }
+
+    if (
+      parsedUrl.hostname === "api.cloudflare.com" &&
+      parsedUrl.pathname === `/client/v4/accounts/${account.id}/workers/subdomain`
+    ) {
+      return Response.json({
+        result: { subdomain: account.workersDevSubdomain },
+        success: true,
+      });
+    }
+
+    return delegate(url, init);
+  };
+}
+
+function fakeFormlessCloudflareOAuthAdapter(input: {
+  account: FormlessCloudflareOAuthAccount;
+  accounts?: readonly FormlessCloudflareOAuthAccount[];
+  authorizationUrl: string;
+  token?: FormlessCloudflareOAuthTokenSet;
+}): FormlessCloudflareOAuthAdapter {
+  const token = input.token ?? formlessCloudflareOAuthToken();
+
+  return {
+    createAuthorization: () => ({
+      requestedScopes: FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+      state: "oauth-state",
+      url: input.authorizationUrl,
+      verifier: "oauth-verifier",
+    }),
+    exchangeCode: async () => token,
+    listAccounts: async () => [...(input.accounts ?? [input.account])],
+    refresh: async () => token,
+    waitForToken: async () => token,
+  };
+}
+
+function throwingFormlessCloudflareOAuthAdapter(): FormlessCloudflareOAuthAdapter {
+  return {
+    createAuthorization: () => {
+      throw new Error("Cloudflare OAuth preflight should not start.");
+    },
+    exchangeCode: async () => {
+      throw new Error("Cloudflare OAuth preflight should not exchange codes.");
+    },
+    listAccounts: async () => {
+      throw new Error("Cloudflare OAuth preflight should not list accounts.");
+    },
+    refresh: async () => {
+      throw new Error("Cloudflare OAuth preflight should not refresh tokens.");
+    },
+    waitForToken: async () => {
+      throw new Error("Cloudflare OAuth preflight should not wait for tokens.");
+    },
+  };
+}
+
+async function writeTestFormlessCloudflareOAuthCredential(workspaceRoot: string): Promise<void> {
+  await writeFormlessCloudflareOAuthCredential({
+    credential: createFormlessCloudflareOAuthCredential({
+      id: "default",
+      selectedAccount: {
+        id: "account-123",
+        name: "Personal",
+        workersDevSubdomain: "dpeek",
+      },
+      token: formlessCloudflareOAuthToken(),
+      updatedAt: "2026-05-12T02:00:00.000Z",
+    }),
+    workspaceRoot,
+  });
+}
+
+function formlessCloudflareOAuthToken(
+  overrides: Partial<FormlessCloudflareOAuthTokenSet> = {},
+): FormlessCloudflareOAuthTokenSet {
+  return {
+    accessToken: "formless-access-token",
+    expiresAt: "2026-05-12T03:00:00.000Z",
+    grantedScopes: [...FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES],
+    refreshToken: "formless-refresh-token",
+    ...overrides,
   };
 }
 
@@ -4944,6 +5839,7 @@ function cliDeps(
     accounts?: Array<{ id: string; name?: string; workersDevSubdomain: string }>;
     accountDiscoveryInputs?: Array<{ credentialProfile: string | null }>;
     cloudflareDomainClient?: CloudflareDomainClient;
+    cloudflareOAuth?: FormlessCloudflareOAuthAdapter;
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
     destroy?: (input: DestroyFormlessInstanceInput) => Promise<DestroyFormlessInstanceResult>;
@@ -4954,6 +5850,7 @@ function cliDeps(
     logs?: string[];
     openedUrls?: string[];
     packageRoot?: string;
+    selectCloudflareAccount?: FormlessCliDependencies["selectCloudflareAccount"];
     selectWorkspaceName?: FormlessCliDependencies["selectWorkspaceName"];
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
     spawn?: typeof spawn;
@@ -4993,6 +5890,7 @@ function cliDeps(
         workerRoutes: {},
         zonesByName: {},
       }),
+    ...(options.cloudflareOAuth === undefined ? {} : { cloudflareOAuth: options.cloudflareOAuth }),
     cwd,
     deploymentAdapter: {
       deploy:
@@ -5052,6 +5950,9 @@ function cliDeps(
         env: commandOptions.env,
       });
     },
+    ...(options.selectCloudflareAccount === undefined
+      ? {}
+      : { selectCloudflareAccount: options.selectCloudflareAccount }),
     ...(options.selectWorkspaceName === undefined
       ? {}
       : { selectWorkspaceName: options.selectWorkspaceName }),

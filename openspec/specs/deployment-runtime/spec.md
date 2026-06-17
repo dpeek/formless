@@ -301,6 +301,10 @@ read-only deployment projection and display status.
   Formless-owned Cloudflare OAuth access token before provider mutation and
   passes the fresh access token to Alchemy as an external bearer token through
   `apiToken` or `CLOUDFLARE_API_TOKEN`
+- **AND** when the selected deployment config uses a
+  `formless-cloudflare-oauth:<id>` credential reference, the deployer resolves
+  and refreshes that credential before considering manual Cloudflare API token
+  environment fallbacks
 - **AND** Formless-owned Cloudflare OAuth credentials are not written to
   Alchemy OAuth profiles for refresh
 - **AND** Worker, R2, DNS, custom-domain, and other projected provider

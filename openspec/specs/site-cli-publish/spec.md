@@ -349,6 +349,9 @@ intent lives in schema-owned storage snapshots.
   deploy, migration, retry, or warning text
 - **AND** `formless push --dry-run` reports the sync plan without mutating local
   source, remote data, Cloudflare resources, or Alchemy state
+- **AND** `formless push --dry-run` does not start credential onboarding, open a
+  provider authorization URL, wait for a localhost OAuth callback, write ignored
+  credential secret state, or rewrite deployment intent
 - **AND** push trusts the local workspace as the selected source and does not
   refuse because the remote target differs from it
 
@@ -391,6 +394,37 @@ workspace-controlled deployment intent.
   credential reference is used
 - **AND** redirect source hosts are reconciled as Worker custom-domain
   resources in the internal push deploy step
+
+#### Scenario: CLI push onboards Cloudflare credentials
+
+- **GIVEN** a local Formless workspace has saved workspace source
+- **AND** the selected deployment config has no usable Formless-owned
+  Cloudflare OAuth credential reference, references missing ignored local
+  credential state, or still names an Alchemy profile credential reference
+- **WHEN** `formless push` runs without `--dry-run`
+- **THEN** the CLI starts Formless-owned Cloudflare OAuth before provider
+  reconciliation
+- **AND** it prints the Cloudflare authorization URL, attempts to open that URL
+  in the user's browser, and waits for the expected localhost OAuth callback
+- **AND** if one accessible Cloudflare account is visible, that account is
+  selected
+- **AND** if multiple accessible Cloudflare accounts are visible in an
+  interactive terminal, the CLI presents a display-safe terminal account
+  selection using account id, name, and workers.dev subdomain
+- **AND** if multiple accounts are visible without an interactive terminal, the
+  CLI fails before provider mutation with display-safe account-selection
+  instructions
+- **AND** OAuth access tokens, OAuth refresh tokens, expiry, granted scopes,
+  and selected-account secret state are stored only under ignored local
+  workspace secret state
+- **AND** the selected deployment config is written or enriched with
+  display-safe target id, target URL, provider family, account id, worker name,
+  and `formless-cloudflare-oauth:<id>` credential reference fields
+- **AND** the push continues by refreshing the selected OAuth credential just in
+  time for provider mutation
+- **AND** manual `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN` environment values
+  are not copied into deployment config, deploy state, archives, operation
+  state, or reviewable workspace source as part of normal onboarding
 
 #### Scenario: Route removal pushes provider deletion
 

@@ -295,6 +295,12 @@ The system SHALL represent deploy target and provider selection as one
 - **THEN** the `deployment-config` record may store display-safe target id,
   target URL, provider family, account id, worker name, and credential
   reference fields
+- **AND** CLI credential setup for `formless push` writes the selected
+  deployment config for the requested target alias rather than an unrelated
+  enabled deployment config
+- **AND** CLI credential setup may replace an Alchemy profile credential
+  reference with a `formless-cloudflare-oauth:<id>` credential reference after
+  validating the Formless-owned OAuth credential
 - **AND** OAuth access tokens, OAuth refresh tokens, token expiry, granted
   scopes, Alchemy passwords, and Alchemy state tokens remain only in ignored
   local secret state

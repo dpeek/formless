@@ -4,12 +4,25 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "@dpeek/formless-instance-control-plane";
+import {
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultInstanceWorkspaceManifest,
   type InstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest,
 } from "@dpeek/formless-workspace";
-import { readInstanceWorkspaceControlPlaneStorageSnapshot } from "@dpeek/formless-workspace/node";
+import {
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StoredRecord,
+} from "@dpeek/formless-storage";
+import {
+  readInstanceWorkspaceControlPlaneStorageSnapshot,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
+} from "@dpeek/formless-workspace/node";
 
 import {
   FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
@@ -353,6 +366,111 @@ describe("Formless Cloudflare OAuth credentials", () => {
     expect(JSON.stringify(snapshot)).not.toContain("formless-refreshed-access-token");
     expect(JSON.stringify(snapshot)).not.toContain("formless-refreshed-refresh-token");
   });
+
+  it("enriches the requested deployment-config target without mutating another target", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifest = await writeWorkspaceManifest(workspaceRoot);
+    const oauth = {
+      createAuthorization: () => ({
+        requestedScopes: FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+        state: "oauth-state",
+        url: "https://dash.cloudflare.com/oauth2/auth?client_id=formless",
+        verifier: "oauth-verifier",
+      }),
+      exchangeCode: async () => formlessOAuthToken,
+      listAccounts: async () => [teamCloudflareAccount],
+      refresh: async () => {
+        throw new Error("New OAuth credentials should not refresh.");
+      },
+      waitForToken: async () => formlessOAuthToken,
+    } satisfies FormlessCloudflareOAuthAdapter;
+
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, manifest, [
+      deploymentConfigRecord({
+        accountId: "acct_personal",
+        credentialRef: "alchemy-profile:default",
+        id: "instance.primary",
+        label: "Production",
+        targetId: "instance.primary",
+        targetUrl: "https://personal-sites.personal.workers.dev",
+        workerName: "personal-sites",
+      }),
+      deploymentConfigRecord({
+        accountId: "acct_old",
+        credentialRef: "alchemy-profile:team",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "staging",
+        label: "Staging",
+        targetId: "staging",
+        targetUrl: "https://staging-sites.old.workers.dev",
+        workerName: "staging-sites",
+      }),
+    ]);
+
+    const start = await setupCloudflareCredentialsWithFormlessOAuth(
+      {
+        deploymentConfigId: "staging",
+        provider: "cloudflare",
+        targetAlias: "staging",
+        workspaceRoot,
+      },
+      { now, oauth },
+    );
+    const final = await start.continue!();
+
+    expect(final).toMatchObject({
+      result: {
+        details: {
+          credentialRef: "formless-cloudflare-oauth:default",
+          deploymentConfig: {
+            accountId: "acct_team",
+            targetId: "staging",
+            targetUrl: "https://staging-sites.team.workers.dev",
+            workerName: "staging-sites",
+          },
+        },
+        summary: {
+          fields: {
+            credentialRef: "formless-cloudflare-oauth:default",
+            selectedAccountId: "acct_team",
+            targetUrl: "https://staging-sites.team.workers.dev",
+            workerName: "staging-sites",
+          },
+        },
+      },
+      status: "succeeded",
+    });
+
+    const snapshot = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest,
+      workspaceRoot,
+    });
+    const production = snapshot?.records.find((record) => record.id === "instance.primary");
+    const staging = snapshot?.records.find((record) => record.id === "staging");
+
+    expect(production?.values).toMatchObject({
+      accountId: "acct_personal",
+      credentialRef: "alchemy-profile:default",
+      label: "Production",
+      targetId: "instance.primary",
+      targetUrl: "https://personal-sites.personal.workers.dev",
+      workerName: "personal-sites",
+    });
+    expect(staging?.createdAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(staging?.values).toMatchObject({
+      accountId: "acct_team",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      credentialRef: "formless-cloudflare-oauth:default",
+      label: "Staging",
+      providerFamily: "cloudflare",
+      targetId: "staging",
+      targetKind: "instance",
+      targetUrl: "https://staging-sites.team.workers.dev",
+      workerName: "staging-sites",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
+    expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
+  });
 });
 
 describe("Alchemy Cloudflare credential setup", () => {
@@ -569,6 +687,60 @@ async function writeWorkspaceManifest(workspaceRoot: string): Promise<InstanceWo
   );
 
   return manifest;
+}
+
+async function writeWorkspaceControlPlaneStorageSnapshot(
+  workspaceRoot: string,
+  manifest: InstanceWorkspaceManifest,
+  records: StoredRecord[],
+): Promise<void> {
+  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
+    manifest,
+    snapshot: {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: now(),
+      schemaUpdatedAt: now(),
+      sourceCursor: records.length,
+      schema: instanceControlPlaneSchema,
+      records,
+    },
+    workspaceRoot,
+  });
+}
+
+function deploymentConfigRecord(input: {
+  accountId: string;
+  createdAt?: string;
+  credentialRef: string;
+  id: string;
+  label: string;
+  targetId: string;
+  targetUrl: string;
+  workerName: string;
+}): StoredRecord {
+  const createdAt = input.createdAt ?? "2026-06-01T00:00:00.000Z";
+
+  return {
+    id: input.id,
+    entity: "deployment-config",
+    values: {
+      targetId: input.targetId,
+      targetKind: "instance",
+      label: input.label,
+      enabled: true,
+      targetUrl: input.targetUrl,
+      providerFamily: "cloudflare",
+      accountId: input.accountId,
+      workerName: input.workerName,
+      credentialRef: input.credentialRef,
+      createdAt,
+      updatedAt: createdAt,
+    },
+    createdAt,
+  };
 }
 
 function fakeProfileStore(

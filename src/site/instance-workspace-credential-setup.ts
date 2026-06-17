@@ -54,9 +54,11 @@ export const FORMLESS_ALCHEMY_PROFILE_REF_PREFIX = "alchemy-profile:";
 
 export type AlchemyCloudflareCredentialSetupInput = {
   accountId?: string | null;
+  deploymentConfigId?: string | null;
   env?: NodeJS.ProcessEnv;
   profileLabel?: string | null;
   provider?: "cloudflare";
+  targetAlias?: string | null;
   workspaceRoot: string;
 };
 
@@ -183,9 +185,11 @@ export async function setupCloudflareCredentialsWithFormlessOAuth(
       accounts,
       credential,
       credentialId,
+      deploymentConfigId: input.deploymentConfigId,
       now: dependencies.now,
       selectedAccountId,
       source: "stored-credential",
+      targetAlias: input.targetAlias,
       token: credential.token,
       workspaceRoot: input.workspaceRoot,
     });
@@ -203,9 +207,11 @@ export async function setupCloudflareCredentialsWithFormlessOAuth(
         accounts,
         credential: existing,
         credentialId,
+        deploymentConfigId: input.deploymentConfigId,
         now: dependencies.now,
         selectedAccountId,
         source: "oauth",
+        targetAlias: input.targetAlias,
         token,
         workspaceRoot: input.workspaceRoot,
       });
@@ -244,9 +250,11 @@ async function completeFormlessOAuthCredentialSetup(input: {
   accounts: readonly FormlessCloudflareOAuthAccount[];
   credential: FormlessCloudflareOAuthCredential | undefined;
   credentialId: string;
+  deploymentConfigId?: string | null;
   now: () => string;
   selectedAccountId: string | undefined;
   source: "oauth" | "stored-credential";
+  targetAlias?: string | null;
   token: FormlessCloudflareOAuthTokenSet;
   workspaceRoot: string;
 }): Promise<AlchemyCloudflareCredentialSetupResult> {
@@ -296,7 +304,9 @@ async function completeFormlessOAuthCredentialSetup(input: {
   const deploymentConfig = await writeFormlessOAuthDeploymentConfigSource({
     account: selectedAccount,
     credentialRef,
+    deploymentConfigId: input.deploymentConfigId,
     now: input.now(),
+    targetAlias: input.targetAlias,
     workspaceRoot: input.workspaceRoot,
   });
 
@@ -315,7 +325,9 @@ async function completeFormlessOAuthCredentialSetup(input: {
 async function writeFormlessOAuthDeploymentConfigSource(input: {
   account: FormlessCloudflareOAuthAccount;
   credentialRef: string;
+  deploymentConfigId?: string | null;
   now: string;
+  targetAlias?: string | null;
   workspaceRoot: string;
 }): Promise<{ accountId: string; targetId: string; targetUrl: string; workerName: string }> {
   const manifest = await readCredentialSetupWorkspaceManifest(input.workspaceRoot);
@@ -323,9 +335,15 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
     manifest,
     workspaceRoot: input.workspaceRoot,
   });
-  const existing = selectCredentialSetupDeploymentConfig(current?.records ?? []);
+  const existing = selectCredentialSetupDeploymentConfig(current?.records ?? [], {
+    deploymentConfigId: input.deploymentConfigId,
+    targetAlias: input.targetAlias,
+  });
   const targetId =
-    stringRecordValue(existing, "targetId") ?? existing?.id ?? formlessWorkspaceDeployTargetId;
+    stringRecordValue(existing, "targetId") ??
+    existing?.id ??
+    normalizeOptionalTargetAlias(input.targetAlias) ??
+    formlessWorkspaceDeployTargetId;
   const workerName =
     stringRecordValue(existing, "workerName") ?? normalizeFormlessInstanceName(manifest.name);
   const targetUrl = `https://${workerName}.${input.account.workersDevSubdomain}.${workersDevDomain}`;
@@ -440,6 +458,10 @@ async function readCredentialSetupWorkspaceManifest(
 
 function selectCredentialSetupDeploymentConfig(
   records: readonly StoredRecord[],
+  input: {
+    deploymentConfigId?: string | null;
+    targetAlias?: string | null;
+  } = {},
 ): StoredRecord | undefined {
   const targets = records.filter(
     (record) =>
@@ -448,6 +470,37 @@ function selectCredentialSetupDeploymentConfig(
       record.values.enabled !== false &&
       record.deletedAt === undefined,
   );
+  const requestedDeploymentConfigId = input.deploymentConfigId?.trim();
+  const requestedTargetId = normalizeOptionalTargetAlias(input.targetAlias);
+
+  if (requestedDeploymentConfigId) {
+    const target = targets.find((record) => record.id === requestedDeploymentConfigId);
+
+    if (!target) {
+      throw new Error(
+        `Formless Cloudflare OAuth credential setup target "${requestedDeploymentConfigId}" was not found.`,
+      );
+    }
+
+    return target;
+  }
+
+  if (requestedTargetId) {
+    const target = targets.find(
+      (record) =>
+        record.id === requestedTargetId ||
+        stringRecordValue(record, "targetId") === requestedTargetId,
+    );
+
+    if (!target) {
+      throw new Error(
+        `Formless Cloudflare OAuth credential setup target "${requestedTargetId}" was not found.`,
+      );
+    }
+
+    return target;
+  }
+
   const primary = targets.find(
     (record) => stringRecordValue(record, "targetId") === formlessWorkspaceDeployTargetId,
   );
@@ -716,6 +769,14 @@ function normalizeOptionalAccountId(accountId: string | null | undefined): strin
   }
 
   return normalized;
+}
+
+function normalizeOptionalTargetAlias(targetAlias: string | null | undefined): string | undefined {
+  if (targetAlias === undefined || targetAlias === null || targetAlias.trim() === "") {
+    return undefined;
+  }
+
+  return targetAlias.trim();
 }
 
 function alchemyProfileRef(profile: string): string {
