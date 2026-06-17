@@ -1024,10 +1024,14 @@ describe("Alchemy Formless instance deployment", () => {
   });
 
   it("declares route-derived custom-domain resources for mounts and redirects during deploy", async () => {
+    const bucketCalls: Array<{ id: string; props: unknown }> = [];
+    const cloudflareApiCalls: Array<{ options: unknown; paths: string[] }> = [];
     const events: string[] = [];
     const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
     const secrets: string[] = [];
     const turnstileCalls: Array<{ id: string; props: unknown }> = [];
+    const workerCalls: Array<{ id: string; props: AlchemyFormlessInstanceDeploymentWorkerProps }> =
+      [];
     let finalized = 0;
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async () => {
@@ -1037,6 +1041,20 @@ describe("Alchemy Formless instance deployment", () => {
           finalize: async () => {
             events.push("finalize");
             finalized += 1;
+          },
+        };
+      },
+      createCloudflareApi: async (options) => {
+        const call = { options, paths: [] as string[] };
+        cloudflareApiCalls.push(call);
+
+        return {
+          get: async (path) => {
+            call.paths.push(path);
+
+            return Response.json({
+              result: [{ id: "zone-1", name: "api.example.com", status: "active" }],
+            });
           },
         };
       },
@@ -1075,8 +1093,9 @@ describe("Alchemy Formless instance deployment", () => {
           ReturnType<NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createDnsRecords"]>>
         >;
       },
-      createR2Bucket: async () => {
+      createR2Bucket: async (id, props) => {
         events.push("r2");
+        bucketCalls.push({ id, props });
 
         return { type: "r2-bucket" };
       },
@@ -1095,8 +1114,9 @@ describe("Alchemy Formless instance deployment", () => {
           verificationSecret: { index: "turnstile-secret", type: "secret" },
         });
       },
-      deployViteWorker: async () => {
+      deployViteWorker: async (id, props) => {
         events.push("worker");
+        workerCalls.push({ id, props });
 
         return { url: "https://brother-instance.dpeek.workers.dev" };
       },
@@ -1112,6 +1132,24 @@ describe("Alchemy Formless instance deployment", () => {
     const deploymentResourceGraph: DeployResourceGraph = {
       targetId: "instance.brother-instance",
       resources: [
+        {
+          dependencies: [],
+          inputs: {
+            records: [
+              {
+                content: "192.0.2.1",
+                name: "api.example.com",
+                proxied: true,
+                ttl: 1,
+                type: "A",
+              },
+            ],
+          },
+          kind: "cloudflare-dns-records",
+          logicalId: "brother-instance-dns-api-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
         {
           dependencies: [],
           inputs: {
@@ -1159,8 +1197,33 @@ describe("Alchemy Formless instance deployment", () => {
     );
 
     expect(routeResourceCalls.map((call) => [call.kind, call.id])).toEqual([
+      ["DnsRecords", "brother-instance-dns-api-example-com"],
       ["CustomDomain", "brother-instance-redirect-custom-domain-old-example-com"],
       ["CustomDomain", "brother-instance-custom-domain-app-example-com-instance"],
+    ]);
+    const dnsCall = routeResourceCalls.find((call) => call.kind === "DnsRecords");
+    const customDomainCalls = routeResourceCalls.filter((call) => call.kind === "CustomDomain");
+    const cloudflareApiToken = (cloudflareApiCalls[0]?.options as Record<string, unknown>).apiToken;
+    expect(bucketCalls).toEqual([
+      {
+        id: "media",
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          apiToken: { index: 1, type: "secret" },
+          empty: true,
+          name: "brother-instance-media",
+        },
+      },
+    ]);
+    expect(cloudflareApiCalls).toEqual([
+      {
+        options: {
+          accountId: "account-123",
+          apiToken: { index: 1, type: "secret" },
+        },
+        paths: ["/zones?name=api.example.com&status=active&account.id=account-123"],
+      },
     ]);
     expect(turnstileCalls).toEqual([
       {
@@ -1175,21 +1238,62 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
     ]);
-    expect(routeResourceCalls[0]?.props).toMatchObject({
+    expect(workerCalls[0]?.props).toMatchObject({
+      accountId: "account-123",
+      apiToken: { index: 1, type: "secret" },
+      assets: {
+        directory: "dist/client",
+        not_found_handling: "single-page-application",
+      },
+      bindings: {
+        ALCHEMY_PASSWORD: { index: 2, type: "secret" },
+        CLOUDFLARE_API_TOKEN: { index: 1, type: "secret" },
+        FORMLESS_ADMIN_TOKEN: { index: 3, type: "secret" },
+        FORMLESS_AUTHORITY: { type: "durable-object-namespace" },
+        FORMLESS_MEDIA: { type: "r2-bucket" },
+      },
+      name: "brother-instance",
+    });
+    expect(dnsCall?.props).toMatchObject({
+      apiToken: { index: 1, type: "secret" },
+      records: [
+        {
+          content: "192.0.2.1",
+          name: "api.example.com",
+          proxied: true,
+          ttl: 1,
+          type: "A",
+        },
+      ],
+      zoneId: "zone-1",
+    });
+    expect(customDomainCalls[0]?.props).toMatchObject({
       adopt: false,
       apiToken: { index: 1, type: "secret" },
       name: "old.example.com",
       workerName: "brother-instance",
       zoneId: "zone-1",
     });
-    expect(routeResourceCalls[1]?.props).toMatchObject({
+    expect(customDomainCalls[1]?.props).toMatchObject({
       adopt: false,
       apiToken: { index: 1, type: "secret" },
       name: "app.example.com",
       workerName: "brother-instance",
       zoneId: "zone-1",
     });
+    expect((bucketCalls[0]?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect((turnstileCalls[0]?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect(workerCalls[0]?.props.apiToken).toBe(cloudflareApiToken);
+    expect(workerCalls[0]?.props.bindings.CLOUDFLARE_API_TOKEN).toBe(cloudflareApiToken);
+    expect((dnsCall?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect((customDomainCalls[0]?.props as Record<string, unknown>).apiToken).toBe(
+      cloudflareApiToken,
+    );
+    expect((customDomainCalls[1]?.props as Record<string, unknown>).apiToken).toBe(
+      cloudflareApiToken,
+    );
     expect(result.resourceEvidence?.map((entry) => [entry.kind, entry.logicalId])).toEqual([
+      ["cloudflare-dns-records", "brother-instance-dns-api-example-com"],
       [
         "cloudflare-worker-custom-domain",
         "brother-instance-redirect-custom-domain-old-example-com",
@@ -1199,14 +1303,20 @@ describe("Alchemy Formless instance deployment", () => {
         "brother-instance-custom-domain-app-example-com-instance",
       ],
     ]);
-    expect(result.resourceEvidence).toHaveLength(2);
+    expect(result.resourceEvidence).toHaveLength(3);
+    expect(JSON.stringify(bucketCalls)).not.toContain("cf-token");
+    expect(JSON.stringify(cloudflareApiCalls)).not.toContain("cf-token");
+    expect(JSON.stringify(result)).not.toContain("cf-token");
     expect(JSON.stringify(routeResourceCalls)).not.toContain("cf-token");
+    expect(JSON.stringify(turnstileCalls)).not.toContain("cf-token");
+    expect(JSON.stringify(workerCalls)).not.toContain("cf-token");
     expect(events).toEqual([
       "app",
       "r2",
       "durable-object",
       "turnstile",
       "worker",
+      "dns-records",
       "custom-domain",
       "custom-domain",
       "finalize",
@@ -1612,9 +1722,9 @@ describe("Alchemy Formless instance deployment", () => {
     ]);
     expect(buckets[0]?.props).toMatchObject({
       accountId: "account-123",
+      apiToken: { index: 1, type: "secret" },
       empty: true,
       name: "brother-instance-media",
-      profile: "personal",
     });
     expect(namespaces[0]?.props).toEqual({
       className: "FormlessAuthority",
@@ -1622,9 +1732,9 @@ describe("Alchemy Formless instance deployment", () => {
     });
     expect(workers[0]?.props).toMatchObject({
       accountId: "account-123",
+      apiToken: { index: 1, type: "secret" },
       cwd: "/package",
       name: "brother-instance",
-      profile: "personal",
     });
     expect(workers[0]?.props.build.env).toEqual(plan.runtimeVars);
     expect(JSON.stringify(workers[0]?.props)).not.toContain("cf-token");

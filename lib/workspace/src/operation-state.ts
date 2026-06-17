@@ -757,6 +757,10 @@ export function allowlistedWorkspaceOperationAuthorizationUrl(
 function isForbiddenDisplayKey(key: string): boolean {
   const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
 
+  if (normalized === "credentialref") {
+    return false;
+  }
+
   return (
     normalized === "secret" ||
     normalized === "secrets" ||

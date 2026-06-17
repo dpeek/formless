@@ -293,11 +293,22 @@ read-only deployment projection and display status.
 - **WHEN** a CLI, browser workspace gateway, CI job, or trusted deploy node
   applies desired state
 - **THEN** it fetches the desired-state projection, resolves provider context
-  and secrets outside the runtime desired-state response, declares the desired
-  graph in tracked Alchemy state or another provider reconciler, and may patch
-  the latest deployment observation cache
+  and Formless-owned Cloudflare credential secrets outside the runtime
+  desired-state response, declares the desired graph in tracked Alchemy state
+  or another provider reconciler, and may patch the latest deployment
+  observation cache
+- **AND** when the provider reconciler is Alchemy, the deployer refreshes the
+  Formless-owned Cloudflare OAuth access token before provider mutation and
+  passes the fresh access token to Alchemy as an external bearer token through
+  `apiToken` or `CLOUDFLARE_API_TOKEN`
+- **AND** Formless-owned Cloudflare OAuth credentials are not written to
+  Alchemy OAuth profiles for refresh
 - **AND** Worker, R2, DNS, custom-domain, and other projected provider
   resources use the same deployer protocol boundary
+- **AND** when the deployer has a refreshed Cloudflare OAuth access token,
+  Worker upload, R2, Turnstile, DNS, custom-domain, and Cloudflare state-store
+  adapters receive it through explicit provider options rather than resolving an
+  Alchemy OAuth profile
 
 #### Scenario: Shared deployment client contracts
 
@@ -320,8 +331,8 @@ read-only deployment projection and display status.
 
 - **WHEN** browser clients, workspace manifests, portable archives, or
   desired-state reads inspect deployment state
-- **THEN** provider API tokens, Alchemy passwords, and Alchemy state tokens are
-  not returned
+- **THEN** provider API tokens, Cloudflare OAuth access tokens, Cloudflare OAuth
+  refresh tokens, Alchemy passwords, and Alchemy state tokens are not returned
 
 #### Scenario: Repair cleanup stays selected
 
@@ -366,12 +377,17 @@ credential boundaries.
 
 - **WHEN** a browser starts Cloudflare credential setup through the local
   workspace gateway proxy before push planning
-- **THEN** the local gateway sidecar may run the trusted local Alchemy profile
-  adapter and return display-safe authorization URL events through the proxy
+- **THEN** the local gateway sidecar runs the trusted Formless-owned
+  Cloudflare OAuth adapter and returns display-safe authorization URL events
+  through the proxy
 - **AND** deployment intent records store only provider references, account
   facts, and validation status after credentials are validated
 - **AND** the first browser onboarding flow does not create Cloudflare API
-  tokens or request token-management credentials from browser input
+  tokens, request token-management credentials from browser input, or write
+  Formless-owned OAuth credentials into Alchemy OAuth profiles
+- **AND** ignored local secret state stores OAuth access token, refresh token,
+  expiry, granted scopes, account selection, and credential id facts needed for
+  just-in-time refresh
 - **AND** Worker runtime code does not run Alchemy credential setup or read
   local provider credential state
 
@@ -457,8 +473,9 @@ outside reviewable source.
 
 - **WHEN** browser clients, workspace manifests, storage snapshots, portable
   archives, or desired-state reads inspect deployment state
-- **THEN** provider API tokens, Alchemy passwords, Alchemy state tokens, raw
-  lease tokens, and runtime secrets are not returned
+- **THEN** provider API tokens, Cloudflare OAuth access tokens, Cloudflare OAuth
+  refresh tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens,
+  and runtime secrets are not returned
 - **AND** display-safe secret references and operation summaries may be returned
 
 #### Scenario: Gateway returns operation summaries

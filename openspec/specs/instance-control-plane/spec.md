@@ -278,10 +278,28 @@ The system SHALL represent deploy target and provider selection as one
   provider account id, worker name, optional display-safe credential reference,
   created time, updated time, and optional latest deployment observation fields
 - **AND** the target id and provider family are immutable after creation
-- **AND** provider API tokens, Alchemy passwords, Alchemy state tokens, raw
-  lease tokens, and runtime secrets are not stored on the record
+- **AND** a Cloudflare credential reference identifies a Formless-owned local
+  OAuth credential without embedding OAuth access tokens, OAuth refresh tokens,
+  API tokens, or Alchemy profile credentials
+- **AND** provider API tokens, Cloudflare OAuth access tokens, Cloudflare OAuth
+  refresh tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens,
+  and runtime secrets are not stored on the record
 - **AND** latest deployment observation fields are runtime-observed cache fields
   rather than deploy intent fields
+
+#### Scenario: Credential setup writes display-safe target facts
+
+- **GIVEN** a local workspace gateway or CLI validates a Formless-owned
+  Cloudflare OAuth credential
+- **WHEN** deployment setup is written to control-plane records
+- **THEN** the `deployment-config` record may store display-safe target id,
+  target URL, provider family, account id, worker name, and credential
+  reference fields
+- **AND** OAuth access tokens, OAuth refresh tokens, token expiry, granted
+  scopes, Alchemy passwords, and Alchemy state tokens remain only in ignored
+  local secret state
+- **AND** subsequent push, destroy, cleanup, or refresh operations resolve and
+  refresh the referenced credential outside schema-owned records
 
 #### Scenario: Route deployment selection
 

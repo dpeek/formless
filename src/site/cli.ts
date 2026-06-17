@@ -1086,6 +1086,9 @@ export function workspaceDomainProviderAlchemyRuntime(
     createRuntime({
       accountId,
       appName: FORMLESS_ALCHEMY_APP_NAME,
+      ...(context.secrets.CLOUDFLARE_API_TOKEN === undefined
+        ? {}
+        : { apiToken: context.secrets.CLOUDFLARE_API_TOKEN }),
       env: workspaceDomainProviderEnv(env, context),
       rootDir: context.deploymentStateRoot,
       stage: context.plan.instanceName,
@@ -1096,14 +1099,22 @@ function workspaceDomainProviderEnv(
   env: NodeJS.ProcessEnv,
   context: FormlessInstanceWorkspaceProviderContext,
 ): NodeJS.ProcessEnv {
+  const baseEnv =
+    context.secrets.CLOUDFLARE_API_TOKEN === undefined ? env : omitCloudflareApiTokenEnv(env);
+
   return {
-    ...env,
+    ...baseEnv,
     ALCHEMY_PASSWORD: context.secrets.ALCHEMY_PASSWORD,
     ...(context.credentialProfile === null ? {} : { ALCHEMY_PROFILE: context.credentialProfile }),
-    ...(context.secrets.CLOUDFLARE_API_TOKEN === undefined
-      ? {}
-      : { CLOUDFLARE_API_TOKEN: context.secrets.CLOUDFLARE_API_TOKEN }),
   };
+}
+
+function omitCloudflareApiTokenEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const rest = { ...env };
+
+  delete rest.CF_API_TOKEN;
+  delete rest.CLOUDFLARE_API_TOKEN;
+  return rest;
 }
 
 export async function forgetFormlessInstanceDomainRouteFromWorkspace(

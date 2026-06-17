@@ -727,6 +727,8 @@ describe("workspace operation contracts", () => {
       ],
       summary: {
         fields: {
+          credentialRef: "formless-cloudflare-oauth:default",
+          credentialToken: "oauth-access-token",
           ownerSetupUrl,
           providerStatePayload: "raw",
           setupUrl: ownerSetupUrl,
@@ -750,6 +752,8 @@ describe("workspace operation contracts", () => {
     );
     expect(updated.result?.deployment?.rawAdapterOutput).toBe("[redacted]");
     expect(updated.result?.summary.fields.ownerSetupUrl).toBe(ownerSetupUrl);
+    expect(updated.summary.fields.credentialRef).toBe("formless-cloudflare-oauth:default");
+    expect(updated.summary.fields.credentialToken).toBe("[redacted]");
     expect(updated.summary.fields.ownerSetupUrl).toBe(ownerSetupUrl);
     expect(updated.summary.fields.providerStatePayload).toBe("[redacted]");
     expect(updated.summary.fields.setupUrl).toBe(
@@ -765,6 +769,7 @@ describe("workspace operation contracts", () => {
     });
     expect(updated.events[0]?.url).toBe("https://dash.cloudflare.com/oauth2/authorize?account=123");
     expect(text).not.toContain(workspaceRoot);
+    expect(text).not.toContain("oauth-access-token");
     expect(text).not.toContain("secret-token");
     expect(text).toContain(ownerSetupUrl);
   });

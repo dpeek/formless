@@ -362,15 +362,22 @@ workspace-controlled deployment intent.
 
 - **GIVEN** a local Formless workspace has saved workspace source and no remote
   target
-- **WHEN** `formless push` runs with required provider credentials available
-  to the CLI or trusted local deployer
+- **WHEN** `formless push` runs with a validated Formless-owned Cloudflare
+  OAuth credential reference available to the CLI or trusted local deployer
 - **THEN** the deployment uses the instance runtime profile
 - **AND** the deployment does not require installed app records or app storage
   snapshots
 - **AND** display-safe target facts are copied to ignored `.formless/` deploy
   state
-- **AND** provider credentials, Alchemy secrets, automation admin tokens, and
-  owner setup tokens are stored only under ignored secret state
+- **AND** the deployer refreshes the Formless-owned Cloudflare OAuth access
+  token just in time before provider mutation
+- **AND** the fresh access token is passed to Alchemy as an external bearer
+  token through `apiToken` or `CLOUDFLARE_API_TOKEN`
+- **AND** Formless-owned OAuth credentials are not written to Alchemy OAuth
+  profiles or browser-visible records
+- **AND** provider credentials, OAuth refresh tokens, Alchemy secrets,
+  automation admin tokens, and owner setup tokens are stored only under ignored
+  secret state
 - **AND** when push creates an owner setup capability, CLI output displays
   the intended owner setup URL for passkey-backed first-owner setup
 - **AND** workspace source is restored or pushed through runtime APIs before
@@ -378,6 +385,10 @@ workspace-controlled deployment intent.
 - **AND** Worker, Durable Object, R2, DNS, and custom-domain resources are
   reconciled through tracked Alchemy desired state as an internal push deploy
   step
+- **AND** Worker upload, R2, Turnstile, route-derived custom-domain resources,
+  DNS resources, tracked Alchemy state, and domain cleanup runners receive the
+  refreshed token through explicit provider options when a Formless-owned
+  credential reference is used
 - **AND** redirect source hosts are reconciled as Worker custom-domain
   resources in the internal push deploy step
 
@@ -385,8 +396,8 @@ workspace-controlled deployment intent.
 
 - **GIVEN** workspace source no longer contains an enabled route that previously
   projected custom-domain or DNS provider resources
-- **WHEN** `formless push` runs with required provider credentials and ignored
-  deploy state available
+- **WHEN** `formless push` runs with a validated Formless-owned Cloudflare
+  OAuth credential reference and ignored deploy state available
 - **THEN** the CLI or trusted local deployer omits those resources from tracked
   Alchemy desired state
 - **AND** Alchemy removes the omitted tracked provider resources
@@ -396,8 +407,9 @@ workspace-controlled deployment intent.
 #### Scenario: Workspace destroy
 
 - **GIVEN** a local Formless workspace targets a Cloudflare-backed instance
-- **WHEN** `formless destroy --confirm <workerName>` runs with provider
-  credentials and ignored deploy state available
+- **WHEN** `formless destroy --confirm <workerName>` runs with a validated
+  Formless-owned Cloudflare OAuth credential reference and ignored deploy state
+  available
 - **THEN** the selected target's Worker, Durable Object namespace, R2 media
   bucket, Worker assets, Worker secrets, custom-domain provider resources, DNS
   provider resources, and Alchemy deploy state are
@@ -448,8 +460,9 @@ deployment intent records.
 - **THEN** they read allowed `app-install`, `route`, and
   `deployment-config` records through the instance control-plane protocol or
   workspace storage snapshots
-- **AND** provider credentials remain in CLI, local gateway, or runner-held
-  secret locations
+- **AND** deployment config credential references remain display-safe pointers
+  to CLI, local gateway, or runner-held Formless credential secret locations
+- **AND** provider credentials remain in those secret locations
 - **AND** deployment observation, evidence, cleanup, sync, and status summaries
   are read through read-only deployment runtime projection or local gateway
   operation responses rather than control-plane storage snapshots
@@ -461,6 +474,8 @@ deployment intent records.
 - **WHEN** `formless push` starts against a schema-owned target
 - **THEN** it reads the current desired-state projection and applies the
   projected resource graph through the local deployment adapter
+- **AND** the local deployment adapter receives a fresh Formless-refreshed
+  Cloudflare OAuth access token rather than resolving an Alchemy OAuth profile
 - **AND** after provider reconciliation or failure it patches the target
   deployment config's display-safe latest observation cache
 - **AND** runner-held credentials remain outside browser, archive, record

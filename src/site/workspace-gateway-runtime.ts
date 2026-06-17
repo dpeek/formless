@@ -47,7 +47,7 @@ import {
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
 import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
-import { setupCloudflareCredentialsWithAlchemyProfile } from "./instance-workspace-credential-setup.ts";
+import { setupCloudflareCredentialsWithFormlessOAuth } from "./instance-workspace-credential-setup.ts";
 import {
   runFormlessWorkspaceOperation,
   type RunFormlessWorkspaceOperationDependencies,
@@ -641,19 +641,14 @@ async function defaultCloudflareCredentialSetupAdapter(
   input: WorkspaceGatewayCredentialSetupAdapterInput,
   dependencies: Pick<WorkspaceGatewayRuntimeDependencies, "accountDiscovery" | "env" | "now">,
 ): Promise<WorkspaceGatewayCredentialSetupAdapterResult> {
-  return setupCloudflareCredentialsWithAlchemyProfile(
+  return setupCloudflareCredentialsWithFormlessOAuth(
     {
       accountId: input.accountId,
       env: dependencies.env,
       profileLabel: input.profileLabel,
       workspaceRoot: input.workspaceRoot,
     },
-    {
-      ...(dependencies.accountDiscovery === undefined
-        ? {}
-        : { accountDiscovery: dependencies.accountDiscovery }),
-      now: dependencies.now,
-    },
+    { now: dependencies.now },
   );
 }
 

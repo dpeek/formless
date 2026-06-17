@@ -12,13 +12,30 @@
  *   7. Create and destroy a built-in Alchemy Cloudflare R2 bucket resource.
  *
  * Run:
- *   FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID=223a6ddec4aad6a652bf9b5ce840912c \
- *     bun scripts/cloudflare-oauth-poc.ts
+ *   bun scripts/cloudflare-oauth-poc.ts --confirm create-and-destroy-cloudflare-resources
  *
- * Required env:
- *   FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID
+ * Guard:
+ *   - The command refuses to run Cloudflare mutations unless the exact
+ *     confirmation flag above is present.
+ *   - OAuth credentials stay in memory only.
+ *   - Alchemy state is written under an OS temp directory and removed before
+ *     exit.
+ *   - The POC does not write ~/.alchemy credentials, ~/.alchemy config, or
+ *     reviewable workspace source.
+ *
+ * Cloudflare resources created and destroyed by each run:
+ *   - One Turnstile widget named "Formless OAuth POC <ISO timestamp>" for
+ *     domain formless.run. It is destroyed through Alchemy, with fallback
+ *     cleanup at DELETE /accounts/:accountId/challenges/widgets/:siteKey.
+ *   - One empty R2 bucket named
+ *     "formless-oauth-poc-<timestamp-base36>-<8-hex>". It is destroyed
+ *     through Alchemy, with fallback cleanup at
+ *     DELETE /accounts/:accountId/r2/buckets/:bucketName.
+ *   - No Worker, DNS record, custom domain, route, zone, Cloudflare account,
+ *     Alchemy OAuth profile, or committed workspace file is created.
  *
  * OAuth client setup:
+ *   - Client ID: source-owned Formless public OAuth client id
  *   - Response type: Code
  *   - Grant types: Authorization Code, Refresh Token
  *   - Token authentication method: none
@@ -39,14 +56,11 @@
  *     into Alchemy resources.
  *   - This bypasses Alchemy's default Cloudflare OAuth client entirely.
  *
- * Unknowns / remaining product work:
- *   - Confirm these dashboard-derived scope IDs against GET /oauth/scopes from
- *     an OAuth Clients Write bootstrap token before productizing.
- *   - Where Formless stores and refreshes the OAuth refresh token.
- *   - Whether Alchemy should accept an upstream provider hook for custom OAuth
- *     refresh behavior.
- *   - Whether the final product should leave created resources for inspection
- *     or always clean up like this POC.
+ * POC boundary:
+ *   This script proves real Cloudflare OAuth credentials can be handed to
+ *   Alchemy as explicit apiToken options without committing secrets. The
+ *   product credential store and refresh path live in src/site/cloudflare-oauth.ts
+ *   and local ignored .formless/cloudflare-oauth state, not in this POC.
  */
 
 import alchemy from "alchemy";
@@ -58,30 +72,22 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
+import {
+  FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID,
+  FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+  FORMLESS_CLOUDFLARE_OAUTH_REDIRECT_URI,
+} from "../src/site/cloudflare-oauth.ts";
 import { CloudflareTurnstileWidget } from "../src/site/turnstile-alchemy.ts";
 
 const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 const openIdConfigurationUrl = "https://dash.cloudflare.com/.well-known/openid-configuration";
 const fallbackAuthorizationEndpoint = "https://dash.cloudflare.com/oauth2/auth";
 const fallbackTokenEndpoint = "https://dash.cloudflare.com/oauth2/token";
-const redirectUri = "http://localhost:9976/auth/callback";
+const redirectUri = FORMLESS_CLOUDFLARE_OAUTH_REDIRECT_URI;
 const testTurnstileDomain = "formless.run";
-const requestedOAuthScopes = [
-  "workers-r2.read",
-  "workers-r2.write",
-  "workers-routes.read",
-  "workers-routes.write",
-  "workers-scripts.read",
-  "workers-scripts.write",
-  "dns.read",
-  "dns.write",
-  "zone.read",
-  "challenge-widgets.read",
-  "challenge-widgets.write",
-  "account-settings.read",
-  "user-details.read",
-  "offline_access",
-] as const;
+const requestedOAuthScopes = FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES;
+const mutationConfirmation = "create-and-destroy-cloudflare-resources";
+const runCommand = `bun scripts/cloudflare-oauth-poc.ts --confirm ${mutationConfirmation}`;
 
 type OAuthEndpoints = {
   authorizationEndpoint: string;
@@ -116,11 +122,19 @@ type CloudflareApiForPoc = {
 };
 
 async function main(): Promise<void> {
-  if (process.argv.length > 2) {
-    throw new Error("This POC has no flags. Run: bun scripts/cloudflare-oauth-poc.ts");
+  const args = parseArgs(process.argv.slice(2));
+
+  if (args.help) {
+    printUsage();
+    return;
   }
 
-  const clientId = requiredEnv("FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID");
+  if (!args.confirmed) {
+    printUsage();
+    throw new Error("Refusing to run Cloudflare mutations without the exact --confirm guard.");
+  }
+
+  const clientId = FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID;
   const endpoints = await readOAuthEndpoints();
   const authorization = createAuthorization({
     authorizationEndpoint: endpoints.authorizationEndpoint,
@@ -422,6 +436,13 @@ async function runAlchemyResourceProofs(input: {
   let turnstileSiteKey: string | undefined;
   let app: AlchemyScopeForPoc | undefined;
 
+  printResourceMutationPlan({
+    account: input.account,
+    bucketName,
+    rootDir,
+    turnstileName,
+  });
+
   try {
     app = (await alchemy("formless-cloudflare-oauth-poc", {
       noTrack: true,
@@ -634,6 +655,80 @@ function redactCredentialSummary(credentials: OAuthCredentials): Record<string, 
   };
 }
 
+function parseArgs(args: string[]): { confirmed: boolean; help: boolean } {
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    return { confirmed: false, help: true };
+  }
+
+  if (args.length === 2 && args[0] === "--confirm" && args[1] === mutationConfirmation) {
+    return { confirmed: true, help: false };
+  }
+
+  return { confirmed: false, help: false };
+}
+
+function printUsage(): void {
+  console.log("Formless Cloudflare OAuth credential POC");
+  console.log("");
+  console.log("Run:");
+  console.log(`  ${runCommand}`);
+  console.log("");
+  console.log("Creates and destroys exactly these real Cloudflare resources:");
+  console.log('- 1 Turnstile widget named "Formless OAuth POC <ISO timestamp>".');
+  console.log('- 1 empty R2 bucket named "formless-oauth-poc-<timestamp-base36>-<8-hex>".');
+  console.log("");
+  console.log("Does not create Workers, DNS records, custom domains, routes, zones, accounts,");
+  console.log("Alchemy OAuth profiles, ~/.alchemy credentials/config, or workspace source files.");
+}
+
+function printResourceMutationPlan(input: {
+  account: CloudflareAccount;
+  bucketName: string;
+  rootDir: string;
+  turnstileName: string;
+}): void {
+  console.log("");
+  console.log("Real Cloudflare mutation plan:");
+  console.log(
+    JSON.stringify(
+      {
+        account: {
+          id: input.account.id,
+          name: input.account.name ?? null,
+        },
+        creates: [
+          {
+            domains: [testTurnstileDomain],
+            fallbackDestroy:
+              "DELETE /accounts/:accountId/challenges/widgets/:siteKey after creation returns siteKey",
+            mode: "managed",
+            name: input.turnstileName,
+            resource: "formless::CloudflareTurnstileWidget",
+          },
+          {
+            empty: true,
+            fallbackDestroy: `DELETE /accounts/${input.account.id}/r2/buckets/${input.bucketName}`,
+            name: input.bucketName,
+            resource: "cloudflare::R2Bucket",
+          },
+        ],
+        destroys: [
+          "Alchemy destroy for created resources in reverse order",
+          "Fallback Cloudflare API deletes for Turnstile widget and R2 bucket if Alchemy destroy fails",
+          `Remove temporary Alchemy root ${input.rootDir}`,
+        ],
+        secrets: [
+          "OAuth access and refresh tokens remain in memory only",
+          "Alchemy receives apiToken as alchemy.secret(oauthAccessToken)",
+          "No ~/.alchemy credentials or config are written",
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function redactText(value: string): string {
   return value
     .replace(/"access_token"\s*:\s*"[^"]+"/g, '"access_token":"<redacted>"')
@@ -643,10 +738,6 @@ function redactText(value: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function requiredEnv(name: string): string {
-  return requiredString(process.env[name], name);
 }
 
 function requiredString(value: unknown, label: string): string {

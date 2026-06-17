@@ -955,6 +955,10 @@ describe("Formless Site CLI", () => {
     };
     const deploymentStateRoot = "/workspace/.formless/deploy/personal";
     const context: FormlessInstanceWorkspaceProviderContext = {
+      credential: {
+        credentialProfile: "personal-profile",
+        kind: "alchemy-profile",
+      },
       credentialProfile: "personal-profile",
       deploymentStatePath: path.join(deploymentStateRoot, "formless.instance.json"),
       deploymentStateRoot,
@@ -1017,10 +1021,10 @@ describe("Formless Site CLI", () => {
       {
         accountId: "account-123",
         appName: FORMLESS_ALCHEMY_APP_NAME,
+        apiToken: "state-cf-token",
         env: {
           ALCHEMY_PASSWORD: "alchemy-password",
           ALCHEMY_PROFILE: "personal-profile",
-          CLOUDFLARE_API_TOKEN: "state-cf-token",
           UNRELATED: "kept",
         },
         rootDir: deploymentStateRoot,

@@ -5,9 +5,42 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+} from "@dpeek/formless-instance-control-plane";
+import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import {
+  INSTANCE_WORKSPACE_MANIFEST_FILE,
+  parseInstanceWorkspaceManifestJson,
+  type InstanceWorkspaceManifest,
+} from "@dpeek/formless-workspace";
+import {
+  readInstanceWorkspaceControlPlaneStorageSnapshot,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
+} from "@dpeek/formless-workspace/node";
+import {
+  FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID,
+  FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+  assertFormlessCloudflareDeployScopesGranted,
+  createFormlessCloudflareOAuthCredential,
+  createNodeFormlessCloudflareOAuthAdapter,
+  formatFormlessCloudflareOAuthCredentialRef,
+  normalizeFormlessCloudflareOAuthCredentialId,
+  readFormlessCloudflareOAuthCredential,
+  refreshStoredFormlessCloudflareOAuthCredential,
+  writeFormlessCloudflareOAuthCredential,
+  type FormlessCloudflareOAuthAccount,
+  type FormlessCloudflareOAuthAdapter,
+  type FormlessCloudflareOAuthCredential,
+  type FormlessCloudflareOAuthTokenSet,
+} from "./cloudflare-oauth.ts";
+import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAccount,
+  normalizeFormlessInstanceName,
 } from "./instance-onboarding.ts";
 import type {
   WorkspaceOperationEvent,
@@ -78,6 +111,11 @@ export type AlchemyCloudflareCredentialSetupDependencies = {
   profileStore?: AlchemyCloudflareProfileStore;
 };
 
+export type FormlessCloudflareCredentialSetupDependencies = {
+  now: () => string;
+  oauth?: FormlessCloudflareOAuthAdapter;
+};
+
 const cloudflareOAuthClientId = "6d8c2255-0773-45f6-b376-2914632e6f91";
 const cloudflareOAuthRedirectUri = "http://localhost:9976/auth/callback";
 const cloudflareOAuthAuthorizeUrl = "https://dash.cloudflare.com/oauth2/authorize";
@@ -110,6 +148,331 @@ const alchemyCloudflareDefaultScopes = [
   "workers:write",
   "zone:read",
 ] as const;
+
+const formlessWorkspaceDeployTargetId = "instance.primary";
+const workersDevDomain = "workers.dev";
+
+export async function setupCloudflareCredentialsWithFormlessOAuth(
+  input: AlchemyCloudflareCredentialSetupInput,
+  dependencies: FormlessCloudflareCredentialSetupDependencies = {
+    now: () => new Date().toISOString(),
+  },
+): Promise<AlchemyCloudflareCredentialSetupResult> {
+  const credentialId = normalizeFormlessCloudflareOAuthCredentialId(input.profileLabel);
+  const selectedAccountId = normalizeOptionalAccountId(input.accountId);
+  const oauth =
+    dependencies.oauth ??
+    createNodeFormlessCloudflareOAuthAdapter({
+      now: dependencies.now,
+    });
+  const existing = await readFormlessCloudflareOAuthCredential({
+    id: credentialId,
+    workspaceRoot: input.workspaceRoot,
+  });
+
+  if (existing) {
+    const credential = await refreshStoredFormlessCloudflareOAuthCredential({
+      credential: existing,
+      oauth,
+      now: dependencies.now,
+      workspaceRoot: input.workspaceRoot,
+    });
+    const accounts = await oauth.listAccounts(credential.token);
+
+    return completeFormlessOAuthCredentialSetup({
+      accounts,
+      credential,
+      credentialId,
+      now: dependencies.now,
+      selectedAccountId,
+      source: "stored-credential",
+      token: credential.token,
+      workspaceRoot: input.workspaceRoot,
+    });
+  }
+
+  const authorization = oauth.createAuthorization();
+
+  return {
+    continue: async () => {
+      const token = await oauth.waitForToken(authorization);
+      assertFormlessCloudflareDeployScopesGranted(token.grantedScopes);
+      const accounts = await oauth.listAccounts(token);
+
+      return completeFormlessOAuthCredentialSetup({
+        accounts,
+        credential: existing,
+        credentialId,
+        now: dependencies.now,
+        selectedAccountId,
+        source: "oauth",
+        token,
+        workspaceRoot: input.workspaceRoot,
+      });
+    },
+    events: [
+      {
+        at: dependencies.now(),
+        profileLabel: credentialId,
+        provider: "cloudflare",
+        status: "waiting",
+        type: "externalAuthorizationUrl",
+        url: authorization.url,
+      },
+    ],
+    result: {
+      details: {
+        clientId: FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID,
+        credentialRef: formatFormlessCloudflareOAuthCredentialRef(credentialId),
+        requestedScopes: [...FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES],
+        scopeSet: "formless-cloudflare-deploy-oauth",
+      },
+      summary: {
+        fields: {
+          credentialRef: formatFormlessCloudflareOAuthCredentialRef(credentialId),
+          provider: "cloudflare",
+          status: "waiting-for-authorization",
+        },
+        title: "Cloudflare authorization required",
+      },
+    },
+    status: "running",
+  };
+}
+
+async function completeFormlessOAuthCredentialSetup(input: {
+  accounts: readonly FormlessCloudflareOAuthAccount[];
+  credential: FormlessCloudflareOAuthCredential | undefined;
+  credentialId: string;
+  now: () => string;
+  selectedAccountId: string | undefined;
+  source: "oauth" | "stored-credential";
+  token: FormlessCloudflareOAuthTokenSet;
+  workspaceRoot: string;
+}): Promise<AlchemyCloudflareCredentialSetupResult> {
+  if (!Array.isArray(input.accounts) || input.accounts.length === 0) {
+    throw new Error("No Cloudflare accounts were found for the Formless OAuth credential.");
+  }
+
+  const selectedAccount =
+    input.selectedAccountId === undefined
+      ? input.credential?.selectedAccount === undefined
+        ? input.accounts.length === 1
+          ? input.accounts[0]
+          : undefined
+        : input.accounts.find((account) => account.id === input.credential?.selectedAccount?.id)
+      : input.accounts.find((account) => account.id === input.selectedAccountId);
+
+  if (input.selectedAccountId !== undefined && !selectedAccount) {
+    throw new Error(
+      `Cloudflare account ${input.selectedAccountId} was not found for the Formless OAuth credential.`,
+    );
+  }
+
+  const credentialRef = formatFormlessCloudflareOAuthCredentialRef(input.credentialId);
+  const credential = createFormlessCloudflareOAuthCredential({
+    ...(input.credential?.createdAt === undefined ? {} : { createdAt: input.credential.createdAt }),
+    id: input.credentialId,
+    ...(selectedAccount === undefined ? {} : { selectedAccount }),
+    token: input.token,
+    updatedAt: input.now(),
+  });
+
+  await writeFormlessCloudflareOAuthCredential({
+    credential,
+    workspaceRoot: input.workspaceRoot,
+  });
+
+  if (!selectedAccount) {
+    return {
+      result: formlessOAuthCredentialSetupAccountSelectionResult({
+        accounts: input.accounts,
+        credentialRef,
+      }),
+      status: "succeeded",
+    };
+  }
+
+  const deploymentConfig = await writeFormlessOAuthDeploymentConfigSource({
+    account: selectedAccount,
+    credentialRef,
+    now: input.now(),
+    workspaceRoot: input.workspaceRoot,
+  });
+
+  return {
+    result: formlessOAuthCredentialSetupReadyResult({
+      account: selectedAccount,
+      accountCount: input.accounts.length,
+      credentialRef,
+      deploymentConfig,
+      source: input.source,
+    }),
+    status: "succeeded",
+  };
+}
+
+async function writeFormlessOAuthDeploymentConfigSource(input: {
+  account: FormlessCloudflareOAuthAccount;
+  credentialRef: string;
+  now: string;
+  workspaceRoot: string;
+}): Promise<{ accountId: string; targetId: string; targetUrl: string; workerName: string }> {
+  const manifest = await readCredentialSetupWorkspaceManifest(input.workspaceRoot);
+  const current = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+    manifest,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const existing = selectCredentialSetupDeploymentConfig(current?.records ?? []);
+  const targetId =
+    stringRecordValue(existing, "targetId") ?? existing?.id ?? formlessWorkspaceDeployTargetId;
+  const workerName =
+    stringRecordValue(existing, "workerName") ?? normalizeFormlessInstanceName(manifest.name);
+  const targetUrl = `https://${workerName}.${input.account.workersDevSubdomain}.${workersDevDomain}`;
+  const deploymentConfigRecord: StoredRecord = {
+    id: existing?.id ?? targetId,
+    entity: "deployment-config",
+    values: {
+      ...existing?.values,
+      targetId,
+      targetKind: "instance",
+      label: stringRecordValue(existing, "label") ?? targetId,
+      enabled: true,
+      targetUrl,
+      providerFamily: "cloudflare",
+      accountId: input.account.id,
+      workerName,
+      credentialRef: input.credentialRef,
+      createdAt: stringRecordValue(existing, "createdAt") ?? input.now,
+      updatedAt: input.now,
+    },
+    createdAt: existing?.createdAt ?? input.now,
+  };
+  const records = [
+    ...(current?.records.filter(
+      (record) =>
+        !(
+          record.entity === "deployment-config" &&
+          (record.id === deploymentConfigRecord.id ||
+            stringRecordValue(record, "targetId") === targetId)
+        ),
+    ) ?? []),
+    deploymentConfigRecord,
+  ];
+
+  await writeInstanceWorkspaceControlPlaneStorageSnapshot({
+    manifest,
+    snapshot: workspaceControlPlaneSnapshotFromRecords({
+      current,
+      exportedAt: input.now,
+      records,
+      schemaUpdatedAt: input.now,
+    }),
+    workspaceRoot: input.workspaceRoot,
+  });
+
+  return {
+    accountId: input.account.id,
+    targetId,
+    targetUrl,
+    workerName,
+  };
+}
+
+function formlessOAuthCredentialSetupReadyResult(input: {
+  account: FormlessCloudflareOAuthAccount;
+  accountCount: number;
+  credentialRef: string;
+  deploymentConfig: { accountId: string; targetId: string; targetUrl: string; workerName: string };
+  source: "oauth" | "stored-credential";
+}): WorkspaceOperationResult {
+  return {
+    details: {
+      account: displaySafeAccount(input.account),
+      accountCount: input.accountCount,
+      credentialRef: input.credentialRef,
+      deploymentConfig: input.deploymentConfig,
+      source: input.source,
+    },
+    summary: {
+      fields: {
+        accountCount: input.accountCount,
+        credentialRef: input.credentialRef,
+        provider: "cloudflare",
+        selectedAccountId: input.account.id,
+        status: "validated",
+        targetUrl: input.deploymentConfig.targetUrl,
+        workerName: input.deploymentConfig.workerName,
+      },
+      title: "Cloudflare credentials ready",
+    },
+  };
+}
+
+function formlessOAuthCredentialSetupAccountSelectionResult(input: {
+  accounts: readonly FormlessCloudflareOAuthAccount[];
+  credentialRef: string;
+}): WorkspaceOperationResult {
+  return {
+    details: {
+      accounts: input.accounts.map(displaySafeAccount),
+      credentialRef: input.credentialRef,
+    },
+    summary: {
+      fields: {
+        accountCount: input.accounts.length,
+        credentialRef: input.credentialRef,
+        provider: "cloudflare",
+        status: "account-selection-required",
+      },
+      title: "Cloudflare account selection required",
+    },
+  };
+}
+
+async function readCredentialSetupWorkspaceManifest(
+  workspaceRoot: string,
+): Promise<InstanceWorkspaceManifest> {
+  return parseInstanceWorkspaceManifestJson(
+    await readFile(path.join(workspaceRoot, INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+  );
+}
+
+function selectCredentialSetupDeploymentConfig(
+  records: readonly StoredRecord[],
+): StoredRecord | undefined {
+  const targets = records.filter(
+    (record) =>
+      record.entity === "deployment-config" &&
+      record.values.targetKind === "instance" &&
+      record.values.enabled !== false &&
+      record.deletedAt === undefined,
+  );
+  const primary = targets.find(
+    (record) => stringRecordValue(record, "targetId") === formlessWorkspaceDeployTargetId,
+  );
+
+  return primary ?? (targets.length === 1 ? targets[0] : undefined);
+}
+
+function workspaceControlPlaneSnapshotFromRecords(input: {
+  current: StorageSnapshot | undefined;
+  exportedAt: string;
+  records: StoredRecord[];
+  schemaUpdatedAt: string;
+}): StorageSnapshot {
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: input.current?.schemaKey ?? INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: input.exportedAt,
+    schemaUpdatedAt: input.schemaUpdatedAt,
+    sourceCursor: input.records.length,
+    schema: input.current?.schema ?? instanceControlPlaneSchema,
+    records: input.records,
+  };
+}
 
 export async function setupCloudflareCredentialsWithAlchemyProfile(
   input: AlchemyCloudflareCredentialSetupInput,
@@ -311,6 +674,15 @@ function displaySafeAccount(account: FormlessInstanceDeploymentAccount): Record<
     ...(account.name === undefined ? {} : { name: account.name }),
     workersDevSubdomain: account.workersDevSubdomain,
   };
+}
+
+function stringRecordValue(
+  record: StoredRecord | undefined,
+  fieldName: string,
+): string | undefined {
+  const value = record?.values[fieldName];
+
+  return typeof value === "string" ? value : undefined;
 }
 
 function normalizeAlchemyProfile(

@@ -307,33 +307,41 @@ The system SHALL track local workspace operations with display-safe progress.
 - **AND** secret material, raw adapter or tool output, and provider state payloads
   are not persisted in operation state
 
-### Requirement: Alchemy Credential Setup
+### Requirement: Cloudflare Credential Setup
 
-The system SHALL use local Alchemy credentials as the browser onboarding path
-for Cloudflare credential setup.
+The system SHALL use a Formless-owned Cloudflare OAuth client as the browser
+onboarding path for Cloudflare credential setup.
 
-#### Scenario: Existing Alchemy profile credentials
+#### Scenario: Existing Formless Cloudflare OAuth credential
 
 - **WHEN** a browser starts Cloudflare credential setup and the local gateway can
-  resolve existing default or named Alchemy profile credentials
-- **THEN** the gateway validates the credentials and returns display-safe
-  account options
+  resolve an existing Formless-owned Cloudflare OAuth credential from ignored
+  local secret state
+- **THEN** the gateway refreshes the access token if needed, validates the
+  credential scopes and account visibility, and returns display-safe account
+  options
 - **AND** no Cloudflare token is requested from browser input
 
-#### Scenario: Create Alchemy OAuth profile
+#### Scenario: Create Formless Cloudflare OAuth credential
 
-- **WHEN** a browser starts Cloudflare credential setup without usable existing
-  Alchemy credentials
-- **THEN** the gateway starts a trusted local Alchemy OAuth profile creation
-  flow
-- **AND** any created Cloudflare credential uses Alchemy's default OAuth scopes
-  for the current deploy resource set
+- **WHEN** a browser starts Cloudflare credential setup without a usable
+  Formless-owned Cloudflare OAuth credential
+- **THEN** the gateway starts a trusted local Formless Cloudflare OAuth flow
+  using Authorization Code with PKCE and the Formless-owned OAuth client
+- **AND** the OAuth client id is a source-owned Formless constant rather than a
+  browser input, workspace setting, secret-state value, or environment variable
+- **AND** the requested Cloudflare scopes match the current Formless deploy
+  resource set, including Worker scripts, Worker routes, R2, DNS, zones,
+  account details, user details, Turnstile widgets, and offline access
 - **AND** after authorization the gateway resolves accessible Cloudflare
   accounts and either selects the only available account or returns
   display-safe account options for browser selection
-- **AND** the selected account is stored as Alchemy provider metadata for the
-  profile
-- **AND** secret material is stored only under ignored workspace secret state
+- **AND** the selected account is stored as display-safe deployment intent
+  together with a credential reference
+- **AND** OAuth access tokens, refresh tokens, expiry, and granted scopes are
+  stored only under ignored workspace secret state
+- **AND** Formless-owned OAuth credentials are not written to Alchemy OAuth
+  credentials or provider profiles
 
 #### Scenario: API token creation excluded from first onboarding
 
@@ -347,29 +355,29 @@ for Cloudflare credential setup.
 
 - **WHEN** browser onboarding needs Cloudflare credentials
 - **THEN** the gateway does not expose a browser token paste operation
-- **AND** credential setup proceeds through existing Alchemy credentials or
-  Alchemy-backed OAuth profile creation
+- **AND** credential setup proceeds through existing Formless-owned OAuth
+  credentials or Formless-owned OAuth creation
 
 ### Requirement: External Authorization URL Handoff
 
 The system SHALL allow browser-initiated credential setup operations to surface
 provider authorization URLs from trusted local credential adapters.
 
-#### Scenario: Alchemy adapter provides Cloudflare authorization URL
+#### Scenario: Formless adapter provides Cloudflare authorization URL
 
 - **WHEN** a browser starts Cloudflare credential setup through the workspace
-  gateway and the trusted Alchemy profile adapter provides an external
+  gateway and the trusted Formless Cloudflare OAuth adapter provides an external
   authorization URL
 - **THEN** the gateway returns a display-safe operation event containing the URL,
-  credential profile label, provider, and waiting status
+  credential label, provider, and waiting status
 - **AND** raw adapter or tool output is not returned to the browser
-- **AND** provider tokens, refresh tokens, Alchemy passwords, and local secret
-  values are redacted from operation events
+- **AND** OAuth access tokens, OAuth refresh tokens, provider tokens, Alchemy
+  passwords, and local secret values are redacted from operation events
 
 #### Scenario: Complete external authorization
 
 - **WHEN** the user completes the external Cloudflare authorization in the
-  browser and the Alchemy profile adapter finishes locally
+  browser and the Formless Cloudflare OAuth adapter finishes locally
 - **THEN** the gateway validates the resulting Cloudflare credentials, resolves
   accessible accounts, and stores any secret material only under ignored
   workspace secret state
@@ -415,8 +423,9 @@ responses and reviewable source.
 #### Scenario: Deploy through gateway
 
 - **WHEN** a browser starts a deploy plan or deploy apply operation
-- **THEN** the gateway resolves provider credentials from environment or ignored
-  workspace secret state
+- **THEN** the gateway resolves Formless-owned Cloudflare OAuth credentials from
+  ignored workspace secret state and refreshes the access token just in time for
+  provider mutation
 - **AND** existing deployed instance targets are resolved from enabled
   `deployment-config.targetUrl` workspace storage state
 - **AND** the browser receives only display-safe plan, operation, health check,
@@ -445,8 +454,9 @@ responses and reviewable source.
 #### Scenario: Secret rejection
 
 - **WHEN** workspace source, operation input, or operation output includes
-  provider API tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens,
-  owner setup tokens, or automation admin tokens
+  provider API tokens, Cloudflare OAuth access tokens, Cloudflare OAuth refresh
+  tokens, Alchemy passwords, Alchemy state tokens, raw lease tokens, owner setup
+  tokens, or automation admin tokens
 - **THEN** Workspace package local state adapters or runtime operation adapters
   reject or redact the secret values before writing reviewable source
 - **AND** Gateway rejects or redacts the secret values before returning

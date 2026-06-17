@@ -221,6 +221,7 @@ function domainProviderAlchemyStage(runtime: DomainProviderAlchemyRuntime): stri
 export async function nodeAlchemyDomainProviderRuntime(input: {
   accountId: string;
   appName?: string;
+  apiToken?: string;
   env: NodeJS.ProcessEnv;
   rootDir?: string;
   stage?: string;
@@ -229,9 +230,10 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
   const alchemyStateToken =
     input.rootDir === undefined ? requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME) : undefined;
   const cloudflareApiToken =
-    input.rootDir === undefined
+    optionalApiToken(input.apiToken) ??
+    (input.rootDir === undefined
       ? cloudflareApiTokenFromEnv(input.env)
-      : optionalCloudflareApiTokenFromEnv(input.env);
+      : optionalCloudflareApiTokenFromEnv(input.env));
   const [{ default: alchemy }, cloudflare, state] = await Promise.all([
     import("alchemy"),
     import("alchemy/cloudflare"),
@@ -344,6 +346,12 @@ function optionalCloudflareApiTokenFromEnv(env: NodeJS.ProcessEnv): string | und
   const value = env.CLOUDFLARE_API_TOKEN?.trim() ?? env.CF_API_TOKEN?.trim();
 
   return value || undefined;
+}
+
+function optionalApiToken(value: string | undefined): string | undefined {
+  const token = value?.trim();
+
+  return token || undefined;
 }
 
 function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
