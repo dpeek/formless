@@ -5,17 +5,8 @@ import {
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type DomainProviderConfigIssue,
   type DomainProviderConfigStatus,
-  type CreateInstanceDomainProviderRedirectIntentRequest,
-  type CreateInstanceDomainProviderRedirectIntentResponse,
-  type DeleteInstanceDomainProviderRedirectIntentRequest,
-  type DeleteInstanceDomainProviderRedirectIntentResponse,
-  type ForgetInstanceDomainProviderRedirectIntentResponse,
-  type InstanceDomainProviderAppliedResourceState,
-  type InstanceDomainProviderAuditEvent,
   type InstanceDomainProviderDeleteBlockedCode,
   type InstanceDomainProviderDeleteJob,
   type InstanceDomainProviderDeleteJobResourceEvidence,
@@ -28,9 +19,7 @@ import {
   type InstanceDomainProviderManualCleanupRequest,
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
-  type InstanceDomainProviderRedirectIntentCleanupEvent,
   type InstanceDomainProviderRedirectIntent,
-  type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
@@ -48,7 +37,6 @@ import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
   type InstanceDomainMappingAppliedState,
-  type InstanceDomainMappingDesiredCleanupEvent,
 } from "../shared/instance-domain-mappings.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
@@ -56,28 +44,15 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   deleteInstanceDomainMappingAppliedState,
   readInstanceDomainMappingAppliedStates,
-  readInstanceDomainMappingDesiredCleanupEvents,
-  readInstanceDomainMappings,
 } from "./instance-domain-mappings-state.ts";
-import {
-  readControlPlaneRecords,
-  syncDomainIntentToControlPlane,
-} from "./deployment-control-plane-client.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { readControlPlaneAppInstallsForRequest } from "./instance-app-installs.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import {
-  domainProviderRedirectIntentFromRow as redirectIntentFromRow,
-  ensureDomainProviderRedirectIntentsTable,
-  readDomainProviderRedirectIntents,
-  type DomainProviderRedirectIntentCleanupEventRow,
-} from "./domain-provider-redirect-intents-state.ts";
 import {
   createSqlStorageMigrationRegistry,
   runSqlStorageMigrations,
   storageSqlMigrationFamily,
 } from "./sql-migrations.ts";
-
-export { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 
 const providerMutationLockId = "domain-provider-mutation";
 const providerMutationLockTableSql = `
@@ -103,24 +78,6 @@ const deleteJobsTableSql = `
     error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-  )
-`;
-const redirectIntentCleanupEventsTableSql = `
-  CREATE TABLE IF NOT EXISTS instance_domain_provider_redirect_intent_cleanup_events (
-    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_host TEXT NOT NULL,
-    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
-    to_host TEXT,
-    to_url TEXT,
-    preserve_path INTEGER NOT NULL CHECK (preserve_path IN (0, 1)),
-    preserve_query_string INTEGER NOT NULL CHECK (preserve_query_string IN (0, 1)),
-    status_code INTEGER NOT NULL CHECK (status_code IN (301, 302, 303, 307, 308)),
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action = 'forgotten'),
-    reason TEXT NOT NULL CHECK (reason = 'disabled-unapplied'),
-    recorded_at TEXT NOT NULL,
-    CHECK ((to_host IS NOT NULL AND to_url IS NULL) OR (to_host IS NULL AND to_url IS NOT NULL))
   )
 `;
 const appliedResourcesTableSql = `
@@ -243,26 +200,6 @@ type DomainProviderDeleteJobRow = {
   updated_at: string;
 };
 
-type DomainProviderAppliedResourceRow = {
-  account_id: string;
-  action: InstanceDomainProviderAppliedResourceState["action"];
-  alchemy_resource_id: string;
-  applied_at: string;
-  host: string;
-  kind: InstanceDomainProviderAppliedResourceState["kind"];
-  logical_id: string;
-  resource_id: string;
-  resource_json: string;
-  runner_id: string | null;
-  updated_at: string;
-  zone_id: string;
-  zone_name: string;
-};
-
-type DomainProviderAuditEventRow = DomainProviderAppliedResourceRow & {
-  event_id: number;
-};
-
 export async function handleInstanceDomainProviderApiRequest(
   request: Request,
   env: InstanceDomainProviderApiEnv,
@@ -326,14 +263,6 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     );
   }
 
-  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH) {
-    return handleForgetRedirectIntentRequest(request, storage, env, url);
-  }
-
-  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH) {
-    return handleRedirectIntentsRequest(request, storage, env, url);
-  }
-
   if (url.pathname === INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH) {
     return handleDeleteRequest(request, storage, env);
   }
@@ -348,23 +277,18 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
 function resetInstanceDomainProviderTables(storage: DurableObjectStorage) {
   ensureDomainProviderMutationLockTable(storage);
   ensureDomainProviderDeleteJobsTable(storage);
-  ensureDomainProviderRedirectIntentsTable(storage);
-  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
   ensureDomainProviderAppliedResourcesTables(storage);
 
   storage.transactionSync(() => {
     storage.sql.exec(`
       DELETE FROM instance_domain_provider_mutation_lock;
       DELETE FROM instance_domain_provider_delete_jobs;
-      DELETE FROM instance_domain_provider_redirect_intents;
-      DELETE FROM instance_domain_provider_redirect_intent_cleanup_events;
       DELETE FROM instance_domain_provider_applied_resources;
       DELETE FROM instance_domain_provider_audit_events;
+      DROP TABLE IF EXISTS instance_domain_provider_redirect_intents;
+      DROP TABLE IF EXISTS instance_domain_provider_redirect_intent_cleanup_events;
       DELETE FROM sqlite_sequence
-      WHERE name IN (
-        'instance_domain_provider_redirect_intent_cleanup_events',
-        'instance_domain_provider_audit_events'
-      );
+      WHERE name = 'instance_domain_provider_audit_events';
     `);
   });
 }
@@ -391,167 +315,6 @@ function handleManualCleanupRequest(
   }
 
   return manualCleanupWithAuthorization(request, storage, env);
-}
-
-async function handleRedirectIntentsRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  url: URL,
-): Promise<Response> {
-  if (request.method === "GET") {
-    return jsonResponse(await domainProviderRedirectsResponse(storage, env, request.url));
-  }
-
-  if (request.method === "POST") {
-    const authorization = await authorizeInstanceWrite(request, env);
-
-    if (!authorization.authorized) {
-      return jsonResponse(
-        { error: authorization.error },
-        authorization.status,
-        authorization.headers,
-      );
-    }
-
-    const parsed = await readRedirectIntentRequest(request);
-
-    if (!parsed.ok) {
-      return jsonResponse({ error: parsed.error }, 400);
-    }
-
-    const now = nowIsoString();
-    const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
-      storage,
-      env,
-      request.url,
-    );
-    const result = buildRedirectIntent({
-      currentRedirectIntents,
-      intent: parsed.request,
-      now,
-    });
-
-    const redirectIntents = await writeControlPlaneRedirectIntents(storage, env, request.url, {
-      now,
-      redirectIntents: result.redirectIntents,
-    });
-
-    return jsonResponse(
-      {
-        redirectIntent:
-          redirectIntents.find((intent) => intent.fromHost === result.redirectIntent.fromHost) ??
-          result.redirectIntent,
-        redirectIntents,
-      } satisfies CreateInstanceDomainProviderRedirectIntentResponse,
-      201,
-    );
-  }
-
-  if (request.method === "DELETE") {
-    const authorization = await authorizeInstanceWrite(request, env);
-
-    if (!authorization.authorized) {
-      return jsonResponse(
-        { error: authorization.error },
-        authorization.status,
-        authorization.headers,
-      );
-    }
-
-    const parsed = parseDeleteRedirectIntentRequest({
-      fromHost: url.searchParams.get("fromHost") ?? "",
-    });
-
-    if (!parsed.ok) {
-      return jsonResponse({ error: parsed.error }, 400);
-    }
-
-    const now = nowIsoString();
-    const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
-      storage,
-      env,
-      request.url,
-    );
-    const result = disableRedirectIntent({
-      currentRedirectIntents,
-      fromHost: parsed.request.fromHost,
-      now,
-    });
-
-    if (!result.ok) {
-      return jsonResponse({ error: result.error }, 404);
-    }
-
-    const redirectIntents = await writeControlPlaneRedirectIntents(storage, env, request.url, {
-      now,
-      redirectIntents: result.redirectIntents,
-    });
-
-    return jsonResponse({
-      redirectIntent:
-        redirectIntents.find((intent) => intent.fromHost === result.redirectIntent.fromHost) ??
-        result.redirectIntent,
-      redirectIntents,
-    } satisfies DeleteInstanceDomainProviderRedirectIntentResponse);
-  }
-
-  return methodNotAllowedResponse("GET, POST, DELETE");
-}
-
-async function handleForgetRedirectIntentRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  url: URL,
-): Promise<Response> {
-  if (request.method !== "DELETE") {
-    return methodNotAllowedResponse("DELETE");
-  }
-
-  const authorization = await authorizeInstanceWrite(request, env);
-
-  if (!authorization.authorized) {
-    return jsonResponse(
-      { error: authorization.error },
-      authorization.status,
-      authorization.headers,
-    );
-  }
-
-  const parsed = parseDeleteRedirectIntentRequest({
-    fromHost: url.searchParams.get("fromHost") ?? "",
-  });
-
-  if (!parsed.ok) {
-    return jsonResponse({ error: parsed.error }, 400);
-  }
-
-  const now = nowIsoString();
-  const currentRedirectIntents = await readControlPlaneSyncedRedirectIntents(
-    storage,
-    env,
-    request.url,
-  );
-  const result = forgetRedirectIntent(storage, {
-    currentRedirectIntents,
-    fromHost: parsed.request.fromHost,
-    now,
-  });
-
-  if (!result.ok) {
-    return jsonResponse({ code: result.code, error: result.error }, result.status);
-  }
-
-  return jsonResponse({
-    redirectIntent: result.redirectIntent,
-    redirectIntentCleanupEvent: result.redirectIntentCleanupEvent,
-    redirectIntentCleanupEvents: result.redirectIntentCleanupEvents,
-    redirectIntents: await writeControlPlaneRedirectIntents(storage, env, request.url, {
-      now,
-      redirectIntents: result.redirectIntents,
-    }),
-  } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
 async function deleteWithAuthorization(
@@ -1030,21 +793,8 @@ function invalidZoneConfigIssue(): { ok: false; issue: DomainProviderConfigIssue
   };
 }
 
-async function domainProviderRedirectsResponse(
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  requestUrl: string,
-): Promise<InstanceDomainProviderRedirectsResponse> {
-  return {
-    appliedResources: readAppliedProviderResources(storage),
-    auditEvents: readProviderAuditEvents(storage),
-    redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
-    redirectIntents: await readControlPlaneSyncedRedirectIntents(storage, env, requestUrl),
-  };
-}
-
 async function readControlPlaneSyncedDomainProviderIntent(
-  storage: DurableObjectStorage,
+  _storage: DurableObjectStorage,
   env: DurableObjectDomainProviderEnv,
   requestUrl: string,
 ): Promise<{
@@ -1061,153 +811,83 @@ async function readControlPlaneSyncedDomainProviderIntent(
     );
   }
 
-  const mappingCleanupEvents = readInstanceDomainMappingDesiredCleanupEvents(storage);
-  const redirectCleanupEvents = readRedirectIntentCleanupEvents(storage);
-  const legacyMappings = readInstanceDomainMappings(storage).filter(
-    (mapping) => !isForgottenDomainMapping(mapping, mappingCleanupEvents),
-  );
-  const legacyRedirectIntents = readDomainProviderRedirectIntents(storage).filter(
-    (intent) => !isForgottenRedirectIntent(intent, redirectCleanupEvents),
-  );
   const records = await readControlPlaneRecords({ env, requestUrl });
 
   if (records === undefined) {
     return {
-      mappings: legacyMappings,
-      redirectIntents: legacyRedirectIntents,
+      mappings: [],
+      redirectIntents: [],
     };
   }
 
-  const mappings = mergeDomainMappings(
-    legacyMappings,
-    domainMappingsFromControlPlaneRecords(records, mappingCleanupEvents),
-  );
-  const redirectIntents = mergeRedirectIntents(
-    legacyRedirectIntents,
-    redirectIntentsFromControlPlaneRecords(records, redirectCleanupEvents),
-  );
-
-  if (legacyMappings.length === 0 && legacyRedirectIntents.length === 0) {
-    return { mappings, redirectIntents };
-  }
-
-  const syncedRecords = await syncDomainIntentToControlPlane({
-    env,
-    mappings,
-    now: nowIsoString(),
-    redirectIntents,
-    requestUrl,
-  });
-
-  if (syncedRecords === undefined) {
-    return { mappings, redirectIntents };
-  }
-
   return {
-    mappings: domainMappingsFromControlPlaneRecords(syncedRecords, mappingCleanupEvents),
-    redirectIntents: redirectIntentsFromControlPlaneRecords(syncedRecords, redirectCleanupEvents),
+    mappings: domainMappingsFromControlPlaneRecords(records),
+    redirectIntents: redirectIntentsFromControlPlaneRecords(records),
   };
-}
-
-async function readControlPlaneSyncedRedirectIntents(
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  requestUrl: string,
-): Promise<InstanceDomainProviderRedirectIntent[]> {
-  return (await readControlPlaneSyncedDomainProviderIntent(storage, env, requestUrl))
-    .redirectIntents;
 }
 
 function domainMappingsFromControlPlaneRecords(
   records: readonly StoredRecord[],
-  cleanupEvents: readonly InstanceDomainMappingDesiredCleanupEvent[],
 ): InstanceDomainMapping[] {
   return listInstanceDomainMappings(
-    records
-      .filter(
-        (record) =>
-          !record.deletedAt &&
-          record.entity === "route" &&
-          record.id.startsWith("route:host:") &&
-          record.values.kind === "mount" &&
-          typeof record.values.matchHost === "string",
-      )
-      .map((record) => {
-        const profile = domainMappingProfileFromRouteTarget(record.values.targetProfile);
-        const targetInstallId =
-          typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+    records.flatMap((record) => {
+      if (
+        record.deletedAt ||
+        record.entity !== "route" ||
+        record.values.enabled !== true ||
+        record.values.kind !== "mount" ||
+        typeof record.values.matchHost !== "string"
+      ) {
+        return [];
+      }
 
-        return {
+      const profile = domainMappingProfileFromRouteTarget(record.values.targetProfile);
+
+      if (profile === undefined) {
+        return [];
+      }
+
+      const targetInstallId =
+        typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+
+      return [
+        {
           host: String(record.values.matchHost),
           profile,
           ...(profile === "publicSite" ? { surface: "site" as const } : {}),
           ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
-          enabled: record.values.enabled === true,
+          enabled: true,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
-        };
-      }),
-  ).filter((mapping) => !isForgottenDomainMapping(mapping, cleanupEvents));
+        },
+      ];
+    }),
+  );
 }
 
-function domainMappingProfileFromRouteTarget(value: unknown): InstanceDomainMapping["profile"] {
+function domainMappingProfileFromRouteTarget(
+  value: unknown,
+): InstanceDomainMapping["profile"] | undefined {
   if (value === "app" || value === "instance") {
     return value;
   }
 
-  return "publicSite";
-}
-
-function mergeDomainMappings(
-  legacyMappings: readonly InstanceDomainMapping[],
-  routeMappings: readonly InstanceDomainMapping[],
-): InstanceDomainMapping[] {
-  const mappings = new Map<string, InstanceDomainMapping>();
-
-  for (const mapping of legacyMappings) {
-    mappings.set(domainMappingKey(mapping), mapping);
+  if (value === "public-site") {
+    return "publicSite";
   }
 
-  for (const mapping of routeMappings) {
-    mappings.set(domainMappingKey(mapping), mapping);
-  }
-
-  return listInstanceDomainMappings([...mappings.values()]);
-}
-
-function isForgottenDomainMapping(
-  mapping: InstanceDomainMapping,
-  cleanupEvents: readonly InstanceDomainMappingDesiredCleanupEvent[],
-): boolean {
-  let lastCleanup: InstanceDomainMappingDesiredCleanupEvent | undefined;
-
-  for (const event of cleanupEvents) {
-    if (
-      event.host === mapping.host &&
-      event.profile === mapping.profile &&
-      (!lastCleanup || event.recordedAt > lastCleanup.recordedAt)
-    ) {
-      lastCleanup = event;
-    }
-  }
-
-  return lastCleanup !== undefined && lastCleanup.recordedAt >= mapping.updatedAt;
-}
-
-function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
-  return `${mapping.profile}:${mapping.host}`;
+  return undefined;
 }
 
 function redirectIntentsFromControlPlaneRecords(
   records: readonly StoredRecord[],
-  cleanupEvents: readonly InstanceDomainProviderRedirectIntentCleanupEvent[],
 ): InstanceDomainProviderRedirectIntent[] {
   return records
     .filter(
       (record) =>
         !record.deletedAt &&
         record.entity === "route" &&
-        record.id.startsWith("route:redirect:") &&
+        record.values.enabled === true &&
         record.values.kind === "redirect" &&
         typeof record.values.matchHost === "string",
     )
@@ -1222,327 +902,7 @@ function redirectIntentsFromControlPlaneRecords(
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     }))
-    .filter((intent) => !isForgottenRedirectIntent(intent, cleanupEvents))
     .sort((left, right) => left.fromHost.localeCompare(right.fromHost));
-}
-
-function mergeRedirectIntents(
-  legacyIntents: readonly InstanceDomainProviderRedirectIntent[],
-  routeIntents: readonly InstanceDomainProviderRedirectIntent[],
-): InstanceDomainProviderRedirectIntent[] {
-  const intents = new Map<string, InstanceDomainProviderRedirectIntent>();
-
-  for (const intent of legacyIntents) {
-    intents.set(intent.fromHost, intent);
-  }
-
-  for (const intent of routeIntents) {
-    intents.set(intent.fromHost, intent);
-  }
-
-  return [...intents.values()].sort((left, right) => left.fromHost.localeCompare(right.fromHost));
-}
-
-function isForgottenRedirectIntent(
-  intent: InstanceDomainProviderRedirectIntent,
-  cleanupEvents: readonly InstanceDomainProviderRedirectIntentCleanupEvent[],
-): boolean {
-  let lastCleanup: InstanceDomainProviderRedirectIntentCleanupEvent | undefined;
-
-  for (const event of cleanupEvents) {
-    if (
-      event.fromHost === intent.fromHost &&
-      (!lastCleanup || event.recordedAt > lastCleanup.recordedAt)
-    ) {
-      lastCleanup = event;
-    }
-  }
-
-  return lastCleanup !== undefined && lastCleanup.recordedAt >= intent.updatedAt;
-}
-
-async function writeControlPlaneRedirectIntents(
-  storage: DurableObjectStorage,
-  env: DurableObjectDomainProviderEnv,
-  requestUrl: string,
-  input: { now: string; redirectIntents: readonly InstanceDomainProviderRedirectIntent[] },
-): Promise<InstanceDomainProviderRedirectIntent[]> {
-  const records = await syncDomainIntentToControlPlane({
-    env,
-    now: input.now,
-    redirectIntents: [...input.redirectIntents],
-    requestUrl,
-  });
-
-  if (records === undefined) {
-    return [...input.redirectIntents].sort((left, right) =>
-      left.fromHost.localeCompare(right.fromHost),
-    );
-  }
-
-  return redirectIntentsFromControlPlaneRecords(records, readRedirectIntentCleanupEvents(storage));
-}
-
-function buildRedirectIntent(input: {
-  currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
-  intent: CreateInstanceDomainProviderRedirectIntentRequest;
-  now: string;
-}): {
-  redirectIntent: InstanceDomainProviderRedirectIntent;
-  redirectIntents: InstanceDomainProviderRedirectIntent[];
-} {
-  const current = input.currentRedirectIntents.find(
-    (intent) => intent.fromHost === input.intent.fromHost,
-  );
-  const createdAt = current?.createdAt ?? input.now;
-  const enabled = input.intent.enabled ?? true;
-  const preservePath = input.intent.preservePath ?? true;
-  const preserveQueryString = input.intent.preserveQueryString ?? true;
-  const statusCode = input.intent.statusCode ?? 301;
-  const redirectIntent: InstanceDomainProviderRedirectIntent = {
-    createdAt,
-    enabled,
-    fromHost: input.intent.fromHost,
-    preservePath,
-    preserveQueryString,
-    statusCode,
-    ...(input.intent.toHost === undefined ? {} : { toHost: input.intent.toHost }),
-    ...(input.intent.toUrl === undefined ? {} : { toUrl: input.intent.toUrl }),
-    updatedAt: input.now,
-  };
-
-  return {
-    redirectIntent,
-    redirectIntents: mergeRedirectIntents(
-      input.currentRedirectIntents.filter((intent) => intent.fromHost !== input.intent.fromHost),
-      [redirectIntent],
-    ),
-  };
-}
-
-function disableRedirectIntent(input: {
-  currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
-  fromHost: string;
-  now: string;
-}):
-  | {
-      ok: true;
-      redirectIntent: InstanceDomainProviderRedirectIntent;
-      redirectIntents: InstanceDomainProviderRedirectIntent[];
-    }
-  | { ok: false; error: string } {
-  const current = input.currentRedirectIntents.find((intent) => intent.fromHost === input.fromHost);
-
-  if (!current) {
-    return {
-      ok: false,
-      error: `Domain provider redirect intent for "${input.fromHost}" does not exist.`,
-    };
-  }
-
-  const redirectIntent = {
-    ...current,
-    enabled: false,
-    updatedAt: input.now,
-  };
-
-  return {
-    ok: true,
-    redirectIntent,
-    redirectIntents: mergeRedirectIntents(
-      input.currentRedirectIntents.filter((intent) => intent.fromHost !== input.fromHost),
-      [redirectIntent],
-    ),
-  };
-}
-
-function forgetRedirectIntent(
-  storage: DurableObjectStorage,
-  input: {
-    currentRedirectIntents: readonly InstanceDomainProviderRedirectIntent[];
-    fromHost: string;
-    now: string;
-  },
-):
-  | {
-      ok: true;
-      redirectIntent: InstanceDomainProviderRedirectIntent;
-      redirectIntentCleanupEvent: InstanceDomainProviderRedirectIntentCleanupEvent;
-      redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
-      redirectIntents: InstanceDomainProviderRedirectIntent[];
-    }
-  | { ok: false; code: string; error: string; status: number } {
-  ensureDomainProviderRedirectIntentsTable(storage);
-  ensureDomainProviderAppliedResourcesTables(storage);
-
-  return storage.transactionSync(() => {
-    const current = input.currentRedirectIntents.find(
-      (intent) => intent.fromHost === input.fromHost,
-    );
-
-    if (!current) {
-      return {
-        ok: false,
-        code: "domain-provider-redirect-not-found",
-        error: `Domain provider redirect intent for "${input.fromHost}" does not exist.`,
-        status: 404,
-      };
-    }
-
-    if (current.enabled) {
-      return {
-        ok: false,
-        code: "domain-provider-redirect-enabled",
-        error: `Domain provider redirect intent for "${input.fromHost}" must be disabled before it can be forgotten.`,
-        status: 409,
-      };
-    }
-
-    const appliedResources = readAppliedProviderResources(storage).filter(
-      (resource) => resource.host === current.fromHost,
-    );
-
-    if (appliedResources.length > 0) {
-      return {
-        ok: false,
-        code: "domain-provider-redirect-has-applied-resources",
-        error: `Domain provider redirect intent for "${input.fromHost}" has provider applied evidence and cannot be forgotten until provider cleanup clears it.`,
-        status: 409,
-      };
-    }
-
-    storage.sql.exec(
-      `
-        DELETE FROM instance_domain_provider_redirect_intents
-        WHERE from_host = ?
-      `,
-      current.fromHost,
-    );
-    writeRedirectIntentCleanupEvent(storage, { intent: current, now: input.now });
-
-    return {
-      ok: true,
-      redirectIntent: current,
-      redirectIntentCleanupEvent: readLastRedirectIntentCleanupEvent(storage),
-      redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
-      redirectIntents: input.currentRedirectIntents.filter(
-        (intent) => intent.fromHost !== current.fromHost,
-      ),
-    };
-  });
-}
-
-function readRedirectIntentCleanupEvents(
-  storage: DurableObjectStorage,
-): InstanceDomainProviderRedirectIntentCleanupEvent[] {
-  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
-  const events: InstanceDomainProviderRedirectIntentCleanupEvent[] = [];
-
-  for (const row of storage.sql.exec<DomainProviderRedirectIntentCleanupEventRow>(
-    `
-      SELECT
-        event_id,
-        from_host,
-        enabled,
-        to_host,
-        to_url,
-        preserve_path,
-        preserve_query_string,
-        status_code,
-        created_at,
-        updated_at,
-        action,
-        reason,
-        recorded_at
-      FROM instance_domain_provider_redirect_intent_cleanup_events
-      ORDER BY event_id ASC
-    `,
-  )) {
-    events.push(redirectIntentCleanupEventFromRow(row));
-  }
-
-  return events;
-}
-
-function writeRedirectIntentCleanupEvent(
-  storage: DurableObjectStorage,
-  input: { intent: InstanceDomainProviderRedirectIntent; now: string },
-) {
-  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
-
-  storage.sql.exec(
-    `
-      INSERT INTO instance_domain_provider_redirect_intent_cleanup_events (
-        from_host,
-        enabled,
-        to_host,
-        to_url,
-        preserve_path,
-        preserve_query_string,
-        status_code,
-        created_at,
-        updated_at,
-        action,
-        reason,
-        recorded_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    input.intent.fromHost,
-    input.intent.enabled ? 1 : 0,
-    input.intent.toHost ?? null,
-    input.intent.toUrl ?? null,
-    input.intent.preservePath ? 1 : 0,
-    input.intent.preserveQueryString ? 1 : 0,
-    input.intent.statusCode,
-    input.intent.createdAt,
-    input.intent.updatedAt,
-    "forgotten",
-    "disabled-unapplied",
-    input.now,
-  );
-}
-
-function readLastRedirectIntentCleanupEvent(
-  storage: DurableObjectStorage,
-): InstanceDomainProviderRedirectIntentCleanupEvent {
-  for (const row of storage.sql.exec<DomainProviderRedirectIntentCleanupEventRow>(
-    `
-      SELECT
-        event_id,
-        from_host,
-        enabled,
-        to_host,
-        to_url,
-        preserve_path,
-        preserve_query_string,
-        status_code,
-        created_at,
-        updated_at,
-        action,
-        reason,
-        recorded_at
-      FROM instance_domain_provider_redirect_intent_cleanup_events
-      WHERE event_id = last_insert_rowid()
-      LIMIT 1
-    `,
-  )) {
-    return redirectIntentCleanupEventFromRow(row);
-  }
-
-  throw new Error("Domain provider redirect cleanup event was not written.");
-}
-
-function redirectIntentCleanupEventFromRow(
-  row: DomainProviderRedirectIntentCleanupEventRow,
-): InstanceDomainProviderRedirectIntentCleanupEvent {
-  return {
-    ...redirectIntentFromRow(row),
-    action: row.action,
-    eventId: row.event_id,
-    reason: row.reason,
-    recordedAt: row.recorded_at,
-  };
 }
 
 function redirectIntentForPlan(
@@ -1857,94 +1217,6 @@ function customDomainAppliedStateFromDeleteTarget(
   };
 }
 
-function readAppliedProviderResources(
-  storage: DurableObjectStorage,
-): InstanceDomainProviderAppliedResourceState[] {
-  ensureDomainProviderAppliedResourcesTables(storage);
-  const resources: InstanceDomainProviderAppliedResourceState[] = [];
-
-  for (const row of storage.sql.exec<DomainProviderAppliedResourceRow>(
-    `
-      SELECT
-        logical_id,
-        kind,
-        host,
-        account_id,
-        alchemy_resource_id,
-        runner_id,
-        zone_id,
-        zone_name,
-        resource_id,
-        resource_json,
-        action,
-        applied_at,
-        updated_at
-      FROM instance_domain_provider_applied_resources
-      ORDER BY host ASC, kind ASC, logical_id ASC
-    `,
-  )) {
-    resources.push(providerAppliedResourceFromRow(row));
-  }
-
-  return resources;
-}
-
-function readProviderAuditEvents(
-  storage: DurableObjectStorage,
-): InstanceDomainProviderAuditEvent[] {
-  ensureDomainProviderAppliedResourcesTables(storage);
-  const events: InstanceDomainProviderAuditEvent[] = [];
-
-  for (const row of storage.sql.exec<DomainProviderAuditEventRow>(
-    `
-      SELECT
-        event_id,
-        logical_id,
-        kind,
-        host,
-        account_id,
-        alchemy_resource_id,
-        runner_id,
-        zone_id,
-        zone_name,
-        resource_id,
-        resource_json,
-        action,
-        applied_at,
-        updated_at
-      FROM instance_domain_provider_audit_events
-      ORDER BY event_id ASC
-    `,
-  )) {
-    events.push({
-      eventId: row.event_id,
-      ...providerAppliedResourceFromRow(row),
-    });
-  }
-
-  return events;
-}
-
-function providerAppliedResourceFromRow(
-  row: DomainProviderAppliedResourceRow,
-): InstanceDomainProviderAppliedResourceState {
-  return {
-    accountId: row.account_id,
-    action: row.action,
-    alchemyResourceId: row.alchemy_resource_id,
-    appliedAt: row.applied_at,
-    host: row.host,
-    kind: row.kind,
-    logicalId: row.logical_id,
-    resourceId: row.resource_id,
-    resourceJson: row.resource_json,
-    ...(row.runner_id === null ? {} : { runnerId: row.runner_id }),
-    updatedAt: row.updated_at,
-    zoneId: row.zone_id,
-    zoneName: row.zone_name,
-  };
-}
-
 function readDeleteJob(
   storage: DurableObjectStorage,
   jobId: string,
@@ -2067,10 +1339,6 @@ function ensureDomainProviderDeleteJobsTable(storage: DurableObjectStorage) {
     family: domainProviderDeleteJobsSqlMigrationFamily,
     migrations: domainProviderSqlMigrations,
   });
-}
-
-function ensureDomainProviderRedirectIntentCleanupEventsTable(storage: DurableObjectStorage) {
-  storage.sql.exec(redirectIntentCleanupEventsTableSql);
 }
 
 function ensureDomainProviderAppliedResourcesTables(storage: DurableObjectStorage) {
@@ -2380,89 +1648,6 @@ async function readDeleteJobResultRequest(
   };
 }
 
-async function readRedirectIntentRequest(
-  request: Request,
-): Promise<
-  | { ok: true; request: CreateInstanceDomainProviderRedirectIntentRequest }
-  | { ok: false; error: string }
-> {
-  const parsed = await readRequiredJsonObject(request, "Domain provider redirect intent request");
-
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  return parseRedirectIntentRequest(parsed.value);
-}
-
-function parseRedirectIntentRequest(
-  value: Record<string, unknown>,
-):
-  | { ok: true; request: CreateInstanceDomainProviderRedirectIntentRequest }
-  | { ok: false; error: string } {
-  const fromHost = parseRequiredHost(value.fromHost, "Domain provider redirect from host");
-  const enabled = parseOptionalBoolean(value.enabled, "Domain provider redirect enabled");
-  const preservePath = parseOptionalBoolean(
-    value.preservePath,
-    "Domain provider redirect preserve path",
-  );
-  const preserveQueryString = parseOptionalBoolean(
-    value.preserveQueryString,
-    "Domain provider redirect preserve query string",
-  );
-  const statusCode = parseOptionalRedirectStatusCode(
-    value.statusCode,
-    "Domain provider redirect status code",
-  );
-  const toHost = parseOptionalHost(value.toHost, "Domain provider redirect target host");
-  const toUrl = parseOptionalHttpsUrl(value.toUrl, "Domain provider redirect target URL");
-
-  if (!fromHost.ok) return fromHost;
-  if (!enabled.ok) return enabled;
-  if (!preservePath.ok) return preservePath;
-  if (!preserveQueryString.ok) return preserveQueryString;
-  if (!statusCode.ok) return statusCode;
-  if (!toHost.ok) return toHost;
-  if (!toUrl.ok) return toUrl;
-
-  if ((toHost.value === undefined && toUrl.value === undefined) || (toHost.value && toUrl.value)) {
-    return { ok: false, error: "Domain provider redirect must set target host or target URL." };
-  }
-
-  return {
-    ok: true,
-    request: {
-      ...(enabled.value === undefined ? {} : { enabled: enabled.value }),
-      fromHost: fromHost.value,
-      ...(preservePath.value === undefined ? {} : { preservePath: preservePath.value }),
-      ...(preserveQueryString.value === undefined
-        ? {}
-        : { preserveQueryString: preserveQueryString.value }),
-      ...(statusCode.value === undefined ? {} : { statusCode: statusCode.value }),
-      ...(toHost.value === undefined ? {} : { toHost: toHost.value }),
-      ...(toUrl.value === undefined ? {} : { toUrl: toUrl.value }),
-    },
-  };
-}
-
-function parseDeleteRedirectIntentRequest(
-  value: unknown,
-):
-  | { ok: true; request: DeleteInstanceDomainProviderRedirectIntentRequest }
-  | { ok: false; error: string } {
-  if (!isRecord(value)) {
-    return { ok: false, error: "Domain provider redirect delete request must be an object." };
-  }
-
-  const fromHost = parseRequiredHost(value.fromHost, "Domain provider redirect from host");
-
-  if (!fromHost.ok) {
-    return fromHost;
-  }
-
-  return { ok: true, request: { fromHost: fromHost.value } };
-}
-
 function parseDeleteJobResourceEvidence(
   value: unknown,
 ):
@@ -2641,21 +1826,6 @@ function parseRequiredHost(
   return { ok: true, value: host.value };
 }
 
-function parseOptionalBoolean(
-  value: unknown,
-  context: string,
-): { ok: true; value?: boolean } | { ok: false; error: string } {
-  if (value === undefined) {
-    return { ok: true };
-  }
-
-  if (typeof value !== "boolean") {
-    return { ok: false, error: `${context} must be a boolean.` };
-  }
-
-  return { ok: true, value };
-}
-
 function parseOptionalString(
   value: unknown,
   context: string,
@@ -2676,63 +1846,6 @@ function parseRequiredString(
   }
 
   return { ok: true, value: value.trim() };
-}
-
-function parseOptionalHttpsUrl(
-  value: unknown,
-  context: string,
-): { ok: true; value?: string } | { ok: false; error: string } {
-  if (value === undefined) {
-    return { ok: true };
-  }
-
-  const parsed = parseRequiredString(value, context);
-
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  try {
-    const url = new URL(parsed.value);
-
-    if (
-      url.protocol !== "https:" ||
-      url.username !== "" ||
-      url.password !== "" ||
-      url.hash !== ""
-    ) {
-      return {
-        ok: false,
-        error: `${context} must be an absolute HTTPS URL without credentials or fragment.`,
-      };
-    }
-
-    return { ok: true, value: url.toString().replace(/\/$/, "") };
-  } catch {
-    return { ok: false, error: `${context} must be valid.` };
-  }
-}
-
-function parseOptionalRedirectStatusCode(
-  value: unknown,
-  context: string,
-): { ok: true; value?: DomainProviderRedirectStatusCode } | { ok: false; error: string } {
-  if (value === undefined) {
-    return { ok: true };
-  }
-
-  return parseRedirectStatusCode(value, context);
-}
-
-function parseRedirectStatusCode(
-  value: unknown,
-  context: string,
-): { ok: true; value: DomainProviderRedirectStatusCode } | { ok: false; error: string } {
-  if (value === 301 || value === 302 || value === 303 || value === 307 || value === 308) {
-    return { ok: true, value };
-  }
-
-  return { ok: false, error: `${context} must be 301, 302, 303, 307, or 308.` };
 }
 
 function logicalResourceId(

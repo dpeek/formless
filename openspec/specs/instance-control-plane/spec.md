@@ -3,11 +3,12 @@
 ## Purpose
 
 Instance control plane models Formless instance management data as runtime-owned
-schema records. It keeps app installs, app routes, domain intent, and deployment
+schema records. It keeps app installs, unified route intent, and deployment
 configuration in flat Authority records. Deployment config records may include a
 display-safe latest deployment observation cache while installed app data,
 provider secrets, raw operation tokens, projected deployment resource graphs,
-deployment history, and provider resource truth stay outside those records.
+deployment history, legacy domain intent, and provider resource truth stay
+outside those records.
 
 ## Requirements
 
@@ -33,11 +34,13 @@ outside reviewable control-plane storage snapshots.
   error, and runner
 - **AND** it does not define separate `deploy-target`,
   `provider-config-ref`, or `deploy-desired-resource` entities
+- **AND** it does not define legacy `app-route`, `domain-mapping`, or
+  `redirect-intent` desired-intent entities
 - **AND** it does not define `deploy-attempt`, `deploy-evidence-summary`, or
   `deploy-drift-report` as schema-owned control-plane record entities
 - **AND** deployment attempt history, evidence history, drift history, cleanup
-  audit summaries, raw operation tokens, and provider resource truth are not
-  schema-owned control-plane record entities
+  audit summaries, raw operation tokens, legacy domain intent stores, and
+  provider resource truth are not schema-owned control-plane record entities
 
 ### Requirement: App Install Records
 
@@ -231,7 +234,7 @@ a deploy package slice.
 ### Requirement: Route Records
 
 The system SHALL represent all desired route behavior as `route` control-plane
-records.
+records and SHALL NOT maintain legacy route-intent record shapes.
 
 #### Scenario: Route record shape
 
@@ -288,6 +291,18 @@ records.
 - **AND** the route stores the source match, target host or URL, status code,
   preservePath policy, and preserveQueryString policy
 - **AND** the route does not require an app install target
+
+#### Scenario: Legacy route intent is not backfilled
+
+- **GIVEN** control-plane storage is initialized, read, restored, saved,
+  projected, or synchronized
+- **WHEN** legacy `app-route`, `domain-mapping`, or `redirect-intent` records
+  or legacy desired-intent SQL stores are present
+- **THEN** runtime route behavior is derived only from active `route` records
+- **AND** legacy route-intent records or stores are not converted into `route`
+  records automatically
+- **AND** absent active `route` records mean absent route behavior and absent
+  route-derived provider resources
 
 #### Scenario: Desired route write
 

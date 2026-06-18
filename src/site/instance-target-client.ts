@@ -50,9 +50,6 @@ import {
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
-  type DeleteInstanceDomainProviderRedirectIntentRequest,
-  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderDeleteJobResultRequest,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteRequest,
@@ -61,7 +58,10 @@ import {
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
-import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  type InstanceControlPlaneRouteTargetProfile,
+} from "@dpeek/formless-instance-control-plane";
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   packageAppFactsForKey,
@@ -77,14 +77,14 @@ import {
   type ResolvedAppPackage,
 } from "../shared/app-packages.ts";
 import type {
-  DeleteInstanceDomainMappingRequest,
-  ForgetInstanceDomainMappingResponse,
-  InstanceDomainMappingsResponse,
+  InstanceDomainMappingProfile,
   RecordInstanceDomainMappingApplyEvidenceRequest,
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
+import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
+import { createOperationId } from "../shared/ids.ts";
 import {
   isSourceSchemaHash,
   isUpgradeMigrationChecksum,
@@ -107,7 +107,6 @@ const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 const PACKAGE_MIGRATIONS_APPLY_PATH_SUFFIX = "/package-migrations/apply";
 const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
-const DOMAIN_MAPPINGS_FORGET_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/forget`;
 
 export type InstanceDeploymentDesiredStateResponse = DeployDesiredStateResponse;
 export type InstanceDeploymentStatusResponse = DeployLatestStatusResponse;
@@ -194,6 +193,15 @@ export type FormlessInstanceTargetUpgradeVerificationFailure = {
 
 export type FormlessInstanceTargetClientDependencies = {
   fetch: typeof fetch;
+};
+
+export type DisableFormlessInstanceDomainRouteRequest = {
+  host: string;
+  profile?: InstanceDomainMappingProfile;
+};
+
+export type DisableFormlessInstanceDomainRedirectRequest = {
+  fromHost: string;
 };
 
 export type FormlessInstancePackageMigrationApplyResponse = {
@@ -656,21 +664,6 @@ async function readFormlessInstanceAppRegistryResult(
   };
 }
 
-export async function readFormlessInstanceDomainMappings(
-  input: { adminToken?: string | null; targetUrl: string },
-  dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<InstanceDomainMappingsResponse> {
-  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
-  const mappingsUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_API_PATH);
-
-  return parseDomainMappings(
-    await fetchJson(dependencies.fetch, mappingsUrl, {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
-    }),
-    mappingsUrl,
-  );
-}
-
 export async function readFormlessInstanceDomainProviderPlan(
   input: {
     adminToken?: string | null;
@@ -758,6 +751,88 @@ export async function readFormlessInstanceControlPlaneRecords(
   return controlPlaneRecordsByEntity(actorKind, bootstrap.records);
 }
 
+export async function disableFormlessInstanceDomainRoute(
+  input: {
+    adminToken?: string | null;
+    mutationId?: string;
+    request: DisableFormlessInstanceDomainRouteRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<OperationInvocationResponse> {
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
+  const host = normalizeTargetDomainHost(input.request.host);
+  const targetProfile = routeTargetProfileFromDomainProfile(input.request.profile ?? "publicSite");
+  const controlPlane = await readFormlessInstanceControlPlaneRecords(
+    {
+      adminToken: input.adminToken,
+      actorKind: "cliDeployer",
+      targetUrl,
+    },
+    dependencies,
+  );
+  const route = controlPlane.domainMappings.find(
+    (record) =>
+      !record.deletedAt &&
+      record.values.matchHost === host &&
+      record.values.targetProfile === targetProfile,
+  );
+
+  if (!route) {
+    throw new Error(`No desired domain route found for host "${host}".`);
+  }
+
+  return updateFormlessInstanceRouteRecord(
+    {
+      adminToken: input.adminToken,
+      mutationId: input.mutationId,
+      recordId: route.id,
+      targetUrl,
+      values: { enabled: false },
+    },
+    dependencies,
+  );
+}
+
+export async function disableFormlessInstanceDomainRedirect(
+  input: {
+    adminToken?: string | null;
+    mutationId?: string;
+    request: DisableFormlessInstanceDomainRedirectRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<OperationInvocationResponse> {
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
+  const fromHost = normalizeTargetDomainHost(input.request.fromHost);
+  const controlPlane = await readFormlessInstanceControlPlaneRecords(
+    {
+      adminToken: input.adminToken,
+      actorKind: "cliDeployer",
+      targetUrl,
+    },
+    dependencies,
+  );
+  const route = controlPlane.redirectIntents.find(
+    (record) => !record.deletedAt && record.values.matchHost === fromHost,
+  );
+
+  if (!route) {
+    throw new Error(`No desired redirect route found for host "${fromHost}".`);
+  }
+
+  return updateFormlessInstanceRouteRecord(
+    {
+      adminToken: input.adminToken,
+      mutationId: input.mutationId,
+      recordId: route.id,
+      targetUrl,
+      values: { enabled: false },
+    },
+    dependencies,
+  );
+}
+
 export async function readOptionalFormlessInstanceControlPlaneRecords(
   input: {
     adminToken?: string | null;
@@ -836,6 +911,37 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
         idempotencyKey,
         input: values,
         recordId: input.targetId,
+      }),
+      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      method: "POST",
+    }),
+    operationUrl,
+  );
+}
+
+async function updateFormlessInstanceRouteRecord(
+  input: {
+    adminToken?: string | null;
+    mutationId?: string;
+    recordId: string;
+    targetUrl: string;
+    values: Record<string, unknown>;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<OperationInvocationResponse> {
+  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
+  const operationUrl = apiUrl(
+    targetUrl,
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/route/update`,
+  );
+
+  return parseOperationInvocationResponse(
+    await postJson(dependencies.fetch, operationUrl, {
+      body: JSON.stringify({
+        idempotencyKey: input.mutationId ?? createOperationId(),
+        input: input.values,
+        recordId: input.recordId,
+        source: { protocol: "cli" },
       }),
       headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
@@ -1040,58 +1146,6 @@ export async function completeFormlessInstanceDomainProviderDeleteJob(
   );
 }
 
-export async function forgetFormlessInstanceDomainMapping(
-  input: {
-    adminToken?: string | null;
-    request: DeleteInstanceDomainMappingRequest;
-    targetUrl: string;
-  },
-  dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<ForgetInstanceDomainMappingResponse> {
-  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
-  const forgetUrl = new URL(apiUrl(targetUrl, DOMAIN_MAPPINGS_FORGET_API_PATH));
-
-  forgetUrl.searchParams.set("host", input.request.host);
-
-  if (input.request.profile !== undefined) {
-    forgetUrl.searchParams.set("profile", input.request.profile);
-  }
-
-  if (input.request.surface !== undefined) {
-    forgetUrl.searchParams.set("surface", input.request.surface);
-  }
-
-  return parseForgetDomainMappingResponse(
-    await deleteJson(dependencies.fetch, forgetUrl.toString(), {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
-      method: "DELETE",
-    }),
-    forgetUrl.toString(),
-  );
-}
-
-export async function forgetFormlessInstanceDomainProviderRedirect(
-  input: {
-    adminToken?: string | null;
-    request: DeleteInstanceDomainProviderRedirectIntentRequest;
-    targetUrl: string;
-  },
-  dependencies: FormlessInstanceTargetClientDependencies,
-): Promise<ForgetInstanceDomainProviderRedirectIntentResponse> {
-  const targetUrl = normalizeInstanceWorkspaceTargetUrl(input.targetUrl);
-  const forgetUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH));
-
-  forgetUrl.searchParams.set("fromHost", input.request.fromHost);
-
-  return parseForgetDomainProviderRedirectResponse(
-    await deleteJson(dependencies.fetch, forgetUrl.toString(), {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
-      method: "DELETE",
-    }),
-    forgetUrl.toString(),
-  );
-}
-
 export async function recordFormlessInstanceDomainMappingApplyEvidence(
   input: {
     adminToken?: string | null;
@@ -1123,12 +1177,6 @@ async function postJson(fetcher: typeof fetch, url: string, init: RequestInit): 
   const response = await fetcher(url, init);
 
   return readJsonResponse(response, `POST ${url}`);
-}
-
-async function deleteJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
-  const response = await fetcher(url, init);
-
-  return readJsonResponse(response, `DELETE ${url}`);
 }
 
 async function readJsonResponse(response: Response, context: string): Promise<unknown> {
@@ -1646,25 +1694,6 @@ function parseOptionalRouteBase(
   return value;
 }
 
-function parseDomainMappings(value: unknown, context: string): InstanceDomainMappingsResponse {
-  if (!isRecord(value) || !Array.isArray(value.mappings)) {
-    throw new Error(`${context} failed: domain mappings response must include mappings.`);
-  }
-
-  return {
-    appliedStates: Array.isArray(value.appliedStates)
-      ? (value.appliedStates as InstanceDomainMappingsResponse["appliedStates"])
-      : [],
-    auditEvents: Array.isArray(value.auditEvents)
-      ? (value.auditEvents as InstanceDomainMappingsResponse["auditEvents"])
-      : [],
-    desiredCleanupEvents: Array.isArray(value.desiredCleanupEvents)
-      ? (value.desiredCleanupEvents as InstanceDomainMappingsResponse["desiredCleanupEvents"])
-      : [],
-    mappings: value.mappings as InstanceDomainMappingsResponse["mappings"],
-  };
-}
-
 function parseDomainProviderPlan(
   value: unknown,
   context: string,
@@ -1875,40 +1904,6 @@ function parseDomainProviderManualCleanupResponse(
   return value as InstanceDomainProviderManualCleanupResponse;
 }
 
-function parseForgetDomainMappingResponse(
-  value: unknown,
-  context: string,
-): ForgetInstanceDomainMappingResponse {
-  if (
-    !isRecord(value) ||
-    !isRecord(value.mapping) ||
-    !Array.isArray(value.mappings) ||
-    !isRecord(value.desiredCleanupEvent) ||
-    !Array.isArray(value.desiredCleanupEvents)
-  ) {
-    throw new Error(`${context} failed: domain mapping forget response is invalid.`);
-  }
-
-  return value as ForgetInstanceDomainMappingResponse;
-}
-
-function parseForgetDomainProviderRedirectResponse(
-  value: unknown,
-  context: string,
-): ForgetInstanceDomainProviderRedirectIntentResponse {
-  if (
-    !isRecord(value) ||
-    !isRecord(value.redirectIntent) ||
-    !Array.isArray(value.redirectIntents) ||
-    !isRecord(value.redirectIntentCleanupEvent) ||
-    !Array.isArray(value.redirectIntentCleanupEvents)
-  ) {
-    throw new Error(`${context} failed: domain provider redirect forget response is invalid.`);
-  }
-
-  return value as ForgetInstanceDomainProviderRedirectIntentResponse;
-}
-
 function parseApplyEvidenceResponse(
   value: unknown,
   context: string,
@@ -1924,6 +1919,22 @@ function parseApplyEvidenceResponse(
   }
 
   return value as RecordInstanceDomainMappingApplyEvidenceResponse;
+}
+
+function normalizeTargetDomainHost(value: string): string {
+  const host = normalizeInstanceDomainHost(value);
+
+  if (!host.ok) {
+    throw new Error(host.error.message);
+  }
+
+  return host.host;
+}
+
+function routeTargetProfileFromDomainProfile(
+  profile: InstanceDomainMappingProfile,
+): InstanceControlPlaneRouteTargetProfile {
+  return profile === "publicSite" ? "public-site" : profile;
 }
 
 function apiUrl(targetUrl: string, apiPath: string): string {

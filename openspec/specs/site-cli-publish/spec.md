@@ -557,3 +557,16 @@ deployment intent records.
 - **THEN** the CLI reads `app-install` and `route` records
 - **AND** route changes are reported by comparing route records rather than
   hand-derived install route strings or manifest route summaries
+
+#### Scenario: CLI reads domain routes
+
+- **WHEN** CLI pull, push, dry-run, domain inspection, route removal, redirect
+  removal, or provider repair workflows need desired domain or redirect intent
+- **THEN** they read schema-owned `route` records through the control-plane
+  protocol or workspace storage snapshots
+- **AND** route-derived domain and redirect intent is not read from
+  `/api/formless/domain-mappings`,
+  `/api/formless/domain-provider/redirects`, legacy desired-intent SQL stores,
+  or legacy control-plane `domain-mapping` and `redirect-intent` records
+- **AND** route removal or redirect removal writes the corresponding `route`
+  record change rather than writing a legacy desired cleanup row

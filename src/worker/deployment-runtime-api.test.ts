@@ -17,11 +17,6 @@ import {
   type InstanceDeploymentDesiredStateResponse,
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
-import {
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-  type CreateInstanceDomainProviderRedirectIntentResponse,
-} from "../shared/domain-provider-api.ts";
-import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
 import { INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID } from "./deployment-runtime-state.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -122,24 +117,41 @@ describe("instance deployment runtime API routes", () => {
   it("projects enabled custom-domain mappings into desired-state resources", async () => {
     await createAppInstall({ packageAppKey: "tasks", installId: "tasks", label: "Tasks" });
     await createAppInstall({ packageAppKey: "site", installId: "personal", label: "Personal" });
-    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
-      host: "disabled.example.com",
-      profile: "instance",
+    await createControlPlaneRecord("route", {
       enabled: false,
+      kind: "mount",
+      matchHost: "disabled.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "instance",
     });
-    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
-      host: "admin.example.com",
-      profile: "instance",
+    await createControlPlaneRecord("route", {
+      enabled: true,
+      kind: "mount",
+      matchHost: "admin.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "instance",
     });
-    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
-      host: "app.example.com",
-      profile: "app",
-      targetInstallId: "tasks",
+    await createControlPlaneRecord("route", {
+      appInstall: "tasks",
+      enabled: true,
+      kind: "mount",
+      matchHost: "app.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "app",
     });
-    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
-      host: "www.example.com",
-      surface: "site",
-      installId: "personal",
+    await createControlPlaneRecord("route", {
+      appInstall: "personal",
+      enabled: true,
+      kind: "mount",
+      matchHost: "www.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "public-site",
+      targetProfile: "public-site",
     });
 
     const desired = await getJson<InstanceDeploymentDesiredStateResponse>(
@@ -216,16 +228,16 @@ describe("instance deployment runtime API routes", () => {
   });
 
   it("projects enabled redirect intent into desired-state resources", async () => {
-    await createRedirectIntent({
+    await createRedirectRoute({
       enabled: false,
       fromHost: "disabled.example.com",
       toHost: "example.com",
     });
-    await createRedirectIntent({
+    await createRedirectRoute({
       fromHost: "www.example.com",
       toHost: "example.com",
     });
-    await createRedirectIntent({
+    await createRedirectRoute({
       fromHost: "docs.example.com",
       preservePath: false,
       preserveQueryString: false,
@@ -295,12 +307,17 @@ describe("instance deployment runtime API routes", () => {
 
   it("does not materialize projected desired resources as control-plane records", async () => {
     await createAppInstall({ packageAppKey: "tasks", installId: "tasks", label: "Tasks" });
-    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
-      host: "app.example.com",
-      profile: "app",
-      targetInstallId: "tasks",
+    await createControlPlaneRecord("route", {
+      appInstall: "tasks",
+      enabled: true,
+      kind: "mount",
+      matchHost: "app.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "app",
     });
-    await createRedirectIntent({
+    await createRedirectRoute({
       fromHost: "www.example.com",
       toHost: "example.com",
     });
@@ -384,6 +401,34 @@ describe("instance deployment runtime API routes", () => {
     expect(serialized).not.toContain("secret:cloudflare:primary");
     expect(serialized).not.toContain("secret-cloudflare-token");
     expect(serialized).not.toContain("secret-alchemy-password");
+  });
+
+  it("omits disabled route resources from desired-state projection", async () => {
+    const created = await createControlPlaneRecord("route", {
+      enabled: true,
+      kind: "mount",
+      matchHost: "remove.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "instance",
+    });
+    const before = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    );
+
+    await patchControlPlaneRecord("route", created.body.record.id, { enabled: false });
+
+    const after = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    );
+
+    expect(before.body.desiredState.resourceGraph.resources).toEqual([
+      expect.objectContaining({
+        logicalId: "primary-custom-domain-remove-example-com-instance",
+      }),
+    ]);
+    expect(after.body.desiredState.resourceGraph.resources).toEqual([]);
+    expect(after.body.desiredState.hash).not.toBe(before.body.desiredState.hash);
   });
 
   it("uses no-store cache policy for method and target errors", async () => {
@@ -573,7 +618,7 @@ async function createAppInstall(input: {
   return postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", input);
 }
 
-async function createRedirectIntent(input: {
+async function createRedirectRoute(input: {
   enabled?: boolean;
   fromHost: string;
   preservePath?: boolean;
@@ -582,10 +627,18 @@ async function createRedirectIntent(input: {
   toHost?: string;
   toUrl?: string;
 }) {
-  return postAdminJson<CreateInstanceDomainProviderRedirectIntentResponse>(
-    INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-    input,
-  );
+  return createControlPlaneRecord("route", {
+    enabled: input.enabled ?? true,
+    kind: "redirect",
+    matchHost: input.fromHost,
+    matchPath: "/",
+    matchPrefix: "/",
+    ...(input.toHost === undefined ? {} : { toHost: input.toHost }),
+    ...(input.toUrl === undefined ? {} : { toUrl: input.toUrl }),
+    statusCode: String(input.statusCode ?? 301),
+    preservePath: input.preservePath ?? true,
+    preserveQueryString: input.preserveQueryString ?? true,
+  });
 }
 
 async function createControlPlaneRecord(entity: string, values: Record<string, unknown>) {

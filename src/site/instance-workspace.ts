@@ -61,10 +61,7 @@ import {
   type AppPackageResolver,
 } from "../shared/app-packages.ts";
 import { findWorkerSchemaAppDefinition } from "../worker/schema-apps.ts";
-import {
-  normalizeInstanceDomainHost,
-  type InstanceDomainMapping,
-} from "../shared/instance-domain-mappings.ts";
+import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -142,9 +139,9 @@ import {
 } from "@dpeek/formless-deploy/client";
 import {
   patchFormlessInstanceDeploymentConfigObservation,
+  readFormlessInstanceControlPlaneRecords,
   readFormlessInstanceDeploymentDesiredState,
   readFormlessInstanceDeploymentStatus,
-  readFormlessInstanceDomainMappings,
   readFormlessInstanceTargetStatus,
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
@@ -223,6 +220,7 @@ const deploymentConfigObservedFieldSet = new Set<string>(
 );
 
 type WorkspaceControlPlaneRecords = StorageSnapshot;
+type WorkspaceRecordValueSource = { values: Record<string, unknown> };
 
 export type InitFormlessInstanceWorkspaceInput = {
   defaultAppPolicy?: FormlessInstanceWorkspaceDefaultAppPolicy;
@@ -4835,7 +4833,7 @@ function comparableAppMediaJson(
 }
 
 function stringRecordValue(
-  record: StoredRecord | undefined,
+  record: WorkspaceRecordValueSource | undefined,
   fieldName: string,
 ): string | undefined {
   const value = record?.values[fieldName];
@@ -4844,7 +4842,7 @@ function stringRecordValue(
 }
 
 function booleanRecordValue(
-  record: StoredRecord | undefined,
+  record: WorkspaceRecordValueSource | undefined,
   fieldName: string,
 ): boolean | undefined {
   const value = record?.values[fieldName];
@@ -4853,7 +4851,7 @@ function booleanRecordValue(
 }
 
 function numberRecordValue(
-  record: StoredRecord | undefined,
+  record: WorkspaceRecordValueSource | undefined,
   fieldName: string,
 ): number | undefined {
   const value = record?.values[fieldName];
@@ -6273,12 +6271,15 @@ async function readLiveWorkspaceDomainIntents(
   },
   dependencies: { fetch: typeof fetch },
 ): Promise<FormlessInstanceWorkspaceDomainIntent[]> {
-  const liveMappings = await readFormlessInstanceDomainMappings(
-    { adminToken: input.adminToken, targetUrl: input.target.url },
+  const controlPlane = await readFormlessInstanceControlPlaneRecords(
+    { adminToken: input.adminToken, actorKind: "cliDeployer", targetUrl: input.target.url },
     dependencies,
   );
 
-  return liveMappings.mappings.map(workspaceDomainIntentFromLiveMapping);
+  return controlPlane.domainMappings
+    .filter((record) => !record.deletedAt)
+    .map(workspaceDomainIntentFromRouteRecord)
+    .sort(compareWorkspaceDomainIntents);
 }
 
 function workspaceDomainIntentsFromSource(
@@ -6311,9 +6312,10 @@ function shouldCompareWorkspaceDomainIntents(
   );
 }
 
-function workspaceDomainIntentFromRouteRecord(
-  record: StoredRecord,
-): FormlessInstanceWorkspaceDomainIntent {
+function workspaceDomainIntentFromRouteRecord(record: {
+  id: string;
+  values: Record<string, unknown>;
+}): FormlessInstanceWorkspaceDomainIntent {
   const host = stringRecordValue(record, "matchHost");
   const profile = workspaceDomainProfileFromRouteTargetProfile(
     stringRecordValue(record, "targetProfile"),
@@ -6359,29 +6361,6 @@ function compareWorkspaceDomainIntents(
     left.profile.localeCompare(right.profile) ||
     (left.targetInstallId ?? "").localeCompare(right.targetInstallId ?? "")
   );
-}
-
-function workspaceDomainIntentFromLiveMapping(
-  mapping: InstanceDomainMapping,
-): FormlessInstanceWorkspaceDomainIntent {
-  const targetInstallId = liveMappingTargetInstallId(mapping);
-
-  if (mapping.profile !== "instance" && targetInstallId === undefined) {
-    throw new Error(
-      `Live domain mapping for host "${mapping.host}" profile "${mapping.profile}" is missing a target install id.`,
-    );
-  }
-
-  return {
-    enabled: mapping.enabled,
-    host: mapping.host,
-    profile: mapping.profile,
-    ...(targetInstallId === undefined ? {} : { targetInstallId }),
-  };
-}
-
-function liveMappingTargetInstallId(mapping: InstanceDomainMapping): string | undefined {
-  return mapping.targetInstallId ?? mapping.installId;
 }
 
 function selectDomainIntentsForHost(input: {

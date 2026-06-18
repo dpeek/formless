@@ -633,7 +633,12 @@ function routeProjectionRecordsFromControlPlaneRecords(
   records: readonly ControlPlaneProjectionSourceRecord[],
 ): ControlPlaneRouteProjectionRecord[] {
   return records
-    .filter((record) => record.entity === "route")
+    .filter(
+      (record) =>
+        record.deletedAt === undefined &&
+        record.entity === "route" &&
+        booleanRecordValue(record, "enabled") === true,
+    )
     .map(routeProjectionRecordFromControlPlaneRecord)
     .filter((record): record is ControlPlaneRouteProjectionRecord => record !== undefined)
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -662,7 +667,7 @@ function routeProjectionRecordFromControlPlaneRecord(
   const toUrl = stringRecordValue(record, "toUrl");
 
   return {
-    enabled: booleanRecordValue(record, "enabled") ?? true,
+    enabled: true,
     id: record.id,
     kind,
     matchPath,

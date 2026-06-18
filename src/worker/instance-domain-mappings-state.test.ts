@@ -38,7 +38,8 @@ describe("instance domain mapping state migrations", () => {
       }>;
       appliedStateSql: string;
       auditEventsSql: string;
-      mappings: unknown[];
+      desiredCleanupSql: string | undefined;
+      mappingsSql: string | undefined;
     };
 
     expect(body.appliedMigrations).toEqual([
@@ -49,7 +50,8 @@ describe("instance domain mapping state migrations", () => {
     ]);
     expect(body.appliedStateSql).toContain("'manually-removed'");
     expect(body.auditEventsSql).toContain("'manually-removed'");
-    expect(body.mappings).toEqual([]);
+    expect(body.desiredCleanupSql).toBeUndefined();
+    expect(body.mappingsSql).toBeUndefined();
   });
 });
 
@@ -63,7 +65,6 @@ async function writeDomainMappingStateHarness() {
       import { DurableObject } from "cloudflare:workers";
       import {
         ensureInstanceDomainMappingTables,
-        readInstanceDomainMappings,
       } from "${process.cwd()}/src/worker/instance-domain-mappings-state.ts";
       import {
         readAppliedSqlMigrations,
@@ -100,7 +101,11 @@ async function writeDomainMappingStateHarness() {
                 this.ctx.storage,
                 "instance_domain_mapping_audit_events",
               ),
-              mappings: readInstanceDomainMappings(this.ctx.storage),
+              desiredCleanupSql: tableSql(
+                this.ctx.storage,
+                "instance_domain_mapping_desired_cleanup_events",
+              ),
+              mappingsSql: tableSql(this.ctx.storage, "instance_domain_mappings"),
             });
           }
 

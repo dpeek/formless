@@ -81,6 +81,8 @@ supported deployment target.
   legacy domain-mapping or redirect-intent stores
 - **AND** if control-plane route records are absent, no route-derived provider
   resources are included
+- **AND** desired-state reads do not migrate, backfill, or synchronize legacy
+  domain-mapping or redirect-intent stores into control-plane route records
 - **AND** raw desired resource rows are not schema-owned control-plane source
   records
 - **AND** the response does not include provider credentials, Alchemy
@@ -330,6 +332,8 @@ read-only deployment projection and display status.
 - **THEN** the route write changes desired deployment state only
 - **AND** provider resources are created, updated, or deleted only when a
   deployer reconciles the projected desired state
+- **AND** route deletion does not write legacy domain-mapping or redirect-intent
+  desired cleanup rows
 
 #### Scenario: Runtime does not expose mutation secrets
 

@@ -14,8 +14,6 @@ export const INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH = `${INSTANCE_DOMAIN_PROVIDE
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/manual-cleanup`;
-export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/redirects`;
-export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}/forget`;
 export const DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES = [
   "CLOUDFLARE_API_TOKEN",
   "CF_API_TOKEN",
@@ -79,32 +77,6 @@ export type InstanceDomainProviderRedirectIntent = {
   updatedAt: string;
 };
 
-export type InstanceDomainProviderRedirectIntentCleanupAction = "forgotten";
-
-export type InstanceDomainProviderRedirectIntentCleanupReason = "disabled-unapplied";
-
-export type InstanceDomainProviderRedirectIntentCleanupEvent =
-  InstanceDomainProviderRedirectIntent & {
-    action: InstanceDomainProviderRedirectIntentCleanupAction;
-    eventId: number;
-    reason: InstanceDomainProviderRedirectIntentCleanupReason;
-    recordedAt: string;
-  };
-
-export type CreateInstanceDomainProviderRedirectIntentRequest = {
-  enabled?: boolean;
-  fromHost: string;
-  preservePath?: boolean;
-  preserveQueryString?: boolean;
-  statusCode?: DomainProviderRedirectStatusCode;
-  toHost?: string;
-  toUrl?: string;
-};
-
-export type DeleteInstanceDomainProviderRedirectIntentRequest = {
-  fromHost: string;
-};
-
 export type InstanceDomainProviderAppliedResourceAction = InstanceDomainMappingAppliedAction;
 export type InstanceDomainProviderActiveResourceAction = Exclude<
   InstanceDomainProviderAppliedResourceAction,
@@ -129,30 +101,6 @@ export type InstanceDomainProviderAppliedResourceState = {
 
 export type InstanceDomainProviderAuditEvent = InstanceDomainProviderAppliedResourceState & {
   eventId: number;
-};
-
-export type InstanceDomainProviderRedirectsResponse = {
-  appliedResources: InstanceDomainProviderAppliedResourceState[];
-  auditEvents: InstanceDomainProviderAuditEvent[];
-  redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
-  redirectIntents: InstanceDomainProviderRedirectIntent[];
-};
-
-export type CreateInstanceDomainProviderRedirectIntentResponse = {
-  redirectIntent: InstanceDomainProviderRedirectIntent;
-  redirectIntents: InstanceDomainProviderRedirectIntent[];
-};
-
-export type DeleteInstanceDomainProviderRedirectIntentResponse = {
-  redirectIntent: InstanceDomainProviderRedirectIntent;
-  redirectIntents: InstanceDomainProviderRedirectIntent[];
-};
-
-export type ForgetInstanceDomainProviderRedirectIntentResponse = {
-  redirectIntent: InstanceDomainProviderRedirectIntent;
-  redirectIntentCleanupEvent: InstanceDomainProviderRedirectIntentCleanupEvent;
-  redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
-  redirectIntents: InstanceDomainProviderRedirectIntent[];
 };
 
 export type InstanceDomainProviderDeleteRequest = {

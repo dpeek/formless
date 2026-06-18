@@ -90,6 +90,68 @@ describe("Deploy control-plane projection helpers", () => {
     });
   });
 
+  it("adapts only active route records into deploy projection input", () => {
+    const projectionInput = deployDesiredStateProjectionInputFromControlPlaneRecords({
+      instanceId: "demo-instance",
+      records: [
+        ...sourceRecords,
+        {
+          id: "route:disabled:legacy.example.com",
+          entity: "route",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          values: {
+            enabled: false,
+            kind: "mount",
+            matchHost: "legacy.example.com",
+            matchPath: "/",
+            targetProfile: "instance",
+          },
+        },
+        {
+          id: "route:deleted:gone.example.com",
+          entity: "route",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          deletedAt: "2026-06-14T00:00:01.000Z",
+          values: {
+            enabled: true,
+            kind: "mount",
+            matchHost: "gone.example.com",
+            matchPath: "/",
+            targetProfile: "instance",
+          },
+        },
+        {
+          id: "legacy:domain:legacy.example.com",
+          entity: "domain-mapping",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          values: {
+            enabled: true,
+            host: "legacy.example.com",
+            profile: "instance",
+          },
+        },
+        {
+          id: "legacy:redirect:old.example.com",
+          entity: "redirect-intent",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          values: {
+            enabled: true,
+            fromHost: "old.example.com",
+            toHost: "new.example.com",
+          },
+        },
+      ],
+      targetId: "instance.primary",
+      workerName: "fallback-worker",
+    });
+    const serialized = JSON.stringify(projectionInput);
+
+    expect(projectionInput.routes?.map((route) => route.id)).toEqual(["route:site:public"]);
+    expect(serialized).not.toContain("legacy.example.com");
+    expect(serialized).not.toContain("gone.example.com");
+    expect(serialized).not.toContain("old.example.com");
+  });
+
   it("projects enabled hostless mount routes as deterministic route targets", () => {
     expect(projectDeployRouteTargets([...appRoutes].reverse(), appInstalls)).toEqual([
       {

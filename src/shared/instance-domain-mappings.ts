@@ -1,9 +1,4 @@
-import {
-  findAppInstall,
-  validateAppInstallId,
-  type AppInstall,
-  type AppInstallId,
-} from "@dpeek/formless-installed-apps";
+import { validateAppInstallId, type AppInstallId } from "@dpeek/formless-installed-apps";
 
 export type InstanceDomainMappingProfile = "instance" | "app" | "publicSite";
 
@@ -52,57 +47,6 @@ export type InstanceDomainMappingAuditEvent = InstanceDomainMappingAppliedState 
   eventId: number;
 };
 
-export type InstanceDomainMappingDesiredCleanupAction = "forgotten";
-
-export type InstanceDomainMappingDesiredCleanupReason = "disabled-unapplied";
-
-export type InstanceDomainMappingDesiredCleanupEvent = {
-  action: InstanceDomainMappingDesiredCleanupAction;
-  createdAt: string;
-  enabled: boolean;
-  eventId: number;
-  host: string;
-  installId?: AppInstallId;
-  profile: InstanceDomainMappingProfile;
-  reason: InstanceDomainMappingDesiredCleanupReason;
-  recordedAt: string;
-  surface?: InstanceDomainMappingSurface;
-  targetInstallId?: AppInstallId;
-  updatedAt: string;
-};
-
-export type CreateInstanceDomainMappingRequest = {
-  host: string;
-  profile?: string;
-  surface?: string;
-  targetInstallId?: string;
-  installId?: string;
-  enabled?: boolean;
-};
-
-export type CreateInstanceDomainMappingResponse = {
-  mapping: InstanceDomainMapping;
-  mappings: InstanceDomainMapping[];
-};
-
-export type DeleteInstanceDomainMappingRequest = {
-  host: string;
-  profile?: string;
-  surface?: string;
-};
-
-export type DeleteInstanceDomainMappingResponse = {
-  mapping: InstanceDomainMapping;
-  mappings: InstanceDomainMapping[];
-};
-
-export type ForgetInstanceDomainMappingResponse = {
-  desiredCleanupEvent: InstanceDomainMappingDesiredCleanupEvent;
-  desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
-  mapping: InstanceDomainMapping;
-  mappings: InstanceDomainMapping[];
-};
-
 export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   host: string;
   profile?: string;
@@ -120,13 +64,6 @@ export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   action: string;
 };
 
-export type InstanceDomainMappingsResponse = {
-  appliedStates: InstanceDomainMappingAppliedState[];
-  auditEvents: InstanceDomainMappingAuditEvent[];
-  desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
-  mappings: InstanceDomainMapping[];
-};
-
 export type InstanceDomainMappingLookupResponse = {
   mapping: InstanceDomainMapping | null;
 };
@@ -140,26 +77,19 @@ export type RecordInstanceDomainMappingApplyEvidenceResponse = {
 
 export type InstanceDomainMappingRegistryErrorCode =
   | "domain-mapping-install-mismatch"
-  | "domain-mapping-enabled"
-  | "domain-mapping-has-applied-state"
   | "domain-mapping-not-found"
-  | "duplicate-domain-mapping"
   | "invalid-applied-action"
-  | "install-not-found"
-  | "invalid-enabled"
   | "invalid-host"
   | "invalid-install-id"
   | "invalid-profile"
   | "invalid-provider"
-  | "invalid-surface"
-  | "unsupported-install-package";
+  | "invalid-surface";
 
 export type InstanceDomainMappingRegistryError = {
   code: InstanceDomainMappingRegistryErrorCode;
   field?:
     | "accountId"
     | "action"
-    | "enabled"
     | "host"
     | "installId"
     | "profile"
@@ -172,71 +102,6 @@ export type InstanceDomainMappingRegistryError = {
     | "zoneName";
   message: string;
 };
-
-export type CreateInstanceDomainMappingInput = {
-  existingMappings: readonly InstanceDomainMapping[];
-  installs: readonly AppInstall[];
-  host: string;
-  profile?: string;
-  surface?: string;
-  targetInstallId?: string;
-  installId?: string;
-  enabled?: boolean;
-  now: string;
-};
-
-export type CreateInstanceDomainMappingResult =
-  | {
-      ok: true;
-      mapping: InstanceDomainMapping;
-      mappings: InstanceDomainMapping[];
-    }
-  | {
-      ok: false;
-      error: InstanceDomainMappingRegistryError;
-      mappings: readonly InstanceDomainMapping[];
-    };
-
-export type DisableInstanceDomainMappingInput = {
-  existingMappings: readonly InstanceDomainMapping[];
-  host: string;
-  profile?: string;
-  surface?: string;
-  now: string;
-};
-
-export type DisableInstanceDomainMappingResult =
-  | {
-      ok: true;
-      mapping: InstanceDomainMapping;
-      mappings: InstanceDomainMapping[];
-    }
-  | {
-      ok: false;
-      error: InstanceDomainMappingRegistryError;
-      mappings: readonly InstanceDomainMapping[];
-    };
-
-export type ForgetInstanceDomainMappingInput = {
-  appliedStates: readonly InstanceDomainMappingAppliedState[];
-  existingMappings: readonly InstanceDomainMapping[];
-  host: string;
-  now: string;
-  profile?: string;
-  surface?: string;
-};
-
-export type ForgetInstanceDomainMappingResult =
-  | {
-      ok: true;
-      mapping: InstanceDomainMapping;
-      mappings: InstanceDomainMapping[];
-    }
-  | {
-      ok: false;
-      error: InstanceDomainMappingRegistryError;
-      mappings: readonly InstanceDomainMapping[];
-    };
 
 export type BuildInstanceDomainMappingAppliedStateInput =
   RecordInstanceDomainMappingApplyEvidenceRequest & {
@@ -276,47 +141,6 @@ export type InstanceDomainMappingProfileResolutionResult =
 
 const hostnameLabelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
-export function parseCreateInstanceDomainMappingRequest(
-  value: unknown,
-): CreateInstanceDomainMappingRequest {
-  if (!isRecord(value)) {
-    throw new Error("Domain mapping request must be an object.");
-  }
-
-  assertCreateInstanceDomainMappingRequestKeys(value);
-
-  return {
-    host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
-    ...optionalStringProperty("profile", "Domain mapping profile", value.profile),
-    ...optionalStringProperty("surface", "Domain mapping surface", value.surface),
-    ...optionalStringProperty(
-      "targetInstallId",
-      "Domain mapping target install id",
-      value.targetInstallId,
-    ),
-    ...optionalStringProperty("installId", "Domain mapping install id", value.installId),
-    ...(value.enabled === undefined
-      ? {}
-      : { enabled: parseBoolean("Domain mapping enabled", value.enabled) }),
-  };
-}
-
-export function parseDeleteInstanceDomainMappingRequest(
-  value: unknown,
-): DeleteInstanceDomainMappingRequest {
-  if (!isRecord(value)) {
-    throw new Error("Domain mapping delete request must be an object.");
-  }
-
-  assertDeleteInstanceDomainMappingRequestKeys(value);
-
-  return {
-    host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
-    ...optionalStringProperty("profile", "Domain mapping profile", value.profile),
-    ...optionalStringProperty("surface", "Domain mapping surface", value.surface),
-  };
-}
-
 export function parseRecordInstanceDomainMappingApplyEvidenceRequest(
   value: unknown,
 ): RecordInstanceDomainMappingApplyEvidenceRequest {
@@ -352,252 +176,6 @@ export function parseRecordInstanceDomainMappingApplyEvidenceRequest(
       value.workerDomainId,
     ),
     action: parseTrimmedNonEmptyString("Domain mapping applied action", value.action),
-  };
-}
-
-export function buildInstanceDomainMapping(
-  input: CreateInstanceDomainMappingInput,
-): CreateInstanceDomainMappingResult {
-  const hostResult = normalizeInstanceDomainHost(input.host);
-
-  if (!hostResult.ok) {
-    return {
-      ok: false,
-      error: hostResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const profileResult = resolveInstanceDomainMappingProfile(input);
-
-  if (!profileResult.ok) {
-    return {
-      ok: false,
-      error: profileResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const targetResult = resolveDomainMappingTargetInstallId(input, profileResult.profile);
-
-  if (!targetResult.ok) {
-    return {
-      ok: false,
-      error: targetResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const requestedEnabled = input.enabled ?? true;
-
-  if (
-    input.existingMappings.some(
-      (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
-    )
-  ) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "duplicate-domain-mapping",
-        "host",
-        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" already exists.`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  const enabledHostMapping = input.existingMappings.find(
-    (mapping) => mapping.host === hostResult.host && mapping.enabled && requestedEnabled,
-  );
-
-  if (enabledHostMapping) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "duplicate-domain-mapping",
-        "host",
-        `Domain mapping for host "${hostResult.host}" already has enabled profile "${enabledHostMapping.profile}".`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  if (targetResult.targetInstallId !== undefined) {
-    const install = findAppInstall(input.installs, targetResult.targetInstallId);
-
-    if (!install) {
-      return {
-        ok: false,
-        error: domainMappingError(
-          "install-not-found",
-          "targetInstallId",
-          `Install id "${targetResult.targetInstallId}" is not installed.`,
-        ),
-        mappings: input.existingMappings,
-      };
-    }
-
-    if (profileResult.profile === "publicSite" && install.packageAppKey !== "site") {
-      return {
-        ok: false,
-        error: domainMappingError(
-          "unsupported-install-package",
-          "targetInstallId",
-          `Install id "${install.installId}" uses package "${install.packageAppKey}", not "site".`,
-        ),
-        mappings: input.existingMappings,
-      };
-    }
-  }
-
-  const mapping = instanceDomainMappingFromParts({
-    enabled: requestedEnabled,
-    host: hostResult.host,
-    now: input.now,
-    profile: profileResult.profile,
-    targetInstallId: targetResult.targetInstallId,
-  });
-
-  return {
-    ok: true,
-    mapping,
-    mappings: listInstanceDomainMappings([...input.existingMappings, mapping]),
-  };
-}
-
-export function disableInstanceDomainMapping(
-  input: DisableInstanceDomainMappingInput,
-): DisableInstanceDomainMappingResult {
-  const hostResult = normalizeInstanceDomainHost(input.host);
-
-  if (!hostResult.ok) {
-    return {
-      ok: false,
-      error: hostResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const profileResult = resolveInstanceDomainMappingProfile(input);
-
-  if (!profileResult.ok) {
-    return {
-      ok: false,
-      error: profileResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const existing = input.existingMappings.find(
-    (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
-  );
-
-  if (!existing) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "domain-mapping-not-found",
-        "host",
-        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" does not exist.`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  const mapping = {
-    ...existing,
-    enabled: false,
-    updatedAt: input.now,
-  };
-
-  return {
-    ok: true,
-    mapping,
-    mappings: listInstanceDomainMappings(
-      input.existingMappings.map((candidate) =>
-        candidate.host === mapping.host && candidate.profile === mapping.profile
-          ? mapping
-          : candidate,
-      ),
-    ),
-  };
-}
-
-export function forgetInstanceDomainMapping(
-  input: ForgetInstanceDomainMappingInput,
-): ForgetInstanceDomainMappingResult {
-  const hostResult = normalizeInstanceDomainHost(input.host);
-
-  if (!hostResult.ok) {
-    return {
-      ok: false,
-      error: hostResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const profileResult = resolveInstanceDomainMappingProfile(input);
-
-  if (!profileResult.ok) {
-    return {
-      ok: false,
-      error: profileResult.error,
-      mappings: input.existingMappings,
-    };
-  }
-
-  const existing = input.existingMappings.find(
-    (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
-  );
-
-  if (!existing) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "domain-mapping-not-found",
-        "host",
-        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" does not exist.`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  if (existing.enabled) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "domain-mapping-enabled",
-        "host",
-        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" must be disabled before it can be forgotten.`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  const appliedState = input.appliedStates.find(
-    (state) => state.host === hostResult.host && state.profile === profileResult.profile,
-  );
-
-  if (appliedState) {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "domain-mapping-has-applied-state",
-        "host",
-        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" has provider applied evidence and cannot be forgotten until provider cleanup clears it.`,
-      ),
-      mappings: input.existingMappings,
-    };
-  }
-
-  return {
-    ok: true,
-    mapping: existing,
-    mappings: listInstanceDomainMappings(
-      input.existingMappings.filter(
-        (mapping) => mapping.host !== existing.host || mapping.profile !== existing.profile,
-      ),
-    ),
   };
 }
 
@@ -863,24 +441,6 @@ function resolveDomainMappingTargetInstallId(
   return { ok: true, targetInstallId: installIdResult.installId };
 }
 
-function instanceDomainMappingFromParts(input: {
-  enabled: boolean;
-  host: string;
-  now: string;
-  profile: InstanceDomainMappingProfile;
-  targetInstallId?: AppInstallId;
-}): InstanceDomainMapping {
-  return {
-    host: input.host,
-    profile: input.profile,
-    ...compatibilitySurfaceForProfile(input.profile),
-    ...compatibilityTargetForInstallId(input.targetInstallId),
-    enabled: input.enabled,
-    createdAt: input.now,
-    updatedAt: input.now,
-  };
-}
-
 function instanceDomainMappingAppliedStateFromParts(input: {
   accountId: string;
   action: InstanceDomainMappingAppliedAction;
@@ -1060,37 +620,6 @@ function optionalStringProperty<K extends string>(
   }
 
   return { [key]: parseTrimmedNonEmptyString(context, value) } as { [P in K]?: string };
-}
-
-function parseBoolean(context: string, value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${context} must be a boolean.`);
-  }
-
-  return value;
-}
-
-function assertCreateInstanceDomainMappingRequestKeys(value: Record<string, unknown>) {
-  const requiredKeys = ["host"];
-  const allowedKeys = new Set([
-    ...requiredKeys,
-    "enabled",
-    "installId",
-    "profile",
-    "surface",
-    "targetInstallId",
-  ]);
-
-  assertOnlyKeys(value, allowedKeys, "Domain mapping request");
-  assertRequiredKeys(value, requiredKeys, "Domain mapping request");
-}
-
-function assertDeleteInstanceDomainMappingRequestKeys(value: Record<string, unknown>) {
-  const requiredKeys = ["host"];
-  const allowedKeys = new Set([...requiredKeys, "profile", "surface"]);
-
-  assertOnlyKeys(value, allowedKeys, "Domain mapping delete request");
-  assertRequiredKeys(value, requiredKeys, "Domain mapping delete request");
 }
 
 function assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value: Record<string, unknown>) {

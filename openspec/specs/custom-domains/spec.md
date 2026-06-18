@@ -15,8 +15,8 @@ The system SHALL store desired exact-host profile mappings as instance
 
 #### Scenario: Create mapping
 
-- **GIVEN** an authorized owner or admin creates a domain mapping through the
-  compatibility API or route editor
+- **GIVEN** an authorized owner or admin creates a domain mapping through a
+  control-plane route write
 - **WHEN** the host and profile are valid
 - **THEN** the host is normalized
 - **AND** an enabled mount `route` record stores the exact match host and
@@ -33,16 +33,17 @@ The system SHALL store desired exact-host profile mappings as instance
 
 ### Requirement: Mapping Reads And Route Policy
 
-The system SHALL expose mapping reads publicly and apply enabled exact-host
-route records before ordinary host profile behavior.
+The system SHALL derive mapping reads and runtime host lookup from enabled
+exact-host `route` records before ordinary host profile behavior.
 
-#### Scenario: Public lookup
+#### Scenario: Route-derived lookup
 
 - **GIVEN** desired mapping routes exist
 - **WHEN** mapping reads or enabled-host lookup runs
-- **THEN** reads are public
+- **THEN** reads are projected from active `route` records
 - **AND** disabled desired routes do not create mapped hosts or desired
   provider resources
+- **AND** no legacy domain-mapping desired store is read as a fallback
 
 #### Scenario: Profile-specific target
 
@@ -165,12 +166,14 @@ semantics.
 
 #### Scenario: Route records are the projection source
 
-- **GIVEN** compatibility domain mapping or redirect workflows still accept
-  legacy-shaped inputs
+- **GIVEN** route-derived domain mapping or redirect provider resources are
+  planned
 - **WHEN** deployment desired state is built
-- **THEN** those workflows must have synchronized desired state into
-  schema-owned `route` records before provider resources can be projected
+- **THEN** only schema-owned active `route` records can project those provider
+  resources
 - **AND** absent route records mean absent custom-domain provider resources
+- **AND** legacy domain-mapping and redirect-intent stores are not synchronized
+  into route records during projection
 
 #### Scenario: Removed routes disappear from desired state
 
@@ -196,16 +199,18 @@ attempt history when a cleanup job removes recorded provider resources.
 - **AND** generic deployment attempt history records the cleanup result without
   deleting desired route intent
 
-### Requirement: Cleanup And Forget
+### Requirement: Cleanup And Route Removal
 
-The system SHALL make route forgetting and provider repair cleanup explicit.
+The system SHALL make desired route removal and provider repair cleanup
+explicit.
 
-#### Scenario: Forget unapplied desired state
+#### Scenario: Remove unapplied desired state
 
 - **GIVEN** a desired route is disabled and has no current provider evidence
-- **WHEN** a forget command runs
-- **THEN** the desired route is removed from normal reads
-- **AND** cleanup audit state records the forgotten route
+- **WHEN** an authorized route delete or route removal command runs
+- **THEN** the desired route is removed from active reads
+- **AND** no legacy domain-mapping or redirect-intent desired cleanup row is
+  written
 
 #### Scenario: Manual provider cleanup
 
@@ -253,6 +258,16 @@ through generic deployment attempts.
   selected evidence row
 - **AND** cleanup does not delete route intent or mutate app data
 
+#### Scenario: Domain commands use route records
+
+- **GIVEN** a domain inspection, route removal, redirect removal, or provider
+  repair workflow needs desired domain intent
+- **WHEN** the workflow reads or writes desired intent
+- **THEN** it reads or writes schema-owned `route` records through the
+  control-plane protocol
+- **AND** it does not call legacy domain-mapping or redirect-intent desired
+  store APIs
+
 #### Scenario: Pure planning helper reuse
 
 - **GIVEN** generic deployment, destroy, inspection, or explicit cleanup needs
@@ -284,22 +299,27 @@ schema-owned `route` control-plane records.
   status code, path/query policy, enabled state, and timestamps
 - **AND** provider resources are not mutated by the intent write
 
-### Requirement: Custom-Domain Compatibility Surface
+### Requirement: No Legacy Domain Intent Stores
 
-Existing custom-domain APIs SHALL remain compatible while reading and writing
-schema-owned route records.
+The system SHALL remove legacy custom-domain desired-intent stores and keep
+routes as the only desired source of truth.
 
-#### Scenario: Existing API delegates to schema records
+#### Scenario: Legacy desired stores are absent
 
-- **GIVEN** existing custom-domain mapping or redirect APIs are called during
-  migration
-- **WHEN** the API reads or writes domain intent
-- **THEN** it reads or writes corresponding `route` records
-- **AND** its response shape remains compatible for existing clients
+- **WHEN** custom-domain mapping or redirect desired state is read, written,
+  saved, pulled, pushed, restored, or projected
+- **THEN** the active desired state comes from schema-owned `route` records
+- **AND** `instance_domain_mappings`,
+  `instance_domain_provider_redirect_intents`, legacy `domain-mapping`
+  records, and legacy `redirect-intent` records are not desired-state sources
+- **AND** runtime reads do not backfill, merge, or synchronize those legacy
+  sources into route records
 
 #### Scenario: Cleanup evidence remains separate
 
-- **GIVEN** provider cleanup, manual cleanup, or forget workflows run
+- **GIVEN** provider cleanup, manual cleanup, or route removal workflows run
 - **WHEN** the workflow records its result
-- **THEN** desired route records, provider evidence summaries, and cleanup
-  history remain separate records or projections
+- **THEN** desired route records and provider evidence remain separate records
+  or projections
+- **AND** provider repair evidence is not stored in legacy desired-intent
+  tables

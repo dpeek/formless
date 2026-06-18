@@ -12,6 +12,7 @@ import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
+import type { MutationResponse } from "../shared/protocol.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -27,6 +28,7 @@ const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 let harness: Harness;
 let defaultHarness: Harness;
 let assetRequests: string[];
+const routeRecordIds = new Map<string, string>();
 
 beforeAll(async () => {
   defaultHarness = await createCustomDomainHarness("instance");
@@ -206,9 +208,13 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("redirects an anonymous instance profile custom host instead of public Site SSR", async () => {
     await withHarness(await createCustomDomainHarness("publishedSite"), async () => {
-      await postAdminJson("/api/formless/domain-mappings", {
-        host: "admin.example.com",
-        profile: "instance",
+      await createRouteRecord("route:host:instance:admin.example.com", {
+        enabled: true,
+        matchHost: "admin.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        kind: "mount",
+        targetProfile: "instance",
       });
       assetRequests = [];
 
@@ -220,9 +226,11 @@ describe("installed Site custom-domain Worker routing", () => {
         headers: { Accept: "text/html" },
         redirect: "manual",
       });
-      const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings", {
-        headers: adminHeaders(),
-      });
+      const mappingLookup = await fetchHost(
+        "admin.example.com",
+        "/api/formless/domain-mappings/lookup?host=admin.example.com&profile=instance",
+        { headers: adminHeaders() },
+      );
       const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
 
       expect(home.status).toBe(302);
@@ -231,7 +239,7 @@ describe("installed Site custom-domain Worker routing", () => {
       expect(publicSitePage.headers.get("Location")).toBe(
         "/login?redirectTo=%2Fblog%2Fstarter-post",
       );
-      expect(instanceApi.status).toBe(200);
+      expect(mappingLookup.status).toBe(200);
       expect(schemaKeyApi.status).toBe(404);
       expect(assetRequests).toEqual([]);
     });
@@ -437,9 +445,24 @@ describe("installed Site custom-domain Worker routing", () => {
     });
   });
 
-  it("stops mapped public Site routing after desired mapping deletion", async () => {
+  it("stops mapped public Site routing after desired route disablement with provider evidence", async () => {
     await setupMappedSite();
-    await deleteAdminJson(`/api/formless/domain-mappings?host=${mappedHost}&profile=publicSite`);
+    await postAdminJson("/api/formless/domain-mappings/apply-evidence", {
+      accountId: "account-123",
+      action: "created",
+      alchemyResourceId: "primary-custom-domain-www-example-com-publicsite-personal",
+      host: mappedHost,
+      profile: "publicSite",
+      provider: "cloudflare-worker-custom-domain",
+      targetInstallId: installId,
+      workerDomainId: "custom-domain-123",
+      workerName: "formless-primary",
+      zoneId: "zone-1",
+      zoneName: "example.com",
+    });
+    await patchRouteRecord(`route:host:publicSite:${mappedHost}`, {
+      enabled: false,
+    });
     assetRequests = [];
 
     const home = await fetchMappedHost("/", {
@@ -483,29 +506,11 @@ async function expectAuthConfigRp(targetHarness: Harness, host: string, expected
 }
 
 async function setupMappedSite() {
-  await postAdminJson("/api/formless/app-installs", {
-    packageAppKey: "site",
-    installId,
-    label: "Personal",
-  });
-  await postAdminJson("/api/formless/domain-mappings", {
-    host: mappedHost,
-    surface: "site",
-    installId,
-  });
+  await setupMappedSiteRouteRecord();
 }
 
 async function setupMappedApp() {
-  await postAdminJson("/api/formless/app-installs", {
-    packageAppKey: "tasks",
-    installId: taskInstallId,
-    label: "Task Workspace",
-  });
-  await postAdminJson("/api/formless/domain-mappings", {
-    host: mappedAppHost,
-    profile: "app",
-    targetInstallId: taskInstallId,
-  });
+  await setupMappedAppRouteRecord();
 }
 
 async function setupMappedSiteRouteRecord() {
@@ -545,11 +550,32 @@ async function setupMappedAppRouteRecord() {
 }
 
 async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
-  await postAdminJson(`${controlPlaneApi}/mutations`, {
+  const request = operationWriteRequest(`${controlPlaneApi}/mutations`, {
     mutationId: `mutation-${recordId}`,
     entity: "route",
     op: "create",
     recordId,
+    values: withoutLifecycleValues(values),
+  });
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  expect([200, 201]).toContain(response.status);
+
+  const body = request.response(await response.json()) as MutationResponse;
+  routeRecordIds.set(recordId, body.record.id);
+}
+
+async function patchRouteRecord(recordId: string, values: Record<string, unknown>) {
+  const actualRecordId = routeRecordIds.get(recordId) ?? recordId;
+  await postAdminJson(`${controlPlaneApi}/mutations`, {
+    mutationId: `mutation-${actualRecordId}-patch`,
+    entity: "route",
+    op: "patch",
+    recordId: actualRecordId,
     values: withoutLifecycleValues(values),
   });
 }
@@ -604,17 +630,6 @@ async function putAdminBytes(path: string, body: Uint8Array, contentType: string
   return response;
 }
 
-async function deleteAdminJson(path: string) {
-  const response = await harness.fetch(path, {
-    headers: adminHeaders(),
-    method: "DELETE",
-  });
-
-  expect(response.status).toBe(200);
-
-  return response;
-}
-
 function adminHeaders(headers: Record<string, string> = {}) {
   return {
     ...headers,
@@ -638,6 +653,7 @@ function assetResponse(request: Request): Response {
 }
 
 async function resetWorkerState(target: Harness) {
+  routeRecordIds.clear();
   await Promise.all([
     postReset(target, `${controlPlaneApi}/reset/seed`),
     postReset(target, `/api/app-installs/site/${installId}/reset/seed`),

@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   deleteInstanceDomainProviderResource,
-  forgetInstanceDomainProviderRedirect,
   markInstanceDomainProviderResourceManuallyRemoved,
 } from "./domain-provider.ts";
 import {
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
 } from "../shared/domain-provider-api.ts";
 
 describe("client domain provider API helpers", () => {
@@ -50,38 +48,6 @@ describe("client domain provider API helpers", () => {
         kind: "cloudflare-worker-custom-domain",
         logicalId: "primary-custom-domain-www-example-com-publicsite-site",
       },
-    });
-  });
-
-  it("forgets a disabled redirect intent", async () => {
-    const forgotten = await forgetInstanceDomainProviderRedirect(
-      { fromHost: "draft.example.com" },
-      {
-        fetcher: jsonFetcher(
-          `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=draft.example.com`,
-          {
-            redirectIntent: {
-              enabled: false,
-              fromHost: "draft.example.com",
-              toHost: "example.com",
-            },
-            redirectIntentCleanupEvent: {
-              action: "forgotten",
-              fromHost: "draft.example.com",
-              reason: "disabled-unapplied",
-            },
-            redirectIntentCleanupEvents: [],
-            redirectIntents: [],
-          },
-          { expectedMethod: "DELETE" },
-        ),
-      },
-    );
-
-    expect(forgotten.redirectIntents).toEqual([]);
-    expect(forgotten.redirectIntentCleanupEvent).toMatchObject({
-      action: "forgotten",
-      fromHost: "draft.example.com",
     });
   });
 

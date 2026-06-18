@@ -386,7 +386,7 @@ describe("instance control-plane API routes", () => {
     }
   });
 
-  it("backfills legacy route intent records without deployment execution history records", async () => {
+  it("leaves legacy route intent records inert without deployment execution history records", async () => {
     const now = "2026-06-02T00:00:00.000Z";
     const restored = await postAdminJson<BootstrapResponse>(
       `${controlPlaneApi}/snapshot/restore`,
@@ -426,46 +426,7 @@ describe("instance control-plane API routes", () => {
       .sort((left, right) => left.id.localeCompare(right.id));
 
     expect(restored.response.status).toBe(200);
-    expect(routes).toEqual([
-      expect.objectContaining({
-        id: "route:host:publicSite:www.example.com",
-        values: expect.objectContaining({
-          appInstall: "personal",
-          enabled: true,
-          kind: "mount",
-          matchHost: "www.example.com",
-          matchPath: "/",
-          matchPrefix: "/",
-          surface: "public-site",
-          targetProfile: "public-site",
-        }),
-      }),
-      expect.objectContaining({
-        id: "route:personal:admin",
-        values: expect.objectContaining({
-          appInstall: "personal",
-          enabled: true,
-          kind: "mount",
-          matchPath: "/apps/personal-legacy",
-          surface: "admin",
-          targetProfile: "app",
-        }),
-      }),
-      expect.objectContaining({
-        id: "route:redirect:old.example.com",
-        values: expect.objectContaining({
-          enabled: true,
-          kind: "redirect",
-          matchHost: "old.example.com",
-          matchPath: "/",
-          matchPrefix: "/",
-          preservePath: true,
-          preserveQueryString: false,
-          statusCode: "308",
-          toHost: "www.example.com",
-        }),
-      }),
-    ]);
+    expect(routes).toEqual([]);
     expect(JSON.stringify(routes)).not.toContain("worker-domain-1");
     expect(JSON.stringify(routes)).not.toContain("affectedLogicalIdsJson");
     expect(controlPlane.body.records.map((record) => record.entity)).not.toContain(
@@ -491,7 +452,7 @@ describe("instance control-plane API routes", () => {
     ]);
   });
 
-  it("reports legacy route migration blockers before conflicting routes become active", async () => {
+  it("does not convert conflicting legacy route intent records into active routes", async () => {
     const now = "2026-06-02T00:00:00.000Z";
     const restored = await postAdminJson<BootstrapResponse>(
       `${controlPlaneApi}/snapshot/restore`,
@@ -520,14 +481,22 @@ describe("instance control-plane API routes", () => {
 
     expect(restored.response.status).toBe(200);
 
-    const blocked = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
+    const bootstrap = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
       headers: adminHeaders(),
     });
-    const body = (await blocked.json()) as FailureResponse;
+    const body = (await bootstrap.json()) as BootstrapResponse;
 
-    expect(blocked.status).toBe(400);
-    expect(body.error).toBe(
-      'Legacy route migration blocker: legacy app-route "legacy:personal:admin" match "<hostless>/apps/personal" conflicts with route "route:reserved".',
+    expect(bootstrap.status).toBe(200);
+    expect(body.records.filter((record) => record.entity === "route")).toEqual([
+      expect.objectContaining({ id: "route:reserved" }),
+    ]);
+    expect(body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "app-route",
+          id: "legacy:personal:admin",
+        }),
+      ]),
     );
   });
 

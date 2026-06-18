@@ -21,11 +21,11 @@ import {
 } from "./cloudflare-domain-client.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import type {
-  ForgetInstanceDomainProviderRedirectIntentResponse,
   InstanceDomainProviderManualCleanupResponse,
   InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
-import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
+import type { InstanceDomainMappingProfile } from "../shared/instance-domain-mappings.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { parseOwnerSetupToken, type OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import {
   nodeAlchemyDomainProviderRuntime,
@@ -112,8 +112,8 @@ import {
   type WorkspaceOperationState,
 } from "@dpeek/formless-workspace";
 import {
-  forgetFormlessInstanceDomainMapping,
-  forgetFormlessInstanceDomainProviderRedirect,
+  disableFormlessInstanceDomainRedirect,
+  disableFormlessInstanceDomainRoute,
   markFormlessInstanceDomainProviderResourceManuallyRemoved,
   readFormlessInstanceDomainProviderPlan,
   readFormlessInstanceOwnerSetupStatus,
@@ -243,11 +243,10 @@ export {
 export {
   readFormlessInstanceAppRegistry,
   readFormlessInstanceDeployMetadata,
-  readFormlessInstanceDomainMappings,
   readFormlessInstanceOwnerSetupStatus,
   readFormlessInstanceTargetStatus,
-  forgetFormlessInstanceDomainMapping,
-  forgetFormlessInstanceDomainProviderRedirect,
+  disableFormlessInstanceDomainRedirect,
+  disableFormlessInstanceDomainRoute,
   markFormlessInstanceDomainProviderResourceManuallyRemoved,
   type FormlessInstanceTargetClientDependencies,
   type FormlessInstanceTargetDeployMetadata,
@@ -1129,13 +1128,13 @@ export type PlanFormlessInstanceDomainProviderResult = {
 };
 
 export type ForgetFormlessInstanceDomainRouteResult = {
-  response: ForgetInstanceDomainMappingResponse;
+  response: OperationInvocationResponse;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
 
 export type ForgetFormlessInstanceDomainRedirectResult = {
-  response: ForgetInstanceDomainProviderRedirectIntentResponse;
+  response: OperationInvocationResponse;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
@@ -1394,7 +1393,7 @@ export async function forgetFormlessInstanceDomainRouteFromWorkspace(
   input: {
     adminToken?: string | null;
     host: string;
-    profile: ForgetFormlessInstanceDomainRouteResult["response"]["mapping"]["profile"];
+    profile: InstanceDomainMappingProfile;
     targetAlias?: string | null;
     workspacePath?: string;
   },
@@ -1429,7 +1428,7 @@ export async function forgetFormlessInstanceDomainRouteFromWorkspace(
   );
 
   return {
-    response: await forgetFormlessInstanceDomainMapping(
+    response: await disableFormlessInstanceDomainRoute(
       {
         adminToken,
         request: {
@@ -1483,7 +1482,7 @@ export async function forgetFormlessInstanceDomainRedirectFromWorkspace(
   );
 
   return {
-    response: await forgetFormlessInstanceDomainProviderRedirect(
+    response: await disableFormlessInstanceDomainRedirect(
       {
         adminToken,
         request: {

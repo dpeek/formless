@@ -14,14 +14,12 @@ import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneAppInstallsFromRecords,
-  instanceControlPlaneAppRouteId,
   instanceControlPlaneDefaultRouteAccess,
   instanceControlPlaneSchemaProvenance,
   type InstanceControlPlaneRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppInstallValues,
-  type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneRedirectStatusCode,
   type InstanceControlPlaneRouteValues,
 } from "@dpeek/formless-instance-control-plane";
@@ -70,6 +68,7 @@ import {
   patchStoredRecordOutcome,
   type RecordConstraintValidator,
   type StorageSource,
+  writeRecordSetForActionOutcome,
 } from "./storage.ts";
 import {
   INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH,
@@ -123,7 +122,6 @@ function initializeControlPlaneStorage(
 
 function ensureControlPlaneStorage(storage: DurableObjectStorage, env: LaunchFixtureStartupEnv) {
   initializeControlPlaneStorage(storage, env);
-  backfillLegacyRouteIntentRecords(storage);
 }
 
 type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv &
@@ -136,8 +134,7 @@ type ParsedCreateAppInstallActionRequest = {
   input: CreateAppInstallRequest;
 };
 
-type RouteMigrationCandidate = {
-  backfill?: boolean;
+type RouteIntentSyncCandidate = {
   id: string;
   source: string;
   values: RecordValues;
@@ -680,150 +677,6 @@ function parseOptionalActionIdentity(value: unknown): string | undefined {
   return value.trim();
 }
 
-function backfillLegacyRouteIntentRecords(storage: DurableObjectStorage) {
-  const candidates = legacyRouteMigrationCandidates(storage);
-
-  if (candidates.length === 0) {
-    return;
-  }
-
-  const safeCandidates = assertRouteMigrationCandidatesAreSafe(storage, candidates);
-
-  for (const candidate of safeCandidates) {
-    if (candidate.backfill === false) {
-      continue;
-    }
-
-    upsertControlPlaneRecord(storage, {
-      action: "backfillLegacyRouteIntent",
-      entity: "route",
-      id: candidate.id,
-      values: candidate.values,
-    });
-  }
-}
-
-function legacyRouteMigrationCandidates(storage: DurableObjectStorage): RouteMigrationCandidate[] {
-  return activeControlPlaneRecords(storage).flatMap((record) => {
-    if (record.entity === "app-route") {
-      return legacyAppRouteMigrationCandidate(storage, record);
-    }
-
-    if (record.entity === "domain-mapping") {
-      return legacyDomainMappingMigrationCandidate(storage, record);
-    }
-
-    if (record.entity === "redirect-intent") {
-      return legacyRedirectIntentMigrationCandidate(storage, record);
-    }
-
-    return [];
-  });
-}
-
-function legacyAppRouteMigrationCandidate(
-  storage: DurableObjectStorage,
-  record: StoredRecord,
-): RouteMigrationCandidate[] {
-  const appInstall = parseRequiredString("legacy app-route.appInstall", record.values.appInstall);
-  const routeKind = parseLegacyAppRouteKind(record.values.routeKind);
-  const id = instanceControlPlaneAppRouteId(appInstall, routeKind);
-  const surface = appRouteSurface(routeKind);
-  const values: RecordValues = {
-    enabled: record.values.enabled === true,
-    matchPath: parseRouteString("legacy app-route.path", record.values.path),
-    ...(typeof record.values.prefix === "string"
-      ? { matchPrefix: parseRoutePrefixString("legacy app-route.prefix", record.values.prefix) }
-      : {}),
-    kind: "mount",
-    targetProfile: routeKind === "publicSite" ? "public-site" : "app",
-    appInstall,
-    surface,
-    access: instanceControlPlaneDefaultRouteAccess({
-      kind: "mount",
-      surface,
-      targetProfile: routeKind === "publicSite" ? "public-site" : "app",
-    }),
-  };
-
-  return [
-    {
-      backfill: !activeControlPlaneRecordExists(storage, "route", id),
-      id,
-      source: `legacy app-route "${record.id}"`,
-      values,
-    },
-  ];
-}
-
-function legacyDomainMappingMigrationCandidate(
-  storage: DurableObjectStorage,
-  record: StoredRecord,
-): RouteMigrationCandidate[] {
-  const profile = parseDomainMappingProfile(record.values.profile);
-  const host = parseRequiredString("legacy domain-mapping.host", record.values.host);
-  const id = domainMappingRouteRecordId({ host, profile });
-  const targetInstallId =
-    stringRecordValue(record.values.appInstall) ??
-    stringRecordValue(record.values.targetInstallId) ??
-    stringRecordValue(record.values.installId);
-  const mapping: InstanceDomainMapping = {
-    host,
-    profile,
-    ...(profile === "publicSite" ? { surface: "site" as const } : {}),
-    ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
-    enabled: record.values.enabled === true,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
-  const values = domainMappingRouteRecordValues(storage, mapping);
-  return [
-    {
-      backfill: !activeControlPlaneRecordExists(storage, "route", id),
-      id,
-      source: `legacy domain-mapping "${record.id}"`,
-      values,
-    },
-  ];
-}
-
-function legacyRedirectIntentMigrationCandidate(
-  storage: DurableObjectStorage,
-  record: StoredRecord,
-): RouteMigrationCandidate[] {
-  const fromHost = parseRequiredString("legacy redirect-intent.fromHost", record.values.fromHost);
-  const id = redirectRouteRecordId(fromHost);
-  const intent: InstanceDomainProviderRedirectIntent = {
-    fromHost,
-    ...(typeof record.values.toHost === "string" && record.values.toHost.trim() !== ""
-      ? { toHost: record.values.toHost }
-      : {}),
-    ...(typeof record.values.toUrl === "string" && record.values.toUrl.trim() !== ""
-      ? { toUrl: record.values.toUrl }
-      : {}),
-    statusCode: parseLegacyRedirectStatusCode(record.values.statusCode),
-    preservePath: booleanRecordValue(
-      record.values.preservePath,
-      "legacy redirect-intent.preservePath",
-    ),
-    preserveQueryString: booleanRecordValue(
-      record.values.preserveQueryString,
-      "legacy redirect-intent.preserveQueryString",
-    ),
-    enabled: record.values.enabled === true,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
-  return [
-    {
-      backfill: !activeControlPlaneRecordExists(storage, "route", id),
-      id,
-      source: `legacy redirect-intent "${record.id}"`,
-      values: redirectRouteRecordValues(intent),
-    },
-  ];
-}
-
 function syncDeploymentProjectionRecords(
   storage: DurableObjectStorage,
   input: {
@@ -847,7 +700,7 @@ function syncDomainIntentRecords(
     input.mappings?.map((mapping) => domainMappingRouteCandidate(storage, mapping)) ?? [];
   const redirectRouteCandidates =
     input.redirectIntents?.map((intent) => redirectRouteCandidate(intent)) ?? [];
-  const safeCandidates = assertRouteMigrationCandidatesAreSafe(storage, [
+  const safeCandidates = assertRouteIntentSyncCandidatesAreSafe(storage, [
     ...domainRouteCandidates,
     ...redirectRouteCandidates,
   ]);
@@ -866,20 +719,18 @@ function syncDomainIntentRecords(
   if (input.mappings !== undefined) {
     const nextDomainRouteIds = new Set(domainRouteCandidates.map((candidate) => candidate.id));
 
-    disableMissingControlPlaneIntentRecords(storage, nextDomainRouteIds, {
-      action: "disableDomainMappingIntent",
+    removeMissingControlPlaneIntentRecords(storage, nextDomainRouteIds, {
+      action: "removeDomainMappingIntent",
       idPrefix: "route:host:",
-      now: input.now,
     });
   }
 
   if (input.redirectIntents !== undefined) {
     const nextRedirectRouteIds = new Set(redirectRouteCandidates.map((candidate) => candidate.id));
 
-    disableMissingControlPlaneIntentRecords(storage, nextRedirectRouteIds, {
-      action: "disableRedirectIntent",
+    removeMissingControlPlaneIntentRecords(storage, nextRedirectRouteIds, {
+      action: "removeRedirectIntent",
       idPrefix: "route:redirect:",
-      now: input.now,
     });
   }
 }
@@ -973,10 +824,10 @@ function upsertControlPlaneRecord(
 function domainMappingRouteCandidate(
   storage: DurableObjectStorage,
   mapping: InstanceDomainMapping,
-): RouteMigrationCandidate {
+): RouteIntentSyncCandidate {
   return {
     id: domainMappingRouteRecordId(mapping),
-    source: `legacy domain mapping "${mapping.profile}:${mapping.host}"`,
+    source: `domain mapping route sync "${mapping.profile}:${mapping.host}"`,
     values: domainMappingRouteRecordValues(storage, mapping),
   };
 }
@@ -1011,10 +862,10 @@ function domainMappingRouteRecordValues(
 
 function redirectRouteCandidate(
   intent: InstanceDomainProviderRedirectIntent,
-): RouteMigrationCandidate {
+): RouteIntentSyncCandidate {
   return {
     id: redirectRouteRecordId(intent.fromHost),
-    source: `legacy redirect intent "${intent.fromHost}"`,
+    source: `redirect route sync "${intent.fromHost}"`,
     values: redirectRouteRecordValues(intent),
   };
 }
@@ -1034,31 +885,34 @@ function redirectRouteRecordValues(intent: InstanceDomainProviderRedirectIntent)
   };
 }
 
-function disableMissingControlPlaneIntentRecords(
+function removeMissingControlPlaneIntentRecords(
   storage: DurableObjectStorage,
   nextRecordIds: Set<string>,
-  input: { action: string; idPrefix: string; now: string },
+  input: { action: string; idPrefix: string },
 ) {
-  for (const record of activeControlPlaneRecords(storage)) {
-    if (
-      record.entity !== "route" ||
-      !record.id.startsWith(input.idPrefix) ||
-      nextRecordIds.has(record.id) ||
-      record.values.enabled === false
-    ) {
-      continue;
-    }
+  const recordsToRemove = activeControlPlaneRecords(storage).filter(
+    (record) =>
+      record.entity === "route" &&
+      record.id.startsWith(input.idPrefix) &&
+      !nextRecordIds.has(record.id),
+  );
 
-    upsertControlPlaneRecord(storage, {
-      action: input.action,
-      entity: "route",
-      id: record.id,
-      values: {
-        ...record.values,
-        enabled: false,
-      },
-    });
+  if (recordsToRemove.length === 0) {
+    return;
   }
+
+  const removedRecordIds = recordsToRemove.map((record) => record.id).sort();
+  const actionId = `controlPlane:${input.action}:${removedRecordIds.join(",")}`;
+  const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema);
+
+  writeRecordSetForActionOutcome(
+    storage,
+    actionId,
+    "route",
+    input.action,
+    recordsToRemove.map((record) => ({ kind: "delete" as const, record })),
+    validate,
+  );
 }
 
 function activeControlPlaneRecords(storage: DurableObjectStorage): StoredRecord[] {
@@ -1295,16 +1149,6 @@ function parseRouteString(field: string, value: unknown): `/${string}` {
   return route as `/${string}`;
 }
 
-function parseRoutePrefixString(field: string, value: unknown): `/${string}/` {
-  const route = parseRouteString(field, value);
-
-  if (!route.endsWith("/")) {
-    throw new BadRequestError(`Field "${field}" must be a route prefix.`);
-  }
-
-  return route as `/${string}/`;
-}
-
 function parseDomainMappingProfile(value: unknown): InstanceDomainMappingProfile {
   if (value === "app" || value === "instance" || value === "publicSite") {
     return value;
@@ -1321,33 +1165,6 @@ function parseRedirectStatusCode(
   }
 
   throw new BadRequestError('Field "redirect.statusCode" must be 301, 302, 303, 307, or 308.');
-}
-
-function parseLegacyRedirectStatusCode(
-  value: unknown,
-): InstanceDomainProviderRedirectIntent["statusCode"] {
-  const statusCode = typeof value === "string" ? Number(value) : value;
-
-  return parseRedirectStatusCode(statusCode);
-}
-
-function parseLegacyAppRouteKind(value: unknown): InstanceControlPlaneAppRouteKind {
-  if (value === "admin" || value === "publicSite") {
-    return value;
-  }
-
-  throw new BadRequestError('Field "legacy app-route.routeKind" must be "admin" or "publicSite".');
-}
-
-function appRouteSurface(
-  routeKind: InstanceControlPlaneAppRouteKind,
-): NonNullable<InstanceControlPlaneRouteValues["surface"]> {
-  switch (routeKind) {
-    case "admin":
-      return "admin";
-    case "publicSite":
-      return "public-site";
-  }
 }
 
 function domainMappingRouteRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
@@ -1394,11 +1211,11 @@ function activeControlPlaneRecordExists(
   return record?.entity === entity && !record.deletedAt;
 }
 
-function assertRouteMigrationCandidatesAreSafe(
+function assertRouteIntentSyncCandidatesAreSafe(
   storage: DurableObjectStorage,
-  candidates: readonly RouteMigrationCandidate[],
-): RouteMigrationCandidate[] {
-  const uniqueCandidates = uniqueRouteMigrationCandidates(candidates);
+  candidates: readonly RouteIntentSyncCandidate[],
+): RouteIntentSyncCandidate[] {
+  const uniqueCandidates = uniqueRouteIntentSyncCandidates(candidates);
   const enabledRoutes = activeControlPlaneRecords(storage)
     .filter((record) => record.entity === "route" && record.values.enabled === true)
     .map((record) => ({
@@ -1424,7 +1241,7 @@ function assertRouteMigrationCandidatesAreSafe(
         routeMatchesOverlap(candidateMatch, existing.match)
       ) {
         throw new BadRequestError(
-          `Legacy route migration blocker: ${candidate.source} match "${formatRouteMatch(
+          `Route intent sync blocker: ${candidate.source} match "${formatRouteMatch(
             candidateMatch,
           )}" conflicts with ${existing.source}.`,
         );
@@ -1441,10 +1258,10 @@ function assertRouteMigrationCandidatesAreSafe(
   return uniqueCandidates;
 }
 
-function uniqueRouteMigrationCandidates(
-  candidates: readonly RouteMigrationCandidate[],
-): RouteMigrationCandidate[] {
-  const byId = new Map<string, RouteMigrationCandidate>();
+function uniqueRouteIntentSyncCandidates(
+  candidates: readonly RouteIntentSyncCandidate[],
+): RouteIntentSyncCandidate[] {
+  const byId = new Map<string, RouteIntentSyncCandidate>();
 
   for (const candidate of candidates) {
     const existing = byId.get(candidate.id);
@@ -1456,7 +1273,7 @@ function uniqueRouteMigrationCandidates(
 
     if (!recordValuesEqual(existing.values, candidate.values)) {
       throw new BadRequestError(
-        `Legacy route migration blocker: ${existing.source} and ${candidate.source} both map to route "${candidate.id}" with different values.`,
+        `Route intent sync blocker: ${existing.source} and ${candidate.source} both map to route "${candidate.id}" with different values.`,
       );
     }
   }

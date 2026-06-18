@@ -518,7 +518,10 @@ function authorityExportFetch(
     }
 
     if (parsedUrl.pathname === "/api/formless/domain-mappings") {
-      return Response.json({ mappings: [] });
+      return Response.json(
+        { error: "legacy domain mapping API should not be called" },
+        { status: 500 },
+      );
     }
 
     if (parsedUrl.pathname === "/api/formless/deployments/status") {
@@ -666,7 +669,10 @@ function deployApplyFetch(
     }
 
     if (parsedUrl.pathname === "/api/formless/domain-mappings") {
-      return Response.json({ mappings: [] });
+      return Response.json(
+        { error: "legacy domain mapping API should not be called" },
+        { status: 500 },
+      );
     }
 
     if (parsedUrl.pathname === "/api/formless/archive/restore") {

@@ -754,7 +754,6 @@ describe("Formless Site CLI", () => {
         james: { records: [] },
       },
       [],
-      [domainMapping("dpeek.com", "david"), domainMapping("www.dpeek.com", "david")],
       controlPlaneRecordsWithProviderObservation({ targetUrl }),
     );
 
@@ -837,7 +836,7 @@ describe("Formless Site CLI", () => {
       "GET https://source-owned.dpeek.workers.dev/api/app-installs/site/david/snapshot",
       "GET https://source-owned.dpeek.workers.dev/api/app-installs/site/james/snapshot",
       "GET https://source-owned.dpeek.workers.dev/api/formless/media/media/images/cover.png",
-      "GET https://source-owned.dpeek.workers.dev/api/formless/domain-mappings",
+      "GET https://source-owned.dpeek.workers.dev/api/formless/control-plane/bootstrap?actorKind=cliDeployer",
     ]);
     expect(requests.map((request) => request.headers.authorization)).toEqual(
       requests.map(() => "Bearer stored-archive-token"),
@@ -848,7 +847,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("mode: apply.");
     expect(logs[0]).toContain("noop: false.");
     expect(logs[0]).toContain("syncPlan:");
-    expect(logs[0]).toContain('"changedAreas":["apps","domains"]');
+    expect(logs[0]).toContain('"changedAreas":["apps"]');
     expect(logs[0]).toContain('"source":"instance.primary"');
     expect(logs[0]).toContain('"target":"workspace"');
     expect(logs[0]).toContain('"status":"changes"');
@@ -872,7 +871,6 @@ describe("Formless Site CLI", () => {
       [installedSite("david", "David Peek")],
       { david: { records: [] } },
       [],
-      [domainMapping("dpeek.com", "david")],
       controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
     );
 
@@ -914,7 +912,6 @@ describe("Formless Site CLI", () => {
       requests,
       [installedSite("david", "David Peek")],
       { david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() } },
-      [],
       [],
       controlPlaneRecords({ targetUrl }),
     );
@@ -1084,7 +1081,6 @@ describe("Formless Site CLI", () => {
         },
       ],
       [],
-      [],
       controlPlaneRecords(),
     );
 
@@ -1161,7 +1157,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("dryRunRestoreOk: false.");
     expect(logs[0]).toContain("sync: changes.");
     expect(logs[0]).toContain("syncPlan:");
-    expect(logs[0]).toContain('"changedAreas":["apps","domains","media","records"]');
+    expect(logs[0]).toContain('"changedAreas":["apps","media","records"]');
     expect(logs[0]).toContain('"source":"workspace"');
     expect(logs[0]).toContain('"target":"instance.primary"');
     expect(logs[0]).not.toContain("drift");
@@ -1425,7 +1421,6 @@ describe("Formless Site CLI", () => {
           restorePlan({ replacedInstalls: ["david"] }),
           restoreReport({ replacedInstalls: ["david"] }),
         ],
-        [],
         [],
         stagingControlPlane,
       ),
@@ -2061,7 +2056,6 @@ describe("Formless Site CLI", () => {
       { david: { records: [] } },
       [],
       [],
-      [domainMapping("dpeek.com", "david")],
       controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
     );
 
@@ -2101,7 +2095,6 @@ describe("Formless Site CLI", () => {
       { david: { records: [] } },
       [],
       [],
-      [domainMapping("dpeek.com", "david")],
       controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
     );
     const changedRemoteSchema = JSON.parse(
@@ -2411,7 +2404,6 @@ describe("Formless Site CLI", () => {
         restoreReport({ replacedInstalls: ["david"] }),
       ],
       [],
-      [domainMapping("dpeek.com", "david")],
       localControlPlaneRecords,
     );
 
@@ -2440,9 +2432,8 @@ describe("Formless Site CLI", () => {
         fetch: fetcher,
       }),
     );
-    expect(requests.some((request) => request.method === "POST")).toBe(true);
-    expect(deployInputs).toHaveLength(1);
-    expect(deployInputs[0]?.deploymentResourceGraph?.resources).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    expect(deployInputs).toHaveLength(0);
   });
 
   it("adopts and rotates instance workspace admin tokens explicitly", async () => {
@@ -3479,7 +3470,6 @@ describe("Formless Site CLI", () => {
         david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
       },
       [],
-      [],
       controlPlaneRecords(),
     );
 
@@ -3575,7 +3565,6 @@ describe("Formless Site CLI", () => {
         david: { records: [] },
       },
       [],
-      [],
       localControlPlaneRecords,
     );
 
@@ -3607,7 +3596,6 @@ describe("Formless Site CLI", () => {
       {
         david: { records: [] },
       },
-      [],
       [],
       controlPlaneRecords(),
     );
@@ -3660,7 +3648,6 @@ describe("Formless Site CLI", () => {
       {
         david: { records: [] },
       },
-      [],
       [],
       secretControlPlane,
     );
@@ -5334,7 +5321,6 @@ function archiveFetch(
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   extraPackages: InstallableAppPackage[] = [],
-  domainMappings: ReturnType<typeof domainMapping>[] = [],
   controlPlaneRecords?: StoredRecord[],
 ): typeof fetch {
   return async (url, init) => {
@@ -5378,11 +5364,10 @@ function archiveFetch(
     }
 
     if (parsedUrl.pathname === "/api/formless/domain-mappings") {
-      return Response.json({
-        appliedStates: [],
-        auditEvents: [],
-        mappings: domainMappings,
-      });
+      return Response.json(
+        { error: "legacy domain mapping API should not be called" },
+        { status: 500 },
+      );
     }
 
     if (parsedUrl.pathname === "/api/formless/deployments/status") {
@@ -5509,19 +5494,6 @@ function archiveFetch(
     }
 
     return Response.json({ error: "not found" }, { status: 404 });
-  };
-}
-
-function domainMapping(host: string, installId: string) {
-  return {
-    createdAt: "2026-05-26T00:00:00.000Z",
-    enabled: true,
-    host,
-    installId,
-    profile: "publicSite",
-    surface: "site",
-    targetInstallId: installId,
-    updatedAt: "2026-05-26T00:00:00.000Z",
   };
 }
 
@@ -5727,7 +5699,6 @@ function pushArchiveFetch(
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   restoreResponses: unknown[],
   extraPackages: InstallableAppPackage[] = [],
-  domainMappings: ReturnType<typeof domainMapping>[] = [],
   remoteControlPlaneRecords?: StoredRecord[],
 ): typeof fetch {
   const readFetch = archiveFetch(
@@ -5735,7 +5706,6 @@ function pushArchiveFetch(
     installs,
     dataByInstall,
     extraPackages,
-    domainMappings,
     remoteControlPlaneRecords ?? controlPlaneRecords(),
   );
 

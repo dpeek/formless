@@ -4,14 +4,10 @@ import {
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
-  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
-  type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_PROVIDER_PATH } from "./domain-provider-api.ts";
 import {
@@ -19,12 +15,9 @@ import {
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
-import type {
-  CreateInstanceDomainMappingResponse,
-  InstanceDomainMappingsResponse,
-  RecordInstanceDomainMappingApplyEvidenceResponse,
-} from "../shared/instance-domain-mappings.ts";
-import type { BootstrapResponse } from "../shared/protocol.ts";
+import type { RecordInstanceDomainMappingApplyEvidenceResponse } from "../shared/instance-domain-mappings.ts";
+import type { BootstrapResponse, MutationResponse } from "../shared/protocol.ts";
+import { operationWriteRequest } from "../test/authority-write.ts";
 import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
@@ -41,10 +34,12 @@ const adminToken = "test-admin-token";
 const cloudflareToken = "secret-cloudflare-token";
 const alchemyPassword = "secret-alchemy-password";
 const domainMappingsApplyEvidenceApiPath = "/api/formless/domain-mappings/apply-evidence";
-const domainMappingsApiPath = "/api/formless/domain-mappings";
+const domainProviderRedirectsApiPath = "/api/formless/domain-provider/redirects";
+const domainProviderRedirectsForgetApiPath = `${domainProviderRedirectsApiPath}/forget`;
 
 let harness: Harness;
 let defaultHarness: Harness;
+const routeRecordIds = new Map<string, string>();
 
 beforeAll(async () => {
   defaultHarness = await createHarness(defaultProviderBindings());
@@ -61,9 +56,21 @@ afterAll(async () => {
 
 describe("instance domain provider API routes", () => {
   it("returns dry-run provider config and plan without exposing provider secrets", async () => {
-    await postAdminJson<CreateInstanceDomainMappingResponse>(domainMappingsApiPath, {
-      host: "admin.example.com",
-      profile: "instance",
+    await createRouteRecord("disabled-provider-plan-route", {
+      enabled: false,
+      matchHost: "disabled.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+    });
+    await createRouteRecord("custom-provider-plan-route", {
+      enabled: true,
+      matchHost: "admin.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
     });
 
     const response = await getJson<InstanceDomainProviderPlanResponse>(
@@ -101,6 +108,8 @@ describe("instance domain provider API routes", () => {
         }),
       }),
     ]);
+    expect(response.body.redirectIntents).toEqual([]);
+    expect(serialized).not.toContain("disabled.example.com");
     expect(serialized).not.toContain(cloudflareToken);
     expect(serialized).not.toContain(alchemyPassword);
   });
@@ -158,7 +167,7 @@ describe("instance domain provider API routes", () => {
           runnerId: "runner-seed",
           workerDomainId: "custom-domain-123",
         });
-        await deleteAdminJson(`${domainMappingsApiPath}?host=admin.example.com&profile=instance`);
+        await patchRouteRecord("route:host:instance:admin.example.com", { enabled: false });
         const intentBeforeCleanup = await getJson<BootstrapResponse>(
           `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
         );
@@ -216,7 +225,6 @@ describe("instance domain provider API routes", () => {
             status: "succeeded",
           },
         );
-        const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
         const cleanupDeployed = await getJson<InstanceDeploymentStatusResponse>(
           INSTANCE_DEPLOYMENT_STATUS_API_PATH,
         );
@@ -228,11 +236,6 @@ describe("instance domain provider API routes", () => {
           result: { evidenceCount: 1 },
           status: "succeeded",
         });
-        expect(after.body.mappings).toEqual([
-          expect.objectContaining({ enabled: false, host: "admin.example.com" }),
-        ]);
-        expect(after.body.appliedStates).toEqual([]);
-        expect(after.body.auditEvents.map((event) => event.action)).toEqual(["created", "deleted"]);
         expect(cleanupDeployed.body.status).toMatchObject({ state: "no-target" });
         expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
           routeAndAppIntentSnapshot(intentBeforeCleanup.body),
@@ -260,7 +263,7 @@ describe("instance domain provider API routes", () => {
           runnerId: "runner-1",
           workerDomainId: "custom-domain-123",
         });
-        await deleteAdminJson(`${domainMappingsApiPath}?host=manual.example.com&profile=instance`);
+        await patchRouteRecord("route:host:instance:manual.example.com", { enabled: false });
         const intentBeforeCleanup = await getJson<BootstrapResponse>(
           `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
         );
@@ -273,13 +276,10 @@ describe("instance domain provider API routes", () => {
             logicalId: "unrelated-resource",
           },
         );
-        const stillApplied = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
-
         expect(unrelated.response.status).toBe(404);
         expect(unrelated.body).toMatchObject({
           code: "domain-provider-manual-cleanup-not-found",
         });
-        expect(stillApplied.body.appliedStates).toHaveLength(1);
 
         const cleanup = await postAdminJson<InstanceDomainProviderManualCleanupResponse>(
           INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
@@ -289,7 +289,6 @@ describe("instance domain provider API routes", () => {
             logicalId,
           },
         );
-        const after = await getJson<InstanceDomainMappingsResponse>(domainMappingsApiPath);
         const intentAfterCleanup = await getJson<BootstrapResponse>(
           `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
         );
@@ -304,11 +303,6 @@ describe("instance domain provider API routes", () => {
             logicalId,
           }),
         });
-        expect(after.body.appliedStates).toEqual([]);
-        expect(after.body.auditEvents.map((event) => event.action)).toEqual([
-          "created",
-          "manually-removed",
-        ]);
         expect(routeAndAppIntentSnapshot(intentAfterCleanup.body)).toEqual(
           routeAndAppIntentSnapshot(intentBeforeCleanup.body),
         );
@@ -316,22 +310,37 @@ describe("instance domain provider API routes", () => {
     );
   });
 
-  it("stores redirect intents and plans redirect resources without provider mutation", async () => {
-    const created = await postAdminJson<InstanceDomainProviderRedirectsResponse>(
-      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-      {
-        fromHost: "WWW.Example.COM.",
-        toHost: "example.com",
-      },
-    );
+  it("plans redirect resources from route records without provider mutation", async () => {
+    await createRouteRecord("route:redirect:disabled.example.com", {
+      enabled: false,
+      matchHost: "disabled.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "redirect",
+      toHost: "example.com",
+      statusCode: "301",
+      preservePath: true,
+      preserveQueryString: true,
+    });
+    await createRouteRecord("route:redirect:www.example.com", {
+      enabled: true,
+      matchHost: "www.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "redirect",
+      toHost: "example.com",
+      statusCode: "301",
+      preservePath: true,
+      preserveQueryString: true,
+    });
     const plan = await getJson<InstanceDomainProviderPlanResponse>(
       INSTANCE_DOMAIN_PROVIDER_API_PATH,
     );
+    const serialized = JSON.stringify(plan.body);
     const controlPlaneIntent = await getJson<BootstrapResponse>(
       `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
     );
 
-    expect(created.response.status).toBe(201);
     expect(plan.body.redirectIntents).toEqual([
       expect.objectContaining({
         enabled: true,
@@ -350,11 +359,11 @@ describe("instance domain provider API routes", () => {
         routeKind: "redirect",
       }),
     ]);
+    expect(serialized).not.toContain("disabled.example.com");
     expect(controlPlaneIntent.body.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           entity: "route",
-          id: "route:redirect:www.example.com",
           values: expect.objectContaining({
             enabled: true,
             matchHost: "www.example.com",
@@ -366,73 +375,17 @@ describe("instance domain provider API routes", () => {
         }),
       ]),
     );
-
-    const disabled = await deleteAdminJson<InstanceDomainProviderRedirectsResponse>(
-      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}?fromHost=www.example.com`,
-    );
-    const forgotten = await deleteAdminJson<ForgetInstanceDomainProviderRedirectIntentResponse>(
-      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=www.example.com`,
-    );
-    const after = await getJson<InstanceDomainProviderRedirectsResponse>(
-      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-    );
-
-    expect(disabled.body.redirectIntents).toEqual([
-      expect.objectContaining({ enabled: false, fromHost: "www.example.com" }),
-    ]);
-    expect(forgotten.response.status).toBe(200);
-    expect(forgotten.body.redirectIntentCleanupEvent).toMatchObject({
-      action: "forgotten",
-      enabled: false,
-      fromHost: "www.example.com",
-      reason: "disabled-unapplied",
-      toHost: "example.com",
-    });
-    expect(after.body.redirectIntents).toEqual([]);
-    expect(after.body.appliedResources).toEqual([]);
   });
 
-  it("rejects redirect intent forget for enabled rows", async () => {
-    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
-      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-      {
-        fromHost: "enabled.example.com",
-        toHost: "example.com",
-      },
+  it("removes legacy redirect desired endpoints", async () => {
+    await expectStatus(domainProviderRedirectsApiPath, "GET", 404);
+    await expectStatus(domainProviderRedirectsApiPath, "POST", 404);
+    await expectStatus(`${domainProviderRedirectsApiPath}?fromHost=www.example.com`, "DELETE", 404);
+    await expectStatus(
+      `${domainProviderRedirectsForgetApiPath}?fromHost=www.example.com`,
+      "DELETE",
+      404,
     );
-
-    const enabled = await deleteAdminJsonAllowingFailure<DomainProviderFailureResponse>(
-      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=enabled.example.com`,
-    );
-
-    expect(enabled.response.status).toBe(409);
-    expect(enabled.body).toMatchObject({
-      code: "domain-provider-redirect-enabled",
-    });
-  });
-
-  it("requires owner or admin authorization for redirect intent forget", async () => {
-    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
-      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
-      {
-        enabled: false,
-        fromHost: "draft.example.com",
-        toHost: "example.com",
-      },
-    );
-
-    const rejected = await harness.fetch(
-      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=draft.example.com`,
-      {
-        method: "DELETE",
-      },
-    );
-
-    expect(rejected.status).toBe(401);
-    expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
-    expect(await rejected.json()).toEqual({
-      error: "Owner session or admin authorization is required for this write endpoint.",
-    });
   });
 });
 
@@ -475,6 +428,7 @@ async function withHarness<T>(target: Harness, run: () => Promise<T>): Promise<T
 }
 
 async function resetWorkerState(target: Harness) {
+  routeRecordIds.clear();
   await Promise.all([
     postReset(target, `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/reset/seed`),
     postInternalInstanceReset(target, INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH),
@@ -513,9 +467,13 @@ async function createMappedCustomDomainEvidence(input: {
   runnerId?: string;
   workerDomainId: string;
 }) {
-  await postAdminJson<CreateInstanceDomainMappingResponse>(domainMappingsApiPath, {
-    host: input.host,
-    profile: "instance",
+  await createRouteRecord(`route:host:instance:${input.host}`, {
+    enabled: true,
+    matchHost: input.host,
+    matchPath: "/",
+    matchPrefix: "/",
+    kind: "mount",
+    targetProfile: "instance",
   });
 
   return postAdminJson<RecordInstanceDomainMappingApplyEvidenceResponse>(
@@ -550,8 +508,9 @@ async function getJson<T>(path: string) {
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
-    body: JSON.stringify(body),
+  const request = operationWriteRequest(path, body);
+  const response = await harness.fetch(request.path, {
+    body: JSON.stringify(request.body),
     headers: {
       Authorization: `Bearer ${adminToken}`,
       "Content-Type": "application/json",
@@ -560,39 +519,54 @@ async function postAdminJson<T>(path: string, body: unknown) {
   });
 
   return {
-    body: (await response.json()) as T,
+    body: request.response(await response.json()) as T,
     response,
   };
 }
 
-async function deleteAdminJson<T = unknown>(path: string) {
-  const response = await harness.fetch(path, {
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
+async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
+  const created = await postAdminJson<MutationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`,
+    {
+      mutationId: `mutation-${recordId}`,
+      entity: "route",
+      op: "create",
+      recordId,
+      values,
     },
-    method: "DELETE",
-  });
+  );
 
-  expect(response.status).toBe(200);
-
-  return {
-    body: (await response.json()) as T,
-    response,
-  };
+  expect(created.response.status).toBe(200);
+  routeRecordIds.set(recordId, created.body.record.id);
 }
 
-async function deleteAdminJsonAllowingFailure<T>(path: string) {
+async function patchRouteRecord(recordId: string, values: Record<string, unknown>) {
+  const actualRecordId = routeRecordIds.get(recordId) ?? recordId;
+  const patched = await postAdminJson<MutationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`,
+    {
+      mutationId: `mutation-${actualRecordId}-patch`,
+      entity: "route",
+      op: "patch",
+      recordId: actualRecordId,
+      values,
+    },
+  );
+
+  expect(patched.response.status).toBe(200);
+}
+
+async function expectStatus(path: string, method: "DELETE" | "GET" | "POST", status: number) {
   const response = await harness.fetch(path, {
     headers: {
       Authorization: `Bearer ${adminToken}`,
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
     },
-    method: "DELETE",
+    method,
+    ...(method === "POST" ? { body: "{}" } : {}),
   });
 
-  return {
-    body: (await response.json()) as T,
-    response,
-  };
+  expect(response.status).toBe(status);
 }
 
 function routeAndAppIntentSnapshot(body: BootstrapResponse) {

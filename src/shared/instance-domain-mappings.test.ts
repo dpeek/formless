@@ -1,19 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { AppInstall } from "@dpeek/formless-installed-apps";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   buildInstanceDomainMappingAppliedState,
-  buildInstanceDomainMapping,
-  disableInstanceDomainMapping,
+  listInstanceDomainMappings,
   normalizeInstanceDomainHost,
-  parseCreateInstanceDomainMappingRequest,
   parseRecordInstanceDomainMappingApplyEvidenceRequest,
+  resolveInstanceDomainMappingProfile,
+  type InstanceDomainMapping,
 } from "./instance-domain-mappings.ts";
 
 const now = "2026-05-26T01:00:00.000Z";
 
-describe("instance domain mappings", () => {
-  it("normalizes exact hostnames for durable lookup keys", () => {
+describe("instance domain mapping evidence contracts", () => {
+  it("normalizes exact hostnames for route-backed lookup keys", () => {
     expect(normalizeInstanceDomainHost("WWW.Example.COM.:443")).toEqual({
       ok: true,
       host: "www.example.com",
@@ -35,243 +33,39 @@ describe("instance domain mappings", () => {
     });
   });
 
-  it("builds enabled profile mappings and keeps legacy Site aliases", () => {
-    const first = buildInstanceDomainMapping({
-      existingMappings: [],
-      installs: [siteInstall("personal")],
-      host: "WWW.Example.COM.",
+  it("keeps legacy Site surface aliases limited to public Site profile resolution", () => {
+    expect(resolveInstanceDomainMappingProfile({ surface: "site" })).toEqual({
+      ok: true,
       profile: "publicSite",
-      targetInstallId: "personal",
-      now,
     });
-
-    expect(first).toMatchObject({
-      ok: true,
-      mapping: {
-        host: "www.example.com",
-        profile: "publicSite",
-        surface: "site",
-        targetInstallId: "personal",
-        installId: "personal",
-        enabled: true,
-      },
-    });
-
-    if (!first.ok) {
-      throw new Error("Expected first domain mapping to build.");
-    }
-
-    const second = buildInstanceDomainMapping({
-      existingMappings: first.mappings,
-      installs: [siteInstall("personal")],
-      host: "admin.example.com",
-      profile: "instance",
-      enabled: false,
-      now,
-    });
-
-    expect(second).toMatchObject({
-      ok: true,
-      mappings: [
-        { host: "admin.example.com", profile: "instance", enabled: false },
-        { host: "www.example.com", profile: "publicSite", enabled: true },
-      ],
-    });
-  });
-
-  it("reads legacy surface input as a publicSite profile mapping", () => {
-    const result = buildInstanceDomainMapping({
-      existingMappings: [],
-      installs: [siteInstall("personal")],
-      host: "example.com",
-      surface: "site",
-      installId: "personal",
-      now,
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      mapping: {
-        host: "example.com",
-        profile: "publicSite",
-        surface: "site",
-        targetInstallId: "personal",
-        installId: "personal",
+    expect(resolveInstanceDomainMappingProfile({ profile: "instance", surface: "site" })).toEqual({
+      ok: false,
+      error: {
+        code: "invalid-surface",
+        field: "surface",
+        message: 'Domain mapping surface compatibility is only valid with profile "publicSite".',
       },
     });
   });
 
-  it("rejects duplicate host/profile mappings and enabled cross-profile host conflicts", () => {
-    const existing = [
-      {
-        host: "example.com",
-        profile: "publicSite",
-        surface: "site",
-        targetInstallId: "personal",
-        installId: "personal",
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ] as const;
+  it("sorts route-derived mappings deterministically", () => {
+    const mappings: InstanceDomainMapping[] = [
+      mapping({ host: "www.example.com", profile: "publicSite", targetInstallId: "site" }),
+      mapping({ host: "admin.example.com", profile: "instance" }),
+      mapping({ host: "www.example.com", profile: "app", targetInstallId: "tasks" }),
+    ];
 
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: existing,
-        installs: [siteInstall("personal")],
-        host: "EXAMPLE.COM.",
-        profile: "publicSite",
-        targetInstallId: "personal",
-        now,
-      }),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "duplicate-domain-mapping", field: "host" },
-      mappings: existing,
-    });
-
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: existing,
-        installs: [],
-        host: "example.com",
-        profile: "instance",
-        now,
-      }),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "duplicate-domain-mapping", field: "host" },
-    });
+    expect(listInstanceDomainMappings(mappings)).toEqual([
+      mapping({ host: "admin.example.com", profile: "instance" }),
+      mapping({ host: "www.example.com", profile: "app", targetInstallId: "tasks" }),
+      mapping({ host: "www.example.com", profile: "publicSite", targetInstallId: "site" }),
+    ]);
   });
 
-  it("validates profile targets", () => {
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: [],
-        installs: [siteInstall("personal")],
-        host: "example.com",
-        profile: "admin",
-        now,
-      }),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "invalid-profile", field: "profile" },
-    });
-
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: [],
-        installs: [tasksInstall("tasks")],
-        host: "example.com",
-        profile: "publicSite",
-        targetInstallId: "tasks",
-        now,
-      }),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "unsupported-install-package", field: "targetInstallId" },
-    });
-
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: [],
-        installs: [tasksInstall("tasks")],
-        host: "tasks.example.com",
-        profile: "app",
-        targetInstallId: "tasks",
-        now,
-      }),
-    ).toMatchObject({
-      ok: true,
-      mapping: { profile: "app", targetInstallId: "tasks", installId: "tasks" },
-    });
-
-    expect(
-      buildInstanceDomainMapping({
-        existingMappings: [],
-        installs: [siteInstall("personal")],
-        host: "admin.example.com",
-        profile: "instance",
-        targetInstallId: "personal",
-        now,
-      }),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "invalid-install-id", field: "targetInstallId" },
-    });
-  });
-
-  it("disables desired mappings without removing them", () => {
-    const existing = [
-      {
-        host: "example.com",
-        profile: "publicSite",
-        surface: "site",
-        targetInstallId: "personal",
-        installId: "personal",
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ] as const;
-
-    expect(
-      disableInstanceDomainMapping({
-        existingMappings: existing,
-        host: "EXAMPLE.COM.",
-        profile: "publicSite",
-        now: "2026-05-26T02:00:00.000Z",
-      }),
-    ).toMatchObject({
-      ok: true,
-      mapping: {
-        host: "example.com",
-        profile: "publicSite",
-        enabled: false,
-        updatedAt: "2026-05-26T02:00:00.000Z",
-      },
-      mappings: [{ host: "example.com", enabled: false }],
-    });
-  });
-
-  it("parses the create request shape", () => {
-    expect(
-      parseCreateInstanceDomainMappingRequest({
-        host: "example.com",
-        profile: "publicSite",
-        targetInstallId: "personal",
-        enabled: false,
-      }),
-    ).toEqual({
-      host: "example.com",
-      profile: "publicSite",
-      targetInstallId: "personal",
-      enabled: false,
-    });
-
-    expect(() =>
-      parseCreateInstanceDomainMappingRequest({
-        host: "example.com",
-        profile: "publicSite",
-        targetInstallId: "personal",
-        extra: true,
-      }),
-    ).toThrow('Domain mapping request has unsupported key "extra".');
-  });
-
-  it("builds Cloudflare applied state only for an existing desired mapping", () => {
+  it("builds Cloudflare applied state only for an existing route-derived mapping", () => {
     const result = buildInstanceDomainMappingAppliedState({
       existingMappings: [
-        {
-          host: "www.example.com",
-          profile: "publicSite",
-          surface: "site",
-          targetInstallId: "personal",
-          installId: "personal",
-          enabled: true,
-          createdAt: now,
-          updatedAt: now,
-        },
+        mapping({ host: "www.example.com", profile: "publicSite", targetInstallId: "personal" }),
       ],
       host: "WWW.Example.COM.",
       profile: "publicSite",
@@ -329,15 +123,7 @@ describe("instance domain mappings", () => {
 
   it("records instance profile applied evidence without a fake install id", () => {
     const result = buildInstanceDomainMappingAppliedState({
-      existingMappings: [
-        {
-          host: "admin.example.com",
-          profile: "instance",
-          enabled: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ],
+      existingMappings: [mapping({ host: "admin.example.com", profile: "instance" })],
       host: "admin.example.com",
       profile: "instance",
       provider: "cloudflare-worker-custom-domain",
@@ -394,32 +180,20 @@ describe("instance domain mappings", () => {
   });
 });
 
-function siteInstall(installId: string): AppInstall {
+function mapping(input: {
+  host: string;
+  profile: InstanceDomainMapping["profile"];
+  targetInstallId?: string;
+}): InstanceDomainMapping {
   return {
-    installId,
-    packageAppKey: "site",
-    packageRevision: 1,
-    label: "Personal Site",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
-    status: "installed",
+    host: input.host,
+    profile: input.profile,
+    ...(input.profile === "publicSite" ? { surface: "site" as const } : {}),
+    ...(input.targetInstallId === undefined
+      ? {}
+      : { installId: input.targetInstallId, targetInstallId: input.targetInstallId }),
+    enabled: true,
     createdAt: now,
     updatedAt: now,
-    adminRoute: `/apps/${installId}`,
-    publicRoute: `/sites/${installId}`,
-    publicRoutePrefix: `/sites/${installId}/`,
-  };
-}
-
-function tasksInstall(installId: string): AppInstall {
-  return {
-    installId,
-    packageAppKey: "tasks",
-    packageRevision: 1,
-    label: "Tasks",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
-    status: "installed",
-    createdAt: now,
-    updatedAt: now,
-    adminRoute: `/apps/${installId}`,
   };
 }

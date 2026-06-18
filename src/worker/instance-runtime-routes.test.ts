@@ -187,6 +187,54 @@ describe("instance runtime route resolution", () => {
     expect(route).toBeUndefined();
   });
 
+  it("ignores legacy route intent records when active route records are absent", () => {
+    const records = [
+      legacyRecord("legacy:domain:www.example.com", "domain-mapping", {
+        host: "www.example.com",
+        profile: "publicSite",
+        targetInstallId: "site",
+        enabled: true,
+      }),
+      legacyRecord("legacy:redirect:old.example.com", "redirect-intent", {
+        fromHost: "old.example.com",
+        toHost: "new.example.com",
+        statusCode: "308",
+        preservePath: true,
+        preserveQueryString: true,
+        enabled: true,
+      }),
+      legacyRecord("legacy:site:public", "app-route", {
+        appInstall: "site",
+        routeKind: "publicSite",
+        path: "/sites/site",
+        prefix: "/sites/site/",
+        enabled: true,
+      }),
+    ];
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [appInstall("site", "site")],
+        records,
+        request: { host: "www.example.com", pathname: "/" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "old.example.com", pathname: "/docs/start", search: "?ref=old" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [appInstall("site", "site")],
+        records,
+        request: { host: "formless.local", pathname: "/sites/site/blog" },
+      }),
+    ).toBeUndefined();
+  });
+
   it("keeps redirect-captured hosts from falling through to hostless routes", () => {
     const records = [
       routeRecord("redirect-capture", {
@@ -360,6 +408,20 @@ function routeRecord(id: string, values: StoredRecord["values"]): StoredRecord {
     createdAt: "2026-06-02T00:00:00.000Z",
     updatedAt: "2026-06-02T00:00:00.000Z",
     entity: "route",
+    id,
+    values,
+  };
+}
+
+function legacyRecord(
+  id: string,
+  entity: "app-route" | "domain-mapping" | "redirect-intent",
+  values: StoredRecord["values"],
+): StoredRecord {
+  return {
+    createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
+    entity,
     id,
     values,
   };
