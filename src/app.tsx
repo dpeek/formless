@@ -34,34 +34,59 @@ import {
   runtimeInstalledSitePublicHomeSlug,
   runtimeInstalledSitePublicPath,
   runtimeProfileNeedsInstalledAppRouteInstalls,
+  runtimeProfileWithActivePackageResolver,
   runtimeScreenPathFromRoute,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
   type RuntimeProfile,
+  type RuntimeInstalledAppRouteContext,
   type RuntimeWorldMount,
 } from "./app/runtime-profile.ts";
-import { fetchInstanceAppInstalls } from "./client/app-installs.ts";
+import {
+  activeAppPackageResolverFromAppInstallsResponse,
+  activeAppPackageResolverFromPackages,
+  fetchInstanceAppInstalls,
+} from "./client/app-installs.ts";
 import { useActiveClientStorageName, useActiveSchemaKey, useSchema } from "./client/store.ts";
 import { workspaceGatewayBrowserConfig } from "@dpeek/formless-gateway/client";
 import {
   appStorageIdentityForClientTarget,
+  clientTargetForSchemaKey,
   clientTargetSourceSchemaKey,
+  type ClientAppSchemaKey,
   type ClientAppTarget,
 } from "./client/app-target.ts";
-import type { AppInstall, PackageAppKey } from "@dpeek/formless-installed-apps";
+import type {
+  AppInstall,
+  AppPackageResolver,
+  InstallableAppPackage,
+  PackageAppKey,
+} from "@dpeek/formless-installed-apps";
 import {
   ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
 import type { RuntimeRouteAccess } from "./shared/runtime-topology.ts";
-import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels } from "./client/views.ts";
+import type { AppInstallsResponse } from "./shared/protocol.ts";
 
 type HomeRouteProps = {
+  activePackageResolver?: AppPackageResolver | undefined;
   target?: ClientAppTarget;
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   screenPath: string;
 };
-type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
+type SchemaRouteProps = {
+  activePackageResolver?: AppPackageResolver | undefined;
+  appLabel?: string;
+  target?: ClientAppTarget;
+  schemaKey: ClientAppSchemaKey;
+};
+
+export type RuntimeInstalledAppRouteRegistry = {
+  activePackageResolver?: AppPackageResolver | undefined;
+  installs: readonly AppInstall[];
+  packages: readonly InstallableAppPackage[];
+};
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
@@ -82,11 +107,13 @@ const defaultRouteComponents: AppRouteComponents = {
 
 export function App({
   installedAppRouteInstalls: installedAppRouteInstallsProp,
+  installedAppRoutePackages: installedAppRoutePackagesProp,
   localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
   routeComponents = defaultRouteComponents,
   runtimeProfile: runtimeProfileProp,
 }: {
   installedAppRouteInstalls?: readonly AppInstall[];
+  installedAppRoutePackages?: readonly InstallableAppPackage[];
   localWorkspaceGatewayAvailable?: boolean;
   routeComponents?: AppRouteComponents;
   runtimeProfile?: RuntimeProfile;
@@ -96,32 +123,50 @@ export function App({
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
     [runtimeProfileProp],
   );
-  const installedAppRouteInstalls = useRuntimeInstalledAppRouteInstalls(
+  const installedAppRouteRegistry = useRuntimeInstalledAppRouteRegistry(
     runtimeProfile,
     installedAppRouteInstallsProp,
+    installedAppRoutePackagesProp,
     location,
+  );
+  const activeRuntimeProfile = useMemo(
+    () =>
+      runtimeProfileWithActivePackageResolver(
+        runtimeProfile,
+        installedAppRouteRegistry?.activePackageResolver,
+      ),
+    [runtimeProfile, installedAppRouteRegistry?.activePackageResolver],
+  );
+  const installedAppRouteInstalls = installedAppRouteRegistry?.installs;
+  const installedAppRouteContext = useMemo<RuntimeInstalledAppRouteContext>(
+    () => ({
+      activePackageResolver: installedAppRouteRegistry?.activePackageResolver,
+      appInstalls: installedAppRouteInstalls,
+    }),
+    [installedAppRouteInstalls, installedAppRouteRegistry?.activePackageResolver],
   );
   const localWorkspaceGatewayAvailable =
     localWorkspaceGatewayAvailableProp ?? workspaceGatewayBrowserConfig() !== undefined;
   const routeContext = useMemo(
-    () => ({ appInstalls: installedAppRouteInstalls, localWorkspaceGatewayAvailable }),
-    [installedAppRouteInstalls, localWorkspaceGatewayAvailable],
+    () => ({ ...installedAppRouteContext, localWorkspaceGatewayAvailable }),
+    [installedAppRouteContext, localWorkspaceGatewayAvailable],
   );
-  const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location, routeContext);
+  const routeWorld = findRuntimeWorldMountByRoute(activeRuntimeProfile, location, routeContext);
   const browserRoutes = useMemo(
-    () => runtimeBrowserRoutePatterns(runtimeProfile),
-    [runtimeProfile],
+    () => runtimeBrowserRoutePatterns(activeRuntimeProfile),
+    [activeRuntimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
   const routeApp = routeWorld?.app;
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
-  const routeAppTargetIdentity = routeWorld
-    ? appStorageIdentityForClientTarget(routeWorld.target ?? routeWorld.app.key)
+  const routeAppTarget = routeWorld ? runtimeWorldClientTarget(routeWorld) : undefined;
+  const routeAppTargetIdentity = routeAppTarget
+    ? appStorageIdentityForClientTarget(routeAppTarget)
     : undefined;
-  const routeAppSchemaKey = routeWorld
-    ? clientTargetSourceSchemaKey(routeWorld.target ?? routeWorld.app.key)
+  const routeAppSchemaKey = routeAppTarget
+    ? clientTargetSourceSchemaKey(routeAppTarget)
     : undefined;
   const routeStoreMatchesTarget =
     activeClientStorageName === null ||
@@ -141,10 +186,22 @@ export function App({
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
   const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
+  const routeRegistryLoading =
+    runtimeProfile.appProfileTarget !== undefined &&
+    runtimeProfile.worlds.length === 0 &&
+    installedAppRouteRegistry === undefined;
+
+  if (routeRegistryLoading) {
+    return (
+      <main className="min-h-dvh">
+        <RouteLoading />
+      </main>
+    );
+  }
 
   if (
     shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
-      runtimeProfile,
+      activeRuntimeProfile,
       location,
       routeWorld,
       routeContext,
@@ -153,10 +210,10 @@ export function App({
     return (
       <main className="min-h-dvh">
         <AppRoutes
-          installedAppRouteInstalls={installedAppRouteInstalls}
+          installedAppRouteContext={installedAppRouteContext}
           localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
           routeComponents={routeComponents}
-          runtimeProfile={runtimeProfile}
+          runtimeProfile={activeRuntimeProfile}
         />
       </main>
     );
@@ -164,44 +221,46 @@ export function App({
 
   const generatedAppFrame = (
     <ActiveAppSurface
+      activePackageResolver={installedAppRouteContext.activePackageResolver}
       activeScreenPath={activeScreenPath}
-      managementHref={runtimeAppManagementHref(runtimeProfile, routeWorld)}
+      managementHref={runtimeAppManagementHref(activeRuntimeProfile, routeWorld)}
       currentPath={location}
       screenModels={routeAppScreenModels}
       world={routeWorld}
     >
       <AppRoutes
-        installedAppRouteInstalls={installedAppRouteInstalls}
+        installedAppRouteContext={installedAppRouteContext}
         localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
         routeComponents={routeComponents}
-        runtimeProfile={runtimeProfile}
+        runtimeProfile={activeRuntimeProfile}
       />
     </ActiveAppSurface>
   );
 
-  return runtimeProfile.shell === "dev" ? (
+  return activeRuntimeProfile.shell === "dev" ? (
     <WorkbenchFrame
+      activePackageResolver={installedAppRouteRegistry?.activePackageResolver}
       currentPath={location}
       installedAppRouteInstalls={installedAppRouteInstalls}
       routeWorld={routeWorld}
-      runtimeProfile={runtimeProfile}
+      runtimeProfile={activeRuntimeProfile}
     >
       {isInstanceShellRoute ? (
         <main className="bg-bg" data-frame="instance-shell">
           <AppRoutes
-            installedAppRouteInstalls={installedAppRouteInstalls}
+            installedAppRouteContext={installedAppRouteContext}
             localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
             routeComponents={routeComponents}
-            runtimeProfile={runtimeProfile}
+            runtimeProfile={activeRuntimeProfile}
           />
         </main>
       ) : routeWorld === undefined ? (
         <main className="bg-bg">
           <AppRoutes
-            installedAppRouteInstalls={installedAppRouteInstalls}
+            installedAppRouteContext={installedAppRouteContext}
             localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
             routeComponents={routeComponents}
-            runtimeProfile={runtimeProfile}
+            runtimeProfile={activeRuntimeProfile}
           />
         </main>
       ) : (
@@ -213,42 +272,76 @@ export function App({
   );
 }
 
-function useRuntimeInstalledAppRouteInstalls(
+export function runtimeInstalledAppRouteRegistryFromResponse(
+  response: AppInstallsResponse,
+): RuntimeInstalledAppRouteRegistry {
+  return {
+    activePackageResolver: activeAppPackageResolverFromAppInstallsResponse(response),
+    installs: [...response.installs],
+    packages: [...response.packages],
+  };
+}
+
+function runtimeInstalledAppRouteRegistryFromInstalls(
+  installs: readonly AppInstall[],
+  packages: readonly InstallableAppPackage[] = [],
+): RuntimeInstalledAppRouteRegistry {
+  return {
+    activePackageResolver:
+      packages.length > 0 ? activeAppPackageResolverFromPackages(packages) : undefined,
+    installs: [...installs],
+    packages: [...packages],
+  };
+}
+
+function emptyRuntimeInstalledAppRouteRegistry(): RuntimeInstalledAppRouteRegistry {
+  return {
+    installs: [],
+    packages: [],
+  };
+}
+
+function useRuntimeInstalledAppRouteRegistry(
   runtimeProfile: RuntimeProfile,
   initialInstalls: readonly AppInstall[] | undefined,
+  initialPackages: readonly InstallableAppPackage[] | undefined,
   refreshKey: string,
-): AppInstall[] | undefined {
+): RuntimeInstalledAppRouteRegistry | undefined {
   const shouldLoad = runtimeProfileNeedsInstalledAppRouteInstalls(runtimeProfile);
-  const [installs, setInstalls] = useState<AppInstall[] | undefined>(() =>
-    initialInstalls ? [...initialInstalls] : shouldLoad ? undefined : [],
+  const [registry, setRegistry] = useState<RuntimeInstalledAppRouteRegistry | undefined>(() =>
+    initialInstalls
+      ? runtimeInstalledAppRouteRegistryFromInstalls(initialInstalls, initialPackages)
+      : shouldLoad
+        ? undefined
+        : emptyRuntimeInstalledAppRouteRegistry(),
   );
 
   useEffect(() => {
     if (initialInstalls) {
-      setInstalls([...initialInstalls]);
+      setRegistry(runtimeInstalledAppRouteRegistryFromInstalls(initialInstalls, initialPackages));
       return;
     }
 
     if (!shouldLoad) {
-      setInstalls([]);
+      setRegistry(emptyRuntimeInstalledAppRouteRegistry());
       return;
     }
 
     const controller = new AbortController();
     let stopped = false;
 
-    setInstalls(undefined);
+    setRegistry(undefined);
 
     async function loadInstalls() {
       try {
         const response = await fetchInstanceAppInstalls({ signal: controller.signal });
 
         if (!stopped) {
-          setInstalls(response.installs);
+          setRegistry(runtimeInstalledAppRouteRegistryFromResponse(response));
         }
       } catch {
         if (!stopped && !controller.signal.aborted) {
-          setInstalls([]);
+          setRegistry(emptyRuntimeInstalledAppRouteRegistry());
         }
       }
     }
@@ -259,18 +352,20 @@ function useRuntimeInstalledAppRouteInstalls(
       stopped = true;
       controller.abort();
     };
-  }, [initialInstalls, refreshKey, shouldLoad]);
+  }, [initialInstalls, initialPackages, refreshKey, shouldLoad]);
 
-  return installs;
+  return registry;
 }
 
 function WorkbenchFrame({
+  activePackageResolver,
   children,
   currentPath,
   installedAppRouteInstalls,
   routeWorld,
   runtimeProfile,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   children: ReactNode;
   currentPath: string;
   installedAppRouteInstalls: readonly AppInstall[] | undefined;
@@ -281,6 +376,7 @@ function WorkbenchFrame({
     runtimeProfile,
     routeWorld,
     installedAppRouteInstalls,
+    activePackageResolver,
   );
   const appManagementIsCurrent = normalizeRuntimeBrowserPath(currentPath) === "/";
 
@@ -358,10 +454,12 @@ export type RuntimeShellInstalledAppLink = {
 };
 
 export function selectRuntimeShellInstalledAppLinks({
+  activePackageResolver,
   installs,
   routeWorld,
   runtimeProfile,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   installs: readonly AppInstall[];
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
@@ -383,7 +481,9 @@ export function selectRuntimeShellInstalledAppLinks({
         }
       : undefined;
   const links = installs.flatMap((install) => {
-    const world = installedAppWorldMountFromInstall(runtimeProfile, install);
+    const world = installedAppWorldMountFromInstall(runtimeProfile, install, {
+      activePackageResolver,
+    });
 
     return world
       ? [
@@ -413,25 +513,27 @@ function useRuntimeShellInstalledAppLinks(
   runtimeProfile: RuntimeProfile,
   routeWorld: RuntimeWorldMount | undefined,
   installs: readonly AppInstall[] | undefined,
+  activePackageResolver: AppPackageResolver | undefined,
 ): RuntimeShellInstalledAppLink[] {
   return useMemo(
     () =>
       selectRuntimeShellInstalledAppLinks({
+        activePackageResolver,
         installs: installs ?? [],
         routeWorld,
         runtimeProfile,
       }),
-    [installs, routeWorld, runtimeProfile],
+    [activePackageResolver, installs, routeWorld, runtimeProfile],
   );
 }
 
 function AppRoutes({
-  installedAppRouteInstalls,
+  installedAppRouteContext,
   localWorkspaceGatewayAvailable,
   routeComponents,
   runtimeProfile,
 }: {
-  installedAppRouteInstalls: readonly AppInstall[] | undefined;
+  installedAppRouteContext: RuntimeInstalledAppRouteContext;
   localWorkspaceGatewayAvailable: boolean;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
@@ -499,10 +601,15 @@ function AppRoutes({
         </Route>
       ) : null}
       {generatedWorlds.map((world) =>
-        world.schemaRoute ? (
+        generatedWorldSchemaKey(world) && world.schemaRoute ? (
           <Route key={world.schemaRoute} path={world.schemaRoute}>
             <OwnerRouteGuard access={world.schemaRouteAccess ?? "anonymous"}>
-              <SchemaRoute schemaKey={world.app.key} target={world.target} />
+              <SchemaRoute
+                activePackageResolver={installedAppRouteContext.activePackageResolver}
+                appLabel={world.app.label}
+                schemaKey={generatedWorldSchemaKey(world)!}
+                target={world.target}
+              />
             </OwnerRouteGuard>
           </Route>
         ) : null,
@@ -510,7 +617,12 @@ function AppRoutes({
       {generatedWorlds.map((world) => (
         <Route key={world.route} path={world.route}>
           <OwnerRouteGuard access={world.access ?? "anonymous"}>
-            <HomeRoute schemaKey={world.app.key} screenPath="/" target={world.target} />
+            <HomeRoute
+              activePackageResolver={installedAppRouteContext.activePackageResolver}
+              schemaKey={world.app.key}
+              screenPath="/"
+              target={world.target}
+            />
           </OwnerRouteGuard>
         </Route>
       ))}
@@ -519,6 +631,7 @@ function AppRoutes({
           {(params) => (
             <OwnerRouteGuard access={world.access ?? "anonymous"}>
               <HomeRoute
+                activePackageResolver={installedAppRouteContext.activePackageResolver}
                 schemaKey={world.app.key}
                 screenPath={runtimeWildcardScreenPath(params)}
                 target={world.target}
@@ -531,7 +644,7 @@ function AppRoutes({
         <Route path={browserRoutes.installedAppSchemaRoutePattern}>
           {(params) => (
             <InstalledAppSchemaRoute
-              installedAppRouteInstalls={installedAppRouteInstalls}
+              installedAppRouteContext={installedAppRouteContext}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -543,7 +656,7 @@ function AppRoutes({
         <Route path={browserRoutes.installedAppHomeRoutePattern}>
           {(params) => (
             <InstalledAppHomeRoute
-              installedAppRouteInstalls={installedAppRouteInstalls}
+              installedAppRouteContext={installedAppRouteContext}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -556,7 +669,7 @@ function AppRoutes({
         <Route path={browserRoutes.installedAppScreenRoutePattern}>
           {(params) => (
             <InstalledAppHomeRoute
-              installedAppRouteInstalls={installedAppRouteInstalls}
+              installedAppRouteContext={installedAppRouteContext}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -569,7 +682,7 @@ function AppRoutes({
         <Route path={browserRoutes.installedSitePublicHomeRoutePattern}>
           {(params) => (
             <InstalledSitePublicRoute
-              installedAppRouteInstalls={installedAppRouteInstalls}
+              installedAppRouteContext={installedAppRouteContext}
               installId={runtimeRouteParam(params, "installId")}
               publicSiteReactAdapters={publicSiteReactAdapters}
               runtimeProfile={runtimeProfile}
@@ -582,7 +695,7 @@ function AppRoutes({
         <Route path={browserRoutes.installedSitePublicSlugRoutePattern}>
           {(params) => (
             <InstalledSitePublicRoute
-              installedAppRouteInstalls={installedAppRouteInstalls}
+              installedAppRouteContext={installedAppRouteContext}
               installId={runtimeRouteParam(params, "installId")}
               publicSiteReactAdapters={publicSiteReactAdapters}
               runtimeProfile={runtimeProfile}
@@ -635,12 +748,12 @@ function AppRoutes({
 }
 
 function InstalledAppSchemaRoute({
-  installedAppRouteInstalls,
+  installedAppRouteContext,
   installId,
   routeComponents,
   runtimeProfile,
 }: {
-  installedAppRouteInstalls: readonly AppInstall[] | undefined;
+  installedAppRouteContext: RuntimeInstalledAppRouteContext;
   installId: string | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
@@ -651,33 +764,42 @@ function InstalledAppSchemaRoute({
     return <NotFoundRoute />;
   }
 
-  if (installedAppRouteInstalls === undefined) {
+  if (installedAppRouteContext.appInstalls === undefined) {
     return <RouteLoading />;
   }
 
-  const world = installedAppWorldMountFromInstallId(runtimeProfile, installId, {
-    appInstalls: installedAppRouteInstalls,
-  });
+  const world = installedAppWorldMountFromInstallId(
+    runtimeProfile,
+    installId,
+    installedAppRouteContext,
+  );
 
-  if (!world?.schemaRoute) {
+  const schemaKey = world ? generatedWorldSchemaKey(world) : undefined;
+
+  if (!world?.schemaRoute || !schemaKey) {
     return <NotFoundRoute />;
   }
 
   return (
     <OwnerRouteGuard access={world.schemaRouteAccess ?? "owner"}>
-      <SchemaRoute schemaKey={world.app.key} target={world.target} />
+      <SchemaRoute
+        activePackageResolver={installedAppRouteContext.activePackageResolver}
+        appLabel={world.app.label}
+        schemaKey={schemaKey}
+        target={world.target}
+      />
     </OwnerRouteGuard>
   );
 }
 
 function InstalledAppHomeRoute({
-  installedAppRouteInstalls,
+  installedAppRouteContext,
   installId,
   routeComponents,
   runtimeProfile,
   screenPath,
 }: {
-  installedAppRouteInstalls: readonly AppInstall[] | undefined;
+  installedAppRouteContext: RuntimeInstalledAppRouteContext;
   installId: string | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
@@ -689,13 +811,15 @@ function InstalledAppHomeRoute({
     return <NotFoundRoute />;
   }
 
-  if (installedAppRouteInstalls === undefined) {
+  if (installedAppRouteContext.appInstalls === undefined) {
     return <RouteLoading />;
   }
 
-  const world = installedAppWorldMountFromInstallId(runtimeProfile, installId, {
-    appInstalls: installedAppRouteInstalls,
-  });
+  const world = installedAppWorldMountFromInstallId(
+    runtimeProfile,
+    installId,
+    installedAppRouteContext,
+  );
 
   if (!world || (!world.schemaRoute && screenPath === "/schema")) {
     return <NotFoundRoute />;
@@ -703,19 +827,24 @@ function InstalledAppHomeRoute({
 
   return (
     <OwnerRouteGuard access={world.access ?? "owner"}>
-      <HomeRoute schemaKey={world.app.key} screenPath={screenPath} target={world.target} />
+      <HomeRoute
+        activePackageResolver={installedAppRouteContext.activePackageResolver}
+        schemaKey={world.app.key}
+        screenPath={screenPath}
+        target={world.target}
+      />
     </OwnerRouteGuard>
   );
 }
 
 function InstalledSitePublicRoute({
-  installedAppRouteInstalls,
+  installedAppRouteContext,
   installId,
   publicSiteReactAdapters,
   runtimeProfile,
   slug,
 }: {
-  installedAppRouteInstalls: readonly AppInstall[] | undefined;
+  installedAppRouteContext: RuntimeInstalledAppRouteContext;
   installId: string | undefined;
   publicSiteReactAdapters: PublicSiteReactAdapterRegistry;
   runtimeProfile: RuntimeProfile;
@@ -725,7 +854,7 @@ function InstalledSitePublicRoute({
     return <NotFoundRoute />;
   }
 
-  if (installedAppRouteInstalls === undefined) {
+  if (installedAppRouteContext.appInstalls === undefined) {
     return <RouteLoading />;
   }
 
@@ -735,9 +864,11 @@ function InstalledSitePublicRoute({
     return <NotFoundRoute />;
   }
 
-  const surface = installedSitePublicSurfaceFromRoute(runtimeProfile, sitePath, {
-    appInstalls: installedAppRouteInstalls,
-  });
+  const surface = installedSitePublicSurfaceFromRoute(
+    runtimeProfile,
+    sitePath,
+    installedAppRouteContext,
+  );
 
   if (!surface) {
     return <NotFoundRoute />;
@@ -862,6 +993,14 @@ function ownerRouteTargetFromLocation(location: string): OwnerLoginRedirectTarge
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {
   return world.route === "/" ? "/*" : `${world.route}/*`;
+}
+
+function generatedWorldSchemaKey(world: RuntimeWorldMount): ClientAppSchemaKey | undefined {
+  return world.app.key;
+}
+
+function runtimeWorldClientTarget(world: RuntimeWorldMount): ClientAppTarget {
+  return world.target ?? clientTargetForSchemaKey(world.app.key);
 }
 
 function runtimeWildcardScreenPath(params: unknown): string {

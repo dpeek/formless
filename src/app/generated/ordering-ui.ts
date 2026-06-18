@@ -1,5 +1,5 @@
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
-import { submitOperation } from "../../client/sync.ts";
+import { submitOperation, type SubmitOperationOptions } from "../../client/sync.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -244,6 +244,7 @@ export async function submitOrderingPatch(
   target: ClientAppTarget,
   orderingContext: ResultOrderingContext,
   plan: OrderingMovePatchPlan,
+  options: SubmitOperationOptions = {},
 ) {
   if (orderingContext.updateOperation === undefined) {
     throw new Error("Update operation is unavailable for ordering.");
@@ -259,6 +260,8 @@ export async function submitOrderingPatch(
         [orderingContext.ordering.fieldName]: plan.rank,
       },
     },
+    undefined,
+    options,
   );
 }
 

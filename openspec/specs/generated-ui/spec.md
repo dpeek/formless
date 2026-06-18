@@ -16,6 +16,21 @@ The system SHALL select generated surfaces from the active runtime profile and r
 - **WHEN** the user visits `/tasks`, `/site`, `/crm`, their `/schema` routes, or installed app routes
 - **THEN** the matching generated app, schema editor, admin, or public Site surface mounts
 
+#### Scenario: Installed workspace package admin routes
+
+- **GIVEN** an enabled installed app admin or schema route targets an app
+  install whose package app key is present only in the active workspace package
+  resolver
+- **WHEN** the browser visits `/apps/<installId>` or `/apps/<installId>/schema`
+- **THEN** generated UI mounts the installed app or schema editor using package
+  metadata from the active install registry response
+- **AND** the source schema key can be a resolved package source schema key
+  outside the bundled `tasks`, `site`, and `crm` source app set
+- **AND** app bootstrap, sync, mutations, reset, and schema reads use the
+  install-scoped app API prefix for that app install
+- **AND** generated UI does not require the package source schema to be bundled
+  into the browser build before the installed route can mount
+
 #### Scenario: App custom-domain host
 
 - **GIVEN** an app custom-domain host mapped to an app install
@@ -498,6 +513,8 @@ records that matches current table-driven install management behavior.
   status, and route summary fields derived from `route` records
 - **AND** install controls support Site, Tasks, and CRM package creation
   by default
+- **AND** workspace-linked packages returned by the active package resolver are
+  selectable only in that resolver scope
 
 #### Scenario: Create install
 

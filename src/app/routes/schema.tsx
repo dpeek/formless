@@ -28,7 +28,10 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
 import {
   appStorageIdentityForClientTarget,
+  clientTargetForSchemaKey,
+  clientTargetLabel,
   clientTargetSourceSchemaKey,
+  type ClientAppSchemaKey,
   type ClientAppTarget,
 } from "../../client/app-target.ts";
 import {
@@ -39,7 +42,6 @@ import {
   type SchemaBuilderFieldProjection,
   type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
-import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import type { EnumValueSchema, FieldSchema, TextFieldFormat } from "@dpeek/formless-schema";
 import {
   applySchemaRouteBuilderIntent,
@@ -51,20 +53,25 @@ import {
   updateSchemaRouteSourceText,
   type SchemaRouteDraftState,
 } from "./schema-draft.ts";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 
 type SchemaRouteMode = "builder" | "source";
 
 export function SchemaRoute({
+  activePackageResolver,
+  appLabel,
   target,
   schemaKey,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
+  appLabel?: string;
   target?: ClientAppTarget;
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
 }) {
-  const appTarget = target ?? schemaKey;
+  const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
   const appSchemaKey = clientTargetSourceSchemaKey(appTarget);
-  const app = getSchemaAppDefinition(schemaKey);
+  const resolvedAppLabel = appLabel ?? clientTargetLabel(appTarget);
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
@@ -147,7 +154,9 @@ export function SchemaRoute({
     setSyncStatus({ state: "syncing", message: "Saving schema..." });
 
     try {
-      const response = await saveActiveSchema(appTarget, saveResult.schema);
+      const response = await saveActiveSchema(appTarget, saveResult.schema, undefined, {
+        activePackageResolver,
+      });
 
       setDraftState(commitSchemaRouteDraftState(response.schema));
       setSyncStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });
@@ -201,13 +210,16 @@ export function SchemaRoute({
   }
 
   return (
-    <section className="mx-auto w-full max-w-[112rem] space-y-4">
+    <section
+      aria-label={`${resolvedAppLabel} schema editor`}
+      className="mx-auto w-full max-w-[112rem] space-y-4"
+    >
       <form className="space-y-4" onSubmit={submitSchema}>
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-600">Schema</span>
             <Badge data-slot="schema-key-badge" intent="outline" isCircle={false}>
-              {app.key}
+              {appSchemaKey}
             </Badge>
             <SchemaDraftStatus
               isDirty={isDirty}

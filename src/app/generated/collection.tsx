@@ -50,7 +50,7 @@ import {
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
@@ -961,6 +961,7 @@ export function RecordList({
   result: ListResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const { ordering, recordFields, recordUnion } = result;
   const [pendingOrderingRecordId, setPendingOrderingRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
@@ -1002,7 +1003,7 @@ export function RecordList({
     setSyncStatus({ state: "syncing", message: syncingMessage });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
       setSyncStatus({ state: "idle", message: successMessage });
     } catch (error) {
       setSyncStatus({

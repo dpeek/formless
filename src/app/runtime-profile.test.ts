@@ -18,6 +18,7 @@ import {
   runtimeBrowserRoutePatterns,
   runtimeInstalledSitePublicPath,
   runtimeProfileNeedsInstalledAppRouteInstalls,
+  runtimeProfileWithActivePackageResolver,
   readRuntimeProfileDocumentHint,
   readRuntimeProfileDocumentHints,
   resolveRuntimeProfile,
@@ -27,7 +28,11 @@ import {
   selectBrowserRuntimeProfileHint,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
-import type { AppInstall } from "@dpeek/formless-installed-apps";
+import type {
+  AppInstall,
+  AppPackageResolver,
+  InstallableAppPackage,
+} from "@dpeek/formless-installed-apps";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 
@@ -57,6 +62,67 @@ function appInstallFixture({
           publicRoutePrefix: `/sites/${installId}/` as const,
         }
       : {}),
+  };
+}
+
+function privateSitePackage(): InstallableAppPackage {
+  return {
+    adminRouteBase: "/apps",
+    defaultInstallId: "private-site",
+    description: "Workspace-linked public Site package.",
+    label: "Private Site",
+    packageAppKey: "private-site",
+    packageRevision: 7,
+    publicRouteBase: "/sites",
+    seedRecordsKey: "private-site",
+    seedRecordsLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/seed-records.json",
+    },
+    sourceOrigin: "workspace",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaKey: "private-site",
+    sourceSchemaLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/schema.json",
+    },
+    supportsMultipleInstalls: false,
+  };
+}
+
+function appInstallFromPackage({
+  appPackage,
+  installId,
+  label,
+}: {
+  appPackage: InstallableAppPackage;
+  installId: string;
+  label: string;
+}): AppInstall {
+  return {
+    adminRoute: `/apps/${installId}`,
+    createdAt: "2026-05-25T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey: appPackage.packageAppKey,
+    packageRevision: appPackage.packageRevision,
+    schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: appPackage.sourceSchemaHash,
+    status: "installed",
+    updatedAt: "2026-05-25T00:00:00.000Z",
+  };
+}
+
+function appPackageResolver(packages: readonly InstallableAppPackage[]): AppPackageResolver {
+  return {
+    findPackage(packageAppKey) {
+      return packages.find((appPackage) => appPackage.packageAppKey === packageAppKey);
+    },
+    listPackages() {
+      return [...packages];
+    },
   };
 }
 
@@ -216,6 +282,45 @@ describe("runtime profile resolver", () => {
     expect(
       installedAppWorldMountFromInstallId(profile, "missing", { appInstalls }),
     ).toBeUndefined();
+  });
+
+  it("resolves workspace package installed admin route mounts from the active resolver", () => {
+    const profile = createDevRuntimeProfile();
+    const privatePackage = privateSitePackage();
+    const appInstalls = [
+      appInstallFromPackage({
+        appPackage: privatePackage,
+        installId: "private-site",
+        label: "Workspace Site",
+      }),
+    ];
+    const context = {
+      activePackageResolver: appPackageResolver([privatePackage]),
+      appInstalls,
+    };
+    const world = installedAppWorldMountFromInstallId(profile, "private-site", context);
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing workspace package app world.");
+    }
+
+    expect(installedAppWorldMountFromInstallId(profile, "private-site", { appInstalls })).toBe(
+      undefined,
+    );
+    expect(world.app.key).toBe("private-site");
+    expect(world.app.label).toBe("Private Site");
+    expect(world.route).toBe("/apps/private-site");
+    expect(world.schemaRoute).toBe("/apps/private-site/schema");
+    expect(world.target.installId).toBe("private-site");
+    expect(world.target.packageAppKey).toBe("private-site");
+    expect(world.target.sourceSchemaKey).toBe("private-site");
+    expect(world.target.seedRecordsKey).toBe("private-site");
+    expect(world.target.apiRoutePrefix).toBe("/api/app-installs/private-site/private-site");
+    expect(world.target.browserDatabaseName).toBe("formless:app:private-site");
+    expect(runtimeScreenPathFromRoute(world, "/apps/private-site/dashboard")).toBe("/dashboard");
+    expect(findRuntimeWorldMountByRoute(profile, "/apps/private-site/dashboard", context)).toEqual(
+      world,
+    );
   });
 
   it("preserves product instance schema policy for installed app routes", () => {
@@ -423,6 +528,46 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/")?.target).toEqual(world.target);
     expect(findRuntimeWorldMountByRoute(profile, "/schema")?.target).toEqual(world.target);
     expect(runtimeScreenRoute(world, "/")).toBe("/");
+    expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+  });
+
+  it("hydrates workspace package app-profile root paths from the active package resolver", () => {
+    const privatePackage = privateSitePackage();
+    const pendingProfile = createInstalledAppRuntimeProfile({
+      installId: "private-site",
+      packageAppKey: "private-site",
+    });
+
+    if (!pendingProfile) {
+      throw new Error("Missing pending installed app profile.");
+    }
+
+    expect(pendingProfile.worlds).toEqual([]);
+    expect(runtimeProfileNeedsInstalledAppRouteInstalls(pendingProfile)).toBe(true);
+
+    const profile = runtimeProfileWithActivePackageResolver(
+      pendingProfile,
+      appPackageResolver([privatePackage]),
+    );
+    const world = profile.worlds[0];
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing hydrated workspace package app profile world.");
+    }
+
+    expect(profile.kind).toBe("app");
+    expect(profile.shell).toBe("app");
+    expect(world.app.key).toBe("private-site");
+    expect(world.app.label).toBe("Private Site");
+    expect(world.route).toBe("/");
+    expect(world.schemaRoute).toBe("/schema");
+    expect(world.target.installId).toBe("private-site");
+    expect(world.target.packageAppKey).toBe("private-site");
+    expect(world.target.sourceSchemaKey).toBe("private-site");
+    expect(world.target.apiRoutePrefix).toBe("/api/app-installs/private-site/private-site");
+    expect(findRuntimeWorldMountByRoute(profile, "/")?.target).toEqual(world.target);
+    expect(findRuntimeWorldMountByRoute(profile, "/schema")?.target).toEqual(world.target);
+    expect(runtimeScreenPathFromRoute(world, "/dashboard")).toBe("/dashboard");
     expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
   });
 

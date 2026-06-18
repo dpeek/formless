@@ -28,7 +28,7 @@ import {
   selectGeneratedCreateFieldAuthoring,
 } from "./create-field-authoring.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 
 export type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
 
@@ -46,6 +46,7 @@ export function GeneratedCreateForm({
   union?: CreateUnionPresentationConfig;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({ defaults, union }),
@@ -88,9 +89,16 @@ export function GeneratedCreateForm({
         throw new Error(`Create operation is unavailable for ${entity.label}.`);
       }
 
-      await submitOperation(appTarget, entityName, createOperation.operationName, {
-        input: values,
-      });
+      await submitOperation(
+        appTarget,
+        entityName,
+        createOperation.operationName,
+        {
+          input: values,
+        },
+        undefined,
+        writeOptions,
+      );
       form.reset();
       setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
       setSyncStatus({ state: "idle", message: "Saved and synced." });
@@ -184,6 +192,7 @@ export function GeneratedCreateDialogForm({
   submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({
@@ -231,9 +240,16 @@ export function GeneratedCreateDialogForm({
         submitValues === undefined
           ? {
               recordId: selectCreatedOperationRecordId(
-                await submitOperation(appTarget, action.entityName, action.operationName, {
-                  input: values,
-                }),
+                await submitOperation(
+                  appTarget,
+                  action.entityName,
+                  action.operationName,
+                  {
+                    input: values,
+                  },
+                  undefined,
+                  writeOptions,
+                ),
               ),
             }
           : await submitValues(values);

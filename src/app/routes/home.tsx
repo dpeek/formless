@@ -22,6 +22,7 @@ import { todayDateString } from "../../shared/date.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   createHomeRouteSelectionState,
   selectHomeRouteSectionContextRecordId,
@@ -42,11 +43,13 @@ export {
 } from "./home-selection.tsx";
 
 export function HomeRoute({
+  activePackageResolver,
   target,
   schemaKey,
   sectionActions,
   screenPath,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   sectionActions?: Record<string, ReactNode>;
@@ -147,7 +150,11 @@ export function HomeRoute({
 
   return (
     <section className="mx-auto w-full max-w-[112rem]">
-      <SchemaAppProvider schemaKey={schemaKey} target={appTarget}>
+      <SchemaAppProvider
+        activePackageResolver={activePackageResolver}
+        schemaKey={schemaKey}
+        target={appTarget}
+      >
         <HomeScreen
           getSectionSelection={(section) => ({
             selectedContextRecordId: selectHomeRouteSectionContextRecordId(

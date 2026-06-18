@@ -3,6 +3,7 @@ import type {
   CreateAppInstallRequest,
   CreateAppInstallResponse,
 } from "../shared/protocol.ts";
+import type { AppPackageResolver, InstallableAppPackage } from "@dpeek/formless-installed-apps";
 import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import {
   enqueueLocalWorkspaceAutoSave,
@@ -43,6 +44,40 @@ export async function fetchInstanceAppInstalls({
   });
 
   return readJsonResponse<AppInstallsResponse>(response);
+}
+
+export function activeAppPackageResolverFromAppInstallsResponse(
+  response: Pick<AppInstallsResponse, "packages">,
+): AppPackageResolver {
+  return activeAppPackageResolverFromPackages(response.packages);
+}
+
+export function activeAppPackageResolverFromPackages(
+  packages: readonly InstallableAppPackage[],
+): AppPackageResolver {
+  const packagesByKey = new Map<string, InstallableAppPackage>();
+  const orderedPackages: InstallableAppPackage[] = [];
+
+  for (const appPackage of packages) {
+    if (packagesByKey.has(appPackage.packageAppKey)) {
+      throw new Error(`Active package app key "${appPackage.packageAppKey}" is already resolved.`);
+    }
+
+    const cloned = cloneInstallableAppPackage(appPackage);
+    packagesByKey.set(cloned.packageAppKey, cloned);
+    orderedPackages.push(cloned);
+  }
+
+  return {
+    findPackage(packageAppKey) {
+      const appPackage = packagesByKey.get(packageAppKey);
+
+      return appPackage ? cloneInstallableAppPackage(appPackage) : undefined;
+    },
+    listPackages() {
+      return orderedPackages.map(cloneInstallableAppPackage);
+    },
+  };
 }
 
 export async function createInstanceAppInstall(
@@ -106,6 +141,14 @@ function appInstallErrorBody(value: unknown): AppInstallApiErrorBody {
     error,
     ...(code === undefined ? {} : { code }),
     ...(field === undefined ? {} : { field }),
+  };
+}
+
+function cloneInstallableAppPackage(appPackage: InstallableAppPackage): InstallableAppPackage {
+  return {
+    ...appPackage,
+    sourceSchemaLocation: { ...appPackage.sourceSchemaLocation },
+    seedRecordsLocation: { ...appPackage.seedRecordsLocation },
   };
 }
 

@@ -27,6 +27,7 @@ import {
   useEntityRecordCountReferencingField,
   useEntityRecordOptionsMatchingQuery,
 } from "../client/store.ts";
+import { clientTargetForSchemaKey } from "../client/app-target.ts";
 import {
   selectGeneratedRootNavigationFacts,
   selectGeneratedRootNavigationGroupFacts,
@@ -36,8 +37,10 @@ import {
 } from "../client/generated-authoring.ts";
 import { todayDateString } from "../shared/date.ts";
 import type { HomeScreenModel } from "../client/views.ts";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 
 export function ActiveAppSurface({
+  activePackageResolver,
   activeScreenPath,
   children,
   currentPath,
@@ -45,6 +48,7 @@ export function ActiveAppSurface({
   screenModels,
   world,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   activeScreenPath: string | undefined;
   children: ReactNode;
   currentPath: string;
@@ -71,6 +75,7 @@ export function ActiveAppSurface({
             {world ? (
               <ActiveAppNavigation
                 activeScreenPath={activeScreenPath}
+                activePackageResolver={activePackageResolver}
                 currentPath={currentPath}
                 managementHref={managementHref}
                 screenModels={screenModels}
@@ -93,7 +98,11 @@ export function ActiveAppSurface({
   );
 
   return world ? (
-    <SchemaAppProvider schemaKey={world.app.key} target={world.target}>
+    <SchemaAppProvider
+      activePackageResolver={activePackageResolver}
+      schemaKey={world.app.key}
+      target={world.target}
+    >
       {frame}
     </SchemaAppProvider>
   ) : (
@@ -133,12 +142,14 @@ function activeAppSidebarTriggerLabel(appLabel: string | undefined) {
 
 function ActiveAppNavigation({
   activeScreenPath,
+  activePackageResolver,
   currentPath,
   managementHref,
   screenModels,
   world,
 }: {
   activeScreenPath: string | undefined;
+  activePackageResolver?: AppPackageResolver | undefined;
   currentPath: string;
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
@@ -164,7 +175,11 @@ function ActiveAppNavigation({
           />
         ) : null}
         <AppRootRecordNavigation rootNavigation={rootNavigation} />
-        <AppSettingsNavigation currentPath={currentPath} world={world} />
+        <AppSettingsNavigation
+          activePackageResolver={activePackageResolver}
+          currentPath={currentPath}
+          world={world}
+        />
       </>
     );
   }
@@ -173,7 +188,11 @@ function ActiveAppNavigation({
     <>
       {managementHref ? <AppManagementLink href={managementHref} world={world} /> : null}
       <AppScreenLinks activeScreenPath={activeScreenPath} screenLinks={screenLinks} world={world} />
-      <AppSettingsNavigation currentPath={currentPath} world={world} />
+      <AppSettingsNavigation
+        activePackageResolver={activePackageResolver}
+        currentPath={currentPath}
+        world={world}
+      />
     </>
   );
 }
@@ -213,16 +232,20 @@ function AppScreenLinks({
 }
 
 function AppSettingsNavigation({
+  activePackageResolver,
   currentPath,
   world,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   currentPath: string;
   world: RuntimeWorldMount;
 }) {
+  const appTarget = world.target ?? clientTargetForSchemaKey(world.app.key);
+
   return (
     <SidebarSection aria-label={`${world.app.label} app settings`} label="App settings">
       <div className="col-span-full px-2 py-1">
-        <SyncStatusControl target={world.target ?? world.app.key} />
+        <SyncStatusControl target={appTarget} />
       </div>
       {world.schemaRoute ? (
         <SidebarItem href={world.schemaRoute} isCurrent={currentPath === world.schemaRoute}>
@@ -230,6 +253,8 @@ function AppSettingsNavigation({
         </SidebarItem>
       ) : null}
       <SourceResetControl
+        activePackageResolver={activePackageResolver}
+        appLabel={world.app.label}
         buttonClassName="w-full"
         buttonLabel="Reset source seed data"
         className="col-span-full px-2 py-1 [&>p]:text-xs"

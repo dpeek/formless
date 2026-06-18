@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   AppInstallApiError,
+  activeAppPackageResolverFromAppInstallsResponse,
   createInstanceAppInstall,
   fetchInstanceAppInstalls,
   INSTANCE_APP_INSTALLS_API_PATH,
 } from "./app-installs.ts";
 import type { LocalWorkspaceAutoSaveClient } from "./workspace-auto-save.ts";
+import {
+  listInstallableAppPackages,
+  type InstallableAppPackage,
+} from "@dpeek/formless-installed-apps";
+import { bundledAppPackageResolver } from "../shared/app-packages.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 
 describe("client app install API helpers", () => {
   it("fetches installed app registry state", async () => {
@@ -17,6 +24,46 @@ describe("client app install API helpers", () => {
     });
 
     expect(response).toEqual({ packages: [], installs: [] });
+  });
+
+  it("builds an active package resolver from bundled registry packages", () => {
+    const packages = listInstallableAppPackages(bundledAppPackageResolver);
+    const resolver = activeAppPackageResolverFromAppInstallsResponse({ packages });
+    const sitePackage = resolver.findPackage("site");
+
+    expect(resolver.listPackages().map((appPackage) => appPackage.packageAppKey)).toEqual([
+      "site",
+      "tasks",
+      "crm",
+    ]);
+    expect(sitePackage).toMatchObject({
+      packageAppKey: "site",
+      sourceOrigin: "bundled",
+      sourceSchemaKey: "site",
+    });
+    expect(resolver.findPackage("missing")).toBeUndefined();
+
+    if (!sitePackage) {
+      throw new Error("Missing active Site package.");
+    }
+
+    sitePackage.sourceSchemaLocation.path = "mutated/schema.json";
+    expect(resolver.findPackage("site")?.sourceSchemaLocation.path).not.toBe("mutated/schema.json");
+  });
+
+  it("builds an active package resolver from workspace registry packages", () => {
+    const privateSite = privateSitePackage();
+    const resolver = activeAppPackageResolverFromAppInstallsResponse({
+      packages: [privateSite],
+    });
+
+    expect(resolver.listPackages()).toEqual([privateSite]);
+    expect(resolver.findPackage("private-site")).toMatchObject({
+      packageAppKey: "private-site",
+      sourceOrigin: "workspace",
+      sourceSchemaKey: "private-site",
+    });
+    expect(resolver.findPackage("site")).toBeUndefined();
   });
 
   it("creates an app install and surfaces API errors", async () => {
@@ -170,6 +217,33 @@ function jsonFetcher(
     expect(init?.method ?? "GET").toBe(options.expectedMethod ?? "GET");
 
     return Response.json(body, { status: options.status ?? 200 });
+  };
+}
+
+function privateSitePackage(): InstallableAppPackage {
+  return {
+    adminRouteBase: "/apps",
+    defaultInstallId: "private-site",
+    description: "Workspace-linked public Site package.",
+    label: "Private Site",
+    packageAppKey: "private-site",
+    packageRevision: 7,
+    publicRouteBase: "/sites",
+    seedRecordsKey: "private-site",
+    seedRecordsLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/seed-records.json",
+    },
+    sourceOrigin: "workspace",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaKey: "private-site",
+    sourceSchemaLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/schema.json",
+    },
+    supportsMultipleInstalls: false,
   };
 }
 

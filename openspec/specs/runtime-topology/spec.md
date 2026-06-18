@@ -228,7 +228,10 @@ profile behavior.
   app
 - **WHEN** the mapped host receives browser requests for `/` or `/schema`
 - **THEN** the client shell is served with runtime profile, package app key,
-  and app install id hints for that install
+  app install id, and resolved package metadata for that install
+- **AND** the resolved package metadata is sufficient for the browser to build
+  install-scoped storage identity and mount the generated app or schema editor
+  without bundled source app lookup
 - **AND** schema-key API routes are not exposed on the mapped app host while
   the matching installed app API route remains available
 - **AND** owner setup, owner login, and passkey ceremony requests do not treat

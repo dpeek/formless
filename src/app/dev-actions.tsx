@@ -9,9 +9,14 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { resetSeedData } from "../client/sync.ts";
-import type { ClientAppTarget } from "../client/app-target.ts";
+import {
+  clientSchemaKeyLabel,
+  clientTargetForSchemaKey,
+  type ClientAppSchemaKey,
+  type ClientAppTarget,
+} from "../client/app-target.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
-import { getSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 
 type DevActionStatus = {
   pending: boolean;
@@ -24,20 +29,25 @@ type SourceResetControlProps = {
   buttonLabel?: string;
   className?: string;
   onResetSourceData?: (response: BootstrapResponse) => void;
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
+  activePackageResolver?: AppPackageResolver | undefined;
+  appLabel?: string;
   target?: ClientAppTarget;
 };
 
 export function SourceResetControl({
+  activePackageResolver,
+  appLabel,
   buttonClassName,
   buttonLabel = "Reset",
   className,
   onResetSourceData,
   schemaKey,
-  target = schemaKey,
+  target,
 }: SourceResetControlProps) {
-  const app = getSchemaAppDefinition(schemaKey);
-  const resetScopeLabel = resetScopeLabelForTarget(app.label, target);
+  const resolvedAppLabel = appLabel ?? clientSchemaKeyLabel(schemaKey);
+  const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
+  const resetScopeLabel = resetScopeLabelForTarget(resolvedAppLabel, appTarget);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<DevActionStatus>({
     pending: false,
@@ -54,7 +64,7 @@ export function SourceResetControl({
     setResetStatus({ pending: true, error: null, message: null });
 
     try {
-      const response = await resetSeedData(target);
+      const response = await resetSeedData(appTarget, undefined, { activePackageResolver });
       onResetSourceData?.(response);
       setResetStatus({
         pending: false,
@@ -91,7 +101,7 @@ export function SourceResetControl({
         <ModalHeader>
           <ModalTitle>Reset {resetScopeLabel} source seed data?</ModalTitle>
           <ModalDescription>
-            This restores the source schema and source seed data for <code>{app.key}</code>.
+            This restores the source schema and source seed data for <code>{schemaKey}</code>.
             Existing records in {resetScopeLabel} are replaced by the source seed records.
           </ModalDescription>
         </ModalHeader>

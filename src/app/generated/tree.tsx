@@ -7,7 +7,7 @@ import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formles
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@dpeek/formless-ui/menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation } from "../../client/sync.ts";
+import { submitOperation, type SubmitOperationOptions } from "../../client/sync.ts";
 import type {
   CreateDefaultConfig,
   CreateFieldConfig,
@@ -39,7 +39,7 @@ import {
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import {
   selectRecordContextLinkForActiveUnion,
   selectRecordFieldsForActiveUnion,
@@ -126,6 +126,7 @@ function PlacementSiblingList({
   selectableContextRecordIds?: Set<string>;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const recordsById = useRecordsById();
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = placements.map((placement) => placement.id);
@@ -185,7 +186,7 @@ function PlacementSiblingList({
     setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
       setSyncStatus({ state: "idle", message: "Placement moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -441,6 +442,7 @@ function TreeChildAddControls({
   result: TreeResultConfig;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [activeVariant, setActiveVariant] = useState<TreeAllowedChildVariantConfig | null>(null);
   const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
   const createAction = activeVariant
@@ -515,6 +517,7 @@ function TreeChildAddControls({
                   parentRecord,
                   values,
                   activeVariant.placementValues,
+                  writeOptions,
                 )
               }
             />
@@ -574,6 +577,7 @@ function TreePlacementRemoveButton({
   result: TreeResultConfig;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [isRemoving, setIsRemoving] = useState(false);
   const removeOperation = result.composition?.remove;
 
@@ -590,11 +594,18 @@ function TreePlacementRemoveButton({
     setSyncStatus({ state: "syncing", message: "Removing placement..." });
 
     try {
-      await submitOperation(appTarget, entityName, removeOperation.operationName, {
-        input: {
-          placementId: placement.id,
+      await submitOperation(
+        appTarget,
+        entityName,
+        removeOperation.operationName,
+        {
+          input: {
+            placementId: placement.id,
+          },
         },
-      });
+        undefined,
+        writeOptions,
+      );
       setSyncStatus({ state: "idle", message: "Placement removed and synced." });
     } catch (error) {
       setSyncStatus({
@@ -637,6 +648,7 @@ function PlacementOrderingControls({
   siblingCount: number;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const showDragHandle = orderingContext?.ordering.presentations.includes("dragHandle") === true;
   const moveItems = selectOrderingMoveMenuItems({
     includeOrdering: orderingContext?.ordering.presentations.includes("moveMenu") === true,
@@ -663,7 +675,7 @@ function PlacementOrderingControls({
     setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, item.plan);
+      await submitOrderingPatch(appTarget, orderingContext, item.plan, writeOptions);
       setSyncStatus({ state: "idle", message: "Placement moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -980,6 +992,7 @@ async function submitTreeChildCreateAction(
   parentRecord: StoredRecord,
   childValues: RecordValues,
   placementValues?: RecordValues,
+  options: SubmitOperationOptions = {},
 ): Promise<{ recordId: string }> {
   const createAction = result.composition?.create;
 
@@ -998,6 +1011,8 @@ async function submitTreeChildCreateAction(
         ...(placementValues === undefined ? {} : { placementValues }),
       },
     },
+    undefined,
+    options,
   );
   const childRecord = selectCreatedTreeChildRecord(response, result.childEntityName);
 

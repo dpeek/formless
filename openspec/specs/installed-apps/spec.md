@@ -344,6 +344,20 @@ records and the active package resolver.
 - **AND** no legacy install registry, SQL table, backfill path, or bundled-only
   compatibility API is used as an alternate source of truth
 
+#### Scenario: Browser active package registry
+
+- **GIVEN** a browser shell needs to mount installed app routes, build
+  install-scoped storage identity, or attach package fact headers to installed
+  app writes
+- **WHEN** it reads the install registry response
+- **THEN** it uses the returned package list as the active package resolver for
+  that browser runtime
+- **AND** workspace-linked package app keys are eligible for browser route,
+  schema editor, replica, broadcast, and write metadata selection when they are
+  present in that active package list
+- **AND** browser installed app behavior does not resolve package metadata
+  through the globally bundled package resolver alone
+
 #### Scenario: Create install request
 
 - **GIVEN** the create app install API is called

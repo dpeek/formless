@@ -1,6 +1,6 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
-import { packageAppFactsForKey } from "@dpeek/formless-installed-apps";
+import { packageAppFactsForKey, type AppPackageResolver } from "@dpeek/formless-installed-apps";
 import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import {
@@ -66,9 +66,11 @@ type StartPushSyncOptions = {
   socketFactory?: (url: string) => SyncWebSocket;
 };
 
-type BrowserWriteOptions = LocalWorkspaceAutoSaveOptions;
+export type BrowserWriteOptions = LocalWorkspaceAutoSaveOptions & {
+  activePackageResolver?: AppPackageResolver | undefined;
+};
 
-type SubmitOperationOptions = BrowserWriteOptions & {
+export type SubmitOperationOptions = BrowserWriteOptions & {
   autoSaveSource?: LocalWorkspaceAutoSaveWriteSource;
 };
 
@@ -139,9 +141,17 @@ export async function saveActiveSchema(
   options: BrowserWriteOptions = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
-  const response = await postJson<SchemaUpdateResponse>(fetcher, apiPath(identity, "schema"), {
-    schema,
-  });
+  const response = await postJson<SchemaUpdateResponse>(
+    fetcher,
+    apiPath(identity, "schema"),
+    {
+      schema,
+    },
+    {
+      activePackageResolver: options.activePackageResolver,
+      writeCompatibilityTarget: identity,
+    },
+  );
 
   await saveSchema(identity, response.schema, response.updatedAt);
   applySchemaSave(response.schema, response.updatedAt, identity);
@@ -174,6 +184,10 @@ export async function restoreStorageSnapshot(
     fetcher,
     apiPath(identity, "snapshot/restore"),
     snapshot,
+    {
+      activePackageResolver: options.activePackageResolver,
+      writeCompatibilityTarget: identity,
+    },
   );
 
   await saveBootstrapResponse(identity, response);
@@ -210,7 +224,10 @@ export async function submitOperation(
         protocol: "generated-ui",
       },
     },
-    { writeCompatibilityTarget: identity },
+    {
+      activePackageResolver: options.activePackageResolver,
+      writeCompatibilityTarget: identity,
+    },
   );
 
   if ("changes" in response.output) {
@@ -239,6 +256,10 @@ export async function resetSourceSchema(
     fetcher,
     apiPath(identity, "reset/schema"),
     {},
+    {
+      activePackageResolver: options.activePackageResolver,
+      writeCompatibilityTarget: identity,
+    },
   );
 
   await saveBootstrapResponse(identity, response);
@@ -258,7 +279,15 @@ export async function resetSeedData(
   options: BrowserWriteOptions = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
-  const response = await postJson<BootstrapResponse>(fetcher, apiPath(identity, "reset/seed"), {});
+  const response = await postJson<BootstrapResponse>(
+    fetcher,
+    apiPath(identity, "reset/seed"),
+    {},
+    {
+      activePackageResolver: options.activePackageResolver,
+      writeCompatibilityTarget: identity,
+    },
+  );
 
   resetClientStore();
   await deleteClientDb(identity);
@@ -490,7 +519,10 @@ async function postJson<T>(
   fetcher: typeof fetch,
   url: string,
   body: unknown,
-  options: { writeCompatibilityTarget?: ClientAppTarget } = {},
+  options: {
+    activePackageResolver?: AppPackageResolver | undefined;
+    writeCompatibilityTarget?: ClientAppTarget;
+  } = {},
 ): Promise<T> {
   const headers = new Headers({
     Accept: "application/json",
@@ -498,7 +530,9 @@ async function postJson<T>(
   });
 
   if (options.writeCompatibilityTarget) {
-    await addBrowserReplicaWriteHeaders(headers, options.writeCompatibilityTarget);
+    await addBrowserReplicaWriteHeaders(headers, options.writeCompatibilityTarget, {
+      activePackageResolver: options.activePackageResolver,
+    });
   }
 
   const response = await fetcher(url, {
@@ -524,13 +558,22 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-async function addBrowserReplicaWriteHeaders(headers: Headers, target: ClientAppTarget) {
+async function addBrowserReplicaWriteHeaders(
+  headers: Headers,
+  target: ClientAppTarget,
+  options: { activePackageResolver?: AppPackageResolver | undefined } = {},
+) {
   const identity = appStorageIdentityForClientTarget(target);
   const schemaUpdatedAt = await readSchemaUpdatedAt(identity);
   const packageFacts =
     identity.kind === "instanceControlPlane"
       ? undefined
-      : packageAppFactsForKey(identity.packageAppKey, bundledAppPackageResolver);
+      : packageAppFactsForKey(
+          identity.packageAppKey,
+          identity.kind === "appInstall"
+            ? (options.activePackageResolver ?? bundledAppPackageResolver)
+            : bundledAppPackageResolver,
+        );
 
   headers.set(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER, String(FORMLESS_RUNTIME_PROTOCOL_VERSION));
 

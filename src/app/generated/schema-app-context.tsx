@@ -5,8 +5,10 @@ import {
   type ClientAppTarget,
 } from "../../client/app-target.ts";
 import { defaultSchemaKey } from "../../shared/schema-apps.ts";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 
 type SchemaAppContextValue = {
+  activePackageResolver?: AppPackageResolver | undefined;
   schemaKey: ClientAppSchemaKey;
   target: ClientAppTarget;
 };
@@ -17,10 +19,12 @@ const SchemaAppContext = createContext<SchemaAppContextValue>({
 });
 
 export function SchemaAppProvider({
+  activePackageResolver,
   children,
   schemaKey,
   target,
 }: {
+  activePackageResolver?: AppPackageResolver | undefined;
   children: ReactNode;
   schemaKey: ClientAppSchemaKey;
   target?: ClientAppTarget;
@@ -28,7 +32,7 @@ export function SchemaAppProvider({
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
 
   return (
-    <SchemaAppContext.Provider value={{ schemaKey, target: appTarget }}>
+    <SchemaAppContext.Provider value={{ activePackageResolver, schemaKey, target: appTarget }}>
       {children}
     </SchemaAppContext.Provider>
   );
@@ -40,4 +44,10 @@ export function useSchemaKey() {
 
 export function useSchemaAppTarget() {
   return useContext(SchemaAppContext).target;
+}
+
+export function useSchemaAppWriteOptions() {
+  const { activePackageResolver } = useContext(SchemaAppContext);
+
+  return activePackageResolver ? { activePackageResolver } : {};
 }

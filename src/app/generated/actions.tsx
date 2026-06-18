@@ -8,7 +8,7 @@ import type { EntityActionTargetCountConfig } from "../../client/action-ui.ts";
 import type { HomeOperationConfig } from "../../client/views.ts";
 import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateDialog } from "./create.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 
 type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
 type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
@@ -23,6 +23,7 @@ export function HomeOperationRow({
   queryContext: QueryEvaluationContext;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeOperationConfig | null>(
     null,
@@ -37,7 +38,14 @@ export function HomeOperationRow({
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      const response = await submitOperation(appTarget, action.entityName, action.operationName);
+      const response = await submitOperation(
+        appTarget,
+        action.entityName,
+        action.operationName,
+        {},
+        undefined,
+        writeOptions,
+      );
       const affected = "changes" in response.output ? response.output.changes.length : 0;
       const message = action.ui.showAffectedCountOnSuccess
         ? `${action.label} synced. ${affected} affected.`

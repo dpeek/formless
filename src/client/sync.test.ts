@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { publishClientEvent } from "./broadcast.ts";
+import { activeAppPackageResolverFromPackages } from "./app-installs.ts";
 import { deleteClientDb, mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
 import {
   connectBroadcastToClientStore,
@@ -46,11 +47,15 @@ import type {
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
+import type { InstallableAppPackage } from "@dpeek/formless-installed-apps";
 import {
   rateSourceSchema as rateCardSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
 import type { LocalWorkspaceAutoSaveClient } from "./workspace-auto-save.ts";
+
+const privateSourceSchemaHash =
+  "sha256:4444444444444444444444444444444444444444444444444444444444444444" as const;
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
@@ -62,6 +67,7 @@ beforeEach(async () => {
   await deleteClientDb(installedTasksIdentity("team"));
   await deleteClientDb(installedCRMIdentity("rates"));
   await deleteClientDb(installedCRMIdentity("alt-rates"));
+  await deleteClientDb(installedWorkspaceSiteIdentity("private-site"));
   resetClientStore();
 });
 
@@ -292,6 +298,99 @@ describe("client sync", () => {
             record: record("record-1", "Headers"),
           }),
         );
+      },
+    );
+  });
+
+  it("sends bundled package facts with bundled installed app operation writes", async () => {
+    const work = installedTasksIdentity("work");
+
+    await saveBootstrapResponse(work, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+
+    await submitOperation(
+      work,
+      "task",
+      "create",
+      { input: { title: "Bundled install", done: false } },
+      async (input, init) => {
+        const headers = new Headers(init?.headers);
+
+        expect(input).toBe("/api/app-installs/tasks/work/operations/task/create");
+        expect(headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
+          String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
+        );
+        expect(headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
+          "2026-04-28T00:00:00.000Z",
+        );
+        expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("1");
+        expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toMatch(
+          /^sha256:[a-f0-9]{64}$/,
+        );
+
+        const changes = [change(1, "record-1", "Bundled install")];
+
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: record("record-1", "Bundled install"),
+          }),
+        );
+      },
+    );
+  });
+
+  it("sends active package facts with workspace installed app operation writes", async () => {
+    const privateSite = installedWorkspaceSiteIdentity("private-site");
+
+    await saveBootstrapResponse(privateSite, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+
+    await submitOperation(
+      privateSite,
+      "task",
+      "create",
+      { input: { title: "Workspace install", done: false } },
+      async (input, init) => {
+        const headers = new Headers(init?.headers);
+
+        expect(input).toBe("/api/app-installs/private-site/private-site/operations/task/create");
+        expect(headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
+          String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
+        );
+        expect(headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
+          "2026-04-28T00:00:00.000Z",
+        );
+        expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("7");
+        expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
+          privateSourceSchemaHash,
+        );
+
+        const changes = [change(1, "record-1", "Workspace install")];
+
+        return Response.json(
+          operationResponse({
+            type: "create",
+            affectedChangeIds: changes.map((change) => String(change.seq)),
+            changes,
+            cursor: 1,
+            record: record("record-1", "Workspace install"),
+          }),
+        );
+      },
+      {
+        activePackageResolver: activeAppPackageResolverFromPackages([privateSitePackage()]),
       },
     );
   });
@@ -2147,6 +2246,46 @@ function installedCRMIdentity(installId: string) {
   }
 
   return identity;
+}
+
+function installedWorkspaceSiteIdentity(installId: string) {
+  const identity = installedAppStorageIdentity(
+    { installId, packageAppKey: "private-site" },
+    activeAppPackageResolverFromPackages([privateSitePackage()]),
+  );
+
+  if (!identity) {
+    throw new Error(`Expected installed workspace Site identity for ${installId}.`);
+  }
+
+  return identity;
+}
+
+function privateSitePackage(): InstallableAppPackage {
+  return {
+    adminRouteBase: "/apps",
+    defaultInstallId: "private-site",
+    description: "Workspace-linked public Site package.",
+    label: "Private Site",
+    packageAppKey: "private-site",
+    packageRevision: 7,
+    publicRouteBase: "/sites",
+    seedRecordsKey: "private-site",
+    seedRecordsLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/seed-records.json",
+    },
+    sourceOrigin: "workspace",
+    sourceSchemaHash: privateSourceSchemaHash,
+    sourceSchemaKey: "private-site",
+    sourceSchemaLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/schema.json",
+    },
+    supportsMultipleInstalls: false,
+  };
 }
 
 function record(id: string, title: string, done = false): StoredRecord {

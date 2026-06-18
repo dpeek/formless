@@ -1,7 +1,11 @@
 import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { App, selectRuntimeShellInstalledAppLinks } from "./app.tsx";
+import {
+  App,
+  runtimeInstalledAppRouteRegistryFromResponse,
+  selectRuntimeShellInstalledAppLinks,
+} from "./app.tsx";
 import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
   GeneratedCreateDialogForm,
@@ -31,6 +35,7 @@ import type { TableCollectionResultModel } from "./client/collection-result-mode
 import type { ListResultModel } from "./client/list-result-model.ts";
 import type { EntityOperationPresentationConfig } from "./client/operation-presentation-model.ts";
 import type { ClientAppTarget } from "./client/app-target.ts";
+import type { ClientAppSchemaKey } from "./client/app-target.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
   HomeRoute,
@@ -52,6 +57,7 @@ import {
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
   findRuntimeWorldMountByRoute,
+  runtimeProfileWithActivePackageResolver,
   type RuntimeProfile,
 } from "./app/runtime-profile.ts";
 import {
@@ -95,18 +101,22 @@ import {
   sitePlacementRecord,
 } from "./test/site-editor.ts";
 import { testSiteSeedRecords } from "./test/site-records.ts";
-import type { AppInstall } from "@dpeek/formless-installed-apps";
+import type { AppInstall, InstallableAppPackage } from "@dpeek/formless-installed-apps";
 
 function renderRoute(
   path: string,
   runtimeProfile?: RuntimeProfile,
   installedAppRouteInstalls?: readonly AppInstall[],
-  options: { localWorkspaceGatewayAvailable?: boolean } = {},
+  options: {
+    installedAppRoutePackages?: readonly InstallableAppPackage[];
+    localWorkspaceGatewayAvailable?: boolean;
+  } = {},
 ) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
       <App
         installedAppRouteInstalls={installedAppRouteInstalls}
+        installedAppRoutePackages={options.installedAppRoutePackages}
         localWorkspaceGatewayAvailable={options.localWorkspaceGatewayAvailable}
         routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
@@ -147,7 +157,7 @@ function SchemaKeyProbeHomeRoute({
   schemaKey: routeSchemaKey,
   target,
 }: {
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
 }) {
@@ -173,7 +183,7 @@ function TargetProbeHomeRoute({
   screenPath,
   target,
 }: {
-  schemaKey: SchemaKey;
+  schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
 }) {
@@ -527,6 +537,56 @@ function appInstallFixture({
           publicRoutePrefix: `/sites/${installId}/` as const,
         }
       : {}),
+  };
+}
+
+function privateSitePackage(): InstallableAppPackage {
+  return {
+    adminRouteBase: "/apps",
+    defaultInstallId: "private-site",
+    description: "Workspace-linked public Site package.",
+    label: "Private Site",
+    packageAppKey: "private-site",
+    packageRevision: 7,
+    publicRouteBase: "/sites",
+    seedRecordsKey: "private-site",
+    seedRecordsLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/seed-records.json",
+    },
+    sourceOrigin: "workspace",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+    sourceSchemaKey: "private-site",
+    sourceSchemaLocation: {
+      kind: "workspace",
+      key: "private-site",
+      path: "source/schema.json",
+    },
+    supportsMultipleInstalls: false,
+  };
+}
+
+function appInstallFromPackage({
+  appPackage,
+  installId,
+  label,
+}: {
+  appPackage: InstallableAppPackage;
+  installId: string;
+  label: string;
+}): AppInstall {
+  return {
+    adminRoute: `/apps/${installId}`,
+    createdAt: "2026-05-25T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey: appPackage.packageAppKey,
+    packageRevision: appPackage.packageRevision,
+    schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: appPackage.sourceSchemaHash,
+    status: "installed",
+    updatedAt: "2026-05-25T00:00:00.000Z",
   };
 }
 
@@ -979,6 +1039,78 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/apps/task-workspace")).toContain("Task Workspace");
   });
 
+  it("routes workspace package admin paths through active package metadata", () => {
+    const privatePackage = privateSitePackage();
+    const appInstalls = [
+      appInstallFromPackage({
+        appPackage: privatePackage,
+        installId: "private-site",
+        label: "Workspace Site",
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/apps/private-site/dashboard">
+        <App
+          installedAppRouteInstalls={appInstalls}
+          installedAppRoutePackages={[privatePackage]}
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SchemaRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expect(html).toContain('data-route-schema-key="private-site"');
+    expect(html).toContain('data-screen-path="/dashboard"');
+    expect(html).toContain('data-target-kind="appInstall"');
+    expect(html).toContain('data-install-id="private-site"');
+    expectAppSettings(html, {
+      appLabel: "Private Site",
+      resetScopeLabel: "Private Site app install private-site",
+      schemaKey: "private-site",
+      schemaRoute: "/apps/private-site/schema",
+      syncWorldKey: "app:private-site",
+    });
+    expect(linkHtml(runtimeShellHtml(html), "/apps/private-site")).toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/apps/private-site")).toContain("Workspace Site");
+    expect(html).not.toContain("Not found");
+  });
+
+  it("preserves fetched active packages with runtime route installs", () => {
+    const privatePackage = privateSitePackage();
+    const privateInstall = {
+      adminRoute: "/apps/private-site",
+      createdAt: "2026-05-25T00:00:00.000Z",
+      installId: "private-site",
+      label: "Private Site",
+      packageAppKey: "private-site",
+      packageRevision: privatePackage.packageRevision,
+      schemaRoute: "/apps/private-site/schema",
+      sourceSchemaHash: privatePackage.sourceSchemaHash,
+      status: "installed",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    } satisfies AppInstall;
+    const registry = runtimeInstalledAppRouteRegistryFromResponse({
+      installs: [privateInstall],
+      packages: [privatePackage],
+    });
+
+    expect(registry.installs).toEqual([privateInstall]);
+    expect(registry.packages).toEqual([privatePackage]);
+    expect(registry.activePackageResolver?.findPackage("private-site")).toMatchObject({
+      packageAppKey: "private-site",
+      sourceOrigin: "workspace",
+      sourceSchemaKey: "private-site",
+    });
+    expect(registry.activePackageResolver?.findPackage("site")).toBeUndefined();
+  });
+
   it("renders installed Tasks generated UI from the install-scoped target", () => {
     const appInstalls = [
       appInstallFixture({
@@ -1139,6 +1271,57 @@ describe("App smoke routes", () => {
     expect(activeHtml).toContain('aria-label="Schema saved"');
     expect(activeHtml).toContain("&quot;siteSettingsHome&quot;");
     expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
+  });
+
+  it("renders workspace package schema routes from active package metadata", () => {
+    const privatePackage = privateSitePackage();
+    const appInstalls = [
+      appInstallFromPackage({
+        appPackage: privatePackage,
+        installId: "private-site",
+        label: "Workspace Site",
+      }),
+    ];
+    const registry = runtimeInstalledAppRouteRegistryFromResponse({
+      installs: appInstalls,
+      packages: [privatePackage],
+    });
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/private-site/schema",
+      {
+        activePackageResolver: registry.activePackageResolver,
+        appInstalls,
+      },
+    );
+
+    if (!installedWorld?.target) {
+      throw new Error("Expected workspace package target for /apps/private-site/schema.");
+    }
+
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
+    const html = renderRoute("/apps/private-site/schema", undefined, appInstalls, {
+      installedAppRoutePackages: [privatePackage],
+    });
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Schema" });
+    expectAppSettings(html, {
+      appLabel: "Private Site",
+      resetScopeLabel: "Private Site app install private-site",
+      schemaKey: "private-site",
+      schemaRoute: "/apps/private-site/schema",
+      syncWorldKey: "app:private-site",
+    });
+    expect(html).toContain('aria-label="Private Site schema editor"');
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">private-site</span>");
+    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).toContain("&quot;siteSettingsHome&quot;");
+    expect(html).toContain("Schema</dt><dd>v1</dd>");
+    expect(html).not.toContain("Not found");
   });
 
   it("selects supported installed apps for the dev runtime shell picker", () => {
@@ -1640,6 +1823,50 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/tasks"');
   });
 
+  it('renders a workspace package app profile home at "/" from active package metadata', () => {
+    const privatePackage = privateSitePackage();
+    const pendingProfile = createInstalledAppRuntimeProfile({
+      installId: "private-site",
+      packageAppKey: "private-site",
+    });
+
+    if (!pendingProfile) {
+      throw new Error("Missing pending workspace app profile.");
+    }
+
+    const registry = runtimeInstalledAppRouteRegistryFromResponse({
+      installs: [],
+      packages: [privatePackage],
+    });
+    const profile = runtimeProfileWithActivePackageResolver(
+      pendingProfile,
+      registry.activePackageResolver,
+    );
+    const world = findRuntimeWorldMountByRoute(profile, "/");
+
+    if (!world?.target) {
+      throw new Error("Missing workspace app profile target.");
+    }
+
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), world.target);
+    const html = renderRoute("/", pendingProfile, [], {
+      installedAppRoutePackages: [privatePackage],
+    });
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, {
+      appLabel: "Private Site",
+      resetScopeLabel: "Private Site app install private-site",
+      schemaKey: "private-site",
+      schemaRoute: "/schema",
+      syncWorldKey: "app:private-site",
+    });
+    expect(html).toContain('aria-label="Pages roots"');
+    expect(html).not.toContain("Not found");
+    expect(html).not.toContain('href="/apps/private-site"');
+  });
+
   it("renders an app profile screen path without the schema key prefix", () => {
     applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
     const html = renderRoute("/audiences", createAppRuntimeProfile("crm"));
@@ -1686,6 +1913,54 @@ describe("App smoke routes", () => {
     expect(html).toContain(">tasks</span>");
     expect(html).toContain('aria-label="Schema saved"');
     expect(html).not.toContain('href="/apps/task-workspace/schema"');
+  });
+
+  it('renders a workspace package app profile schema editor at "/schema" from active package metadata', () => {
+    const privatePackage = privateSitePackage();
+    const pendingProfile = createInstalledAppRuntimeProfile({
+      installId: "private-site",
+      packageAppKey: "private-site",
+    });
+
+    if (!pendingProfile) {
+      throw new Error("Missing pending workspace app profile.");
+    }
+
+    const registry = runtimeInstalledAppRouteRegistryFromResponse({
+      installs: [],
+      packages: [privatePackage],
+    });
+    const profile = runtimeProfileWithActivePackageResolver(
+      pendingProfile,
+      registry.activePackageResolver,
+    );
+    const world = findRuntimeWorldMountByRoute(profile, "/schema");
+
+    if (!world?.target) {
+      throw new Error("Missing workspace app profile schema target.");
+    }
+
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), world.target);
+    const html = renderRoute("/schema", pendingProfile, [], {
+      installedAppRoutePackages: [privatePackage],
+    });
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Schema" });
+    expectAppSettings(html, {
+      appLabel: "Private Site",
+      resetScopeLabel: "Private Site app install private-site",
+      schemaKey: "private-site",
+      schemaRoute: "/schema",
+      syncWorldKey: "app:private-site",
+    });
+    expect(html).toContain('aria-label="Private Site schema editor"');
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">private-site</span>");
+    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).not.toContain("Not found");
+    expect(html).not.toContain('href="/apps/private-site/schema"');
   });
 
   it('renders an app profile schema editor at "/schema" with the selected schema key', () => {

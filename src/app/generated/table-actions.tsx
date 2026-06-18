@@ -27,7 +27,7 @@ import type {
 } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
@@ -53,6 +53,7 @@ export function InvokeActionTableCell({
   sourceRecordId: string;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [openActionName, setOpenActionName] = useState<string | null>(null);
   const [pendingOrderingDirection, setPendingOrderingDirection] =
     useState<OrderingMoveDirection | null>(null);
@@ -86,7 +87,7 @@ export function InvokeActionTableCell({
     setSyncStatus({ state: "syncing", message: `${item.label}...` });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, item.plan);
+      await submitOrderingPatch(appTarget, orderingContext, item.plan, writeOptions);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({

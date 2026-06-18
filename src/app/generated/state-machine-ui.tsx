@@ -7,11 +7,11 @@ import {
 } from "../../client/state-machine-model.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation } from "../../client/sync.ts";
+import { submitOperation, type BrowserWriteOptions } from "../../client/sync.ts";
 import type { StateMachineFieldConfig, TransitionStateActionConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { enumValuePresentation, GeneratedFieldPresentationIcon } from "./field-presentation.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import type { FieldSchema } from "@dpeek/formless-schema";
 
 export function StateMachineStateBadge({
@@ -64,6 +64,7 @@ export function RecordTransitionActionControls({
   values: RecordValues | undefined;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const [pendingActionName, setPendingActionName] = useState<string | null>(null);
 
   if (actions.length === 0) {
@@ -79,7 +80,14 @@ export function RecordTransitionActionControls({
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      await submitTransitionStateAction(appTarget, entityName, action.operationName, recordId);
+      await submitTransitionStateAction(
+        appTarget,
+        entityName,
+        action.operationName,
+        recordId,
+        undefined,
+        writeOptions,
+      );
       setSyncStatus({ state: "idle", message: `${action.label} synced.` });
     } catch (error) {
       setSyncStatus({
@@ -146,8 +154,9 @@ export async function submitTransitionStateAction(
   operationName: string,
   recordId: string,
   fetcher: typeof fetch = fetch,
+  options: BrowserWriteOptions = {},
 ) {
-  return submitOperation(target, entityName, operationName, { recordId }, fetcher);
+  return submitOperation(target, entityName, operationName, { recordId }, fetcher, options);
 }
 
 function badgeIntentForPresentation(

@@ -23,7 +23,7 @@ import {
   upsertMediaAssetOption,
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 type RecordFieldEditorProps = {
@@ -83,6 +83,7 @@ function EditableRecordFieldEditor({
   updateOperation,
 }: RecordFieldEditorProps) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const { field, fieldName } = fieldConfig;
   const schema = useSchema();
   const numberFormat = fieldConfig.format ?? "plain";
@@ -200,7 +201,10 @@ function EditableRecordFieldEditor({
           input: patchValues,
         },
         undefined,
-        options.autoSaveSource ? { autoSaveSource: options.autoSaveSource } : {},
+        {
+          ...writeOptions,
+          ...(options.autoSaveSource ? { autoSaveSource: options.autoSaveSource } : {}),
+        },
       );
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });

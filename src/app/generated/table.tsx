@@ -60,7 +60,7 @@ import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
 import {
@@ -91,6 +91,7 @@ export function RecordTable({
   result: TableCollectionResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const canPatch = result.updateOperation !== undefined;
   const canDelete = result.deleteOperation !== undefined;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
@@ -160,7 +161,7 @@ export function RecordTable({
     setSyncStatus({ state: "syncing", message: "Moving row..." });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({

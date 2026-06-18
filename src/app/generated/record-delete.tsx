@@ -14,7 +14,7 @@ import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { FieldSchema } from "@dpeek/formless-schema";
-import { useSchemaAppTarget } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 
 export type RecordLabelFieldConfig = {
   fieldName: string;
@@ -47,6 +47,7 @@ export function DeleteRecordButton({
   triggerData?: Record<string, string>;
 }) {
   const appTarget = useSchemaAppTarget();
+  const writeOptions = useSchemaAppWriteOptions();
   const record = useRecord(recordId);
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -61,7 +62,14 @@ export function DeleteRecordButton({
     setSyncStatus({ state: "syncing", message: `Deleting ${recordLabel}...` });
 
     try {
-      await submitOperation(appTarget, entityName, deleteOperation.operationName, { recordId });
+      await submitOperation(
+        appTarget,
+        entityName,
+        deleteOperation.operationName,
+        { recordId },
+        undefined,
+        writeOptions,
+      );
       setOpen(false);
       onDeleted?.();
       setSyncStatus({ state: "idle", message: `Deleted ${recordLabel}.` });
