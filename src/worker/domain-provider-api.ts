@@ -1143,8 +1143,8 @@ function domainMappingsFromControlPlaneRecords(
           ...(profile === "publicSite" ? { surface: "site" as const } : {}),
           ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
           enabled: record.values.enabled === true,
-          createdAt: String(record.values.createdAt),
-          updatedAt: String(record.values.updatedAt),
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
         };
       }),
   ).filter((mapping) => !isForgottenDomainMapping(mapping, cleanupEvents));
@@ -1219,8 +1219,8 @@ function redirectIntentsFromControlPlaneRecords(
       preservePath: record.values.preservePath === true,
       preserveQueryString: record.values.preserveQueryString === true,
       enabled: record.values.enabled === true,
-      createdAt: String(record.values.createdAt),
-      updatedAt: String(record.values.updatedAt),
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
     }))
     .filter((intent) => !isForgottenRedirectIntent(intent, cleanupEvents))
     .sort((left, right) => left.fromHost.localeCompare(right.fromHost));

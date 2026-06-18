@@ -60,12 +60,17 @@ type RecordRow = {
   entity: string;
   values_json: string;
   created_at: string;
+  updated_at: string;
   deleted_at: string | null;
 };
 
 type SchemaRow = {
   schema_json: string;
   updated_at: string;
+};
+
+type TableInfoRow = {
+  name: string;
 };
 
 type AppliedPackageAppMigrationRow = {
@@ -367,6 +372,7 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       entity TEXT NOT NULL,
       values_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
       deleted_at TEXT
     );
 
@@ -394,8 +400,20 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       created_at TEXT NOT NULL
     );
   `);
+  ensureRecordUpdatedAtColumn(storage);
 
   ensurePackageAppMigrationTables(storage);
+}
+
+function ensureRecordUpdatedAtColumn(storage: DurableObjectStorage) {
+  const columns = storage.sql.exec<TableInfoRow>("PRAGMA table_info(records)").toArray();
+
+  if (columns.some((column) => column.name === "updated_at")) {
+    return;
+  }
+
+  storage.sql.exec("ALTER TABLE records ADD COLUMN updated_at TEXT");
+  storage.sql.exec("UPDATE records SET updated_at = COALESCE(deleted_at, created_at)");
 }
 
 export function ensureOperationInvocationTables(storage: DurableObjectStorage) {
@@ -873,7 +891,7 @@ function planSourceSchemaReset(
       continue;
     }
 
-    prunedRecords.push({ ...record, values });
+    prunedRecords.push({ ...record, values, updatedAt: changedAt });
   }
 
   return { schema, changedAt, prunedRecords };
@@ -887,10 +905,12 @@ function materializeSourceSchemaResetRecordPrunes(
     storage.sql.exec(
       `
         UPDATE records
-        SET values_json = ?
+        SET values_json = ?,
+            updated_at = ?
         WHERE id = ?
       `,
       JSON.stringify(record.values),
+      record.updatedAt,
       record.id,
     );
   }
@@ -932,13 +952,14 @@ function materializeSourceRecords(storage: DurableObjectStorage, records: Stored
 function materializeSourceRecord(storage: DurableObjectStorage, record: StoredRecord) {
   storage.sql.exec(
     `
-      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO records (id, entity, values_json, created_at, updated_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `,
     record.id,
     record.entity,
     JSON.stringify(record.values),
     record.createdAt,
+    record.updatedAt,
     record.deletedAt ?? null,
   );
 }
@@ -976,7 +997,7 @@ function planSnapshotRestore(
       continue;
     }
 
-    const tombstonedRecord = { ...record, deletedAt: restoredAt };
+    const tombstonedRecord = { ...record, updatedAt: restoredAt, deletedAt: restoredAt };
     recordsToTombstone.push(tombstonedRecord);
     changedRecords.push(tombstonedRecord);
   }
@@ -993,18 +1014,20 @@ function planSnapshotRestore(
 function upsertSnapshotRecord(storage: DurableObjectStorage, record: StoredRecord) {
   storage.sql.exec(
     `
-      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO records (id, entity, values_json, created_at, updated_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         entity = excluded.entity,
         values_json = excluded.values_json,
         created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
         deleted_at = excluded.deleted_at
     `,
     record.id,
     record.entity,
     JSON.stringify(record.values),
     record.createdAt,
+    record.updatedAt,
     record.deletedAt ?? null,
   );
 }
@@ -1059,6 +1082,7 @@ function planPackageAppMigrationMaterialization(input: {
       entity: create.entity,
       values: create.values,
       createdAt: create.createdAt ?? input.changedAt,
+      updatedAt: create.createdAt ?? input.changedAt,
     } satisfies StoredRecord;
 
     recordsById.set(record.id, record);
@@ -1071,6 +1095,7 @@ function planPackageAppMigrationMaterialization(input: {
     const record = {
       ...existingRecord,
       values,
+      updatedAt: input.changedAt,
     } satisfies StoredRecord;
 
     recordsById.set(record.id, record);
@@ -1081,6 +1106,7 @@ function planPackageAppMigrationMaterialization(input: {
     const existingRecord = activePackageAppMigrationRecord(recordsById, tombstone);
     const record = {
       ...existingRecord,
+      updatedAt: input.changedAt,
       deletedAt: input.changedAt,
     } satisfies StoredRecord;
 
@@ -1174,18 +1200,20 @@ function patchPackageAppMigrationRecordValues(
 function upsertPackageAppMigrationRecord(storage: DurableObjectStorage, record: StoredRecord) {
   storage.sql.exec(
     `
-      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO records (id, entity, values_json, created_at, updated_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         entity = excluded.entity,
         values_json = excluded.values_json,
         created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
         deleted_at = excluded.deleted_at
     `,
     record.id,
     record.entity,
     JSON.stringify(record.values),
     record.createdAt,
+    record.updatedAt,
     record.deletedAt ?? null,
   );
 }
@@ -1381,7 +1409,7 @@ function assertPackageAppMigrationDeletes(
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {
   const rows = storage.sql
     .exec<RecordRow>(
-      "SELECT id, entity, values_json, created_at, deleted_at FROM records ORDER BY created_at ASC",
+      "SELECT id, entity, values_json, created_at, updated_at, deleted_at FROM records ORDER BY created_at ASC",
     )
     .toArray();
 
@@ -1395,7 +1423,7 @@ export function getActiveRecordsByEntity(
   const rows = storage.sql
     .exec<RecordRow>(
       `
-        SELECT id, entity, values_json, created_at, deleted_at
+        SELECT id, entity, values_json, created_at, updated_at, deleted_at
         FROM records
         WHERE entity = ? AND deleted_at IS NULL
         ORDER BY created_at ASC
@@ -1674,6 +1702,7 @@ export function patchStoredRecordOutcome(
     const record = materializePatchedMutationRecord(
       storage,
       {
+        changedAt,
         entity: mutation.entity,
         existingRecord,
         values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
@@ -1944,15 +1973,18 @@ function materializeActionTombstoneRecord(
 ): StoredRecord {
   const record: StoredRecord = {
     ...existingRecord,
+    updatedAt: deletedAt,
     deletedAt,
   };
 
   storage.sql.exec(
     `
       UPDATE records
-      SET deleted_at = ?
+      SET updated_at = ?,
+          deleted_at = ?
       WHERE id = ?
     `,
+    deletedAt,
     deletedAt,
     record.id,
   );
@@ -2042,7 +2074,7 @@ function materializeActionRecordWrites(
         typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
 
       writtenRecords.push(
-        materializePatchedActionRecord(storage, record, values, validateConstraints),
+        materializePatchedActionRecord(storage, record, values, changedAt, validateConstraints),
       );
       continue;
     }
@@ -2064,11 +2096,13 @@ function materializePatchedActionRecord(
   storage: DurableObjectStorage,
   existingRecord: StoredRecord,
   values: RecordValues,
+  changedAt: string,
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord {
   const record: StoredRecord = {
     ...existingRecord,
     values,
+    updatedAt: changedAt,
   };
 
   validateConstraints?.(record.entity, record.values, { ignoreRecordId: record.id });
@@ -2076,10 +2110,12 @@ function materializePatchedActionRecord(
   storage.sql.exec(
     `
       UPDATE records
-      SET values_json = ?
+      SET values_json = ?,
+          updated_at = ?
       WHERE id = ?
     `,
     JSON.stringify(record.values),
+    record.updatedAt,
     record.id,
   );
 
@@ -2138,6 +2174,7 @@ function materializeCreatedMutationRecord(
 function materializePatchedMutationRecord(
   storage: DurableObjectStorage,
   input: {
+    changedAt: string;
     entity: string;
     existingRecord: StoredRecord;
     values: RecordValues;
@@ -2147,6 +2184,7 @@ function materializePatchedMutationRecord(
   const record: StoredRecord = {
     ...input.existingRecord,
     values: input.values,
+    updatedAt: input.changedAt,
   };
 
   validateConstraints?.(input.entity, record.values, { ignoreRecordId: record.id });
@@ -2154,10 +2192,12 @@ function materializePatchedMutationRecord(
   storage.sql.exec(
     `
       UPDATE records
-      SET values_json = ?
+      SET values_json = ?,
+          updated_at = ?
       WHERE id = ?
     `,
     JSON.stringify(record.values),
+    record.updatedAt,
     record.id,
   );
 
@@ -2184,15 +2224,18 @@ function materializeDeletedMutationRecord(
 ): StoredRecord {
   const record: StoredRecord = {
     ...existingRecord,
+    updatedAt: deletedAt,
     deletedAt,
   };
 
   storage.sql.exec(
     `
       UPDATE records
-      SET deleted_at = ?
+      SET updated_at = ?,
+          deleted_at = ?
       WHERE id = ?
     `,
+    deletedAt,
     deletedAt,
     record.id,
   );
@@ -2252,17 +2295,19 @@ function insertCreatedRecord(
     entity,
     values,
     createdAt,
+    updatedAt: createdAt,
   };
 
   storage.sql.exec(
     `
-      INSERT INTO records (id, entity, values_json, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO records (id, entity, values_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
     `,
     record.id,
     record.entity,
     JSON.stringify(record.values),
     record.createdAt,
+    record.updatedAt,
   );
 
   return record;
@@ -2305,6 +2350,7 @@ function storedRecordsEqual(left: StoredRecord | undefined, right: StoredRecord)
     left.id === right.id &&
     left.entity === right.entity &&
     left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
     left.deletedAt === right.deletedAt &&
     recordValuesEqual(left.values, right.values)
   );
@@ -2329,7 +2375,7 @@ export function getStoredRecord(
 ): StoredRecord | undefined {
   const row = storage.sql
     .exec<RecordRow>(
-      "SELECT id, entity, values_json, created_at, deleted_at FROM records WHERE id = ?",
+      "SELECT id, entity, values_json, created_at, updated_at, deleted_at FROM records WHERE id = ?",
       recordId,
     )
     .next();
@@ -2797,6 +2843,7 @@ function recordFromRow(row: RecordRow): StoredRecord {
     entity: row.entity,
     values: parseJsonRecord(row.values_json),
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 
   if (row.deleted_at !== null) {

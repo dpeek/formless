@@ -310,6 +310,7 @@ describe("authority", () => {
               href: "https://cdn.example.com/installed-manual.webp",
             },
             createdAt: "2026-05-22T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
           },
           {
             id: "rec_installed_site_image_place",
@@ -320,6 +321,7 @@ describe("authority", () => {
               order: 9000,
             },
             createdAt: "2026-05-22T00:00:01.000Z",
+            updatedAt: "2026-05-22T00:00:01.000Z",
           },
         ],
       }),
@@ -1237,6 +1239,36 @@ describe("authority", () => {
         values: { title: "First" },
       },
       'Create mutations are disabled for entity "task".',
+    );
+  });
+
+  it("rejects caller-provided system fields in generic mutation values", async () => {
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-system-created",
+        entity: "task",
+        op: "create",
+        values: { title: "System field", updatedAt: "2026-05-28T00:00:00.000Z" },
+      },
+      'Record values must not include system field "updatedAt".',
+    );
+
+    const created = await postMutation("mutation-system-patch-source", {
+      title: "Patch source",
+      done: false,
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-system-patch",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { updatedAt: "2026-05-28T00:00:01.000Z" },
+      },
+      'Mutation values must not include system field "updatedAt".',
     );
   });
 
@@ -3538,6 +3570,7 @@ function taskSnapshotRecord(id: string, title: string): StoredRecord {
     entity: "task",
     values: { title, done: false },
     createdAt: "2026-05-07T00:10:00.000Z",
+    updatedAt: "2026-05-07T00:10:00.000Z",
   };
 }
 

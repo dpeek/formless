@@ -27,6 +27,7 @@ export const testSiteSeedRecords: StoredRecord[] = [
       backgroundColor: "#09090B",
     },
     createdAt: "2026-05-05T00:00:00.000Z",
+    updatedAt: "2026-05-05T00:00:00.000Z",
   },
   block("rec_site_media_avatar", "2026-05-05T00:00:01.000Z", {
     type: "image",
@@ -365,6 +366,7 @@ function block(id: string, createdAt: string, values: StoredRecord["values"]): S
     entity: "block",
     values,
     createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -386,5 +388,6 @@ function placement(
       ...(label === undefined ? {} : { label }),
     },
     createdAt,
+    updatedAt: createdAt,
   };
 }

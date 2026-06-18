@@ -1370,6 +1370,7 @@ describe("Formless Site CLI", () => {
       ...controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
       {
         createdAt: now,
+        updatedAt: now,
         entity: "deployment-config",
         id: "staging",
         values: {
@@ -1975,8 +1976,11 @@ describe("Formless Site CLI", () => {
     );
 
     expect(refreshRequests).toHaveLength(1);
-    expect(String(refreshRequests[0]?.body)).toContain("grant_type=refresh_token");
-    expect(String(refreshRequests[0]?.body)).toContain("refresh_token=expired-refresh-token");
+    const refreshBody = refreshRequests[0]?.body;
+    expect(refreshBody).toBeInstanceOf(URLSearchParams);
+    const refreshBodyText = refreshBody instanceof URLSearchParams ? refreshBody.toString() : "";
+    expect(refreshBodyText).toContain("grant_type=refresh_token");
+    expect(refreshBodyText).toContain("refresh_token=expired-refresh-token");
     expect(deployInputs).toHaveLength(1);
     expect(deployInputs[0]?.secrets.CLOUDFLARE_API_TOKEN).toBe("refreshed-access-token");
 
@@ -4853,6 +4857,7 @@ function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredR
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "route:labs:admin",
@@ -4868,6 +4873,7 @@ function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredR
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "route:labs:schema",
@@ -4883,6 +4889,7 @@ function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredR
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -5353,6 +5360,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: adminRouteId,
@@ -5368,6 +5376,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: publicRouteId,
@@ -5384,6 +5393,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: schemaRouteId,
@@ -5399,6 +5409,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: domainRouteId,
@@ -5416,6 +5427,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: deployTargetId,
@@ -5434,6 +5446,7 @@ function controlPlaneRecords(
         ...(options.credentialRef === undefined ? {} : { credentialRef: options.credentialRef }),
       },
       createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -5466,6 +5479,7 @@ function controlPlaneRecordsWithProviderObservation(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -5513,6 +5527,7 @@ function redirectRouteRecord(fromHost: string, toHost: string): StoredRecord {
       updatedAt: now,
     },
     createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -5535,6 +5550,7 @@ function disabledHostRouteRecord(host: string, installId: string): StoredRecord 
       updatedAt: now,
     },
     createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -6168,6 +6184,7 @@ function block(id: string, createdAt: string, values: StoredRecord["values"]): S
   return {
     id,
     createdAt,
+    updatedAt: createdAt,
     entity: "block",
     values,
   };

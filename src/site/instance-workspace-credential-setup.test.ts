@@ -740,6 +740,7 @@ function deploymentConfigRecord(input: {
       updatedAt: createdAt,
     },
     createdAt,
+    updatedAt: createdAt,
   };
 }
 

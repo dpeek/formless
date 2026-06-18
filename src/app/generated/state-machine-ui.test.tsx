@@ -337,6 +337,7 @@ function taskRecord(id: string, status: "todo" | "doing" | "done"): StoredRecord
       status,
     },
     createdAt: "2026-06-09T00:00:00.000Z",
+    updatedAt: "2026-06-09T00:00:00.000Z",
   };
 }
 

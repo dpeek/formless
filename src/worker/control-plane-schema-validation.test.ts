@@ -155,8 +155,6 @@ describe("control-plane schema runtime validation", () => {
         enabled: true,
         targetUrl: "https://personal.example.workers.dev",
         providerFamily: "cloudflare",
-        createdAt: now,
-        updatedAt: now,
       },
     });
 
@@ -555,6 +553,7 @@ describe("control-plane schema runtime validation", () => {
               id: "task-1",
               entity: "task",
               createdAt: "2026-05-28T00:00:00.000Z",
+              updatedAt: "2026-05-28T00:00:00.000Z",
               values: {
                 title: "Hidden",
                 done: true,
@@ -573,8 +572,6 @@ describe("control-plane schema runtime validation", () => {
   });
 });
 
-const now = "2026-06-02T00:00:00.000Z";
-
 async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", label: string) {
   const installId = packageAppKey === "site" ? "personal" : "tasks";
 
@@ -590,8 +587,6 @@ async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", lab
       label,
       status: "installed",
       storageIdentity: `app:${installId}`,
-      createdAt: now,
-      updatedAt: now,
     },
   });
 }
@@ -630,8 +625,6 @@ function mountRouteValues(appInstall: string, overrides: Record<string, unknown>
     targetProfile: "app",
     appInstall,
     surface: "admin",
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   };
 }
@@ -647,8 +640,6 @@ function redirectRouteValues(overrides: Record<string, unknown> = {}) {
     statusCode: "308",
     preservePath: true,
     preserveQueryString: true,
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   };
 }

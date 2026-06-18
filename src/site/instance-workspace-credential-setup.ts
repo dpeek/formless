@@ -10,7 +10,7 @@ import {
   instanceControlPlaneSchema,
 } from "@dpeek/formless-instance-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
-import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   parseInstanceWorkspaceManifestJson,
@@ -351,7 +351,7 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
     id: existing?.id ?? targetId,
     entity: "deployment-config",
     values: {
-      ...existing?.values,
+      ...withoutControlPlaneLifecycleValues(existing?.values ?? {}),
       targetId,
       targetKind: "instance",
       label: stringRecordValue(existing, "label") ?? targetId,
@@ -361,10 +361,9 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
       accountId: input.account.id,
       workerName,
       credentialRef: input.credentialRef,
-      createdAt: stringRecordValue(existing, "createdAt") ?? input.now,
-      updatedAt: input.now,
     },
     createdAt: existing?.createdAt ?? input.now,
+    updatedAt: input.now,
   };
   const records = [
     ...(current?.records.filter(
@@ -736,6 +735,14 @@ function stringRecordValue(
   const value = record?.values[fieldName];
 
   return typeof value === "string" ? value : undefined;
+}
+
+function withoutControlPlaneLifecycleValues(values: RecordValues): RecordValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  ) as RecordValues;
 }
 
 function normalizeAlchemyProfile(

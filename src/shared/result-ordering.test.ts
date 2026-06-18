@@ -174,6 +174,8 @@ function recordsByIdFrom(records: StoredRecord[]) {
 }
 
 function placementRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  const createdAt = `2026-05-07T00:00:${id}.000Z`;
+
   return {
     id,
     entity: "block-placement",
@@ -182,6 +184,7 @@ function placementRecord(id: string, values: StoredRecord["values"]): StoredReco
       slot: "main",
       ...values,
     },
-    createdAt: `2026-05-07T00:00:${id}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }

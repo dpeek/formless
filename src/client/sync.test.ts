@@ -1036,18 +1036,21 @@ describe("client sync", () => {
     const controlPlaneTarget = instanceControlPlaneClientTarget();
     const routeRecord: StoredRecord = {
       createdAt: "2026-04-28T00:00:01.000Z",
+      updatedAt: "2026-04-28T00:00:01.000Z",
       entity: "route",
       id: "route-1",
       values: { enabled: true, kind: "mount" },
     };
     const deploymentRecord: StoredRecord = {
       createdAt: "2026-04-28T00:00:02.000Z",
+      updatedAt: "2026-04-28T00:00:02.000Z",
       entity: "deployment-config",
       id: "deployment-1",
       values: { enabled: true, label: "Primary" },
     };
     const mediaRecord: StoredRecord = {
       createdAt: "2026-04-28T00:00:03.000Z",
+      updatedAt: "2026-04-28T00:00:03.000Z",
       entity: "block",
       id: "block-1",
       values: { mediaAsset: "hero.webp" },
@@ -2147,15 +2150,20 @@ function installedCRMIdentity(installId: string) {
 }
 
 function record(id: string, title: string, done = false): StoredRecord {
+  const timestamp = `2026-04-28T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "task",
     values: { title, done },
-    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
 function resourceRecord(id: string, name: string): StoredRecord {
+  const timestamp = `2026-04-28T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "resource",
@@ -2164,11 +2172,14 @@ function resourceRecord(id: string, name: string): StoredRecord {
       kind: "role",
       unit: "day",
     },
-    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
 function rateRecord(id: string, resourceId: string, cardId: string): StoredRecord {
+  const timestamp = `2026-04-28T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "rate",
@@ -2181,7 +2192,8 @@ function rateRecord(id: string, resourceId: string, cardId: string): StoredRecor
       priceSet: true,
       currency: "usd",
     },
-    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 

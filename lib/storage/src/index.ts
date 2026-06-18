@@ -65,6 +65,7 @@ export function isStoredRecord(value: unknown): value is StoredRecord {
     typeof value.entity === "string" &&
     isRecordValues(value.values) &&
     typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string" &&
     (!("deletedAt" in value) || typeof value.deletedAt === "string")
   );
 }
@@ -119,6 +120,7 @@ function parseStorageSnapshotRecords(value: unknown): StoredRecord[] {
       entity: record.entity,
       values: { ...record.values },
       createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
       ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
     };
   });

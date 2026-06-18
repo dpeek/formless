@@ -1,4 +1,5 @@
 import {
+  isSystemFieldName,
   isValidStoredFieldValue as isValidStoredFieldValueForType,
   parseAppSchema,
   runtimeControlPlaneEntityMetadata,
@@ -271,6 +272,7 @@ function validateSnapshotRecords(snapshot: StorageSnapshot) {
     }
 
     assertIsoTimestamp(`Storage snapshot record "${record.id}" createdAt`, record.createdAt);
+    assertIsoTimestamp(`Storage snapshot record "${record.id}" updatedAt`, record.updatedAt);
 
     if (record.deletedAt !== undefined) {
       assertIsoTimestamp(`Storage snapshot record "${record.id}" deletedAt`, record.deletedAt);
@@ -401,6 +403,8 @@ export function validateCompatibleSchemaChange(
 }
 
 function validatePatchValues(values: Record<string, unknown>, entity: EntitySchema) {
+  assertNoSystemRecordValues("Mutation values", values, entity);
+
   const patchValues: Partial<RecordValues> = {};
 
   for (const [fieldName, fieldValue] of Object.entries(values)) {
@@ -426,6 +430,8 @@ export function validateRecordValues(
     schema: AppSchema;
   },
 ): RecordValues {
+  assertNoSystemRecordValues("Record values", values, entity);
+
   for (const fieldName of Object.keys(values)) {
     if (!entity.fields[fieldName]) {
       throw new BadRequestError(`Unknown field "${fieldName}".`);
@@ -496,6 +502,18 @@ export function validateRecordValues(
   }
 
   return validated;
+}
+
+function assertNoSystemRecordValues(
+  context: string,
+  values: Record<string, unknown>,
+  entity: EntitySchema,
+) {
+  for (const fieldName of Object.keys(values)) {
+    if (!entity.fields[fieldName] && isSystemFieldName(fieldName)) {
+      throw new BadRequestError(`${context} must not include system field "${fieldName}".`);
+    }
+  }
 }
 
 function getStoredRecordForValidation(

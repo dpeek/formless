@@ -397,6 +397,7 @@ export type InstanceWorkspaceStoredRecord = {
   deletedAt?: string;
   entity: string;
   id: string;
+  updatedAt: string;
   values: InstanceWorkspaceRecordValues;
 };
 

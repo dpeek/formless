@@ -204,6 +204,7 @@ describe("instance deployment runtime state", () => {
 function deploymentConfigRecord(values: Record<string, unknown> = {}): StoredRecord {
   return {
     createdAt: "2026-05-28T00:00:00.000Z",
+    updatedAt: "2026-05-28T00:00:00.000Z",
     entity: "deployment-config",
     id: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
     values: {

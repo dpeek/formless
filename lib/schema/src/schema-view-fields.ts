@@ -1,5 +1,7 @@
 import { assertExactKeys, isRecord, parseRequiredNonEmptyString } from "./schema-parse-helpers.ts";
 import { parseFieldCommitPolicy, parseFieldEditor } from "./schema-view-field-parser.ts";
+import { isSystemFieldName } from "./fields.ts";
+import { isFieldCommitPolicy, isFieldEditor } from "./field-types.ts";
 import type {
   CreateViewFieldSchema,
   EntitySchema,
@@ -47,15 +49,25 @@ function parseListViewField(
   }
 
   const field = entity.fields[fieldName];
-  if (!field) {
+  const systemField = field === undefined && isSystemFieldName(fieldName);
+  if (!field && !systemField) {
     throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
   }
 
   const context = `View field "${viewName}.${fieldName}"`;
-  const editor = parseFieldEditor(context, value.editor, field);
-  const commit = parseFieldCommitPolicy(context, value.commit, field);
+  const editor =
+    field === undefined
+      ? parseSystemFieldEditor(context, value.editor)
+      : parseFieldEditor(context, value.editor, field);
+  const commit =
+    field === undefined
+      ? parseSystemFieldCommitPolicy(context, value.commit)
+      : parseFieldCommitPolicy(context, value.commit, field);
   const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
-  const presentation = parseOptionalFieldPresentation(context, value.presentation, field);
+  const presentation =
+    field === undefined
+      ? undefined
+      : parseOptionalFieldPresentation(context, value.presentation, field);
 
   return {
     editor,
@@ -102,20 +114,51 @@ function parseCreateViewField(
   }
 
   const field = entity.fields[fieldName];
-  if (!field) {
+  const systemField = field === undefined && isSystemFieldName(fieldName);
+  if (!field && !systemField) {
     throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
   }
 
   const context = `View field "${viewName}.${fieldName}"`;
-  const editor = parseFieldEditor(context, value.editor, field);
+  const editor =
+    field === undefined
+      ? parseSystemFieldEditor(context, value.editor)
+      : parseFieldEditor(context, value.editor, field);
   const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
-  const presentation = parseOptionalFieldPresentation(context, value.presentation, field);
+  const presentation =
+    field === undefined
+      ? undefined
+      : parseOptionalFieldPresentation(context, value.presentation, field);
 
   return {
     editor,
     ...(visibleWhen === undefined ? {} : { visibleWhen }),
     ...(presentation === undefined ? {} : { presentation }),
   };
+}
+
+function parseSystemFieldEditor(context: string, value: unknown): "text" {
+  if (value === undefined) {
+    return "text";
+  }
+
+  if (!isFieldEditor(value)) {
+    throw new Error(`${context} has unsupported editor "${formatUnknownValue(value)}".`);
+  }
+
+  return "text";
+}
+
+function parseSystemFieldCommitPolicy(context: string, value: unknown): "field-commit" {
+  if (value === undefined) {
+    return "field-commit";
+  }
+
+  if (!isFieldCommitPolicy(value)) {
+    throw new Error(`${context} has unsupported commit policy "${formatUnknownValue(value)}".`);
+  }
+
+  return "field-commit";
 }
 
 export function parseOptionalFieldPresentation(
@@ -259,6 +302,34 @@ function parseFieldVisibilityCondition(
       parseFieldVisibilityValue(`${context} visibleWhen values[${index}]`, candidate, field),
     ),
   };
+}
+
+function formatUnknownValue(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return `${value}`;
+  }
+
+  if (value === undefined) {
+    return "undefined";
+  }
+
+  if (value === null) {
+    return "null";
+  }
+
+  if (typeof value === "symbol") {
+    return value.description === undefined ? "Symbol()" : `Symbol(${value.description})`;
+  }
+
+  if (typeof value === "function") {
+    return "[function]";
+  }
+
+  return JSON.stringify(value) ?? "[object]";
 }
 
 export function parseFieldVisibilityValue(

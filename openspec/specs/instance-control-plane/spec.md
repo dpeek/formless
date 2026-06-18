@@ -49,7 +49,9 @@ records.
 - GIVEN an app install is created
 - WHEN the control-plane write commits
 - THEN the `app-install` record stores stable install identity, package app key,
-  label, status, created time, and updated time
+  label, and status
+- AND created and updated timestamps come from record system fields rather than
+  app-install value fields
 - AND install identity, package app key, and storage identity are immutable
   after creation
 - AND the record stores display-safe storage identity such as `app:<installId>`
@@ -209,8 +211,10 @@ records.
   optional match host, match path, optional match prefix, kind, optional target
   profile, optional app install reference, optional surface, optional access
   policy, optional deployment config reference, redirect target fields,
-  redirect policy fields, created time, and updated time
+  and redirect policy fields
 - **AND** route records remain flat schema records
+- **AND** created and updated timestamps come from record system fields rather
+  than route value fields
 
 #### Scenario: Mount route
 
@@ -260,9 +264,23 @@ records.
 - **GIVEN** an owner or admin writes route intent
 - **WHEN** the write commits
 - **THEN** the write stores desired route state only
+- **AND** the write does not accept created or updated timestamp input
+- **AND** Authority materializes route lifecycle timestamps as record system
+  metadata
 - **AND** no installed app data, provider resource, runtime secret, provider
   evidence, cleanup history, deployment attempt, or drift report is mutated by
   the route write itself
+
+#### Scenario: Control-plane lifecycle metadata
+
+- **GIVEN** `app-install`, `route`, or `deployment-config` records are created,
+  updated, synced, snapshotted, restored, or projected
+- **WHEN** control-plane lifecycle timestamps are needed
+- **THEN** `createdAt` and `updatedAt` are read from record system fields
+- **AND** create and update operation inputs for those entities do not include
+  lifecycle timestamp fields
+- **AND** generated management tables and forms omit lifecycle timestamps unless
+  a display-only surface explicitly includes the record system fields
 
 ### Requirement: Deployment Config Records
 
@@ -276,7 +294,9 @@ The system SHALL represent deploy target and provider selection as one
 - **THEN** each record stores camelCase fields for target id, target kind,
   display label, enabled state, display-safe target URL, provider family,
   provider account id, worker name, optional display-safe credential reference,
-  created time, updated time, and optional latest deployment observation fields
+  and optional latest deployment observation fields
+- **AND** created and updated timestamps come from record system fields rather
+  than deployment-config value fields
 - **AND** the target id and provider family are immutable after creation
 - **AND** a Cloudflare credential reference identifies a Formless-owned local
   OAuth credential without embedding OAuth access tokens, OAuth refresh tokens,

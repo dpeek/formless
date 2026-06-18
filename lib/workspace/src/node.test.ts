@@ -413,7 +413,9 @@ describe("workspace app package source resolver", () => {
       sourceSchemaPath: fixture.sourceSchemaPath,
     });
     expect(linkedPackage?.sourceSchema.entities.task).toBeDefined();
-    expect(linkedPackage?.seedRecords).toEqual(fixture.seedRecords);
+    expect(linkedPackage?.seedRecords).toEqual(
+      materializedWorkspaceSeedRecords(fixture.seedRecords),
+    );
   });
 
   it("rejects linked source schemas that do not parse as app schemas", async () => {
@@ -609,6 +611,18 @@ type WorkspaceAppPackageFixture = {
   sourceSchemaHash: SourceSchemaHash;
   sourceSchemaPath: string;
 };
+
+function materializedWorkspaceSeedRecords(records: unknown[]): unknown[] {
+  return records.map((record) => {
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      return record;
+    }
+
+    const createdAt = "createdAt" in record ? record.createdAt : undefined;
+
+    return typeof createdAt === "string" ? { ...record, updatedAt: createdAt } : record;
+  });
+}
 
 type WorkspaceAppPackageFixtureOptions = {
   capabilities?: AppPackageCapability[];

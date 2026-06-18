@@ -23,6 +23,7 @@ export function siteBlockRecord(id: string, values: StoredRecord["values"]): Sto
     entity: "block",
     values,
     createdAt: "2026-05-05T00:00:40.000Z",
+    updatedAt: "2026-05-05T00:00:40.000Z",
   };
 }
 
@@ -37,5 +38,6 @@ export function sitePlacementRecord(id: string, label: string, order: number): S
       order,
     },
     createdAt: "2026-05-05T00:00:40.000Z",
+    updatedAt: "2026-05-05T00:00:40.000Z",
   };
 }

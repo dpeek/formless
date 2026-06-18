@@ -370,6 +370,7 @@ function blockPlacementRecord(
       ...(options.slot === undefined ? {} : { slot: options.slot }),
     },
     createdAt: "2026-05-05T00:00:40.000Z",
+    updatedAt: "2026-05-05T00:00:40.000Z",
   };
 }
 
@@ -2349,6 +2350,7 @@ describe("public site renderer", () => {
           body: "I co-founded [pricinglab.example](https://pricinglab.example) and **OpenSurf**.",
         },
         createdAt: "2026-05-05T00:00:32.000Z",
+        updatedAt: "2026-05-05T00:00:32.000Z",
       },
       {
         id: "rec_site_place_home_markdown",
@@ -2359,6 +2361,7 @@ describe("public site renderer", () => {
           order: 1500,
         },
         createdAt: "2026-05-05T00:00:33.000Z",
+        updatedAt: "2026-05-05T00:00:33.000Z",
       },
     ];
     const html = renderSitePage("home", records);
@@ -2385,6 +2388,7 @@ describe("public site renderer", () => {
           ),
         },
         createdAt: "2026-05-05T00:00:34.000Z",
+        updatedAt: "2026-05-05T00:00:34.000Z",
       },
       {
         id: "rec_site_place_home_json_markdown",
@@ -2395,6 +2399,7 @@ describe("public site renderer", () => {
           order: 1501,
         },
         createdAt: "2026-05-05T00:00:35.000Z",
+        updatedAt: "2026-05-05T00:00:35.000Z",
       },
     ];
     const html = renderSitePage("home", records);
@@ -2497,6 +2502,7 @@ describe("public site renderer", () => {
           label: "Copyright 2026 David Peek. All rights reserved.",
         },
         createdAt: "2026-05-05T00:00:32.000Z",
+        updatedAt: "2026-05-05T00:00:32.000Z",
       },
       {
         id: "rec_site_place_footer_copyright",
@@ -2507,6 +2513,7 @@ describe("public site renderer", () => {
           order: 3000,
         },
         createdAt: "2026-05-05T00:00:33.000Z",
+        updatedAt: "2026-05-05T00:00:33.000Z",
       },
     );
     const html = renderSitePage("home", records);
@@ -2934,6 +2941,7 @@ describe("generated collection home", () => {
           order: 1000,
         },
         createdAt: "2026-05-05T00:00:40.000Z",
+        updatedAt: "2026-05-05T00:00:40.000Z",
       },
       {
         id: "placement-2",
@@ -2945,6 +2953,7 @@ describe("generated collection home", () => {
           order: 2000,
         },
         createdAt: "2026-05-05T00:00:41.000Z",
+        updatedAt: "2026-05-05T00:00:41.000Z",
       },
     ]);
     const html = renderToStaticMarkup(
@@ -3072,6 +3081,7 @@ describe("generated collection home", () => {
           order: 1000,
         },
         createdAt: "2026-05-05T00:00:40.000Z",
+        updatedAt: "2026-05-05T00:00:40.000Z",
       },
       {
         id: "placement-2",
@@ -3083,6 +3093,7 @@ describe("generated collection home", () => {
           slot: "actions",
         },
         createdAt: "2026-05-05T00:00:41.000Z",
+        updatedAt: "2026-05-05T00:00:41.000Z",
       },
     ]);
     const nestedHtml = renderToStaticMarkup(
@@ -3544,6 +3555,7 @@ describe("generated collection home", () => {
         label: "Post without metadata",
       },
       createdAt: "2026-05-05T00:00:00.000Z",
+      updatedAt: "2026-05-05T00:00:00.000Z",
     };
 
     const html = renderRecordTableHtml({
@@ -5237,6 +5249,7 @@ describe("generated forms and records", () => {
       entity: "metric",
       values: { price: 475, margin: 0.125 },
       createdAt: "2026-04-29T00:00:01.000Z",
+      updatedAt: "2026-04-29T00:00:01.000Z",
     };
 
     applyBootstrapResponse(bootstrap([record]));
@@ -5959,12 +5972,14 @@ describe("generated forms and records", () => {
           entity: "mediaAssetCase",
           values: { mediaAssetId: "cover.webp" },
           createdAt: "2026-05-26T00:00:00.000Z",
+          updatedAt: "2026-05-26T00:00:00.000Z",
         },
         {
           id: "media-asset-case-2",
           entity: "mediaAssetCase",
           values: { mediaAssetId: "../bad.webp" },
           createdAt: "2026-05-26T00:00:01.000Z",
+          updatedAt: "2026-05-26T00:00:01.000Z",
         },
       ]),
     );
@@ -6034,6 +6049,7 @@ describe("generated forms and records", () => {
       entity: "media",
       values: { href: "https://example.com/cover.webp" },
       createdAt: "2026-05-05T00:00:51.000Z",
+      updatedAt: "2026-05-05T00:00:51.000Z",
     };
     const formData = new FormData();
     formData.set("href", "https://example.com/create.webp");
@@ -6737,6 +6753,7 @@ function discriminatedTaskRecord(
     entity: "task",
     values: { kind, title, done },
     createdAt: "2026-05-11T00:00:00.000Z",
+    updatedAt: "2026-05-11T00:00:00.000Z",
   };
 }
 
@@ -6746,6 +6763,7 @@ function taskPlacementRecord(id: string, parent: string, task: string): StoredRe
     entity: "task-placement",
     values: { parent, task, order: 1 },
     createdAt: "2026-05-11T00:00:01.000Z",
+    updatedAt: "2026-05-11T00:00:01.000Z",
   };
 }
 
@@ -7109,11 +7127,14 @@ function taskRecord(
   done: boolean,
   dueDate = "2026-05-01",
 ): StoredRecord {
+  const createdAt = `2026-04-29T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "task",
     values: { title, done, dueDate },
-    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -7135,6 +7156,7 @@ function enumRecord(kind: string): StoredRecord {
     entity: "task",
     values: { kind },
     createdAt: "2026-04-29T00:00:01.000Z",
+    updatedAt: "2026-04-29T00:00:01.000Z",
   };
 }
 
@@ -7144,6 +7166,7 @@ function markdownRecord(body: string): StoredRecord {
     entity: "task",
     values: { body },
     createdAt: "2026-04-29T00:00:01.000Z",
+    updatedAt: "2026-04-29T00:00:01.000Z",
   };
 }
 
@@ -7153,33 +7176,43 @@ function numberRecord(estimate: number): StoredRecord {
     entity: "task",
     values: { estimate },
     createdAt: "2026-04-29T00:00:01.000Z",
+    updatedAt: "2026-04-29T00:00:01.000Z",
   };
 }
 
 function resourceRecord(id: string, name: string): StoredRecord {
+  const createdAt = `2026-04-29T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "resource",
     values: { name, kind: "role", unit: "day" },
-    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
 function cardRecord(id: string, name: string): StoredRecord {
+  const createdAt = `2026-04-29T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "card",
     values: { name, isDefault: false, marginMin: 0.4, marginMed: 0.5, marginMax: 0.6 },
-    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
 function rateRecord(id: string, resource: string): StoredRecord {
+  const createdAt = `2026-04-29T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "rate",
     values: { resource },
-    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -7199,6 +7232,8 @@ function rateCardRateRecordWithCost(
   cost: number,
   price: number,
 ): StoredRecord {
+  const createdAt = `2026-04-29T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity: "rate",
@@ -7211,7 +7246,8 @@ function rateCardRateRecordWithCost(
       priceSet: true,
       currency: "usd",
     },
-    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -7498,6 +7534,7 @@ function fieldEditorCharacterizationRecord(): StoredRecord {
       resource: "resource-1",
     },
     createdAt: "2026-05-05T00:00:50.000Z",
+    updatedAt: "2026-05-05T00:00:50.000Z",
   };
 }
 

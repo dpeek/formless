@@ -365,6 +365,31 @@ The system SHALL use field behavior to define validation, defaults, conversion, 
 - AND `completion` requires a boolean field
 - AND `valueOrInteraction` requires an optional date field
 
+### Requirement: Record System Fields
+
+The system SHALL expose record system fields as schema-addressable metadata
+separate from entity value fields.
+
+#### Scenario: Address record metadata
+
+- GIVEN runtime code builds the field catalog for an entity
+- WHEN the entity's addressable fields are inspected
+- THEN system fields include `id`, `createdAt`, `updatedAt`, and `deletedAt`
+- AND those fields provide labels, display type metadata, and query/display
+  references without being stored in the record's flat `values`
+- AND record lifecycle timestamps use system field references rather than
+  entity value fields named `createdAt` or `updatedAt`
+
+#### Scenario: Keep system fields non-writable
+
+- GIVEN an operation input, generated create/edit view, public form, CLI write,
+  automation write, or record-plan step targets record fields
+- WHEN the target is a system field
+- THEN schema parsing or Authority validation rejects the write target
+- AND callers cannot provide, patch, unset, or override system field values
+- AND generated ids and generated timestamps may still be used for normal value
+  fields declared by the entity schema
+
 ### Requirement: Schema Builder
 
 The system SHALL provide a Builder surface that emits normal app schema and

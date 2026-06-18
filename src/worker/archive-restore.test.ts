@@ -418,6 +418,7 @@ function siteRecord(id: string, key: string): StoredRecord {
       label: `${key} Site`,
     },
     createdAt: "2026-05-23T00:00:00.000Z",
+    updatedAt: "2026-05-23T00:00:00.000Z",
   };
 }
 
@@ -431,6 +432,7 @@ function coreImageBlock(name: string): StoredRecord {
       mediaAssetId: `${name}.png`,
     },
     createdAt: "2026-05-23T00:00:02.000Z",
+    updatedAt: "2026-05-23T00:00:02.000Z",
   };
 }
 

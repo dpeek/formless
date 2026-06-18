@@ -37,6 +37,18 @@ import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
+function materializedWorkspaceSeedRecords(records: unknown[]): unknown[] {
+  return records.map((record) => {
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      return record;
+    }
+
+    const createdAt = "createdAt" in record ? record.createdAt : undefined;
+
+    return typeof createdAt === "string" ? { ...record, updatedAt: createdAt } : record;
+  });
+}
+
 type AppInstallFailureResponse = {
   code: string;
   error: string;
@@ -287,7 +299,6 @@ describe("instance app install API routes", () => {
         recordId: "route:personal:admin",
         values: {
           matchPath: "/apps/personal-admin",
-          updatedAt: "2026-05-28T00:00:00.000Z",
         },
       },
     );
@@ -348,7 +359,6 @@ describe("instance app install API routes", () => {
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {
-    const now = "2026-06-02T00:00:00.000Z";
     const conflictingRoute = await postAdminJson<MutationResponse>(
       "/api/formless/control-plane/mutations",
       {
@@ -361,8 +371,6 @@ describe("instance app install API routes", () => {
           kind: "mount",
           targetProfile: "instance",
           surface: "admin",
-          createdAt: now,
-          updatedAt: now,
         },
       },
     );
@@ -396,7 +404,6 @@ describe("instance app install API routes", () => {
         recordId: "route:personal:admin",
         values: {
           matchPath: "/apps/personal-admin",
-          updatedAt: "2026-06-02T00:00:00.000Z",
         },
       },
     );
@@ -604,7 +611,9 @@ describe("instance app install API routes", () => {
         ["orders", "/apps/orders/schema", "schema"],
       ]);
       expect(bootstrap.body.schema).toEqual(workspacePackage.sourceSchema);
-      expect(bootstrap.body.records).toEqual(workspacePackage.seedRecords);
+      expect(bootstrap.body.records).toEqual(
+        materializedWorkspaceSeedRecords(workspacePackage.seedRecords),
+      );
       expect(bootstrap.body.cursor).toBe(workspacePackage.seedRecords.length);
     } finally {
       await privateHarness.dispose();

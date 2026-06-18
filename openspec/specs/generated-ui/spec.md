@@ -218,6 +218,18 @@ The system SHALL render generated field displays and editors from field behavior
 - AND unknown tokens fall back to visible text or neutral styling
 - AND empty `valueOrInteraction` date controls stay quiet until hover or focus
 
+#### Scenario: System field display
+
+- GIVEN a generated table, detail, list, or record surface includes a record
+  system field
+- WHEN generated UI renders the field
+- THEN it resolves the value from record metadata such as `id`, `createdAt`,
+  `updatedAt`, or `deletedAt`
+- AND it uses the same display formatting and layout pipeline as schema value
+  fields
+- AND it treats the field as read-only regardless of table display metadata,
+  field editor metadata, or operation availability
+
 ### Requirement: Media Field Package Adapter
 
 The system SHALL keep generated field layout and commit behavior in generated UI
@@ -251,6 +263,16 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 - THEN hidden literal defaults are submitted
 - AND hidden `visibleWhen` fields are not submitted
 - AND active union variant fields follow draft discriminator values
+
+#### Scenario: Non-writable fields stay out of authoring
+
+- GIVEN a generated create form, edit form, inline table editor, or row edit
+  dialog resolves field configs
+- WHEN a field is a record system field or otherwise non-writable
+- THEN generated UI does not render a user-editable control for that field
+- AND generated UI does not include that field in operation input
+- AND read-only metadata display remains available through display-only
+  surfaces
 
 #### Scenario: Local workspace auto-save after generated writes
 
@@ -526,10 +548,11 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **GIVEN** owner or admin users inspect routes
 - **WHEN** route records render
 - **THEN** routes show match host, match path, match prefix, kind, target
-  profile, app install target, surface, redirect target, enabled state, and
-  timestamps where applicable
+  profile, app install target, surface, redirect target, and enabled state
 - **AND** routes are grouped or filterable by instance paths, host mappings,
   public Site routes, redirects, and app install
+- **AND** route lifecycle timestamps may render only as read-only record metadata
+  in surfaces that explicitly include them
 - **AND** browser route management does not expose deployment config grouping,
   deployment config table columns, or target-selection controls
 
@@ -563,6 +586,8 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **AND** route edits do not imply provider mutation
 - **AND** deployment config observation cache fields may be displayed for status
   but are not editable route intent
+- **AND** route lifecycle timestamps are system-owned metadata, not editable
+  route intent
 
 #### Scenario: Primary deployment target default
 

@@ -292,10 +292,13 @@ function projectionSnapshot(records: StoredRecord[]): BrowserReplicaProjectionSn
 }
 
 function record(id: string, entity: string, values: StoredRecord["values"]): StoredRecord {
+  const createdAt = `2026-04-28T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity,
     values,
-    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }

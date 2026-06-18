@@ -299,7 +299,6 @@ async function handleInternalUpdateAppInstallPackageFacts(
     );
   }
 
-  const now = nowIsoString();
   noopWriteNotifier.apply(() =>
     patchStoredRecordOutcome(
       storage,
@@ -311,10 +310,13 @@ async function handleInternalUpdateAppInstallPackageFacts(
         values: {
           packageRevision: parsed.packageRevision,
           sourceSchemaHash: parsed.sourceSchemaHash,
-          updatedAt: now,
         },
       },
-      undefined,
+      withoutControlPlaneLifecycleValues({
+        ...getStoredRecord(storage, parsed.installId)?.values,
+        packageRevision: parsed.packageRevision,
+        sourceSchemaHash: parsed.sourceSchemaHash,
+      }),
       validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema, {
         packageResolver,
       }),
@@ -524,6 +526,7 @@ function preflightAppInstallRecordSet(
     createdAt,
     entity: record.entity,
     id: record.id,
+    updatedAt: createdAt,
     values: record.values,
   }));
   const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema, {
@@ -733,8 +736,6 @@ function legacyAppRouteMigrationCandidate(
       surface,
       targetProfile: routeKind === "publicSite" ? "public-site" : "app",
     }),
-    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
-    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
   };
 
   return [
@@ -768,8 +769,8 @@ function legacyDomainMappingMigrationCandidate(
     ...(profile === "publicSite" ? { surface: "site" as const } : {}),
     ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
     enabled: record.values.enabled === true,
-    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
-    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
   const values = domainMappingRouteRecordValues(storage, mapping);
   return [
@@ -810,8 +811,8 @@ function legacyRedirectIntentMigrationCandidate(
       "legacy redirect-intent.preserveQueryString",
     ),
     enabled: record.values.enabled === true,
-    createdAt: stringRecordValue(record.values.createdAt) ?? record.createdAt,
-    updatedAt: stringRecordValue(record.values.updatedAt) ?? record.createdAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
   return [
     {
@@ -903,8 +904,6 @@ function upsertDeploymentConfigRecord(
     enabled: true,
     targetUrl: input.targetUrl,
     providerFamily: "cloudflare",
-    createdAt: input.now,
-    updatedAt: input.now,
   };
 
   upsertControlPlaneRecord(storage, {
@@ -1006,8 +1005,6 @@ function domainMappingRouteRecordValues(
       surface,
       targetProfile: domainMappingTargetProfile(mapping.profile),
     }),
-    createdAt: mapping.createdAt,
-    updatedAt: mapping.updatedAt,
   };
 }
 
@@ -1033,8 +1030,6 @@ function redirectRouteRecordValues(intent: InstanceDomainProviderRedirectIntent)
     statusCode: String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
     preservePath: intent.preservePath,
     preserveQueryString: intent.preserveQueryString,
-    createdAt: intent.createdAt,
-    updatedAt: intent.updatedAt,
   };
 }
 
@@ -1060,7 +1055,6 @@ function disableMissingControlPlaneIntentRecords(
       values: {
         ...record.values,
         enabled: false,
-        updatedAt: input.now,
       },
     });
   }
@@ -1280,6 +1274,14 @@ function booleanRecordValue(value: unknown, field: string): boolean {
 
 function stringRecordValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function withoutControlPlaneLifecycleValues(values: RecordValues): RecordValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  ) as RecordValues;
 }
 
 function parseRouteString(field: string, value: unknown): `/${string}` {

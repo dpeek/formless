@@ -800,6 +800,7 @@ function canonicalStoredRecord(record: StoredRecord): StoredRecord {
     entity: record.entity,
     values: stableJsonValue(record.values) as RecordValues,
     createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
 }
@@ -928,6 +929,7 @@ function parseWorkspacePackageSeedRecord(value: unknown, context: string): Store
     entity: value.entity,
     values: value.values,
     createdAt: value.createdAt,
+    updatedAt: value.createdAt,
   };
 }
 

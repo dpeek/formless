@@ -10,6 +10,7 @@ import type {
   EntityUnionVariantSchema,
   FieldCommitPolicy,
   FieldEditor,
+  FieldRef,
   FieldPresentationSchema,
   FieldVisibilityConditionSchema,
   FieldVisibilityValue,
@@ -62,11 +63,21 @@ export type {
 export type { StateMachineFieldConfig, TransitionStateActionConfig };
 export { fieldLabel } from "./view-labels.ts";
 
+export function recordFieldRef(fieldConfig: { fieldName: string; fieldRef?: FieldRef }): FieldRef {
+  return fieldConfig.fieldRef ?? { kind: "value", name: fieldConfig.fieldName };
+}
+
+export function recordFieldIsWritable(fieldConfig: { writable?: boolean }) {
+  return fieldConfig.writable ?? true;
+}
+
 export type RecordFieldConfig = {
   fieldName: string;
+  fieldRef?: FieldRef;
   field: FieldSchema;
   editor: FieldEditor;
   commit: FieldCommitPolicy;
+  writable?: boolean;
   label?: string;
   format?: TableColumnFormat;
   stateMachine?: StateMachineFieldConfig;

@@ -222,6 +222,7 @@ function record(id: string): StoredRecord {
     entity: "task",
     values: { title: "First", done: false },
     createdAt: "2026-04-28T00:00:01.000Z",
+    updatedAt: "2026-04-28T00:00:01.000Z",
   };
 }
 

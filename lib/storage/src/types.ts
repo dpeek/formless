@@ -9,6 +9,7 @@ export type StoredRecord = {
   entity: EntityName;
   values: RecordValues;
   createdAt: string;
+  updatedAt: string;
   deletedAt?: string;
 };
 

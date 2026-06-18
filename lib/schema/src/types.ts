@@ -36,11 +36,12 @@ export type StoredRecord = {
   entity: string;
   values: RecordValues;
   createdAt: string;
+  updatedAt: string;
   deletedAt?: string;
 };
 
 /** System-owned fields that can be addressed by schema query expressions. */
-export type SystemFieldName = "id" | "createdAt" | "deletedAt";
+export type SystemFieldName = "id" | "createdAt" | "updatedAt" | "deletedAt";
 
 /** Reference to a value field or supported system field in a query expression. */
 export type FieldRef = { kind: "value"; name: string } | { kind: "system"; name: SystemFieldName };

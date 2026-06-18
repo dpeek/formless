@@ -6,6 +6,7 @@ import type {
   EditViewSchema,
   EntitySchema,
   FieldSchema,
+  TableColumnDisplay,
   ItemViewSchema,
   TableViewSchema,
 } from "@dpeek/formless-schema";
@@ -28,7 +29,8 @@ import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectStateMachineField, selectTransitionStateActions } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
-import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
+import { selectAddressableRecordFieldConfig } from "./field-configs.ts";
+import { humanizeFieldName } from "./view-labels.ts";
 
 export type TableResultModel = {
   columns: TableColumnConfig[];
@@ -120,7 +122,11 @@ function selectTableColumns(
       }
 
       const referencedEntity = schema.entities[sourceReferenceField.to] as EntitySchema;
-      const field = referencedEntity.fields[column.field] as FieldSchema;
+      const selectedField = selectAddressableRecordFieldConfig(referencedEntity, column.field);
+      const stateMachine =
+        selectedField.fieldRef.kind === "value"
+          ? selectStateMachineField(referencedEntity, column.field)
+          : undefined;
       const referencedUpdateOperation = selectEntityOperationByKind(
         sourceReferenceField.to,
         referencedEntity,
@@ -136,19 +142,27 @@ function selectTableColumns(
         referencedEntity,
         ...(referencedUpdateOperation === undefined ? {} : { referencedUpdateOperation }),
         fieldName: column.field,
-        field,
-        editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
-        commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
-        label: column.label ?? fieldLabel(column.field, field),
-        ...(selectStateMachineField(referencedEntity, column.field) === undefined
-          ? {}
-          : { stateMachine: selectStateMachineField(referencedEntity, column.field) }),
+        fieldRef: selectedField.fieldRef,
+        field: selectedField.field,
+        editor:
+          selectedField.writable && column.editor !== undefined
+            ? column.editor
+            : getFieldTypeBehavior(selectedField.field).defaultEditor,
+        commit:
+          selectedField.writable && column.commit !== undefined
+            ? column.commit
+            : getFieldTypeBehavior(selectedField.field).defaultCommit,
+        writable: selectedField.writable,
+        label: column.label ?? selectedField.label,
+        ...(stateMachine === undefined ? {} : { stateMachine }),
         ...(column.align === undefined ? {} : { align: column.align }),
         ...(column.width === undefined ? {} : { width: column.width }),
-        display: column.display ?? "editor",
+        display: selectFieldColumnDisplay(column.display, selectedField.writable, "editor"),
         ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
         format: column.format ?? "plain",
-        ...(column.presentation === undefined ? {} : { presentation: column.presentation }),
+        ...(selectedField.writable && column.presentation !== undefined
+          ? { presentation: column.presentation }
+          : {}),
       };
     }
 
@@ -191,29 +205,51 @@ function selectTableColumns(
       };
     }
 
-    const field = entity.fields[column.field] as FieldSchema;
-    const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
-    const valueUnit = selectValueUnitField(entity, column.valueUnit?.unitField);
+    const selectedField = selectAddressableRecordFieldConfig(entity, column.field);
+    const stateMachine =
+      selectedField.fieldRef.kind === "value"
+        ? selectStateMachineField(entity, column.field)
+        : undefined;
+    const referenceItem = selectReferenceItem(
+      schema,
+      selectedField.field,
+      column.referenceItemView,
+    );
+    const valueUnit = selectedField.writable
+      ? selectValueUnitField(entity, column.valueUnit?.unitField)
+      : undefined;
 
     return {
       type: "field",
       key: `field:${column.field}`,
       fieldName: column.field,
-      field,
-      editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
-      commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
-      label: column.label ?? fieldLabel(column.field, field),
-      ...(selectStateMachineField(entity, column.field) === undefined
-        ? {}
-        : { stateMachine: selectStateMachineField(entity, column.field) }),
+      fieldRef: selectedField.fieldRef,
+      field: selectedField.field,
+      editor:
+        selectedField.writable && column.editor !== undefined
+          ? column.editor
+          : getFieldTypeBehavior(selectedField.field).defaultEditor,
+      commit:
+        selectedField.writable && column.commit !== undefined
+          ? column.commit
+          : getFieldTypeBehavior(selectedField.field).defaultCommit,
+      writable: selectedField.writable,
+      label: column.label ?? selectedField.label,
+      ...(stateMachine === undefined ? {} : { stateMachine }),
       ...(column.align === undefined ? {} : { align: column.align }),
       ...(column.width === undefined ? {} : { width: column.width }),
-      display: column.display ?? (ordering?.fieldName === column.field ? "hidden" : "editor"),
+      display: selectFieldColumnDisplay(
+        column.display,
+        selectedField.writable,
+        ordering?.fieldName === column.field ? "hidden" : "editor",
+      ),
       ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
       format: column.format ?? "plain",
       ...(referenceItem === undefined ? {} : { referenceItem }),
       ...(valueUnit === undefined ? {} : { valueUnit }),
-      ...(column.presentation === undefined ? {} : { presentation: column.presentation }),
+      ...(selectedField.writable && column.presentation !== undefined
+        ? { presentation: column.presentation }
+        : {}),
     };
   });
 
@@ -247,6 +283,18 @@ function tableFooterColumnName(column: TableColumnConfig) {
   }
 
   return `${column.sourceReferenceFieldName}.${column.fieldName}`;
+}
+
+function selectFieldColumnDisplay(
+  display: TableColumnDisplay | undefined,
+  writable: boolean,
+  defaultDisplay: TableColumnDisplay,
+) {
+  if (display === "hidden") {
+    return "hidden";
+  }
+
+  return writable ? (display ?? defaultDisplay) : "readOnly";
 }
 
 function selectSyntheticOrderingMenuColumn(
@@ -388,29 +436,55 @@ function selectEditViewConfig(schema: AppSchema, editViewName: string): EditView
 }
 
 function selectEditFields(view: EditViewSchema, entity: EntitySchema): RecordFieldConfig[] {
-  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
-    fieldName,
-    field: entity.fields[fieldName] as FieldSchema,
-    editor: viewField.editor,
-    commit: viewField.commit,
-    ...(selectStateMachineField(entity, fieldName) === undefined
-      ? {}
-      : { stateMachine: selectStateMachineField(entity, fieldName) }),
-    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-  }));
+  return Object.entries(view.fields).flatMap(([fieldName, viewField]) => {
+    const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+
+    if (!selectedField.writable) {
+      return [];
+    }
+
+    const stateMachine = selectStateMachineField(entity, fieldName);
+
+    return [
+      {
+        fieldName,
+        fieldRef: selectedField.fieldRef,
+        field: selectedField.field,
+        editor: viewField.editor,
+        commit: viewField.commit,
+        writable: true,
+        label: selectedField.label,
+        ...(stateMachine === undefined ? {} : { stateMachine }),
+        ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+        ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
+      },
+    ];
+  });
 }
 
 function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordFieldConfig[] {
-  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
-    fieldName,
-    field: entity.fields[fieldName] as FieldSchema,
-    editor: viewField.editor,
-    commit: viewField.commit,
-    ...(selectStateMachineField(entity, fieldName) === undefined
-      ? {}
-      : { stateMachine: selectStateMachineField(entity, fieldName) }),
-    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-  }));
+  return Object.entries(view.fields).map(([fieldName, viewField]) => {
+    const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+    const stateMachine =
+      selectedField.fieldRef.kind === "value"
+        ? selectStateMachineField(entity, fieldName)
+        : undefined;
+
+    return {
+      fieldName,
+      fieldRef: selectedField.fieldRef,
+      field: selectedField.field,
+      editor: selectedField.writable ? viewField.editor : "text",
+      commit: selectedField.writable ? viewField.commit : "field-commit",
+      writable: selectedField.writable,
+      label: selectedField.label,
+      ...(stateMachine === undefined ? {} : { stateMachine }),
+      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+      ...(selectedField.writable && viewField.presentation !== undefined
+        ? { presentation: viewField.presentation }
+        : {}),
+    };
+  });
 }
 
 function invokeActionNames(

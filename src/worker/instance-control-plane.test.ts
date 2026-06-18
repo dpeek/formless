@@ -251,7 +251,6 @@ describe("instance control-plane API routes", () => {
       recordId: "route:personal:admin",
       values: {
         matchPath: "/apps/personal-admin",
-        updatedAt: "2026-05-28T00:00:00.000Z",
       },
     });
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -270,7 +269,6 @@ describe("instance control-plane API routes", () => {
   });
 
   it("validates app install package keys and route capabilities against resolved packages", async () => {
-    const now = "2026-05-28T00:00:00.000Z";
     const missingPackage = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
       mutationId: "mutation-missing-package-install",
       entity: "app-install",
@@ -281,8 +279,6 @@ describe("instance control-plane API routes", () => {
         label: "Missing",
         status: "installed",
         storageIdentity: "app:missing",
-        createdAt: now,
-        updatedAt: now,
       },
     });
 
@@ -310,8 +306,6 @@ describe("instance control-plane API routes", () => {
           appInstall: "tasks",
           surface: "public-site",
           access: "anonymous",
-          createdAt: now,
-          updatedAt: now,
         },
       },
     );
@@ -325,7 +319,6 @@ describe("instance control-plane API routes", () => {
   });
 
   it("validates public Site route capability through the active package resolver", async () => {
-    const now = "2026-06-15T00:00:00.000Z";
     const sourceSchemaHash = await computeSourceSchemaHash(siteSourceSchema);
     const privateHarness = await createWorkerHarness(
       "src/worker/index.ts",
@@ -375,8 +368,6 @@ describe("instance control-plane API routes", () => {
             appInstall: "private-site",
             surface: "public-site",
             access: "anonymous",
-            createdAt: now,
-            updatedAt: now,
           },
         },
       );
@@ -509,8 +500,6 @@ describe("instance control-plane API routes", () => {
           kind: "mount",
           targetProfile: "instance",
           surface: "admin",
-          createdAt: now,
-          updatedAt: now,
         }),
         legacyAppRouteRecord("legacy:personal:admin", {
           appInstall: "personal",
@@ -570,8 +559,6 @@ describe("instance control-plane API routes", () => {
           label: "Runner",
           status: "installed",
           storageIdentity: "app:runner",
-          createdAt: "2026-05-28T00:00:00.000Z",
-          updatedAt: "2026-05-28T00:00:00.000Z",
         },
       },
       { actorKind: "runner" },
@@ -603,8 +590,6 @@ describe("instance control-plane API routes", () => {
         targetUrl: "https://instance.example.workers.dev",
         providerFamily: "cloudflare",
         credentialRef: "secret:cloudflare:primary",
-        createdAt: now,
-        updatedAt: now,
       },
     });
     const rejectedRecord = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
@@ -619,8 +604,6 @@ describe("instance control-plane API routes", () => {
         targetUrl: "https://secret.example.workers.dev",
         providerFamily: "cloudflare",
         accountId: "CF_API_TOKEN",
-        createdAt: now,
-        updatedAt: now,
       },
     });
     const rejectedSnapshot = await postAdminJson<FailureResponse>(
@@ -796,14 +779,13 @@ function secretSnapshot(now: string): StorageSnapshot {
         id: "secret",
         entity: "app-install",
         createdAt: now,
+        updatedAt: now,
         values: {
           installId: "secret",
           packageAppKey: "site",
           label: "CF_API_TOKEN=hidden",
           status: "installed",
           storageIdentity: "app:secret",
-          createdAt: now,
-          updatedAt: now,
         },
       },
     ],
@@ -926,6 +908,7 @@ function legacyAppInstallRecord(installId: string, now: string): StoredRecord {
     id: installId,
     entity: "app-install",
     createdAt: now,
+    updatedAt: now,
     values: {
       installId,
       packageAppKey: "site",
@@ -934,8 +917,6 @@ function legacyAppInstallRecord(installId: string, now: string): StoredRecord {
       label: "Personal Site",
       status: "installed",
       storageIdentity: `app:${installId}`,
-      createdAt: now,
-      updatedAt: now,
     },
   };
 }
@@ -945,6 +926,7 @@ function legacyAppRouteRecord(id: string, values: StoredRecord["values"]): Store
     id,
     entity: "app-route",
     createdAt: String(values.createdAt),
+    updatedAt: String(values.updatedAt ?? values.createdAt),
     values,
   };
 }
@@ -954,6 +936,7 @@ function legacyDomainMappingRecord(id: string, values: StoredRecord["values"]): 
     id,
     entity: "domain-mapping",
     createdAt: String(values.createdAt),
+    updatedAt: String(values.updatedAt ?? values.createdAt),
     values,
   };
 }
@@ -963,17 +946,29 @@ function legacyRedirectIntentRecord(id: string, values: StoredRecord["values"]):
     id,
     entity: "redirect-intent",
     createdAt: String(values.createdAt),
+    updatedAt: String(values.updatedAt ?? values.createdAt),
     values,
   };
 }
 
 function routeRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  const recordValues = withoutLifecycleValues(values);
+
   return {
     id,
     entity: "route",
     createdAt: String(values.createdAt),
-    values,
+    updatedAt: String(values.updatedAt ?? values.createdAt),
+    values: recordValues,
   };
+}
+
+function withoutLifecycleValues(values: StoredRecord["values"]): StoredRecord["values"] {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  ) as StoredRecord["values"];
 }
 
 function textField(label: string) {

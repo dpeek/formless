@@ -686,6 +686,7 @@ function recordPlanWritePlanForStep(
       entity: step.entity,
       values,
       createdAt: state.envelope.receivedAt,
+      updatedAt: state.envelope.receivedAt,
     } satisfies StoredRecord;
 
     recordPlanRecordWritten(step, record, state);
@@ -716,6 +717,7 @@ function recordPlanWritePlanForStep(
     const record = {
       ...existingRecord,
       values: mutation.recordValues,
+      updatedAt: state.envelope.receivedAt,
     } satisfies StoredRecord;
 
     recordPlanRecordWritten(step, record, state);
@@ -739,6 +741,7 @@ function recordPlanWritePlanForStep(
 
   const record = {
     ...existingRecord,
+    updatedAt: state.envelope.receivedAt,
     deletedAt: state.envelope.receivedAt,
   } satisfies StoredRecord;
 

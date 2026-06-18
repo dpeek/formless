@@ -150,5 +150,6 @@ function placementRecord(id: string, values: StoredRecord["values"]): StoredReco
     entity: "block-placement",
     values,
     createdAt: `2026-05-11T00:00:00.000Z`,
+    updatedAt: `2026-05-11T00:00:00.000Z`,
   };
 }

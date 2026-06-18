@@ -1,4 +1,5 @@
 import { assertSchemaLocalEntityKey } from "./entity-names.ts";
+import { isSystemFieldName } from "./fields.ts";
 import {
   assertExactKeys,
   isFiniteNumber,
@@ -963,6 +964,10 @@ function parseRecordPlanValues(
 
   return Object.fromEntries(
     entries.map(([fieldName, expression]) => {
+      if (isSystemFieldName(fieldName)) {
+        throw new Error(`${context}.${fieldName} must not target system field "${fieldName}".`);
+      }
+
       const field = entity.fields[fieldName];
       if (!field) {
         throw new Error(`${context}.${fieldName} references unknown field "${fieldName}".`);

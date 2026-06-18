@@ -53,6 +53,27 @@ describe("schema table views", () => {
       "computed",
     ]);
   });
+
+  it("parses system field display columns without requiring value fields", () => {
+    const schema = tableParserSchema();
+    schema.tableViews.rateTable.columns = [
+      ...schema.tableViews.rateTable.columns,
+      { type: "field", field: "updatedAt", display: "editor" },
+      { type: "referenceField", referenceField: "resource", field: "createdAt" },
+    ];
+
+    const tableViews = parseTableViews(
+      schema.tableViews,
+      schema.entities,
+      schema.itemViews,
+      schema.readModels,
+    );
+
+    expect(tableViews.rateTable?.columns.slice(-2)).toEqual([
+      { type: "field", field: "updatedAt", display: "editor" },
+      { type: "referenceField", referenceField: "resource", field: "createdAt" },
+    ]);
+  });
 });
 
 function tableParserSchema(): AppSchema {

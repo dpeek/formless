@@ -691,6 +691,8 @@ function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnaps
 }
 
 function siteRecord(id: string, key: string): StoredRecord {
+  const createdAt = "2026-05-23T00:00:00.000Z";
+
   return {
     id,
     entity: "site",
@@ -698,11 +700,16 @@ function siteRecord(id: string, key: string): StoredRecord {
       key,
       label: `${key} Site`,
     },
-    createdAt: "2026-05-23T00:00:00.000Z",
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
 function blockRecord(id: string, label: string, values: StoredRecord["values"] = {}): StoredRecord {
+  const createdAt = id.endsWith("missing")
+    ? "2026-05-23T00:00:03.000Z"
+    : "2026-05-23T00:00:02.000Z";
+
   return {
     id,
     entity: "block",
@@ -711,7 +718,8 @@ function blockRecord(id: string, label: string, values: StoredRecord["values"] =
       label,
       ...values,
     },
-    createdAt: id.endsWith("missing") ? "2026-05-23T00:00:03.000Z" : "2026-05-23T00:00:02.000Z",
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -734,6 +742,8 @@ function coreImageBlock(name: string): StoredRecord {
 }
 
 function placementRecord(id: string, parent: string, block: string): StoredRecord {
+  const createdAt = "2026-05-23T00:00:04.000Z";
+
   return {
     id,
     entity: "block-placement",
@@ -742,7 +752,8 @@ function placementRecord(id: string, parent: string, block: string): StoredRecor
       block,
       order: 1000,
     },
-    createdAt: "2026-05-23T00:00:04.000Z",
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -863,6 +874,7 @@ function taskRecord(id: string, title: string, done: boolean): StoredRecord {
     entity: "task",
     values: { done, title },
     createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -872,5 +884,6 @@ function companyRecord(id: string, name: string): StoredRecord {
     entity: "company",
     values: { name },
     createdAt: now,
+    updatedAt: now,
   };
 }

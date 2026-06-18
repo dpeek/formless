@@ -149,6 +149,12 @@ describe("storage snapshot package", () => {
         records: [{ ...record("record-1"), createdAt: 123 }],
       }),
     ).toThrow("Storage snapshot records[0] must be a stored record.");
+    expect(() =>
+      parseStorageSnapshot({
+        ...storageSnapshot(),
+        records: [{ ...record("record-1"), updatedAt: 123 }],
+      }),
+    ).toThrow("Storage snapshot records[0] must be a stored record.");
 
     expect(() =>
       parseStorageSnapshot({
@@ -191,5 +197,6 @@ function record(id: string): StoredRecord {
     entity: "task",
     values: { title: "First", done: false },
     createdAt: "2026-04-28T00:00:01.000Z",
+    updatedAt: "2026-04-28T00:00:01.000Z",
   };
 }

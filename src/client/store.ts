@@ -23,6 +23,7 @@ import { nowIsoString } from "../shared/clock.ts";
 import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import type { QueryEvaluationContext, QueryExpression } from "@dpeek/formless-schema";
+import { resolveRecordFieldValue, type FieldRef } from "@dpeek/formless-schema";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AggregateSchema, AppSchema, ComputedValueSchema } from "@dpeek/formless-schema";
 
@@ -324,9 +325,21 @@ export function useRecordCreatedAt(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]?.createdAt);
 }
 
+export function useRecordUpdatedAt(recordId: string) {
+  return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]?.updatedAt);
+}
+
 export function useRecordField(recordId: string, fieldName: string) {
   return useClientStoreSelector((snapshot) => {
     return snapshot.recordsById[recordId]?.values[fieldName];
+  });
+}
+
+export function useRecordFieldValue(recordId: string, fieldRef: FieldRef) {
+  return useClientStoreSelector((snapshot) => {
+    const record = snapshot.recordsById[recordId];
+
+    return record === undefined ? undefined : resolveRecordFieldValue(record, fieldRef);
   });
 }
 
@@ -541,6 +554,7 @@ function storedRecordsEqual(left: StoredRecord | undefined, right: StoredRecord)
     left.id === right.id &&
     left.entity === right.entity &&
     left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
     left.deletedAt === right.deletedAt &&
     recordValuesEqual(left.values, right.values)
   );

@@ -38,6 +38,7 @@ import type {
   TableFooterSlotConfig,
   TransitionStateActionConfig,
 } from "../../client/views.ts";
+import { recordFieldIsWritable } from "../../client/views.ts";
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
 import {
   evaluateNumericExpression,
@@ -678,7 +679,7 @@ function RecordTableCell({
     );
   }
 
-  if (column.display === "readOnly") {
+  if (column.display === "readOnly" || !recordFieldIsWritable(column)) {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
         <RecordFieldDisplay column={column} recordId={recordId} />
@@ -838,7 +839,7 @@ function ResolvedReferenceFieldTableCell({
     return <EmptyReferenceFieldCell column={column} justifyClass={justifyClass} />;
   }
 
-  if (column.display === "readOnly") {
+  if (column.display === "readOnly" || !recordFieldIsWritable(column)) {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
         <RecordFieldDisplay column={column} recordId={referenceRecordId} />

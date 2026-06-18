@@ -380,6 +380,7 @@ describe("instance runtime route resolution", () => {
 function routeRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   return {
     createdAt: "2026-06-02T00:00:00.000Z",
+    updatedAt: "2026-06-02T00:00:00.000Z",
     entity: "route",
     id,
     values,

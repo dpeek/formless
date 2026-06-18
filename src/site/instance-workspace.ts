@@ -3591,7 +3591,7 @@ function controlPlaneAppInstallRecords(
         stringRecordValue(record, "status") === "installed",
     )
     .map((record) => ({
-      createdAt: stringRecordValue(record, "createdAt") ?? record.createdAt,
+      createdAt: record.createdAt,
       installId: String(record.values.installId),
       label: stringRecordValue(record, "label") ?? String(record.values.installId),
       packageAppKey: String(record.values.packageAppKey),
@@ -3602,7 +3602,7 @@ function controlPlaneAppInstallRecords(
         ? {}
         : { sourceSchemaHash: sourceSchemaHashRecordValue(record) }),
       status: "installed" as const,
-      updatedAt: stringRecordValue(record, "updatedAt") ?? record.createdAt,
+      updatedAt: record.updatedAt,
     }))
     .sort((left, right) => left.installId.localeCompare(right.installId));
 }
@@ -4775,8 +4775,9 @@ function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive:
         .filter((record) => !record.deletedAt && controlPlaneRecordEntity(record) !== undefined)
         .map((record) => ({
           ...record,
-          values: normalizeControlPlaneGeneratedValues(record.values, generatedAt),
+          values: withoutControlPlaneLifecycleValues(record.values),
           createdAt: generatedAt,
+          updatedAt: generatedAt,
         }));
     }
 
@@ -4790,12 +4791,12 @@ function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive:
   return nextArchive;
 }
 
-function normalizeControlPlaneGeneratedValues(values: RecordValues, generatedAt: string) {
-  return {
-    ...values,
-    ...(values.createdAt === undefined ? {} : { createdAt: generatedAt }),
-    ...(values.updatedAt === undefined ? {} : { updatedAt: generatedAt }),
-  };
+function withoutControlPlaneLifecycleValues(values: RecordValues): RecordValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  ) as RecordValues;
 }
 
 function withSingleTarget(
@@ -4934,6 +4935,7 @@ function deploymentConfigRecordFromTarget(input: {
       updatedAt: now,
     },
     createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -4976,6 +4978,7 @@ function appInstallControlPlaneRecords(install: AppInstall): StoredRecord[] {
       updatedAt: install.updatedAt,
     },
     createdAt: install.createdAt,
+    updatedAt: install.updatedAt,
   };
   const routes: StoredRecord[] = [
     {
@@ -4992,6 +4995,7 @@ function appInstallControlPlaneRecords(install: AppInstall): StoredRecord[] {
         updatedAt: install.updatedAt,
       },
       createdAt: install.createdAt,
+      updatedAt: install.updatedAt,
     },
     {
       id: `route:${install.installId}:schema`,
@@ -5007,6 +5011,7 @@ function appInstallControlPlaneRecords(install: AppInstall): StoredRecord[] {
         updatedAt: install.updatedAt,
       },
       createdAt: install.createdAt,
+      updatedAt: install.updatedAt,
     },
   ];
 
@@ -5028,6 +5033,7 @@ function appInstallControlPlaneRecords(install: AppInstall): StoredRecord[] {
         updatedAt: install.updatedAt,
       },
       createdAt: install.createdAt,
+      updatedAt: install.updatedAt,
     });
   }
 
@@ -6734,7 +6740,7 @@ async function writeLocalWorkspaceDeploymentConfigSource(input: {
     id: targetId,
     entity: "deployment-config",
     values: {
-      ...existing?.values,
+      ...withoutControlPlaneLifecycleValues(existing?.values ?? {}),
       targetId,
       targetKind: "instance",
       label: stringRecordValue(existing, "label") ?? targetId,
@@ -6743,10 +6749,9 @@ async function writeLocalWorkspaceDeploymentConfigSource(input: {
       providerFamily: "cloudflare",
       accountId: input.plan.account.id,
       workerName: input.plan.resources.worker.name,
-      createdAt: stringRecordValue(existing, "createdAt") ?? input.now,
-      updatedAt: input.now,
     },
     createdAt: existing?.createdAt ?? input.now,
+    updatedAt: input.now,
   };
   const records = [
     ...(current?.records.filter(

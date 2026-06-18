@@ -36,6 +36,7 @@ import {
   selectTransitionStateActions,
   type TransitionStateActionConfig,
 } from "./state-machine-model.ts";
+import { selectAddressableRecordFieldConfig } from "./field-configs.ts";
 import { humanizeFieldName } from "./view-labels.ts";
 import type {
   CreateDefaultConfig,
@@ -573,15 +574,26 @@ function selectBoundCollectionOperation(
 }
 
 function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): CreateFieldConfig[] {
-  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
-    fieldName,
-    field: entity.fields[fieldName] as FieldSchema,
-    editor: viewField.editor,
-    ...(selectStateMachineField(entity, fieldName) === undefined
-      ? {}
-      : { stateMachine: selectStateMachineField(entity, fieldName) }),
-    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-  }));
+  return Object.entries(view.fields).flatMap(([fieldName, viewField]) => {
+    const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+
+    if (!selectedField.writable) {
+      return [];
+    }
+
+    const stateMachine = selectStateMachineField(entity, fieldName);
+
+    return [
+      {
+        fieldName,
+        field: selectedField.field,
+        editor: viewField.editor,
+        ...(stateMachine === undefined ? {} : { stateMachine }),
+        ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+        ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
+      },
+    ];
+  });
 }
 
 function selectCreateDefaults(view: CreateViewSchema, entity: EntitySchema): CreateDefaultConfig[] {
@@ -596,14 +608,26 @@ export function selectRecordFields(
   view: ItemViewSchema,
   entity: EntitySchema,
 ): RecordFieldConfig[] {
-  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
-    fieldName,
-    field: entity.fields[fieldName] as FieldSchema,
-    editor: viewField.editor,
-    commit: viewField.commit,
-    ...(selectStateMachineField(entity, fieldName) === undefined
-      ? {}
-      : { stateMachine: selectStateMachineField(entity, fieldName) }),
-    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-  }));
+  return Object.entries(view.fields).map(([fieldName, viewField]) => {
+    const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+    const stateMachine =
+      selectedField.fieldRef.kind === "value"
+        ? selectStateMachineField(entity, fieldName)
+        : undefined;
+
+    return {
+      fieldName,
+      fieldRef: selectedField.fieldRef,
+      field: selectedField.field,
+      editor: selectedField.writable ? viewField.editor : "text",
+      commit: selectedField.writable ? viewField.commit : "field-commit",
+      writable: selectedField.writable,
+      label: selectedField.label,
+      ...(stateMachine === undefined ? {} : { stateMachine }),
+      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+      ...(selectedField.writable && viewField.presentation !== undefined
+        ? { presentation: viewField.presentation }
+        : {}),
+    };
+  });
 }

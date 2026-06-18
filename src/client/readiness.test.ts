@@ -99,5 +99,6 @@ function record(id: string, entity: string, values: StoredRecord["values"]): Sto
     entity,
     values,
     createdAt: "2026-05-05T00:00:00.000Z",
+    updatedAt: "2026-05-05T00:00:00.000Z",
   };
 }

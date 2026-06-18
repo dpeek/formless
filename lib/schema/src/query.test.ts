@@ -78,6 +78,13 @@ describe("field catalog", () => {
         filterOps: ["eq"],
       },
       {
+        ref: { kind: "system", name: "updatedAt" },
+        type: "datetime",
+        label: "Updated at",
+        writable: false,
+        filterOps: ["eq"],
+      },
+      {
         ref: { kind: "system", name: "deletedAt" },
         type: "datetime",
         label: "Deleted at",
@@ -100,6 +107,9 @@ describe("field catalog", () => {
     expect(resolveRecordFieldValue(record, { kind: "system", name: "id" })).toBe("record-1");
     expect(resolveRecordFieldValue(record, { kind: "system", name: "createdAt" })).toBe(
       "2026-04-28T00:00:00.000Z",
+    );
+    expect(resolveRecordFieldValue(record, { kind: "system", name: "updatedAt" })).toBe(
+      "2026-04-28T00:00:01.000Z",
     );
     expect(resolveRecordFieldValue(record, { kind: "system", name: "deletedAt" })).toBeUndefined();
   });
@@ -1122,4 +1132,5 @@ const record: StoredRecord = {
     resource: "record-resource-1",
   },
   createdAt: "2026-04-28T00:00:00.000Z",
+  updatedAt: "2026-04-28T00:00:01.000Z",
 };

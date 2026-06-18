@@ -127,8 +127,6 @@ describe("instance control-plane schema contracts", () => {
       observedSummary: { type: "text", required: false, format: "longText" },
       observedError: { type: "text", required: false, format: "longText" },
       observedRunnerId: { type: "text", required: false },
-      createdAt: { type: "text", required: true },
-      updatedAt: { type: "text", required: true },
     });
     expect(Object.keys(deploymentFields ?? {})).toEqual([
       "targetId",
@@ -141,8 +139,6 @@ describe("instance control-plane schema contracts", () => {
       "workerName",
       "credentialRef",
       ...instanceControlPlaneDeploymentConfigObservedFields,
-      "createdAt",
-      "updatedAt",
     ]);
   });
 
@@ -216,8 +212,6 @@ describe("instance control-plane schema contracts", () => {
       },
       preservePath: { type: "boolean", required: false, default: true },
       preserveQueryString: { type: "boolean", required: false, default: true },
-      createdAt: { type: "text", required: true },
-      updatedAt: { type: "text", required: true },
     });
     expect(Object.keys(routeFields ?? {})).toEqual([
       "enabled",
@@ -235,8 +229,6 @@ describe("instance control-plane schema contracts", () => {
       "statusCode",
       "preservePath",
       "preserveQueryString",
-      "createdAt",
-      "updatedAt",
     ]);
     expect(schema.runtime?.controlPlane?.entities.route).toEqual({
       immutableFields: ["kind"],
@@ -358,8 +350,6 @@ describe("instance control-plane schema contracts", () => {
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
       { field: "statusCode", display: "readOnly" },
-      { field: "createdAt", display: "readOnly" },
-      { field: "updatedAt", display: "readOnly" },
       { type: "invokeAction", actions: ["editRoute"] },
     ]);
     expect(routeCreateFields).not.toContain("deploymentConfig");
@@ -443,8 +433,6 @@ describe("instance control-plane schema contracts", () => {
         label: "Personal Site",
         status: "installed",
         storageIdentity: "app:personal",
-        createdAt: now,
-        updatedAt: now,
       },
     });
 
@@ -464,8 +452,6 @@ describe("instance control-plane schema contracts", () => {
         appInstall: "personal",
         surface: "admin",
         access: "owner",
-        createdAt: now,
-        updatedAt: now,
       },
       {
         enabled: true,
@@ -475,8 +461,6 @@ describe("instance control-plane schema contracts", () => {
         appInstall: "personal",
         surface: "schema",
         access: "owner",
-        createdAt: now,
-        updatedAt: now,
       },
       {
         enabled: true,
@@ -487,8 +471,6 @@ describe("instance control-plane schema contracts", () => {
         appInstall: "personal",
         surface: "public-site",
         access: "anonymous",
-        createdAt: now,
-        updatedAt: now,
       },
     ]);
 
@@ -710,10 +692,9 @@ function controlPlaneRecords(
         label: "Site",
         status: "installed",
         storageIdentity: "app:site",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "route:site:public-site",
@@ -726,10 +707,9 @@ function controlPlaneRecords(
         targetProfile: "public-site",
         appInstall: "site",
         surface: "public-site",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "instance.primary",
@@ -753,10 +733,9 @@ function controlPlaneRecords(
               observedSummary: "Deployed revision 2",
             }
           : {}),
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
   ];
 }

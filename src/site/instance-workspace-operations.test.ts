@@ -807,6 +807,7 @@ function controlPlaneRecords(): StoredRecord[] {
   return [
     {
       createdAt: now,
+      updatedAt: now,
       entity: "app-install",
       id: installId,
       values: {
@@ -821,6 +822,7 @@ function controlPlaneRecords(): StoredRecord[] {
     },
     {
       createdAt: now,
+      updatedAt: now,
       entity: "route",
       id: `route:${installId}:admin`,
       values: {
@@ -852,6 +854,7 @@ function deployControlPlaneRecords(
     ...controlPlaneRecords(),
     {
       createdAt: now,
+      updatedAt: now,
       entity: "route",
       id: "route:site:public-site",
       values: {
@@ -868,6 +871,7 @@ function deployControlPlaneRecords(
     },
     {
       createdAt: now,
+      updatedAt: now,
       entity: "route",
       id: "route:host:public-site:www.example.com",
       values: {
@@ -886,6 +890,7 @@ function deployControlPlaneRecords(
     },
     {
       createdAt: now,
+      updatedAt: now,
       entity: "route",
       id: "route:redirect:old.example.com",
       values: {
@@ -904,6 +909,7 @@ function deployControlPlaneRecords(
     },
     {
       createdAt: now,
+      updatedAt: now,
       entity: "deployment-config",
       id: "instance.primary",
       values: {

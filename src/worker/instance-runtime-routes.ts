@@ -257,8 +257,6 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
     ...(typeof values.preserveQueryString === "boolean"
       ? { preserveQueryString: values.preserveQueryString }
       : {}),
-    createdAt: typeof values.createdAt === "string" ? values.createdAt : "",
-    updatedAt: typeof values.updatedAt === "string" ? values.updatedAt : "",
   };
 }
 

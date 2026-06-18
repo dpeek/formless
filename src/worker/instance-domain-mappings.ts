@@ -554,8 +554,8 @@ function domainMappingFromControlPlaneRecord(record: StoredRecord): InstanceDoma
     ...(profile === "publicSite" ? { surface: "site" as const } : {}),
     ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
     enabled: record.values.enabled === true,
-    createdAt: String(record.values.createdAt),
-    updatedAt: String(record.values.updatedAt),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
 }
 

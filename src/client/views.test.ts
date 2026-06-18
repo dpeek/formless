@@ -92,6 +92,67 @@ describe("home view model collections", () => {
     ]);
   });
 
+  it("selects system metadata displays as read-only and omits them from authoring configs", () => {
+    const schema = systemMetadataUiSchema();
+    const listModel = requiredCollectionModel(schema, "taskHome");
+    const tableModel = requiredCollectionModel(schema, "taskTableHome");
+    const createOperation = listModel.operations.find((action) => action.type === "create");
+    const listFields = listModel.result.type === "list" ? listModel.result.recordFields : [];
+    const tableColumns = tableModel.result.type === "table" ? tableModel.result.columns : [];
+    const editAction = tableColumns
+      .find((column) => column.type === "invokeAction")
+      ?.actions.find((action) => action.type === "editRecord");
+
+    expect(
+      listFields.map((field) => ({
+        fieldName: field.fieldName,
+        fieldRef: field.fieldRef,
+        label: field.label,
+        writable: field.writable,
+      })),
+    ).toEqual([
+      {
+        fieldName: "title",
+        fieldRef: { kind: "value", name: "title" },
+        label: "Title",
+        writable: true,
+      },
+      {
+        fieldName: "updatedAt",
+        fieldRef: { kind: "system", name: "updatedAt" },
+        label: "Updated at",
+        writable: false,
+      },
+    ]);
+    expect(
+      tableColumns
+        .filter((column): column is FieldTableColumnConfig => column.type === "field")
+        .map((column) => ({
+          fieldName: column.fieldName,
+          fieldRef: column.fieldRef,
+          display: column.display,
+          writable: column.writable,
+        })),
+    ).toEqual([
+      {
+        fieldName: "updatedAt",
+        fieldRef: { kind: "system", name: "updatedAt" },
+        display: "readOnly",
+        writable: false,
+      },
+    ]);
+    expect(
+      createOperation?.type === "create"
+        ? createOperation.fields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["title"]);
+    expect(
+      editAction?.type === "editRecord"
+        ? editAction.editView.fields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["title"]);
+  });
+
   it("selects generated state-machine field and transition facts", () => {
     const schema = lifecycleTaskSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
@@ -3020,6 +3081,101 @@ function taskSchemaWithFieldPresentations(): AppSchema {
   };
 
   return parseAppSchema(rawSchema);
+}
+
+function systemMetadataUiSchema(): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true, label: "Title" },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+        operations: testWriteOperations("Task", ["title"]),
+      },
+    },
+    queries: {
+      taskAll: { label: "All", entity: "task", expression: { kind: "all" } },
+    },
+    itemViews: {
+      taskItem: {
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          updatedAt: { editor: "text", commit: "field-commit" },
+        },
+      },
+    },
+    tableViews: {
+      taskTable: {
+        entity: "task",
+        actions: {
+          editTask: {
+            type: "editRecord",
+            label: "Edit task",
+            target: { kind: "row" },
+            editView: "taskEdit",
+          },
+        },
+        columns: [
+          { type: "field", field: "updatedAt", display: "editor" },
+          { type: "invokeAction", action: "editTask", label: "Actions" },
+        ],
+      },
+    },
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskItem" },
+        operations: [{ operation: "task.create", createView: "taskCreate" }],
+      },
+      taskTableHome: {
+        type: "collection",
+        label: "Task table",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskTable" },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+          updatedAt: { editor: "text" },
+        },
+      },
+      taskEdit: {
+        type: "edit",
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          updatedAt: { editor: "text", commit: "field-commit" },
+        },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
+  });
 }
 
 function summarizeHomeModel(model: HomeViewModel) {

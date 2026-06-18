@@ -326,6 +326,21 @@ describe("schema entity operations", () => {
               steps: [
                 {
                   ...createTaskStep(),
+                  values: { updatedAt: { kind: "generatedTimestamp" } },
+                },
+              ],
+            }),
+          }),
+        },
+        message: 'must not target system field "updatedAt"',
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
                   values: { title: { kind: "input", field: "missing" } },
                 },
               ],

@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { resetClientStore } from "../../client/store.ts";
 import type { TableColumnConfig, TableOrderingConfig } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import type { AppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
-import { renderRecordTableHtml, renderTableViewHtml } from "../../test/generated-table.tsx";
+import {
+  renderRecordTableHtml,
+  renderTableViewHtml,
+  requiredTableModel,
+} from "../../test/generated-table.tsx";
 import { testSiteSeedRecords } from "../../test/site-records.ts";
 
 describe("RecordTable", () => {
@@ -71,6 +75,37 @@ describe("RecordTable", () => {
     expect(html).toContain('data-formless-field-presentation-color="danger"');
     expect(html).toContain('data-web-svg-icon="svg"');
     expect(html).toContain('d="M4 15s1-1 4-1');
+  });
+
+  it("renders system field table displays from record metadata without inline editors", () => {
+    const schema = systemMetadataTableSchema();
+    const table = requiredTableModel(schema, "taskHome");
+    const record = {
+      id: "task-1",
+      entity: "task",
+      values: { title: "Ship system metadata" },
+      createdAt: "2026-05-26T00:00:00.000Z",
+      updatedAt: "2026-05-26T00:30:00.000Z",
+    } satisfies StoredRecord;
+
+    const html = renderTableViewHtml({
+      records: [record],
+      schema,
+      viewName: "taskHome",
+    });
+
+    expect(table.columns).toMatchObject([
+      {
+        type: "field",
+        fieldName: "updatedAt",
+        fieldRef: { kind: "system", name: "updatedAt" },
+        display: "readOnly",
+        writable: false,
+      },
+    ]);
+    expect(html).toContain("2026-05-26T00:30:00.000Z");
+    expect(html).not.toContain('name="updatedAt"');
+    expect(html).not.toContain('value="2026-05-26T00:30:00.000Z"');
   });
 
   it("uses icon-sized utility columns for placement reordering and row actions", () => {
@@ -166,6 +201,7 @@ function rateRecord(id: string, cost: number): StoredRecord {
       price: cost + 100,
     },
     createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
   };
 }
 
@@ -198,11 +234,74 @@ const presentationTaskSchema = {
   views: {},
 } satisfies AppSchema;
 
+function systemMetadataTableSchema(): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+        operations: {
+          update: {
+            label: "Update Task",
+            kind: "update",
+            scope: "record",
+            input: { fields: { title: { field: "title" } } },
+            effect: { type: "patchRecord" },
+            output: { type: "update" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        },
+      },
+    },
+    queries: {
+      taskAll: { label: "All", entity: "task", expression: { kind: "all" } },
+    },
+    itemViews: {},
+    tableViews: {
+      taskTable: {
+        entity: "task",
+        columns: [{ type: "field", field: "updatedAt", display: "editor" }],
+      },
+    },
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskTable" },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
+  });
+}
+
 function presentationTaskRecord(id: string, priority: string): StoredRecord {
   return {
     id,
     entity: "task",
     values: { priority },
     createdAt: "2026-05-26T00:00:00.000Z",
+    updatedAt: "2026-05-26T00:00:00.000Z",
   };
 }

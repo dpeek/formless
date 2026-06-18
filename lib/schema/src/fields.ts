@@ -24,6 +24,13 @@ const SYSTEM_FIELDS: AddressableField[] = [
     filterOps: ["eq"],
   },
   {
+    ref: { kind: "system", name: "updatedAt" },
+    type: "datetime",
+    label: "Updated at",
+    writable: false,
+    filterOps: ["eq"],
+  },
+  {
     ref: { kind: "system", name: "deletedAt" },
     type: "datetime",
     label: "Deleted at",
@@ -68,11 +75,15 @@ export function resolveRecordFieldValue(
     return record.createdAt;
   }
 
+  if (ref.name === "updatedAt") {
+    return record.updatedAt;
+  }
+
   return record.deletedAt;
 }
 
 export function isSystemFieldName(value: string): value is SystemFieldName {
-  return value === "id" || value === "createdAt" || value === "deletedAt";
+  return value === "id" || value === "createdAt" || value === "updatedAt" || value === "deletedAt";
 }
 
 export function formatFieldRef(ref: FieldRef) {

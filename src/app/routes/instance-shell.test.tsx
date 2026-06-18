@@ -773,21 +773,21 @@ function autoSaveState(
 }
 
 function routeRecord(overrides: Partial<InstanceControlPlaneRouteValues> = {}): StoredRecord {
+  const now = "2026-06-10T00:00:00.000Z";
   const values = {
     access: "anonymous",
     appInstall: "site",
-    createdAt: "2026-06-10T00:00:00.000Z",
     enabled: true,
     kind: "mount",
     matchPath: "/sites/site",
     surface: "public-site",
     targetProfile: "public-site",
-    updatedAt: "2026-06-10T00:00:00.000Z",
     ...overrides,
   } satisfies InstanceControlPlaneRouteValues;
 
   return {
-    createdAt: values.createdAt,
+    createdAt: now,
+    updatedAt: now,
     entity: "route",
     id: "route:site:public",
     values,

@@ -722,6 +722,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       id: "instance.primary",
       entity: "deployment-config",
       createdAt: now,
+      updatedAt: now,
       values: {
         targetId: "instance.primary",
         targetKind: "instance",
@@ -739,6 +740,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       id: "route:host:publicSite:archive.example.com",
       entity: "route",
       createdAt: now,
+      updatedAt: now,
       values: {
         enabled: true,
         matchHost: "archive.example.com",
@@ -757,6 +759,7 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
       id: "route:redirect:old.archive.example.com",
       entity: "route",
       createdAt: now,
+      updatedAt: now,
       values: {
         enabled: true,
         matchHost: "old.archive.example.com",
@@ -779,6 +782,7 @@ function storedControlPlaneRecord(record: {
   deletedAt?: string;
   entity: string;
   id: string;
+  updatedAt?: string;
   values: RecordValues;
 }): StoredRecord {
   return {
@@ -786,6 +790,7 @@ function storedControlPlaneRecord(record: {
     entity: record.entity,
     values: record.values,
     createdAt: record.createdAt,
+    updatedAt: record.updatedAt ?? record.createdAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
 }
@@ -1021,6 +1026,7 @@ function siteRecord(): StoredRecord {
   return {
     id: "site-main",
     createdAt: "2026-05-12T00:00:00.000Z",
+    updatedAt: "2026-05-12T00:00:00.000Z",
     entity: "site",
     values: {
       key: "personal",
@@ -1033,6 +1039,7 @@ function taskRecord(overrides: { done?: boolean; id?: string; title?: string } =
   return {
     id: overrides.id ?? "task-restored",
     createdAt: "2026-05-12T00:00:00.000Z",
+    updatedAt: "2026-05-12T00:00:00.000Z",
     entity: "task",
     values: {
       title: overrides.title ?? "Restored task",

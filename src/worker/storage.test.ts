@@ -965,6 +965,7 @@ function record(id: string, title: string, overrides: Partial<StoredRecord> = {}
     entity: "task",
     values: { title, done: false },
     createdAt: "2026-04-28T00:00:00.000Z",
+    updatedAt: "2026-04-28T00:00:00.000Z",
     ...overrides,
   };
 }

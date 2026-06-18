@@ -1462,6 +1462,7 @@ function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
   return [
     {
       createdAt: now,
+      updatedAt: now,
       entity: "app-install",
       id: installId,
       values: {
@@ -1476,6 +1477,7 @@ function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
     },
     {
       createdAt: now,
+      updatedAt: now,
       entity: "route",
       id: `route:${installId}:admin`,
       values: {

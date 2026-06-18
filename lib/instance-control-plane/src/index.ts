@@ -89,14 +89,16 @@ export type InstanceControlPlaneRecord<Entity extends InstanceControlPlaneEntity
   deletedAt?: string;
   entity: Entity;
   id: string;
-  updatedAt?: string;
+  updatedAt: string;
   values: Values;
 };
 
 export type InstanceControlPlaneProjectionRecord = {
+  createdAt: string;
   deletedAt?: string;
   entity: string;
   id: string;
+  updatedAt: string;
   values: Readonly<Record<string, unknown>>;
 };
 
@@ -110,8 +112,6 @@ export type InstanceControlPlaneAppInstallValues = {
   label: string;
   status: InstanceControlPlaneAppInstallStatus;
   storageIdentity: `app:${AppInstallId}`;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type InstanceControlPlaneAppRouteKind = "admin" | "publicSite" | "schema";
@@ -138,8 +138,6 @@ export type InstanceControlPlaneRouteValues = {
   statusCode?: InstanceControlPlaneRedirectStatusCode;
   preservePath?: boolean;
   preserveQueryString?: boolean;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type InstanceControlPlaneProviderFamily = "cloudflare";
@@ -167,8 +165,6 @@ export type InstanceControlPlaneDeploymentConfigValues = {
   observedSummary?: string;
   observedError?: string;
   observedRunnerId?: string;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type InstanceControlPlaneRedirectStatusCode = "301" | "302" | "303" | "307" | "308";
@@ -246,8 +242,6 @@ export const instanceControlPlaneSchema = {
           installed: "Installed",
         }),
         storageIdentity: textField("Storage identity"),
-        createdAt: textField("Created at"),
-        updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
       operations: writeOperations("App install", [
@@ -258,8 +252,6 @@ export const instanceControlPlaneSchema = {
         "label",
         "status",
         "storageIdentity",
-        "createdAt",
-        "updatedAt",
       ]),
       constraints: {
         uniqueInstallId: { kind: "unique", fields: ["installId"] },
@@ -304,8 +296,6 @@ export const instanceControlPlaneSchema = {
         }),
         preservePath: optionalBooleanField("Preserve path", true),
         preserveQueryString: optionalBooleanField("Preserve query string", true),
-        createdAt: textField("Created at"),
-        updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
       operations: writeOperations("Route", [
@@ -324,8 +314,6 @@ export const instanceControlPlaneSchema = {
         "statusCode",
         "preservePath",
         "preserveQueryString",
-        "createdAt",
-        "updatedAt",
       ]),
     },
     "deployment-config": {
@@ -352,8 +340,6 @@ export const instanceControlPlaneSchema = {
         observedSummary: optionalTextField("Observed summary", "longText"),
         observedError: optionalTextField("Observed error", "longText"),
         observedRunnerId: optionalTextField("Observed runner"),
-        createdAt: textField("Created at"),
-        updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
       operations: writeOperations(
@@ -368,8 +354,6 @@ export const instanceControlPlaneSchema = {
           "accountId",
           "workerName",
           "credentialRef",
-          "createdAt",
-          "updatedAt",
         ],
         {
           updateFields: [
@@ -388,8 +372,6 @@ export const instanceControlPlaneSchema = {
             "observedSummary",
             "observedError",
             "observedRunnerId",
-            "createdAt",
-            "updatedAt",
           ],
         },
       ),
@@ -479,8 +461,6 @@ export const instanceControlPlaneSchema = {
         { field: "toHost", display: "readOnly" },
         { field: "toUrl", display: "readOnly" },
         { field: "statusCode", display: "readOnly" },
-        { field: "createdAt", display: "readOnly" },
-        { field: "updatedAt", display: "readOnly" },
       ],
       {
         actions: {
@@ -520,8 +500,6 @@ export const instanceControlPlaneSchema = {
       "label",
       "status",
       "storageIdentity",
-      "createdAt",
-      "updatedAt",
     ]),
     appInstallList: collectionView(
       "App installs",
@@ -553,8 +531,6 @@ export const instanceControlPlaneSchema = {
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "preservePath", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "preserveQueryString", visibleWhen: { field: "kind", values: ["redirect"] } },
-      "createdAt",
-      "updatedAt",
     ]),
     routeEdit: editView("route", [
       "enabled",
@@ -600,8 +576,6 @@ export const instanceControlPlaneSchema = {
       "accountId",
       "workerName",
       "credentialRef",
-      "createdAt",
-      "updatedAt",
     ]),
     deploymentConfigList: collectionView(
       "Deployment configs",
@@ -689,8 +663,6 @@ export function instanceControlPlaneAppInstallRecord(
       label: install.label,
       status: install.status,
       storageIdentity: instanceControlPlaneStorageIdentityForInstall(install.installId),
-      createdAt: install.createdAt,
-      updatedAt: install.updatedAt,
     },
   };
 }
@@ -719,8 +691,8 @@ export function instanceControlPlaneAppInstallsFromRecords(
     activeRecords
       .filter((record) => record.entity === "app-install" && record.values.status === "installed")
       .map((record) =>
-        appInstallFromControlPlaneValues(
-          record.values,
+        appInstallFromControlPlaneRecord(
+          record,
           routeRecords
             .filter(
               (routeRecord) =>
@@ -737,11 +709,12 @@ export function instanceControlPlaneAppInstallsFromRecords(
   );
 }
 
-function appInstallFromControlPlaneValues(
-  values: Readonly<Record<string, unknown>>,
+function appInstallFromControlPlaneRecord(
+  record: InstanceControlPlaneProjectionRecord,
   routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
   packageResolver?: AppPackageResolver,
 ): AppInstall {
+  const values = record.values;
   const packageAppKey = stringControlPlaneValue(values.packageAppKey);
   const packageApp =
     packageAppKey && packageResolver
@@ -774,8 +747,8 @@ function appInstallFromControlPlaneValues(
     ),
     label: stringControlPlaneValue(values.label) ?? "",
     status: "installed",
-    createdAt: stringControlPlaneValue(values.createdAt) ?? "",
-    updatedAt: stringControlPlaneValue(values.updatedAt) ?? "",
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
     adminRoute,
     schemaRoute,
     ...(publicRoute
@@ -1022,8 +995,6 @@ function mountRouteRecord(
         surface: route.surface,
         targetProfile: route.targetProfile,
       }),
-      createdAt: input.now,
-      updatedAt: input.now,
     },
   };
 }
@@ -1188,13 +1159,11 @@ export function reviewableInstanceControlPlaneRecordValues(
   entity: InstanceControlPlaneEntityName,
   values: RecordValues,
 ): RecordValues {
-  if (entity !== "deployment-config") {
-    return values;
-  }
-
   return Object.fromEntries(
     Object.entries(values).filter(
       ([fieldName]) =>
+        fieldName !== "createdAt" &&
+        fieldName !== "updatedAt" &&
         !isRuntimeControlPlaneObservedField(instanceControlPlaneSchema, entity, fieldName),
     ),
   ) as RecordValues;
@@ -1261,7 +1230,12 @@ function parseInstanceControlPlaneRecord(context: string, value: unknown): Store
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["id", "entity", "values", "createdAt"], ["deletedAt"]);
+  assertExactKeys(
+    context,
+    value,
+    ["id", "entity", "values", "createdAt", "updatedAt"],
+    ["deletedAt"],
+  );
 
   const id = parseNonEmptyString(`${context} id`, value.id);
   const entity = parseInstanceControlPlaneEntityName(
@@ -1274,6 +1248,7 @@ function parseInstanceControlPlaneRecord(context: string, value: unknown): Store
     entity,
     values: parseRecordValues(`${context} values`, value.values),
     createdAt: parseIsoTimestamp(`${context} createdAt`, value.createdAt),
+    updatedAt: parseIsoTimestamp(`${context} updatedAt`, value.updatedAt),
     ...(value.deletedAt === undefined
       ? {}
       : { deletedAt: parseIsoTimestamp(`${context} deletedAt`, value.deletedAt) }),
@@ -2004,6 +1979,7 @@ function canonicalInstanceControlPlaneRecord(record: StoredRecord): StoredRecord
       reviewableInstanceControlPlaneRecordValues(entity, record.values),
     ) as RecordValues,
     createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
 }

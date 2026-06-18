@@ -291,6 +291,7 @@ function parseStoredRecord(value: string): StoredRecord {
     typeof parsed.entity !== "string" ||
     !isRecordValues(parsed.values) ||
     typeof parsed.createdAt !== "string" ||
+    typeof parsed.updatedAt !== "string" ||
     ("deletedAt" in parsed && typeof parsed.deletedAt !== "string")
   ) {
     throw new Error("Stored change payload is invalid.");

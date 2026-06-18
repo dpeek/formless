@@ -1203,7 +1203,26 @@ describe("Alchemy Formless instance deployment", () => {
     ]);
     const dnsCall = routeResourceCalls.find((call) => call.kind === "DnsRecords");
     const customDomainCalls = routeResourceCalls.filter((call) => call.kind === "CustomDomain");
-    const cloudflareApiToken = (cloudflareApiCalls[0]?.options as Record<string, unknown>).apiToken;
+    const cloudflareApiCall = cloudflareApiCalls[0];
+    const bucketCall = bucketCalls[0];
+    const turnstileCall = turnstileCalls[0];
+    const workerCall = workerCalls[0];
+    const redirectCustomDomainCall = customDomainCalls[0];
+    const appCustomDomainCall = customDomainCalls[1];
+
+    if (
+      !cloudflareApiCall ||
+      !bucketCall ||
+      !turnstileCall ||
+      !workerCall ||
+      !dnsCall ||
+      !redirectCustomDomainCall ||
+      !appCustomDomainCall
+    ) {
+      throw new Error("Expected generated Cloudflare resource calls.");
+    }
+
+    const cloudflareApiToken = (cloudflareApiCall.options as Record<string, unknown>).apiToken;
     expect(bucketCalls).toEqual([
       {
         id: "media",
@@ -1281,15 +1300,15 @@ describe("Alchemy Formless instance deployment", () => {
       workerName: "brother-instance",
       zoneId: "zone-1",
     });
-    expect((bucketCalls[0]?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
-    expect((turnstileCalls[0]?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
-    expect(workerCalls[0]?.props.apiToken).toBe(cloudflareApiToken);
-    expect(workerCalls[0]?.props.bindings.CLOUDFLARE_API_TOKEN).toBe(cloudflareApiToken);
-    expect((dnsCall?.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
-    expect((customDomainCalls[0]?.props as Record<string, unknown>).apiToken).toBe(
+    expect((bucketCall.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect((turnstileCall.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect(workerCall.props.apiToken).toBe(cloudflareApiToken);
+    expect(workerCall.props.bindings.CLOUDFLARE_API_TOKEN).toBe(cloudflareApiToken);
+    expect((dnsCall.props as Record<string, unknown>).apiToken).toBe(cloudflareApiToken);
+    expect((redirectCustomDomainCall.props as Record<string, unknown>).apiToken).toBe(
       cloudflareApiToken,
     );
-    expect((customDomainCalls[1]?.props as Record<string, unknown>).apiToken).toBe(
+    expect((appCustomDomainCall.props as Record<string, unknown>).apiToken).toBe(
       cloudflareApiToken,
     );
     expect(result.resourceEvidence?.map((entry) => [entry.kind, entry.logicalId])).toEqual([

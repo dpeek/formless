@@ -262,6 +262,7 @@ describe("portable archive protocol", () => {
               reportedAt: now,
             },
             createdAt: now,
+            updatedAt: now,
           },
         ],
       }),
@@ -456,6 +457,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "route:site:public-site",
@@ -472,6 +474,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "route:host:publicSite:www.example.com",
@@ -489,6 +492,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
     {
       id: "instance.primary",
@@ -516,6 +520,7 @@ function controlPlaneRecords(
         updatedAt: now,
       },
       createdAt: now,
+      updatedAt: now,
     },
   ];
 }
@@ -551,6 +556,8 @@ function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): Storage
 }
 
 function activeSiteRecord(id: string, values: StoredRecord["values"] = {}): StoredRecord {
+  const createdAt = id.endsWith("alpha") ? "2026-05-23T00:00:01.000Z" : "2026-05-23T00:00:02.000Z";
+
   return {
     id,
     entity: "site",
@@ -559,7 +566,8 @@ function activeSiteRecord(id: string, values: StoredRecord["values"] = {}): Stor
       label: "Primary Site",
       ...values,
     },
-    createdAt: id.endsWith("alpha") ? "2026-05-23T00:00:01.000Z" : "2026-05-23T00:00:02.000Z",
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 

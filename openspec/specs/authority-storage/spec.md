@@ -280,6 +280,30 @@ materialization.
   ids
 - AND replayed write or command operations return the original stored output
 
+#### Scenario: Materialize record lifecycle timestamps
+
+- GIVEN an operation invocation creates, updates, deletes, tombstones, or
+  materializes a record-plan step
+- WHEN Authority commits the write
+- THEN create writes set record system `createdAt` and `updatedAt` to the
+  invocation received timestamp
+- AND update and patch writes preserve `createdAt` and set system `updatedAt` to
+  the invocation received timestamp
+- AND delete and tombstone writes preserve `createdAt`, set system `deletedAt`,
+  and set system `updatedAt` to the deletion timestamp
+- AND sync change payloads, snapshots, exports, and browser replicas carry those
+  system fields outside record `values`
+
+#### Scenario: Reject caller-owned system fields
+
+- GIVEN generated UI, protocol, public, automation, CLI, or runner callers submit
+  operation input
+- WHEN the input attempts to create, patch, unset, or record-plan-target `id`,
+  `createdAt`, `updatedAt`, or `deletedAt`
+- THEN Authority rejects the write before materialization
+- AND accepted write paths derive lifecycle metadata from Authority-owned write
+  context, not caller-provided values
+
 ### Requirement: Operation Record Plan Materialization
 
 The system SHALL materialize declarative command record plans through the same
@@ -416,7 +440,8 @@ The system SHALL represent record deletes as tombstones.
 
 - GIVEN a target record has no active referencing records
 - WHEN a delete mutation commits
-- THEN the stored record row remains with its id, entity, values, and created timestamp
+- THEN the stored record row remains with its id, entity, values, created
+  timestamp, and updated timestamp
 - AND the record has a deleted timestamp
 - AND a delete change is appended with the tombstoned record payload
 

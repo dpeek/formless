@@ -1,9 +1,4 @@
-import type {
-  ComputedTableColumnConfig,
-  FieldTableColumnConfig,
-  HomeSummarySlotConfig,
-  ReferenceFieldTableColumnConfig,
-} from "../../client/views.ts";
+import type { ComputedTableColumnConfig, HomeSummarySlotConfig } from "../../client/views.ts";
 import type { FieldValue } from "@dpeek/formless-storage";
 import {
   createInputValueToFieldValue as createInputValueToFieldValuePrimitive,
@@ -24,14 +19,14 @@ const readModelNumberField = {
 } satisfies FieldSchema;
 
 export function formatFieldDisplayValue(
-  column: FieldTableColumnConfig | ReferenceFieldTableColumnConfig,
+  column: { field: FieldSchema; format?: TableColumnFormat },
   value: FieldValue | undefined,
 ) {
   if (value === undefined || value === "") {
     return "";
   }
 
-  return formatFieldDisplayPrimitive(column.field, value, { format: column.format });
+  return formatFieldDisplayPrimitive(column.field, value, { format: column.format ?? "plain" });
 }
 
 export function formatComputedDisplayValue(

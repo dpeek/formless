@@ -10,6 +10,7 @@ import type {
   ItemViewSchema,
   ItemViewVariantPresentationSchema,
 } from "@dpeek/formless-schema";
+import { selectAddressableRecordFieldConfig } from "./field-configs.ts";
 import type {
   CreateFallbackPresentationConfig,
   CreateUnionPresentationConfig,
@@ -143,14 +144,23 @@ function selectRecordVariantPresentation(
 
   return {
     type: "fields",
-    fields: Object.entries(presentation.fields).map(([fieldName, viewField]) => ({
-      fieldName,
-      field: entity.fields[fieldName] as FieldSchema,
-      editor: viewField.editor,
-      commit: viewField.commit,
-      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
-      ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-    })),
+    fields: Object.entries(presentation.fields).map(([fieldName, viewField]) => {
+      const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+
+      return {
+        fieldName,
+        fieldRef: selectedField.fieldRef,
+        field: selectedField.field,
+        editor: selectedField.writable ? viewField.editor : "text",
+        commit: selectedField.writable ? viewField.commit : "field-commit",
+        writable: selectedField.writable,
+        label: selectedField.label,
+        ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+        ...(selectedField.writable && viewField.presentation !== undefined
+          ? { presentation: viewField.presentation }
+          : {}),
+      };
+    }),
   };
 }
 
@@ -192,12 +202,22 @@ function selectCreateVariantPresentation(
 ): CreateVariantPresentationConfig["presentation"] {
   return {
     type: "fields",
-    fields: Object.entries(presentation.fields).map(([fieldName, viewField]) => ({
-      fieldName,
-      field: entity.fields[fieldName] as FieldSchema,
-      editor: viewField.editor,
-      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
-      ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
-    })),
+    fields: Object.entries(presentation.fields).flatMap(([fieldName, viewField]) => {
+      const selectedField = selectAddressableRecordFieldConfig(entity, fieldName);
+
+      if (!selectedField.writable) {
+        return [];
+      }
+
+      return [
+        {
+          fieldName,
+          field: selectedField.field,
+          editor: viewField.editor,
+          ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
+          ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
+        },
+      ];
+    }),
   };
 }

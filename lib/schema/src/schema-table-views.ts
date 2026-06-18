@@ -5,6 +5,8 @@ import {
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
 import { parseOptionalResultOrdering } from "./schema-ordering.ts";
+import { isSystemFieldName } from "./fields.ts";
+import { isFieldCommitPolicy, isFieldEditor } from "./field-types.ts";
 import type {
   ComputedValueSchema,
   EntitySchema,
@@ -27,6 +29,11 @@ import type {
 } from "./types.ts";
 import { parseFieldCommitPolicy, parseFieldEditor } from "./schema-view-field-parser.ts";
 import { parseOptionalFieldPresentation } from "./schema-view-fields.ts";
+
+const systemDisplayField = {
+  type: "text",
+  required: false,
+} satisfies FieldSchema;
 
 export function parseTableViews(
   value: unknown,
@@ -327,8 +334,9 @@ function parseFieldTableColumn(
 
   const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
   const field = entity.fields[fieldName];
+  const systemField = field === undefined && isSystemFieldName(fieldName);
 
-  if (!field) {
+  if (!field && !systemField) {
     throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
   }
 
@@ -336,34 +344,44 @@ function parseFieldTableColumn(
   const editor =
     value.editor === undefined
       ? undefined
-      : parseFieldEditor(`${context} field "${fieldName}"`, value.editor, field);
+      : field === undefined
+        ? parseSystemFieldEditor(`${context} field "${fieldName}"`, value.editor)
+        : parseFieldEditor(`${context} field "${fieldName}"`, value.editor, field);
   const commit =
     value.commit === undefined
       ? undefined
-      : parseFieldCommitPolicy(`${context} field "${fieldName}"`, value.commit, field);
+      : field === undefined
+        ? parseSystemFieldCommitPolicy(`${context} field "${fieldName}"`, value.commit)
+        : parseFieldCommitPolicy(`${context} field "${fieldName}"`, value.commit, field);
   const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
   const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
   const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
   const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
   const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
-  const referenceItemView = parseOptionalReferenceItemView(
-    `${context} referenceItemView`,
-    value.referenceItemView,
-    field,
-    itemViews,
-  );
-  const valueUnit = parseOptionalValueUnitEditor(
-    `${context} valueUnit`,
-    value.valueUnit,
-    entityName,
-    fieldName,
-    field,
-    entity,
-  );
+  const referenceItemView =
+    field === undefined
+      ? undefined
+      : parseOptionalReferenceItemView(
+          `${context} referenceItemView`,
+          value.referenceItemView,
+          field,
+          itemViews,
+        );
+  const valueUnit =
+    field === undefined
+      ? undefined
+      : parseOptionalValueUnitEditor(
+          `${context} valueUnit`,
+          value.valueUnit,
+          entityName,
+          fieldName,
+          field,
+          entity,
+        );
   const presentation = parseOptionalFieldPresentation(
     `${context} field "${fieldName}"`,
     value.presentation,
-    field,
+    field ?? systemDisplayField,
   );
 
   return {
@@ -424,8 +442,9 @@ function parseReferenceFieldTableColumn(
 
   const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
   const field = referencedEntity.fields[fieldName];
+  const systemField = field === undefined && isSystemFieldName(fieldName);
 
-  if (!field) {
+  if (!field && !systemField) {
     throw new Error(`${context} references unknown field "${sourceField.to}.${fieldName}".`);
   }
 
@@ -433,15 +452,26 @@ function parseReferenceFieldTableColumn(
   const editor =
     value.editor === undefined
       ? undefined
-      : parseFieldEditor(`${context} field "${sourceField.to}.${fieldName}"`, value.editor, field);
+      : field === undefined
+        ? parseSystemFieldEditor(`${context} field "${sourceField.to}.${fieldName}"`, value.editor)
+        : parseFieldEditor(
+            `${context} field "${sourceField.to}.${fieldName}"`,
+            value.editor,
+            field,
+          );
   const commit =
     value.commit === undefined
       ? undefined
-      : parseFieldCommitPolicy(
-          `${context} field "${sourceField.to}.${fieldName}"`,
-          value.commit,
-          field,
-        );
+      : field === undefined
+        ? parseSystemFieldCommitPolicy(
+            `${context} field "${sourceField.to}.${fieldName}"`,
+            value.commit,
+          )
+        : parseFieldCommitPolicy(
+            `${context} field "${sourceField.to}.${fieldName}"`,
+            value.commit,
+            field,
+          );
   const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
   const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
   const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
@@ -450,7 +480,7 @@ function parseReferenceFieldTableColumn(
   const presentation = parseOptionalFieldPresentation(
     `${context} field "${sourceField.to}.${fieldName}"`,
     value.presentation,
-    field,
+    field ?? systemDisplayField,
   );
 
   return {
@@ -467,6 +497,50 @@ function parseReferenceFieldTableColumn(
     ...(format === undefined ? {} : { format }),
     ...(presentation === undefined ? {} : { presentation }),
   };
+}
+
+function parseSystemFieldEditor(context: string, value: unknown): undefined {
+  if (!isFieldEditor(value)) {
+    throw new Error(`${context} has unsupported editor "${formatUnknownValue(value)}".`);
+  }
+
+  return undefined;
+}
+
+function parseSystemFieldCommitPolicy(context: string, value: unknown): undefined {
+  if (!isFieldCommitPolicy(value)) {
+    throw new Error(`${context} has unsupported commit policy "${formatUnknownValue(value)}".`);
+  }
+
+  return undefined;
+}
+
+function formatUnknownValue(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return `${value}`;
+  }
+
+  if (value === undefined) {
+    return "undefined";
+  }
+
+  if (value === null) {
+    return "null";
+  }
+
+  if (typeof value === "symbol") {
+    return value.description === undefined ? "Symbol()" : `Symbol(${value.description})`;
+  }
+
+  if (typeof value === "function") {
+    return "[function]";
+  }
+
+  return JSON.stringify(value) ?? "[object]";
 }
 
 function parseComputedTableColumn(

@@ -243,6 +243,7 @@ function canonicalRecordSourceRecord(
       ),
     ) as InstanceWorkspaceRecordValues,
     createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
     ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
 }

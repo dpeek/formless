@@ -105,6 +105,7 @@ function parseSeedRecord(value: unknown, label: string): StoredRecord {
     entity: value.entity,
     values: value.values,
     createdAt: value.createdAt,
+    updatedAt: value.createdAt,
   };
 }
 

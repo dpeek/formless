@@ -8,9 +8,10 @@ import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
-import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
+import { fieldLabel, recordFieldIsWritable, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
+import { RecordFieldDisplay } from "./record-field-display.tsx";
 import {
   fieldValueToRecordFieldEditorInputValue,
   imageMediaAssetOptionFromUpload,
@@ -36,11 +37,40 @@ type RecordFieldEditorProps = {
 };
 
 export function RecordFieldEditor(props: RecordFieldEditorProps) {
+  if (!recordFieldIsWritable(props.fieldConfig)) {
+    return <ReadOnlyRecordFieldDisplay {...props} />;
+  }
+
   if (props.fieldConfig.field.type === "enum" && props.fieldConfig.stateMachine) {
     return <StateMachineRecordField {...props} />;
   }
 
   return <EditableRecordFieldEditor {...props} />;
+}
+
+function ReadOnlyRecordFieldDisplay({
+  density = "default",
+  fieldConfig,
+  recordId,
+  showLabel = false,
+}: RecordFieldEditorProps) {
+  const label = fieldConfig.label ?? fieldLabel(fieldConfig.fieldName, fieldConfig.field);
+
+  return (
+    <div
+      className={
+        density === "compact"
+          ? "min-w-0 text-xs text-slate-700"
+          : "min-w-0 space-y-1 text-sm text-slate-700"
+      }
+      data-formless-readonly-field={fieldConfig.fieldName}
+    >
+      {showLabel ? <div className="text-xs font-medium text-slate-500">{label}</div> : null}
+      <div className="flex min-h-6 items-center gap-1">
+        <RecordFieldDisplay column={fieldConfig} recordId={recordId} />
+      </div>
+    </div>
+  );
 }
 
 function EditableRecordFieldEditor({

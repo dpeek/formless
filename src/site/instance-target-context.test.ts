@@ -173,5 +173,6 @@ function deploymentConfigRecord(): StoredRecord {
       updatedAt: now,
     },
     createdAt: now,
+    updatedAt: now,
   };
 }

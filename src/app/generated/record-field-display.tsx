@@ -1,11 +1,13 @@
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
-import { useRecordField, useReferenceOptions } from "../../client/store.ts";
+import { useRecordFieldValue, useReferenceOptions } from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,
+  RecordFieldConfig,
   ReferenceFieldTableColumnConfig,
 } from "../../client/views.ts";
+import { recordFieldRef } from "../../client/views.ts";
 import type { FieldValue } from "@dpeek/formless-storage";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import { expandHexColor, isHexColor } from "./color-utils.ts";
@@ -17,7 +19,10 @@ import {
 import { formatFieldDisplayValue } from "./format.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
-type DisplayTableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
+type DisplayTableColumnConfig =
+  | FieldTableColumnConfig
+  | ReferenceFieldTableColumnConfig
+  | (RecordFieldConfig & { display?: "editor" | "readOnly" | "hidden"; suffix?: string });
 
 export function RecordFieldDisplay({
   column,
@@ -26,7 +31,7 @@ export function RecordFieldDisplay({
   column: DisplayTableColumnConfig;
   recordId: string;
 }) {
-  const recordValue = useRecordField(recordId, column.fieldName);
+  const recordValue = useRecordFieldValue(recordId, recordFieldRef(column));
 
   if (column.field.type === "reference") {
     return (
@@ -43,7 +48,7 @@ export function RecordFieldDisplay({
       <>
         <StateMachineStateBadge
           field={column.field}
-          label={column.label}
+          label={column.label ?? column.fieldName}
           stateMachine={column.stateMachine}
           value={recordValue}
         />
@@ -184,7 +189,7 @@ function RecordColorDisplay({
 
   return (
     <>
-      <ColorDisplaySwatch color={color} label={column.label} />
+      <ColorDisplaySwatch color={color} label={column.label ?? column.fieldName} />
       <span>{displayValue}</span>
       {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
     </>

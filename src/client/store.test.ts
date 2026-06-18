@@ -212,11 +212,14 @@ function bootstrap(records: StoredRecord[], schema: AppSchema = appSchema): Boot
 }
 
 function record(id: string, title: string, done = false, entity = "task"): StoredRecord {
+  const timestamp = `2026-04-28T00:00:0${id.at(-1)}.000Z`;
+
   return {
     id,
     entity,
     values: { title, done },
-    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
