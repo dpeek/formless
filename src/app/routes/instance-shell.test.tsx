@@ -61,9 +61,12 @@ describe("instance shell route view", () => {
       />,
     );
 
+    expect(html).toContain("Instance Settings");
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain("Loading Instance control plane");
+    expect(html).not.toContain('aria-label="Instance navigation"');
+    expect(html).not.toContain("Overview");
     expect(html).not.toContain("Deployments");
     expect(html).not.toContain('href="/deployments"');
     expect(html).not.toContain('data-formless-control-plane-screen="deployments"');
@@ -117,7 +120,7 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Primary deployment target");
   });
 
-  it("renders local workspace gateway controls and browser onboarding state", () => {
+  it("renders only the local workspace push control without onboarding state", () => {
     const html = renderWithRouter(
       <InstanceShellRouteView
         state={readyState({ installs: [] })}
@@ -141,23 +144,24 @@ describe("instance shell route view", () => {
 
     expect(html).toContain('data-formless-workspace-gateway="local"');
     expect(html).toContain('data-formless-workspace-operation-controls="true"');
-    expect(html).toContain('data-formless-workspace-operation-control="check"');
-    expect(html).toContain('data-formless-workspace-operation-control="credentialSetup"');
-    expect(html).toContain('data-formless-workspace-operation-control="pull"');
     expect(html).toContain('data-formless-workspace-operation-control="push"');
     expect(html).toContain(
-      'data-formless-workspace-operation-required-capability="credential-setup"',
+      'data-formless-workspace-operation-required-capability="workspace-source-sync"',
     );
     expect(html).toContain('data-formless-workspace-operation-input-fields="dryRun targetAlias"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="check"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="credentialSetup"');
+    expect(html).not.toContain('data-formless-workspace-operation-control="pull"');
     expect(html).not.toContain('data-formless-workspace-operation-control="deploymentRefresh"');
     expect(html).not.toContain('data-formless-workspace-operation-control="deployPlan"');
     expect(html).not.toContain('data-formless-workspace-operation-control="deployApply"');
     expect(html).not.toContain('data-formless-workspace-operation-control="save"');
-    expect(html).toContain('data-formless-workspace-onboarding="local"');
-    expect(html).toContain('data-formless-onboarding-generated-record-controls="routes"');
+    expect(html).not.toContain('data-formless-workspace-onboarding="local"');
+    expect(html).not.toContain('data-formless-onboarding-generated-record-controls="routes"');
     expect(html).not.toContain('href="/deployments"');
-    expect(html).toContain("No package apps are installed.");
-    expect(html).toContain("Install first app");
+    expect(html).not.toContain("No package apps are installed.");
+    expect(html).not.toContain("Install first app");
+    expect(html).not.toContain("Workspace status");
     expect(html).not.toContain("Workspace source has not been created.");
     expect(html).not.toContain("Initialize workspace");
     expect(html).toContain('data-formless-control-plane-screen="apps"');
@@ -165,7 +169,7 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("/Users/");
   });
 
-  it("renders local workspace auto-save states without manual save or retry controls", () => {
+  it("does not render local workspace auto-save states on the overview", () => {
     const states: Array<[WorkspaceGatewayAutoSaveState["displayState"], string]> = [
       ["clean", "Workspace source has no pending local writes."],
       ["dirty", "Local writes are waiting for workspace save."],
@@ -209,25 +213,11 @@ describe("instance shell route view", () => {
         />,
       );
 
-      expect(html).toContain('data-formless-workspace-auto-save-status="true"');
-      expect(html).toContain(`data-formless-workspace-auto-save-state="${displayState}"`);
-      expect(html).toContain(detail);
+      expect(html).not.toContain('data-formless-workspace-auto-save-status="true"');
+      expect(html).not.toContain(`data-formless-workspace-auto-save-state="${displayState}"`);
+      expect(html).not.toContain(detail);
     }
 
-    const dirtyHtml = renderWithRouter(
-      <InstanceShellRouteView
-        onStartWorkspaceOperation={() => undefined}
-        state={readyState({ installs: [] })}
-        workspaceGatewayState={workspaceGatewayState({
-          autoSave: autoSaveState({
-            dirtyGeneration: 1,
-            displayState: "dirty",
-            writeSources: ["schema-save"],
-          }),
-          csrfToken: "csrf-token",
-        })}
-      />,
-    );
     const failedHtml = renderWithRouter(
       <InstanceShellRouteView
         onStartWorkspaceOperation={() => undefined}
@@ -249,13 +239,13 @@ describe("instance shell route view", () => {
       />,
     );
 
-    expect(dirtyHtml).toContain("Sources: Schema save");
-    expect(dirtyHtml).not.toContain('data-formless-workspace-auto-save-control="manual-save"');
-    expect(dirtyHtml).not.toContain("Save now");
+    expect(failedHtml).not.toContain("Sources: Schema save");
+    expect(failedHtml).not.toContain('data-formless-workspace-auto-save-control="manual-save"');
+    expect(failedHtml).not.toContain("Save now");
     expect(failedHtml).not.toContain('data-formless-workspace-auto-save-control="retry"');
     expect(failedHtml).not.toContain("Retry save");
-    expect(failedHtml).toContain("&lt;path&gt;");
-    expect(failedHtml).toContain("[redacted]");
+    expect(failedHtml).not.toContain("&lt;path&gt;");
+    expect(failedHtml).not.toContain("[redacted]");
     expect(failedHtml).not.toContain("/Users/dpeek");
     expect(failedHtml).not.toContain("secret-token");
     expect(failedHtml).not.toContain("owner-token");
@@ -298,7 +288,7 @@ describe("instance shell route view", () => {
       selectWorkspaceGatewayOperationControls({ operationGroup: "workspace" }).map(
         (control) => control.kind,
       ),
-    ).toEqual(["check", "credentialSetup", "pull", "push"]);
+    ).toEqual(["push"]);
     expect(
       selectWorkspaceGatewayOperationControls({
         runtime: { actor: "browser", capabilities: ["deployment-plan"] },
@@ -349,8 +339,8 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Apply deploy");
   });
 
-  it("renders gateway proxy status and pollable operation progress without sidecar internals", () => {
-    const html = renderWithRouter(
+  it("renders compact push completion and failure feedback without sidecar internals", () => {
+    const succeededHtml = renderWithRouter(
       <InstanceShellRouteView
         state={readyState({ installs: [siteInstall({ installId: "site", label: "Site" })] })}
         workspaceGatewayState={workspaceGatewayState({
@@ -374,7 +364,7 @@ describe("instance shell route view", () => {
                 title: "Workspace push planned",
               },
             },
-            status: "running",
+            status: "succeeded",
             summary: {
               fields: {
                 provider: "cloudflare",
@@ -387,23 +377,57 @@ describe("instance shell route view", () => {
         })}
       />,
     );
+    const failedHtml = renderWithRouter(
+      <InstanceShellRouteView
+        state={readyState({ installs: [siteInstall({ installId: "site", label: "Site" })] })}
+        workspaceGatewayState={workspaceGatewayState({
+          activeOperationId: "op_push_00000002",
+          currentOperation: workspaceOperation({
+            errors: [
+              {
+                at: "2026-06-02T00:00:02.000Z",
+                message:
+                  'Failed at /Users/dpeek/workspace with CLOUDFLARE_API_TOKEN="secret-token".',
+              },
+            ],
+            id: "op_push_00000002",
+            operation: "push",
+            status: "failed",
+            summary: {
+              fields: {
+                workspace: "/Users/dpeek/workspace",
+              },
+              title: "Workspace push failed",
+            },
+          }),
+          error:
+            'Failed at /Users/dpeek/workspace with CLOUDFLARE_API_TOKEN="secret-token" and owner setup token owner-token.',
+        })}
+      />,
+    );
 
-    expect(html).toContain('data-formless-workspace-gateway="local"');
-    expect(html).toContain('data-formless-workspace-operation-controls="true"');
-    expect(html).toContain('data-formless-workspace-operation-progress="true"');
-    expect(html).toContain("Workspace push planned");
-    expect(html).toContain("Workspace source push");
-    expect(html).toContain("Running");
-    expect(html).toContain("Provider details");
-    expect(html).toContain("desired.instance.primary.3");
-    expect(html).toContain("https://personal.dpeek.workers.dev");
-    expect(html).toContain("[redacted]");
-    expect(html).not.toContain('data-formless-deployment-gateway="local"');
-    expect(html).not.toContain('data-formless-deployment-operation-controls="true"');
-    expect(html).not.toContain('href="/deployments"');
-    expect(html).not.toContain("secret-provider-token");
-    expect(html).not.toContain("sidecar-proxy-token");
-    expect(html).not.toContain("http://127.0.0.1:7777");
+    expect(succeededHtml).toContain('data-formless-workspace-gateway="local"');
+    expect(succeededHtml).toContain('data-formless-workspace-operation-controls="true"');
+    expect(succeededHtml).toContain('data-formless-workspace-operation-feedback="true"');
+    expect(succeededHtml).toContain("Workspace source push succeeded");
+    expect(succeededHtml).not.toContain('data-formless-workspace-operation-progress="true"');
+    expect(succeededHtml).not.toContain("Workspace push planned");
+    expect(succeededHtml).not.toContain("Provider details");
+    expect(succeededHtml).not.toContain("desired.instance.primary.3");
+    expect(succeededHtml).not.toContain("https://personal.dpeek.workers.dev");
+    expect(succeededHtml).not.toContain('data-formless-deployment-gateway="local"');
+    expect(succeededHtml).not.toContain('data-formless-deployment-operation-controls="true"');
+    expect(succeededHtml).not.toContain('href="/deployments"');
+    expect(succeededHtml).not.toContain("secret-provider-token");
+    expect(succeededHtml).not.toContain("sidecar-proxy-token");
+    expect(succeededHtml).not.toContain("http://127.0.0.1:7777");
+
+    expect(failedHtml).toContain('data-formless-workspace-operation-feedback="true"');
+    expect(failedHtml).toContain("&lt;path&gt;");
+    expect(failedHtml).toContain("[redacted]");
+    expect(failedHtml).not.toContain('data-formless-workspace-operation-progress="true"');
+    expect(failedHtml).not.toContain("secret-token");
+    expect(failedHtml).not.toContain("owner-token");
   });
 
   it("polls only queued or running workspace operations automatically", () => {
@@ -413,7 +437,7 @@ describe("instance shell route view", () => {
     expect(operationPollsAutomatically(workspaceOperation({ status: "failed" }))).toBe(false);
   });
 
-  it("renders first app onboarding while keeping generated record editors mounted", () => {
+  it("keeps generated record editors mounted without first app onboarding", () => {
     const html = renderWithRouter(
       <InstanceShellRouteView
         state={readyState({ installs: [] })}
@@ -436,10 +460,10 @@ describe("instance shell route view", () => {
       />,
     );
 
-    expect(html).toContain("Install first app");
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).not.toContain('data-formless-control-plane-screen="deployments"');
-    expect(html).toContain('data-formless-onboarding-generated-record-controls="routes"');
+    expect(html).not.toContain("Install first app");
+    expect(html).not.toContain('data-formless-onboarding-generated-record-controls="routes"');
     expect(html).not.toContain("Owner setup");
     expect(html).not.toContain("passkey");
     expect(html).not.toContain("Initialize workspace");

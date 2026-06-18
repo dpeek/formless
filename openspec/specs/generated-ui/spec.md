@@ -482,13 +482,22 @@ cache, provider evidence, view, screen, read model, and action models.
 - **WHEN** app install, route, workspace gateway, deployment config,
   deployment observation, desired-state projection, and provider evidence data
   are available
-- **THEN** the overview renders app install management, route management,
-  workspace source status, and first-app onboarding
+- **THEN** the overview is titled `Instance Settings`
+- **AND** the overview renders app install management and route management as
+  table-backed sections
+- **AND** route management uses the default route collection title, table, and
+  `Create Route` action without route-category query tabs
+- **AND** the overview renders one local workspace action, `Push`, only when
+  the local workspace gateway proxy is available
+- **AND** push completion or failure is shown as compact display-safe status or
+  alert feedback instead of a workspace status panel
 - **AND** the overview does not render deployment setup, deployment status,
   desired-state summaries, deployment operation controls, deployment config
   management tables, routes grouped by deployment config, primary instance
   target summaries, deployment target selectors, deployment target links,
-  standalone workspace sync panels, or standalone provider evidence cleanup panels
+  standalone workspace sync panels, workspace status panels, auto-save panels,
+  local onboarding panels, overview navigation, brand eyebrow text, or
+  standalone provider evidence cleanup panels
 - **AND** deployment and provider runtime reads are not required to render the
   overview
 
@@ -542,10 +551,12 @@ actor kinds.
 
 - GIVEN an owner or admin views workspace sync controls
 - WHEN generated UI renders operations
-- THEN it renders only push, pull, check, and credential setup operations exposed
-  to owner or admin browser actors
+- THEN it renders only the workspace push operation on the instance management
+  surface
 - AND standalone deploy, deploy plan, deploy apply, drift report, and provider
   runner operations are hidden from the browser surface
+- AND workspace check, pull, credential setup, and save operations remain hidden
+  from the instance overview controls
 
 #### Scenario: Read-only deployment observation
 
@@ -566,8 +577,11 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **WHEN** route records render
 - **THEN** routes show match host, match path, match prefix, kind, target
   profile, app install target, surface, redirect target, and enabled state
-- **AND** routes are grouped or filterable by instance paths, host mappings,
-  public Site routes, redirects, and app install
+- **AND** routes render as a single all-routes collection with the default
+  `Create Route` action
+- **AND** route management does not render route-category query tabs for
+  enabled routes, mounts, host mappings, redirects, instance paths, app install
+  routes, or public Site routes
 - **AND** route lifecycle timestamps may render only as read-only record metadata
   in surfaces that explicitly include them
 - **AND** browser route management does not expose deployment config grouping,
@@ -638,8 +652,8 @@ destination or public workflow.
 - **GIVEN** the product instance shell renders in a local workspace runtime with
   gateway proxy status available
 - **WHEN** workspace sync operations are available
-- **THEN** push, pull, check, and credential setup controls may render through
-  the workspace operation controls
+- **THEN** only the `Push` control may render through the workspace operation
+  controls
 - **AND** app install management, route management, owner auth, and app-local
   navigation remain outside those controls
 - **AND** deployment config records may exist as schema-owned intent, but the UI
@@ -659,16 +673,17 @@ destination or public workflow.
 
 ### Requirement: Browser Workspace Operation Controls
 
-Generated instance management UI SHALL expose local workspace operations when a
+Generated instance management UI SHALL expose local workspace push when a
 workspace gateway proxy is available through the local runtime.
 
 #### Scenario: Local workspace controls
 
 - **WHEN** the product instance shell renders in a local workspace runtime with
   gateway proxy status available
-- **THEN** the UI can start workspace check, pull, push, and credential setup
-  operations through the
-  same-origin gateway API family
+- **THEN** the UI can start workspace push through the same-origin gateway API
+  family
+- **AND** the UI does not expose workspace check, pull, credential setup, or
+  save controls on the instance overview
 - **AND** the browser UI does not expose a user-triggered workspace save action
   because browser writes enqueue workspace auto-save
 - **AND** CLI save remains available outside the browser as an explicit flush or
@@ -693,8 +708,9 @@ workspace gateway proxy is available through the local runtime.
 #### Scenario: Operation status display
 
 - **WHEN** a workspace operation is running or completed
-- **THEN** the UI can display operation status, progress, summaries, and
-  display-safe errors returned through the local runtime gateway proxy
+- **THEN** the UI can display compact operation completion and failure feedback
+  from display-safe operation state returned through the local runtime gateway
+  proxy
 - **AND** provider credentials, local secret values, raw provider state, and
   disallowed filesystem paths are not rendered
 
@@ -758,10 +774,9 @@ behavior for onboarding steps that write schema records.
 
 #### Scenario: Gateway operation step
 
-- **WHEN** an onboarding step starts credential setup, runs workspace check, or
-  starts push dry-run/apply
+- **WHEN** an onboarding step starts workspace push
 - **THEN** the step invokes the workspace gateway operation model and renders
-  operation progress
+  display-safe completion or failure feedback
 - **AND** push apply completion may refresh displayed deployment config
   observation cache fields after the authorized cache patch commits
 - **AND** schema field controls are used only for schema-record inputs, not for

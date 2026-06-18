@@ -2399,7 +2399,7 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("selects the unified route control-plane surface with route filters", () => {
+  it("selects the unified route control-plane surface without route filter tabs", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const routes = selectScreenModelByPath(schema, "/routes");
 
@@ -2423,16 +2423,7 @@ describe("home view model collections", () => {
     });
     const routeSection = routes.layout.sections[0];
 
-    expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual([
-      "Routes",
-      "Enabled routes",
-      "Mounts",
-      "Host mappings",
-      "Redirects",
-      "Instance paths",
-      "App install routes",
-      "Public Site routes",
-    ]);
+    expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual(["Routes"]);
     expect(routeSection?.collection.result.type).toBe("table");
     expect(
       routeSection?.collection.result.type === "table"

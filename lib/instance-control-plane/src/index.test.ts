@@ -309,16 +309,7 @@ describe("instance control-plane schema contracts", () => {
       schema.views.routeList?.type === "collection"
         ? schema.views.routeList.queries.map((slot) => slot.query)
         : undefined,
-    ).toEqual([
-      "routeAll",
-      "routeEnabled",
-      "routeMount",
-      "routeHostMapping",
-      "routeRedirect",
-      "routeInstanceMount",
-      "routeAppMount",
-      "routePublicSiteMount",
-    ]);
+    ).toEqual(["routeAll"]);
     expect(schema.views.routesByDeploymentConfigList).toBeUndefined();
     expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual(["routeList"]);
     expect(JSON.stringify(routesScreen)).not.toContain("deployEvidenceSummaryList");

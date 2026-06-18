@@ -1,12 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
-import { Link, useLocation } from "wouter";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
@@ -136,6 +129,7 @@ export function selectWorkspaceGatewayOperationControls({
   return WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceBrowserGatewayBinding)
     .filter((definition) => definition.mode === "write")
     .filter((definition) => definition.kind !== "save")
+    .filter((definition) => operationGroup !== "workspace" || definition.kind === "push")
     .filter((definition) => definition.actorPolicy.allowedActors.includes(runtime.actor))
     .filter((definition) => capabilities.has(definition.requiredCapability))
     .map(workspaceGatewayOperationControlFromDefinition)
@@ -728,8 +722,6 @@ export function InstanceShellRouteView({
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader currentPath={currentPath} />
       <WorkspaceGatewayManagementSection
-        installCount={state.installs.length}
-        onInstallFirstApp={() => setInstallDialogOpen(true)}
         onPollOperation={onPollWorkspaceOperation}
         onStartOperation={onStartWorkspaceOperation}
         state={workspaceGatewayState}
@@ -752,14 +744,10 @@ export function InstanceShellRouteView({
 }
 
 function WorkspaceGatewayManagementSection({
-  installCount,
-  onInstallFirstApp,
   onPollOperation,
   onStartOperation,
   state,
 }: {
-  installCount: number;
-  onInstallFirstApp: () => void;
   onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
   onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: WorkspaceGatewayRouteState;
@@ -768,55 +756,33 @@ function WorkspaceGatewayManagementSection({
     return null;
   }
 
-  const operation = state.status === "ready" ? state.currentOperation : undefined;
   const progressOperation =
     state.status === "ready" ? workspaceManagementOperation(state) : undefined;
   const progressError = state.status === "ready" ? state.error : undefined;
-  const initialized =
-    state.status === "ready"
-      ? workspaceInitialized(state.statusOperation ?? state.currentOperation ?? operation)
-      : undefined;
 
   return (
     <section
       aria-labelledby="workspace-gateway-heading"
-      className="space-y-3"
+      className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2"
       data-formless-workspace-gateway="local"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-        <div className="min-w-0 space-y-1">
-          <h2 id="workspace-gateway-heading" className="text-sm font-semibold">
-            Workspace
-          </h2>
-          <p className="text-xs text-muted-fg">
-            {state.status === "loading"
-              ? "Loading local workspace status"
-              : initialized === false
-                ? "Not initialized"
-                : initialized === true
-                  ? "Initialized"
-                  : "Local gateway connected"}
-          </p>
-        </div>
+      <div className="min-w-0">
+        <h2 id="workspace-gateway-heading" className="sr-only">
+          Workspace
+        </h2>
+        {state.status === "ready" ? (
+          <WorkspaceOperationCompactStatus error={progressError} operation={progressOperation} />
+        ) : null}
       </div>
       <WorkspaceGatewayOperationControls
         onStartOperation={onStartOperation}
         operationGroup="workspace"
         state={state}
       />
-      <WorkspaceAutoSaveStatusPanel
-        autoSave={state.status === "ready" ? state.autoSave : undefined}
-        error={state.status === "ready" ? state.autoSaveError : undefined}
-      />
-      <WorkspaceOnboardingFlowSection
-        installCount={installCount}
-        onInstallFirstApp={onInstallFirstApp}
-      />
       {state.status === "ready" ? (
-        <WorkspaceOperationProgress
-          error={progressError}
+        <WorkspaceOperationAuthorizationEvents
           onPollOperation={onPollOperation}
-          operation={progressOperation ?? state.statusOperation}
+          operation={progressOperation}
         />
       ) : null}
     </section>
@@ -865,144 +831,44 @@ function WorkspaceGatewayOperationControls({
   );
 }
 
-function WorkspaceAutoSaveStatusPanel({
-  autoSave,
+function WorkspaceOperationCompactStatus({
   error,
+  operation,
 }: {
-  autoSave?: WorkspaceGatewayAutoSaveState;
+  operation?: WorkspaceGatewayOperation;
   error?: string;
 }) {
-  if (!autoSave && !error) {
+  if (!operation && !error) {
     return null;
   }
 
-  const summary = autoSave ? workspaceAutoSaveDisplaySummary(autoSave) : undefined;
+  const succeeded = operation?.status === "succeeded";
+  const failed = operation?.status === "failed" || Boolean(error);
+
+  if (!succeeded && !failed) {
+    return null;
+  }
+
+  const label = error
+    ? "Push failed"
+    : operation
+      ? `${workspaceOperationKindLabel(operation.operation)} ${workspaceOperationStatusLabel(operation.status).toLowerCase()}`
+      : "Push failed";
 
   return (
-    <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
-      data-formless-workspace-auto-save-status="true"
-      data-formless-workspace-auto-save-state={autoSave?.displayState ?? "unavailable"}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold">Auto-save</h3>
-          <p className="text-xs text-muted-fg">{summary?.detail ?? "Status unavailable"}</p>
-        </div>
-        {summary ? (
-          <span className={`rounded border px-2 py-1 text-xs ${summary.className}`}>
-            {summary.label}
-          </span>
-        ) : null}
-      </div>
-      {autoSave && autoSave.writeSources.length > 0 ? (
-        <p className="text-xs text-muted-fg">
-          Sources: {autoSave.writeSources.map(workspaceAutoSaveWriteSourceLabel).join(", ")}
-        </p>
-      ) : null}
-      {autoSave?.lastSavedAt ? (
-        <p className="text-xs text-muted-fg">Last saved {displaySafeText(autoSave.lastSavedAt)}</p>
-      ) : null}
-      {autoSave?.error ? (
-        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-          {displaySafeText(autoSave.error.message)}
-        </p>
-      ) : null}
+    <div data-formless-workspace-operation-feedback="true">
       {error ? (
         <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
           {displaySafeText(error)}
         </p>
-      ) : null}
-    </div>
-  );
-}
-
-function workspaceAutoSaveDisplaySummary(autoSave: WorkspaceGatewayAutoSaveState): {
-  className: string;
-  detail: string;
-  label: string;
-} {
-  switch (autoSave.displayState) {
-    case "clean":
-      return {
-        className: "border-border text-muted-fg",
-        detail: "Workspace source has no pending local writes.",
-        label: "Clean",
-      };
-    case "dirty":
-      return {
-        className: "border-amber-300 text-amber-700",
-        detail: "Local writes are waiting for workspace save.",
-        label: "Dirty",
-      };
-    case "queued":
-      return {
-        className: "border-amber-300 text-amber-700",
-        detail: "Workspace save is queued.",
-        label: "Queued",
-      };
-    case "saving":
-      return {
-        className: "border-blue-300 text-blue-700",
-        detail: "Workspace save is running.",
-        label: "Saving",
-      };
-    case "saved":
-      return {
-        className: "border-green-300 text-green-700",
-        detail: "Workspace source is saved.",
-        label: "Saved",
-      };
-    case "failed":
-      return {
-        className: "border-red-300 text-red-700",
-        detail:
-          autoSave.retryCount > 0
-            ? `Workspace save failed after ${autoSave.retryCount} attempt${autoSave.retryCount === 1 ? "" : "s"}.`
-            : "Workspace save failed.",
-        label: "Failed",
-      };
-  }
-}
-
-function workspaceAutoSaveWriteSourceLabel(
-  source: WorkspaceGatewayAutoSaveState["writeSources"][number],
-): string {
-  return fieldKeyLabel(source);
-}
-
-function WorkspaceOnboardingFlowSection({
-  installCount,
-  onInstallFirstApp,
-}: {
-  installCount: number;
-  onInstallFirstApp: () => void;
-}) {
-  if (installCount > 0) {
-    return null;
-  }
-
-  return (
-    <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-2"
-      data-formless-workspace-onboarding="local"
-    >
-      <div className="min-w-0 space-y-2">
-        <h3 className="text-sm font-semibold">Local onboarding</h3>
-        <p className="text-xs text-muted-fg">No package apps are installed.</p>
-        <div className="flex flex-wrap gap-2">
-          <Button onPress={onInstallFirstApp} size="sm" type="button">
-            <AddIcon />
-            Install first app
-          </Button>
-        </div>
-      </div>
-      <div
-        className="flex min-w-0 flex-wrap content-start gap-2 text-xs text-muted-fg"
-        data-formless-onboarding-generated-record-controls="routes"
-      >
-        <span className="rounded border border-border px-2 py-1">Routes</span>
-      </div>
+      ) : (
+        <p
+          className={failed ? "text-xs text-red-700" : "text-xs text-muted-fg"}
+          role={failed ? "alert" : undefined}
+        >
+          {displaySafeText(label)}
+        </p>
+      )}
     </div>
   );
 }
@@ -1179,6 +1045,26 @@ function WorkspaceOperationEvents({
         </div>
       ))}
     </div>
+  );
+}
+
+function WorkspaceOperationAuthorizationEvents({
+  onPollOperation,
+  operation,
+}: {
+  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
+  operation?: WorkspaceGatewayOperation;
+}) {
+  if (!operation) {
+    return null;
+  }
+
+  return (
+    <WorkspaceOperationEvents
+      events={operation.events}
+      onPollOperation={(operationId) => onPollOperation?.(operationId, operation.operation)}
+      operationId={operation.id}
+    />
   );
 }
 
@@ -1365,7 +1251,7 @@ function workspaceManagementOperation(
 
   const operation = state.currentOperation;
 
-  if (!operation) {
+  if (!operation || operation.operation !== "push") {
     return undefined;
   }
 
@@ -1425,50 +1311,12 @@ function GeneratedInstanceRoutesSection() {
 }
 
 function ShellHeader({ currentPath }: { currentPath: string }) {
-  const pathname = currentPath.split("?")[0] ?? currentPath;
+  void currentPath;
 
   return (
-    <header className="space-y-3">
-      <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-        <h1 className="text-2xl font-semibold">Instance</h1>
-      </div>
-      <nav aria-label="Instance navigation" className="flex flex-wrap gap-2">
-        <InstanceNavigationLink
-          href={runtimeTopologyRoutes.instanceRootRoute}
-          isCurrent={pathname === runtimeTopologyRoutes.instanceRootRoute}
-        >
-          Overview
-        </InstanceNavigationLink>
-      </nav>
+    <header>
+      <h1 className="text-2xl font-semibold">Instance Settings</h1>
     </header>
-  );
-}
-
-function InstanceNavigationLink({
-  children,
-  href,
-  isCurrent,
-}: {
-  children: ReactNode;
-  href: `/${string}`;
-  isCurrent: boolean;
-}) {
-  const base =
-    "inline-flex h-8 items-center rounded border px-3 text-sm font-medium transition-colors";
-
-  return (
-    <Link
-      aria-current={isCurrent ? "page" : undefined}
-      className={
-        isCurrent
-          ? `${base} border-fg bg-fg text-bg`
-          : `${base} border-border text-muted-fg hover:border-fg hover:text-fg`
-      }
-      href={href}
-    >
-      {children}
-    </Link>
   );
 }
 

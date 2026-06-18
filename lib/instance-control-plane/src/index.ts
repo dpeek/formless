@@ -555,15 +555,6 @@ export const instanceControlPlaneSchema = {
     ]),
     routeList: collectionView("Routes", "route", "routeAll", "routeTable", {
       createView: "routeCreate",
-      extraQueries: [
-        "routeEnabled",
-        "routeMount",
-        "routeHostMapping",
-        "routeRedirect",
-        "routeInstanceMount",
-        "routeAppMount",
-        "routePublicSiteMount",
-      ],
       navigation: true,
     }),
     deploymentConfigCreate: createView("deployment-config", [

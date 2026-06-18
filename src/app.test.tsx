@@ -688,8 +688,9 @@ describe("App smoke routes", () => {
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
-    expect(html).toContain("Instance");
-    expect(html).toContain('aria-label="Instance navigation"');
+    expect(html).toContain("Instance Settings");
+    expect(html).not.toContain('aria-label="Instance navigation"');
+    expect(html).not.toContain("Overview");
     expect(html).not.toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
     expect(html).toContain('href="/tasks"');
