@@ -183,7 +183,12 @@ export default {
       return notFoundResponse(requestTopology.apiPath);
     }
 
-    const localSessionBootstrapResponse = await handleLocalSessionBootstrapApiRequest(request, env);
+    const localSessionBootstrapResponse = isLocalSessionBootstrapApiPath(requestTopology.pathname)
+      ? await handleLocalSessionBootstrapApiRequest(
+          authorityRequestWithOriginalUrlFacts(request),
+          env,
+        )
+      : undefined;
 
     if (localSessionBootstrapResponse) {
       return localSessionBootstrapResponse;
@@ -403,11 +408,63 @@ const FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER = "x-formless-original-request-ori
 function authorityRequestWithOriginalUrlFacts(request: Request): Request {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
+  const forwardedHost = originalRequestHost(request);
 
-  headers.set(FORMLESS_ORIGINAL_REQUEST_HOST_HEADER, url.host);
-  headers.set(FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER, url.origin);
+  headers.set(FORMLESS_ORIGINAL_REQUEST_HOST_HEADER, forwardedHost ?? url.host);
+  headers.set(FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER, originalRequestOrigin(request));
 
   return new Request(request, { headers });
+}
+
+function originalRequestOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const forwardedHost = originalRequestHost(request);
+
+  if (!forwardedHost) {
+    return url.origin;
+  }
+
+  const forwardedProto =
+    firstHeaderValue(request.headers.get("x-forwarded-proto")) ??
+    forwardedHeaderValue(request.headers.get("forwarded"), "proto") ??
+    url.protocol.replace(/:$/, "");
+
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
+function originalRequestHost(request: Request): string | undefined {
+  return (
+    firstHeaderValue(request.headers.get("x-forwarded-host")) ??
+    forwardedHeaderValue(request.headers.get("forwarded"), "host")
+  );
+}
+
+function firstHeaderValue(value: string | null): string | undefined {
+  const first = value?.split(",")[0]?.trim();
+
+  return first ? first : undefined;
+}
+
+function forwardedHeaderValue(value: string | null, key: "host" | "proto"): string | undefined {
+  const first = firstHeaderValue(value);
+
+  if (!first) {
+    return undefined;
+  }
+
+  for (const part of first.split(";")) {
+    const [partKey, partValue] = part.split("=", 2);
+
+    if (partKey?.trim().toLowerCase() !== key) {
+      continue;
+    }
+
+    const normalized = partValue?.trim().replace(/^"|"$/g, "");
+
+    return normalized ? normalized : undefined;
+  }
+
+  return undefined;
 }
 
 async function readOwnerSetupStatus(

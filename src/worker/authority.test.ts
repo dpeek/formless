@@ -1469,8 +1469,8 @@ describe("authority", () => {
           recordId: created.record.id,
           payload: {
             ...created.record,
-            updatedAt: deleted.record.updatedAt,
             deletedAt: expect.any(String),
+            updatedAt: deleted.record.deletedAt,
           },
           createdAt: expect.any(String),
         },
@@ -2500,8 +2500,8 @@ describe("authority", () => {
     expect(deleted).toMatchObject({
       record: {
         ...created.record,
-        updatedAt: deleted.record.updatedAt,
         deletedAt: expect.any(String),
+        updatedAt: deleted.record.deletedAt,
       },
       changes: [
         {
@@ -2511,8 +2511,8 @@ describe("authority", () => {
           recordId: created.record.id,
           payload: {
             ...created.record,
-            updatedAt: deleted.record.updatedAt,
             deletedAt: expect.any(String),
+            updatedAt: deleted.record.deletedAt,
           },
           createdAt: expect.any(String),
         },
@@ -2587,8 +2587,8 @@ describe("authority", () => {
     );
     expect(deleted.record).toEqual({
       ...project.record,
-      updatedAt: deleted.record.updatedAt,
       deletedAt: expect.any(String),
+      updatedAt: deleted.record.deletedAt,
     });
     expect(bootstrap.records.find((record) => record.id === project.record.id)).toEqual(
       deleted.record,

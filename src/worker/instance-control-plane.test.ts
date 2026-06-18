@@ -490,7 +490,7 @@ describe("instance control-plane API routes", () => {
 
   it("reports legacy route migration blockers before conflicting routes become active", async () => {
     const now = "2026-06-02T00:00:00.000Z";
-    await postAdminJson<BootstrapResponse>(
+    const restored = await postAdminJson<BootstrapResponse>(
       `${controlPlaneApi}/snapshot/restore`,
       legacyRouteIntentSnapshot(now, [
         legacyAppInstallRecord("personal", now),
@@ -499,6 +499,8 @@ describe("instance control-plane API routes", () => {
           matchPath: "/apps/personal",
           kind: "mount",
           targetProfile: "instance",
+          surface: "admin",
+          access: "owner",
           createdAt: now,
           updatedAt: now,
         }),
@@ -512,6 +514,8 @@ describe("instance control-plane API routes", () => {
         }),
       ]),
     );
+
+    expect(restored.response.status).toBe(200);
 
     const blocked = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
       headers: adminHeaders(),

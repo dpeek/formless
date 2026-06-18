@@ -40,6 +40,7 @@ export const runtimeTopologyRoutes = {
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
   instanceRootRoute: "/",
   loginRoute: "/login",
+  localSessionRoute: "/local-session",
   publicSiteIndexingResourcePaths: ["/robots.txt", "/sitemap.xml"],
   publicSiteHomeSlug: "home",
   publicSitePackageAppKey: "site",
@@ -60,9 +61,13 @@ export type RuntimeRouteBaseMatch = {
   suffixSegments: readonly string[];
 };
 
-const clientRoutePaths = [
+const ownerSessionClientRoutePaths = [
   runtimeTopologyRoutes.loginRoute,
   runtimeTopologyRoutes.setupRoute,
+] as const;
+const clientRoutePaths = [
+  runtimeTopologyRoutes.localSessionRoute,
+  ...ownerSessionClientRoutePaths,
 ] as const;
 const clientRoutePrefixes = [
   runtimeTopologyRoutes.appRouteBase,
@@ -77,6 +82,7 @@ const publishedProfileClientRoutePrefixes = [
 ] as const;
 const instanceProfileClientRoutePaths = [
   runtimeTopologyRoutes.instanceRootRoute,
+  runtimeTopologyRoutes.localSessionRoute,
   runtimeTopologyRoutes.loginRoute,
   runtimeTopologyRoutes.setupRoute,
 ] as const;
@@ -197,7 +203,7 @@ export function isRuntimeClientShellRoute(pathname: string): boolean {
 
 export function isRuntimePublishedProfileClientShellRoute(pathname: string): boolean {
   return (
-    isRuntimeClientShellPath(pathname) ||
+    isRuntimeOwnerSessionClientShellPath(pathname) ||
     publishedProfileClientRoutePrefixes.some((prefix) => routeMatchesPrefix(pathname, prefix))
   );
 }
@@ -314,6 +320,12 @@ export function isWorkersDevHost(hostname: string): boolean {
 
 function isRuntimeClientShellPath(pathname: string): boolean {
   return clientRoutePaths.includes(pathname as (typeof clientRoutePaths)[number]);
+}
+
+function isRuntimeOwnerSessionClientShellPath(pathname: string): boolean {
+  return ownerSessionClientRoutePaths.includes(
+    pathname as (typeof ownerSessionClientRoutePaths)[number],
+  );
 }
 
 function routeMatchesPrefix(pathname: string, prefix: string): boolean {

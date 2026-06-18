@@ -133,6 +133,7 @@ type ParsedCreateAppInstallActionRequest = {
 };
 
 type RouteMigrationCandidate = {
+  backfill?: boolean;
   id: string;
   source: string;
   values: RecordValues;
@@ -681,6 +682,10 @@ function backfillLegacyRouteIntentRecords(storage: DurableObjectStorage) {
   const safeCandidates = assertRouteMigrationCandidatesAreSafe(storage, candidates);
 
   for (const candidate of safeCandidates) {
+    if (candidate.backfill === false) {
+      continue;
+    }
+
     upsertControlPlaneRecord(storage, {
       action: "backfillLegacyRouteIntent",
       entity: "route",
@@ -715,11 +720,6 @@ function legacyAppRouteMigrationCandidate(
   const appInstall = parseRequiredString("legacy app-route.appInstall", record.values.appInstall);
   const routeKind = parseLegacyAppRouteKind(record.values.routeKind);
   const id = instanceControlPlaneAppRouteId(appInstall, routeKind);
-
-  if (activeControlPlaneRecordExists(storage, "route", id)) {
-    return [];
-  }
-
   const surface = appRouteSurface(routeKind);
   const values: RecordValues = {
     enabled: record.values.enabled === true,
@@ -740,6 +740,7 @@ function legacyAppRouteMigrationCandidate(
 
   return [
     {
+      backfill: !activeControlPlaneRecordExists(storage, "route", id),
       id,
       source: `legacy app-route "${record.id}"`,
       values,
@@ -754,11 +755,6 @@ function legacyDomainMappingMigrationCandidate(
   const profile = parseDomainMappingProfile(record.values.profile);
   const host = parseRequiredString("legacy domain-mapping.host", record.values.host);
   const id = domainMappingRouteRecordId({ host, profile });
-
-  if (activeControlPlaneRecordExists(storage, "route", id)) {
-    return [];
-  }
-
   const targetInstallId =
     stringRecordValue(record.values.appInstall) ??
     stringRecordValue(record.values.targetInstallId) ??
@@ -775,6 +771,7 @@ function legacyDomainMappingMigrationCandidate(
   const values = domainMappingRouteRecordValues(storage, mapping);
   return [
     {
+      backfill: !activeControlPlaneRecordExists(storage, "route", id),
       id,
       source: `legacy domain-mapping "${record.id}"`,
       values,
@@ -788,11 +785,6 @@ function legacyRedirectIntentMigrationCandidate(
 ): RouteMigrationCandidate[] {
   const fromHost = parseRequiredString("legacy redirect-intent.fromHost", record.values.fromHost);
   const id = redirectRouteRecordId(fromHost);
-
-  if (activeControlPlaneRecordExists(storage, "route", id)) {
-    return [];
-  }
-
   const intent: InstanceDomainProviderRedirectIntent = {
     fromHost,
     ...(typeof record.values.toHost === "string" && record.values.toHost.trim() !== ""
@@ -816,6 +808,7 @@ function legacyRedirectIntentMigrationCandidate(
   };
   return [
     {
+      backfill: !activeControlPlaneRecordExists(storage, "route", id),
       id,
       source: `legacy redirect-intent "${record.id}"`,
       values: redirectRouteRecordValues(intent),

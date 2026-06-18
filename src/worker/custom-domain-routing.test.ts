@@ -354,8 +354,6 @@ describe("installed Site custom-domain Worker routing", () => {
       statusCode: "308",
       preservePath: true,
       preserveQueryString: true,
-      createdAt: "2026-06-02T00:00:00.000Z",
-      updatedAt: "2026-06-02T00:00:00.000Z",
     });
     await createRouteRecord("route:redirect:docs.example.com", {
       enabled: true,
@@ -367,8 +365,6 @@ describe("installed Site custom-domain Worker routing", () => {
       statusCode: "302",
       preservePath: false,
       preserveQueryString: false,
-      createdAt: "2026-06-02T00:00:00.000Z",
-      updatedAt: "2026-06-02T00:00:00.000Z",
     });
 
     const redirected = await fetchHost("old.example.com", "/docs/start?ref=old", {
@@ -399,8 +395,6 @@ describe("installed Site custom-domain Worker routing", () => {
       statusCode: "308",
       preservePath: true,
       preserveQueryString: true,
-      createdAt: "2026-06-02T00:00:00.000Z",
-      updatedAt: "2026-06-02T00:00:00.000Z",
     });
     assetRequests = [];
 
@@ -422,8 +416,6 @@ describe("installed Site custom-domain Worker routing", () => {
         statusCode: "308",
         preservePath: true,
         preserveQueryString: true,
-        createdAt: "2026-06-02T00:00:00.000Z",
-        updatedAt: "2026-06-02T00:00:00.000Z",
       });
       assetRequests = [];
 
@@ -531,8 +523,6 @@ async function setupMappedSiteRouteRecord() {
     targetProfile: "public-site",
     appInstall: installId,
     surface: "public-site",
-    createdAt: "2026-06-02T00:00:00.000Z",
-    updatedAt: "2026-06-02T00:00:00.000Z",
   });
 }
 
@@ -551,8 +541,6 @@ async function setupMappedAppRouteRecord() {
     targetProfile: "app",
     appInstall: taskInstallId,
     surface: "admin",
-    createdAt: "2026-06-02T00:00:00.000Z",
-    updatedAt: "2026-06-02T00:00:00.000Z",
   });
 }
 

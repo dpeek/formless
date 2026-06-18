@@ -16,6 +16,7 @@ import {
   bootstrapClient,
   exportStorageSnapshot,
   fetchActiveSchema,
+  resetLocalBrowserReplicaState,
   resetSeedData,
   resetSourceSchema,
   requestSync,
@@ -194,6 +195,47 @@ describe("client sync", () => {
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:rates",
       activeSchemaKey: "crm",
+    });
+  });
+
+  it("re-bootstraps opened surfaces from Authority after local browser replica reset", async () => {
+    await bootstrapClient(
+      "tasks",
+      jsonFetcher("/api/tasks/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("record-1", "Stale browser cache")],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+
+    const reset = await resetLocalBrowserReplicaState();
+
+    expect(reset.deletedDatabaseNames).toEqual(["formless:tasks"]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: null,
+      activeSchemaKey: null,
+      schema: null,
+      recordsById: {},
+    });
+
+    await bootstrapClient(
+      "tasks",
+      jsonFetcher("/api/tasks/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        records: [record("record-2", "Authority state")],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot("tasks")).records).toEqual([
+      record("record-2", "Authority state"),
+    ]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:tasks",
+      activeSchemaKey: "tasks",
+      schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
     });
   });
 

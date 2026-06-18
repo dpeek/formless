@@ -5,7 +5,12 @@ import {
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
 import { nowIsoString } from "../shared/clock.ts";
-import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
+import {
+  ownerLoginDefaultRedirectTarget,
+  parseOwnerLoginRedirectTarget,
+  type OwnerLoginRedirectTarget,
+} from "../shared/instance-auth.ts";
+import { resolveRuntimeProfileKind, runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { ensureLocalDevOwnerInCurrentTransaction } from "./instance-setup-state.ts";
 import {
@@ -13,6 +18,8 @@ import {
   ownerSessionSigningSecret,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
+
+const originalRequestOriginHeader = "x-formless-original-request-origin";
 
 type LocalSessionBootstrapTokenRow = {
   token_hash: string;
@@ -84,8 +91,13 @@ export async function handleLocalSessionBootstrapDurableObjectRequest(
     owner: exchanged.owner,
     request,
   });
+  const requestUrl = new URL(request.url);
+  const redirectTarget =
+    parseOwnerLoginRedirectTarget(requestUrl.searchParams.get("redirectTo")) ??
+    ownerLoginDefaultRedirectTarget;
+  const browserRedirectTarget = localSessionBrowserRedirectTarget(requestUrl, redirectTarget);
   const headers = new Headers({
-    Location: new URL("/", request.url).toString(),
+    Location: new URL(browserRedirectTarget, localSessionRedirectOrigin(request)).toString(),
     "Set-Cookie": session.cookie,
   });
 
@@ -155,6 +167,36 @@ function isSameOriginOrNoOrigin(request: Request): boolean {
   } catch {
     return false;
   }
+}
+
+function localSessionRedirectOrigin(request: Request): string {
+  const originalOrigin = request.headers.get(originalRequestOriginHeader);
+
+  if (originalOrigin) {
+    try {
+      return new URL(originalOrigin).origin;
+    } catch {
+      // Fall through to the Durable Object request URL.
+    }
+  }
+
+  return new URL(request.url).origin;
+}
+
+function localSessionBrowserRedirectTarget(
+  requestUrl: URL,
+  redirectTarget: OwnerLoginRedirectTarget,
+): OwnerLoginRedirectTarget {
+  if (requestUrl.searchParams.get("reset") !== "1") {
+    return redirectTarget;
+  }
+
+  const localSessionUrl = new URL(runtimeTopologyRoutes.localSessionRoute, "http://formless.local");
+
+  localSessionUrl.searchParams.set("reset", "1");
+  localSessionUrl.searchParams.set("redirectTo", redirectTarget);
+
+  return `${localSessionUrl.pathname}${localSessionUrl.search}` as OwnerLoginRedirectTarget;
 }
 
 function exchangeLocalSessionBootstrapToken(

@@ -11,6 +11,7 @@ import {
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { ActiveAppSurface } from "./app/app-surface.tsx";
 import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
+import { LocalSessionRoute } from "./app/routes/local-session.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { OwnerLoginRoute, fetchOwnerSessionStatus } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
@@ -563,6 +564,11 @@ function AppRoutes({
       {browserRoutes.ownerLoginRoute ? (
         <Route path={browserRoutes.ownerLoginRoute}>
           <OwnerLoginRoute />
+        </Route>
+      ) : null}
+      {browserRoutes.localSessionRoute && localWorkspaceGatewayAvailable ? (
+        <Route path={browserRoutes.localSessionRoute}>
+          <LocalSessionRoute />
         </Route>
       ) : null}
       {browserRoutes.instanceShellRoute ? (

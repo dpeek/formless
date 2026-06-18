@@ -12,7 +12,12 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string | null;
     }
-  | { kind: "workspaceDev"; open: boolean; workspacePath: string | null }
+  | {
+      kind: "workspaceDev";
+      open: boolean;
+      reset: boolean;
+      workspacePath: string | null;
+    }
   | {
       adminToken: string | null;
       kind: "workspaceOwnerSetup";
@@ -51,7 +56,8 @@ export function formlessCliUsage(): string {
     "Usage: formless <command>",
     "",
     "Commands:",
-    "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
+    "  dev [--workspace <path>] [--open] [--reset]",
+    "                                      Run local workspace and print browser session URL",
     "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
     "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
     "                                      Sync selected target into workspace source",
@@ -115,8 +121,10 @@ function requireWorkspaceCliOperation(commandName: string, operationKind: Worksp
 }
 
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
-  const options = parseTopLevelWorkspaceOptions(args, "formless dev [--workspace <path>] [--open]");
+  const usage = "formless dev [--workspace <path>] [--open] [--reset]";
+  const options = parseTopLevelWorkspaceOptions(args, usage);
   let open = false;
+  let reset = false;
 
   for (const arg of options.rest) {
     if (arg === "--open") {
@@ -124,10 +132,15 @@ function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
       continue;
     }
 
+    if (arg === "--reset") {
+      reset = true;
+      continue;
+    }
+
     throw new Error(`Unknown option for formless dev: ${arg}`);
   }
 
-  return { kind: "workspaceDev", open, workspacePath: options.workspacePath };
+  return { kind: "workspaceDev", open, reset, workspacePath: options.workspacePath };
 }
 
 function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {

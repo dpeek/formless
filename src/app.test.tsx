@@ -837,6 +837,22 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Runtime apps"');
   });
 
+  it('renders the "/local-session" route only for local workspace runtimes', () => {
+    const html = renderRoute("/local-session", undefined, undefined, {
+      localWorkspaceGatewayAvailable: true,
+    });
+    const unavailableHtml = renderRoute("/local-session");
+
+    expect(html).toContain("Checking local session");
+    expect(html).toContain("Verifying owner access.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('aria-label="Runtime apps"');
+    expect(unavailableHtml).toContain("Not found");
+    expect(unavailableHtml).not.toContain("Checking local session");
+    expect(unavailableHtml).not.toContain('data-frame="workbench"');
+  });
+
   it("keeps deployed owner auth routes available outside default instance onboarding", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const shellHtml = renderRoute("/", instanceProfile);

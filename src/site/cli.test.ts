@@ -54,6 +54,8 @@ import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-ru
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
+  WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
+  WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
@@ -90,7 +92,6 @@ import {
   initFormlessInstanceWorkspace,
   planFormlessInstanceDeployment,
   resolveFormlessInstanceWorkspaceRoot,
-  resetFormlessInstanceWorkspaceLocalState,
   restoreAppArchive,
   restorePortableArchive,
   runFormlessCli,
@@ -131,7 +132,8 @@ describe("Formless Site CLI", () => {
       "Usage: formless <command>",
       "",
       "Commands:",
-      "  dev [--workspace <path>] [--open]   Run local workspace and browser setup",
+      "  dev [--workspace <path>] [--open] [--reset]",
+      "                                      Run local workspace and print browser session URL",
       "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
       "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
       "                                      Sync selected target into workspace source",
@@ -160,16 +162,25 @@ describe("Formless Site CLI", () => {
     expect(parseFormlessCliArgs(["dev"])).toEqual({
       kind: "workspaceDev",
       open: false,
+      reset: false,
       workspacePath: null,
     });
     expect(parseFormlessCliArgs(["dev", "--workspace", "../personal"])).toEqual({
       kind: "workspaceDev",
       open: false,
+      reset: false,
       workspacePath: "../personal",
     });
     expect(parseFormlessCliArgs(["dev", "--workspace", "../personal", "--open"])).toEqual({
       kind: "workspaceDev",
       open: true,
+      reset: false,
+      workspacePath: "../personal",
+    });
+    expect(parseFormlessCliArgs(["dev", "--workspace", "../personal", "--reset"])).toEqual({
+      kind: "workspaceDev",
+      open: false,
+      reset: true,
       workspacePath: "../personal",
     });
     expect(parseFormlessCliArgs(["save", "--workspace", "../personal", "--check"])).toEqual({
@@ -289,7 +300,10 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["unknown"])).toThrow("Unknown command: unknown");
     expect(() => parseFormlessCliArgs(["init"])).toThrow("Unknown command: init");
     expect(() => parseFormlessCliArgs(["dev", "--help"])).toThrow(
-      "Usage: formless dev [--workspace <path>] [--open]",
+      "Usage: formless dev [--workspace <path>] [--open] [--reset]",
+    );
+    expect(() => parseFormlessCliArgs(["dev", "--print-session"])).toThrow(
+      "Unknown option for formless dev: --print-session",
     );
     expect(() => parseFormlessCliArgs(["dev", "--verbose"])).toThrow(
       "Unknown option for formless dev: --verbose",
@@ -1978,7 +1992,11 @@ describe("Formless Site CLI", () => {
     expect(refreshRequests).toHaveLength(1);
     const refreshBody = refreshRequests[0]?.body;
     const refreshBodyText =
-      refreshBody instanceof URLSearchParams ? refreshBody.toString() : String(refreshBody ?? "");
+      refreshBody instanceof URLSearchParams
+        ? refreshBody.toString()
+        : typeof refreshBody === "string"
+          ? refreshBody
+          : "";
     expect(refreshBodyText).toContain("grant_type=refresh_token");
     expect(refreshBodyText).toContain("refresh_token=expired-refresh-token");
     expect(deployInputs).toHaveLength(1);
@@ -2446,16 +2464,14 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toMatchObject({
-      args: ["run", "dev"],
-      command: "npm",
+      args: ["dev", "--port", "4443", "--strictPort"],
+      command: "/package/node_modules/.bin/vp",
       cwd: "/package",
     });
     expect(spawnCalls[0]?.env).toMatchObject({
@@ -2510,12 +2526,7 @@ describe("Formless Site CLI", () => {
     ).resolves.toBe(
       `FORMLESS_ADMIN_TOKEN=generated-token\nFORMLESS_OWNER_SESSION_SECRET=${setupToken}\n`,
     );
-    expect(withoutFakeCliDevLogs(logs)).toEqual([
-      "Instance shell: http://localhost:4443/",
-      "Local bootstrap entry: complete workspace setup in the browser.",
-      `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
-      "Workspace storage restore skipped: no workspace state found.",
-    ]);
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(child.killed).toBe(false);
     expect(sidecars).toMatchObject([
       {
@@ -2558,24 +2569,69 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
+    const sessionUrl = devSessionBootstrapUrlLogLine(logs);
     const openedUrl = new URL(openedUrls[0] ?? "");
 
-    expect(openedUrls).toHaveLength(1);
+    expect(logs).toEqual([sessionUrl]);
+    expect(openedUrls).toEqual([sessionUrl]);
     expect(openedUrl.origin).toBe("http://localhost:4443");
     expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
     expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
+    expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN).toBe("generated-token");
     expect(spawnCalls[0]?.env?.[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).toBe("local-session-token");
     expect(openedUrls[0]).not.toContain("generated-token");
     expect(requests.map((request) => request.headers.authorization)).toEqual([
       "Bearer generated-token",
       "Bearer generated-token",
+    ]);
+  });
+
+  it("prints only the local session bootstrap URL without opening a browser", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "session-workspace");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+
+    const run = runFormlessCli(
+      ["dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: { PORT: "4443" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        openedUrls,
+        packageRoot: "/package",
+        spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+          announceFakeCliDevServer(child, options.env);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
+    child.close(0);
+    await run;
+
+    const bootstrapUrl = readDevSessionBootstrapUrl(logs);
+
+    expect(openedUrls).toEqual([]);
+    expect(logs).toEqual([
+      "http://localhost:4443/api/formless/local-session/bootstrap?token=local-session-token",
+    ]);
+    expect(bootstrapUrl.origin).toBe("http://localhost:4443");
+    expect(bootstrapUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
+    expect(bootstrapUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4443/api/formless/app-installs",
+      "GET http://localhost:4443/api/formless/app-installs",
     ]);
   });
 
@@ -2603,17 +2659,19 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
     const openedUrl = new URL(openedUrls[0] ?? "");
 
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
+    expect(openedUrls).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(openedUrl.origin).toBe("http://localhost:5174");
     expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
     expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
+    expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5174/api/formless/app-installs",
       "GET http://localhost:5174/api/formless/app-installs",
@@ -2622,6 +2680,83 @@ describe("Formless Site CLI", () => {
       "Bearer generated-token",
       "Bearer generated-token",
     ]);
+  });
+
+  it("prints and opens local session URLs on the Portless origin while probing the child origin", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "portless-workspace");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+
+    const run = runFormlessCli(
+      ["dev", "--workspace", workspaceRoot, "--open"],
+      cliDeps(tempDir, {
+        env: {
+          ALCHEMY_PASSWORD: "alchemy-secret",
+          CLOUDFLARE_API_TOKEN: "cf-secret",
+          HOST: "127.0.0.1",
+          PORT: "5174",
+          PORTLESS_URL: "https://ooga.formless.local",
+        },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        openedUrls,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+          child.announceReady("http://127.0.0.1:5174");
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
+    child.close(0);
+    await run;
+
+    const sessionUrl = devSessionBootstrapUrlLogLine(logs);
+    const openedUrl = new URL(openedUrls[0] ?? "");
+    const printedAndOpenedUrls = [sessionUrl, ...openedUrls].join("\n");
+    const forbiddenValues = [
+      spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN,
+      spawnCalls[0]?.env?.FORMLESS_OWNER_SESSION_SECRET,
+      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV],
+      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV],
+      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
+      spawnCalls[0]?.env?.ALCHEMY_PASSWORD,
+      spawnCalls[0]?.env?.CLOUDFLARE_API_TOKEN,
+    ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+    expect(logs).toEqual([
+      "https://ooga.formless.local/api/formless/local-session/bootstrap?token=local-session-token",
+    ]);
+    expect(openedUrls).toEqual([sessionUrl]);
+    expect(openedUrl.origin).toBe("https://ooga.formless.local");
+    expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
+    expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
+    expect(openedUrl.searchParams.get("reset")).toBeNull();
+    expect(spawnCalls[0]).toMatchObject({
+      args: ["dev", "--port", "5174", "--strictPort", "--host", "127.0.0.1"],
+      command: "/package/node_modules/.bin/vp",
+      cwd: "/package",
+    });
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://127.0.0.1:5174/api/formless/app-installs",
+      "GET http://127.0.0.1:5174/api/formless/app-installs",
+    ]);
+    for (const value of forbiddenValues) {
+      expect(printedAndOpenedUrls).not.toContain(value);
+    }
   });
 
   it("keeps workspace dev browser gateway config same-origin without sidecar proxy config", async () => {
@@ -2686,9 +2821,7 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line === "Workspace storage restore skipped: no workspace state found."),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
@@ -2726,7 +2859,7 @@ describe("Formless Site CLI", () => {
     ).resolves.toBe(
       `FORMLESS_ADMIN_TOKEN=generated-token\nFORMLESS_OWNER_SESSION_SECRET=${setupToken}\n`,
     );
-    expect(logs).toContain("Local bootstrap entry: complete workspace setup in the browser.");
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(child.killed).toBe(false);
   });
 
@@ -2839,16 +2972,14 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toMatchObject({
-      args: ["run", "dev"],
-      command: "npm",
+      args: ["dev", "--port", "4444", "--strictPort"],
+      command: "/package/node_modules/.bin/vp",
       cwd: "/package",
     });
     expect(spawnCalls[0]?.env).toMatchObject({
@@ -2904,12 +3035,7 @@ describe("Formless Site CLI", () => {
       "media/images/cover.png",
     );
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
-    expect(withoutFakeCliDevLogs(logs)).toEqual([
-      "Instance shell: http://localhost:4444/",
-      "Local bootstrap entry: complete workspace setup in the browser.",
-      `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
-      `Workspace storage restored: storage state (1 apps, ${mediaRecords().length} records, 1 media).`,
-    ]);
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(child.killed).toBe(false);
   });
 
@@ -2953,9 +3079,7 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
@@ -2999,9 +3123,7 @@ describe("Formless Site CLI", () => {
     expect(controlPlaneJson).not.toContain("formless.app.json");
     expect(controlPlaneJson).not.toContain(packageRoot);
     expect(restoreBody.mediaFiles).toEqual([]);
-    expect(logs.at(-1)).toBe(
-      "Workspace storage restored: storage state (1 apps, 0 records, 0 media).",
-    );
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
   });
 
   it("rejects missing local app state before local dev restore", async () => {
@@ -3210,9 +3332,7 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line === "Workspace storage restore skipped: no workspace state found."),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
@@ -3231,12 +3351,7 @@ describe("Formless Site CLI", () => {
       "Bearer generated-token",
       "Bearer generated-token",
     ]);
-    expect(withoutFakeCliDevLogs(logs)).toEqual([
-      "Instance shell: http://localhost:4446/",
-      "Local bootstrap entry: complete workspace setup in the browser.",
-      `Local state: ${path.relative(nestedRoot, path.join(workspaceRoot, ".formless/local"))}.`,
-      "Workspace storage restore skipped: no workspace state found.",
-    ]);
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
   });
 
   it("keeps existing workspace-local installs on instance dev rerun", async () => {
@@ -3262,9 +3377,7 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restore skipped")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
@@ -3276,9 +3389,7 @@ describe("Formless Site CLI", () => {
       "Bearer generated-token",
       "Bearer generated-token",
     ]);
-    expect(logs.at(-1)).toBe(
-      "Workspace storage restore skipped: local installs already exist (david).",
-    );
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
   });
 
   it("saves browser-created local Authority installed apps into deterministic workspace state", async () => {
@@ -3481,22 +3592,41 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("resets only instance workspace local state", async () => {
+  it("resets only instance workspace local state through dev --reset", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
 
     await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceAppStateFromArchive(workspaceRoot, appArchive("david", "David Peek"));
     await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
     await mkdir(path.join(workspaceRoot, ".formless/backups"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
     await writeFile(path.join(workspaceRoot, ".formless/backups/keep.txt"), "backup");
     await writeFile(path.join(workspaceRoot, ".formless/instance.env"), "FORMLESS_ADMIN_TOKEN=x\n");
 
-    const result = await resetFormlessInstanceWorkspaceLocalState(
-      { workspacePath: workspaceRoot },
-      cliDeps(tempDir),
+    const run = runFormlessCli(
+      ["dev", "--workspace", workspaceRoot, "--reset"],
+      cliDeps(tempDir, {
+        env: { PORT: "4451" },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        openedUrls,
+        spawn: ((_command: string, _args: string[], options: CapturedSpawnOptions) => {
+          announceFakeCliDevServer(child, options.env);
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
     );
+
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
+    child.close(0);
+    await run;
+
+    const bootstrapUrl = readDevSessionBootstrapUrl(logs);
 
     await expect(
       stat(path.join(workspaceRoot, ".formless/local/wrangler/state.txt")),
@@ -3507,13 +3637,15 @@ describe("Formless Site CLI", () => {
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
-    await expect(
-      readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
-    ).resolves.toContain('"storageIdentity": "app:david"');
-    expect(result.localStateRoot).toBe(path.join(workspaceRoot, ".formless/local"));
+    expect(openedUrls).toEqual([]);
+    expect(bootstrapUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
+    expect(bootstrapUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(bootstrapUrl.searchParams.get("reset")).toBe("1");
+    expect(bootstrapUrl.searchParams.get("redirectTo")).toBeNull();
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
   });
 
-  it("rebuilds local runtime state from workspace source after local reset", async () => {
+  it("rebuilds local Authority state from workspace source after dev --reset", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const child = new FakeCliDevChild();
@@ -3526,13 +3658,8 @@ describe("Formless Site CLI", () => {
     await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
     await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
 
-    await resetFormlessInstanceWorkspaceLocalState(
-      { workspacePath: workspaceRoot },
-      cliDeps(tempDir),
-    );
-
     const run = runFormlessCli(
-      ["dev", "--workspace", workspaceRoot],
+      ["dev", "--workspace", workspaceRoot, "--reset"],
       cliDeps(tempDir, {
         env: { PORT: "4450" },
         fetch: localInstanceDevFetch(requests, []),
@@ -3545,12 +3672,11 @@ describe("Formless Site CLI", () => {
       }),
     );
 
-    await waitUntil(() =>
-      logs.some((line) => line.startsWith("Workspace storage restored: storage state")),
-    );
+    await waitUntil(() => logs.some((line) => line.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH)));
     child.close(0);
     await run;
 
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4450/api/formless/app-installs",
       "GET http://localhost:4450/api/formless/app-installs",
@@ -3567,9 +3693,6 @@ describe("Formless Site CLI", () => {
     await expect(
       readFile(path.join(workspaceRoot, ".formless/local/dev.json"), "utf8"),
     ).resolves.toContain('"sourceUrl": "http://localhost:4450"');
-    expect(logs.at(-1)).toBe(
-      "Workspace storage restored: storage state (1 apps, 0 records, 0 media).",
-    );
     expect(child.killed).toBe(false);
   });
 
@@ -4619,8 +4742,18 @@ function fakeCliDevReadyLog(origin: string): string {
   return `Fake Vite ready: ${origin}/`;
 }
 
-function withoutFakeCliDevLogs(logs: string[]): string[] {
-  return logs.filter((line) => !line.startsWith("Fake Vite ready: "));
+function devSessionBootstrapUrlLogLine(logs: readonly string[]): string {
+  const line = logs.find((entry) => entry.includes(LOCAL_SESSION_BOOTSTRAP_API_PATH));
+
+  if (!line) {
+    throw new Error("Expected formless dev bootstrap URL log.");
+  }
+
+  return line;
+}
+
+function readDevSessionBootstrapUrl(logs: readonly string[]): URL {
+  return new URL(devSessionBootstrapUrlLogLine(logs));
 }
 
 async function writeWorkspaceManifest(

@@ -520,11 +520,13 @@ export type FormlessInstanceWorkspaceDevCommand = {
 export type DevFormlessInstanceWorkspaceInput = {
   name?: string | null;
   open?: boolean;
+  reset?: boolean;
   workspacePath?: string;
 };
 
 export type EnsureFormlessInstanceWorkspaceDevBootstrapInput = {
   name?: string | null;
+  reset?: boolean;
   workspacePath?: string;
 };
 
@@ -581,6 +583,10 @@ export type DevFormlessInstanceWorkspaceDependencies = {
     | "setupCapability"
   >
 >;
+
+export type FormlessInstanceWorkspaceDevSessionEntry = {
+  localSessionBootstrapUrl: string;
+};
 
 export type ResetFormlessInstanceWorkspaceLocalStateInput = {
   workspacePath?: string;
@@ -1925,7 +1931,8 @@ export async function runFormlessInstanceWorkspaceDev(
   dependencies: DevFormlessInstanceWorkspaceDependencies,
 ): Promise<void> {
   const devBootstrap = await ensureFormlessInstanceWorkspaceDevBootstrap(input, dependencies);
-  const { localDevSecrets, localStateRoot, manifest, workspaceRoot } = devBootstrap;
+  const { localDevSecrets, manifest, workspaceRoot } = devBootstrap;
+
   const activePackages = await createActiveWorkspaceAppPackages(workspaceRoot);
   const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
@@ -1972,7 +1979,7 @@ export async function runFormlessInstanceWorkspaceDev(
       stdio: "pipe",
     });
 
-    forwardDevOutput(child, dependencies.log, candidateOrigins);
+    collectDevOutputOrigins(child, candidateOrigins);
 
     const source = await waitForInstanceDevServer(
       child,
@@ -1980,7 +1987,7 @@ export async function runFormlessInstanceWorkspaceDev(
       candidateOrigins,
       localDevSecrets.adminToken,
     );
-    const bootstrap = await bootstrapWorkspaceLocalInstance(
+    await bootstrapWorkspaceLocalInstance(
       {
         adminToken: localDevSecrets.adminToken,
         activePackages,
@@ -1998,28 +2005,19 @@ export async function runFormlessInstanceWorkspaceDev(
       workspaceRoot,
     });
 
+    const browserOrigin = browserFacingLocalDevOrigin(source, dependencies.env);
+    const sessionEntry = localSessionEntry(browserOrigin, localSessionBootstrapToken, {
+      reset: input.reset === true,
+    });
+
+    dependencies.log(sessionEntry.localSessionBootstrapUrl);
+
     if (input.open) {
       if (!dependencies.openBrowser) {
         throw new Error("Formless instance dev --open requires a browser opener.");
       }
 
-      await dependencies.openBrowser(localSessionBootstrapUrl(source, localSessionBootstrapToken));
-    }
-
-    dependencies.log(`Instance shell: ${source}/`);
-    dependencies.log("Local bootstrap entry: complete workspace setup in the browser.");
-    dependencies.log(`Local state: ${relativeDependencyPath(dependencies.cwd, localStateRoot)}.`);
-
-    if (bootstrap.status === "restored") {
-      dependencies.log(
-        `Workspace storage restored: ${bootstrap.sourceKind} (${bootstrap.appCount} apps, ${bootstrap.recordCount} records, ${bootstrap.mediaCount} media).`,
-      );
-    } else if (bootstrap.status === "existing") {
-      dependencies.log(
-        `Workspace storage restore skipped: local installs already exist (${bootstrap.installIds.join(", ") || "none"}).`,
-      );
-    } else {
-      dependencies.log("Workspace storage restore skipped: no workspace state found.");
+      await dependencies.openBrowser(sessionEntry.localSessionBootstrapUrl);
     }
 
     await waitForChildExit(child);
@@ -2060,6 +2058,12 @@ export async function ensureFormlessInstanceWorkspaceDevBootstrap(
   }
 
   const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
+
+  if (input.reset) {
+    await rm(localStateRoot, { force: true, recursive: true });
+    await mkdir(localStateRoot, { recursive: true });
+  }
+
   const localDevSecrets = await ensureFormlessInstanceWorkspaceLocalDevSecretState(
     workspaceRoot,
     localStateRoot,
@@ -3081,12 +3085,49 @@ function randomWorkspaceGatewayToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-function localSessionBootstrapUrl(source: string, token: string): string {
+function localSessionBootstrapUrl(
+  source: string,
+  token: string,
+  input: { reset: boolean },
+): string {
   const url = new URL(LOCAL_SESSION_BOOTSTRAP_API_PATH, `${source}/`);
 
   url.searchParams.set("token", token);
+  if (input.reset) {
+    url.searchParams.set("reset", "1");
+  }
 
   return url.toString();
+}
+
+function localSessionEntry(
+  browserOrigin: string,
+  token: string,
+  input: { reset: boolean },
+): FormlessInstanceWorkspaceDevSessionEntry {
+  return {
+    localSessionBootstrapUrl: localSessionBootstrapUrl(browserOrigin, token, input),
+  };
+}
+
+function browserFacingLocalDevOrigin(source: string, env: NodeJS.ProcessEnv | undefined): string {
+  const proxyOrigin = env?.PORTLESS_URL?.trim();
+
+  if (!proxyOrigin) {
+    return source;
+  }
+
+  try {
+    const url = new URL(proxyOrigin);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("must use http or https");
+    }
+
+    return url.origin;
+  } catch {
+    throw new Error(`PORTLESS_URL is invalid: ${proxyOrigin}`);
+  }
 }
 
 function createLocalDevSecret(dependencies: DevFormlessInstanceWorkspaceDependencies): string {
@@ -6886,9 +6927,8 @@ function workerNameFromWorkersDevUrl(targetUrl: string | undefined): string | un
   return workerName || undefined;
 }
 
-function forwardDevOutput(
+function collectDevOutputOrigins(
   child: ChildProcessWithoutNullStreams,
-  log: (message: string) => void,
   candidateOrigins: Set<string>,
 ) {
   const handleOutput = (chunk: Buffer) => {
@@ -6896,12 +6936,6 @@ function forwardDevOutput(
 
     for (const origin of httpOriginsFromText(text)) {
       candidateOrigins.add(origin);
-    }
-
-    for (const line of text.split(/\r?\n/)) {
-      if (line.length > 0) {
-        log(line);
-      }
     }
   };
 
@@ -7032,12 +7066,6 @@ function instanceAppInstallsUrl(origin: string): string {
 
 function restoreErrors(restore: RestorePortableArchiveResult): string {
   return restore.remote.errors?.map((error) => error.message).join("; ") || "unknown error";
-}
-
-function relativeDependencyPath(cwd: string, filePath: string): string {
-  const relativePath = path.relative(cwd, filePath);
-
-  return relativePath === "" ? "." : relativePath.split(path.sep).join("/");
 }
 
 function delay(ms: number): Promise<void> {

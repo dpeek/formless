@@ -186,6 +186,11 @@ bootstrap boundary.
   local session bootstrap endpoint
 - **AND** the endpoint issues an owner session cookie for the local runtime and
   redirects to the instance shell
+- **AND** when the local runtime is reached through a named same-origin proxy,
+  the bootstrap URL may use the proxy origin while server readiness and admin
+  bootstrap work may use the loopback child dev origin
+- **AND** the owner session cookie is scoped to the request host that exchanged
+  the token
 - **AND** the token cannot authorize gateway operations, control-plane writes,
   app installs, arbitrary filesystem access, Cloudflare mutation, Alchemy
   mutation, or provider mutation
@@ -193,6 +198,23 @@ bootstrap boundary.
   successful exchange
 - **AND** the local session bootstrap endpoint is unavailable outside local
   workspace runtime profiles
+
+#### Scenario: Local agent session reset entrypoint
+
+- **WHEN** a browser or agent opens a local session bootstrap URL with a reset
+  request intended to start from a fresh authenticated browser session
+- **THEN** the entrypoint must establish or verify a local owner session through
+  the local session bootstrap boundary before any owner-only local runtime
+  surface is used
+- **AND** browser-visible reset work is limited to browser-owned local caches,
+  session bootstrap redirect state, and same-origin client state for the local
+  runtime
+- **AND** resetting browser-owned local state cannot authorize save, pull, push,
+  credential setup, deploy plan, deploy apply, cleanup, arbitrary filesystem
+  access, Cloudflare mutation, Alchemy mutation, provider mutation, or admin
+  bearer disclosure
+- **AND** server-owned local Authority, media, operation, and Wrangler state
+  reset remains a CLI-owned local workspace state operation
 
 #### Scenario: Browser starts mutating operation
 

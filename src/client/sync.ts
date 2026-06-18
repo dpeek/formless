@@ -5,11 +5,13 @@ import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
 import {
   deleteClientDb,
+  deleteFormlessReplicaDatabases,
   mergeChanges,
   readCursor,
   readSchemaUpdatedAt,
   saveBootstrapResponse,
   saveSchema,
+  type FormlessReplicaDatabaseResetResult,
 } from "./db.ts";
 import {
   applyBootstrapResponse,
@@ -83,6 +85,14 @@ export async function bootstrapClient(target: ClientAppTarget, fetcher: typeof f
   notifyLocalDataChanged(identity, { schemaChanged: true });
 
   return response;
+}
+
+export async function resetLocalBrowserReplicaState(): Promise<FormlessReplicaDatabaseResetResult> {
+  const result = await deleteFormlessReplicaDatabases();
+
+  resetClientStore();
+
+  return result;
 }
 
 export async function syncClient(target: ClientAppTarget, fetcher: typeof fetch = fetch) {

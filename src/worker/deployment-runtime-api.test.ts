@@ -320,17 +320,14 @@ describe("instance deployment runtime API routes", () => {
   });
 
   it("projects provider resources directly from route records without route timestamps or secrets", async () => {
-    const now = "2026-05-28T00:00:00.000Z";
     const deploymentConfig = await createControlPlaneRecord("deployment-config", {
       targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
       targetKind: "instance",
-      createdAt: now,
       label: "Cloudflare primary",
       enabled: true,
       targetUrl: "https://direct.example.workers.dev",
       providerFamily: "cloudflare",
       credentialRef: "secret:cloudflare:primary",
-      updatedAt: now,
       workerName: "config-worker",
     });
     expect(deploymentConfig.response.status).toBe(200);
@@ -343,8 +340,6 @@ describe("instance deployment runtime API routes", () => {
       matchPrefix: "/",
       deploymentConfig: deploymentConfig.body.record.id,
       targetProfile: "instance",
-      createdAt: now,
-      updatedAt: now,
     });
     expect(enabledRoute.response.status).toBe(200);
 
@@ -355,8 +350,6 @@ describe("instance deployment runtime API routes", () => {
       matchPath: "/",
       matchPrefix: "/",
       targetProfile: "instance",
-      createdAt: now,
-      updatedAt: now,
     });
 
     const first = await getJson<InstanceDeploymentDesiredStateResponse>(
@@ -424,19 +417,16 @@ describe("instance deployment runtime API routes", () => {
   });
 
   it("derives deployment status from deployment-config observation fields", async () => {
-    const now = "2026-05-28T00:00:00.000Z";
     const empty = await getJson<InstanceDeploymentStatusResponse>(
       INSTANCE_DEPLOYMENT_STATUS_API_PATH,
     );
     const deploymentConfig = await createControlPlaneRecord("deployment-config", {
       targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
       targetKind: "instance",
-      createdAt: now,
       label: "Cloudflare primary",
       enabled: true,
       targetUrl: "https://direct.example.workers.dev",
       providerFamily: "cloudflare",
-      updatedAt: now,
     });
     const desired = await getJson<InstanceDeploymentDesiredStateResponse>(
       INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,

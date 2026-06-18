@@ -64,7 +64,6 @@ import {
   preflightPushFormlessCloudflareOAuthCredential,
   resolveFormlessInstanceWorkspaceProviderContext,
   resolveFormlessInstanceWorkspaceRoot as resolveFormlessInstanceWorkspaceRootCommand,
-  resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
   runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
   saveLocalFormlessWorkspace as saveLocalFormlessWorkspaceCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
@@ -88,7 +87,6 @@ import {
   type PlanFormlessInstanceWorkspaceDomainsResult,
   type PullFormlessInstanceWorkspaceResult,
   type PushFormlessInstanceWorkspaceResult,
-  type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
   type SaveLocalFormlessWorkspaceInput,
   type SaveLocalFormlessWorkspaceResult,
@@ -121,7 +119,6 @@ import {
   readFormlessInstanceOwnerSetupStatus,
 } from "./instance-target-client.ts";
 import { requireSiteCliTargetContext } from "./instance-target-context.ts";
-import { packageRunScriptCommand } from "./package-commands.ts";
 import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
@@ -236,9 +233,6 @@ export {
   type PushFormlessInstanceWorkspaceDependencies,
   type PushFormlessInstanceWorkspaceInput,
   type PushFormlessInstanceWorkspaceResult,
-  type ResetFormlessInstanceWorkspaceLocalStateDependencies,
-  type ResetFormlessInstanceWorkspaceLocalStateInput,
-  type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
   type RotateFormlessInstanceWorkspaceAdminTokenInput,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
@@ -420,11 +414,12 @@ export async function runFormlessCli(
       await runFormlessInstanceWorkspaceDev(
         {
           open: command.open,
+          reset: command.reset,
           workspacePath,
         },
         dependencies,
         {
-          devCommand: packageRunScriptCommand("dev", dependencies.env),
+          devCommand: workspaceDevServerCommandForEnv(dependencies.env, dependencies.packageRoot),
         },
       );
       return;
@@ -530,6 +525,38 @@ export async function runFormlessCli(
       return;
     }
   }
+}
+
+function workspaceDevServerCommandForEnv(
+  env: NodeJS.ProcessEnv,
+  packageRoot: string,
+): FormlessInstanceWorkspaceDevCommand {
+  const command: FormlessInstanceWorkspaceDevCommand = {
+    args: ["dev"],
+    command: path.join(packageRoot, "node_modules/.bin/vp"),
+    label: "vp dev",
+  };
+  const extraArgs: string[] = [];
+  const port = env.PORT?.trim();
+  const host = env.HOST?.trim();
+
+  if (port) {
+    extraArgs.push("--port", port, "--strictPort");
+  }
+
+  if (host) {
+    extraArgs.push("--host", host);
+  }
+
+  if (extraArgs.length === 0) {
+    return command;
+  }
+
+  return {
+    ...command,
+    args: [...command.args, ...extraArgs],
+    label: `${command.label} ${extraArgs.join(" ")}`,
+  };
 }
 
 async function runCliWorkspaceOperation(
@@ -970,6 +997,7 @@ export async function pushFormlessInstanceWorkspace(
 export async function runFormlessInstanceWorkspaceDev(
   input: {
     open?: boolean;
+    reset?: boolean;
     workspacePath?: string;
   },
   dependencies: Pick<
@@ -997,18 +1025,11 @@ export async function runFormlessInstanceWorkspaceDev(
 ): Promise<void> {
   return runFormlessInstanceWorkspaceDevCommand(input, {
     ...dependencies,
-    devCommand: options.devCommand ?? packageRunScriptCommand("dev", dependencies.env),
+    devCommand:
+      options.devCommand ??
+      workspaceDevServerCommandForEnv(dependencies.env, dependencies.packageRoot),
     packageVersion: packageJson.version,
   });
-}
-
-export async function resetFormlessInstanceWorkspaceLocalState(
-  input: {
-    workspacePath?: string;
-  },
-  dependencies: Pick<FormlessCliDependencies, "cwd"> = nodeFormlessCliDependencies(),
-): Promise<ResetFormlessInstanceWorkspaceLocalStateResult> {
-  return resetFormlessInstanceWorkspaceLocalStateCommand(input, dependencies);
 }
 
 export async function deployFormlessInstanceWorkspace(

@@ -2,7 +2,7 @@
  * Local Node Workspace package adapter entrypoint.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -626,12 +626,24 @@ export async function writeInstanceWorkspaceAutoSaveState(input: {
 
   await ensureInstanceWorkspaceSecretStateIgnored(input.workspaceRoot);
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, formatWorkspaceAutoSaveState(input.state));
+  await writeFileAtomically(filePath, formatWorkspaceAutoSaveState(input.state));
 
   return {
     path: filePath,
     state: input.state,
   };
+}
+
+async function writeFileAtomically(filePath: string, contents: string): Promise<void> {
+  const tempPath = `${filePath}.${randomUUID()}.tmp`;
+
+  try {
+    await writeFile(tempPath, contents);
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function ensureInstanceWorkspaceSecretStateIgnored(

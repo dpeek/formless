@@ -125,6 +125,7 @@ export type RuntimeBrowserRoutePatterns = {
   installedAppScreenRoutePattern?: `/${string}`;
   installedSitePublicHomeRoutePattern?: `/${string}`;
   installedSitePublicSlugRoutePattern?: `/${string}`;
+  localSessionRoute?: typeof runtimeTopologyRoutes.localSessionRoute;
   ownerLoginRoute?: typeof runtimeTopologyRoutes.loginRoute;
   ownerSetupRoute?: typeof runtimeTopologyRoutes.setupRoute;
 };
@@ -270,6 +271,7 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
     ...(hasInstanceBrowserShell
       ? {
           instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
+          localSessionRoute: runtimeTopologyRoutes.localSessionRoute,
         }
       : {}),
     ...(installedAppRoutes
@@ -334,6 +336,7 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
   return (
     path === routes.ownerLoginRoute ||
     path === routes.ownerSetupRoute ||
+    path === routes.localSessionRoute ||
     isRuntimePublicSiteRoute(profile, path, context) ||
     isInstalledSitePublicRoutePath(profile, path) ||
     profile.shell === "publishedSite" ||

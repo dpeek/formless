@@ -37,7 +37,9 @@ describe("local session bootstrap API routes", () => {
   it("mints a local owner session that authorizes app install writes without exposing admin tokens", async () => {
     const rejectedBefore = await createSiteInstall({ cookie: null });
     const bootstrap = await bootstrapLocalSession({
-      headers: { Origin: "http://example.com" },
+      init: { headers: { Origin: "http://example.com" } },
+      redirectTo: "/apps/site",
+      reset: true,
     });
     const cookie = cookiePair(bootstrap.headers.get("Set-Cookie"));
     const session = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
@@ -55,7 +57,10 @@ describe("local session bootstrap API routes", () => {
       error: "Owner session or admin authorization is required for this write endpoint.",
     });
     expect(bootstrap.status).toBe(302);
-    expect(bootstrap.headers.get("Location")).toBe("http://example.com/");
+    expect(bootstrap.headers.get("Location")).toBe(
+      "http://example.com/local-session?reset=1&redirectTo=%2Fapps%2Fsite",
+    );
+    expect(bootstrap.headers.get("Location")).not.toContain(localSessionBootstrapToken);
     expect(bootstrap.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(bootstrap.headers.get("Set-Cookie")).toContain("HttpOnly");
     expect(bootstrap.headers.get("Set-Cookie")).toContain("SameSite=Lax");
@@ -96,13 +101,33 @@ describe("local session bootstrap API routes", () => {
     expect(installsAfter.body.installs.map((install) => install.installId)).toEqual(["site"]);
   });
 
+  it("redirects same-origin local bootstrap requests back to the original named proxy origin", async () => {
+    const bootstrap = await bootstrapLocalSession({
+      init: {
+        headers: {
+          "x-forwarded-host": "ooga.formless.local",
+          "x-forwarded-proto": "https",
+        },
+      },
+      origin: "http://127.0.0.1:4334",
+      reset: true,
+    });
+
+    expect(bootstrap.status).toBe(302);
+    expect(bootstrap.headers.get("Location")).toBe(
+      "https://ooga.formless.local/local-session?reset=1&redirectTo=%2F",
+    );
+    expect(bootstrap.headers.get("Location")).not.toContain(localSessionBootstrapToken);
+    expect(bootstrap.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+  });
+
   it("rejects invalid, replayed, cross-origin, and non-local bootstrap requests", async () => {
     const invalid = await harness.fetch(`${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=wrong`, {
       redirect: "manual",
     });
     const invalidBody = await invalid.json();
     const crossOrigin = await bootstrapLocalSession({
-      headers: { Origin: "http://evil.example.com" },
+      init: { headers: { Origin: "http://evil.example.com" } },
     });
     const crossOriginBody = await crossOrigin.json();
     const setupAfterRejected = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
@@ -130,6 +155,7 @@ describe("local session bootstrap API routes", () => {
       });
       expect(setupAfterRejected.body).toEqual({ setupComplete: false });
       expect(accepted.status).toBe(302);
+      expect(accepted.headers.get("Location")).toBe("http://example.com/");
       expect(replay.status).toBe(401);
       expect(replayBody).toEqual({
         error: "Local session bootstrap token is invalid.",
@@ -143,8 +169,40 @@ describe("local session bootstrap API routes", () => {
   });
 });
 
-async function bootstrapLocalSession(init: HarnessFetchInit = {}) {
-  return harness.fetch(`${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=${localSessionBootstrapToken}`, {
+async function bootstrapLocalSession({
+  init = {},
+  origin = "http://example.com",
+  redirectTo,
+  reset = false,
+}: {
+  init?: HarnessFetchInit;
+  origin?: string;
+  redirectTo?: string;
+  reset?: boolean;
+} = {}) {
+  const url = new URL(
+    `${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=${localSessionBootstrapToken}`,
+    origin,
+  );
+
+  if (redirectTo !== undefined) {
+    url.searchParams.set("redirectTo", redirectTo);
+  }
+  if (reset) {
+    url.searchParams.set("reset", "1");
+  }
+
+  const requestTarget =
+    origin === "http://example.com" ? `${url.pathname}${url.search}` : url.toString();
+
+  if (origin !== "http://example.com") {
+    return harness.mf.dispatchFetch(requestTarget, {
+      ...init,
+      redirect: "manual",
+    });
+  }
+
+  return harness.fetch(requestTarget, {
     ...init,
     redirect: "manual",
   });

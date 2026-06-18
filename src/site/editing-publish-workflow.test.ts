@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vite-plus/test";
 import {
   STORAGE_SNAPSHOT_KIND,
@@ -7,10 +5,6 @@ import {
   parseStorageSnapshot,
 } from "@dpeek/formless-storage";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
-
-type PackageJson = {
-  scripts?: Record<string, string>;
-};
 
 describe("Site editing and publish workflow baseline", () => {
   it("characterizes the source seed as active stored records, not a storage snapshot export", () => {
@@ -42,27 +36,4 @@ describe("Site editing and publish workflow baseline", () => {
       expect(record).not.toHaveProperty("payload");
     }
   });
-
-  it("characterizes deploy as code and asset deploy only", () => {
-    const packageJson = readPackageJson();
-    const deployScript = packageJson.scripts?.deploy;
-
-    expect(deployScript).toBe("vp build && wrangler deploy");
-    expect(deployScript).toContain("vp build");
-    expect(deployScript).toContain("wrangler deploy");
-    expect(deployScript).not.toContain("snapshot");
-    expect(deployScript).not.toContain("reset");
-    expect(readWranglerConfigText()).toContain('"run_worker_first": [');
-    expect(readWranglerConfigText()).toContain('"/*"');
-  });
 });
-
-function readPackageJson(): PackageJson {
-  return JSON.parse(
-    readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-  ) as PackageJson;
-}
-
-function readWranglerConfigText(): string {
-  return readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
-}

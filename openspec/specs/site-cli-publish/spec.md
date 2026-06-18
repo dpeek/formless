@@ -181,12 +181,41 @@ optional first app install, credential setup, and push operations.
 #### Scenario: Open authenticated local session
 
 - **WHEN** a user runs `formless dev --open`
-- **THEN** the CLI opens a same-origin local session bootstrap URL for the
-  running local workspace runtime
+- **THEN** the CLI prints and opens the same same-origin local session
+  bootstrap URL for the running local workspace runtime
 - **AND** successful bootstrap issues an owner session cookie and redirects the
   browser to the instance shell
 - **AND** the instance shell can install the first package app through the
   normal app install flow without passkey setup
+
+#### Scenario: Print authenticated local session entrypoint
+
+- **WHEN** `formless dev` runs for humans, agents, or dev supervisors
+- **THEN** the CLI prints the local session bootstrap URL as a plain URL line
+- **AND** when the dev server is wrapped by a named local proxy, the printed and
+  opened browser URLs use the proxy origin while internal readiness probes may
+  continue using the child dev server origin
+- **AND** the printed bootstrap URL contains only the process-scoped local
+  session bootstrap token and never prints the admin bearer token, owner session
+  signing secret, gateway proxy token, gateway CSRF token, provider credential,
+  raw filesystem path outside the workspace, or deploy secret
+- **AND** the bootstrap URL is useful for a browser or agent to obtain an owner
+  session and then navigate the named local instance origin
+
+#### Scenario: Reset local workspace runtime state
+
+- **WHEN** `formless dev --reset` runs for a selected workspace
+- **THEN** before serving the local runtime it removes and recreates only the
+  ignored local runtime state root used for dev server persistence, local dev
+  secrets, local dev metadata, and local Wrangler state
+- **AND** it preserves reviewable workspace source, package links, storage
+  snapshots, media payloads, deployment secret state, provider credentials, and
+  remote instance state
+- **AND** the same `formless dev --reset` start can rebuild local Authority
+  state from workspace storage snapshots and media payloads when present
+- **AND** the printed local session bootstrap URL includes a reset request so
+  browser-context Formless replica caches are reset before a fully fresh agent
+  browser session enters the instance shell
 
 #### Scenario: Install first app locally
 

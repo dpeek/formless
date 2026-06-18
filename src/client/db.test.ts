@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   clientDbName,
   deleteClientDb,
+  deleteFormlessReplicaDatabases,
+  FormlessReplicaDatabaseDeleteBlockedError,
+  isFormlessReplicaDatabaseName,
   saveBootstrapResponse,
   saveSchema,
   mergeChanges,
@@ -23,6 +26,7 @@ beforeEach(async () => {
   await deleteClientDb(instanceControlPlaneClientTarget());
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
+  await deleteRawDatabase("notes");
 });
 
 describe("client db", () => {
@@ -110,6 +114,61 @@ describe("client db", () => {
       record("install-1", "Personal Site"),
     ]);
     expect((await readLocalSnapshot("tasks")).records).toEqual([]);
+  });
+
+  it("deletes only same-origin Formless replica databases", async () => {
+    const personal = installedSiteIdentity("personal");
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Task")],
+      cursor: 1,
+    });
+    await saveBootstrapResponse(personal, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-2", "Personal")],
+      cursor: 2,
+    });
+    await saveBootstrapResponse(controlPlaneTarget, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-3", "Control plane")],
+      cursor: 3,
+    });
+    await createRawDatabase("notes");
+
+    const result = await deleteFormlessReplicaDatabases();
+    const databaseNames = await rawDatabaseNames();
+
+    expect(result.deletedDatabaseNames).toEqual([
+      "formless:app:personal",
+      "formless:instance:control-plane",
+      "formless:tasks",
+    ]);
+    expect(result.skippedDatabaseNames).toContain("notes");
+    expect(databaseNames).not.toContain("formless:tasks");
+    expect(databaseNames).not.toContain("formless:app:personal");
+    expect(databaseNames).not.toContain("formless:instance:control-plane");
+    expect(databaseNames).toContain("notes");
+    expect(isFormlessReplicaDatabaseName("notes")).toBe(false);
+    expect(isFormlessReplicaDatabaseName("formless:unknown")).toBe(false);
+    expect(isFormlessReplicaDatabaseName("formless:app:")).toBe(false);
+  });
+
+  it("reports blocked Formless replica database deletion", async () => {
+    const db = await openRawDatabase("formless:tasks");
+
+    try {
+      await expect(deleteFormlessReplicaDatabases()).rejects.toMatchObject({
+        blockedDatabaseNames: ["formless:tasks"],
+        name: "FormlessReplicaDatabaseDeleteBlockedError",
+      } satisfies Partial<FormlessReplicaDatabaseDeleteBlockedError>);
+    } finally {
+      db.close();
+    }
   });
 
   it("migrates older local replica metadata without replacing records", async () => {
@@ -238,6 +297,28 @@ function deleteRawDatabase(name: string) {
     request.onerror = () => reject(request.error ?? new Error(`Could not delete ${name}.`));
     request.onblocked = () => reject(new Error(`${name} delete was blocked.`));
   });
+}
+
+function createRawDatabase(name: string) {
+  return openRawDatabase(name).then((db) => db.close());
+}
+
+function openRawDatabase(name: string) {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error(`Could not open ${name}.`));
+  });
+}
+
+async function rawDatabaseNames() {
+  const databases = await indexedDB.databases();
+
+  return databases
+    .map((database) => database.name)
+    .filter((name): name is string => typeof name === "string")
+    .toSorted();
 }
 
 function createLegacyReplica(

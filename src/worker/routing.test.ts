@@ -153,6 +153,12 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/login"), instanceProfile),
     ).toBe(true);
     expect(
+      shouldDeferToStaticAssets(
+        documentRequest("http://example.com/local-session"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/deployments"), instanceProfile),
     ).toBe(false);
     expect(
@@ -246,6 +252,12 @@ describe("Worker document routing", () => {
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
         documentRequest("http://example.com/setup"),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/local-session"),
         instanceProfile,
       ),
     ).toBe(false);
@@ -356,6 +368,7 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/schema"),
       documentRequest("http://example.com/setup"),
       documentRequest("http://example.com/login"),
+      documentRequest("http://example.com/local-session"),
       documentRequest("http://example.com/apps/personal"),
       documentRequest("http://example.com/sites/personal"),
       documentRequest("http://example.com/assets/index.js"),
@@ -456,6 +469,9 @@ describe("Worker document routing", () => {
     );
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/setup"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/login"))).toBe(true);
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/local-session"))).toBe(
+      true,
+    );
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/site"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/setup"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/login"))).toBe(true);
@@ -648,6 +664,7 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isClientShellRoute("/setup")).toBe(true);
     expect(isClientShellRoute("/login")).toBe(true);
+    expect(isClientShellRoute("/local-session")).toBe(true);
     expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);
   });

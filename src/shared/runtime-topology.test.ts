@@ -160,6 +160,7 @@ describe("runtime topology", () => {
     expect(isRuntimeClientShellRoute("/schema")).toBe(true);
     expect(isRuntimeClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeClientShellRoute("/sites/personal/blog")).toBe(true);
+    expect(isRuntimeClientShellRoute("/local-session")).toBe(true);
     expect(isRuntimeClientShellRoute("/login")).toBe(true);
     expect(isRuntimeClientShellRoute("/setup")).toBe(true);
     expect(isRuntimeClientShellRoute("/rates")).toBe(false);
@@ -169,10 +170,12 @@ describe("runtime topology", () => {
     expect(isRuntimePublishedProfileClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/login")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/setup")).toBe(true);
+    expect(isRuntimePublishedProfileClientShellRoute("/local-session")).toBe(false);
     expect(isRuntimePublishedProfileClientShellRoute("/pages/home")).toBe(false);
     expect(isRuntimePublishedProfileClientShellRoute("/site")).toBe(false);
 
     expect(isRuntimeInstanceProfileClientShellRoute("/")).toBe(true);
+    expect(isRuntimeInstanceProfileClientShellRoute("/local-session")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/deployments")).toBe(false);
     expect(isRuntimeInstanceProfileClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/sites/personal")).toBe(true);

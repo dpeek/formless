@@ -7,18 +7,18 @@
   },
   "checks": {
     "vite": {
-      "cmd": "vp check --fix"
+      "cmd": "bun run check"
     }
   },
   "services": {
     "web": {
-      "cmd": "portless run vp dev",
+      "cmd": "portless run -- bun run dev",
       "events": {
         "url": {
-          "log": "(https?://(?:[a-z0-9-]+\\.)*formless\\.local(?::\\d+)?)"
+          "log": "https?://(?:[a-z0-9-]+\\.)*formless\\.local/api/formless/local-session/bootstrap[^\n]+"
         },
         "ready": {
-          "log": "(?:ready in|Local:|Network:)"
+          "log": "https?://(?:[a-z0-9-]+\\.)*formless\\.local/api/formless/local-session/bootstrap[^\n]+"
         }
       }
     },

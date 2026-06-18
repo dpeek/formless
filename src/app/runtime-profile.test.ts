@@ -161,6 +161,7 @@ describe("runtime profile resolver", () => {
       installedAppScreenRoutePattern: "/apps/:installId/*",
       installedSitePublicHomeRoutePattern: "/sites/:installId",
       installedSitePublicSlugRoutePattern: "/sites/:installId/*",
+      localSessionRoute: "/local-session",
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });
@@ -207,6 +208,7 @@ describe("runtime profile resolver", () => {
       installedAppScreenRoutePattern: "/apps/:installId/*",
       installedSitePublicHomeRoutePattern: "/sites/:installId",
       installedSitePublicSlugRoutePattern: "/sites/:installId/*",
+      localSessionRoute: "/local-session",
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });

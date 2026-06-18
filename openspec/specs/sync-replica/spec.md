@@ -91,6 +91,20 @@ truth migrations.
 - THEN the client can delete the local replica and re-bootstrap from Authority
 - AND no Authority data is lost
 
+#### Scenario: Local dev browser replica reset
+
+- WHEN a local dev authenticated session bootstrap URL requests a fresh browser
+  replica state
+- THEN the browser deletes same-origin Formless replica IndexedDB databases for
+  schema-key apps, installed apps, and the instance control plane before
+  rendering owner-only local runtime surfaces
+- AND non-Formless IndexedDB databases on the same origin are not deleted
+- AND after reset, each opened Formless surface re-bootstraps or syncs from
+  Authority storage for its storage identity
+- AND if deletion is blocked by another tab or browser connection, the client
+  reports the blocked local cache reset instead of treating browser cache state
+  as source of truth
+
 ### Requirement: HTTP Cursor Sync
 
 The system SHALL use a sync cursor to catch up a browser replica from Authority storage.

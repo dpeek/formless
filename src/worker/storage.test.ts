@@ -454,8 +454,8 @@ describe("storage", () => {
     expect(deleted.cursor).toBe(2);
     expect(deleted.record).toEqual({
       ...created.record,
-      updatedAt: deleted.record.deletedAt,
       deletedAt: expect.any(String),
+      updatedAt: deleted.record.deletedAt,
     });
     expect(records).toEqual([deleted.record]);
     expect(changes).toHaveLength(1);

@@ -3,6 +3,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
+import { schemaApps } from "../shared/schema-apps.ts";
 
 const DB_VERSION = 2;
 
@@ -14,6 +15,12 @@ const SCHEMA_UPDATED_AT_KEY = "schemaUpdatedAt";
 const CURSOR_KEY = "cursor";
 const LAST_SYNCED_AT_KEY = "lastSyncedAt";
 const REPLICA_VERSION_KEY = "replicaVersion";
+const FORMLESS_REPLICA_DB_PREFIX = "formless:";
+const FORMLESS_INSTALLED_APP_REPLICA_DB_PREFIX = `${FORMLESS_REPLICA_DB_PREFIX}app:`;
+const FORMLESS_INSTANCE_CONTROL_PLANE_REPLICA_DB = `${FORMLESS_REPLICA_DB_PREFIX}instance:control-plane`;
+const SCHEMA_KEY_REPLICA_DB_NAMES = new Set(
+  schemaApps.map((app) => `${FORMLESS_REPLICA_DB_PREFIX}${app.key}`),
+);
 
 export type LocalSnapshot = {
   schema: AppSchema | null;
@@ -22,6 +29,23 @@ export type LocalSnapshot = {
   cursor: number;
   lastSyncedAt: string | null;
 };
+
+export type FormlessReplicaDatabaseResetResult = {
+  deletedDatabaseNames: string[];
+  skippedDatabaseNames: string[];
+};
+
+export class FormlessReplicaDatabaseDeleteBlockedError extends Error {
+  readonly blockedDatabaseNames: string[];
+
+  constructor(blockedDatabaseNames: string[]) {
+    super(
+      `Local browser replica reset was blocked for ${blockedDatabaseNames.join(", ")}. Close other tabs using this local runtime and try again.`,
+    );
+    this.name = "FormlessReplicaDatabaseDeleteBlockedError";
+    this.blockedDatabaseNames = blockedDatabaseNames;
+  }
+}
 
 export async function readLocalSnapshot(target: ClientAppTarget): Promise<LocalSnapshot> {
   const db = await openClientDb(target);
@@ -170,6 +194,41 @@ export function deleteClientDb(target: ClientAppTarget) {
   });
 }
 
+export async function deleteFormlessReplicaDatabases(): Promise<FormlessReplicaDatabaseResetResult> {
+  const databaseNames = await listIndexedDbDatabaseNames();
+  const replicaDatabaseNames = databaseNames.filter(isFormlessReplicaDatabaseName).toSorted();
+  const skippedDatabaseNames = databaseNames
+    .filter((name) => !isFormlessReplicaDatabaseName(name))
+    .toSorted();
+  const deletedDatabaseNames: string[] = [];
+  const blockedDatabaseNames: string[] = [];
+
+  for (const databaseName of replicaDatabaseNames) {
+    const result = await deleteIndexedDbDatabase(databaseName);
+
+    if (result === "blocked") {
+      blockedDatabaseNames.push(databaseName);
+    } else {
+      deletedDatabaseNames.push(databaseName);
+    }
+  }
+
+  if (blockedDatabaseNames.length > 0) {
+    throw new FormlessReplicaDatabaseDeleteBlockedError(blockedDatabaseNames);
+  }
+
+  return { deletedDatabaseNames, skippedDatabaseNames };
+}
+
+export function isFormlessReplicaDatabaseName(name: string): boolean {
+  return (
+    name === FORMLESS_INSTANCE_CONTROL_PLANE_REPLICA_DB ||
+    SCHEMA_KEY_REPLICA_DB_NAMES.has(name) ||
+    (name.startsWith(FORMLESS_INSTALLED_APP_REPLICA_DB_PREFIX) &&
+      name.length > FORMLESS_INSTALLED_APP_REPLICA_DB_PREFIX.length)
+  );
+}
+
 export function clientDbName(target: ClientAppTarget) {
   return appStorageIdentityForClientTarget(target).browserDatabaseName;
 }
@@ -225,6 +284,38 @@ function requestToPromise<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
+  });
+}
+
+type IndexedDbDatabaseInfo = {
+  name?: string | null;
+};
+
+type IndexedDbFactoryWithDatabases = IDBFactory & {
+  databases?: () => Promise<IndexedDbDatabaseInfo[]>;
+};
+
+async function listIndexedDbDatabaseNames(): Promise<string[]> {
+  const databaseLister = (indexedDB as IndexedDbFactoryWithDatabases).databases?.bind(indexedDB);
+
+  if (!databaseLister) {
+    throw new Error("IndexedDB database enumeration is unavailable.");
+  }
+
+  const databases = await databaseLister();
+
+  return databases
+    .map((database) => database.name)
+    .filter((name): name is string => typeof name === "string" && name.length > 0);
+}
+
+function deleteIndexedDbDatabase(name: string) {
+  return new Promise<"blocked" | "deleted">((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+
+    request.onsuccess = () => resolve("deleted");
+    request.onerror = () => reject(request.error ?? new Error(`Could not delete ${name}.`));
+    request.onblocked = () => resolve("blocked");
   });
 }
 
