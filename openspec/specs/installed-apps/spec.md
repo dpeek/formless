@@ -76,7 +76,7 @@ app install can be created.
 
 #### Scenario: Private package availability
 
-- **GIVEN** a private app package such as ClearTrace is resolved from a
+- **GIVEN** a private app package such as Verifi-Labs is resolved from a
   workspace-linked package source
 - **WHEN** app packages are listed for that workspace or runtime
 - **THEN** the private package is installable only in that resolver scope

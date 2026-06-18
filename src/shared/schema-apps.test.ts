@@ -33,9 +33,9 @@ describe("schema app definitions", () => {
     expect(findSchemaAppDefinitionByRoute("/crm")?.key).toBe("crm");
     expect(findSchemaAppDefinitionByRoute("/crm/audiences")?.key).toBe("crm");
     expect(findSchemaAppDefinitionByRoute("/crm/schema")?.key).toBe("crm");
-    expect(findSchemaAppDefinitionByRoute("/cleartrace")).toBeUndefined();
-    expect(findSchemaAppDefinitionByRoute("/cleartrace/orders")).toBeUndefined();
-    expect(findSchemaAppDefinitionByRoute("/cleartrace/schema")).toBeUndefined();
+    expect(findSchemaAppDefinitionByRoute("/verifi")).toBeUndefined();
+    expect(findSchemaAppDefinitionByRoute("/verifi/orders")).toBeUndefined();
+    expect(findSchemaAppDefinitionByRoute("/verifi/schema")).toBeUndefined();
     expect(findSchemaAppDefinitionByRoute("/rates/schema")).toBeUndefined();
     expect(findSchemaAppDefinitionByRoute("/site/schema")?.key).toBe("site");
     expect(findSchemaAppDefinitionByRoute("/missing")).toBeUndefined();

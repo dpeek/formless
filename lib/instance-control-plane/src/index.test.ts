@@ -35,7 +35,7 @@ import {
 
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const cleartraceSourceSchemaHash =
+const verifiSourceSchemaHash =
   "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 const privateSourceSchemaHash =
   "sha256:3333333333333333333333333333333333333333333333333333333333333333";
@@ -47,9 +47,9 @@ const controlPlanePackageManifests = [
     sourceSchemaHash: siteSourceSchemaHash,
   }),
   packageManifest({
-    label: "Cleartrace",
-    packageAppKey: "cleartrace",
-    sourceSchemaHash: cleartraceSourceSchemaHash,
+    label: "Verifi Labs",
+    packageAppKey: "verifi",
+    sourceSchemaHash: verifiSourceSchemaHash,
   }),
 ];
 const controlPlanePackageResolver = createAppPackageResolver(controlPlanePackageManifests);
@@ -494,16 +494,16 @@ describe("instance control-plane schema contracts", () => {
 
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
-        installId: "cleartrace",
-        packageAppKey: "cleartrace",
+        installId: "verifi",
+        packageAppKey: "verifi",
         packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.surface),
     ).toEqual(["admin", "schema"]);
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
-        installId: "cleartrace",
-        packageAppKey: "cleartrace",
+        installId: "verifi",
+        packageAppKey: "verifi",
         packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.access),
