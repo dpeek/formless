@@ -95,7 +95,6 @@ describe("launch fixture registry", () => {
             label: "CRM",
             packageAppKey: "crm",
             packageRevision: 1,
-            schemaRoute: "/apps/crm/schema",
             sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
             status: "installed",
             updatedAt: now,

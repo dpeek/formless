@@ -95,7 +95,6 @@ const instanceControlPlaneApp = {
   key: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   label: "Instance control plane",
   route: "/instance-control-plane",
-  schemaRoute: "/instance-control-plane/schema",
   seedChangeMutationPrefix: "seed-instance-control-plane",
   sourceSchema: instanceControlPlaneSourceSchema,
   seedRecords: [],
@@ -1324,13 +1323,11 @@ function parseLegacyRedirectStatusCode(
 }
 
 function parseLegacyAppRouteKind(value: unknown): InstanceControlPlaneAppRouteKind {
-  if (value === "admin" || value === "schema" || value === "publicSite") {
+  if (value === "admin" || value === "publicSite") {
     return value;
   }
 
-  throw new BadRequestError(
-    'Field "legacy app-route.routeKind" must be "admin", "schema", or "publicSite".',
-  );
+  throw new BadRequestError('Field "legacy app-route.routeKind" must be "admin" or "publicSite".');
 }
 
 function appRouteSurface(
@@ -1339,8 +1336,6 @@ function appRouteSurface(
   switch (routeKind) {
     case "admin":
       return "admin";
-    case "schema":
-      return "schema";
     case "publicSite":
       return "public-site";
   }

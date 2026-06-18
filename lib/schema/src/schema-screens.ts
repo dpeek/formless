@@ -14,8 +14,6 @@ import type {
   ViewSchema,
 } from "./types.ts";
 
-const SCHEMA_EDITOR_SCREEN_PATH = "/schema";
-
 export function parseScreens(
   value: unknown,
   views: Record<string, ViewSchema>,
@@ -107,12 +105,6 @@ function parseScreenPath(screenName: string, value: unknown): string | undefined
 
   if (typeof value !== "string" || !isStaticAppRelativePath(value)) {
     throw new Error(`Screen "${screenName}" path must be a static app-relative path.`);
-  }
-
-  if (value === SCHEMA_EDITOR_SCREEN_PATH) {
-    throw new Error(
-      `Screen "${screenName}" path must not collide with schema editor path "${SCHEMA_EDITOR_SCREEN_PATH}".`,
-    );
   }
 
   return value;

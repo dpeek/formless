@@ -3514,9 +3514,15 @@ describe("schema collection views", () => {
         screens: defaultScreens({ path: "/setup" }),
       }),
     );
+    const schemaPathSchema = parseAppSchema(
+      baseSchema({
+        screens: defaultScreens({ path: "/schema" }),
+      }),
+    );
 
     expect(rootSchema.screens?.taskHome?.path).toBe("/");
     expect(setupSchema.screens?.taskHome?.path).toBe("/setup");
+    expect(schemaPathSchema.screens?.taskHome?.path).toBe("/schema");
   });
 
   it("rejects duplicate screen paths", () => {
@@ -3532,7 +3538,7 @@ describe("schema collection views", () => {
     ).toThrow('Screen path "/" must be unique. Used by "taskHome" and "taskSetup".');
   });
 
-  it("rejects non-static screen paths and schema editor path collisions", () => {
+  it("rejects non-static screen paths", () => {
     for (const path of ["", "setup", "/tasks/:taskId", "/*", "/tasks/*"]) {
       expect(() =>
         parseAppSchema(
@@ -3542,14 +3548,6 @@ describe("schema collection views", () => {
         ),
       ).toThrow('Screen "taskHome" path must be a static app-relative path.');
     }
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          screens: defaultScreens({ path: "/schema" }),
-        }),
-      ),
-    ).toThrow('Screen "taskHome" path must not collide with schema editor path "/schema".');
   });
 
   it("rejects malformed screen layouts and duplicate section ids", () => {

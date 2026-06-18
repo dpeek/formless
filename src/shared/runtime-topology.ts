@@ -45,7 +45,6 @@ export const runtimeTopologyRoutes = {
   publicSiteHomeSlug: "home",
   publicSitePackageAppKey: "site",
   publicSitePreviewRouteBase: "/pages",
-  schemaRoute: "/schema",
   setupRoute: "/setup",
   siteAdminRoute: "/admin",
   siteRouteBase: "/sites",
@@ -72,7 +71,7 @@ const clientRoutePaths = [
 const clientRoutePrefixes = [
   runtimeTopologyRoutes.appRouteBase,
   runtimeTopologyRoutes.publicSitePreviewRouteBase,
-  runtimeTopologyRoutes.schemaRoute,
+  "/schema",
   runtimeTopologyRoutes.siteRouteBase,
   ...schemaApps.map((app) => app.route),
 ] as const;

@@ -4996,7 +4996,6 @@ function appArchiveControlPlaneRecords(archive: AppArchive): StoredRecord[] {
       archive.app.packageAppKey === "site"
         ? (`/sites/${archive.app.installId}/` as `/sites/${string}/`)
         : undefined,
-    schemaRoute: `/apps/${archive.app.installId}/schema` as `/apps/${string}/schema`,
     sourceSchemaHash: archive.app.sourceSchemaHash,
     status: archive.app.status,
     updatedAt: archive.app.updatedAt,
@@ -5032,22 +5031,6 @@ function appInstallControlPlaneRecords(install: AppInstall): StoredRecord[] {
         targetProfile: "app",
         appInstall: install.installId,
         surface: "admin",
-        createdAt: install.createdAt,
-        updatedAt: install.updatedAt,
-      },
-      createdAt: install.createdAt,
-      updatedAt: install.updatedAt,
-    },
-    {
-      id: `route:${install.installId}:schema`,
-      entity: "route",
-      values: {
-        enabled: true,
-        matchPath: install.schemaRoute,
-        kind: "mount",
-        targetProfile: "app",
-        appInstall: install.installId,
-        surface: "schema",
         createdAt: install.createdAt,
         updatedAt: install.updatedAt,
       },
@@ -5119,7 +5102,6 @@ function appDeclarationFromInstall(install: AppInstall): FormlessInstanceWorkspa
     statePath: `${DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_STATE_ROOT}/${install.installId}.json`,
     routes: {
       admin: install.adminRoute as `/apps/${string}`,
-      schema: install.schemaRoute as `/apps/${string}/schema`,
       ...(install.publicRoute === undefined
         ? {}
         : { public: install.publicRoute as `/sites/${string}` }),
@@ -5140,7 +5122,6 @@ function appDeclarationFromArchive(
     statePath,
     routes: {
       admin: `/apps/${installId}`,
-      schema: `/apps/${installId}/schema`,
       ...(archive.app.packageAppKey === "site" ? { public: `/sites/${installId}` } : {}),
     },
   };

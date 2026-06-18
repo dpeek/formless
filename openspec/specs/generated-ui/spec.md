@@ -13,17 +13,18 @@ The system SHALL select generated surfaces from the active runtime profile and r
 #### Scenario: Dev workbench routes
 
 - **GIVEN** the dev workbench profile
-- **WHEN** the user visits `/tasks`, `/site`, `/crm`, their `/schema` routes, or installed app routes
-- **THEN** the matching generated app, schema editor, admin, or public Site surface mounts
+- **WHEN** the user visits `/tasks`, `/site`, `/crm`, installed app admin
+  routes, or installed Site public routes
+- **THEN** the matching generated app, admin, or public Site surface mounts
 
 #### Scenario: Installed workspace package admin routes
 
-- **GIVEN** an enabled installed app admin or schema route targets an app
-  install whose package app key is present only in the active workspace package
-  resolver
-- **WHEN** the browser visits `/apps/<installId>` or `/apps/<installId>/schema`
-- **THEN** generated UI mounts the installed app or schema editor using package
-  metadata from the active install registry response
+- **GIVEN** an enabled installed app admin route targets an app install whose
+  package app key is present only in the active workspace package resolver
+- **WHEN** the browser visits `/apps/<installId>` or an app screen path under
+  that route
+- **THEN** generated UI mounts the installed app using package metadata from the
+  active install registry response
 - **AND** the source schema key can be a resolved package source schema key
   outside the bundled `tasks`, `site`, and `crm` source app set
 - **AND** app bootstrap, sync, mutations, reset, and schema reads use the
@@ -34,9 +35,10 @@ The system SHALL select generated surfaces from the active runtime profile and r
 #### Scenario: App custom-domain host
 
 - **GIVEN** an app custom-domain host mapped to an app install
-- **WHEN** the user visits `/` or `/schema`
-- **THEN** the installed app mounts at `/`
-- **AND** the mapped install schema editor mounts at `/schema`
+- **WHEN** the user visits `/` or an app screen path such as `/schema`
+- **THEN** the installed app mounts through normal generated app routing
+- **AND** `/schema` is treated as an app screen path when the active source
+  schema declares it
 - **AND** the instance shell is not exposed
 
 #### Scenario: Package-owned public surface
@@ -48,8 +50,8 @@ The system SHALL select generated surfaces from the active runtime profile and r
   runtime React registry using the target package app key
 - **AND** the public component receives route base, app storage identity,
   runtime profile, and package metadata from Formless core
-- **AND** generated admin screens, schema editing, sync, field editors, and
-  mutation behavior remain schema-driven core generated UI behavior
+- **AND** generated admin screens, sync, field editors, and mutation behavior
+  remain schema-driven core generated UI behavior
 - **AND** React routing does not hard-code the bundled Site route component
   when the selected package has no registered public adapter
 
@@ -95,8 +97,8 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 
 - **GIVEN** app settings are opened for the active app
 - **WHEN** settings render
-- **THEN** sync status, a profile-exposed Schema link, and source seed reset are
-  available where supported
+- **THEN** sync status and source seed reset are available where supported
+- **AND** frontend Schema links and schema editor actions are not shown
 - **AND** legacy storage snapshot Export or Restore controls are not shown
 - **AND** portable archive backup, restore, or import controls are not shown
 
@@ -127,6 +129,13 @@ The system SHALL render generated screens from screen models and collection sect
 - WHEN generated app chrome renders
 - THEN the sidebar lists the app screens
 - AND the sidebar title is the app label
+
+#### Scenario: Schema path app screen
+
+- GIVEN an app schema declares a screen with path `/schema`
+- WHEN the generated app is mounted at a route where `/schema` is reachable
+- THEN generated UI renders the declared app screen
+- AND no frontend schema editor route takes precedence over that screen path
 
 #### Scenario: Owner screen route guard
 
@@ -394,69 +403,6 @@ status fields.
 - THEN generated UI treats the field as read-only outside transition controls
 - AND create forms allow the initial state behavior declared by the schema
 
-### Requirement: Schema Authoring Surface
-
-The system SHALL provide a generated schema authoring surface with Builder mode and Source mode over the same draft.
-
-#### Scenario: Invalid Source mode
-
-- GIVEN Source mode JSON becomes invalid
-- WHEN the user views Builder mode or Save schema
-- THEN Builder mode and Save schema are disabled until JSON parses
-- AND draft status remains accessible as saved, dirty, invalid, or saving
-
-#### Scenario: Builder-owned model editing
-
-- GIVEN the user creates entities and fields in Builder mode
-- WHEN those entities and fields have been saved
-- THEN saved entity keys, saved field keys, saved field types, and reference targets are locked
-- AND builder-owned create and inline field presentation can still be edited
-
-#### Scenario: Source and Builder share one draft
-
-- GIVEN the schema route is open
-- WHEN Builder mode or Source mode changes the draft
-- THEN both modes edit the same local draft
-- AND Save schema uses the existing schema parser before committing the active
-  schema
-
-### Requirement: Builder Kebab-Case Entity Keys
-
-Generated UI SHALL let Builder author schema entities with canonical kebab-case
-entity keys and render clean human labels for those entities.
-
-#### Scenario: Create builder-owned kebab-case entity
-
-- WHEN a user creates a Builder-owned entity with a key such as `app-install`,
-  `project-note`, or `block-placement`
-- THEN Builder accepts the key when the schema parser accepts it
-- AND the emitted schema stores that key locally in the `entities` object
-  without a namespace prefix
-
-#### Scenario: Reject non-canonical entity key in Builder
-
-- WHEN a user enters an entity key with camelCase, uppercase characters,
-  underscores, dots, slashes, colons, leading digits, leading hyphens, trailing
-  hyphens, or double hyphens
-- THEN Builder reports validation feedback before save
-- AND Save schema remains unavailable until the draft parses
-
-#### Scenario: Render entity labels from kebab-case keys
-
-- WHEN generated UI renders an entity whose source key is `app-install`,
-  `domain-mapping`, or `deployment-config`
-- THEN human-facing labels are derived from words such as `App install`,
-  `Domain mapping`, or `Deployment config`
-- AND generated UI does not treat hyphens as namespace separators
-
-#### Scenario: Preserve saved key locking
-
-- WHEN a kebab-case entity key has been saved
-- THEN Builder keeps the saved entity key locked under the existing schema
-  authoring rules
-- AND this change does not rename saved field keys, query keys, view keys,
-  action keys, or screen keys
-
 ### Requirement: Schema-Driven Instance Management UI
 
 The system SHALL render instance management in the instance shell from
@@ -531,8 +477,8 @@ records that matches current table-driven install management behavior.
 - **WHEN** the create flow is submitted
 - **THEN** the editor provides package selection, route-safe install id input,
   label input, and validation feedback for duplicate or reserved install ids
-- **AND** successful creation shows the generated admin, schema, and public Site
-  route records for that install when those routes are supported
+- **AND** successful creation shows the generated admin and public Site route
+  records for that install when those routes are supported
 
 #### Scenario: Edit install metadata
 

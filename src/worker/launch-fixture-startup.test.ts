@@ -49,7 +49,7 @@ describe("worker launch fixture startup", () => {
         .filter((record) => record.entity === "app-install")
         .map((record) => record.id),
     ).toEqual(["site", "docs", "projects"]);
-    expect(controlPlane.records.filter((record) => record.entity === "route")).toHaveLength(9);
+    expect(controlPlane.records.filter((record) => record.entity === "route")).toHaveLength(6);
     expect(
       controlPlane.records
         .filter((record) => record.entity === "route")
@@ -57,11 +57,8 @@ describe("worker launch fixture startup", () => {
         .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
     ).toEqual([
       ["docs", "/apps/docs", "admin"],
-      ["docs", "/apps/docs/schema", "schema"],
       ["projects", "/apps/projects", "admin"],
-      ["projects", "/apps/projects/schema", "schema"],
       ["site", "/apps/site", "admin"],
-      ["site", "/apps/site/schema", "schema"],
       ["docs", "/sites/docs", "public-site"],
       ["projects", "/sites/projects", "public-site"],
       ["site", "/sites/site", "public-site"],
@@ -102,7 +99,6 @@ describe("worker launch fixture startup", () => {
     expect(installs.installs.map((install) => install.installId)).toEqual(["crm"]);
     expect(installs.installs.map((install) => install.packageAppKey)).toEqual(["crm"]);
     expect(installs.installs.map((install) => install.adminRoute)).toEqual(["/apps/crm"]);
-    expect(installs.installs.map((install) => install.schemaRoute)).toEqual(["/apps/crm/schema"]);
     expect(installs.installs.map((install) => install.publicRoute)).toEqual([undefined]);
     expect(
       controlPlane.records
@@ -114,10 +110,7 @@ describe("worker launch fixture startup", () => {
         .filter((record) => record.entity === "route")
         .map((record) => [record.values.appInstall, record.values.matchPath, record.values.surface])
         .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
-    ).toEqual([
-      ["crm", "/apps/crm", "admin"],
-      ["crm", "/apps/crm/schema", "schema"],
-    ]);
+    ).toEqual([["crm", "/apps/crm", "admin"]]);
     expect(legacyCrm.status).toBe(404);
     expect(crm.schema).toEqual(crmSourceSchema);
     expect(crm.cursor).toBe(crmSeedRecords.length);

@@ -19,7 +19,7 @@ The system SHALL treat an app install id as the stable instance-local identity f
 - GIVEN a create app install request uses an install id such as `site`, `tasks`, `docs-site`, or `project-site-2026`
 - WHEN the install id is route-safe and unique within the Formless instance
 - THEN the app install can be created
-- AND the app install id is used in admin, schema, API, Authority, browser replica, and broadcast identity
+- AND the app install id is used in admin, API, Authority, browser replica, and broadcast identity
 
 #### Scenario: Invalid or duplicate install id
 
@@ -139,8 +139,7 @@ instance `route` records.
 - **THEN** its app install metadata stores package app key `site`, label
   `Personal Site`, and status `installed`
 - **AND** route records target the install for admin route `/apps/personal`,
-  schema route `/apps/personal/schema`, public route `/sites/personal`, and
-  public route prefix `/sites/personal/`
+  public route `/sites/personal`, and public route prefix `/sites/personal/`
 - **AND** app install API metadata can include route summaries derived from route
   records
 
@@ -149,7 +148,7 @@ instance `route` records.
 - **GIVEN** a package app install without public Site route capability is created
 - **WHEN** install metadata is returned
 - **THEN** the app install metadata stores package app key, label, and status
-- **AND** route records target the install for admin and schema routes under
+- **AND** route records target the install for an admin route under
   `/apps/<installId>`
 - **AND** no public Site route record is created for that install
 
@@ -163,7 +162,7 @@ installed package app without changing install identity.
 - WHEN a resolved package app install is created
 - THEN install metadata records the package app key, install id, package
   revision, and source schema hash used for initialization
-- AND admin, schema, API, Authority, browser replica, and broadcast identity
+- AND admin, API, Authority, browser replica, and broadcast identity
   remain derived from the stable install id
 
 #### Scenario: Upgrade installed package facts
@@ -253,7 +252,7 @@ installed app state without changing route shape.
 - **GIVEN** `FORMLESS_LAUNCH_FIXTURE` selects `crm`
 - **WHEN** fixture initialization runs
 - **THEN** the initial install includes CRM with install id `crm`, label `CRM`, and package app key `crm`
-- **AND** the CRM install receives admin and schema routes under `/apps/crm`
+- **AND** the CRM install receives an admin route under `/apps/crm`
 - **AND** the CRM install does not receive Site public route metadata
 
 ### Requirement: Install-Scoped Storage And API
@@ -300,24 +299,24 @@ control-plane records.
 
 ### Requirement: Schema-Owned App Routes
 
-The system SHALL represent app admin, schema, and public Site routes as
-schema-owned `route` records that target app install records.
+The system SHALL represent app admin and public Site routes as schema-owned
+`route` records that target app install records.
 
 #### Scenario: Site install route records
 
 - **GIVEN** a Site app install with install id `personal` is created
 - **WHEN** default route records are created
 - **THEN** route records target the `personal` app install for admin route
-  `/apps/personal`, schema route `/apps/personal/schema`, public route
-  `/sites/personal`, and public route prefix `/sites/personal/`
+  `/apps/personal`, public route `/sites/personal`, and public route prefix
+  `/sites/personal/`
 - **AND** Site public route metadata is scoped to that app install record
 
 #### Scenario: Non-Site install route records
 
 - **GIVEN** a package app install without public Site route capability is created
 - **WHEN** default route records are created
-- **THEN** route records target the app install for admin and schema routes
-  under `/apps/<installId>`
+- **THEN** route records target the app install for an admin route under
+  `/apps/<installId>`
 - **AND** no public Site route record is created for that install
 
 #### Scenario: Route record target
@@ -353,8 +352,8 @@ records and the active package resolver.
 - **THEN** it uses the returned package list as the active package resolver for
   that browser runtime
 - **AND** workspace-linked package app keys are eligible for browser route,
-  schema editor, replica, broadcast, and write metadata selection when they are
-  present in that active package list
+  replica, broadcast, and write metadata selection when they are present in
+  that active package list
 - **AND** browser installed app behavior does not resolve package metadata
   through the globally bundled package resolver alone
 

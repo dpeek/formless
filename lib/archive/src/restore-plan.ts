@@ -911,7 +911,6 @@ function appInstallForArchive(
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,
     adminRoute: `${appPackage.adminRouteBase}/${app.installId}`,
-    schemaRoute: `${appPackage.adminRouteBase}/${app.installId}/schema`,
     ...(appPackage.publicRouteBase === undefined
       ? {}
       : {

@@ -405,7 +405,6 @@ function siteInstall(installId: string): AppInstall {
     createdAt: now,
     updatedAt: now,
     adminRoute: `/apps/${installId}`,
-    schemaRoute: `/apps/${installId}/schema`,
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
   };
@@ -422,6 +421,5 @@ function tasksInstall(installId: string): AppInstall {
     createdAt: now,
     updatedAt: now,
     adminRoute: `/apps/${installId}`,
-    schemaRoute: `/apps/${installId}/schema`,
   };
 }

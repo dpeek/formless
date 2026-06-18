@@ -127,7 +127,6 @@ describe("instance archive restore API", () => {
         adminRoute: "/apps/work",
         installId: "work",
         packageAppKey: "tasks",
-        schemaRoute: "/apps/work/schema",
       }),
     ]);
     expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
@@ -247,7 +246,6 @@ describe("instance archive restore API", () => {
         adminRoute: "/apps/rates",
         installId: "rates",
         packageAppKey: "crm",
-        schemaRoute: "/apps/rates/schema",
       }),
     ]);
     expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
@@ -336,14 +334,12 @@ describe("instance archive restore API", () => {
         label: "Archived Personal",
         packageAppKey: "site",
         publicRoute: "/sites/personal",
-        schemaRoute: "/apps/personal/schema",
       }),
     ]);
     expect(
       installs.body.installs[0]?.routes?.map((route) => [route.routeKind, route.path]),
     ).toEqual([
       ["admin", "/apps/personal-dashboard"],
-      ["schema", "/apps/personal/schema"],
       ["publicSite", "/sites/personal"],
     ]);
     expect(installedApp.body.records).toContainEqual(siteRecord());
@@ -681,7 +677,6 @@ function tasksInstall(): AppInstall {
     createdAt: "2026-05-12T00:00:00.000Z",
     updatedAt: "2026-05-12T00:00:00.000Z",
     adminRoute: "/apps/work",
-    schemaRoute: "/apps/work/schema",
   };
 }
 
@@ -697,7 +692,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
     createdAt: now,
     updatedAt: now,
     adminRoute: "/apps/personal",
-    schemaRoute: "/apps/personal/schema",
     publicRoute: "/sites/personal",
     publicRoutePrefix: "/sites/personal/",
   };

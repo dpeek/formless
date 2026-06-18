@@ -12,7 +12,6 @@ import {
   type SitePageRouteState,
 } from "@dpeek/formless-site-app/react";
 import { HomeRoute } from "../app/routes/home.tsx";
-import { SchemaRoute } from "../app/routes/schema.tsx";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 
 describe("public Site SSR characterization", () => {
@@ -142,7 +141,7 @@ function renderPublishedRoute(path: string): string {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
       <App
-        routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
+        routeComponents={{ HomeRoute, SitePageRoute }}
         runtimeProfile={createPublishedSiteRuntimeProfile()}
       />
     </Router>,

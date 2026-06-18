@@ -604,7 +604,6 @@ function instanceRouteRuntimeSchema(): AppSchema {
     },
     runtime: {
       owner: "runtime",
-      builder: { editable: false },
       controlPlane: {
         entities: {
           "app-install": controlPlaneSchema.runtime!.controlPlane!.entities["app-install"]!,
@@ -772,7 +771,6 @@ function controlPlaneRuntimeSchema(): AppSchema {
     },
     runtime: {
       owner: "runtime",
-      builder: { editable: false },
       controlPlane: {
         entities: {
           task: {

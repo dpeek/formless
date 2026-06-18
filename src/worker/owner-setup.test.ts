@@ -181,7 +181,6 @@ describe("owner setup API routes", () => {
         .map((record) => [record.values.matchPath, record.values.surface]),
     ).toEqual([
       ["/apps/site", "admin"],
-      ["/apps/site/schema", "schema"],
       ["/sites/site", "public-site"],
     ]);
   });

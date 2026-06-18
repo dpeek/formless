@@ -43,7 +43,6 @@ export function ActiveAppSurface({
   activePackageResolver,
   activeScreenPath,
   children,
-  currentPath,
   managementHref,
   screenModels,
   world,
@@ -51,16 +50,13 @@ export function ActiveAppSurface({
   activePackageResolver?: AppPackageResolver | undefined;
   activeScreenPath: string | undefined;
   children: ReactNode;
-  currentPath: string;
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount | undefined;
 }) {
   const headerTitle = activeAppHeaderTitle({
     activeScreenPath,
-    currentPath,
     routeAppLabel: world?.app.label,
-    schemaRoute: world?.schemaRoute,
     screenModels,
   });
 
@@ -76,7 +72,6 @@ export function ActiveAppSurface({
               <ActiveAppNavigation
                 activeScreenPath={activeScreenPath}
                 activePackageResolver={activePackageResolver}
-                currentPath={currentPath}
                 managementHref={managementHref}
                 screenModels={screenModels}
                 world={world}
@@ -112,21 +107,13 @@ export function ActiveAppSurface({
 
 function activeAppHeaderTitle({
   activeScreenPath,
-  currentPath,
   routeAppLabel,
-  schemaRoute,
   screenModels,
 }: {
   activeScreenPath: string | undefined;
-  currentPath: string;
   routeAppLabel: string | undefined;
-  schemaRoute: string | undefined;
   screenModels: HomeScreenModel[];
 }) {
-  if (schemaRoute && currentPath === schemaRoute) {
-    return "Schema";
-  }
-
   return (
     screenModels.find((model) => model.path === activeScreenPath)?.label ??
     routeAppLabel ??
@@ -143,14 +130,12 @@ function activeAppSidebarTriggerLabel(appLabel: string | undefined) {
 function ActiveAppNavigation({
   activeScreenPath,
   activePackageResolver,
-  currentPath,
   managementHref,
   screenModels,
   world,
 }: {
   activeScreenPath: string | undefined;
   activePackageResolver?: AppPackageResolver | undefined;
-  currentPath: string;
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount;
@@ -175,11 +160,7 @@ function ActiveAppNavigation({
           />
         ) : null}
         <AppRootRecordNavigation rootNavigation={rootNavigation} />
-        <AppSettingsNavigation
-          activePackageResolver={activePackageResolver}
-          currentPath={currentPath}
-          world={world}
-        />
+        <AppSettingsNavigation activePackageResolver={activePackageResolver} world={world} />
       </>
     );
   }
@@ -188,11 +169,7 @@ function ActiveAppNavigation({
     <>
       {managementHref ? <AppManagementLink href={managementHref} world={world} /> : null}
       <AppScreenLinks activeScreenPath={activeScreenPath} screenLinks={screenLinks} world={world} />
-      <AppSettingsNavigation
-        activePackageResolver={activePackageResolver}
-        currentPath={currentPath}
-        world={world}
-      />
+      <AppSettingsNavigation activePackageResolver={activePackageResolver} world={world} />
     </>
   );
 }
@@ -233,11 +210,9 @@ function AppScreenLinks({
 
 function AppSettingsNavigation({
   activePackageResolver,
-  currentPath,
   world,
 }: {
   activePackageResolver?: AppPackageResolver | undefined;
-  currentPath: string;
   world: RuntimeWorldMount;
 }) {
   const appTarget = world.target ?? clientTargetForSchemaKey(world.app.key);
@@ -247,11 +222,6 @@ function AppSettingsNavigation({
       <div className="col-span-full px-2 py-1">
         <SyncStatusControl target={appTarget} />
       </div>
-      {world.schemaRoute ? (
-        <SidebarItem href={world.schemaRoute} isCurrent={currentPath === world.schemaRoute}>
-          <SidebarLabel>Schema</SidebarLabel>
-        </SidebarItem>
-      ) : null}
       <SourceResetControl
         activePackageResolver={activePackageResolver}
         appLabel={world.app.label}

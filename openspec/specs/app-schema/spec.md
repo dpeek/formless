@@ -135,10 +135,18 @@ The system MUST parse app schemas into validated runtime models before use.
 
 #### Scenario: Reject invalid screen paths
 
-- GIVEN a screen path that is relative, parameterized, duplicate, or `/schema`
+- GIVEN a screen path that is relative, parameterized, or duplicate
 - WHEN the schema is parsed
 - THEN parsing fails
 - AND the screen is not made available for app navigation
+
+#### Scenario: Accept schema screen path
+
+- GIVEN an app schema declares a screen path `/schema`
+- WHEN the schema is parsed
+- THEN parsing accepts the screen path
+- AND generated UI may route `/schema` as an ordinary app screen where the
+  active runtime profile exposes that app route
 
 ### Requirement: Schema Package Boundary
 
@@ -147,13 +155,12 @@ pure helpers through the Schema package slice.
 
 #### Scenario: Package owns app schema interface
 
-- **WHEN** generated UI models, schema authoring state, Authority validation,
-  browser replicas, archive planning, archive validation, upgrade
-  migrations, tests, or other package slices need App schema types, parse
-  behavior, stringify behavior, schema-local entity key helpers, qualified
-  entity name helpers, field behavior, query helpers, read model helpers,
-  create-default helpers, runtime metadata helpers, operation capability facts,
-  or action capability facts
+- **WHEN** generated UI models, Authority validation, browser replicas, archive
+  planning, archive validation, upgrade migrations, tests, or other package
+  slices need App schema types, parse behavior, stringify behavior,
+  schema-local entity key helpers, qualified entity name helpers, field
+  behavior, query helpers, read model helpers, create-default helpers, runtime
+  metadata helpers, operation capability facts, or action capability facts
 - **THEN** they import those contracts and helpers from
   `@dpeek/formless-schema`
 - **AND** they do not import package-owned schema behavior from old
@@ -166,9 +173,9 @@ pure helpers through the Schema package slice.
 
 - **WHEN** App schema behavior is used to load bundled or resolved package
   source schemas, load source seed records, render generated React surfaces,
-  edit Builder drafts, validate Authority writes, store active schemas, sync
-  browser replicas, plan or apply archives, compose Workspace storage snapshots,
-  build instance control-plane records, or apply package app migrations
+  validate Authority writes, store active schemas, sync browser replicas, plan
+  or apply archives, compose Workspace storage snapshots, build instance
+  control-plane records, or apply package app migrations
 - **THEN** those runtime behaviors remain owned by app, client, Worker,
   archive, Workspace, instance control-plane, migration, or generated UI modules
 - **AND** the Schema package only owns runtime-neutral schema language
@@ -390,27 +397,6 @@ separate from entity value fields.
 - AND generated ids and generated timestamps may still be used for normal value
   fields declared by the entity schema
 
-### Requirement: Schema Builder
-
-The system SHALL provide a Builder surface that emits normal app schema and
-preserves advanced source-owned schema sections.
-
-#### Scenario: Create builder-owned entity
-
-- GIVEN a user creates an entity in Builder mode
-- WHEN the draft is saved
-- THEN the emitted schema declares create and update operations for the entity
-- AND the entity receives a simple generated surface with all-records query,
-  item view, create view, collection view, and workspace screen
-
-#### Scenario: Preserve advanced schema
-
-- GIVEN a source schema contains sections not owned by Builder
-- WHEN Builder edits supported entity or field metadata
-- THEN advanced source-owned sections are preserved
-- AND saved entity keys, field keys, field types, and reference targets remain
-  locked in Builder
-
 ### Requirement: Action Kinds
 
 The system SHALL declare schema action kinds as data-owned command effect
@@ -625,8 +611,8 @@ operations, mutations, and actions.
 - GIVEN a runtime-owned control-plane schema
 - WHEN the schema is parsed
 - THEN it is validated with the same schema parser as other app schemas
-- AND runtime-owned schema sections are preserved from Builder edits unless
-  explicitly supported
+- AND runtime-owned schema sections remain source-schema data unless explicitly
+  interpreted by runtime behavior
 
 #### Scenario: Control-plane records stay flat
 

@@ -76,12 +76,6 @@ type HomeRouteProps = {
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
 };
-type SchemaRouteProps = {
-  activePackageResolver?: AppPackageResolver | undefined;
-  appLabel?: string;
-  target?: ClientAppTarget;
-  schemaKey: ClientAppSchemaKey;
-};
 
 export type RuntimeInstalledAppRouteRegistry = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -91,7 +85,6 @@ export type RuntimeInstalledAppRouteRegistry = {
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
-  SchemaRoute: ElementType<SchemaRouteProps>;
   SitePageRoute: ElementType<PublicSiteRouteProps>;
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
@@ -99,9 +92,6 @@ export type AppRouteComponents = {
 const defaultRouteComponents: AppRouteComponents = {
   HomeRoute: lazy(() =>
     import("./app/routes/home.tsx").then((module) => ({ default: module.HomeRoute })),
-  ),
-  SchemaRoute: lazy(() =>
-    import("./app/routes/schema.tsx").then((module) => ({ default: module.SchemaRoute })),
   ),
   SitePageRoute: createPublicSiteReactAdapterRegistry().get("site")!.Route,
 };
@@ -225,7 +215,6 @@ export function App({
       activePackageResolver={installedAppRouteContext.activePackageResolver}
       activeScreenPath={activeScreenPath}
       managementHref={runtimeAppManagementHref(activeRuntimeProfile, routeWorld)}
-      currentPath={location}
       screenModels={routeAppScreenModels}
       world={routeWorld}
     >
@@ -539,7 +528,7 @@ function AppRoutes({
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
-  const { HomeRoute, SchemaRoute } = routeComponents;
+  const { HomeRoute } = routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
@@ -606,20 +595,6 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
-      {generatedWorlds.map((world) =>
-        generatedWorldSchemaKey(world) && world.schemaRoute ? (
-          <Route key={world.schemaRoute} path={world.schemaRoute}>
-            <OwnerRouteGuard access={world.schemaRouteAccess ?? "anonymous"}>
-              <SchemaRoute
-                activePackageResolver={installedAppRouteContext.activePackageResolver}
-                appLabel={world.app.label}
-                schemaKey={generatedWorldSchemaKey(world)!}
-                target={world.target}
-              />
-            </OwnerRouteGuard>
-          </Route>
-        ) : null,
-      )}
       {generatedWorlds.map((world) => (
         <Route key={world.route} path={world.route}>
           <OwnerRouteGuard access={world.access ?? "anonymous"}>
@@ -646,18 +621,6 @@ function AppRoutes({
           )}
         </Route>
       ))}
-      {browserRoutes.installedAppSchemaRoutePattern ? (
-        <Route path={browserRoutes.installedAppSchemaRoutePattern}>
-          {(params) => (
-            <InstalledAppSchemaRoute
-              installedAppRouteContext={installedAppRouteContext}
-              installId={runtimeRouteParam(params, "installId")}
-              routeComponents={routeComponents}
-              runtimeProfile={runtimeProfile}
-            />
-          )}
-        </Route>
-      ) : null}
       {browserRoutes.installedAppHomeRoutePattern ? (
         <Route path={browserRoutes.installedAppHomeRoutePattern}>
           {(params) => (
@@ -753,51 +716,6 @@ function AppRoutes({
   );
 }
 
-function InstalledAppSchemaRoute({
-  installedAppRouteContext,
-  installId,
-  routeComponents,
-  runtimeProfile,
-}: {
-  installedAppRouteContext: RuntimeInstalledAppRouteContext;
-  installId: string | undefined;
-  routeComponents: AppRouteComponents;
-  runtimeProfile: RuntimeProfile;
-}) {
-  const { SchemaRoute } = routeComponents;
-
-  if (!installId) {
-    return <NotFoundRoute />;
-  }
-
-  if (installedAppRouteContext.appInstalls === undefined) {
-    return <RouteLoading />;
-  }
-
-  const world = installedAppWorldMountFromInstallId(
-    runtimeProfile,
-    installId,
-    installedAppRouteContext,
-  );
-
-  const schemaKey = world ? generatedWorldSchemaKey(world) : undefined;
-
-  if (!world?.schemaRoute || !schemaKey) {
-    return <NotFoundRoute />;
-  }
-
-  return (
-    <OwnerRouteGuard access={world.schemaRouteAccess ?? "owner"}>
-      <SchemaRoute
-        activePackageResolver={installedAppRouteContext.activePackageResolver}
-        appLabel={world.app.label}
-        schemaKey={schemaKey}
-        target={world.target}
-      />
-    </OwnerRouteGuard>
-  );
-}
-
 function InstalledAppHomeRoute({
   installedAppRouteContext,
   installId,
@@ -827,7 +745,7 @@ function InstalledAppHomeRoute({
     installedAppRouteContext,
   );
 
-  if (!world || (!world.schemaRoute && screenPath === "/schema")) {
+  if (!world) {
     return <NotFoundRoute />;
   }
 
@@ -999,10 +917,6 @@ function ownerRouteTargetFromLocation(location: string): OwnerLoginRedirectTarge
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {
   return world.route === "/" ? "/*" : `${world.route}/*`;
-}
-
-function generatedWorldSchemaKey(world: RuntimeWorldMount): ClientAppSchemaKey | undefined {
-  return world.app.key;
 }
 
 function runtimeWorldClientTarget(world: RuntimeWorldMount): ClientAppTarget {

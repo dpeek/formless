@@ -114,11 +114,11 @@ export type InstanceControlPlaneAppInstallValues = {
   storageIdentity: `app:${AppInstallId}`;
 };
 
-export type InstanceControlPlaneAppRouteKind = "admin" | "publicSite" | "schema";
-export type InstanceControlPlaneAppRouteCapability = "generatedApp" | "publicSite" | "schema";
-export type InstanceControlPlaneAppRouteSurface = "admin" | "publicSite" | "schema";
+export type InstanceControlPlaneAppRouteKind = "admin" | "publicSite";
+export type InstanceControlPlaneAppRouteCapability = "generatedApp" | "publicSite";
+export type InstanceControlPlaneAppRouteSurface = "admin" | "publicSite";
 export type InstanceControlPlaneRouteKind = "mount" | "redirect";
-export type InstanceControlPlaneRouteSurface = "admin" | "public-site" | "schema";
+export type InstanceControlPlaneRouteSurface = "admin" | "public-site";
 export type InstanceControlPlaneRouteTargetProfile = "app" | "instance" | "public-site";
 export type InstanceControlPlaneRouteAccess = AppInstallRouteAccess;
 
@@ -278,7 +278,6 @@ export const instanceControlPlaneSchema = {
         surface: optionalEnumField("Surface", {
           admin: "Admin",
           "public-site": "Public Site",
-          schema: "Schema",
         }),
         access: optionalEnumField("Access", {
           anonymous: "Anonymous",
@@ -613,7 +612,6 @@ export const instanceControlPlaneSchema = {
   },
   runtime: {
     owner: "runtime",
-    builder: { editable: false },
     controlPlane: {
       entities: {
         "app-install": {
@@ -721,8 +719,6 @@ function appInstallFromControlPlaneRecord(
   const hasRouteRecords = routes.length > 0;
   const adminRoute =
     enabledRoutePath(routes, "admin") ?? `${packageApp.adminRouteBase}/${installId}`;
-  const schemaRoute =
-    enabledRoutePath(routes, "schema") ?? `${packageApp.adminRouteBase}/${installId}/schema`;
   const publicRoute = enabledAppInstallRoute(routes, "publicSite");
 
   return {
@@ -741,7 +737,6 @@ function appInstallFromControlPlaneRecord(
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     adminRoute,
-    schemaRoute,
     ...(publicRoute
       ? {
           publicRoute: publicRoute.path,
@@ -805,10 +800,8 @@ function appInstallRouteKindOrder(kind: AppInstallRouteKind) {
   switch (kind) {
     case "admin":
       return 0;
-    case "schema":
-      return 1;
     case "publicSite":
-      return 2;
+      return 1;
   }
 }
 
@@ -818,8 +811,6 @@ function appInstallRouteKindFromRouteSurface(
   switch (surface) {
     case "admin":
       return "admin";
-    case "schema":
-      return "schema";
     case "public-site":
       return "publicSite";
     default:
@@ -883,19 +874,13 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
     surface: "admin",
     targetProfile: "app",
   });
-  const schemaRoute = mountRouteRecord(routeInput, {
-    matchPath: `${adminRouteBase}/${input.installId}/schema`,
-    surface: "schema",
-    targetProfile: "app",
-  });
 
   if (publicRouteBase === undefined) {
-    return [adminRoute, schemaRoute];
+    return [adminRoute];
   }
 
   return [
     adminRoute,
-    schemaRoute,
     mountRouteRecord(routeInput, {
       matchPath: `${publicRouteBase}/${input.installId}`,
       matchPrefix: `${publicRouteBase}/${input.installId}/`,
@@ -908,12 +893,7 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
 export function instanceControlPlaneRouteRecordsForAppInstall(input: {
   install: Pick<
     AppInstall,
-    | "adminRoute"
-    | "installId"
-    | "packageAppKey"
-    | "publicRoute"
-    | "publicRoutePrefix"
-    | "schemaRoute"
+    "adminRoute" | "installId" | "packageAppKey" | "publicRoute" | "publicRoutePrefix"
   >;
   now: string;
 }): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
@@ -921,11 +901,6 @@ export function instanceControlPlaneRouteRecordsForAppInstall(input: {
     mountRouteRecord(input, {
       matchPath: input.install.adminRoute,
       surface: "admin",
-      targetProfile: "app",
-    }),
-    mountRouteRecord(input, {
-      matchPath: input.install.schemaRoute,
-      surface: "schema",
       targetProfile: "app",
     }),
   ];
@@ -1576,9 +1551,9 @@ function validateSourceMountRoute(
   }
 
   if (targetProfile === "app") {
-    if (surface !== "admin" && surface !== "schema") {
+    if (surface !== "admin") {
       throw new Error(
-        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "surface")}" must be "admin" or "schema" for app mount routes.`,
+        `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "surface")}" must be "admin" for app mount routes.`,
       );
     }
 

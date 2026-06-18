@@ -1521,11 +1521,6 @@ function parseAppInstall(
       `${packageApp.adminRouteBase}/${installId}`,
       `${context} adminRoute`,
     ) as `/apps/${string}`,
-    schemaRoute: parseRequiredString(
-      value.schemaRoute,
-      `${packageApp.adminRouteBase}/${installId}/schema`,
-      `${context} schemaRoute`,
-    ) as `/apps/${string}/schema`,
     ...(packageApp.publicRouteBase === undefined
       ? {}
       : {

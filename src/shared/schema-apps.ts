@@ -6,7 +6,6 @@ export type SchemaAppDefinition = {
   key: SchemaKey;
   label: string;
   route: `/${string}`;
-  schemaRoute: `/${string}/schema`;
   seedChangeMutationPrefix: string;
 };
 
@@ -15,21 +14,18 @@ export const schemaAppDefinitions = {
     key: "tasks",
     label: "Tasks",
     route: "/tasks",
-    schemaRoute: "/tasks/schema",
     seedChangeMutationPrefix: "seed-task",
   },
   site: {
     key: "site",
     label: "Site",
     route: "/site",
-    schemaRoute: "/site/schema",
     seedChangeMutationPrefix: "seed-site",
   },
   crm: {
     key: "crm",
     label: "CRM",
     route: "/crm",
-    schemaRoute: "/crm/schema",
     seedChangeMutationPrefix: "seed-crm",
   },
 } as const satisfies Record<SchemaKey, SchemaAppDefinition>;
@@ -53,9 +49,7 @@ export function findSchemaAppDefinition(key: string): SchemaAppDefinition | unde
 }
 
 export function findSchemaAppDefinitionByRoute(pathname: string): SchemaAppDefinition | undefined {
-  return schemaApps.find(
-    (app) => app.schemaRoute === pathname || schemaAppScreenPathFromRoute(app, pathname),
-  );
+  return schemaApps.find((app) => schemaAppScreenPathFromRoute(app, pathname));
 }
 
 export function schemaAppScreenRoute(app: SchemaAppDefinition, screenPath: string): `/${string}` {
@@ -66,10 +60,6 @@ export function schemaAppScreenPathFromRoute(
   app: SchemaAppDefinition,
   pathname: string,
 ): string | undefined {
-  if (pathname === app.schemaRoute) {
-    return undefined;
-  }
-
   if (pathname === app.route) {
     return "/";
   }

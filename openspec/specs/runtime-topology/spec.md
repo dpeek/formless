@@ -56,7 +56,8 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - WHEN a browser navigates to `/`, `/deployments`, `/setup`, `/login`,
   `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
 - THEN the request is eligible for the client shell
-- AND source schema routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and `/pages/home` are not eligible instance browser routes
+- AND source app routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and
+  `/pages/home` are not eligible instance browser routes
 
 #### Scenario: Product instance deployment route
 
@@ -79,8 +80,9 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 #### Scenario: App profile mounts one app
 
 - GIVEN the runtime profile is `app`
-- WHEN a browser navigates to `/` or `/schema`
+- WHEN a browser navigates to `/` or an app screen path such as `/schema`
 - THEN the selected installed app is mounted as the app surface
+- AND `/schema` is not reserved for frontend schema editing
 
 #### Scenario: Site authoring profile mounts preview and admin
 
@@ -102,14 +104,14 @@ surfaces or owner-only management API data.
 - THEN the runtime redirects to the owner login route with a safe same-origin
   return target for the original path and query
 - AND the owner-only browser shell, instance dashboard, generated app surface,
-  or schema editor is not served
+  or app screen is not served
 
 #### Scenario: Authenticated owner browser route
 
 - GIVEN a runtime browser route has effective access `owner`
 - WHEN the request includes a valid owner session
 - THEN the route remains eligible for the matching instance dashboard,
-  generated app surface, or schema editor
+  generated app surface, or app screen
 
 #### Scenario: Anonymous route remains public
 
@@ -226,12 +228,13 @@ profile behavior.
 
 - **GIVEN** an enabled exact-host `route` mounts an app surface for an installed
   app
-- **WHEN** the mapped host receives browser requests for `/` or `/schema`
+- **WHEN** the mapped host receives browser requests for `/` or an app screen
+  path such as `/schema`
 - **THEN** the client shell is served with runtime profile, package app key,
   app install id, and resolved package metadata for that install
 - **AND** the resolved package metadata is sufficient for the browser to build
-  install-scoped storage identity and mount the generated app or schema editor
-  without bundled source app lookup
+  install-scoped storage identity and mount the generated app without bundled
+  source app lookup
 - **AND** schema-key API routes are not exposed on the mapped app host while
   the matching installed app API route remains available
 - **AND** owner setup, owner login, and passkey ceremony requests do not treat
@@ -244,7 +247,7 @@ routes from enabled schema-owned `route` records.
 
 #### Scenario: Installed app browser route
 
-- **GIVEN** a browser requests an enabled admin or schema app route
+- **GIVEN** a browser requests an enabled admin app route
 - **WHEN** runtime topology resolves the route
 - **THEN** the route record resolves through `appInstall` to its referenced
   `app-install` record

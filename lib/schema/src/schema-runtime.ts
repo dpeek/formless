@@ -22,7 +22,7 @@ export function parseRuntimeMetadata(
     throw new Error("Schema runtime metadata must be an object.");
   }
 
-  assertExactKeys("Schema runtime metadata", value, ["owner", "builder"], ["controlPlane"]);
+  assertExactKeys("Schema runtime metadata", value, ["owner"], ["controlPlane"]);
 
   if (value.owner !== "runtime") {
     throw new Error('Schema runtime metadata owner must be "runtime".');
@@ -30,7 +30,6 @@ export function parseRuntimeMetadata(
 
   return {
     owner: "runtime",
-    builder: parseRuntimeBuilderPolicy(value.builder),
     ...(value.controlPlane === undefined
       ? {}
       : { controlPlane: parseControlPlaneMetadata(value.controlPlane, entities) }),
@@ -76,20 +75,6 @@ export function isRuntimeControlPlaneObservedField(
     runtimeControlPlaneEntityMetadata(schema, entityName)?.observedFields?.includes(fieldName) ??
     false
   );
-}
-
-function parseRuntimeBuilderPolicy(value: unknown): RuntimeSchemaMetadata["builder"] {
-  if (!isRecord(value)) {
-    throw new Error("Schema runtime builder policy must be an object.");
-  }
-
-  assertExactKeys("Schema runtime builder policy", value, ["editable"]);
-
-  if (value.editable !== false) {
-    throw new Error("Schema runtime builder policy editable must be false.");
-  }
-
-  return { editable: false };
 }
 
 function parseControlPlaneMetadata(

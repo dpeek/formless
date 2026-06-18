@@ -36,9 +36,8 @@ export type { RuntimeProfileKind };
 
 export type RuntimeShellKind = "instance" | "dev" | "app" | "publishedSite";
 
-export type RuntimeAppDefinition = Omit<SchemaAppDefinition, "key" | "schemaRoute"> & {
+export type RuntimeAppDefinition = Omit<SchemaAppDefinition, "key"> & {
   key: string;
-  schemaRoute: `/${string}`;
 };
 
 export type RuntimeWorldMount = {
@@ -46,14 +45,11 @@ export type RuntimeWorldMount = {
   app: RuntimeAppDefinition;
   generatedRoutes: boolean;
   route: `/${string}`;
-  schemaRouteAccess?: RuntimeRouteAccess;
-  schemaRoute?: `/${string}`;
   target?: AppStorageIdentity;
 };
 
 export type RuntimeInstalledAppRoutes = {
   appRouteBase: "/apps";
-  schemaRoutes: boolean;
 };
 
 export type RuntimeInstalledSitePublicRoutes = {
@@ -121,7 +117,6 @@ export type RuntimeRoutePolicy = {
 export type RuntimeBrowserRoutePatterns = {
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
-  installedAppSchemaRoutePattern?: `/${string}`;
   installedAppScreenRoutePattern?: `/${string}`;
   installedSitePublicHomeRoutePattern?: `/${string}`;
   installedSitePublicSlugRoutePattern?: `/${string}`;
@@ -140,10 +135,6 @@ export type RuntimeProfileResolverInput = {
 
 export type AppRuntimeProfileOptions = {
   target?: AppStorageIdentity;
-};
-
-export type SiteAuthoringRuntimeProfileOptions = {
-  exposeSchemaRoute?: boolean;
 };
 
 export type PublishedSiteRuntimeProfileOptions = {
@@ -204,7 +195,6 @@ export function createInstanceRuntimeProfile(): RuntimeProfile {
     instanceShell: true,
     installedAppRoutes: {
       appRouteBase: runtimeTopologyRoutes.appRouteBase,
-      schemaRoutes: false,
     },
     installedSitePublicRoutes: {
       homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
@@ -225,7 +215,6 @@ export function createDevWorkbenchRuntimeProfile(): RuntimeProfile {
     instanceShell: true,
     installedAppRoutes: {
       appRouteBase: runtimeTopologyRoutes.appRouteBase,
-      schemaRoutes: true,
     },
     installedSitePublicRoutes: {
       homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
@@ -280,12 +269,6 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
             `${installedAppRoutes.appRouteBase}/:installId` as `/${string}`,
           installedAppScreenRoutePattern:
             `${installedAppRoutes.appRouteBase}/:installId/*` as `/${string}`,
-          ...(installedAppRoutes.schemaRoutes
-            ? {
-                installedAppSchemaRoutePattern:
-                  `${installedAppRoutes.appRouteBase}/:installId${runtimeTopologyRoutes.schemaRoute}` as `/${string}`,
-              }
-            : {}),
         }
       : {}),
     ...(installedSitePublicRoutes
@@ -388,10 +371,9 @@ export function createAppRuntimeProfile(
     shell: "app",
     worlds: [
       {
-        app,
+        app: runtimeAppDefinitionFromSchemaApp(app),
         generatedRoutes: true,
         route: "/",
-        schemaRoute: "/schema",
         ...(options.target ? { target: options.target } : {}),
       },
     ],
@@ -438,10 +420,8 @@ export function createInstalledAppRuntimeProfile(
   }
 
   const route = runtimeTopologyRoutes.instanceRootRoute;
-  const schemaRoute = runtimeTopologyRoutes.schemaRoute;
   const app = runtimeAppDefinitionFromPackage(appPackage, {
     route,
-    schemaRoute,
   });
 
   return {
@@ -453,7 +433,6 @@ export function createInstalledAppRuntimeProfile(
         app,
         generatedRoutes: true,
         route,
-        schemaRoute,
         target,
       },
     ],
@@ -475,20 +454,15 @@ function runtimeProfileNeedsAppProfilePackageResolver(profile: RuntimeProfile): 
   return Boolean(profile.appProfileTarget && profile.worlds.length === 0);
 }
 
-export function createSiteAuthoringRuntimeProfile(
-  options: SiteAuthoringRuntimeProfileOptions = {},
-): RuntimeProfile {
+export function createSiteAuthoringRuntimeProfile(): RuntimeProfile {
   return {
     kind: "siteAuthoring",
     shell: "app",
     worlds: [
       {
-        app: getSchemaAppDefinition("site"),
+        app: runtimeAppDefinitionFromSchemaApp(getSchemaAppDefinition("site")),
         generatedRoutes: true,
         route: runtimeTopologyRoutes.siteAdminRoute,
-        schemaRoute: options.exposeSchemaRoute
-          ? `${runtimeTopologyRoutes.siteAdminRoute}${runtimeTopologyRoutes.schemaRoute}`
-          : undefined,
       },
     ],
     publicSitePreview: {
@@ -524,7 +498,7 @@ export function createPublishedSiteRuntimeProfile(
     shell: "publishedSite",
     worlds: [
       {
-        app,
+        app: runtimeAppDefinitionFromSchemaApp(app),
         generatedRoutes: false,
         route: runtimeTopologyRoutes.instanceRootRoute,
         ...(target ? { target } : {}),
@@ -548,9 +522,8 @@ export function findRuntimeWorldMountByRoute(
   return (
     profile.worlds
       .filter(hasGeneratedRoutes)
-      .find(
-        (world) => world.schemaRoute === pathname || runtimeScreenPathFromRoute(world, pathname),
-      ) ?? installedAppWorldMountFromRoute(profile, pathname, context)
+      .find((world) => runtimeScreenPathFromRoute(world, pathname)) ??
+    installedAppWorldMountFromRoute(profile, pathname, context)
   );
 }
 
@@ -639,10 +612,6 @@ export function runtimeScreenPathFromRoute(
   world: RuntimeWorldMount,
   pathname: string,
 ): string | undefined {
-  if (world.schemaRoute === pathname) {
-    return undefined;
-  }
-
   if (pathname === world.route) {
     return "/";
   }
@@ -692,16 +661,9 @@ export function installedAppWorldMountFromInstall(
 
   const fallbackRoute = runtimeRouteFromBase(routes.appRouteBase, target.installId);
   const adminRoute = enabledInstallRoute(install, "admin");
-  const schemaInstallRoute = enabledInstallRoute(install, "schema");
   const route = adminRoute?.path ?? (install.routes ? undefined : fallbackRoute);
-  const schemaRoute =
-    schemaInstallRoute?.path ??
-    (install.routes
-      ? undefined
-      : (`${fallbackRoute}${runtimeTopologyRoutes.schemaRoute}` as const));
   const app = runtimeAppDefinitionFromPackage(appPackage, {
     route: route ?? fallbackRoute,
-    schemaRoute: schemaRoute ?? (`${fallbackRoute}${runtimeTopologyRoutes.schemaRoute}` as const),
   });
 
   if (!route) {
@@ -713,12 +675,6 @@ export function installedAppWorldMountFromInstall(
     app,
     generatedRoutes: true,
     route,
-    ...(routes.schemaRoutes && schemaRoute
-      ? {
-          schemaRoute,
-          schemaRouteAccess: schemaInstallRoute?.access ?? "owner",
-        }
-      : {}),
     target,
   };
 }
@@ -741,18 +697,10 @@ function installedAppWorldMountFromRoute(
       continue;
     }
 
-    if (world.schemaRoute && pathname === world.schemaRoute) {
-      return world;
-    }
-
     const routeMatch = matchInstalledRoutePath(pathname, world.route);
 
     if (!routeMatch) {
       continue;
-    }
-
-    if (!world.schemaRoute && routeMatch.pathSuffix === runtimeTopologyRoutes.schemaRoute) {
-      return undefined;
     }
 
     return world;
@@ -781,28 +729,35 @@ function sourceAppWorldMountsForProfileKind(profileKind: RuntimeProfileKind): Ru
   }
 
   return schemaApps.map((app) => ({
-    app,
+    app: runtimeAppDefinitionFromSchemaApp(app),
     generatedRoutes: true,
     route: app.route,
-    schemaRoute: app.schemaRoute,
   }));
 }
 
 function runtimeAppDefinitionFromPackage(
   appPackage: ResolvedAppPackage,
-  routes: { route: `/${string}`; schemaRoute: `/${string}` },
+  routes: { route: `/${string}` },
 ): RuntimeAppDefinition {
   const bundledApp = findSchemaAppDefinition(appPackage.sourceSchemaKey);
 
   return (
-    bundledApp ?? {
+    (bundledApp ? runtimeAppDefinitionFromSchemaApp(bundledApp) : undefined) ?? {
       key: appPackage.sourceSchemaKey,
       label: appPackage.label,
       route: routes.route,
-      schemaRoute: routes.schemaRoute,
       seedChangeMutationPrefix: `seed-${appPackage.sourceSchemaKey}`,
     }
   );
+}
+
+function runtimeAppDefinitionFromSchemaApp(app: SchemaAppDefinition): RuntimeAppDefinition {
+  return {
+    key: app.key,
+    label: app.label,
+    route: app.route,
+    seedChangeMutationPrefix: app.seedChangeMutationPrefix,
+  };
 }
 
 function runtimeInstalledAppRoutesForProfile(

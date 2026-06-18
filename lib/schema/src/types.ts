@@ -1203,13 +1203,8 @@ export type RuntimeSchemaControlPlaneSchema = {
   entities: Record<string, RuntimeSchemaControlPlaneEntitySchema>;
 };
 
-export type RuntimeSchemaBuilderPolicy = {
-  editable: false;
-};
-
 export type RuntimeSchemaMetadata = {
   owner: "runtime";
-  builder: RuntimeSchemaBuilderPolicy;
   controlPlane?: RuntimeSchemaControlPlaneSchema;
 };
 

@@ -256,7 +256,7 @@ describe("instance runtime route resolution", () => {
     });
   });
 
-  it("resolves enabled app, schema, public Site, exact-host, and disabled mount routes", () => {
+  it("resolves enabled app, public Site, exact-host, and disabled mount routes", () => {
     const records = [
       routeRecord("route:tasks:admin", {
         access: "owner",
@@ -266,16 +266,6 @@ describe("instance runtime route resolution", () => {
         targetProfile: "app",
         appInstall: "tasks",
         surface: "admin",
-        createdAt: "2026-06-02T00:00:00.000Z",
-        updatedAt: "2026-06-02T00:00:00.000Z",
-      }),
-      routeRecord("route:tasks:schema", {
-        enabled: true,
-        matchPath: "/apps/tasks/schema",
-        kind: "mount",
-        targetProfile: "app",
-        appInstall: "tasks",
-        surface: "schema",
         createdAt: "2026-06-02T00:00:00.000Z",
         updatedAt: "2026-06-02T00:00:00.000Z",
       }),
@@ -327,18 +317,6 @@ describe("instance runtime route resolution", () => {
       surface: "admin",
       target: { installId: "tasks", kind: "appInstall", packageAppKey: "tasks" },
       targetProfile: "app",
-    });
-    expect(
-      resolveInstanceRuntimeRouteFromRecords({
-        appInstalls,
-        records,
-        request: { host: "formless.local", pathname: "/apps/tasks/schema" },
-      }),
-    ).toMatchObject({
-      access: "owner",
-      id: "route:tasks:schema",
-      surface: "schema",
-      target: { installId: "tasks", kind: "appInstall", packageAppKey: "tasks" },
     });
     expect(
       resolveInstanceRuntimeRouteFromRecords({
@@ -401,7 +379,6 @@ function appInstall(installId: string, packageAppKey: SchemaKey): AppInstall {
           publicRoutePrefix: `/sites/${installId}/` as `/${string}/`,
         }
       : {}),
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-06-02T00:00:00.000Z",

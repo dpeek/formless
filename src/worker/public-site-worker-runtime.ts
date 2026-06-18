@@ -192,7 +192,7 @@ export async function handlePublicSiteIndexingRequest(
       : {
           clientRoutePrefixes: [
             runtimeTopologyRoutes.publicSitePreviewRouteBase,
-            runtimeTopologyRoutes.schemaRoute,
+            "/schema",
             ...schemaApps.map((app) => app.route),
           ],
           origin: url.origin,

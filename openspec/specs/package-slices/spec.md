@@ -568,8 +568,8 @@ runtime-neutral App schema language contracts, parsers, and pure helpers.
 
 #### Scenario: Schema package exports
 
-- GIVEN generated UI models, schema authoring state, Authority validation,
-  browser replicas, archives, upgrade migrations, tests, or package slices need
+- GIVEN generated UI models, Authority validation, browser replicas, archives,
+  upgrade migrations, tests, or package slices need
   App schema contracts, parser behavior, field behavior, query helpers, read
   model helpers, schema-local entity key helpers, or qualified entity name
   helpers

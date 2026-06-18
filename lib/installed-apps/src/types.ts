@@ -6,7 +6,7 @@ export type AppPackageKey = PackageAppKey;
 export type AppInstallId = string;
 export type AppInstallStatus = "installed";
 export type AppInstallRouteAccess = "anonymous" | "owner";
-export type AppInstallRouteKind = "admin" | "publicSite" | "schema";
+export type AppInstallRouteKind = "admin" | "publicSite";
 
 export type AppInstallRoute = {
   access?: AppInstallRouteAccess;
@@ -27,7 +27,6 @@ export type AppInstall = {
   createdAt: string;
   updatedAt: string;
   adminRoute: `/${string}`;
-  schemaRoute: `/${string}`;
   publicRoute?: `/${string}`;
   publicRoutePrefix?: `/${string}/`;
   routes?: AppInstallRoute[];

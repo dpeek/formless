@@ -167,18 +167,17 @@ describe("instance control-plane API routes", () => {
     );
 
     expect(created.response.status).toBe(201);
-    expect(created.body.cursor).toBe(4);
+    expect(created.body.cursor).toBe(3);
     expect(created.body.changes.map((change) => change.payload.id)).toEqual([
       "personal",
       "route:personal:admin",
-      "route:personal:schema",
       "route:personal:public-site",
     ]);
     expect(replay.response.status).toBe(200);
     expect(replay.body).toEqual(created.body);
     expect(installedSite.body.schema).toEqual(siteSourceSchema);
     expect(installedSite.body.records).toEqual(siteSeedRecords);
-    expect(controlPlane.body.records).toHaveLength(4);
+    expect(controlPlane.body.records).toHaveLength(3);
     expect(appInstallValues(controlPlane.body, "personal")).toMatchObject({
       installId: "personal",
       packageAppKey: "site",
@@ -187,7 +186,6 @@ describe("instance control-plane API routes", () => {
     });
     expect(routeValues(controlPlane.body).map((route) => route["matchPath"])).toEqual([
       "/apps/personal",
-      "/apps/personal/schema",
       "/sites/personal",
     ]);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("block-placement");
@@ -227,7 +225,6 @@ describe("instance control-plane API routes", () => {
       "app-install",
       "route",
       "route",
-      "route",
     ]);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("Installed only");
     expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
@@ -258,13 +255,11 @@ describe("instance control-plane API routes", () => {
     expect(before.body.installs[0]).toMatchObject({
       adminRoute: "/apps/personal",
       installId: "personal",
-      schemaRoute: "/apps/personal/schema",
     });
     expect(routeEdit.response.status).toBe(200);
     expect(after.body.installs[0]).toMatchObject({
       adminRoute: "/apps/personal-admin",
       installId: "personal",
-      schemaRoute: "/apps/personal/schema",
     });
   });
 
@@ -823,7 +818,6 @@ function legacyRouteIntentSchema(): AppSchema {
           routeKind: enumField("Route kind", {
             admin: "Admin",
             publicSite: "Public Site",
-            schema: "Schema",
           }),
           path: textField("Path"),
           prefix: optionalTextField("Prefix"),

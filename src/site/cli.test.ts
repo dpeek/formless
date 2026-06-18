@@ -803,7 +803,6 @@ describe("Formless Site CLI", () => {
         "deployment-config:instance.primary",
         "route:route:david:admin",
         "route:route:david:public-site",
-        "route:route:david:schema",
         "route:route:host:publicSite:dpeek.com",
       ].sort((left, right) => left.localeCompare(right)),
     );
@@ -1135,7 +1134,6 @@ describe("Formless Site CLI", () => {
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
       "app-install",
       "deployment-config",
-      "route",
       "route",
       "route",
       "route",
@@ -3027,7 +3025,6 @@ describe("Formless Site CLI", () => {
       "app-install",
       "route",
       "route",
-      "route",
     ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(restoreBody.archive.apps[0]?.data.kind).toBe(STORAGE_SNAPSHOT_KIND);
@@ -3111,7 +3108,7 @@ describe("Formless Site CLI", () => {
       routes
         ?.map((record) => record.values.matchPath)
         .sort((left, right) => String(left).localeCompare(String(right))),
-    ).toEqual(["/apps/labs", "/apps/labs/schema"]);
+    ).toEqual(["/apps/labs"]);
     expect(restoreBody.archive.apps[0]?.app).toMatchObject({
       installId: "labs",
       packageAppKey: "private-labs",
@@ -3474,7 +3471,7 @@ describe("Formless Site CLI", () => {
     expect(logs[0]).toContain("source: http://localhost:5173.");
     expect(logs[0]).toContain("appCount: 1.");
     expect(logs[0]).toContain("mediaCount: 1.");
-    expect(logs[0]).toContain("recordCount: 6.");
+    expect(logs[0]).toContain("recordCount: 5.");
     expect(logs[0]).toContain(
       `appState: {"installId":"david","mediaCount":1,"recordCount":${mediaRecords().length}}.`,
     );
@@ -4031,7 +4028,6 @@ describe("Formless Site CLI", () => {
           packageAppKey: "site",
           publicRoute: "/sites/personal",
           publicRoutePrefix: "/sites/personal/",
-          schemaRoute: "/apps/personal/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -4230,7 +4226,6 @@ describe("Formless Site CLI", () => {
           label: "Work Tasks",
           packageAppKey: "tasks",
           ...packageAppFactsForKey("tasks", bundledAppPackageResolver)!,
-          schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -4292,7 +4287,6 @@ describe("Formless Site CLI", () => {
           ...packageAppFactsForKey("site", bundledAppPackageResolver)!,
           publicRoute: "/sites/personal",
           publicRoutePrefix: "/sites/personal/",
-          schemaRoute: "/apps/personal/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -4303,7 +4297,6 @@ describe("Formless Site CLI", () => {
           label: "Work Tasks",
           packageAppKey: "tasks",
           ...packageAppFactsForKey("tasks", bundledAppPackageResolver)!,
-          schemaRoute: "/apps/work/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -4314,7 +4307,6 @@ describe("Formless Site CLI", () => {
           label: "Sales CRM",
           packageAppKey: "crm",
           ...packageAppFactsForKey("crm", bundledAppPackageResolver)!,
-          schemaRoute: "/apps/sales/schema",
           status: "installed",
           updatedAt: "2026-05-01T00:00:00.000Z",
         },
@@ -4857,7 +4849,6 @@ type TestWorkspaceApp = ReturnType<typeof workspaceApp> & {
   routes?: {
     admin?: `/apps/${string}`;
     public?: `/sites/${string}`;
-    schema?: `/apps/${string}/schema`;
   };
 };
 
@@ -4964,7 +4955,6 @@ function installedApp(installId: string, label: string, packageAppKey: "site" | 
           publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
         }
       : {}),
-    schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
     sourceSchemaHash: facts.sourceSchemaHash,
     status: "installed" as const,
     updatedAt: "2026-05-01T00:00:00.000Z",
@@ -5002,22 +4992,6 @@ function privateControlPlaneRecords(sourceSchemaHash: SourceSchemaHash): StoredR
         targetProfile: "app",
         appInstall: "labs",
         surface: "admin",
-        createdAt: now,
-        updatedAt: now,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "route:labs:schema",
-      entity: "route",
-      values: {
-        enabled: true,
-        matchPath: "/apps/labs/schema",
-        kind: "mount",
-        targetProfile: "app",
-        appInstall: "labs",
-        surface: "schema",
         createdAt: now,
         updatedAt: now,
       },
@@ -5473,7 +5447,6 @@ function controlPlaneRecords(
   const installId = options.installId ?? "david";
   const adminRouteId = `route:${installId}:admin`;
   const publicRouteId = `route:${installId}:public-site`;
-  const schemaRouteId = `route:${installId}:schema`;
   const domainRouteId = `route:host:publicSite:${host}`;
   const deployTargetId = "instance.primary";
   const targetUrl = options.targetUrl ?? "https://personal.dpeek.workers.dev";
@@ -5518,20 +5491,6 @@ function controlPlaneRecords(
         targetProfile: "public-site",
         appInstall: installId,
         surface: "public-site",
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: schemaRouteId,
-      entity: "route",
-      values: {
-        enabled: true,
-        matchPath: `/apps/${installId}/schema`,
-        kind: "mount",
-        targetProfile: "app",
-        appInstall: installId,
-        surface: "schema",
       },
       createdAt: now,
       updatedAt: now,

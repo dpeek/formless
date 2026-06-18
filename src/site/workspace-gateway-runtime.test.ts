@@ -1418,7 +1418,6 @@ function installedSite(installId: string, label: string) {
     packageRevision: facts.packageRevision,
     publicRoute: `/sites/${installId}` as `/sites/${string}`,
     publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
-    schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
     sourceSchemaHash: facts.sourceSchemaHash,
     status: "installed" as const,
     updatedAt: "2026-05-01T00:00:00.000Z",

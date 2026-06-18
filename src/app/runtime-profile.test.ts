@@ -52,7 +52,6 @@ function appInstallFixture({
     label,
     packageAppKey,
     packageRevision: 1,
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
@@ -108,7 +107,6 @@ function appInstallFromPackage({
     label,
     packageAppKey: appPackage.packageAppKey,
     packageRevision: appPackage.packageRevision,
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: appPackage.sourceSchemaHash,
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
@@ -136,7 +134,6 @@ describe("runtime profile resolver", () => {
     expect(profile.instanceShell).toBe(true);
     expect(profile.installedAppRoutes).toEqual({
       appRouteBase: "/apps",
-      schemaRoutes: false,
     });
     expect(profile.installedSitePublicRoutes).toEqual({
       homeSlug: "home",
@@ -176,7 +173,6 @@ describe("runtime profile resolver", () => {
     expect(profile.instanceShell).toBe(true);
     expect(profile.installedAppRoutes).toEqual({
       appRouteBase: "/apps",
-      schemaRoutes: true,
     });
     expect(profile.installedSitePublicRoutes).toEqual({
       homeSlug: "home",
@@ -185,14 +181,10 @@ describe("runtime profile resolver", () => {
     expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "site", "crm"]);
     expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true]);
     expect(profile.worlds.map((world) => world.route)).toEqual(["/tasks", "/site", "/crm"]);
-    expect(profile.worlds.map((world) => world.schemaRoute)).toEqual([
-      "/tasks/schema",
-      "/site/schema",
-      "/crm/schema",
-    ]);
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/rates/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(profile.worlds[0]!, "/tasks/schema")).toBe("/schema");
     expect(runtimeRoutePolicy(profile)).toEqual({
       instanceBrowserRoutes: true,
       installedAppBrowserRoutes: true,
@@ -204,7 +196,6 @@ describe("runtime profile resolver", () => {
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
-      installedAppSchemaRoutePattern: "/apps/:installId/schema",
       installedAppScreenRoutePattern: "/apps/:installId/*",
       installedSitePublicHomeRoutePattern: "/sites/:installId",
       installedSitePublicSlugRoutePattern: "/sites/:installId/*",
@@ -251,18 +242,14 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("site");
     expect(world.route).toBe("/apps/personal");
     expect(world.access).toBe("owner");
-    expect(world.schemaRoute).toBe("/apps/personal/schema");
-    expect(world.schemaRouteAccess).toBe("owner");
     expect(world.target.installId).toBe("personal");
     expect(world.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
     expect(tasksWorld.app.key).toBe("tasks");
     expect(tasksWorld.route).toBe("/apps/task-workspace");
-    expect(tasksWorld.schemaRoute).toBe("/apps/task-workspace/schema");
     expect(tasksWorld.target.installId).toBe("task-workspace");
     expect(tasksWorld.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
     expect(crmWorld.app.key).toBe("crm");
     expect(crmWorld.route).toBe("/apps/crm");
-    expect(crmWorld.schemaRoute).toBe("/apps/crm/schema");
     expect(crmWorld.target.installId).toBe("crm");
     expect(crmWorld.target.apiRoutePrefix).toBe("/api/app-installs/crm/crm");
     expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
@@ -270,7 +257,7 @@ describe("runtime profile resolver", () => {
     expect(runtimeScreenRoute(crmWorld, "/audiences")).toBe("/apps/crm/audiences");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/settings")).toBe("/settings");
-    expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBe("/schema");
     expect(runtimeScreenPathFromRoute(crmWorld, "/apps/crm/audiences")).toBe("/audiences");
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/personal/settings", { appInstalls })?.target,
@@ -312,7 +299,6 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("private-site");
     expect(world.app.label).toBe("Private Site");
     expect(world.route).toBe("/apps/private-site");
-    expect(world.schemaRoute).toBe("/apps/private-site/schema");
     expect(world.target.installId).toBe("private-site");
     expect(world.target.packageAppKey).toBe("private-site");
     expect(world.target.sourceSchemaKey).toBe("private-site");
@@ -325,7 +311,7 @@ describe("runtime profile resolver", () => {
     );
   });
 
-  it("preserves product instance schema policy for installed app routes", () => {
+  it("resolves product instance installed app screen paths without schema route metadata", () => {
     const profile = createInstanceRuntimeProfile();
     const appInstalls = [
       appInstallFixture({
@@ -342,14 +328,13 @@ describe("runtime profile resolver", () => {
 
     expect(world.app.key).toBe("tasks");
     expect(world.route).toBe("/apps/task-workspace");
-    expect(world.schemaRoute).toBeUndefined();
     expect(world.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
     expect(findRuntimeWorldMountByRoute(profile, "/apps/task-workspace", { appInstalls })).toEqual(
       world,
     );
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
-    ).toBeUndefined();
+    ).toEqual(world);
     expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/", undefined)).toBe(true);
     expect(
       shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/apps/task-workspace", world, {
@@ -377,12 +362,6 @@ describe("runtime profile resolver", () => {
             path: "/apps/personal-admin",
             routeKind: "admin",
           },
-          {
-            enabled: true,
-            id: "app-route:personal:schema",
-            path: "/apps/personal-admin/schema",
-            routeKind: "schema",
-          },
         ],
       },
     ];
@@ -395,7 +374,6 @@ describe("runtime profile resolver", () => {
     }
 
     expect(world.route).toBe("/apps/personal-admin");
-    expect(world.schemaRoute).toBe("/apps/personal-admin/schema");
     expect(world.target.installId).toBe("personal");
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/personal", { appInstalls }),
@@ -498,12 +476,11 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("crm");
     expect(world.generatedRoutes).toBe(true);
     expect(world.route).toBe("/");
-    expect(world.schemaRoute).toBe("/schema");
     expect(runtimeScreenRoute(world, "/")).toBe("/");
     expect(runtimeScreenRoute(world, "/setup")).toBe("/setup");
     expect(runtimeScreenPathFromRoute(world, "/")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/setup")).toBe("/setup");
-    expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(world, "/schema")).toBe("/schema");
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({});
     expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(false);
   });
@@ -523,14 +500,13 @@ describe("runtime profile resolver", () => {
     expect(profile.shell).toBe("app");
     expect(world.app.key).toBe("tasks");
     expect(world.route).toBe("/");
-    expect(world.schemaRoute).toBe("/schema");
     expect(world.target.installId).toBe("task-workspace");
     expect(world.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
     expect(world.target.browserDatabaseName).toBe("formless:app:task-workspace");
     expect(findRuntimeWorldMountByRoute(profile, "/")?.target).toEqual(world.target);
     expect(findRuntimeWorldMountByRoute(profile, "/schema")?.target).toEqual(world.target);
     expect(runtimeScreenRoute(world, "/")).toBe("/");
-    expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(world, "/schema")).toBe("/schema");
   });
 
   it("hydrates workspace package app-profile root paths from the active package resolver", () => {
@@ -562,7 +538,6 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("private-site");
     expect(world.app.label).toBe("Private Site");
     expect(world.route).toBe("/");
-    expect(world.schemaRoute).toBe("/schema");
     expect(world.target.installId).toBe("private-site");
     expect(world.target.packageAppKey).toBe("private-site");
     expect(world.target.sourceSchemaKey).toBe("private-site");
@@ -570,7 +545,7 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/")?.target).toEqual(world.target);
     expect(findRuntimeWorldMountByRoute(profile, "/schema")?.target).toEqual(world.target);
     expect(runtimeScreenPathFromRoute(world, "/dashboard")).toBe("/dashboard");
-    expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(world, "/schema")).toBe("/schema");
   });
 
   it("resolves the Site authoring profile with top-level preview and admin routes", () => {
@@ -587,7 +562,6 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("site");
     expect(world.generatedRoutes).toBe(true);
     expect(world.route).toBe("/admin");
-    expect(world.schemaRoute).toBeUndefined();
     expect(profile.publicSitePreview).toEqual({
       packageAppKey: "site",
       rootRoute: "/",
@@ -600,12 +574,6 @@ describe("runtime profile resolver", () => {
     expect(runtimeScreenRoute(world, "/header")).toBe("/admin/header");
     expect(runtimeScreenPathFromRoute(world, "/admin")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/admin/header")).toBe("/header");
-  });
-
-  it("can expose the Site authoring schema route explicitly", () => {
-    const profile = createSiteAuthoringRuntimeProfile({ exposeSchemaRoute: true });
-
-    expect(profile.worlds[0]?.schemaRoute).toBe("/admin/schema");
   });
 
   it("resolves the published Site profile without generated admin routes", () => {
@@ -621,7 +589,6 @@ describe("runtime profile resolver", () => {
     expect(world.app.key).toBe("site");
     expect(world.generatedRoutes).toBe(false);
     expect(world.route).toBe("/");
-    expect(world.schemaRoute).toBeUndefined();
     expect(profile.publishedSite).toEqual({
       homeSlug: "home",
       packageAppKey: "site",
@@ -714,7 +681,6 @@ describe("runtime profile resolver", () => {
     expect(profile.kind).toBe("app");
     expect(world.app.key).toBe("tasks");
     expect(world.route).toBe("/");
-    expect(world.schemaRoute).toBe("/schema");
     expect(world.target.installId).toBe("task-workspace");
   });
 

@@ -827,7 +827,6 @@ function siteInstall(installId: string): AppInstall {
     packageRevision: 1,
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: siteSourceSchemaHash,
     status: "installed",
     updatedAt: now,

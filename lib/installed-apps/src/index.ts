@@ -450,7 +450,6 @@ function appInstallFromPackage(input: {
     createdAt: input.now,
     updatedAt: input.now,
     adminRoute: `${input.packageApp.adminRouteBase}/${input.installId}`,
-    schemaRoute: `${input.packageApp.adminRouteBase}/${input.installId}/schema`,
     ...(input.packageApp.publicRouteBase === undefined
       ? {}
       : {

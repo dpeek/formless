@@ -86,7 +86,7 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.screens?.routes.path).toBe("/routes");
     expect(schema.screens?.deployments.path).toBe("/deployments");
     expect(schema.runtime?.owner).toBe("runtime");
-    expect(schema.runtime?.builder.editable).toBe(false);
+    expect(schema.runtime).not.toHaveProperty("builder");
   });
 
   it("defines deployment config intent and observation cache fields", () => {
@@ -180,7 +180,6 @@ describe("instance control-plane schema contracts", () => {
         values: {
           admin: { label: "Admin" },
           "public-site": { label: "Public Site" },
-          schema: { label: "Schema" },
         },
       },
       access: {
@@ -406,7 +405,6 @@ describe("instance control-plane schema contracts", () => {
         packageRevision: 1,
         publicRoute: "/sites/personal",
         publicRoutePrefix: "/sites/personal/",
-        schemaRoute: "/apps/personal/schema",
         sourceSchemaHash: siteSourceSchemaHash,
         status: "installed",
         updatedAt: now,
@@ -446,15 +444,6 @@ describe("instance control-plane schema contracts", () => {
       },
       {
         enabled: true,
-        matchPath: "/apps/personal/schema",
-        kind: "mount",
-        targetProfile: "app",
-        appInstall: "personal",
-        surface: "schema",
-        access: "owner",
-      },
-      {
-        enabled: true,
         matchPath: "/sites/personal",
         matchPrefix: "/sites/personal/",
         kind: "mount",
@@ -472,7 +461,7 @@ describe("instance control-plane schema contracts", () => {
         packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.surface),
-    ).toEqual(["admin", "schema"]);
+    ).toEqual(["admin"]);
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
         installId: "verifi",
@@ -480,7 +469,7 @@ describe("instance control-plane schema contracts", () => {
         packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.access),
-    ).toEqual(["owner", "owner"]);
+    ).toEqual(["owner"]);
     expect(
       instanceControlPlaneEffectiveRouteAccess({
         kind: "mount",
@@ -522,15 +511,9 @@ describe("instance control-plane schema contracts", () => {
     expect(records.map((record) => record.id)).toEqual([
       "labs",
       "route:labs:admin",
-      "route:labs:schema",
       "route:labs:public-site",
     ]);
-    expect(records.map((record) => record.entity)).toEqual([
-      "app-install",
-      "route",
-      "route",
-      "route",
-    ]);
+    expect(records.map((record) => record.entity)).toEqual(["app-install", "route", "route"]);
     expect(records.map((record) => record.values).slice(1)).toEqual(
       instanceControlPlaneDefaultRoutesForInstall({
         installId: "labs",

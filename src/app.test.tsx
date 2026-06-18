@@ -47,7 +47,6 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
-import { SchemaRoute } from "./app/routes/schema.tsx";
 import { buildSitePageTree, type SitePageTree } from "@dpeek/formless-site-app";
 import {
   createDevRuntimeProfile,
@@ -118,7 +117,7 @@ function renderRoute(
         installedAppRouteInstalls={installedAppRouteInstalls}
         installedAppRoutePackages={options.installedAppRoutePackages}
         localWorkspaceGatewayAvailable={options.localWorkspaceGatewayAvailable}
-        routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
+        routeComponents={{ HomeRoute, SitePageRoute }}
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
       />
     </Router>,
@@ -527,7 +526,6 @@ function appInstallFixture({
     label,
     packageAppKey,
     packageRevision: 1,
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
@@ -583,7 +581,6 @@ function appInstallFromPackage({
     label,
     packageAppKey: appPackage.packageAppKey,
     packageRevision: appPackage.packageRevision,
-    schemaRoute: `/apps/${installId}/schema`,
     sourceSchemaHash: appPackage.sourceSchemaHash,
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
@@ -620,13 +617,11 @@ function expectAppSettings(
     appLabel,
     resetScopeLabel = appLabel,
     schemaKey,
-    schemaRoute,
     syncWorldKey = schemaKey,
   }: {
     appLabel: string;
     resetScopeLabel?: string;
     schemaKey: string;
-    schemaRoute?: string;
     syncWorldKey?: string;
   },
 ) {
@@ -634,9 +629,6 @@ function expectAppSettings(
   expect(html).toContain(">App settings<");
   expect(html).toContain(`aria-label="Toggle ${appLabel} navigation and app settings"`);
   expectSyncStatusControl(html, syncWorldKey);
-  if (schemaRoute) {
-    expect(html).toContain(`href="${schemaRoute}"`);
-  }
   expect(html).toContain("Reset source seed data");
   expect(html).toContain(`aria-label="Reset source seed data for ${resetScopeLabel}"`);
   expect(html).not.toContain("Export storage snapshot");
@@ -753,7 +745,6 @@ describe("App smoke routes", () => {
     expectAppSettings(html, {
       appLabel: "Tasks",
       schemaKey: "tasks",
-      schemaRoute: "/tasks/schema",
     });
     expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Loading Tasks...");
@@ -773,7 +764,6 @@ describe("App smoke routes", () => {
     expectAppSettings(html, {
       appLabel: "Site",
       schemaKey: "site",
-      schemaRoute: "/site/schema",
     });
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Loading Site...");
@@ -786,36 +776,29 @@ describe("App smoke routes", () => {
 
     expect(linkHtml(devSetupHtml, "/crm/audiences")).toContain('aria-current="page"');
     expect(linkHtml(devSetupHtml, "/crm")).not.toContain('aria-current="page"');
-    expect(linkHtml(devSetupHtml, "/crm/schema")).not.toContain('aria-current="page"');
-
-    const appSchemaHtml = generatedAppFrameHtml(
-      renderRoute("/schema", createAppRuntimeProfile("crm")),
-    );
-
-    expect(linkHtml(appSchemaHtml, "/schema")).toContain('aria-current="page"');
-    expect(appSchemaHtml).not.toContain('href="/setup"');
+    expect(devSetupHtml).not.toContain('href="/crm/schema"');
 
     resetClientStore();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const installedWorld = findRuntimeWorldMountByRoute(
       createDevRuntimeProfile(),
-      "/apps/personal/schema",
+      "/apps/personal/settings",
       {
         appInstalls,
       },
     );
     if (!installedWorld?.target) {
-      throw new Error("Expected installed app target for /apps/personal/schema.");
+      throw new Error("Expected installed app target for /apps/personal/settings.");
     }
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
     const installedSchemaHtml = generatedAppFrameHtml(
-      renderRoute("/apps/personal/schema", undefined, appInstalls),
+      renderRoute("/apps/personal/settings", undefined, appInstalls),
     );
 
-    expect(linkHtml(installedSchemaHtml, "/apps/personal/schema")).toContain('aria-current="page"');
-    expect(linkHtml(installedSchemaHtml, "/apps/personal/settings")).not.toContain(
+    expect(linkHtml(installedSchemaHtml, "/apps/personal/settings")).toContain(
       'aria-current="page"',
     );
+    expect(installedSchemaHtml).not.toContain('href="/apps/personal/schema"');
   });
 
   it('renders the "/setup" owner setup route outside workbench chrome', () => {
@@ -886,7 +869,6 @@ describe("App smoke routes", () => {
           installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute: SchemaKeyProbeHomeRoute,
-            SchemaRoute,
             SitePageRoute,
           }}
           runtimeProfile={instanceProfile}
@@ -958,7 +940,6 @@ describe("App smoke routes", () => {
         <App
           routeComponents={{
             HomeRoute: SchemaKeyProbeHomeRoute,
-            SchemaRoute,
             SitePageRoute,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -979,7 +960,6 @@ describe("App smoke routes", () => {
           installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute: TargetProbeHomeRoute,
-            SchemaRoute,
             SitePageRoute,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -990,7 +970,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
     expectRuntimeShell(html);
-    expect(html).toContain('href="/apps/personal/schema"');
+    expect(html).not.toContain('href="/apps/personal/schema"');
     expect(html).toContain('data-route-schema-key="site"');
     expect(html).toContain('data-screen-path="/settings"');
     expect(html).toContain('data-target-kind="appInstall"');
@@ -999,7 +979,6 @@ describe("App smoke routes", () => {
       appLabel: "Site",
       resetScopeLabel: "Site app install personal",
       schemaKey: "site",
-      schemaRoute: "/apps/personal/schema",
       syncWorldKey: "app:personal",
     });
     expect(html).toContain("Schema</dt><dd>Loading</dd>");
@@ -1028,7 +1007,6 @@ describe("App smoke routes", () => {
           installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute: TargetProbeHomeRoute,
-            SchemaRoute,
             SitePageRoute,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -1047,7 +1025,6 @@ describe("App smoke routes", () => {
       appLabel: "Tasks",
       resetScopeLabel: "Tasks app install task-workspace",
       schemaKey: "tasks",
-      schemaRoute: "/apps/task-workspace/schema",
       syncWorldKey: "app:task-workspace",
     });
     expect(linkHtml(runtimeShellHtml(html), "/apps/task-workspace")).toContain(
@@ -1072,7 +1049,6 @@ describe("App smoke routes", () => {
           installedAppRoutePackages={[privatePackage]}
           routeComponents={{
             HomeRoute: TargetProbeHomeRoute,
-            SchemaRoute,
             SitePageRoute,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -1091,7 +1067,6 @@ describe("App smoke routes", () => {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
       schemaKey: "private-site",
-      schemaRoute: "/apps/private-site/schema",
       syncWorldKey: "app:private-site",
     });
     expect(linkHtml(runtimeShellHtml(html), "/apps/private-site")).toContain('aria-current="page"');
@@ -1108,7 +1083,6 @@ describe("App smoke routes", () => {
       label: "Private Site",
       packageAppKey: "private-site",
       packageRevision: privatePackage.packageRevision,
-      schemaRoute: "/apps/private-site/schema",
       sourceSchemaHash: privatePackage.sourceSchemaHash,
       status: "installed",
       updatedAt: "2026-05-25T00:00:00.000Z",
@@ -1158,7 +1132,6 @@ describe("App smoke routes", () => {
       appLabel: "Tasks",
       resetScopeLabel: "Tasks app install task-workspace",
       schemaKey: "tasks",
-      schemaRoute: "/apps/task-workspace/schema",
       syncWorldKey: "app:task-workspace",
     });
     expect(html).toContain("Create Task");
@@ -1194,7 +1167,6 @@ describe("App smoke routes", () => {
       appLabel: "CRM",
       resetScopeLabel: "CRM app install crm",
       schemaKey: "crm",
-      schemaRoute: "/apps/crm/schema",
       syncWorldKey: "app:crm",
     });
     expect(html).toContain('href="/apps/crm/audiences"');
@@ -1219,7 +1191,6 @@ describe("App smoke routes", () => {
       appLabel: "Site",
       resetScopeLabel: "Site app install personal",
       schemaKey: "site",
-      schemaRoute: "/apps/personal/schema",
       syncWorldKey: "app:personal",
     });
     expect(loadingHtml).toContain("Loading Site...");
@@ -1246,7 +1217,7 @@ describe("App smoke routes", () => {
     expect(activeHtml).not.toContain("Loading Site...");
   });
 
-  it("keeps installed Site schema routes scoped to the installed app target", () => {
+  it("does not render an installed Site schema editor route", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const loadingHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
@@ -1254,12 +1225,11 @@ describe("App smoke routes", () => {
     expect(loadingHtml).toContain('data-frame="workbench"');
     expect(loadingHtml).toContain('data-frame="generated-app"');
     expectRuntimeShell(loadingHtml);
-    expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Site" });
     expectAppSettings(loadingHtml, {
       appLabel: "Site",
       resetScopeLabel: "Site app install personal",
       schemaKey: "site",
-      schemaRoute: "/apps/personal/schema",
       syncWorldKey: "app:personal",
     });
     expect(loadingHtml).not.toContain("Site Schema");
@@ -1285,12 +1255,13 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
     const activeHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
 
-    expect(activeHtml).toContain('aria-label="Schema saved"');
-    expect(activeHtml).toContain("&quot;siteSettingsHome&quot;");
+    expect(activeHtml).toContain("Not found");
+    expect(activeHtml).not.toContain('aria-label="Schema saved"');
+    expect(activeHtml).not.toContain("&quot;siteSettingsHome&quot;");
     expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
   });
 
-  it("renders workspace package schema routes from active package metadata", () => {
+  it("does not render a workspace package schema editor route", () => {
     const privatePackage = privateSitePackage();
     const appInstalls = [
       appInstallFromPackage({
@@ -1324,21 +1295,18 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
     expectRuntimeShell(html);
-    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Private Site" });
     expectAppSettings(html, {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
       schemaKey: "private-site",
-      schemaRoute: "/apps/private-site/schema",
       syncWorldKey: "app:private-site",
     });
-    expect(html).toContain('aria-label="Private Site schema editor"');
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">private-site</span>");
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).toContain("&quot;siteSettingsHome&quot;");
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('aria-label="Private Site schema editor"');
+    expect(html).not.toContain('data-slot="schema-key-badge"');
+    expect(html).not.toContain('aria-label="Schema saved"');
     expect(html).toContain("Schema</dt><dd>v1</dd>");
-    expect(html).not.toContain("Not found");
   });
 
   it("selects supported installed apps for the dev runtime shell picker", () => {
@@ -1427,7 +1395,6 @@ describe("App smoke routes", () => {
           installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: SitePageRouteProbe,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -1458,7 +1425,6 @@ describe("App smoke routes", () => {
           installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: SitePageRouteProbe,
           }}
           runtimeProfile={createDevRuntimeProfile()}
@@ -1472,7 +1438,7 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="generated-app"');
   });
 
-  it('renders the "/tasks/schema" route', () => {
+  it('does not render a source app schema editor at "/tasks/schema"', () => {
     applyBootstrapResponse(bootstrap([], appSchema), "tasks");
     const html = renderRoute("/tasks/schema");
 
@@ -1480,56 +1446,23 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="workbench-tool"');
     expect(html).toContain('data-frame="generated-app"');
     expectRuntimeShell(html);
-    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
     expectAppSettings(html, {
       appLabel: "Tasks",
       schemaKey: "tasks",
-      schemaRoute: "/tasks/schema",
     });
     expect(html).toContain('aria-label="Tasks screens"');
+    expect(html).toContain("Not found");
     expect(html).not.toContain("Tasks Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">tasks</span>");
+    expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Tasks route reset controls"');
     expect(html).not.toContain('aria-label="Tasks source reset controls"');
-    expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-controls="schema-builder-panel"');
-    expect(html).toContain('aria-controls="schema-source-panel"');
-    expect(html).toContain('aria-selected="true"');
-    expect(html).toContain('aria-label="Schema builder"');
-    expect(html).toContain('aria-label="Schema entities"');
-    expect(html).not.toContain('aria-label="Builder schema tree"');
-    expect(html).not.toContain("Schema tree");
-    expect(html).not.toContain("1 entities");
-    expect(html).not.toContain('role="tree"');
-    expect(html).not.toContain('role="treeitem"');
-    expect(html).toContain('data-entity-key="task"');
-    expect(html).toContain('data-field-key="title"');
-    expect(html).not.toContain('aria-label="Collapse Task"');
-    expect(html).toContain('aria-label="Entity label for task"');
-    expect(html).toContain('aria-label="Field label for task.title"');
-    expect(html).not.toContain(">Entity label</span>");
-    expect(html).not.toContain(">Field label</span>");
-    expect(html).toContain('data-slot="entity-key-badge"');
-    expect(html).toContain('data-slot="field-key-badge"');
-    expect(html).toContain('data-slot="field-type-badge"');
-    expect(html).toContain("Text format");
-    expect(html).toContain("Required");
-    expect(html).not.toContain(">Type</span>");
-    expect(html).toContain('aria-label="Create entity"');
-    expect(html).toContain('aria-label="Create field for Task"');
-    expect(html).toContain(">Field</span>");
-    expect(html).not.toContain(">Add field</span>");
-    expect(html).not.toContain('aria-label="Field details"');
-    expect(html).not.toContain("Create generated surface");
-    expect(html).not.toContain("Source-owned app surfaces.");
-    expect(html).not.toContain('aria-label="Field presentation preview"');
-    expect(html).toContain('aria-label="Schema source"');
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).not.toContain('aria-label="Task entity saved"');
-    expect(html).not.toContain('aria-label="Title field saved"');
-    expect(html).toContain("Save schema");
-    expect(html).toContain("Revert draft");
+    expect(html).not.toContain('aria-label="Schema editor mode"');
+    expect(html).not.toContain('aria-label="Schema builder"');
+    expect(html).not.toContain('aria-label="Schema source"');
+    expect(html).not.toContain('aria-label="Schema saved"');
+    expect(html).not.toContain("Save schema");
+    expect(html).not.toContain("Revert draft");
     expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Tasks storage snapshot controls"');
@@ -1537,93 +1470,27 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Tasks snapshot file");
     expect(html).not.toContain("Restore storage snapshot");
     expect(html).not.toContain("Reset source schema");
-    expect(html).toContain("&quot;screens&quot;");
-    expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
   });
 
-  it('renders the "/site/schema" route', () => {
-    applyBootstrapResponse(bootstrap([], siteSourceSchema), "site");
-    const html = renderRoute("/site/schema");
+  it('renders a declared app screen at "/schema"', () => {
+    const schema = taskSchemaWithSchemaPathScreen();
 
-    expect(html).toContain('data-frame="workbench"');
-    expect(html).not.toContain('data-frame="workbench-tool"');
+    applyBootstrapResponse(bootstrap(taskSeedRecords, schema), "tasks");
+    const html = renderRoute("/schema", createAppRuntimeProfile("tasks"));
+    const frameHtml = generatedAppFrameHtml(html);
+
+    expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectRuntimeShell(html);
-    expectAppSettings(html, {
-      appLabel: "Site",
-      schemaKey: "site",
-      schemaRoute: "/site/schema",
-    });
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).not.toContain('href="/site/header"');
-    expect(html).not.toContain('href="/site/footer"');
-    expect(html).not.toContain("Site Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">site</span>");
-    expect(html).not.toContain('aria-label="Site route reset controls"');
-    expect(html).not.toContain('aria-label="Site source reset controls"');
-    expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Schema builder"');
-    expect(html).toContain('aria-label="Schema entities"');
-    expect(html).not.toContain('aria-label="Builder schema tree"');
-    expect(html).not.toContain('role="tree"');
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).toContain("Save schema");
-    expect(html).not.toContain("Open app");
-    expect(html).not.toContain("Reset schema and seed data");
-    expect(html).not.toContain('aria-label="Site storage snapshot controls"');
-    expect(html).not.toContain("Export storage snapshot");
-    expect(html).not.toContain("Site snapshot file");
-    expect(html).not.toContain("Restore storage snapshot");
-    expect(html).not.toContain("Reset source schema");
-    expect(html).toContain("&quot;siteEditor&quot;");
-    expect(html).toContain("&quot;siteSettings&quot;");
-    expect(html).toContain("&quot;siteSettingsHome&quot;");
-    expect(html).toContain("&quot;siteCompositionHome&quot;");
-    expect(html).toContain("&quot;sitePrimary&quot;");
-    expect(html).toContain("&quot;blockSiteRoots&quot;");
-    expect(html).not.toContain("&quot;siteHeader&quot;");
-    expect(html).not.toContain("&quot;siteFooter&quot;");
-    expect(html).toContain("&quot;block&quot;");
-    expect(html).toContain("&quot;block-placement&quot;");
-    expect(html).not.toContain("<code>tasks</code>");
-    expect(html).not.toContain("<code>rates</code>");
-  });
-
-  it('renders the "/crm/schema" route', () => {
-    applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
-    const html = renderRoute("/crm/schema");
-
-    expect(html).toContain('data-frame="workbench"');
-    expect(html).not.toContain('data-frame="workbench-tool"');
-    expect(html).toContain('data-frame="generated-app"');
-    expectRuntimeShell(html);
-    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Schema" });
-    expectAppSettings(html, {
-      appLabel: "CRM",
-      schemaKey: "crm",
-      schemaRoute: "/crm/schema",
-    });
-    expect(html).toContain('aria-label="CRM screens"');
-    expect(html).toContain('href="/crm/audiences"');
-    expect(html).not.toContain("CRM Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">crm</span>");
-    expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Schema builder"');
-    expect(html).toContain('aria-label="Schema entities"');
-    expect(html).toContain('data-entity-key="company"');
-    expect(html).toContain('data-field-key="name"');
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).toContain("Save schema");
-    expect(html).not.toContain("Open app");
-    expect(html).not.toContain("Reset schema and seed data");
-    expect(html).toContain("&quot;contactHome&quot;");
-    expect(html).toContain("&quot;companyContacts&quot;");
-    expect(html).toContain("&quot;broadcast-recipient&quot;");
-    expect(html).not.toContain("<code>tasks</code>");
-    expect(html).not.toContain("<code>site</code>");
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
+    expect(frameHtml).toContain('href="/schema"');
+    expect(linkHtml(frameHtml, "/schema")).toContain("Schema path");
+    expect(html).toContain('aria-label="Schema path tasks"');
+    expect(html).toContain('aria-label="Schema path tasks copy"');
+    expect(html).toContain("Create Task");
+    expect(html).not.toContain('data-slot="schema-key-badge"');
+    expect(html).not.toContain('aria-label="Schema editor mode"');
+    expect(html).not.toContain("Save schema");
   });
 
   it('renders the "/pages/home" public site route outside generated admin navigation', () => {
@@ -1655,7 +1522,6 @@ describe("App smoke routes", () => {
         <App
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: SitePageRouteProbe,
           }}
           runtimeProfile={createPublishedSiteRuntimeProfile({ packageAppKey: "private-site" })}
@@ -1674,7 +1540,6 @@ describe("App smoke routes", () => {
         <App
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: SitePageRouteProbe,
           }}
           runtimeProfile={createSiteAuthoringRuntimeProfile()}
@@ -1696,7 +1561,6 @@ describe("App smoke routes", () => {
         <App
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: SitePageRouteProbe,
           }}
           runtimeProfile={createSiteAuthoringRuntimeProfile()}
@@ -1740,26 +1604,6 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Save schema");
   });
 
-  it('can render the Site authoring schema editor at "/admin/schema" when exposed', () => {
-    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
-    const html = renderRoute(
-      "/admin/schema",
-      createSiteAuthoringRuntimeProfile({ exposeSchemaRoute: true }),
-    );
-
-    expect(html).toContain('data-frame="generated-app"');
-    expectAppSettings(html, {
-      appLabel: "Site",
-      schemaKey: "site",
-      schemaRoute: "/admin/schema",
-    });
-    expect(html).not.toContain("Site Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">site</span>");
-    expect(html).toContain("Save schema");
-    expect(html).not.toContain("Open app");
-  });
-
   it("renders a published Site profile slug path outside generated admin navigation", () => {
     const html = renderRoute("/projects/pricinglab", createPublishedSiteRuntimeProfile());
 
@@ -1798,7 +1642,6 @@ describe("App smoke routes", () => {
     expectAppSettings(html, {
       appLabel: "CRM",
       schemaKey: "crm",
-      schemaRoute: "/schema",
     });
     expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Contacts" });
     expect(html).toContain(">Contacts</h1>");
@@ -1831,7 +1674,6 @@ describe("App smoke routes", () => {
       appLabel: "Tasks",
       resetScopeLabel: "Tasks app install task-workspace",
       schemaKey: "tasks",
-      schemaRoute: "/schema",
       syncWorldKey: "app:task-workspace",
     });
     expect(html).toContain("Create Task");
@@ -1876,7 +1718,6 @@ describe("App smoke routes", () => {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
       schemaKey: "private-site",
-      schemaRoute: "/schema",
       syncWorldKey: "app:private-site",
     });
     expect(html).toContain('aria-label="Pages roots"');
@@ -1896,13 +1737,12 @@ describe("App smoke routes", () => {
     expectAppSettings(html, {
       appLabel: "CRM",
       schemaKey: "crm",
-      schemaRoute: "/schema",
     });
     expect(html).toContain("Create Audience");
     expect(html).not.toContain('href="/crm/audiences"');
   });
 
-  it('renders an installed app profile schema editor at "/schema" from the install-scoped target', () => {
+  it('does not render an installed app profile schema editor at "/schema"', () => {
     const profile = createInstalledAppRuntimeProfile({
       installId: "task-workspace",
       packageAppKey: "tasks",
@@ -1918,21 +1758,21 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
     expectAppSettings(html, {
       appLabel: "Tasks",
       resetScopeLabel: "Tasks app install task-workspace",
       schemaKey: "tasks",
-      schemaRoute: "/schema",
       syncWorldKey: "app:task-workspace",
     });
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">tasks</span>");
-    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('data-slot="schema-key-badge"');
+    expect(html).not.toContain('aria-label="Schema saved"');
+    expect(html).not.toContain("Save schema");
     expect(html).not.toContain('href="/apps/task-workspace/schema"');
   });
 
-  it('renders a workspace package app profile schema editor at "/schema" from active package metadata', () => {
+  it('does not render a workspace package app profile schema editor at "/schema"', () => {
     const privatePackage = privateSitePackage();
     const pendingProfile = createInstalledAppRuntimeProfile({
       installId: "private-site",
@@ -1964,40 +1804,38 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Private Site" });
     expectAppSettings(html, {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
       schemaKey: "private-site",
-      schemaRoute: "/schema",
       syncWorldKey: "app:private-site",
     });
-    expect(html).toContain('aria-label="Private Site schema editor"');
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">private-site</span>");
-    expect(html).toContain('aria-label="Schema saved"');
-    expect(html).not.toContain("Not found");
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('aria-label="Private Site schema editor"');
+    expect(html).not.toContain('data-slot="schema-key-badge"');
+    expect(html).not.toContain('aria-label="Schema saved"');
+    expect(html).not.toContain("Save schema");
     expect(html).not.toContain('href="/apps/private-site/schema"');
   });
 
-  it('renders an app profile schema editor at "/schema" with the selected schema key', () => {
+  it('does not render an app profile schema editor at "/schema" without a declared screen', () => {
     applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
     const html = renderRoute("/schema", createAppRuntimeProfile("crm"));
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Schema" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "CRM" });
+    expect(html).toContain("Not found");
     expect(html).not.toContain("CRM Schema");
-    expect(html).toContain('data-slot="schema-key-badge"');
-    expect(html).toContain(">crm</span>");
-    expect(html).toContain('href="/audiences"');
+    expect(html).not.toContain('data-slot="schema-key-badge"');
     expectAppSettings(html, {
       appLabel: "CRM",
       schemaKey: "crm",
-      schemaRoute: "/schema",
     });
     expect(html).not.toContain('aria-label="CRM route reset controls"');
     expect(html).not.toContain("Reset schema and seed data");
+    expect(html).not.toContain("Save schema");
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/crm/schema"');
@@ -2342,7 +2180,6 @@ describe("public site renderer", () => {
         <App
           routeComponents={{
             HomeRoute,
-            SchemaRoute,
             SitePageRoute: ReadySitePageRoute,
           }}
           runtimeProfile={createPublishedSiteRuntimeProfile()}
@@ -8071,5 +7908,37 @@ function bootstrap(records: StoredRecord[], schema = appSchema): BootstrapRespon
   return bootstrapResponse(schema, records, {
     cursor: 1,
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+  });
+}
+
+function taskSchemaWithSchemaPathScreen(): AppSchema {
+  return parseAppSchema({
+    ...appSchema,
+    screens: {
+      ...appSchema.screens,
+      taskSchemaPath: {
+        type: "workspace",
+        label: "Schema path",
+        path: "/schema",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "schema-tasks",
+              type: "collection",
+              label: "Schema path tasks",
+              view: "taskHome",
+            },
+            {
+              id: "schema-tasks-copy",
+              type: "collection",
+              label: "Schema path tasks copy",
+              view: "taskHome",
+            },
+          ],
+        },
+      },
+    },
   });
 }

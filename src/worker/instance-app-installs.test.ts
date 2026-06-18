@@ -152,7 +152,6 @@ describe("instance app install API routes", () => {
       packageAppKey: "site",
       packageRevision: 1,
       publicRoute: "/sites/site",
-      schemaRoute: "/apps/site/schema",
       sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       status: "installed",
     });
@@ -243,7 +242,6 @@ describe("instance app install API routes", () => {
           packageRevision: 7,
           publicRoute: "/sites/labs",
           publicRoutePrefix: "/sites/labs/",
-          schemaRoute: "/apps/labs/schema",
           sourceSchemaHash,
           status: "installed",
         }),
@@ -259,7 +257,7 @@ describe("instance app install API routes", () => {
         routes
           .map((record) => record.values.matchPath)
           .sort((left, right) => String(left).localeCompare(String(right))),
-      ).toEqual(["/apps/labs", "/apps/labs/schema", "/sites/labs"]);
+      ).toEqual(["/apps/labs", "/sites/labs"]);
       expect(
         routes
           .map((record) => [
@@ -272,7 +270,6 @@ describe("instance app install API routes", () => {
       ).toEqual([
         ["route:labs:admin", "app", "admin", "owner"],
         ["route:labs:public-site", "public-site", "public-site", "anonymous"],
-        ["route:labs:schema", "app", "schema", "owner"],
       ]);
       expect(controlPlaneJson).not.toContain("formless.app.json");
       expect(controlPlaneJson).not.toContain("../app");
@@ -305,7 +302,6 @@ describe("instance app install API routes", () => {
     expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual([
       "app-install:personal",
       "route:route:personal:admin",
-      "route:route:personal:schema",
       "route:route:personal:public-site",
     ]);
     expect(patchedRoute.response.status).toBe(200);
@@ -315,18 +311,15 @@ describe("instance app install API routes", () => {
         installId: "personal",
         publicRoute: "/sites/personal",
         publicRoutePrefix: "/sites/personal/",
-        schemaRoute: "/apps/personal/schema",
       }),
     );
     expect(after.body.installs[0]?.routes?.map((route) => [route.routeKind, route.path])).toEqual([
       ["admin", "/apps/personal-admin"],
-      ["schema", "/apps/personal/schema"],
       ["publicSite", "/sites/personal"],
     ]);
     expect(after.body.installs[0]?.routes?.map((route) => [route.routeKind, route.access])).toEqual(
       [
         ["admin", "owner"],
-        ["schema", "owner"],
         ["publicSite", "anonymous"],
       ],
     );
@@ -394,7 +387,6 @@ describe("instance app install API routes", () => {
     expect(installs.body.installs[0]).toMatchObject({
       adminRoute: "/apps/personal-admin",
       installId: "personal",
-      schemaRoute: "/apps/personal/schema",
     });
     expect(bootstrap.body.schema).toEqual(siteSourceSchema);
   });
@@ -421,7 +413,6 @@ describe("instance app install API routes", () => {
         label: "Tasks",
         packageAppKey: "tasks",
         packageRevision: 1,
-        schemaRoute: "/apps/tasks/schema",
         sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
         status: "installed",
       }),
@@ -489,7 +480,6 @@ describe("instance app install API routes", () => {
         label: "CRM",
         packageAppKey: "crm",
         packageRevision: 1,
-        schemaRoute: "/apps/crm/schema",
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
         status: "installed",
       }),
@@ -564,7 +554,6 @@ describe("instance app install API routes", () => {
           label: "Client Orders",
           packageAppKey: "client-orders",
           packageRevision: 3,
-          schemaRoute: "/apps/orders/schema",
           sourceSchemaHash: workspacePackage.manifest.sourceSchemaHash,
           status: "installed",
         }),
@@ -580,10 +569,7 @@ describe("instance app install API routes", () => {
             record.values.surface,
           ])
           .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
-      ).toEqual([
-        ["orders", "/apps/orders", "admin"],
-        ["orders", "/apps/orders/schema", "schema"],
-      ]);
+      ).toEqual([["orders", "/apps/orders", "admin"]]);
       expect(bootstrap.body.schema).toEqual(workspacePackage.sourceSchema);
       expect(bootstrap.body.records).toEqual(
         materializedWorkspaceSeedRecords(workspacePackage.seedRecords),

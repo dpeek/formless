@@ -241,9 +241,7 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
       ? { targetProfile: values.targetProfile }
       : {}),
     ...(typeof values.appInstall === "string" ? { appInstall: values.appInstall } : {}),
-    ...(values.surface === "admin" ||
-    values.surface === "schema" ||
-    values.surface === "public-site"
+    ...(values.surface === "admin" || values.surface === "public-site"
       ? { surface: values.surface }
       : {}),
     ...(access === undefined ? {} : { access }),

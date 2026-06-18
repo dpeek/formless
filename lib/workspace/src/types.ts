@@ -764,7 +764,6 @@ export type InstanceWorkspaceApp = {
 
 export type InstanceWorkspaceAppRoutes = {
   admin?: `/apps/${string}`;
-  schema?: `/apps/${string}/schema`;
   public?: `/sites/${string}`;
 };
 

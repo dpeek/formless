@@ -17,7 +17,6 @@ describe("control-plane schema runtime metadata", () => {
 
     expect(schema.runtime).toEqual({
       owner: "runtime",
-      builder: { editable: false },
       controlPlane: {
         entities: {
           route: {
@@ -62,7 +61,6 @@ describe("control-plane schema runtime metadata", () => {
         ...controlPlaneTaskSchema(),
         runtime: {
           owner: "runtime",
-          builder: { editable: false },
           controlPlane: {
             entities: {
               task: { immutableFields: ["missing"] },
@@ -79,7 +77,6 @@ describe("control-plane schema runtime metadata", () => {
         ...controlPlaneTaskSchema(),
         runtime: {
           owner: "runtime",
-          builder: { editable: false },
           controlPlane: {
             entities: {
               task: { observedFields: ["missing"] },
@@ -195,7 +192,6 @@ function controlPlaneTaskSchema(): AppSchema {
     },
     runtime: {
       owner: "runtime",
-      builder: { editable: false },
       controlPlane: {
         entities: {
           task: {

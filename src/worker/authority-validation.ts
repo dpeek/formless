@@ -1021,10 +1021,8 @@ function validateInstanceControlPlaneMountRoute(
   }
 
   if (targetProfile === "app") {
-    if (surface !== "admin" && surface !== "schema") {
-      throw new BadRequestError(
-        'Field "surface" must be "admin" or "schema" for app mount routes.',
-      );
+    if (surface !== "admin") {
+      throw new BadRequestError('Field "surface" must be "admin" for app mount routes.');
     }
 
     return;

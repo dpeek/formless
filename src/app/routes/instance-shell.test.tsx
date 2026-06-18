@@ -868,7 +868,6 @@ function appInstall(input: {
           publicRoutePrefix: `/sites/${input.installId}/` as `/sites/${string}/`,
         }
       : {}),
-    schemaRoute: `/apps/${input.installId}/schema`,
     status: "installed",
     updatedAt: "2026-05-22T08:00:00.000Z",
   };

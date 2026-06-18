@@ -121,7 +121,6 @@ describe("worker launch fixture initialization", () => {
     expect(first.installs.map((install) => install.installId)).toEqual(["crm"]);
     expect(first.installs.map((install) => install.packageAppKey)).toEqual(["crm"]);
     expect(first.installs.map((install) => install.adminRoute)).toEqual(["/apps/crm"]);
-    expect(first.installs.map((install) => install.schemaRoute)).toEqual(["/apps/crm/schema"]);
     expect(first.installs.map((install) => install.publicRoute)).toEqual([undefined]);
     expect(second.createdInstalls).toEqual([]);
     expect(second.installs).toEqual(first.installs);

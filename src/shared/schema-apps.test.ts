@@ -13,11 +13,6 @@ describe("schema app definitions", () => {
   it("declares the first route-backed schema apps in order", () => {
     expect(schemaApps.map((app) => app.key)).toEqual(["tasks", "site", "crm"]);
     expect(schemaApps.map((app) => app.route)).toEqual(["/tasks", "/site", "/crm"]);
-    expect(schemaApps.map((app) => app.schemaRoute)).toEqual([
-      "/tasks/schema",
-      "/site/schema",
-      "/crm/schema",
-    ]);
   });
 
   it("looks up app definitions by schema key and route", () => {
@@ -48,7 +43,7 @@ describe("schema app definitions", () => {
     expect(schemaAppScreenRoute(site, "/setup")).toBe("/site/setup");
     expect(schemaAppScreenPathFromRoute(site, "/site")).toBe("/");
     expect(schemaAppScreenPathFromRoute(site, "/site/setup")).toBe("/setup");
-    expect(schemaAppScreenPathFromRoute(site, "/site/schema")).toBeUndefined();
+    expect(schemaAppScreenPathFromRoute(site, "/site/schema")).toBe("/schema");
     expect(schemaAppScreenPathFromRoute(site, "/tasks")).toBeUndefined();
   });
 });
