@@ -713,7 +713,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
   adminRoute.values = {
     ...adminRoute.values,
     matchPath: "/apps/personal-dashboard",
-    updatedAt: now,
   };
 
   return [
@@ -732,8 +731,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
         providerFamily: "cloudflare",
         accountId: "account-123",
         workerName: "personal-worker",
-        createdAt: now,
-        updatedAt: now,
       },
     },
     {
@@ -751,8 +748,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
         appInstall: "personal",
         surface: "public-site",
         deploymentConfig: "instance.primary",
-        createdAt: now,
-        updatedAt: now,
       },
     },
     {
@@ -770,8 +765,6 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
         statusCode: "308",
         preservePath: true,
         preserveQueryString: true,
-        createdAt: now,
-        updatedAt: now,
       },
     },
   ];

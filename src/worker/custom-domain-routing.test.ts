@@ -562,8 +562,16 @@ async function createRouteRecord(recordId: string, values: Record<string, unknow
     entity: "route",
     op: "create",
     recordId,
-    values,
+    values: withoutLifecycleValues(values),
   });
+}
+
+function withoutLifecycleValues(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  );
 }
 
 function fetchMappedHost(path: string, init?: DispatchFetchInit) {

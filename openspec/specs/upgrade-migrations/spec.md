@@ -10,7 +10,7 @@ planning, migration backup requirements, or migration approval gates.
 
 ### Requirement: Metadata Helpers
 
-The system MAY expose display-safe package and runtime facts for diagnostics
+The system SHALL expose display-safe package and runtime facts for diagnostics
 and future upgrade work.
 
 #### Scenario: Read deployed metadata facts

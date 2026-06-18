@@ -364,7 +364,7 @@ describe("instance deployment runtime API routes", () => {
     );
 
     await patchControlPlaneRecord("route", enabledRoute.body.record.id, {
-      updatedAt: "2026-05-28T00:01:00.000Z",
+      access: "owner",
     });
     const second = await getJson<InstanceDeploymentDesiredStateResponse>(
       INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
@@ -603,7 +603,7 @@ async function createControlPlaneRecord(entity: string, values: Record<string, u
     mutationId: `mutation-${entity}-${++controlPlaneMutationCounter}`,
     entity,
     op: "create",
-    values,
+    values: withoutLifecycleValues(values),
   });
 }
 
@@ -619,6 +619,14 @@ async function patchControlPlaneRecord(
     recordId,
     values,
   });
+}
+
+function withoutLifecycleValues(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
+    ),
+  );
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {

@@ -1,6 +1,7 @@
 import {
   formatEntityOperationKey,
   isEntityOperationWriteKind,
+  isSystemFieldName,
   matchesQuery,
   type AppSchema,
   type EntityOperationActorKind,
@@ -806,6 +807,7 @@ function validateOperationInputContractByInputName(
 
   for (const fieldName of Object.keys(values)) {
     if (!inputContract.fields[fieldName]) {
+      assertOperationInputDoesNotOwnSystemField(context, fieldName);
       throw new BadRequestError(`${context} includes undeclared field "${fieldName}".`);
     }
   }
@@ -1349,6 +1351,7 @@ export function validateEntityOperationInputContract(input: {
 
   for (const fieldName of Object.keys(values)) {
     if (!inputContract.fields[fieldName]) {
+      assertOperationInputDoesNotOwnSystemField(context, fieldName);
       throw new BadRequestError(`${context} includes undeclared field "${fieldName}".`);
     }
   }
@@ -1382,6 +1385,12 @@ export function validateEntityOperationInputContract(input: {
   }
 
   return mappedValues;
+}
+
+function assertOperationInputDoesNotOwnSystemField(context: string, fieldName: string) {
+  if (isSystemFieldName(fieldName)) {
+    throw new BadRequestError(`${context} must not include system field "${fieldName}".`);
+  }
 }
 
 function validateOperationInputContract(

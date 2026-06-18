@@ -459,7 +459,6 @@ describe("Formless Cloudflare OAuth credentials", () => {
     expect(staging?.createdAt).toBe("2026-01-01T00:00:00.000Z");
     expect(staging?.values).toMatchObject({
       accountId: "acct_team",
-      createdAt: "2026-01-01T00:00:00.000Z",
       credentialRef: "formless-cloudflare-oauth:default",
       label: "Staging",
       providerFamily: "cloudflare",
@@ -736,8 +735,6 @@ function deploymentConfigRecord(input: {
       accountId: input.accountId,
       workerName: input.workerName,
       credentialRef: input.credentialRef,
-      createdAt,
-      updatedAt: createdAt,
     },
     createdAt,
     updatedAt: createdAt,

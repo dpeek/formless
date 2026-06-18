@@ -499,7 +499,8 @@ describe("instance control-plane API routes", () => {
           matchPath: "/apps/personal",
           kind: "mount",
           targetProfile: "instance",
-          surface: "admin",
+          createdAt: now,
+          updatedAt: now,
         }),
         legacyAppRouteRecord("legacy:personal:admin", {
           appInstall: "personal",

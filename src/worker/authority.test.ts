@@ -1251,7 +1251,7 @@ describe("authority", () => {
         op: "create",
         values: { title: "System field", updatedAt: "2026-05-28T00:00:00.000Z" },
       },
-      'Record values must not include system field "updatedAt".',
+      'Operation input must not include system field "updatedAt".',
     );
 
     const created = await postMutation("mutation-system-patch-source", {
@@ -1268,7 +1268,7 @@ describe("authority", () => {
         recordId: created.record.id,
         values: { updatedAt: "2026-05-28T00:00:01.000Z" },
       },
-      'Mutation values must not include system field "updatedAt".',
+      'Operation input must not include system field "updatedAt".',
     );
   });
 
@@ -1469,6 +1469,7 @@ describe("authority", () => {
           recordId: created.record.id,
           payload: {
             ...created.record,
+            updatedAt: deleted.record.updatedAt,
             deletedAt: expect.any(String),
           },
           createdAt: expect.any(String),
@@ -2499,6 +2500,7 @@ describe("authority", () => {
     expect(deleted).toMatchObject({
       record: {
         ...created.record,
+        updatedAt: deleted.record.updatedAt,
         deletedAt: expect.any(String),
       },
       changes: [
@@ -2509,6 +2511,7 @@ describe("authority", () => {
           recordId: created.record.id,
           payload: {
             ...created.record,
+            updatedAt: deleted.record.updatedAt,
             deletedAt: expect.any(String),
           },
           createdAt: expect.any(String),
@@ -2584,6 +2587,7 @@ describe("authority", () => {
     );
     expect(deleted.record).toEqual({
       ...project.record,
+      updatedAt: deleted.record.updatedAt,
       deletedAt: expect.any(String),
     });
     expect(bootstrap.records.find((record) => record.id === project.record.id)).toEqual(

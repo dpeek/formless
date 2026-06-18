@@ -1977,8 +1977,8 @@ describe("Formless Site CLI", () => {
 
     expect(refreshRequests).toHaveLength(1);
     const refreshBody = refreshRequests[0]?.body;
-    expect(refreshBody).toBeInstanceOf(URLSearchParams);
-    const refreshBodyText = refreshBody instanceof URLSearchParams ? refreshBody.toString() : "";
+    const refreshBodyText =
+      refreshBody instanceof URLSearchParams ? refreshBody.toString() : String(refreshBody ?? "");
     expect(refreshBodyText).toContain("grant_type=refresh_token");
     expect(refreshBodyText).toContain("refresh_token=expired-refresh-token");
     expect(deployInputs).toHaveLength(1);
@@ -5356,8 +5356,6 @@ function controlPlaneRecords(
         label: "David Peek",
         status: "installed",
         storageIdentity: `app:${installId}`,
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
       updatedAt: now,
@@ -5372,8 +5370,6 @@ function controlPlaneRecords(
         targetProfile: "app",
         appInstall: installId,
         surface: "admin",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
       updatedAt: now,
@@ -5389,8 +5385,6 @@ function controlPlaneRecords(
         targetProfile: "public-site",
         appInstall: installId,
         surface: "public-site",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
       updatedAt: now,
@@ -5405,8 +5399,6 @@ function controlPlaneRecords(
         targetProfile: "app",
         appInstall: installId,
         surface: "schema",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
       updatedAt: now,
@@ -5423,8 +5415,6 @@ function controlPlaneRecords(
         targetProfile: "public-site",
         appInstall: installId,
         surface: "public-site",
-        createdAt: now,
-        updatedAt: now,
       },
       createdAt: now,
       updatedAt: now,
@@ -5441,8 +5431,6 @@ function controlPlaneRecords(
         providerFamily: "cloudflare",
         accountId: "account-123",
         workerName: "personal",
-        createdAt: now,
-        updatedAt: now,
         ...(options.credentialRef === undefined ? {} : { credentialRef: options.credentialRef }),
       },
       createdAt: now,
@@ -5523,8 +5511,6 @@ function redirectRouteRecord(fromHost: string, toHost: string): StoredRecord {
       statusCode: "308",
       preservePath: true,
       preserveQueryString: true,
-      createdAt: now,
-      updatedAt: now,
     },
     createdAt: now,
     updatedAt: now,
@@ -5546,8 +5532,6 @@ function disabledHostRouteRecord(host: string, installId: string): StoredRecord 
       targetProfile: "public-site",
       appInstall: installId,
       surface: "public-site",
-      createdAt: now,
-      updatedAt: now,
     },
     createdAt: now,
     updatedAt: now,
