@@ -178,6 +178,7 @@ type WatchOptions = {
   dryRun: boolean;
   intervalSeconds: number;
   once: boolean;
+  targetChangeId: string | null;
   workerName: string;
   worktreeDir: string | null;
 };
@@ -1245,15 +1246,19 @@ export function discoverClaimableOpenSpecChanges(
   cwd: string,
   options: {
     baseRef?: string;
+    targetChangeId?: string | null;
     now?: () => Date;
     runCommand?: CommandRunner;
     stateRoot?: string | null;
   } = {},
 ): CommittedOpenSpecChange[] {
   const baseRef = options.baseRef ?? defaultBaseRef;
+  const targetChangeId = options.targetChangeId ? validateChangeId(options.targetChangeId) : null;
   const now = options.now ?? (() => new Date());
   const runCommand = options.runCommand ?? defaultCommandRunner;
-  const changes = discoverLocalFormlessChangeBranches(cwd, runCommand);
+  const changes = discoverLocalFormlessChangeBranches(cwd, runCommand).filter(
+    (change) => !targetChangeId || change.changeId === targetChangeId,
+  );
 
   const claimableChanges = changes.flatMap((change) => {
     if (!change.metadata || !formlessChangeMetadataAllowsClaim(change.metadata)) {
@@ -1693,10 +1698,13 @@ function findReadyForReviewLeaseNeedingRebase(input: {
   cwd: string;
   runCommand: CommandRunner;
   stateRoot: string;
+  targetChangeId?: string | null;
 }): LeaseRecord | null {
+  const targetChangeId = input.targetChangeId ? validateChangeId(input.targetChangeId) : null;
   return (
     listChangeLeases(input.stateRoot).find(
       (lease) =>
+        (!targetChangeId || lease.changeId === targetChangeId) &&
         lease.state === "ready-for-review" &&
         branchExists(input.cwd, lease.branch, input.runCommand) &&
         !branchIncludesBase(input.cwd, lease.branch, input.baseRef, input.runCommand),
@@ -2476,6 +2484,7 @@ function usage(): string {
     "  --once                 Run one supervisor pass.",
     "  --dry-run              Print claim, branch, status, and Codex command without mutating.",
     "  --base <ref>           Queue and branch base ref. Default: local main.",
+    "  --change <change-id>   Restrict watch to one changes/<change-id> branch.",
     "  --worktree-dir <dir>   Override claimed change worktree path.",
     "  --interval <seconds>   Watch interval. Default: 60.",
     "  --dangerous            Use Codex's no-approval, no-sandbox mode.",
@@ -2502,6 +2511,7 @@ export function parseAgentsArgs(args: string[]): AgentsOptions | "help" {
       dryRun: false,
       intervalSeconds: defaultIntervalSeconds,
       once: false,
+      targetChangeId: null,
       workerName: validateWorkerName(workerName),
       worktreeDir: null,
     };
@@ -2527,6 +2537,12 @@ export function parseAgentsArgs(args: string[]): AgentsOptions | "help" {
 
       if (arg === "--base") {
         options.baseRef = nextValue(args, index, arg);
+        index += 1;
+        continue;
+      }
+
+      if (arg === "--change") {
+        options.targetChangeId = validateChangeId(nextValue(args, index, arg));
         index += 1;
         continue;
       }
@@ -2945,6 +2961,7 @@ async function runReadyForReviewMaintenance(input: {
     cwd: input.cwd,
     runCommand: input.runCommand,
     stateRoot: input.paths.root,
+    targetChangeId: input.options.targetChangeId,
   });
   if (!lease) {
     return null;
@@ -3026,6 +3043,29 @@ async function runIdleMaintenance(input: {
   runCommand: CommandRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
+  if (input.options.targetChangeId) {
+    const evidence: AgentEvidence = {
+      at: nowIso(input.now),
+      message: `no claimable Git-backed change branch for ${input.options.targetChangeId}`,
+    };
+    writeWorkerStatus(
+      input.paths.root,
+      makeWorkerStatus({
+        latestEvidence: evidence,
+        now: input.now,
+        owner: input.options.workerName,
+        state: "idle",
+      }),
+    );
+    writeBlockedLeaseNotices({
+      now: input.now,
+      stateRoot: input.paths.root,
+      stdout: input.stdout,
+    });
+    writeLine(input.stdout, `[agents] idle: no claimable work for ${input.options.targetChangeId}`);
+    return 0;
+  }
+
   const branches = listLocalChangeBranches(input.cwd, input.runCommand);
   if (branches.length === 0) {
     const evidence: AgentEvidence = {
@@ -3126,6 +3166,14 @@ async function runWatchOnce(input: {
 
     const ownedLease = findWorkerActiveLease(paths.root, input.options.workerName);
     if (ownedLease) {
+      if (input.options.targetChangeId && ownedLease.changeId !== input.options.targetChangeId) {
+        writeLine(
+          input.stderr,
+          `[agents] worker ${input.options.workerName} already owns ${ownedLease.changeId}; release it before targeting ${input.options.targetChangeId}`,
+        );
+        return 1;
+      }
+
       const branchPlan = ensureChangeBranch(input.cwd, ownedLease.changeId, {
         baseRef: input.options.baseRef,
         resetWorkerBranch: false,
@@ -3168,13 +3216,20 @@ async function runWatchOnce(input: {
     now: input.now,
     runCommand: input.runCommand,
     stateRoot: input.options.dryRun ? null : paths.root,
+    targetChangeId: input.options.targetChangeId,
   });
   const change = changes[0];
 
   if (!change) {
     if (input.options.dryRun) {
       writeLine(input.stdout, `[agents] worker ${input.options.workerName}`);
-      writeLine(input.stdout, "[agents] dry-run idle: no claimable Git-backed change branches");
+      const targetSuffix = input.options.targetChangeId
+        ? ` for ${input.options.targetChangeId}`
+        : "es";
+      writeLine(
+        input.stdout,
+        `[agents] dry-run idle: no claimable Git-backed change branch${targetSuffix}`,
+      );
       return 0;
     }
 

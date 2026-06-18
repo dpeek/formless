@@ -29,6 +29,12 @@ The system SHALL discover worker-claimable work from local `changes/<change-id>`
 - **THEN** the worker supervisor orders branches with existing unmerged implementation first
 - **AND** orders remaining branches by deterministic change id order
 
+#### Scenario: Worker targets one change branch
+
+- **WHEN** a worker runs `bun agents watch igor --change add-thing`
+- **THEN** the worker supervisor considers only `changes/add-thing` for claim, resume, or ready-for-review maintenance
+- **AND** it does not claim another available change branch
+
 #### Scenario: Worker skips completed branch work
 
 - **WHEN** local branch `changes/add-thing` has valid metadata with no remaining task work
@@ -133,6 +139,13 @@ The system SHALL use an atomic local lease to claim one Git-backed change for on
 
 - **WHEN** `igor` holds a valid active lease for `add-thing`
 - **THEN** another worker cannot claim `add-thing`
+
+#### Scenario: Targeted worker does not retarget active lease
+
+- **WHEN** `igor` holds a valid active lease for `add-thing`
+- **AND** `igor` runs `bun agents watch igor --change other-thing`
+- **THEN** the worker supervisor refuses to start `other-thing`
+- **AND** it leaves the `add-thing` lease intact
 
 #### Scenario: Lease records ownership metadata
 

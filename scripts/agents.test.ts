@@ -733,6 +733,31 @@ describe("local agent worker discovery", () => {
     ).toEqual(["zeta-started", "alpha-new"]);
   });
 
+  it("filters claimable changes to an explicit target change id", () => {
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      const metadataResult = changeBranchMetadataCommand(command, args, [
+        "alpha-new",
+        "zeta-started",
+      ]);
+      if (metadataResult) {
+        return metadataResult;
+      }
+
+      if (command === "git" && args[0] === "merge-base" && args[1] === "--is-ancestor") {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    expect(
+      discoverClaimableOpenSpecChanges("/repo", {
+        runCommand,
+        targetChangeId: "alpha-new",
+      }).map((change) => change.changeId),
+    ).toEqual(["alpha-new"]);
+  });
+
   it("claims completed metadata branches for finalization", () => {
     const runCommand: CommandRunner = (_cwd, command, args) => {
       const metadataResult = changeBranchMetadataCommand(command, args, ["done-thing"], {
@@ -1030,6 +1055,59 @@ describe("local agent worker discovery", () => {
       expect(releaseCode).toBe(0);
       expect(readChangeLease(paths.root, "add-thing")).toBeNull();
       expect(stdout).toContain("released add-thing");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not retarget a worker with an active lease for another change", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const paths = agentStatePaths(gitCommonDir);
+    ensureAgentStateDirs(paths);
+    createChangeLease(paths.root, {
+      changeId: "add-thing",
+      owner: "igor",
+      state: "working",
+    });
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once", "--change", "other-thing"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async () => {
+          throw new Error("worker session should not start");
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+
+      expect(code).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain(
+        "[agents] worker igor already owns add-thing; release it before targeting other-thing",
+      );
+      expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
+        owner: "igor",
+        state: "working",
+      });
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -2174,6 +2252,63 @@ describe("local agent worker dry-run", () => {
       expect(stdout).toContain("git diff --stat --find-renames main..HEAD");
       expect(stdout).not.toContain("openspec-apply-change");
       expect(stdout).not.toContain("openspec instructions apply");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("restricts dry-run claims to the requested change id", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (_cwd, command, args) => {
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      const metadataResult = changeBranchMetadataCommand(command, args, [
+        "alpha-new",
+        "zeta-started",
+      ]);
+      if (metadataResult) {
+        return metadataResult;
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/alpha-new"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(
+        ["watch", "igor", "--once", "--dry-run", "--change", "alpha-new"],
+        {
+          cwd: root,
+          now: () => new Date("2026-05-28T00:00:00.000Z"),
+          runCommand,
+          stderr: {
+            write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+          } as Pick<NodeJS.WriteStream, "write">,
+          stdout: {
+            write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+          } as Pick<NodeJS.WriteStream, "write">,
+        },
+      );
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(stdout).toContain("[agents] would claim alpha-new");
+      expect(stdout).toContain("changes/alpha-new create");
+      expect(stdout).not.toContain("zeta-started");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
