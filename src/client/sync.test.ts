@@ -302,8 +302,17 @@ describe("client sync", () => {
   });
 
   it("sends browser replica compatibility facts with operation writes", async () => {
+    const storedSourceSchemaHash =
+      "sha256:9999999999999999999999999999999999999999999999999999999999999999" as const;
+
     await saveBootstrapResponse("tasks", {
       schema: appSchema,
+      schemaProvenance: {
+        kind: "package-app",
+        packageAppKey: "tasks",
+        packageRevision: 3,
+        sourceSchemaHash: storedSourceSchemaHash,
+      },
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [],
       cursor: 0,
@@ -324,10 +333,8 @@ describe("client sync", () => {
         expect(headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
           "2026-04-28T00:00:00.000Z",
         );
-        expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("1");
-        expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toMatch(
-          /^sha256:[a-f0-9]{64}$/,
-        );
+        expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("3");
+        expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(storedSourceSchemaHash);
 
         const changes = [change(1, "record-1", "Headers")];
 
@@ -435,6 +442,49 @@ describe("client sync", () => {
         activePackageResolver: activeAppPackageResolverFromPackages([privateSitePackage()]),
       },
     );
+  });
+
+  it("sends stored control-plane source provenance with operation writes", async () => {
+    const controlPlaneTarget = instanceControlPlaneClientTarget();
+    const controlPlaneSourceSchemaHash =
+      "sha256:8888888888888888888888888888888888888888888888888888888888888888" as const;
+
+    await saveBootstrapResponse(controlPlaneTarget, {
+      schema: appSchema,
+      schemaProvenance: {
+        kind: "instance-control-plane",
+        sourceSchemaHash: controlPlaneSourceSchemaHash,
+      },
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+
+    await submitOperation(controlPlaneTarget, "app-install", "noop", {}, async (input, init) => {
+      const headers = new Headers(init?.headers);
+
+      expect(input).toBe("/api/formless/control-plane/operations/app-install/noop");
+      expect(headers.get(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER)).toBe(
+        String(FORMLESS_RUNTIME_PROTOCOL_VERSION),
+      );
+      expect(headers.get(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER)).toBe(
+        "2026-04-28T00:00:00.000Z",
+      );
+      expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBeNull();
+      expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
+        controlPlaneSourceSchemaHash,
+      );
+
+      return Response.json(
+        operationResponse({
+          type: "command",
+          affectedChangeIds: [],
+          changes: [],
+          cursor: 0,
+          response: { actionId: "noop", changes: [], cursor: 0 },
+        }),
+      );
+    });
   });
 
   it("merges schema returned by HTTP sync", async () => {

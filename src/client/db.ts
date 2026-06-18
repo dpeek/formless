@@ -1,6 +1,10 @@
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
+import type {
+  BootstrapResponse,
+  BrowserReplicaSchemaProvenance,
+  ChangeRow,
+} from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 import { schemaApps } from "../shared/schema-apps.ts";
@@ -11,6 +15,7 @@ const META_STORE = "meta";
 const RECORDS_STORE = "records";
 
 const SCHEMA_KEY = "schema";
+const SCHEMA_PROVENANCE_KEY = "schemaProvenance";
 const SCHEMA_UPDATED_AT_KEY = "schemaUpdatedAt";
 const CURSOR_KEY = "cursor";
 const LAST_SYNCED_AT_KEY = "lastSyncedAt";
@@ -24,6 +29,7 @@ const SCHEMA_KEY_REPLICA_DB_NAMES = new Set(
 
 export type LocalSnapshot = {
   schema: AppSchema | null;
+  schemaProvenance: BrowserReplicaSchemaProvenance | null;
   schemaUpdatedAt: string | null;
   records: StoredRecord[];
   cursor: number;
@@ -55,17 +61,22 @@ export async function readLocalSnapshot(target: ClientAppTarget): Promise<LocalS
     const meta = transaction.objectStore(META_STORE);
     const records = transaction.objectStore(RECORDS_STORE);
 
-    const [schema, schemaUpdatedAt, cursor, lastSyncedAt, storedRecords] = await Promise.all([
-      requestToPromise<AppSchema | undefined>(meta.get(SCHEMA_KEY)),
-      requestToPromise<string | undefined>(meta.get(SCHEMA_UPDATED_AT_KEY)),
-      requestToPromise<number | undefined>(meta.get(CURSOR_KEY)),
-      requestToPromise<string | undefined>(meta.get(LAST_SYNCED_AT_KEY)),
-      requestToPromise<StoredRecord[]>(records.getAll()),
-      transactionDone(transaction),
-    ]);
+    const [schema, schemaProvenance, schemaUpdatedAt, cursor, lastSyncedAt, storedRecords] =
+      await Promise.all([
+        requestToPromise<AppSchema | undefined>(meta.get(SCHEMA_KEY)),
+        requestToPromise<BrowserReplicaSchemaProvenance | undefined>(
+          meta.get(SCHEMA_PROVENANCE_KEY),
+        ),
+        requestToPromise<string | undefined>(meta.get(SCHEMA_UPDATED_AT_KEY)),
+        requestToPromise<number | undefined>(meta.get(CURSOR_KEY)),
+        requestToPromise<string | undefined>(meta.get(LAST_SYNCED_AT_KEY)),
+        requestToPromise<StoredRecord[]>(records.getAll()),
+        transactionDone(transaction),
+      ]);
 
     return {
       schema: schema ?? null,
+      schemaProvenance: schemaProvenance ?? null,
       schemaUpdatedAt: schemaUpdatedAt ?? null,
       records: sortRecords(storedRecords),
       cursor: cursor ?? 0,
@@ -90,6 +101,7 @@ export async function saveBootstrapResponse(target: ClientAppTarget, response: B
     }
 
     meta.put(response.schema, SCHEMA_KEY);
+    putOrDeleteMeta(meta, response.schemaProvenance, SCHEMA_PROVENANCE_KEY);
     meta.put(response.schemaUpdatedAt, SCHEMA_UPDATED_AT_KEY);
     meta.put(response.cursor, CURSOR_KEY);
     meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
@@ -100,7 +112,12 @@ export async function saveBootstrapResponse(target: ClientAppTarget, response: B
   }
 }
 
-export async function saveSchema(target: ClientAppTarget, schema: AppSchema, updatedAt: string) {
+export async function saveSchema(
+  target: ClientAppTarget,
+  schema: AppSchema,
+  updatedAt: string,
+  schemaProvenance?: BrowserReplicaSchemaProvenance,
+) {
   const db = await openClientDb(target);
 
   try {
@@ -108,6 +125,7 @@ export async function saveSchema(target: ClientAppTarget, schema: AppSchema, upd
     const meta = transaction.objectStore(META_STORE);
 
     meta.put(schema, SCHEMA_KEY);
+    putOrDeleteMeta(meta, schemaProvenance, SCHEMA_PROVENANCE_KEY);
     meta.put(updatedAt, SCHEMA_UPDATED_AT_KEY);
     meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
 
@@ -147,6 +165,24 @@ export async function mergeRecords(
     meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
 
     await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+}
+
+export async function readSchemaProvenance(
+  target: ClientAppTarget,
+): Promise<BrowserReplicaSchemaProvenance | null> {
+  const db = await openClientDb(target);
+
+  try {
+    const transaction = db.transaction(META_STORE, "readonly");
+    const schemaProvenance = await requestToPromise<BrowserReplicaSchemaProvenance | undefined>(
+      transaction.objectStore(META_STORE).get(SCHEMA_PROVENANCE_KEY),
+    );
+    await transactionDone(transaction);
+
+    return schemaProvenance ?? null;
   } finally {
     db.close();
   }
@@ -285,6 +321,15 @@ function requestToPromise<T>(request: IDBRequest<T>) {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
   });
+}
+
+function putOrDeleteMeta(store: IDBObjectStore, value: unknown, key: string) {
+  if (value === undefined) {
+    store.delete(key);
+    return;
+  }
+
+  store.put(value, key);
 }
 
 type IndexedDbDatabaseInfo = {

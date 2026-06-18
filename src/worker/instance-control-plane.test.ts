@@ -1,18 +1,22 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
+  instanceControlPlaneSchemaProvenance,
   type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneRouteValues,
 } from "@dpeek/formless-instance-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import { FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER } from "../shared/protocol.ts";
 import type {
   ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
   MutationResponse,
   OwnerIdentity,
+  SchemaResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
 import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
@@ -97,16 +101,20 @@ describe("instance control-plane API routes", () => {
     const runnerBootstrap = await getJson<BootstrapResponse>(
       `${controlPlaneApi}/bootstrap?actorKind=runner`,
     );
-    const ownerSchema = await getJson<{
-      schema: AppSchema;
-      updatedAt: string;
-    }>(`${controlPlaneApi}/schema`);
+    const ownerSchema = await getJson<SchemaResponse>(`${controlPlaneApi}/schema`);
     const parsedInstanceControlPlaneSchema = parseAppSchema(instanceControlPlaneSchema);
+    const sourceSchemaHash = await computeSourceSchemaHash(instanceControlPlaneSchema);
 
+    expect(INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH).toBe(sourceSchemaHash);
     expect(runnerBootstrap.body.schema).toEqual(parsedInstanceControlPlaneSchema);
+    expect(runnerBootstrap.body.schemaProvenance).toEqual(instanceControlPlaneSchemaProvenance);
     expect(runnerBootstrap.body.records).toEqual([]);
     expect(runnerBootstrap.body.cursor).toBe(0);
+    expect(runnerBootstrap.response.headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
+      runnerBootstrap.body.schemaProvenance?.sourceSchemaHash,
+    );
     expect(ownerSchema.body.schema).toEqual(parsedInstanceControlPlaneSchema);
+    expect(ownerSchema.body.schemaProvenance).toEqual(runnerBootstrap.body.schemaProvenance);
     expect(ownerSchema.response.headers.get("Cache-Control")).toBe("no-store");
   });
 

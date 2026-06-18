@@ -25,7 +25,11 @@ import type {
 } from "@dpeek/formless-schema";
 import { parseAppSchema, stringifySchema } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
-import type { PackageAppKey } from "@dpeek/formless-installed-apps";
+import {
+  isPackageAppRevision,
+  isSourceSchemaHash,
+  type PackageAppKey,
+} from "@dpeek/formless-installed-apps";
 import type {
   PackageAppRevision,
   SourceSchemaHash,
@@ -66,6 +70,7 @@ type RecordRow = {
 
 type SchemaRow = {
   schema_json: string;
+  schema_provenance_json: string | null;
   updated_at: string;
 };
 
@@ -134,8 +139,43 @@ const packageAppStateTableName = "formless_package_app_state";
 
 export type StoredSchema = {
   schema: AppSchema;
+  schemaProvenance?: StorageSchemaProvenance;
   updatedAt: string;
 };
+
+export type PackageAppSchemaProvenance = {
+  kind: "package-app";
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+};
+
+export type InstanceControlPlaneSchemaProvenance = {
+  kind: "instance-control-plane";
+  sourceSchemaHash: SourceSchemaHash;
+};
+
+export type StorageSchemaProvenance =
+  | PackageAppSchemaProvenance
+  | InstanceControlPlaneSchemaProvenance;
+
+export type ActiveSchemaRefreshBlocker = {
+  currentSchemaProvenance?: StorageSchemaProvenance;
+  reason: string;
+  schemaKey?: string;
+  storageIdentity?: string;
+  targetSchemaProvenance: StorageSchemaProvenance;
+};
+
+export class ActiveSchemaRefreshBlockedError extends Error {
+  readonly blocker: ActiveSchemaRefreshBlocker;
+
+  constructor(blocker: ActiveSchemaRefreshBlocker) {
+    super(activeSchemaRefreshBlockedMessage(blocker));
+    this.name = "ActiveSchemaRefreshBlockedError";
+    this.blocker = blocker;
+  }
+}
 
 export type WriteOutcome<T> =
   | {
@@ -213,6 +253,9 @@ export type StorageSource = {
   schema: AppSchema;
   records: StoredRecord[];
   changeMutationPrefix: string;
+  schemaKey?: string;
+  schemaProvenance?: StorageSchemaProvenance;
+  storageIdentity?: string;
 };
 
 export type StorageSchemaResetValidator = (
@@ -303,6 +346,7 @@ export type ApplyPackageAppMigrationsResponse = {
 
 type SourceDataPlan = {
   schema: AppSchema;
+  schemaProvenance?: StorageSchemaProvenance;
   records: StoredRecord[];
   changeMutationPrefix: string;
 };
@@ -389,6 +433,7 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
     CREATE TABLE IF NOT EXISTS app_schema (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       schema_json TEXT NOT NULL,
+      schema_provenance_json TEXT,
       updated_at TEXT NOT NULL
     );
 
@@ -401,6 +446,7 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
     );
   `);
   ensureRecordUpdatedAtColumn(storage);
+  ensureAppSchemaProvenanceColumn(storage);
 
   ensurePackageAppMigrationTables(storage);
 }
@@ -414,6 +460,16 @@ function ensureRecordUpdatedAtColumn(storage: DurableObjectStorage) {
 
   storage.sql.exec("ALTER TABLE records ADD COLUMN updated_at TEXT");
   storage.sql.exec("UPDATE records SET updated_at = COALESCE(deleted_at, created_at)");
+}
+
+function ensureAppSchemaProvenanceColumn(storage: DurableObjectStorage) {
+  const columns = storage.sql.exec<TableInfoRow>("PRAGMA table_info(app_schema)").toArray();
+
+  if (columns.some((column) => column.name === "schema_provenance_json")) {
+    return;
+  }
+
+  storage.sql.exec("ALTER TABLE app_schema ADD COLUMN schema_provenance_json TEXT");
 }
 
 export function ensureOperationInvocationTables(storage: DurableObjectStorage) {
@@ -541,16 +597,149 @@ export function readCurrentStoredSchema(storage: DurableObjectStorage): StoredSc
 export function initializeStorageFromSource(
   storage: DurableObjectStorage,
   source: StorageSource,
+  options: { refreshActiveSchema?: boolean } = {},
 ): StoredSchema {
   return storage.transactionSync(() => {
     const existing = readStoredSchema(storage);
 
     if (existing) {
-      return existing;
+      if (options.refreshActiveSchema === false) {
+        return existing;
+      }
+
+      return refreshActiveSchemaFromSource(storage, existing, source);
     }
 
     return writeSourceData(storage, source);
   });
+}
+
+function refreshActiveSchemaFromSource(
+  storage: DurableObjectStorage,
+  existing: StoredSchema,
+  source: StorageSource,
+): StoredSchema {
+  if (!source.schemaProvenance) {
+    return existing;
+  }
+
+  assertPackageRevisionAllowsSchemaRefresh(storage, existing, source);
+
+  const schemaChanged = !schemasEqual(existing.schema, source.schema);
+  const trackedSchemaProvenance = activeSchemaProvenanceForBlocker(storage, existing, source);
+
+  if (!trackedSchemaProvenance && schemaChanged) {
+    return existing;
+  }
+
+  const provenanceChanged = !schemaProvenancesEqual(
+    existing.schemaProvenance,
+    source.schemaProvenance,
+  );
+
+  if (!schemaChanged && !provenanceChanged) {
+    return existing;
+  }
+
+  try {
+    validateActiveRecordsAgainstSchema(source.schema, getBootstrapRecords(storage));
+  } catch (error) {
+    throw activeSchemaRefreshBlocked(storage, existing, source, errorMessage(error));
+  }
+
+  return writeActiveSchemaAt(storage, source.schema, nowIsoString(), source.schemaProvenance);
+}
+
+function assertPackageRevisionAllowsSchemaRefresh(
+  storage: DurableObjectStorage,
+  existing: StoredSchema,
+  source: StorageSource,
+) {
+  const target = source.schemaProvenance;
+
+  if (target?.kind !== "package-app") {
+    return;
+  }
+
+  const current = packageAppSchemaProvenanceForRefresh(storage, existing, target.packageAppKey);
+
+  if (!current || current.packageRevision === target.packageRevision) {
+    return;
+  }
+
+  throw activeSchemaRefreshBlocked(
+    storage,
+    existing,
+    source,
+    `package app revision ${current.packageRevision} targets ${target.packageRevision}`,
+    current,
+  );
+}
+
+function packageAppSchemaProvenanceForRefresh(
+  storage: DurableObjectStorage,
+  existing: StoredSchema,
+  packageAppKey: PackageAppKey,
+): PackageAppSchemaProvenance | undefined {
+  if (
+    existing.schemaProvenance?.kind === "package-app" &&
+    existing.schemaProvenance.packageAppKey === packageAppKey
+  ) {
+    return existing.schemaProvenance;
+  }
+
+  const packageState = readPackageAppMigrationState(storage, packageAppKey);
+
+  if (!packageState) {
+    return undefined;
+  }
+
+  return {
+    kind: "package-app",
+    packageAppKey: packageState.packageAppKey,
+    packageRevision: packageState.packageRevision,
+    sourceSchemaHash: packageState.sourceSchemaHash,
+  };
+}
+
+function activeSchemaRefreshBlocked(
+  storage: DurableObjectStorage,
+  existing: StoredSchema,
+  source: StorageSource,
+  reason: string,
+  currentSchemaProvenance = activeSchemaProvenanceForBlocker(storage, existing, source),
+) {
+  if (!source.schemaProvenance) {
+    throw new Error("Cannot create an active schema refresh blocker without target provenance.");
+  }
+
+  return new ActiveSchemaRefreshBlockedError({
+    ...(currentSchemaProvenance === undefined ? {} : { currentSchemaProvenance }),
+    reason,
+    ...(source.schemaKey === undefined ? {} : { schemaKey: source.schemaKey }),
+    ...(source.storageIdentity === undefined ? {} : { storageIdentity: source.storageIdentity }),
+    targetSchemaProvenance: source.schemaProvenance,
+  });
+}
+
+function activeSchemaProvenanceForBlocker(
+  storage: DurableObjectStorage,
+  existing: StoredSchema,
+  source: StorageSource,
+): StorageSchemaProvenance | undefined {
+  if (existing.schemaProvenance) {
+    return existing.schemaProvenance;
+  }
+
+  if (source.schemaProvenance?.kind === "package-app") {
+    return packageAppSchemaProvenanceForRefresh(
+      storage,
+      existing,
+      source.schemaProvenance.packageAppKey,
+    );
+  }
+
+  return undefined;
 }
 
 export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSchema): StoredSchema {
@@ -568,20 +757,38 @@ function writeActiveSchemaAt(
   storage: DurableObjectStorage,
   schema: AppSchema,
   updatedAt: string,
+  schemaProvenance?: StorageSchemaProvenance,
 ): StoredSchema {
   storage.sql.exec(
     `
-      INSERT INTO app_schema (id, schema_json, updated_at)
-      VALUES (1, ?, ?)
+      INSERT INTO app_schema (id, schema_json, schema_provenance_json, updated_at)
+      VALUES (1, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         schema_json = excluded.schema_json,
+        schema_provenance_json = excluded.schema_provenance_json,
         updated_at = excluded.updated_at
     `,
     stringifySchema(schema),
+    schemaProvenance ? JSON.stringify(schemaProvenance) : null,
     updatedAt,
   );
 
-  return { schema, updatedAt };
+  if (schemaProvenance?.kind === "package-app") {
+    upsertPackageAppMigrationState(storage, {
+      packageAppKey: schemaProvenance.packageAppKey,
+      packageRevision: schemaProvenance.packageRevision,
+      sourceSchemaHash: schemaProvenance.sourceSchemaHash,
+      updatedAt,
+    });
+  } else if (schemaProvenance === undefined) {
+    clearPackageAppMigrationState(storage);
+  }
+
+  return {
+    schema,
+    ...(schemaProvenance === undefined ? {} : { schemaProvenance }),
+    updatedAt,
+  };
 }
 
 export function resetStorageSchemaToSource(
@@ -610,7 +817,9 @@ export function resetStorageSchemaToSourceOutcome(
     materializeSourceSchemaResetRecordPrunes(storage, plan.prunedRecords);
     appendSourceSchemaResetChanges(storage, plan);
 
-    return committedWrite(writeActiveSchemaAt(storage, plan.schema, plan.changedAt));
+    return committedWrite(
+      writeActiveSchemaAt(storage, plan.schema, plan.changedAt, source.schemaProvenance),
+    );
   });
 }
 
@@ -787,6 +996,12 @@ export function applyPackageAppMigrationsOutcome(
           changedAt: appliedAt,
           materialization,
           migration,
+          schemaProvenance: {
+            kind: "package-app",
+            packageAppKey: input.packageAppKey,
+            packageRevision: migration.toPackageRevision,
+            sourceSchemaHash: input.targetSourceSchemaHash,
+          },
           storedSchema,
         });
 
@@ -822,10 +1037,26 @@ export function applyPackageAppMigrationsOutcome(
       updatedAt: finishedAt,
     });
 
-    const finalSchema = readStoredSchema(storage);
+    let finalSchema = readStoredSchema(storage);
 
     if (!finalSchema) {
       throw new Error("Package app migration left storage without an active schema.");
+    }
+
+    const targetSchemaProvenance = {
+      kind: "package-app",
+      packageAppKey: input.packageAppKey,
+      packageRevision: input.targetPackageRevision,
+      sourceSchemaHash: input.targetSourceSchemaHash,
+    } satisfies PackageAppSchemaProvenance;
+
+    if (!schemaProvenancesEqual(finalSchema.schemaProvenance, targetSchemaProvenance)) {
+      finalSchema = writeActiveSchemaAt(
+        storage,
+        finalSchema.schema,
+        finishedAt,
+        targetSchemaProvenance,
+      );
     }
 
     return committedWrite({
@@ -850,6 +1081,11 @@ function clearStorageForSourceSeedReset(storage: DurableObjectStorage) {
   storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
 }
 
+function clearPackageAppMigrationState(storage: DurableObjectStorage) {
+  ensurePackageAppMigrationTables(storage);
+  storage.sql.exec(`DELETE FROM ${packageAppStateTableName}`);
+}
+
 function writeSourceData(storage: DurableObjectStorage, source: StorageSource): StoredSchema {
   return writePlannedSourceData(storage, planSourceDataWrite(source));
 }
@@ -857,13 +1093,19 @@ function writeSourceData(storage: DurableObjectStorage, source: StorageSource): 
 function planSourceDataWrite(source: StorageSource): SourceDataPlan {
   return {
     schema: source.schema,
+    ...(source.schemaProvenance === undefined ? {} : { schemaProvenance: source.schemaProvenance }),
     records: source.records,
     changeMutationPrefix: source.changeMutationPrefix,
   };
 }
 
 function writePlannedSourceData(storage: DurableObjectStorage, plan: SourceDataPlan): StoredSchema {
-  const storedSchema = writeActiveSchemaAt(storage, plan.schema, nowIsoString());
+  const storedSchema = writeActiveSchemaAt(
+    storage,
+    plan.schema,
+    nowIsoString(),
+    plan.schemaProvenance,
+  );
 
   materializeSourceRecords(storage, plan.records);
   appendSourceRecordChanges(storage, plan);
@@ -1132,12 +1374,18 @@ function materializePackageAppMigration(
     changedAt: string;
     materialization: PackageAppMigrationMaterializationPlan;
     migration: AuthorityPackageAppMigration;
+    schemaProvenance: PackageAppSchemaProvenance;
     storedSchema: StoredSchema;
   },
 ): StoredSchema {
   const schemaChanged = !schemasEqual(input.storedSchema.schema, input.materialization.schema);
   const storedSchema = schemaChanged
-    ? writeActiveSchemaAt(storage, input.materialization.schema, input.changedAt)
+    ? writeActiveSchemaAt(
+        storage,
+        input.materialization.schema,
+        input.changedAt,
+        input.schemaProvenance,
+      )
     : input.storedSchema;
   const mutationId = `package-migration:${input.migration.id}`;
 
@@ -1244,6 +1492,115 @@ function validatePackageAppMigrationRecords(
   }
 
   assertPackageAppMigrationUniqueConstraints(schema, records);
+}
+
+function validateActiveRecordsAgainstSchema(schema: AppSchema, records: StoredRecord[]) {
+  const activeRecords = records.filter((record) => !record.deletedAt);
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of activeRecords) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`Active schema refresh found duplicate record id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const record of activeRecords) {
+    validateActiveSchemaRefreshRecord(schema, record, recordsById);
+  }
+
+  assertActiveSchemaRefreshUniqueConstraints(schema, activeRecords);
+}
+
+function validateActiveSchemaRefreshRecord(
+  schema: AppSchema,
+  record: StoredRecord,
+  recordsById: Map<string, StoredRecord>,
+) {
+  const entity = schema.entities[record.entity];
+
+  if (!entity) {
+    throw new Error(`record "${record.id}" references unknown entity "${record.entity}"`);
+  }
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (!Object.hasOwn(entity.fields, fieldName)) {
+      throw new Error(
+        `record "${record.id}" would require value pruning for unknown field "${record.entity}.${fieldName}"`,
+      );
+    }
+  }
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    const fieldValue = record.values[fieldName];
+    const fieldWasProvided = fieldName in record.values;
+    const result = validateAuthorityFieldValue(fieldName, field, fieldValue, fieldWasProvided);
+
+    if (result.kind === "omit") {
+      continue;
+    }
+
+    if (field.type !== "reference") {
+      continue;
+    }
+
+    if (typeof result.value !== "string") {
+      throw new Error("reference field validation returned a non-string value");
+    }
+
+    const targetRecord = recordsById.get(result.value);
+
+    if (!targetRecord) {
+      throw new Error(
+        `field "${record.entity}.${fieldName}" references unknown ${field.to} record "${result.value}"`,
+      );
+    }
+
+    if (targetRecord.entity !== field.to) {
+      throw new Error(`field "${record.entity}.${fieldName}" must reference a ${field.to} record`);
+    }
+  }
+}
+
+function assertActiveSchemaRefreshUniqueConstraints(schema: AppSchema, records: StoredRecord[]) {
+  for (const [entityName, entity] of Object.entries(schema.entities)) {
+    const entityRecords = records.filter((record) => record.entity === entityName);
+
+    for (const [constraintName, constraint] of Object.entries(entity.constraints ?? {})) {
+      if (constraint.kind !== "unique") {
+        continue;
+      }
+
+      assertActiveSchemaRefreshUniqueConstraint(
+        entityName,
+        constraintName,
+        constraint,
+        entityRecords,
+      );
+    }
+  }
+}
+
+function assertActiveSchemaRefreshUniqueConstraint(
+  entityName: string,
+  constraintName: string,
+  constraint: UniqueConstraintSchema,
+  records: StoredRecord[],
+) {
+  const seen = new Set<string>();
+
+  for (const record of records) {
+    const key = JSON.stringify(
+      constraint.fields.map((fieldName) => record.values[fieldName] ?? null),
+    );
+
+    if (seen.has(key)) {
+      throw new Error(`unique constraint "${entityName}.${constraintName}" would be violated`);
+    }
+
+    seen.add(key);
+  }
 }
 
 function validateActivePackageAppMigrationRecord(
@@ -2818,23 +3175,119 @@ function schemasEqual(left: AppSchema, right: AppSchema) {
   return stringifySchema(left) === stringifySchema(right);
 }
 
+function schemaProvenancesEqual(
+  left: StorageSchemaProvenance | undefined,
+  right: StorageSchemaProvenance | undefined,
+) {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+
+  if (left.kind !== right.kind || left.sourceSchemaHash !== right.sourceSchemaHash) {
+    return false;
+  }
+
+  if (left.kind === "instance-control-plane" && right.kind === "instance-control-plane") {
+    return true;
+  }
+
+  return (
+    left.kind === "package-app" &&
+    right.kind === "package-app" &&
+    left.packageAppKey === right.packageAppKey &&
+    left.packageRevision === right.packageRevision
+  );
+}
+
 function writeOutcomeResponse<T>(outcome: WriteOutcome<T>): T {
   return outcome.response;
 }
 
 function readStoredSchema(storage: DurableObjectStorage): StoredSchema | undefined {
   const row = storage.sql
-    .exec<SchemaRow>("SELECT schema_json, updated_at FROM app_schema WHERE id = 1")
+    .exec<SchemaRow>(
+      "SELECT schema_json, schema_provenance_json, updated_at FROM app_schema WHERE id = 1",
+    )
     .next();
 
   if (row.done) {
     return undefined;
   }
 
+  const schemaProvenance = parseStoredSchemaProvenance(row.value.schema_provenance_json);
+
   return {
     schema: parseStoredSchema(row.value.schema_json),
+    ...(schemaProvenance === undefined ? {} : { schemaProvenance }),
     updatedAt: row.value.updated_at,
   };
+}
+
+function parseStoredSchemaProvenance(value: string | null): StorageSchemaProvenance | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+
+  if (!isJsonObject(parsed) || !isSourceSchemaHash(parsed.sourceSchemaHash)) {
+    return undefined;
+  }
+
+  if (parsed.kind === "instance-control-plane") {
+    return {
+      kind: "instance-control-plane",
+      sourceSchemaHash: parsed.sourceSchemaHash,
+    };
+  }
+
+  if (
+    parsed.kind === "package-app" &&
+    typeof parsed.packageAppKey === "string" &&
+    parsed.packageAppKey.trim() !== "" &&
+    isPackageAppRevision(parsed.packageRevision)
+  ) {
+    return {
+      kind: "package-app",
+      packageAppKey: parsed.packageAppKey,
+      packageRevision: parsed.packageRevision,
+      sourceSchemaHash: parsed.sourceSchemaHash,
+    };
+  }
+
+  return undefined;
+}
+
+function activeSchemaRefreshBlockedMessage(blocker: ActiveSchemaRefreshBlocker) {
+  const storage = blocker.storageIdentity
+    ? `storage "${blocker.storageIdentity}"`
+    : "unknown storage";
+  const schema = blocker.schemaKey ? ` schema "${blocker.schemaKey}"` : "";
+  const current = blocker.currentSchemaProvenance
+    ? formatSchemaProvenance(blocker.currentSchemaProvenance)
+    : "untracked";
+  const target = formatSchemaProvenance(blocker.targetSchemaProvenance);
+
+  return [
+    `Active schema refresh blocked for ${storage}${schema}.`,
+    `Current provenance: ${current}.`,
+    `Target provenance: ${target}.`,
+    `Current records require package app migration, control-plane migration, backfill, reset, or value pruning: ${blocker.reason}.`,
+  ].join(" ");
+}
+
+function formatSchemaProvenance(provenance: StorageSchemaProvenance) {
+  if (provenance.kind === "instance-control-plane") {
+    return `kind=instance-control-plane sourceSchemaHash=${provenance.sourceSchemaHash}`;
+  }
+
+  return `kind=package-app packageAppKey=${provenance.packageAppKey} packageRevision=${provenance.packageRevision} sourceSchemaHash=${provenance.sourceSchemaHash}`;
 }
 
 function recordFromRow(row: RecordRow): StoredRecord {

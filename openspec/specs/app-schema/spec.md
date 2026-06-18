@@ -64,6 +64,18 @@ archive, or deploy workflows.
 - AND the package is not exposed to install, upgrade, archive, or deploy
   workflows until the manifest and source schema agree
 
+#### Scenario: Hash complete schema source
+
+- GIVEN an app package source schema changes entities, fields, relationships,
+  queries, read models, views, table views, item views, screens, actions,
+  operations, state machines, labels, or runtime metadata
+- WHEN the deterministic source schema hash is computed
+- THEN the hash input is the complete canonical App schema object
+- AND generated UI-only changes such as view, table view, item view, or screen
+  changes produce a different source schema hash
+- AND the hash is independent of record data, seed records, workspace state, or
+  active storage timestamps
+
 #### Scenario: Import app package manifest contracts
 
 - GIVEN app, client, Worker, archive, workspace, upgrade, Site runtime, or tests
@@ -121,6 +133,19 @@ revisions.
 - THEN stored package facts identify the applied package revision and source
   schema hash
 - AND the hash is used for drift/provenance checks, not migration ordering
+
+#### Scenario: Refresh schema-only source changes
+
+- GIVEN an installed package app has the same package revision as the active
+  resolver and a different source schema hash
+- WHEN the resolved source schema parses and validates against current active
+  records without a record materialization plan
+- THEN the runtime can refresh the stored active schema and package source
+  schema hash without applying a package app migration
+- AND the refresh updates the schema timestamp used by browser replicas and
+  workspace state
+- AND package app migrations remain required when the package revision advances
+  or when current records need creates, patches, tombstones, or value pruning
 
 ### Requirement: Schema Parsing
 
@@ -235,7 +260,7 @@ the declaring schema.
 
 #### Scenario: Emit external qualified entity name
 
-- WHEN records are written to archives, workspace storage snapshots, drift reports,
+- WHEN records are written to archives, workspace record state, drift reports,
   logs, diagnostic output, or another external boundary that combines schema
   record families
 - THEN entity identity is represented with a qualified name such as

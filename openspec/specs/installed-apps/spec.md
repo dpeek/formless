@@ -172,6 +172,16 @@ installed package app without changing install identity.
   schema hash
 - AND the install id and package app key remain immutable
 
+#### Scenario: Track schema-only package source changes
+
+- GIVEN a resolved package app source schema changes without requiring record
+  data migration
+- WHEN the installed app active schema is refreshed from that source
+- THEN install metadata records the new source schema hash
+- AND the package revision may remain unchanged
+- AND browser replica metadata, workspace state, archive planning, and upgrade
+  planning use the new source schema hash as the exact schema freshness fact
+
 ### Requirement: Package Revision Drift
 
 The system SHALL report installed package app revision drift to CLI upgrade
@@ -183,6 +193,17 @@ planning.
 - THEN it can identify installed apps whose package revision or schema hash
   differs from the local package facts
 - AND it can include required package app migrations in the upgrade plan
+
+#### Scenario: Installed app schema hash behind resolved package
+
+- GIVEN an installed app package revision equals the active resolver package
+  revision
+- WHEN the installed source schema hash differs from the resolver source schema
+  hash
+- THEN upgrade planning treats the difference as a schema refresh candidate
+  rather than package revision drift
+- AND the plan blocks only when current records cannot be validated against the
+  resolved source schema without a package app migration
 
 ### Requirement: Package Source Initialization
 

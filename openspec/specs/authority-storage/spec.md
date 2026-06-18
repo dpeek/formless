@@ -567,6 +567,37 @@ Authority-backed app storage identity separate from installed app data.
   install-scoped app storage identity
 - AND a failure in either part leaves no partially usable installed app route
 
+### Requirement: Active Schema Source Refresh
+
+Authority storage SHALL keep the active schema aligned with resolved source
+schema provenance without treating seed records or workspace state as the
+source of schema truth.
+
+#### Scenario: Refresh compatible source schema
+
+- GIVEN an Authority storage identity already has committed records and an
+  active schema
+- WHEN the resolved source schema hash for that storage identity differs from
+  the stored source schema hash or runtime schema hash
+- AND current active records validate against the resolved source schema without
+  creates, patches, tombstones, or value pruning
+- THEN Authority writes the resolved source schema as the active schema
+- AND Authority records a new schema timestamp for sync, browser reload, and
+  workspace state provenance
+- AND committed records, source cursor, action executions, and change rows are
+  not reset or reseeded
+
+#### Scenario: Block incompatible schema refresh
+
+- GIVEN current active records cannot validate against a resolved source schema
+  without record materialization
+- WHEN the package revision has not advanced to a matching package app migration
+  or explicit reset path
+- THEN Authority keeps the existing active schema and records unchanged
+- AND the caller receives a schema refresh blocker that identifies the storage
+  identity, package app key or control-plane schema key, current schema
+  provenance, and target schema provenance
+
 ### Requirement: Control-Plane Secret Boundary
 
 Authority storage SHALL keep installed app data, deployment secrets, and

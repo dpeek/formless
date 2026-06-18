@@ -39,6 +39,7 @@ import {
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  WORKSPACE_RECORD_STATE_FILE_KIND,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
   initialWorkspaceAutoSaveState,
@@ -878,10 +879,20 @@ describe("workspace auto-save scheduler", () => {
     );
     const instanceState = JSON.parse(
       await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
-    ) as StorageSnapshot;
+    ) as {
+      kind: string;
+      schema?: unknown;
+      schemaProvenance?: { kind: string };
+      storageIdentity: string;
+    };
     const appState = JSON.parse(
       await readFile(path.join(workspaceRoot, "state/apps/site.json"), "utf8"),
-    ) as StorageSnapshot;
+    ) as {
+      kind: string;
+      schema?: unknown;
+      schemaProvenance?: { kind: string };
+      storageIdentity: string;
+    };
 
     expect(autoSaveState).toMatchObject({
       dirtyGeneration: 1,
@@ -892,13 +903,17 @@ describe("workspace auto-save scheduler", () => {
       writeSources: [],
     });
     expect(instanceState).toMatchObject({
-      kind: STORAGE_SNAPSHOT_KIND,
+      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+      schemaProvenance: { kind: "instance-control-plane" },
       storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     });
+    expect(instanceState.schema).toBeUndefined();
     expect(appState).toMatchObject({
-      kind: STORAGE_SNAPSHOT_KIND,
+      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+      schemaProvenance: { kind: "package-app" },
       storageIdentity: "app:site",
     });
+    expect(appState.schema).toBeUndefined();
     await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
       code: "ENOENT",
     });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppInstallRecord,
@@ -11,6 +12,7 @@ import {
   instanceControlPlaneImmutableFields,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
+  instanceControlPlaneSchemaProvenance,
   isInstanceControlPlaneEntityName,
   isInstanceControlPlaneRouteSafePath,
   parseInstanceControlPlaneBoundaryEntityName,
@@ -20,13 +22,14 @@ import {
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
+  computeSourceSchemaHash,
   createAppInstall,
   createAppPackageResolver,
   type CreateAppInstallResult,
 } from "@dpeek/formless-installed-apps";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import { parseAppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import {
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
@@ -55,6 +58,49 @@ const controlPlanePackageManifests = [
 const controlPlanePackageResolver = createAppPackageResolver(controlPlanePackageManifests);
 
 describe("instance control-plane schema contracts", () => {
+  it("publishes deterministic source provenance for the full control-plane schema", async () => {
+    const baseHash = await computeSourceSchemaHash(instanceControlPlaneSchema);
+    const mutationCases: Array<[string, (schema: AppSchema) => void]> = [
+      [
+        "view",
+        (schema) => {
+          const view = schema.views.routeList;
+
+          if (view.type !== "collection") {
+            throw new Error("Expected routeList to be a collection view.");
+          }
+
+          view.label = "Runtime routes";
+        },
+      ],
+      [
+        "runtime metadata",
+        (schema) => {
+          const routeMetadata = schema.runtime?.controlPlane?.entities.route;
+
+          if (!routeMetadata) {
+            throw new Error("Expected route runtime control-plane metadata.");
+          }
+
+          routeMetadata.immutableFields = ["kind", "matchPath"];
+        },
+      ],
+    ];
+
+    expect(INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH).toBe(baseHash);
+    expect(instanceControlPlaneSchemaProvenance).toEqual({
+      kind: "instance-control-plane",
+      sourceSchemaHash: baseHash,
+    });
+
+    for (const [label, mutate] of mutationCases) {
+      const changedSchema = structuredClone(instanceControlPlaneSchema) as AppSchema;
+      mutate(changedSchema);
+
+      expect(await computeSourceSchemaHash(changedSchema), label).not.toBe(baseHash);
+    }
+  });
+
   it("defines the runtime-owned flat record schema", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const referenceTargets = Object.values(schema.entities).flatMap((entity) =>

@@ -190,8 +190,8 @@ package slice.
 ### Requirement: Workspace Source Of Truth
 
 The system SHALL treat layout-only `formless.json`, optional workspace package
-links, workspace storage snapshots, and media payloads as the reviewable local
-source of truth for local-first Formless workspaces.
+links, workspace record state files, schema provenance, and media payloads as
+the reviewable local source of truth for local-first Formless workspaces.
 
 #### Scenario: Fresh local workspace bootstrap
 
@@ -204,7 +204,7 @@ source of truth for local-first Formless workspaces.
 - **AND** local admin tokens, owner session signing secrets, local session
   bootstrap tokens, gateway proxy tokens, and CSRF tokens are kept under ignored
   local state or process environment
-- **AND** the CLI does not create empty storage snapshot or media directories
+- **AND** the CLI does not create empty record state or media directories
 - **AND** no app install, route, deployment config, Cloudflare resource,
   Alchemy resource, provider credential, or remote instance is created by fresh
   local workspace bootstrap
@@ -213,8 +213,8 @@ source of truth for local-first Formless workspaces.
 
 - **WHEN** workspace save runs against local Authority state containing active
   app records, control-plane intent, and referenced core media
-- **THEN** the system writes deterministic storage snapshots and referenced
-  media payloads from Authority-backed state
+- **THEN** the system writes deterministic record state files, schema
+  provenance, and referenced media payloads from Authority-backed state
 - **AND** instance control-plane records are written to `state/instance.json`
 - **AND** installed app records are written to `state/apps/<installId>.json`
 - **AND** browser replica state is not used as the source of truth
@@ -224,35 +224,43 @@ source of truth for local-first Formless workspaces.
 
 - **WHEN** workspace-local runtime state under `.formless/local` is reset
 - **THEN** the next local dev run can rebuild runtime state from workspace
-  storage snapshots and media payloads
+  record state files, schema provenance, and media payloads
 - **AND** reviewable workspace source remains unchanged by the reset
 
 #### Scenario: Empty workspace runtime state
 
 - **WHEN** workspace-local dev starts after fresh CLI bootstrap with a
-  layout-only manifest and no storage snapshots
+  layout-only manifest and no record state files
 - **THEN** the local product instance starts with no installed apps
 - **AND** the user can install the first app through local Authority-backed
   browser actions
 
-### Requirement: Workspace Storage Snapshot State
+### Requirement: Workspace Storage State
 
-The system SHALL store workspace state as storage snapshots and media payloads,
-not portable archive directories.
+The system SHALL store workspace state as compact record state files and media
+payloads, not portable archive directories or duplicated schema source bodies.
 
-#### Scenario: Workspace snapshot files
+#### Scenario: Workspace record state files
 
 - **WHEN** workspace source is written
 - **THEN** instance control-plane state is written to `state/instance.json`
 - **AND** each installed app's Authority storage state is written to
   `state/apps/<installId>.json`
-- **AND** each snapshot declares kind `formless.storageSnapshot`, version,
-  storage identity, schema key, exported timestamp, schema timestamp, source
-  cursor, schema, and records
+- **AND** each state file declares kind, version, storage identity, schema key,
+  exported timestamp, schema timestamp, source cursor, schema provenance, and
+  records
+- **AND** schema provenance identifies the resolved source schema by source
+  schema hash, package app key and package revision for installed apps, or
+  runtime-owned schema hash for the instance control-plane schema
+- **AND** installed app state files declare `schemaProvenance.kind`
+  `package-app`, `packageAppKey`, `packageRevision`, and `sourceSchemaHash`
+- **AND** `state/instance.json` declares `schemaProvenance.kind`
+  `instance-control-plane` and `sourceSchemaHash`
+- **AND** workspace state files do not embed the full App schema object
 - **AND** `state/instance.json` uses storage identity `instance:control-plane`
-- **AND** app snapshot files use storage identity `app:<installId>`
-- **AND** snapshot kind constants, version constants, and parsing behavior come
-  from the Storage package contract
+- **AND** app state files use storage identity `app:<installId>`
+- **AND** workspace state kind constants, version constants, and parsing
+  behavior come from the Workspace package contract
 
 #### Scenario: Auto-save uses compact workspace state
 
@@ -272,9 +280,11 @@ not portable archive directories.
 #### Scenario: Portable archive envelope composition
 
 - **WHEN** workspace export, push, restore, or backup needs a portable archive
-- **THEN** the workflow composes a portable archive envelope from workspace
-  storage snapshots, media payloads, and the restore policy selected by the
-  owning workflow
+- **THEN** the workflow resolves package and control-plane source schemas from
+  workspace schema provenance
+- **AND** it composes a portable archive envelope from resolved schemas,
+  workspace record state files, media payloads, and the restore policy selected
+  by the owning workflow
 - **AND** workspace `state/instance.json`, `state/apps/<installId>.json`, and
   `state/media` files are not themselves portable archive envelopes
 
@@ -283,13 +293,14 @@ not portable archive directories.
 - **WHEN** workspace save, check, pull, push, gateway status, tests, local
   adapters, or local agent instructions describe reviewable workspace source
 - **THEN** instance and app source files are described as workspace state,
-  storage state, instance state, app state, storage snapshots, or media payloads
+  record state, instance state, app state, or media payloads
 - **AND** archive terminology is reserved for portable archive envelopes,
   archive restore/export/import/backup workflows, and archive manifest paths
   inside portable archive payloads
 - **AND** workspace result fields, sync summaries, logs, and package-local
-  instructions do not call `state/instance.json` an instance archive or
-  `state/apps/<installId>.json` app archives
+  instructions do not call `state/instance.json` an instance archive,
+  `state/apps/<installId>.json` app archives, or workspace state files storage
+  snapshots
 
 ### Requirement: Workspace App Package Links
 
@@ -408,8 +419,8 @@ manifest.
 #### Scenario: Workspace push apply
 
 - **WHEN** `formless push` runs
-- **THEN** the workflow composes an instance archive from workspace storage
-  snapshots and media payloads
+- **THEN** the workflow composes an instance archive from workspace record
+  state files, resolved source schemas, and media payloads
 - **AND** the workflow applies the composed instance archive restore through
   runtime APIs without requiring apply, replace, stale acknowledgement, or
   install-set replacement flags
@@ -430,8 +441,8 @@ differences as a safety blocker.
 
 - **WHEN** a workspace targeting a remote instance runs `formless push`,
   `formless push --dry-run`, `formless pull`, or `formless pull --dry-run`
-- **THEN** remote target storage snapshots are compared with local workspace
-  storage snapshots
+- **THEN** remote target records and schema provenance are compared with local
+  workspace record state and schema provenance
 - **AND** `app-install`, unified `route`, `deployment-config`, app record, and
   media changes are reported without deriving intent from `formless.json`
 - **AND** pull treats target schema-owned control-plane records, routes,
@@ -458,23 +469,23 @@ differences as a safety blocker.
 - **AND** push does not run archive restore or provider mutation
 - **AND** pull does not rewrite workspace source
 
-### Requirement: Storage Snapshot Record Entity Names
+### Requirement: Workspace Record Entity Names
 
-The system SHALL keep storage snapshot record entity names aligned with the
-snapshot's active schema.
+The system SHALL keep workspace state record entity names aligned with the
+resolved schema identified by that state file's schema provenance.
 
-#### Scenario: Write schema-local snapshot record entity
+#### Scenario: Write schema-local workspace record entity
 
-- WHEN app or instance control-plane records are written into a storage snapshot
-- THEN record `entity` values use the entity keys from the snapshot schema
-- AND portable archive envelopes do not rewrite storage snapshot records into a
+- WHEN app or instance control-plane records are written into workspace state
+- THEN record `entity` values use the entity keys from the resolved schema
+- AND portable archive envelopes do not rewrite workspace state records into a
   separate qualified entity-name format
 
 #### Scenario: Keep app data outside control-plane records
 
-- WHEN a workspace state or instance archive includes installed app data
+- WHEN workspace state or an instance archive includes installed app data
 - THEN installed app records remain scoped by app install identity through app
-  storage snapshots
+  record state or archive storage snapshots
 - AND installed app records are not stored as instance control-plane records
 
 ### Requirement: Schema-Owned Control-Plane Snapshots
@@ -499,15 +510,16 @@ deployment execution history.
 - **AND** installed app data remains represented through storage snapshots
   scoped by app install identity
 
-#### Scenario: Workspace snapshot state remains reviewable
+#### Scenario: Workspace control-plane state remains reviewable
 
 - **WHEN** workspace source is written
 - **THEN** `app-install`, unified `route`, and deployment intent is reviewable
   in `state/instance.json`
-- **AND** the file declares kind `formless.storageSnapshot`, version `1`,
+- **AND** the file declares a workspace state kind, version,
   storage identity `instance:control-plane`, schema key
-  `instance-control-plane`, schema timestamp, source cursor, schema, and
-  records
+  `instance-control-plane`, schema timestamp, source cursor, control-plane
+  schema provenance, and records
+- **AND** the file does not embed the full control-plane App schema object
 - **AND** `formless.json` does not duplicate that intent
 - **AND** deployment attempts, evidence summaries, and cleanup
   audit summaries are available only through deployment runtime projection or

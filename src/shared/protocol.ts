@@ -197,6 +197,7 @@ export type ChangeRow = {
 
 export type BootstrapResponse = {
   schema: AppSchema;
+  schemaProvenance?: BrowserReplicaSchemaProvenance;
   schemaUpdatedAt: string;
   records: StoredRecord[];
   cursor: number;
@@ -206,6 +207,7 @@ export type SyncResponse = {
   changes: ChangeRow[];
   cursor: number;
   schema?: AppSchema;
+  schemaProvenance?: BrowserReplicaSchemaProvenance;
   schemaUpdatedAt?: string;
 };
 
@@ -242,9 +244,22 @@ export const FORMLESS_CLIENT_PACKAGE_REVISION_HEADER = "x-formless-package-app-r
 export const FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER = "x-formless-source-schema-hash";
 export const FORMLESS_RELOAD_REQUIRED_ERROR_CODE = "reload-required";
 
+export type BrowserReplicaSchemaProvenance =
+  | {
+      kind: "package-app";
+      packageAppKey: PackageAppKey;
+      packageRevision: PackageAppRevision;
+      sourceSchemaHash: SourceSchemaHash;
+    }
+  | {
+      kind: "instance-control-plane";
+      sourceSchemaHash: SourceSchemaHash;
+    };
+
 export type BrowserReplicaUpgradeFacts = {
   runtimeProtocolVersion: number;
   schemaUpdatedAt: string | null;
+  schemaProvenance: BrowserReplicaSchemaProvenance | null;
   packageApp: {
     packageAppKey: PackageAppKey;
     packageRevision: PackageAppRevision;
@@ -334,11 +349,13 @@ export type ActionResponse = {
 
 export type SchemaResponse = {
   schema: AppSchema;
+  schemaProvenance?: BrowserReplicaSchemaProvenance;
   updatedAt: string;
 };
 
 export type SchemaUpdateResponse = {
   schema: AppSchema;
+  schemaProvenance?: BrowserReplicaSchemaProvenance;
   updatedAt: string;
 };
 
@@ -437,7 +454,29 @@ function isSyncResponse(value: unknown): value is SyncResponse {
     return false;
   }
 
+  if ("schemaProvenance" in value && !isBrowserReplicaSchemaProvenance(value.schemaProvenance)) {
+    return false;
+  }
+
   return true;
+}
+
+function isBrowserReplicaSchemaProvenance(value: unknown): value is BrowserReplicaSchemaProvenance {
+  if (!isRecord(value) || !isSha256SourceSchemaHash(value.sourceSchemaHash)) {
+    return false;
+  }
+
+  if (value.kind === "instance-control-plane") {
+    return true;
+  }
+
+  return (
+    value.kind === "package-app" &&
+    typeof value.packageAppKey === "string" &&
+    typeof value.packageRevision === "number" &&
+    Number.isInteger(value.packageRevision) &&
+    value.packageRevision > 0
+  );
 }
 
 function isChangeRow(value: unknown): value is ChangeRow {
@@ -462,6 +501,10 @@ function isCursor(value: unknown): value is number {
 
 function isNullableString(value: unknown): value is string | null {
   return typeof value === "string" || value === null;
+}
+
+function isSha256SourceSchemaHash(value: unknown): value is SourceSchemaHash {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

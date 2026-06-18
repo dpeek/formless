@@ -104,6 +104,36 @@ through the Instance Control Plane package slice.
 - AND the Instance Control Plane package supplies schema contracts, reviewable
   validation, pure helpers, and package-local deterministic tests
 
+### Requirement: Control-Plane Schema Provenance
+
+The system SHALL treat the instance control-plane schema as a normal
+runtime-owned App schema source with deterministic provenance.
+
+#### Scenario: Resolve control-plane source schema
+
+- GIVEN the runtime loads the instance control-plane schema contract
+- WHEN the schema is parsed for Authority, generated UI, workspace, archive,
+  sync, or deploy workflows
+- THEN it uses the normal App schema parser and App schema source hash rules
+- AND entity, field, relationship, query, read model, view, screen, action,
+  operation, and runtime metadata changes all affect control-plane schema
+  provenance
+- AND the schema authoring format is not observable through records, workspace
+  state, archives, sync, or generated UI behavior
+
+#### Scenario: Refresh stored control-plane schema
+
+- GIVEN instance control-plane storage already contains committed
+  `app-install`, `route`, or `deployment-config` records
+- WHEN the resolved control-plane source schema hash differs from the active
+  control-plane schema provenance
+- AND active control-plane records validate against the resolved schema without
+  record materialization
+- THEN the runtime refreshes the active control-plane schema and schema
+  timestamp without reseeding or replacing control-plane records
+- AND incompatible control-plane schema changes require an explicit migration,
+  backfill, or reset path before they can become active
+
 ### Requirement: Deployment Projection Boundary
 
 The system SHALL build deployment runtime desired-state projections from
@@ -366,15 +396,20 @@ canonical source for workspace-authored instance intent.
 
 - **WHEN** local Authority control-plane state is saved to workspace source
 - **THEN** `app-install`, `route`, and `deployment-config` records are written
-  to the schema-owned `state/instance.json` storage snapshot
+  to the schema-owned `state/instance.json` workspace state file
 - **AND** enabled `deployment-config` records include the display-safe
   deployed HTTP origin in `targetUrl`
 - **AND** workspace and archive boundaries identify those records with
   qualified entity names such as `instance:app-install` and
   `instance:route`
-- **AND** `state/instance.json` declares kind `formless.storageSnapshot`,
-  version `1`, storage identity `instance:control-plane`, schema key
-  `instance-control-plane`, schema metadata, source cursor, and records
+- **AND** `state/instance.json` declares a workspace state kind, version,
+  storage identity `instance:control-plane`, schema key
+  `instance-control-plane`, control-plane schema provenance, source cursor, and
+  records
+- **AND** control-plane schema provenance uses `schemaProvenance.kind`
+  `instance-control-plane` and `sourceSchemaHash`
+- **AND** `state/instance.json` does not embed the full control-plane App
+  schema object
 - **AND** `formless.json` does not duplicate those records as app, route,
   domain, or deploy intent
 - **AND** `deploy-target`, `provider-config-ref`,

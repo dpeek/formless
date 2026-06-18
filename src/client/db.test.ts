@@ -41,10 +41,40 @@ describe("client db", () => {
     const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.schemaProvenance).toBeNull();
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
     expect(snapshot.records).toEqual([record("record-1", "First")]);
     expect(snapshot.cursor).toBe(7);
     expect(snapshot.lastSyncedAt).toEqual(expect.any(String));
+  });
+
+  it("stores and clears active schema provenance metadata", async () => {
+    const sourceSchemaHash =
+      "sha256:7777777777777777777777777777777777777777777777777777777777777777" as const;
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaProvenance: {
+        kind: "package-app",
+        packageAppKey: "tasks",
+        packageRevision: 4,
+        sourceSchemaHash,
+      },
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    } satisfies BootstrapResponse);
+
+    expect((await readLocalSnapshot("tasks")).schemaProvenance).toEqual({
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: 4,
+      sourceSchemaHash,
+    });
+
+    await saveSchema("tasks", appSchema, "2026-04-28T00:01:00.000Z");
+
+    expect((await readLocalSnapshot("tasks")).schemaProvenance).toBeNull();
   });
 
   it("stores each schema key in its own IndexedDB database", async () => {

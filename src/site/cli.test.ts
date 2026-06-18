@@ -61,6 +61,7 @@ import {
 } from "@dpeek/formless-gateway";
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  WORKSPACE_RECORD_STATE_FILE_KIND,
   defaultWorkspacePackageLinks,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
@@ -1130,7 +1131,9 @@ describe("Formless Site CLI", () => {
       "app-store-snapshots",
       "core-media-assets",
     ]);
+    expect(restoreBody.archive.controlPlane?.schema).toEqual(instanceControlPlaneSchema);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(restoreBody.archive.apps[0]?.data.schema).toEqual(siteSourceSchema);
     expect(restoreBody.archive.controlPlane?.records.map((record) => record.entity)).toEqual([
       "app-install",
       "deployment-config",
@@ -1138,6 +1141,17 @@ describe("Formless Site CLI", () => {
       "route",
       "route",
     ]);
+    const instanceState = JSON.parse(
+      await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
+    ) as Record<string, unknown>;
+    const appState = JSON.parse(
+      await readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
+    ) as Record<string, unknown>;
+
+    expect(instanceState.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
+    expect(instanceState.schema).toBeUndefined();
+    expect(appState.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
+    expect(appState.schema).toBeUndefined();
     expect(deployInputs).toEqual([]);
     expect(logs).toHaveLength(1);
 
@@ -2072,6 +2086,70 @@ describe("Formless Site CLI", () => {
     expect(logs).toEqual(["Everything up to date."]);
     expect(logs.join("\n")).not.toContain("drift");
     expect(logs.join("\n")).not.toContain("deploy");
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+  });
+
+  it("treats matching app records and schema provenance as repeat push no-op when remote schema bodies differ", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const readFetch = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      [domainMapping("dpeek.com", "david")],
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    const changedRemoteSchema = JSON.parse(
+      JSON.stringify(siteSourceSchema),
+    ) as typeof siteSourceSchema;
+
+    changedRemoteSchema.entities.site = {
+      ...changedRemoteSchema.entities.site!,
+      label: "Changed remote schema body",
+    };
+
+    const fetcher: typeof fetch = async (url, init) => {
+      const requestUrl =
+        typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      const parsedUrl = new URL(requestUrl);
+      const response = await readFetch(url, init);
+
+      if (parsedUrl.pathname !== "/api/app-installs/site/david/snapshot") {
+        return response;
+      }
+
+      const remoteSnapshot = (await response.json()) as StorageSnapshot;
+
+      return Response.json({
+        ...remoteSnapshot,
+        schema: changedRemoteSchema,
+      });
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(logs).toEqual(["Everything up to date."]);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
@@ -3428,7 +3506,12 @@ describe("Formless Site CLI", () => {
     const operationStates = await listWorkspaceOperationStates(workspaceRoot);
     const appStateValue = JSON.parse(
       await readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
-    ) as StorageSnapshot;
+    ) as {
+      kind: string;
+      schema?: unknown;
+      schemaProvenance?: { kind: string };
+      storageIdentity: string;
+    };
 
     expect(manifest).toEqual(layoutWorkspaceManifest("personal-sites"));
     expect(operationStates).toHaveLength(1);
@@ -3445,8 +3528,10 @@ describe("Formless Site CLI", () => {
     );
     expect(JSON.stringify(controlPlane)).not.toContain("CF_API_TOKEN");
     expect(JSON.stringify(controlPlane)).not.toContain("media/images/cover.png");
-    expect(appStateValue.kind).toBe(STORAGE_SNAPSHOT_KIND);
+    expect(appStateValue.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
     expect(appStateValue.storageIdentity).toBe("app:david");
+    expect(appStateValue.schema).toBeUndefined();
+    expect(appStateValue.schemaProvenance).toMatchObject({ kind: "package-app" });
     await expect(
       readFile(path.join(workspaceRoot, "state/media/media/david/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
@@ -5212,6 +5297,12 @@ async function writeWorkspaceAppStateFromArchive(
     await writeInstanceWorkspaceAppStorageSnapshot({
       installId,
       manifest,
+      schemaProvenance: {
+        kind: "package-app",
+        packageAppKey: archive.app.packageAppKey,
+        packageRevision: archive.app.packageRevision,
+        sourceSchemaHash: archive.app.sourceSchemaHash,
+      },
       snapshot: archive.data,
       workspaceRoot,
     });

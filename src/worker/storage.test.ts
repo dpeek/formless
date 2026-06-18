@@ -18,6 +18,7 @@ import type {
   AppliedPackageAppMigration,
   ApplyPackageAppMigrationsResponse,
   PackageAppMigrationState,
+  StoredSchema,
   WriteOutcome,
 } from "./storage.ts";
 
@@ -212,6 +213,168 @@ describe("storage", () => {
     expect(catchUp).toEqual({
       changes: [initialSync.changes[1]],
       cursor: 2,
+    });
+  });
+
+  it("refreshes compatible source schema provenance without reseeding records", async () => {
+    const initialHash = sourceHash("1");
+    const refreshedHash = sourceHash("2");
+    const initial = await postJson<StoredSchema>("/source-bootstrap", {
+      sourceSchemaHash: initialHash,
+    });
+    const created = await createRecord("mutation-before-refresh", "Keep me");
+    const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
+    const beforeCursor = await getJson<number>("/cursor");
+
+    const refreshed = await postJson<StoredSchema>("/source-bootstrap", {
+      schemaKind: "view-label",
+      sourceSchemaHash: refreshedHash,
+    });
+    const state = await getJson<PackageAppMigrationState>("/package-migration-state");
+
+    expect(initial.schemaProvenance).toEqual({
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: 1,
+      sourceSchemaHash: initialHash,
+    });
+    expect(refreshed.updatedAt).not.toBe(initial.updatedAt);
+    expect(refreshed.schema.views.taskHome).toMatchObject({ label: "Refreshed" });
+    expect(refreshed.schemaProvenance).toEqual({
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: 1,
+      sourceSchemaHash: refreshedHash,
+    });
+    expect(await getJson<StoredRecord[]>("/records")).toEqual([created.record]);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toEqual(beforeChanges);
+    expect(await getJson<number>("/cursor")).toBe(beforeCursor);
+    expect(state).toMatchObject({
+      packageAppKey: "tasks",
+      packageRevision: 1,
+      sourceSchemaHash: refreshedHash,
+    });
+  });
+
+  it("refreshes compatible control-plane source schema provenance without reseeding records", async () => {
+    const initialHash = sourceHash("1");
+    const viewHash = sourceHash("2");
+    const runtimeHash = sourceHash("3");
+    const records = controlPlaneRefreshRecords();
+    const initial = await postJson<StoredSchema>("/control-plane-source-bootstrap", {
+      records,
+      sourceSchemaHash: initialHash,
+    });
+    const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
+    const beforeCursor = await getJson<number>("/cursor");
+
+    const viewRefreshed = await postJson<StoredSchema>("/control-plane-source-bootstrap", {
+      schemaKind: "view-label",
+      sourceSchemaHash: viewHash,
+    });
+    const runtimeRefreshed = await postJson<StoredSchema>("/control-plane-source-bootstrap", {
+      schemaKind: "runtime-metadata",
+      sourceSchemaHash: runtimeHash,
+    });
+
+    expect(initial.schemaProvenance).toEqual({
+      kind: "instance-control-plane",
+      sourceSchemaHash: initialHash,
+    });
+    expect(viewRefreshed.updatedAt).not.toBe(initial.updatedAt);
+    expect(viewRefreshed.schema.views.routeList).toMatchObject({
+      label: "Refreshed control-plane routes",
+    });
+    expect(viewRefreshed.schemaProvenance).toEqual({
+      kind: "instance-control-plane",
+      sourceSchemaHash: viewHash,
+    });
+    expect(runtimeRefreshed.schema.runtime?.controlPlane?.entities.route?.immutableFields).toEqual([
+      "kind",
+      "matchPath",
+    ]);
+    expect(runtimeRefreshed.schemaProvenance).toEqual({
+      kind: "instance-control-plane",
+      sourceSchemaHash: runtimeHash,
+    });
+    expect(await getJson<StoredRecord[]>("/records")).toEqual(records);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toEqual(beforeChanges);
+    expect(await getJson<number>("/cursor")).toBe(beforeCursor);
+  });
+
+  it("blocks incompatible source schema refresh without mutating active state", async () => {
+    const initialHash = sourceHash("1");
+    const refreshedHash = sourceHash("2");
+
+    await postJson<StoredSchema>("/source-bootstrap", {
+      sourceSchemaHash: initialHash,
+    });
+    await createRecord("mutation-before-blocked-refresh", "Missing new required field");
+
+    const beforeSchema = await getJson<StoredSchema>("/current-schema");
+    const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
+    const beforeState = await getJson<PackageAppMigrationState>("/package-migration-state");
+    const response = await fetchStorage("/source-bootstrap", {
+      body: JSON.stringify({
+        schemaKind: "required-field",
+        sourceSchemaHash: refreshedHash,
+      }),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("Active schema refresh blocked"),
+      blocker: {
+        currentSchemaProvenance: {
+          kind: "package-app",
+          packageAppKey: "tasks",
+          packageRevision: 1,
+          sourceSchemaHash: initialHash,
+        },
+        storageIdentity: "app:tasks",
+        targetSchemaProvenance: {
+          kind: "package-app",
+          packageAppKey: "tasks",
+          packageRevision: 1,
+          sourceSchemaHash: refreshedHash,
+        },
+      },
+    });
+    expect(await getJson<StoredSchema>("/current-schema")).toEqual(beforeSchema);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toEqual(beforeChanges);
+    expect(await getJson<PackageAppMigrationState>("/package-migration-state")).toEqual(
+      beforeState,
+    );
+  });
+
+  it("blocks schema-only refresh when the package revision changed", async () => {
+    await postJson<StoredSchema>("/source-bootstrap", {
+      sourceSchemaHash: sourceHash("1"),
+    });
+
+    const response = await fetchStorage("/source-bootstrap", {
+      body: JSON.stringify({
+        packageRevision: 2,
+        schemaKind: "view-label",
+        sourceSchemaHash: sourceHash("2"),
+      }),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("package app revision 1 targets 2"),
+      blocker: {
+        currentSchemaProvenance: {
+          kind: "package-app",
+          packageRevision: 1,
+        },
+        targetSchemaProvenance: {
+          kind: "package-app",
+          packageRevision: 2,
+        },
+      },
     });
   });
 
@@ -877,6 +1040,60 @@ function packageMigrationRecords(): StoredRecord[] {
   ];
 }
 
+function controlPlaneRefreshRecords(): StoredRecord[] {
+  return [
+    {
+      createdAt: "2026-06-18T00:00:00.000Z",
+      entity: "app-install",
+      id: "site",
+      updatedAt: "2026-06-18T00:00:00.000Z",
+      values: {
+        installId: "site",
+        packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: sourceHash("a"),
+        label: "Site",
+        status: "installed",
+        storageIdentity: "app:site",
+      },
+    },
+    {
+      createdAt: "2026-06-18T00:00:01.000Z",
+      entity: "deployment-config",
+      id: "production",
+      updatedAt: "2026-06-18T00:00:01.000Z",
+      values: {
+        targetId: "instance.primary",
+        targetKind: "instance",
+        label: "Production",
+        enabled: true,
+        targetUrl: "https://example.com",
+        providerFamily: "cloudflare",
+      },
+    },
+    {
+      createdAt: "2026-06-18T00:00:02.000Z",
+      entity: "route",
+      id: "route:site:admin",
+      updatedAt: "2026-06-18T00:00:02.000Z",
+      values: {
+        enabled: true,
+        matchPath: "/apps/site",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "site",
+        surface: "admin",
+        access: "owner",
+        deploymentConfig: "production",
+      },
+    },
+  ];
+}
+
+function sourceHash(digit: string) {
+  return `sha256:${digit.repeat(64)}`;
+}
+
 function snapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   return {
     kind: STORAGE_SNAPSHOT_KIND,
@@ -1086,6 +1303,11 @@ async function writeStorageHarness() {
       import rawSeedSchema from "${process.cwd()}/schema/apps/tasks/schema.json";
       import { parseAppSchema } from "@dpeek/formless-schema";
       import {
+        instanceControlPlaneSchema,
+        instanceControlPlaneSchemaProvenance,
+      } from "@dpeek/formless-instance-control-plane";
+      import {
+        ActiveSchemaRefreshBlockedError,
         createStoredRecord,
         createStoredRecordOutcome,
         deleteStoredRecord,
@@ -1097,9 +1319,11 @@ async function writeStorageHarness() {
         getChangesAfter,
         getCurrentCursor,
         getStoredRecord,
+        initializeStorageFromSource,
         patchStoredRecord,
         applyPackageAppMigrationsOutcome,
         readAppliedPackageAppMigrations,
+        readCurrentStoredSchema,
         readPackageAppMigrationState,
         resetStorage,
         resetStorageSchemaToSource,
@@ -1112,6 +1336,7 @@ async function writeStorageHarness() {
       import { packageAppMigrationFamily } from "${process.cwd()}/src/worker/package-app-migrations.ts";
 
       const seedSchema = parseAppSchema(rawSeedSchema);
+      const controlPlaneSchema = parseAppSchema(instanceControlPlaneSchema);
       const sourceSchemaHash = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
       const targetSchemaHash = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
       const packageFamily = packageAppMigrationFamily("tasks");
@@ -1261,6 +1486,83 @@ async function writeStorageHarness() {
         return schema;
       }
 
+      function schemaForSourceRefresh(kind) {
+        const schema = structuredClone(seedSchema);
+
+        if (kind === "view-label") {
+          schema.views.taskHome.label = "Refreshed";
+          return schema;
+        }
+
+        if (kind === "required-field") {
+          schema.entities.task.fields.reviewedBy = {
+            type: "text",
+            required: true,
+            label: "Reviewed by",
+          };
+          return schema;
+        }
+
+        return schema;
+      }
+
+      function schemaForControlPlaneSourceRefresh(kind) {
+        const schema = structuredClone(controlPlaneSchema);
+
+        if (kind === "view-label") {
+          schema.views.routeList.label = "Refreshed control-plane routes";
+          return schema;
+        }
+
+        if (kind === "runtime-metadata") {
+          schema.runtime.controlPlane.entities.route.immutableFields = ["kind", "matchPath"];
+          return schema;
+        }
+
+        if (kind === "required-field") {
+          schema.entities.route.fields.auditNote = {
+            type: "text",
+            required: true,
+            label: "Audit note",
+          };
+          return schema;
+        }
+
+        return schema;
+      }
+
+      function sourceForBootstrap(body) {
+        const nextSourceSchemaHash = body.sourceSchemaHash ?? sourceSchemaHash;
+
+        return {
+          changeMutationPrefix: "seed-task",
+          records: body.records ?? [],
+          schema: schemaForSourceRefresh(body.schemaKind),
+          schemaKey: "tasks",
+          schemaProvenance: {
+            kind: "package-app",
+            packageAppKey: "tasks",
+            packageRevision: body.packageRevision ?? 1,
+            sourceSchemaHash: nextSourceSchemaHash,
+          },
+          storageIdentity: "app:tasks",
+        };
+      }
+
+      function controlPlaneSourceForBootstrap(body) {
+        return {
+          changeMutationPrefix: "seed-instance-control-plane",
+          records: body.records ?? [],
+          schema: schemaForControlPlaneSourceRefresh(body.schemaKind),
+          schemaKey: "instance-control-plane",
+          schemaProvenance: {
+            ...instanceControlPlaneSchemaProvenance,
+            sourceSchemaHash: body.sourceSchemaHash ?? instanceControlPlaneSchemaProvenance.sourceSchemaHash,
+          },
+          storageIdentity: "instance:control-plane",
+        };
+      }
+
       export class StorageHarness extends DurableObject {
         constructor(ctx, env) {
           super(ctx, env);
@@ -1280,6 +1582,10 @@ async function writeStorageHarness() {
 
           if (request.method === "GET" && url.pathname === "/schema") {
             return Response.json(getActiveSchema(this.ctx.storage, seedSchema));
+          }
+
+          if (request.method === "GET" && url.pathname === "/current-schema") {
+            return Response.json(readCurrentStoredSchema(this.ctx.storage) ?? null);
           }
 
           if (request.method === "GET" && url.pathname === "/changes") {
@@ -1315,6 +1621,49 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/create") {
             return Response.json(createStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/source-bootstrap") {
+            try {
+              return Response.json(
+                initializeStorageFromSource(this.ctx.storage, sourceForBootstrap(await request.json())),
+              );
+            } catch (error) {
+              if (error instanceof ActiveSchemaRefreshBlockedError) {
+                return Response.json(
+                  { error: error.message, blocker: error.blocker },
+                  { status: 409 },
+                );
+              }
+
+              return Response.json(
+                { error: error instanceof Error ? error.message : "Unknown error." },
+                { status: 500 },
+              );
+            }
+          }
+
+          if (request.method === "POST" && url.pathname === "/control-plane-source-bootstrap") {
+            try {
+              return Response.json(
+                initializeStorageFromSource(
+                  this.ctx.storage,
+                  controlPlaneSourceForBootstrap(await request.json()),
+                ),
+              );
+            } catch (error) {
+              if (error instanceof ActiveSchemaRefreshBlockedError) {
+                return Response.json(
+                  { error: error.message, blocker: error.blocker },
+                  { status: 409 },
+                );
+              }
+
+              return Response.json(
+                { error: error instanceof Error ? error.message : "Unknown error." },
+                { status: 500 },
+              );
+            }
           }
 
           if (request.method === "POST" && url.pathname === "/create-outcome") {

@@ -4,6 +4,20 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+  instanceControlPlaneSchemaProvenance,
+} from "@dpeek/formless-instance-control-plane";
+import { parseAppSchema } from "@dpeek/formless-schema";
+
+import {
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
+  type StoredRecord,
+} from "@dpeek/formless-storage";
 
 import {
   appPackageManifestKind,
@@ -23,9 +37,11 @@ import {
   INSTANCE_WORKSPACE_LOCAL_DEV_SECRET_STATE_PATH,
   INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
   INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  WORKSPACE_RECORD_STATE_FILE_KIND,
   WORKSPACE_PACKAGE_LINKS_FILE,
   createWorkspaceAppPackageResolver,
   createWorkspaceOperationState,
+  defaultInstanceWorkspaceManifest,
   defaultWorkspacePackageLinks,
   ensureInstanceWorkspaceLocalDevSecretState,
   ensureInstanceWorkspaceSecretStateIgnored,
@@ -40,6 +56,8 @@ import {
   parseInstanceWorkspaceLocalDevSecretState,
   parseInstanceWorkspaceSecretState,
   readInstanceWorkspaceAutoSaveState,
+  readInstanceWorkspaceAppStorageSnapshot,
+  readInstanceWorkspaceControlPlaneStorageSnapshot,
   readWorkspacePackageLinks,
   readWorkspaceOperationState,
   readInstanceWorkspaceLocalDevSecretState,
@@ -49,7 +67,9 @@ import {
   updateWorkspaceOperationState,
   workspaceOperationStatePath,
   workspaceOperationStateRoot,
+  writeInstanceWorkspaceAppStorageSnapshot,
   writeInstanceWorkspaceAutoSaveState,
+  writeInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceLocalDevSecretState,
   writeInstanceWorkspaceSecretState,
 } from "./node.ts";
@@ -476,6 +496,133 @@ describe("workspace app package source resolver", () => {
         workspaceRoot,
       }),
     ).rejects.toThrow(/does not match manifest sourceSchemaHash/);
+  });
+});
+
+describe("workspace record state node files", () => {
+  it("writes and reads control-plane record state without embedding schema source", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
+    const snapshot: StorageSnapshot = {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: 0,
+      schema: instanceControlPlaneSchema,
+      records: [],
+    };
+
+    await writeInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest,
+      snapshot,
+      workspaceRoot,
+    });
+
+    const fileText = await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8");
+    const file = JSON.parse(fileText) as Record<string, unknown>;
+
+    expect(file.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
+    expect(file.storageIdentity).toBe(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+    expect(file.schema).toBeUndefined();
+    expect(file.schemaProvenance).toEqual(instanceControlPlaneSchemaProvenance);
+    await expect(
+      readInstanceWorkspaceControlPlaneStorageSnapshot({ manifest, workspaceRoot }),
+    ).resolves.toEqual(snapshot);
+  });
+
+  it("rejects control-plane record state when provenance does not match the resolved schema", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
+    const snapshot: StorageSnapshot = {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: 0,
+      schema: instanceControlPlaneSchema,
+      records: [],
+    };
+
+    await writeInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest,
+      snapshot,
+      workspaceRoot,
+    });
+
+    const filePath = path.join(workspaceRoot, "state/instance.json");
+    const file = JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>;
+
+    file.schemaProvenance = {
+      kind: "instance-control-plane",
+      sourceSchemaHash: `sha256:${"0".repeat(64)}`,
+    };
+    await writeFile(filePath, `${JSON.stringify(file, null, 2)}\n`);
+
+    await expect(
+      readInstanceWorkspaceControlPlaneStorageSnapshot({ manifest, workspaceRoot }),
+    ).rejects.toThrow(
+      "Workspace instance state state/instance.json schemaProvenance does not match resolved instance control-plane source.",
+    );
+  });
+
+  it("writes and reads app record state with package schema provenance", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
+    const schemaProvenance = {
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: 7,
+      sourceSchemaHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    } as const;
+    const records: StoredRecord[] = [
+      {
+        ...workspaceFixtureTaskRecord("rec_task_saved", "Persist record state", false),
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const sourceSchema = parseAppSchema(workspaceFixtureTaskSourceSchema);
+    const snapshot: StorageSnapshot = {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: "app:tasks",
+      schemaKey: "tasks",
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: 1,
+      schema: sourceSchema,
+      records,
+    };
+
+    await writeInstanceWorkspaceAppStorageSnapshot({
+      installId: "tasks",
+      manifest,
+      schemaProvenance,
+      snapshot,
+      workspaceRoot,
+    });
+
+    const fileText = await readFile(path.join(workspaceRoot, "state/apps/tasks.json"), "utf8");
+    const file = JSON.parse(fileText) as Record<string, unknown>;
+
+    expect(file.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
+    expect(file.storageIdentity).toBe("app:tasks");
+    expect(file.schema).toBeUndefined();
+    expect(file.schemaProvenance).toEqual(schemaProvenance);
+    await expect(
+      readInstanceWorkspaceAppStorageSnapshot({
+        installId: "tasks",
+        manifest,
+        schemaKey: "tasks",
+        schemaProvenance,
+        sourceSchema,
+        workspaceRoot,
+      }),
+    ).resolves.toEqual(snapshot);
   });
 });
 

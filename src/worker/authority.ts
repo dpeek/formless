@@ -13,6 +13,8 @@ import {
   getCurrentCursor,
   initializeStorageFromSource,
   resetStorageToEmpty,
+  ActiveSchemaRefreshBlockedError,
+  type PackageAppSchemaProvenance,
   type StorageSource,
   type WriteOutcome,
 } from "./storage.ts";
@@ -49,6 +51,7 @@ import {
 import {
   activeAppPackageResolver,
   findActiveWorkerSchemaAppDefinition,
+  listActiveAppPackages,
 } from "./runtime-app-packages.ts";
 
 export const INTERNAL_RESET_APP_STORAGE_PATH = "/_internal/reset-app-storage";
@@ -297,6 +300,10 @@ export class FormlessAuthority extends DurableObject<Env> {
         return jsonResponse(error.body, error.status);
       }
 
+      if (error instanceof ActiveSchemaRefreshBlockedError) {
+        return jsonResponse({ error: error.message, blocker: error.blocker }, 409);
+      }
+
       throw error;
     }
   }
@@ -386,15 +393,50 @@ function storageSourceFromRoute(
   env: Env,
 ): StorageSource {
   return (
-    launchFixtureStorageSourceForIdentity(route.identity, env) ?? storageSourceFromApp(route.app)
+    launchFixtureStorageSourceForIdentity(route.identity, env) ??
+    storageSourceFromApp(route.app, {
+      schemaProvenance: packageSchemaProvenanceForIdentity(route.identity, env),
+      schemaKey: route.identity.sourceSchemaKey,
+      storageIdentity: route.identity.authorityName,
+    })
   );
 }
 
-function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
+function storageSourceFromApp(
+  app: WorkerSchemaAppDefinition,
+  options: {
+    schemaKey?: string;
+    schemaProvenance?: PackageAppSchemaProvenance;
+    storageIdentity?: string;
+  } = {},
+): StorageSource {
   return {
     schema: app.sourceSchema,
     records: app.seedRecords,
     changeMutationPrefix: app.seedChangeMutationPrefix,
+    ...(options.schemaKey === undefined ? {} : { schemaKey: options.schemaKey }),
+    ...(options.schemaProvenance === undefined
+      ? {}
+      : { schemaProvenance: options.schemaProvenance }),
+    ...(options.storageIdentity === undefined ? {} : { storageIdentity: options.storageIdentity }),
+  };
+}
+
+function packageSchemaProvenanceForIdentity(
+  identity: AppStorageIdentity,
+  env: Env,
+): PackageAppSchemaProvenance {
+  const packageApp = activeAppPackageResolver(env).findPackage(identity.packageAppKey);
+
+  if (!packageApp) {
+    throw new Error(`Package app "${identity.packageAppKey}" is not installable.`);
+  }
+
+  return {
+    kind: "package-app",
+    packageAppKey: packageApp.packageAppKey,
+    packageRevision: packageApp.packageRevision,
+    sourceSchemaHash: packageApp.sourceSchemaHash,
   };
 }
 
@@ -409,17 +451,47 @@ function storageSourceFromSyncSocket(
     return launchFixtureSource;
   }
 
-  return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name, env);
+  return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name, env, ctx.id.name);
 }
 
-function storageSourceFromSchemaKey(schemaKey: string | undefined, env: Env): StorageSource {
-  const app = schemaKey ? findActiveWorkerSchemaAppDefinition(schemaKey, env) : undefined;
+function storageSourceFromSchemaKey(
+  schemaKey: string | undefined,
+  env: Env,
+  storageIdentity?: string,
+): StorageSource {
+  if (!schemaKey) {
+    throw new Error("Authority Durable Object is missing a valid schema key.");
+  }
+
+  const app = findActiveWorkerSchemaAppDefinition(schemaKey, env);
 
   if (!app) {
     throw new Error("Authority Durable Object is missing a valid schema key.");
   }
 
-  return storageSourceFromApp(app);
+  return storageSourceFromApp(app, {
+    schemaKey,
+    schemaProvenance: packageSchemaProvenanceForSchemaKey(schemaKey, env),
+    storageIdentity,
+  });
+}
+
+function packageSchemaProvenanceForSchemaKey(
+  schemaKey: string,
+  env: Env,
+): PackageAppSchemaProvenance | undefined {
+  const packageApp = listActiveAppPackages(env).find(
+    (candidate) => candidate.sourceSchemaKey === schemaKey,
+  );
+
+  return packageApp
+    ? {
+        kind: "package-app",
+        packageAppKey: packageApp.packageAppKey,
+        packageRevision: packageApp.packageRevision,
+        sourceSchemaHash: packageApp.sourceSchemaHash,
+      }
+    : undefined;
 }
 
 function initialSyncSocketAttachment(): SyncSocketAttachment {
@@ -470,9 +542,17 @@ function syncResponseForAttachment(
   source: StorageSource,
   attachment: SyncSocketAttachment,
 ): SyncResponse {
-  const { schema, updatedAt } = initializeStorageFromSource(storage, source);
+  const storedSchema = initializeStorageFromSource(storage, source);
   const schemaFields =
-    attachment.schemaUpdatedAt === updatedAt ? {} : { schema, schemaUpdatedAt: updatedAt };
+    attachment.schemaUpdatedAt === storedSchema.updatedAt
+      ? {}
+      : {
+          schema: storedSchema.schema,
+          ...(storedSchema.schemaProvenance === undefined
+            ? {}
+            : { schemaProvenance: storedSchema.schemaProvenance }),
+          schemaUpdatedAt: storedSchema.updatedAt,
+        };
 
   return {
     changes: getChangesAfter(storage, attachment.cursor),

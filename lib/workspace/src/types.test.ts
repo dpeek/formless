@@ -6,6 +6,8 @@ import {
   DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE,
+  WORKSPACE_RECORD_STATE_FILE_KIND,
+  WORKSPACE_RECORD_STATE_FILE_VERSION,
   WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_PACKAGE_LINKS_KIND,
   WORKSPACE_PACKAGE_LINKS_VERSION,
@@ -28,6 +30,7 @@ import {
   defaultWorkspacePackageLinks,
   formatWorkspaceAutoSaveState,
   formatWorkspacePackageLinks,
+  formatWorkspaceRecordStateFile,
   formatWorkspaceOperationState,
   formatInstanceWorkspaceManifest,
   initialWorkspaceAutoSaveState,
@@ -56,6 +59,8 @@ import {
   parseWorkspacePackageLinks,
   parseWorkspacePackageLinksJson,
   parseWorkspacePackageManifestLinkPath,
+  parseWorkspaceRecordStateFile,
+  parseWorkspaceRecordStateFileJson,
   parseWorkspaceOperationId,
   parseWorkspaceOperationStateJson,
   workspaceOperationBootstrapAllowed,
@@ -67,6 +72,8 @@ import {
   workspaceOperationInputDisplay,
   workspaceOperationMode,
   workspaceOperationRequiredCapability,
+  type WorkspaceControlPlaneRecordStateFile,
+  type WorkspacePackageAppRecordStateFile,
 } from "./index.ts";
 
 describe("instance workspace manifest", () => {
@@ -291,6 +298,182 @@ describe("instance workspace manifest", () => {
     );
     expect(() => normalizeInstanceWorkspaceTargetUrl("file:///tmp/archive")).toThrow(
       "Formless instance workspace target URL is invalid: file:///tmp/archive",
+    );
+  });
+});
+
+describe("workspace record state contracts", () => {
+  it("declares package app and control-plane schema provenance fields", () => {
+    const packageAppState = {
+      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+      version: WORKSPACE_RECORD_STATE_FILE_VERSION,
+      storageIdentity: "app:site",
+      schemaKey: "site",
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: 7,
+      schemaProvenance: {
+        kind: "package-app",
+        packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: `sha256:${"1".repeat(64)}`,
+      },
+      records: [],
+    } satisfies WorkspacePackageAppRecordStateFile;
+    const controlPlaneState = {
+      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+      version: WORKSPACE_RECORD_STATE_FILE_VERSION,
+      storageIdentity: "instance:control-plane",
+      schemaKey: "instance-control-plane",
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: 7,
+      schemaProvenance: {
+        kind: "instance-control-plane",
+        sourceSchemaHash: `sha256:${"2".repeat(64)}`,
+      },
+      records: [],
+    } satisfies WorkspaceControlPlaneRecordStateFile;
+
+    expect(packageAppState.schemaProvenance).toEqual({
+      kind: "package-app",
+      packageAppKey: "site",
+      packageRevision: 1,
+      sourceSchemaHash: `sha256:${"1".repeat(64)}`,
+    });
+    expect(controlPlaneState.schemaProvenance).toEqual({
+      kind: "instance-control-plane",
+      sourceSchemaHash: `sha256:${"2".repeat(64)}`,
+    });
+  });
+
+  it("parses and formats package app record state without full App schema bodies", () => {
+    const state = workspacePackageAppRecordState();
+    const formatted = formatWorkspaceRecordStateFile({
+      ...state,
+      records: [
+        workspaceRecord("task-2", "task", "2026-06-18T00:00:02.000Z", {
+          done: true,
+          title: "Second",
+        }),
+        workspaceRecord("task-1", "task", "2026-06-18T00:00:01.000Z", {
+          title: "First",
+          done: false,
+        }),
+      ],
+    });
+
+    expect(formatted).toBe(`${JSON.stringify(JSON.parse(formatted), null, 2)}\n`);
+    expect(JSON.parse(formatted)).not.toHaveProperty("schema");
+    expect(JSON.parse(formatted)).toMatchObject({
+      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+      version: WORKSPACE_RECORD_STATE_FILE_VERSION,
+      storageIdentity: "app:tasks",
+      schemaKey: "tasks",
+      schemaProvenance: {
+        kind: "package-app",
+        packageAppKey: "tasks",
+        packageRevision: 7,
+        sourceSchemaHash: `sha256:${"a".repeat(64)}`,
+      },
+      records: [
+        {
+          id: "task-1",
+          values: { done: false, title: "First" },
+        },
+        {
+          id: "task-2",
+          values: { done: true, title: "Second" },
+        },
+      ],
+    });
+    expect(
+      parseWorkspaceRecordStateFileJson(formatted, {
+        context: "state/apps/tasks.json",
+        expected: {
+          schemaKey: "tasks",
+          schemaProvenanceKind: "package-app",
+          storageIdentity: "app:tasks",
+        },
+      }),
+    ).toEqual(JSON.parse(formatted));
+  });
+
+  it("parses control-plane record state with deterministic provenance", () => {
+    const state = workspaceControlPlaneRecordState();
+
+    expect(
+      parseWorkspaceRecordStateFile(state, {
+        context: "state/instance.json",
+        expected: {
+          schemaKey: "instance-control-plane",
+          schemaProvenanceKind: "instance-control-plane",
+          storageIdentity: "instance:control-plane",
+        },
+      }),
+    ).toEqual(state);
+  });
+
+  it("rejects embedded schemas and invalid record state provenance", () => {
+    expect(() =>
+      parseWorkspaceRecordStateFile({
+        ...workspacePackageAppRecordState(),
+        schema: { entities: {} },
+      }),
+    ).toThrow('Workspace record state file has unsupported key "schema".');
+
+    expect(() =>
+      parseWorkspaceRecordStateFile({
+        ...workspacePackageAppRecordState(),
+        schemaProvenance: {
+          kind: "package-app",
+          packageAppKey: "tasks",
+          packageRevision: 0,
+          sourceSchemaHash: `sha256:${"a".repeat(64)}`,
+        },
+      }),
+    ).toThrow(
+      "Workspace record state file schemaProvenance packageRevision must be a positive integer.",
+    );
+
+    expect(() =>
+      parseWorkspaceRecordStateFile({
+        ...workspaceControlPlaneRecordState(),
+        storageIdentity: "app:instance",
+      }),
+    ).toThrow('Workspace record state file storageIdentity must be "instance:control-plane".');
+
+    expect(() =>
+      parseWorkspaceRecordStateFile({
+        ...workspacePackageAppRecordState(),
+        records: [
+          {
+            id: "task-1",
+            entity: "task",
+            values: { nested: { unsupported: true } },
+            createdAt: "2026-06-18T00:00:01.000Z",
+            updatedAt: "2026-06-18T00:00:01.000Z",
+          },
+        ],
+      }),
+    ).toThrow(
+      'Workspace record state file records[0] values field "nested" must be a scalar value.',
+    );
+  });
+
+  it("rejects mismatched expected record state fields", () => {
+    expect(() =>
+      parseWorkspaceRecordStateFile(workspacePackageAppRecordState(), {
+        expected: { storageIdentity: "app:crm" },
+      }),
+    ).toThrow('Workspace record state file storageIdentity must be "app:crm".');
+
+    expect(() =>
+      parseWorkspaceRecordStateFile(workspacePackageAppRecordState(), {
+        expected: { schemaProvenanceKind: "instance-control-plane" },
+      }),
+    ).toThrow(
+      'Workspace record state file schemaProvenance.kind must be "instance-control-plane".',
     );
   });
 });
@@ -901,6 +1084,63 @@ function layoutManifestSource(): Record<string, unknown> {
       stateRoot: ".formless/local",
       secretStateRoot: ".formless",
     },
+  };
+}
+
+function workspacePackageAppRecordState(): WorkspacePackageAppRecordStateFile {
+  return {
+    kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+    version: WORKSPACE_RECORD_STATE_FILE_VERSION,
+    storageIdentity: "app:tasks",
+    schemaKey: "tasks",
+    exportedAt: "2026-06-18T00:00:00.000Z",
+    schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+    sourceCursor: 7,
+    schemaProvenance: {
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: 7,
+      sourceSchemaHash: `sha256:${"a".repeat(64)}`,
+    },
+    records: [],
+  };
+}
+
+function workspaceControlPlaneRecordState(): WorkspaceControlPlaneRecordStateFile {
+  return {
+    kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+    version: WORKSPACE_RECORD_STATE_FILE_VERSION,
+    storageIdentity: "instance:control-plane",
+    schemaKey: "instance-control-plane",
+    exportedAt: "2026-06-18T00:00:00.000Z",
+    schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+    sourceCursor: 11,
+    schemaProvenance: {
+      kind: "instance-control-plane",
+      sourceSchemaHash: `sha256:${"b".repeat(64)}`,
+    },
+    records: [
+      workspaceRecord("install-site", "instance:app-install", "2026-06-18T00:00:02.000Z", {
+        installId: "site",
+        label: "Site",
+        packageAppKey: "site",
+      }),
+    ],
+  };
+}
+
+function workspaceRecord(
+  id: string,
+  entity: string,
+  createdAt: string,
+  values: Record<string, string | boolean | number>,
+) {
+  return {
+    id,
+    entity,
+    values,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 

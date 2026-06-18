@@ -16,6 +16,7 @@ import {
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneAppRouteId,
   instanceControlPlaneDefaultRouteAccess,
+  instanceControlPlaneSchemaProvenance,
   type InstanceControlPlaneRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
@@ -61,6 +62,7 @@ import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   createRecordSetForActionOutcome,
   ensureStorageTables,
+  ActiveSchemaRefreshBlockedError,
   getActionResponseById,
   getBootstrapRecords,
   getStoredRecord,
@@ -105,6 +107,9 @@ function instanceControlPlaneSourceForEnv(env: LaunchFixtureStartupEnv): Storage
     schema: instanceControlPlaneSourceSchema,
     records: launchFixtureControlPlaneRecordsForEnv(env),
     changeMutationPrefix: "seed-instance-control-plane",
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    schemaProvenance: instanceControlPlaneSchemaProvenance,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   };
 }
 
@@ -248,6 +253,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 
     return jsonResponse(result.body, result.status, result.headers);
   } catch (error) {
+    if (error instanceof ActiveSchemaRefreshBlockedError) {
+      return jsonResponse({ error: error.message, blocker: error.blocker }, 409);
+    }
+
     if (error instanceof BadRequestError) {
       return jsonResponse({ error: error.message }, 400);
     }

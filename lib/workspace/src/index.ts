@@ -4,3 +4,4 @@
 export * from "./types.ts";
 export * from "./manifest.ts";
 export * from "./operation-state.ts";
+export * from "./record-state.ts";

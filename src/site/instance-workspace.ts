@@ -54,11 +54,13 @@ import {
   type MediaAsset,
 } from "@dpeek/formless-media";
 import { packageAppFactsForKey, type AppInstall } from "@dpeek/formless-installed-apps";
+import type { AppSchema } from "@dpeek/formless-schema";
 import {
   bundledAppPackageManifests,
   findResolvedAppPackage,
   type AppPackageResolver,
 } from "../shared/app-packages.ts";
+import { findWorkerSchemaAppDefinition } from "../worker/schema-apps.ts";
 import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
@@ -104,6 +106,7 @@ import {
   type InstanceWorkspaceDomainIntent as FormlessInstanceWorkspaceDomainIntent,
   type InstanceWorkspaceManifest as FormlessInstanceWorkspaceManifest,
   type InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget,
+  type WorkspacePackageAppSchemaProvenance,
 } from "@dpeek/formless-workspace";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
@@ -1108,7 +1111,7 @@ export async function pullFormlessInstanceWorkspace(
       workspaceRoot,
       manifest,
       localControlPlane,
-      activePackages.resolver,
+      activePackages,
     );
     const syncPlan = createWorkspaceSyncPlan({
       domainDesiredDrift,
@@ -1171,6 +1174,7 @@ export async function pullFormlessInstanceWorkspace(
 
     const appSnapshots = pulledInstanceArchive.archive.apps.map((app) => ({
       installId: app.app.installId,
+      schemaProvenance: workspaceSchemaProvenanceForAppArchive(app),
       snapshot: appStorageSnapshotFromArchive(app),
     }));
 
@@ -1268,7 +1272,7 @@ export async function checkFormlessInstanceWorkspace(
       workspaceRoot,
       manifest,
       localControlPlane,
-      activePackages.resolver,
+      activePackages,
     );
 
     return {
@@ -1415,11 +1419,11 @@ export async function saveLocalFormlessWorkspace(
 
     if (input.check) {
       const stalePaths = await staleSavedWorkspaceSourcePaths({
+        activePackages,
         exported,
         manifest,
         manifestPath,
         nextManifest,
-        packageResolver: activePackages.resolver,
         sourceControlPlane,
         workspaceRoot,
       });
@@ -1522,7 +1526,7 @@ export async function pushFormlessInstanceWorkspace(
       workspaceRoot,
       planned.manifest,
       localControlPlane,
-      activePackages.resolver,
+      activePackages,
     );
     const source = await writeComposedWorkspacePushArchive({
       archiveRoot: composedArchiveRoot,
@@ -1941,10 +1945,10 @@ export async function runFormlessInstanceWorkspaceDev(
 
   if (controlPlane !== undefined) {
     await readRequiredWorkspaceAppState({
+      activePackages,
       controlPlane,
       manifest,
       operation: "local dev",
-      packageResolver: activePackages.resolver,
       workspaceRoot,
     });
   }
@@ -3345,6 +3349,40 @@ async function createActiveWorkspaceAppPackages(
   });
 }
 
+function workspaceSourceSchemaForPackageApp(input: {
+  activePackages: ActiveWorkspaceAppPackages;
+  packageAppKey: string;
+}): AppSchema | undefined {
+  const linked = input.activePackages.linkedPackages.find(
+    (appPackage) => appPackage.appPackage.packageAppKey === input.packageAppKey,
+  );
+
+  if (linked) {
+    return linked.sourceSchema;
+  }
+
+  const packageApp = findResolvedAppPackage(input.packageAppKey, input.activePackages.resolver);
+  const bundled = packageApp
+    ? findWorkerSchemaAppDefinition(packageApp.sourceSchemaKey)
+    : undefined;
+
+  return bundled?.sourceSchema;
+}
+
+function workspaceSchemaProvenanceForPackageApp(
+  packageApp: Pick<
+    NonNullable<ReturnType<AppPackageResolver["findPackage"]>>,
+    "packageAppKey" | "packageRevision" | "sourceSchemaHash"
+  >,
+): WorkspacePackageAppSchemaProvenance {
+  return {
+    kind: "package-app",
+    packageAppKey: packageApp.packageAppKey,
+    packageRevision: packageApp.packageRevision,
+    sourceSchemaHash: packageApp.sourceSchemaHash,
+  };
+}
+
 function runtimeWorkspaceAppPackagesEnvValue(
   activePackages: ActiveWorkspaceAppPackages,
 ): string | undefined {
@@ -3462,7 +3500,7 @@ async function workspaceLocalRestoreArchiveSource(input: {
     input.workspaceRoot,
     input.manifest,
     controlPlane,
-    input.activePackages.resolver,
+    input.activePackages,
   );
   const write = await writeComposedWorkspacePushArchive({
     archiveRoot: path.join(input.tempRoot, "archive"),
@@ -3550,13 +3588,13 @@ async function readCompleteWorkspaceAppState(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
   controlPlane: WorkspaceControlPlaneRecords,
-  packageResolver: AppPackageResolver,
+  activePackages: ActiveWorkspaceAppPackages,
 ): Promise<WorkspaceAppStateArchive[]> {
   return readRequiredWorkspaceAppState({
+    activePackages,
     controlPlane,
     manifest,
     operation: "local dev",
-    packageResolver,
     workspaceRoot,
   });
 }
@@ -3565,15 +3603,15 @@ async function readWorkspaceAppStateMapForCheck(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
   controlPlane: WorkspaceControlPlaneRecords | undefined,
-  packageResolver: AppPackageResolver,
+  activePackages: ActiveWorkspaceAppPackages,
 ): Promise<Map<string, WorkspaceAppStateArchive>> {
   const appState = new Map<string, WorkspaceAppStateArchive>();
 
   for (const app of controlPlaneAppInstallRecords(controlPlane)) {
     const state = await readWorkspaceAppStateForCheck({
+      activePackages,
       install: app,
       manifest,
-      packageResolver,
       workspaceRoot,
     });
 
@@ -3586,14 +3624,27 @@ async function readWorkspaceAppStateMapForCheck(
 }
 
 async function readWorkspaceAppStateForCheck(input: {
+  activePackages: ActiveWorkspaceAppPackages;
   install: WorkspaceControlPlaneAppInstallRecord;
   manifest: FormlessInstanceWorkspaceManifest;
-  packageResolver: AppPackageResolver;
   workspaceRoot: string;
 }): Promise<WorkspaceAppStateArchive | undefined> {
+  const packageApp = findResolvedAppPackage(
+    input.install.packageAppKey,
+    input.activePackages.resolver,
+  );
+  const sourceSchema = workspaceSourceSchemaForPackageApp({
+    activePackages: input.activePackages,
+    packageAppKey: input.install.packageAppKey,
+  });
+  const schemaProvenance =
+    packageApp === undefined ? undefined : workspaceSchemaProvenanceForPackageApp(packageApp);
   const snapshot = await readInstanceWorkspaceAppStorageSnapshot({
     installId: input.install.installId,
     manifest: input.manifest,
+    schemaKey: packageApp?.sourceSchemaKey,
+    schemaProvenance,
+    sourceSchema,
     workspaceRoot: input.workspaceRoot,
   });
 
@@ -3602,9 +3653,9 @@ async function readWorkspaceAppStateForCheck(input: {
   }
 
   return workspaceAppStateArchiveFromSnapshot({
+    activePackages: input.activePackages,
     install: input.install,
     manifest: input.manifest,
-    packageResolver: input.packageResolver,
     snapshot,
     workspaceRoot: input.workspaceRoot,
   });
@@ -3816,11 +3867,11 @@ function controlPlaneRecordEntity(record: StoredRecord): string | undefined {
 }
 
 async function staleSavedWorkspaceSourcePaths(input: {
+  activePackages: ActiveWorkspaceAppPackages;
   exported: WorkspaceInstanceArchiveDirectory;
   manifest: FormlessInstanceWorkspaceManifest;
   manifestPath: string;
   nextManifest: FormlessInstanceWorkspaceManifest;
-  packageResolver: AppPackageResolver;
   sourceControlPlane: WorkspaceControlPlaneRecords | undefined;
   workspaceRoot: string;
 }): Promise<string[]> {
@@ -3838,8 +3889,8 @@ async function staleSavedWorkspaceSourcePaths(input: {
   });
 
   if (
-    comparableControlPlaneIntentRecordsJson(localControlPlane, input.packageResolver) !==
-    comparableControlPlaneIntentRecordsJson(input.sourceControlPlane, input.packageResolver)
+    comparableControlPlaneIntentRecordsJson(localControlPlane, input.activePackages.resolver) !==
+    comparableControlPlaneIntentRecordsJson(input.sourceControlPlane, input.activePackages.resolver)
   ) {
     stalePaths.add(instanceWorkspaceInstanceStateRelativePath(input.nextManifest));
   }
@@ -3861,9 +3912,9 @@ async function staleSavedWorkspaceSourcePaths(input: {
       install === undefined
         ? undefined
         : await readWorkspaceAppStateForCheck({
+            activePackages: input.activePackages,
             install,
             manifest: input.nextManifest,
-            packageResolver: input.packageResolver,
             workspaceRoot: input.workspaceRoot,
           });
 
@@ -3892,6 +3943,7 @@ async function writeSavedWorkspaceSource(input: {
     manifest: input.nextManifest,
     snapshots: input.exported.archive.apps.map((app) => ({
       installId: app.app.installId,
+      schemaProvenance: workspaceSchemaProvenanceForAppArchive(app),
       snapshot: appStorageSnapshotFromArchive(app),
     })),
     workspaceRoot: input.workspaceRoot,
@@ -3942,9 +3994,9 @@ function workspaceAppStateArchiveFromInstanceExport(
 }
 
 async function workspaceAppStateArchiveFromSnapshot(input: {
+  activePackages: ActiveWorkspaceAppPackages;
   install: WorkspaceControlPlaneAppInstallRecord;
   manifest: FormlessInstanceWorkspaceManifest;
-  packageResolver: AppPackageResolver;
   snapshot: StorageSnapshot;
   workspaceRoot: string;
 }): Promise<WorkspaceAppStateArchive> {
@@ -3968,11 +4020,14 @@ async function workspaceAppStateArchiveFromSnapshot(input: {
 }
 
 function appArchiveFromWorkspaceSnapshot(input: {
+  activePackages: ActiveWorkspaceAppPackages;
   install: WorkspaceControlPlaneAppInstallRecord;
-  packageResolver: AppPackageResolver;
   snapshot: StorageSnapshot;
 }): AppArchive {
-  const packageApp = findResolvedAppPackage(input.install.packageAppKey, input.packageResolver);
+  const packageApp = findResolvedAppPackage(
+    input.install.packageAppKey,
+    input.activePackages.resolver,
+  );
   const packageRevision = input.install.packageRevision ?? packageApp?.packageRevision;
   const sourceSchemaHash = input.install.sourceSchemaHash ?? packageApp?.sourceSchemaHash;
 
@@ -4058,6 +4113,17 @@ function appStorageSnapshotFromArchive(app: AppArchive): StorageSnapshot {
   }
 
   return app.data;
+}
+
+function workspaceSchemaProvenanceForAppArchive(
+  app: AppArchive,
+): WorkspacePackageAppSchemaProvenance {
+  return {
+    kind: "package-app",
+    packageAppKey: app.app.packageAppKey,
+    packageRevision: app.app.packageRevision,
+    sourceSchemaHash: app.app.sourceSchemaHash,
+  };
 }
 
 function pulledAppStateResults(input: {
@@ -4308,7 +4374,8 @@ function workspaceAppStateMatches(
   }
 
   return (
-    comparableAppRecordsJson(actual.appArchive) === comparableAppRecordsJson(expected.appArchive) &&
+    comparableAppRecordStateJson(actual.appArchive) ===
+      comparableAppRecordStateJson(expected.appArchive) &&
     comparableAppMediaJson(actual, actual.appArchive) ===
       comparableAppMediaJson(expected, expected.appArchive)
   );
@@ -4384,7 +4451,10 @@ function createWorkspaceSyncPlan(input: {
       continue;
     }
 
-    if (comparableAppRecordsJson(localState.appArchive) !== comparableAppRecordsJson(remoteApp)) {
+    if (
+      comparableAppRecordStateJson(localState.appArchive) !==
+      comparableAppRecordStateJson(remoteApp)
+    ) {
       changedRecords.add(remoteApp.app.installId);
       changedStatePaths.add(statePath);
     }
@@ -4587,7 +4657,7 @@ function comparableWorkspaceSyncApp(
     mediaJson: comparableAppMediaJson(archive, archive.appArchive),
     missingState: false,
     packageAppKey: archive.appArchive.app.packageAppKey,
-    recordsJson: comparableAppRecordsJson(archive.appArchive),
+    recordsJson: comparableAppRecordStateJson(archive.appArchive),
   };
 }
 
@@ -4713,12 +4783,14 @@ function controlPlaneRecordKey(record: Pick<StoredRecord, "entity" | "id">) {
   return `${entityName}:${record.id}`;
 }
 
-function comparableAppRecordsJson(archive: AppArchive): string {
+function comparableAppRecordStateJson(archive: AppArchive): string {
   const data = normalizeGeneratedArchiveTimestamps(archive).data;
 
   return JSON.stringify(
     stableValue({
-      ...data,
+      schemaKey: data.schemaKey,
+      schemaProvenance: workspaceSchemaProvenanceForAppArchive(archive),
+      storageIdentity: data.storageIdentity,
       records: [...data.records].sort(compareRecordsByEntityAndId),
     }),
   );
@@ -4939,6 +5011,7 @@ async function writeInitialInstanceWorkspaceState(input: {
       manifest: input.manifest,
       snapshots: archiveApps(input.archive).map((app) => ({
         installId: app.app.installId,
+        schemaProvenance: workspaceSchemaProvenanceForAppArchive(app),
         snapshot: appStorageSnapshotFromArchive(app),
       })),
       workspaceRoot: input.workspaceRoot,
@@ -5927,22 +6000,22 @@ async function readWorkspaceAppStateForPush(
   workspaceRoot: string,
   manifest: FormlessInstanceWorkspaceManifest,
   controlPlane: WorkspaceControlPlaneRecords | undefined,
-  packageResolver: AppPackageResolver,
+  activePackages: ActiveWorkspaceAppPackages,
 ): Promise<WorkspaceAppStateArchive[]> {
   return readRequiredWorkspaceAppState({
+    activePackages,
     controlPlane,
     manifest,
     operation: "push",
-    packageResolver,
     workspaceRoot,
   });
 }
 
 async function readRequiredWorkspaceAppState(input: {
+  activePackages: ActiveWorkspaceAppPackages;
   controlPlane: WorkspaceControlPlaneRecords | undefined;
   manifest: FormlessInstanceWorkspaceManifest;
   operation: "local dev" | "push";
-  packageResolver: AppPackageResolver;
   workspaceRoot: string;
 }): Promise<WorkspaceAppStateArchive[]> {
   const appState: WorkspaceAppStateArchive[] = [];
@@ -5950,16 +6023,16 @@ async function readRequiredWorkspaceAppState(input: {
   for (const app of controlPlaneAppInstallRecords(input.controlPlane)) {
     const statePath = instanceWorkspaceAppStateRelativePath(input.manifest, app.installId);
     const state = await readWorkspaceAppStateForCheck({
+      activePackages: input.activePackages,
       install: app,
       manifest: input.manifest,
-      packageResolver: input.packageResolver,
       workspaceRoot: input.workspaceRoot,
     });
 
     validateRequiredWorkspaceAppState({
       install: app,
       operation: input.operation,
-      packageResolver: input.packageResolver,
+      packageResolver: input.activePackages.resolver,
       state,
       statePath,
     });

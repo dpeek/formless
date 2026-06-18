@@ -111,10 +111,17 @@ describe("authority", () => {
     expect(sync.headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
       packageFacts?.sourceSchemaHash,
     );
+    expect(bootstrapBody.schemaProvenance).toEqual({
+      kind: "package-app",
+      packageAppKey: "tasks",
+      packageRevision: packageFacts?.packageRevision,
+      sourceSchemaHash: packageFacts?.sourceSchemaHash,
+    });
     expect(syncBody).toMatchObject({
       changes: [],
       cursor: bootstrapBody.cursor,
       schema: appSchema,
+      schemaProvenance: bootstrapBody.schemaProvenance,
       schemaUpdatedAt: bootstrapBody.schemaUpdatedAt,
     });
   });

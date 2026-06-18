@@ -20,15 +20,22 @@ import {
   type ResolvedAppPackage,
   type SourceSchemaHash,
 } from "@dpeek/formless-installed-apps";
-import { parseStorageSnapshot } from "@dpeek/formless-storage";
+import {
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  parseStorageSnapshot,
+} from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   WORKSPACE_AUTO_SAVE_STATE_FILE,
   WORKSPACE_PACKAGE_LINKS_FILE,
+  WORKSPACE_RECORD_STATE_FILE_KIND,
+  WORKSPACE_RECORD_STATE_FILE_VERSION,
   WORKSPACE_OPERATION_STATE_ROOT,
   defaultWorkspacePackageLinks,
   formatWorkspaceAutoSaveState,
+  formatWorkspaceRecordStateFile,
   formatWorkspaceOperationState,
   initialWorkspaceOperationState,
   nextWorkspaceOperationState,
@@ -36,12 +43,15 @@ import {
   parseInstanceWorkspaceRelativePath,
   parseInstanceWorkspaceResourceSlug,
   parseWorkspacePackageLinksJson,
+  parseWorkspaceRecordStateFile,
   parseWorkspaceOperationStateJson,
   workspaceOperationStateFileName,
 } from "./index.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneSchema,
+  instanceControlPlaneSchemaProvenance,
   reviewableInstanceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-instance-control-plane";
 import type {
@@ -52,6 +62,9 @@ import type {
   WorkspacePackageLinks,
   WorkspaceAutoSaveState,
   WorkspaceOperationState,
+  WorkspacePackageAppSchemaProvenance,
+  WorkspaceRecordStateFile,
+  WorkspaceSchemaProvenance,
 } from "./index.ts";
 
 export * from "./index.ts";
@@ -249,7 +262,7 @@ export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
   const filePath = instanceWorkspaceInstanceStatePath(input.workspaceRoot, input.manifest);
 
   try {
-    return parseInstanceWorkspaceControlPlaneStorageSnapshot(
+    return await parseInstanceWorkspaceControlPlaneStorageSnapshot(
       await readFile(filePath, "utf8"),
       `Workspace instance state ${instanceWorkspaceInstanceStateRelativePath(input.manifest)}`,
     );
@@ -281,14 +294,20 @@ export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
     context: input.validationContext,
     sourceLabel: input.sourceLabel,
   });
+  const state = await workspaceRecordStateFileFromStorageSnapshot(snapshot, {
+    schemaProvenance: instanceControlPlaneSchemaProvenance,
+  });
 
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, formatInstanceWorkspaceStorageSnapshot(snapshot));
+  await writeFile(filePath, formatWorkspaceRecordStateFile(state));
 }
 
 export async function readInstanceWorkspaceAppStorageSnapshot(input: {
   installId: string;
   manifest: InstanceWorkspaceManifest;
+  schemaKey?: string;
+  schemaProvenance?: WorkspacePackageAppSchemaProvenance;
+  sourceSchema?: AppSchema;
   workspaceRoot: string;
 }): Promise<StorageSnapshot | undefined> {
   const filePath = instanceWorkspaceAppStatePath(
@@ -298,10 +317,15 @@ export async function readInstanceWorkspaceAppStorageSnapshot(input: {
   );
 
   try {
-    return parseInstanceWorkspaceStorageSnapshotFile(
+    return parseInstanceWorkspaceAppStorageStateFile(
       await readFile(filePath, "utf8"),
       `Workspace app state ${instanceWorkspaceAppStateRelativePath(input.manifest, input.installId)}`,
-      { storageIdentity: `app:${input.installId}` },
+      {
+        schemaKey: input.schemaKey,
+        schemaProvenance: input.schemaProvenance,
+        sourceSchema: input.sourceSchema,
+        storageIdentity: `app:${input.installId}`,
+      },
     );
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
@@ -315,11 +339,15 @@ export async function readInstanceWorkspaceAppStorageSnapshot(input: {
 export async function writeInstanceWorkspaceAppStorageSnapshot(input: {
   installId: string;
   manifest: InstanceWorkspaceManifest;
+  schemaProvenance: WorkspacePackageAppSchemaProvenance;
   snapshot: StorageSnapshot;
   workspaceRoot: string;
 }): Promise<void> {
   const snapshot = parseStorageSnapshot(input.snapshot, {
     storageIdentity: `app:${parseWorkspaceStateInstallId(input.installId)}`,
+  });
+  const state = await workspaceRecordStateFileFromStorageSnapshot(snapshot, {
+    schemaProvenance: input.schemaProvenance,
   });
   const filePath = instanceWorkspaceAppStatePath(
     input.workspaceRoot,
@@ -328,12 +356,16 @@ export async function writeInstanceWorkspaceAppStorageSnapshot(input: {
   );
 
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, formatInstanceWorkspaceStorageSnapshot(snapshot));
+  await writeFile(filePath, formatWorkspaceRecordStateFile(state));
 }
 
 export async function replaceInstanceWorkspaceAppStorageSnapshots(input: {
   manifest: InstanceWorkspaceManifest;
-  snapshots: readonly { installId: string; snapshot: StorageSnapshot }[];
+  snapshots: readonly {
+    installId: string;
+    schemaProvenance: WorkspacePackageAppSchemaProvenance;
+    snapshot: StorageSnapshot;
+  }[];
   workspaceRoot: string;
 }): Promise<void> {
   const appStateRoot = instanceWorkspaceAppStateRootPath(input.workspaceRoot, input.manifest);
@@ -344,6 +376,7 @@ export async function replaceInstanceWorkspaceAppStorageSnapshots(input: {
     await writeInstanceWorkspaceAppStorageSnapshot({
       installId: app.installId,
       manifest: input.manifest,
+      schemaProvenance: app.schemaProvenance,
       snapshot: app.snapshot,
       workspaceRoot: input.workspaceRoot,
     });
@@ -745,25 +778,87 @@ export async function writeWorkspaceOperationState(
   );
 }
 
-function parseInstanceWorkspaceControlPlaneStorageSnapshot(
+async function parseInstanceWorkspaceControlPlaneStorageSnapshot(
   contents: string,
   context: string,
-): StorageSnapshot {
+): Promise<StorageSnapshot> {
+  const parsed = parseWorkspaceStateJson(contents, context);
+
+  if (isWorkspaceRecordStateFile(parsed)) {
+    const state = parseWorkspaceRecordStateFile(parsed, {
+      context,
+      expected: {
+        schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+        schemaProvenanceKind: "instance-control-plane",
+        storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      },
+    });
+    const expectedProvenance: WorkspaceSchemaProvenance = instanceControlPlaneSchemaProvenance;
+
+    if (!workspaceSchemaProvenanceEqual(state.schemaProvenance, expectedProvenance)) {
+      throw new Error(
+        `${context} schemaProvenance does not match resolved instance control-plane source.`,
+      );
+    }
+
+    return reviewableControlPlaneStorageSnapshot(
+      storageSnapshotFromWorkspaceRecordState(state, instanceControlPlaneSchema),
+    );
+  }
+
   return reviewableControlPlaneStorageSnapshot(
-    parseInstanceWorkspaceStorageSnapshotFile(contents, context, {
+    parseInstanceWorkspaceStorageSnapshotValue(parsed, {
       schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
       storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     }),
   );
 }
 
-function parseInstanceWorkspaceStorageSnapshotFile(
+function parseInstanceWorkspaceAppStorageStateFile(
   contents: string,
   context: string,
-  expected?: { schemaKey?: string; storageIdentity?: string },
+  expected: {
+    schemaKey?: string;
+    schemaProvenance?: WorkspacePackageAppSchemaProvenance;
+    sourceSchema?: AppSchema;
+    storageIdentity: string;
+  },
 ): StorageSnapshot {
+  const parsed = parseWorkspaceStateJson(contents, context);
+
+  if (!isWorkspaceRecordStateFile(parsed)) {
+    return parseInstanceWorkspaceStorageSnapshotValue(parsed, {
+      schemaKey: expected.schemaKey,
+      storageIdentity: expected.storageIdentity,
+    });
+  }
+
+  if (expected.sourceSchema === undefined) {
+    throw new Error(`${context} requires a resolved source schema.`);
+  }
+
+  const state = parseWorkspaceRecordStateFile(parsed, {
+    context,
+    expected: {
+      schemaKey: expected.schemaKey,
+      schemaProvenanceKind: "package-app",
+      storageIdentity: expected.storageIdentity,
+    },
+  });
+
+  if (
+    expected.schemaProvenance !== undefined &&
+    !workspaceSchemaProvenanceEqual(state.schemaProvenance, expected.schemaProvenance)
+  ) {
+    throw new Error(`${context} schemaProvenance does not match resolved package source.`);
+  }
+
+  return storageSnapshotFromWorkspaceRecordState(state, expected.sourceSchema);
+}
+
+function parseWorkspaceStateJson(contents: string, context: string): unknown {
   try {
-    return parseStorageSnapshot(JSON.parse(contents) as unknown, expected);
+    return JSON.parse(contents) as unknown;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`${context} must be valid JSON.`);
@@ -771,6 +866,13 @@ function parseInstanceWorkspaceStorageSnapshotFile(
 
     throw error;
   }
+}
+
+function parseInstanceWorkspaceStorageSnapshotValue(
+  value: unknown,
+  expected?: { schemaKey?: string; storageIdentity?: string },
+): StorageSnapshot {
+  return parseStorageSnapshot(value, expected);
 }
 
 function reviewableControlPlaneStorageSnapshot(
@@ -789,21 +891,70 @@ function reviewableControlPlaneStorageSnapshot(
   });
 }
 
-function formatInstanceWorkspaceStorageSnapshot(snapshot: StorageSnapshot): string {
+async function workspaceRecordStateFileFromStorageSnapshot(
+  snapshot: StorageSnapshot,
+  input: { schemaProvenance: WorkspaceSchemaProvenance },
+): Promise<WorkspaceRecordStateFile> {
   const parsed = parseStorageSnapshot(snapshot);
-  const formatted: StorageSnapshot = {
-    kind: parsed.kind,
-    version: parsed.version,
+  const formatted = {
+    kind: WORKSPACE_RECORD_STATE_FILE_KIND,
+    version: WORKSPACE_RECORD_STATE_FILE_VERSION,
     storageIdentity: parsed.storageIdentity,
     schemaKey: parsed.schemaKey,
     exportedAt: parsed.exportedAt,
     schemaUpdatedAt: parsed.schemaUpdatedAt,
     sourceCursor: parsed.sourceCursor,
-    schema: stableJsonValue(parsed.schema) as StorageSnapshot["schema"],
+    schemaProvenance: input.schemaProvenance,
     records: parsed.records.map(canonicalStoredRecord).sort(compareStoredRecords),
   };
 
-  return `${JSON.stringify(formatted, null, 2)}\n`;
+  return parseWorkspaceRecordStateFile(formatted);
+}
+
+function storageSnapshotFromWorkspaceRecordState(
+  state: WorkspaceRecordStateFile,
+  schema: AppSchema,
+): StorageSnapshot {
+  return parseStorageSnapshot({
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: state.storageIdentity,
+    schemaKey: state.schemaKey,
+    exportedAt: state.exportedAt,
+    schemaUpdatedAt: state.schemaUpdatedAt,
+    sourceCursor: state.sourceCursor,
+    schema,
+    records: state.records,
+  });
+}
+
+function workspaceSchemaProvenanceEqual(
+  left: WorkspaceSchemaProvenance,
+  right: WorkspaceSchemaProvenance,
+): boolean {
+  if (left.kind !== right.kind || left.sourceSchemaHash !== right.sourceSchemaHash) {
+    return false;
+  }
+
+  if (left.kind === "instance-control-plane") {
+    return true;
+  }
+
+  return (
+    right.kind === "package-app" &&
+    left.packageAppKey === right.packageAppKey &&
+    left.packageRevision === right.packageRevision
+  );
+}
+
+function isWorkspaceRecordStateFile(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "kind" in value &&
+    value.kind === WORKSPACE_RECORD_STATE_FILE_KIND
+  );
 }
 
 function canonicalStoredRecord(record: StoredRecord): StoredRecord {

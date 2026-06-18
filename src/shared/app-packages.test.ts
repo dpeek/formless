@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
+import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
+import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
+import rawTasksSourceSchema from "../../schema/apps/tasks/schema.json";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -9,7 +12,7 @@ import {
   listResolvedAppPackages,
   parseAppPackageManifest,
 } from "./app-packages.ts";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
+import { bundledSourceSchemaHashFixtures, computeSourceSchemaHash } from "./upgrade-migrations.ts";
 
 const privateSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
@@ -222,6 +225,25 @@ describe("app package manifests", () => {
       "crm",
       "private-labs",
     ]);
+  });
+
+  it("checks bundled package hashes against complete source schemas", async () => {
+    const packageSchemas: Record<string, unknown> = {
+      site: rawSiteSourceSchema,
+      tasks: rawTasksSourceSchema,
+      crm: rawCrmSourceSchema,
+    };
+    const expectedHashes: Record<string, string> = bundledSourceSchemaHashFixtures;
+
+    for (const manifest of bundledAppPackageManifests) {
+      const sourceSchema = packageSchemas[manifest.packageAppKey];
+
+      expect(sourceSchema, manifest.packageAppKey).toBeDefined();
+      const sourceSchemaHash = await computeSourceSchemaHash(sourceSchema);
+
+      expect(sourceSchemaHash, manifest.packageAppKey).toBe(manifest.sourceSchemaHash);
+      expect(sourceSchemaHash, manifest.packageAppKey).toBe(expectedHashes[manifest.packageAppKey]);
+    }
   });
 });
 

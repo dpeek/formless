@@ -34,6 +34,7 @@ const crmSourceSchemaHash =
 const privateSourceSchemaHash =
   "sha256:4444444444444444444444444444444444444444444444444444444444444444";
 
+type SourceSchemaHashFixture = ReturnType<typeof sourceSchemaHashFixture>;
 type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
@@ -493,6 +494,78 @@ describe("source schema hash contracts", () => {
     expect(isPackageAppRevision(1)).toBe(true);
     expect(isPackageAppRevision(0)).toBe(false);
   });
+
+  it("hashes the complete App schema object", async () => {
+    const baseHash = await computeSourceSchemaHash(sourceSchemaHashFixture());
+    const mutationCases: Array<[string, (schema: SourceSchemaHashFixture) => void]> = [
+      [
+        "view",
+        (schema) => {
+          schema.views.taskList.label = "Open Tasks";
+        },
+      ],
+      [
+        "table view",
+        (schema) => {
+          schema.tableViews.taskTable.columns[0]!.label = "Task title";
+        },
+      ],
+      [
+        "item view",
+        (schema) => {
+          schema.itemViews.taskItem.fields.done.commit = "field-commit";
+        },
+      ],
+      [
+        "screen",
+        (schema) => {
+          schema.screens.home.label = "Task Home";
+        },
+      ],
+      [
+        "query",
+        (schema) => {
+          schema.queries.taskDone.expression = {
+            kind: "where",
+            ref: { kind: "value", name: "done" },
+            op: "eq",
+            value: false,
+          };
+        },
+      ],
+      [
+        "read model",
+        (schema) => {
+          schema.readModels.computedValues.effortScore.expression.right.value = 3;
+        },
+      ],
+      [
+        "operation",
+        (schema) => {
+          schema.entities.task.operations.create.audit.input = "hash";
+        },
+      ],
+      [
+        "action",
+        (schema) => {
+          schema.entities.task.actions.clearCompletedTasks.label = "Remove completed";
+        },
+      ],
+      [
+        "runtime metadata",
+        (schema) => {
+          schema.runtime.controlPlane.entities.task.observedFields = ["done", "effort"];
+        },
+      ],
+    ];
+
+    for (const [label, mutate] of mutationCases) {
+      const changedSchema = sourceSchemaHashFixture();
+      mutate(changedSchema);
+
+      expect(await computeSourceSchemaHash(changedSchema), label).not.toBe(baseHash);
+    }
+  });
 });
 
 function expectSuccess(result: CreateAppInstallResult): CreateAppInstallSuccess {
@@ -633,5 +706,128 @@ function packageManifest(input: {
           ]
         : []),
     ],
+  };
+}
+
+function sourceSchemaHashFixture() {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true, label: "Title" },
+          done: { type: "boolean", required: true, label: "Done", default: false },
+          effort: { type: "number", required: true, label: "Effort", default: 1 },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+        actions: {
+          clearCompletedTasks: {
+            label: "Clear completed",
+            kind: "clear-completed",
+            target: { query: "taskDone" },
+          },
+        },
+        operations: {
+          create: {
+            label: "Create Task",
+            kind: "create",
+            scope: "collection",
+            input: {
+              fields: {
+                title: { field: "title", required: true },
+                done: { field: "done" },
+                effort: { field: "effort" },
+              },
+            },
+            effect: { type: "createRecord" },
+            output: { type: "create" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        },
+      },
+    },
+    queries: {
+      taskAll: { label: "Tasks", entity: "task", expression: { kind: "all" } },
+      taskDone: {
+        label: "Completed",
+        entity: "task",
+        expression: {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+      },
+    },
+    readModels: {
+      computedValues: {
+        effortScore: {
+          entity: "task",
+          type: "number",
+          expression: {
+            kind: "binary",
+            op: "multiply",
+            left: { kind: "field", field: "effort" },
+            right: { kind: "literal", value: 2 },
+          },
+        },
+      },
+      aggregates: {
+        doneTasks: { query: "taskDone", function: "count" },
+      },
+    },
+    itemViews: {
+      taskItem: {
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          done: { editor: "boolean", commit: "immediate" },
+        },
+      },
+    },
+    tableViews: {
+      taskTable: {
+        entity: "task",
+        columns: [{ type: "field", field: "title", label: "Title" }],
+      },
+    },
+    views: {
+      taskList: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }, { query: "taskDone", count: { type: "count" } }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskTable" },
+      },
+    },
+    screens: {
+      home: {
+        type: "workspace",
+        label: "Home",
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskList" }],
+        },
+      },
+    },
+    runtime: {
+      owner: "runtime",
+      builder: { editable: false },
+      controlPlane: {
+        entities: {
+          task: {
+            immutableFields: ["title"],
+            observedFields: ["done"],
+          },
+        },
+      },
+    },
   };
 }

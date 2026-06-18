@@ -8,6 +8,7 @@ import {
   deleteFormlessReplicaDatabases,
   mergeChanges,
   readCursor,
+  readSchemaProvenance,
   readSchemaUpdatedAt,
   saveBootstrapResponse,
   saveSchema,
@@ -117,7 +118,12 @@ export async function applySyncResponse(
   const schemaChanged = Boolean(response.schema && response.schemaUpdatedAt);
 
   if (response.schema && response.schemaUpdatedAt) {
-    await saveSchema(identity, response.schema, response.schemaUpdatedAt);
+    await saveSchema(
+      identity,
+      response.schema,
+      response.schemaUpdatedAt,
+      response.schemaProvenance,
+    );
     applySchemaSave(response.schema, response.schemaUpdatedAt, identity);
   }
 
@@ -137,7 +143,7 @@ export async function fetchActiveSchema(target: ClientAppTarget, fetcher: typeof
   const identity = appStorageIdentityForClientTarget(target);
   const response = await fetchJson<SchemaResponse>(fetcher, apiPath(identity, "schema"));
 
-  await saveSchema(identity, response.schema, response.updatedAt);
+  await saveSchema(identity, response.schema, response.updatedAt, response.schemaProvenance);
   applySchemaSave(response.schema, response.updatedAt, identity);
   notifySchemaChanged(identity);
 
@@ -163,7 +169,7 @@ export async function saveActiveSchema(
     },
   );
 
-  await saveSchema(identity, response.schema, response.updatedAt);
+  await saveSchema(identity, response.schema, response.updatedAt, response.schemaProvenance);
   applySchemaSave(response.schema, response.updatedAt, identity);
   notifySchemaChanged(identity);
   await enqueueLocalWorkspaceAutoSave(
@@ -574,9 +580,12 @@ async function addBrowserReplicaWriteHeaders(
   options: { activePackageResolver?: AppPackageResolver | undefined } = {},
 ) {
   const identity = appStorageIdentityForClientTarget(target);
-  const schemaUpdatedAt = await readSchemaUpdatedAt(identity);
+  const [schemaUpdatedAt, schemaProvenance] = await Promise.all([
+    readSchemaUpdatedAt(identity),
+    readSchemaProvenance(identity),
+  ]);
   const packageFacts =
-    identity.kind === "instanceControlPlane"
+    schemaProvenance || identity.kind === "instanceControlPlane"
       ? undefined
       : packageAppFactsForKey(
           identity.packageAppKey,
@@ -589,6 +598,17 @@ async function addBrowserReplicaWriteHeaders(
 
   if (schemaUpdatedAt) {
     headers.set(FORMLESS_CLIENT_SCHEMA_UPDATED_AT_HEADER, schemaUpdatedAt);
+  }
+
+  if (schemaProvenance?.kind === "package-app") {
+    headers.set(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER, String(schemaProvenance.packageRevision));
+    headers.set(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER, schemaProvenance.sourceSchemaHash);
+    return;
+  }
+
+  if (schemaProvenance?.kind === "instance-control-plane") {
+    headers.set(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER, schemaProvenance.sourceSchemaHash);
+    return;
   }
 
   if (packageFacts) {

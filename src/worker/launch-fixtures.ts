@@ -17,6 +17,7 @@ import {
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
+  instanceControlPlaneSchemaProvenance,
 } from "@dpeek/formless-instance-control-plane";
 import { bundledAppPackageResolver, type AppPackageResolver } from "../shared/app-packages.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
@@ -71,7 +72,10 @@ export function launchFixtureControlPlaneStorageSource(
   return {
     changeMutationPrefix: "seed-instance-control-plane",
     records: launchFixtureControlPlaneRecords(plan),
+    schemaKey: "instance-control-plane",
+    schemaProvenance: instanceControlPlaneSchemaProvenance,
     schema: parseAppSchema(instanceControlPlaneSchema),
+    storageIdentity: "instance:control-plane",
   };
 }
 
@@ -120,7 +124,15 @@ export function launchFixtureStorageSourceForApp(
   return {
     changeMutationPrefix: seed.seedChangeMutationPrefix,
     records: seed.seedRecords,
+    schemaKey: source.key,
+    schemaProvenance: {
+      kind: "package-app",
+      packageAppKey: appPlan.install.packageAppKey,
+      packageRevision: appPlan.install.packageRevision,
+      sourceSchemaHash: appPlan.install.sourceSchemaHash,
+    },
     schema: source.sourceSchema,
+    storageIdentity: `app:${appPlan.install.installId}`,
   };
 }
 

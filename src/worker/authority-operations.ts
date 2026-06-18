@@ -22,7 +22,7 @@ import type {
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";
+import type { SchemaActionActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -61,6 +61,8 @@ import {
   recordOperationInvocationRejected,
   type RecordConstraintValidator,
   type ApplyPackageAppMigrationsResponse,
+  type PackageAppSchemaProvenance,
+  type StoredSchema,
   type StorageSource,
   type WriteOutcome,
   writeActiveSchemaOutcome,
@@ -267,19 +269,19 @@ export function executeAuthorityOperation(
 
   switch (operation.kind) {
     case "bootstrap": {
-      const { schema, updatedAt } = initializeStorageFromSource(input.storage, input.source);
+      const storedSchema = initializeStorageFromSource(input.storage, input.source);
 
       return {
-        body: bootstrapResponse(input.storage, schema, updatedAt),
+        body: bootstrapResponse(input.storage, storedSchema),
         headers: browserReplicaUpgradeHeaders(input.storage, input.identity, input.packageResolver),
       };
     }
 
     case "readSchema": {
-      const { schema, updatedAt } = initializeStorageFromSource(input.storage, input.source);
+      const storedSchema = initializeStorageFromSource(input.storage, input.source);
 
       return {
-        body: { schema, updatedAt },
+        body: schemaResponse(storedSchema),
       };
     }
 
@@ -327,10 +329,12 @@ export function executeAuthorityOperation(
     }
 
     case "sync": {
-      const { schema, updatedAt } = initializeStorageFromSource(input.storage, input.source);
+      const storedSchema = initializeStorageFromSource(input.storage, input.source);
       const changes = getChangesAfter(input.storage, operation.after);
       const schemaFields =
-        operation.clientSchemaUpdatedAt === updatedAt ? {} : { schema, schemaUpdatedAt: updatedAt };
+        operation.clientSchemaUpdatedAt === storedSchema.updatedAt
+          ? {}
+          : syncSchemaFields(storedSchema);
 
       return {
         body: {
@@ -414,7 +418,7 @@ export function executeAuthorityOperation(
               input.source,
               validateSourceSchemaReset,
             ),
-            ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+            (storedSchema) => bootstrapResponse(input.storage, storedSchema),
           ),
         ),
       );
@@ -425,14 +429,14 @@ export function executeAuthorityOperation(
         input.writes.apply(() =>
           mapWriteOutcome(
             resetStorageToSourceSeedOutcome(input.storage, input.source),
-            ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+            (storedSchema) => bootstrapResponse(input.storage, storedSchema),
           ),
         ),
       );
     }
 
     case "applyPackageMigrations": {
-      initializeStorageFromSource(input.storage, input.source);
+      initializeStorageFromSource(input.storage, input.source, { refreshActiveSchema: false });
 
       const packageFacts = parsePackageAppMigrationApplyRequest(
         input.body,
@@ -525,9 +529,9 @@ function assertBrowserReplicaWriteCompatible(input: AuthorityOperationExecutionI
 
   if (
     clientFacts.sourceSchemaHash !== undefined &&
-    clientFacts.sourceSchemaHash !== upgrade.packageApp?.sourceSchemaHash
+    clientFacts.sourceSchemaHash !== upgrade.schemaProvenance?.sourceSchemaHash
   ) {
-    throw reloadRequired("Package app source schema changed. Reload required.", upgrade);
+    throw reloadRequired("App source schema changed. Reload required.", upgrade);
   }
 }
 
@@ -631,7 +635,10 @@ function browserReplicaUpgradeHeaders(
 
   if (facts.packageApp) {
     headers[FORMLESS_CLIENT_PACKAGE_REVISION_HEADER] = String(facts.packageApp.packageRevision);
-    headers[FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER] = facts.packageApp.sourceSchemaHash;
+  }
+
+  if (facts.schemaProvenance) {
+    headers[FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER] = facts.schemaProvenance.sourceSchemaHash;
   }
 
   return headers;
@@ -645,27 +652,74 @@ function browserReplicaUpgradeFacts(
   const storedSchema = readCurrentStoredSchema(storage);
 
   if (identity.kind === "instanceControlPlane") {
+    const schemaProvenance =
+      storedSchema?.schemaProvenance?.kind === "instance-control-plane"
+        ? storedSchema.schemaProvenance
+        : null;
+
     return {
       runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
       schemaUpdatedAt: storedSchema?.updatedAt ?? null,
+      schemaProvenance,
       packageApp: null,
     };
   }
 
-  const packageApp = findResolvedAppPackage(identity.packageAppKey, packageResolver);
-  const packageState = readPackageAppMigrationState(storage, identity.packageAppKey);
+  const packageProvenance = packageSchemaProvenanceForBrowserReplica(
+    storage,
+    identity.packageAppKey,
+    storedSchema,
+    packageResolver,
+  );
 
   return {
     runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
     schemaUpdatedAt: storedSchema?.updatedAt ?? null,
-    packageApp: packageApp
+    schemaProvenance: packageProvenance ?? null,
+    packageApp: packageProvenance
       ? {
-          packageAppKey: packageApp.packageAppKey,
-          packageRevision: packageState?.packageRevision ?? packageApp.packageRevision,
-          sourceSchemaHash: packageState?.sourceSchemaHash ?? packageApp.sourceSchemaHash,
+          packageAppKey: packageProvenance.packageAppKey,
+          packageRevision: packageProvenance.packageRevision,
+          sourceSchemaHash: packageProvenance.sourceSchemaHash,
         }
       : null,
   };
+}
+
+function packageSchemaProvenanceForBrowserReplica(
+  storage: DurableObjectStorage,
+  packageAppKey: PackageAppKey,
+  storedSchema: ReturnType<typeof readCurrentStoredSchema>,
+  packageResolver?: AppPackageResolver,
+): PackageAppSchemaProvenance | undefined {
+  if (
+    storedSchema?.schemaProvenance?.kind === "package-app" &&
+    storedSchema.schemaProvenance.packageAppKey === packageAppKey
+  ) {
+    return storedSchema.schemaProvenance;
+  }
+
+  const packageState = readPackageAppMigrationState(storage, packageAppKey);
+
+  if (packageState) {
+    return {
+      kind: "package-app",
+      packageAppKey: packageState.packageAppKey,
+      packageRevision: packageState.packageRevision,
+      sourceSchemaHash: packageState.sourceSchemaHash,
+    };
+  }
+
+  const packageApp = findResolvedAppPackage(packageAppKey, packageResolver);
+
+  return packageApp
+    ? {
+        kind: "package-app",
+        packageAppKey: packageApp.packageAppKey,
+        packageRevision: packageApp.packageRevision,
+        sourceSchemaHash: packageApp.sourceSchemaHash,
+      }
+    : undefined;
 }
 
 function operationMetadata<
@@ -682,14 +736,38 @@ function operationMetadata<
 
 function bootstrapResponse(
   storage: DurableObjectStorage,
-  schema: AppSchema,
-  schemaUpdatedAt: string,
+  storedSchema: StoredSchema,
 ): BootstrapResponse {
   return {
-    schema,
-    schemaUpdatedAt,
+    schema: storedSchema.schema,
+    ...(storedSchema.schemaProvenance === undefined
+      ? {}
+      : { schemaProvenance: storedSchema.schemaProvenance }),
+    schemaUpdatedAt: storedSchema.updatedAt,
     records: getBootstrapRecords(storage),
     cursor: getCurrentCursor(storage),
+  };
+}
+
+function schemaResponse(storedSchema: StoredSchema): SchemaResponse {
+  return {
+    schema: storedSchema.schema,
+    ...(storedSchema.schemaProvenance === undefined
+      ? {}
+      : { schemaProvenance: storedSchema.schemaProvenance }),
+    updatedAt: storedSchema.updatedAt,
+  };
+}
+
+function syncSchemaFields(
+  storedSchema: StoredSchema,
+): Pick<SyncResponse, "schema" | "schemaProvenance" | "schemaUpdatedAt"> {
+  return {
+    schema: storedSchema.schema,
+    ...(storedSchema.schemaProvenance === undefined
+      ? {}
+      : { schemaProvenance: storedSchema.schemaProvenance }),
+    schemaUpdatedAt: storedSchema.updatedAt,
   };
 }
 
