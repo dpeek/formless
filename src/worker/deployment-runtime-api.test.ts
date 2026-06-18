@@ -494,7 +494,7 @@ describe("instance deployment runtime API routes", () => {
     expect(staleObserved.body.status).toMatchObject({ state: "pending-changes" });
   });
 
-  it("keeps the deployment runtime API read-only by rejecting removed writeback endpoints", async () => {
+  it("rejects mutation requests through the read-only deployment runtime API", async () => {
     for (const path of [
       INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
       INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,

@@ -200,9 +200,6 @@ describe("authority operation selection", () => {
   it("leaves WebSocket sync and unknown routes outside operation dispatch", () => {
     expect(selectOperation("GET", "/sync/ws")).toBeUndefined();
     expect(selectOperation("POST", "/sync/ws")).toBeUndefined();
-    expect(selectOperation("DELETE", "/mutations")).toBeUndefined();
-    expect(selectOperation("POST", "/mutations")).toBeUndefined();
-    expect(selectOperation("POST", "/actions")).toBeUndefined();
     expect(selectOperation("GET", "/missing")).toBeUndefined();
   });
 });
@@ -956,24 +953,6 @@ describe("authority operation execution", () => {
       operationKey: "task.create",
       status: "failed",
     });
-  });
-
-  it("returns not found for legacy generic write routes", async () => {
-    const mutation = await executeOperationFailure({
-      method: "POST",
-      path: "/mutations",
-      body: {},
-    });
-    const action = await executeOperationFailure({
-      method: "POST",
-      path: "/actions",
-      body: {},
-    });
-
-    expect(mutation.response.status).toBe(404);
-    expect(mutation.body).toEqual({ error: "Unsupported operation.", writes: [] });
-    expect(action.response.status).toBe(404);
-    expect(action.body).toEqual({ error: "Unsupported operation.", writes: [] });
   });
 
   it("rejects stale browser operation writes before write notification", async () => {

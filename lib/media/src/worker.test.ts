@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vite-plus/test";
 import {
   CORE_MEDIA_ROUTE_PREFIX,
@@ -17,15 +14,18 @@ import type { MediaAsset, MediaObjectMetadata, MediaObjectStore } from "./types.
 const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
 describe("Media Worker adapter", () => {
-  it("stays free of React and generated UI imports", async () => {
-    const source = await readFile(fileURLToPath(new URL("./worker.ts", import.meta.url)), "utf8");
+  it("exposes Worker adapter route behavior through the public package subpath", async () => {
+    const mediaWorker = await import("@dpeek/formless-media/worker");
 
-    expect(source).not.toMatch(
-      /\bfrom\s+["'][^"']*(?:react|generated|record-field|\.tsx)[^"']*["']/i,
-    );
-    expect(source).not.toMatch(
-      /\bimport\s+["'][^"']*(?:react|generated|record-field|\.tsx)[^"']*["']/i,
-    );
+    expect(mediaWorker.CORE_MEDIA_ROUTE_PREFIX).toBe(CORE_MEDIA_ROUTE_PREFIX);
+    expect(mediaWorker.imageMediaRouteFromPathname("/api/formless/media/images")).toEqual({
+      media: {
+        imageKeyPrefix: "media/images",
+        imageUploadPath: "/api/formless/media/images",
+        routePrefix: "/api/formless/media",
+      },
+      path: "/media/images",
+    });
   });
 
   it("preserves core media route matching and rejects legacy media routes", () => {

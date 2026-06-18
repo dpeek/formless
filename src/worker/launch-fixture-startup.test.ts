@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("worker launch fixture startup", () => {
-  it("starts a product instance from the multi-Site fixture without schema-key APIs", async () => {
+  it("starts a product instance from the multi-Site fixture with install-scoped APIs", async () => {
     harness = await createFixtureHarness("multi-site");
 
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -72,7 +72,7 @@ describe("worker launch fixture startup", () => {
     expect(recordIds(docs.records)).toEqual(recordIds(siteSeedRecords));
   });
 
-  it("starts a product instance from the mixed app fixture without schema-key APIs", async () => {
+  it("starts a product instance from the mixed app fixture with install-scoped APIs", async () => {
     harness = await createFixtureHarness("mixed-apps");
 
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -91,7 +91,7 @@ describe("worker launch fixture startup", () => {
     expect(recordIds(tasks.records)).toEqual(recordIds(taskSeedRecords));
   });
 
-  it("starts a product instance from the CRM fixture without Site public route metadata", async () => {
+  it("starts a product instance from the CRM fixture with install-scoped APIs", async () => {
     harness = await createFixtureHarness("crm");
 
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -132,7 +132,7 @@ describe("worker launch fixture startup", () => {
     expect(installs.installs).toEqual([]);
   });
 
-  it("rejects the removed default Site startup fixture", async () => {
+  it("rejects default-site startup fixture selection", async () => {
     harness = await createFixtureHarness("default-site");
 
     const response = await harness.fetch("/api/formless/app-installs");

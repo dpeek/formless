@@ -1,7 +1,11 @@
-import { readFileSync } from "node:fs";
+import { Children, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import type { ImageMediaAssetOption } from "@dpeek/formless-media/react";
+import {
+  MediaFieldControl,
+  type ImageMediaAssetOption,
+  type MediaFieldControlProps,
+} from "@dpeek/formless-media/react";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
@@ -209,13 +213,38 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('aria-label="Hero image asset"');
   });
 
-  it("keeps media URL commit policy in generated UI", () => {
-    const source = readFileSync(new URL("./record-field-control.tsx", import.meta.url), "utf8");
-    const mediaRendererSource = source.slice(source.indexOf("function RecordMediaFieldRenderer"));
+  it("commits and reverts media URL edits from generated UI policy", () => {
+    const committed: FieldValue[] = [];
+    let reverted = 0;
+    const fieldCommitControl = recordMediaFieldControlProps({
+      fieldConfig: mediaFieldConfig,
+      onDraftRevert: () => {
+        reverted += 1;
+      },
+      onValueCommit: (value) => {
+        committed.push(value);
+      },
+    });
 
-    expect(mediaRendererSource).toContain('commitPolicy === "field-commit"');
-    expect(mediaRendererSource).toContain("onUrlEnter");
-    expect(mediaRendererSource).toContain("onUrlEscape={onDraftRevert}");
+    fieldCommitControl.onUrlBlur("/blur.webp");
+    fieldCommitControl.onUrlEnter("/enter.webp");
+    fieldCommitControl.onUrlEscape();
+
+    expect(committed).toEqual(["/blur.webp", "/enter.webp"]);
+    expect(reverted).toBe(1);
+
+    const immediateCommitted: FieldValue[] = [];
+    const immediateControl = recordMediaFieldControlProps({
+      fieldConfig: { ...mediaFieldConfig, commit: "immediate" },
+      onValueCommit: (value) => {
+        immediateCommitted.push(value);
+      },
+    });
+
+    immediateControl.onUrlBlur("/ignored.webp");
+    immediateControl.onUrlEnter("/entered.webp");
+
+    expect(immediateCommitted).toEqual(["/entered.webp"]);
   });
 });
 
@@ -266,6 +295,83 @@ function renderRecordControl(
       uploadEnabled={options.uploadEnabled ?? false}
     />,
   );
+}
+
+function recordMediaFieldControlProps({
+  fieldConfig,
+  onDraftRevert = () => undefined,
+  onValueCommit = () => undefined,
+}: {
+  fieldConfig: RecordFieldConfig;
+  onDraftRevert?: () => void;
+  onValueCommit?: (value: FieldValue) => void;
+}): MediaFieldControlProps {
+  const props = findMediaFieldControlProps(
+    <GeneratedRecordFieldControl
+      canPatch={true}
+      draft="/draft.webp"
+      error={null}
+      fieldConfig={fieldConfig}
+      iconDialogDraft=""
+      iconDialogOpen={false}
+      isPending={false}
+      mediaAssetOptions={[]}
+      mediaEditorMode="url"
+      numberFormat="plain"
+      onDraftChange={() => undefined}
+      onDraftRevert={onDraftRevert}
+      onErrorChange={() => undefined}
+      onIconCancel={() => undefined}
+      onIconDraftChange={() => undefined}
+      onIconOpenChange={() => undefined}
+      onIconSave={() => Promise.resolve()}
+      onImageFileSelect={() => undefined}
+      onMediaAssetSelect={() => undefined}
+      onPatchValues={() => undefined}
+      onUnitDraftChange={() => undefined}
+      onUnitDraftRevert={() => undefined}
+      onValueCommit={onValueCommit}
+      recordValue="/record.webp"
+      unitDraft=""
+      uploadEnabled={true}
+    />,
+  );
+
+  if (!props) {
+    throw new Error("Expected generated media field control props.");
+  }
+
+  return props;
+}
+
+function findMediaFieldControlProps(node: ReactNode): MediaFieldControlProps | undefined {
+  for (const child of Children.toArray(node)) {
+    if (!isValidElement(child)) {
+      continue;
+    }
+
+    if (child.type === MediaFieldControl) {
+      return child.props as MediaFieldControlProps;
+    }
+
+    const childProps = child.props as { children?: ReactNode };
+    const nestedProps = findMediaFieldControlProps(childProps.children);
+
+    if (nestedProps) {
+      return nestedProps;
+    }
+
+    if (typeof child.type === "function") {
+      const rendered = (child.type as (props: unknown) => ReactNode)(child.props);
+      const renderedProps = findMediaFieldControlProps(rendered);
+
+      if (renderedProps) {
+        return renderedProps;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function requiredCatalogSvg(key: string) {

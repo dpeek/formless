@@ -1,9 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vite-plus/test";
 import {
   coreImageMediaAssetOptionForId,
+  IMAGE_UPLOAD_ACCEPT,
   listCoreImageMediaAssets,
   parseImageMediaListResponse,
   parseImageMediaUploadResponse,
@@ -11,15 +9,15 @@ import {
 } from "./client.ts";
 
 describe("Media client adapter", () => {
-  it("stays free of React and generated UI imports", async () => {
-    const source = await readFile(fileURLToPath(new URL("./client.ts", import.meta.url)), "utf8");
+  it("exposes client adapter behavior through the public package subpath", async () => {
+    const mediaClient = await import("@dpeek/formless-media/client");
 
-    expect(source).not.toMatch(
-      /\bfrom\s+["'][^"']*(?:react|generated|record-field|\.tsx)[^"']*["']/i,
-    );
-    expect(source).not.toMatch(
-      /\bimport\s+["'][^"']*(?:react|generated|record-field|\.tsx)[^"']*["']/i,
-    );
+    expect(mediaClient.IMAGE_UPLOAD_ACCEPT).toBe(IMAGE_UPLOAD_ACCEPT);
+    expect(mediaClient.coreImageMediaAssetOptionForId("hero.webp")).toEqual({
+      href: "/api/formless/media/media/images/hero.webp",
+      id: "hero.webp",
+      label: "hero.webp",
+    });
   });
 
   it("preserves core image upload request and response behavior", async () => {

@@ -333,7 +333,7 @@ describe("media worker routes", () => {
     expect((await headResponse.arrayBuffer()).byteLength).toBe(0);
   });
 
-  it("does not expose legacy schema-key or installed Site media routes", async () => {
+  it("keeps legacy app-scoped media routes inactive", async () => {
     const bucket = await harness.mf.getR2Bucket(mediaBinding);
 
     await bucket.put("site/images/public.png", pngBytes, {

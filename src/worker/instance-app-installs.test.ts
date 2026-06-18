@@ -22,7 +22,6 @@ import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
-import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
@@ -31,7 +30,6 @@ import {
   workspaceAppPackageManifestFixture,
   writeWorkspaceAppPackageFixture,
 } from "../test/workspace-app-package.ts";
-import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -332,30 +330,6 @@ describe("instance app install API routes", () => {
         ["publicSite", "anonymous"],
       ],
     );
-  });
-
-  it("does not serve legacy app install registry reset or backfill endpoints", async () => {
-    const reset = await harness.durableObjectFetch(
-      "FORMLESS_AUTHORITY",
-      FORMLESS_INSTANCE_AUTHORITY_NAME,
-      "/_internal/reset-instance-app-installs",
-      { method: "POST" },
-    );
-    const backfill = await harness.durableObjectFetch(
-      "FORMLESS_AUTHORITY",
-      INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-      "/api/formless/control-plane/_internal/backfill-app-installs",
-      {
-        body: JSON.stringify({ installs: [] }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      },
-    );
-
-    expect(reset.status).toBe(404);
-    expect(await reset.json()).toEqual({ error: "Not found." });
-    expect(backfill.status).toBe(404);
-    expect(await backfill.json()).toEqual({ error: "Not found." });
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {

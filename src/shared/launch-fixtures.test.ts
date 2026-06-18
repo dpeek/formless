@@ -28,7 +28,7 @@ describe("launch fixture registry", () => {
     });
   });
 
-  it("rejects the removed default Site fixture", () => {
+  it("rejects default-site fixture selection", () => {
     expect(resolveLaunchFixture("default-site")).toBeUndefined();
     expect(createLaunchFixtureInitializationPlan("default-site", { now })).toBeUndefined();
   });

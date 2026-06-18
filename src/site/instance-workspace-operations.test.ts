@@ -118,7 +118,7 @@ describe("Formless workspace operations", () => {
     expect(persistedText).not.toContain(tempDir);
   });
 
-  it("rejects removed deploy operation keys before workspace access", async () => {
+  it("rejects unsupported standalone deploy operations before workspace access", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "missing-workspace");
 

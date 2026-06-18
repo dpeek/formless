@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import { readFileSync } from "node:fs";
 
 import { MediaFieldControl } from "./react.tsx";
 
@@ -49,12 +48,20 @@ describe("Media React field control", () => {
     expect(html).not.toContain("Current asset:");
   });
 
-  it("does not own generic generated field label or validation placement", () => {
-    const source = readFileSync(new URL("./react.tsx", import.meta.url), "utf8");
+  it("keeps generic generated labels and validation placement outside the adapter output", () => {
+    const html = renderMediaFieldControl({
+      draft: "/manual.webp",
+      fieldKind: "image",
+      invalid: true,
+      label: "Hero image",
+      mediaEditorMode: "url",
+    });
 
-    expect(source).not.toContain("FieldError");
-    expect(source).not.toContain("TextField");
-    expect(source).not.toContain("<Label");
+    expect(html).toContain('aria-label="Hero image URL"');
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('title="Upload Hero image"');
+    expect(html).not.toContain('data-slot="label"');
+    expect(html).not.toContain(">Hero image</label>");
   });
 });
 

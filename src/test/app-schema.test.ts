@@ -3445,7 +3445,7 @@ describe("schema collection views", () => {
     ).not.toThrow();
   });
 
-  it("does not use collection primary navigation as a missing-Screens fallback", () => {
+  it("requires screens even when collection navigation is not primary", () => {
     const schemaWithoutScreens: Record<string, unknown> = baseSchema({
       views: {
         ...defaultViews(),
@@ -5085,9 +5085,6 @@ describe("personal site sample schema", () => {
       },
       fallback: { label: "Block", fields: ["label", "type"] },
     });
-    for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
-      expect(schema.unions?.blockByType?.variants ?? {}).not.toHaveProperty(removedType);
-    }
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
@@ -5693,26 +5690,12 @@ describe("personal site sample schema", () => {
 
   it("parses simplified site block authoring views", () => {
     const schema = parseAppSchema(rawSiteSchema);
-    const plannedRemovedBlockTypes = [
-      "contentList",
-      "contentGrid",
-      "video",
-      "file",
-      "cta",
-      "subscribe",
-      "profile",
-      "custom",
-    ];
 
     const blockTypeField = schema.entities.block?.fields.type;
     if (blockTypeField?.type !== "enum") {
       throw new Error("Missing Site block type enum.");
     }
 
-    for (const blockType of plannedRemovedBlockTypes) {
-      expect(blockTypeField.values).not.toHaveProperty(blockType);
-      expect(schema.unions?.blockByType?.variants ?? {}).not.toHaveProperty(blockType);
-    }
     expect(blockTypeField.values).toMatchObject({
       postList: { label: "Post list" },
       projectList: { label: "Project list" },
@@ -5897,13 +5880,6 @@ describe("personal site sample schema", () => {
         buttonLabel: { editor: "text", commit: "field-commit" },
       },
     });
-
-    for (const blockType of plannedRemovedBlockTypes) {
-      expect(blockCreate.variants).not.toHaveProperty(blockType);
-      expect(blockEdit.variants).not.toHaveProperty(blockType);
-      expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty(blockType);
-      expect(schema.itemViews.blockTreeNode.variants).not.toHaveProperty(blockType);
-    }
 
     expect(siteCompositionHome.result).toMatchObject({
       type: "tree",

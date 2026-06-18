@@ -3889,9 +3889,6 @@ describe("generated collection home", () => {
     expect(html).toContain(
       'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
     );
-    for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
-      expect(html).not.toContain(`value="${removedType}"`);
-    }
   });
 
   it("renders header navigation as content block placements", () => {

@@ -2567,7 +2567,7 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("rejects missing screens instead of building legacy collection screen models", () => {
+  it("requires screen definitions before selecting screen models", () => {
     const schemaWithoutScreens: AppSchema = { ...siteSourceSchema, screens: undefined };
 
     expect(() => selectScreenModels(schemaWithoutScreens)).toThrow(

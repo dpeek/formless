@@ -741,7 +741,7 @@ describe("local workspace gateway", () => {
     expect(browserBearer.response.status).toBe(401);
   });
 
-  it("rejects removed deployment gateway operations before execution", async () => {
+  it("rejects unsupported standalone deployment gateway operations before execution", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
     let executed = false;
