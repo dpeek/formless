@@ -1100,12 +1100,20 @@ export type RecordPlanEntityOperationEffectSchema = {
   steps: RecordPlanStepSchema[];
 };
 
+export type EntityOperationCommandEffectSchema =
+  | RunActionKindEntityOperationEffectSchema
+  | RecordPlanEntityOperationEffectSchema;
+
+export type EntityOperationCommandEffectType = EntityOperationCommandEffectSchema["type"];
+
+export type LegacyEntityOperationCommandEffectType =
+  RunActionKindEntityOperationEffectSchema["type"];
+
 export type EntityOperationEffectSchema =
   | CreateRecordEntityOperationEffectSchema
   | PatchRecordEntityOperationEffectSchema
   | DeleteRecordEntityOperationEffectSchema
-  | RunActionKindEntityOperationEffectSchema
-  | RecordPlanEntityOperationEffectSchema;
+  | EntityOperationCommandEffectSchema;
 
 export type EntityOperationOutputContractSchema =
   | {
@@ -1190,6 +1198,8 @@ export type RuntimeSchemaRouteValidationSchema = {
 export type RuntimeSchemaHistorySchema = {
   kind: "actionCreated" | "appendOnly";
 };
+
+export type LegacyMigrationDeclarationKind = RuntimeSchemaHistorySchema["kind"];
 
 export type RuntimeSchemaControlPlaneEntitySchema = {
   immutableFields?: string[];

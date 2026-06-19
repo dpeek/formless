@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import type {
-  BootstrapResponse,
-  CreateAppInstallResponse,
-  MutationResponse,
-} from "../shared/protocol.ts";
+import type { BootstrapResponse, CreateAppInstallResponse } from "../shared/protocol.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import {
   INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
@@ -28,14 +26,14 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 const adminToken = "test-admin-token";
 
 let harness: Harness;
-let controlPlaneMutationCounter = 0;
+let controlPlaneOperationCounter = 0;
 
 beforeAll(async () => {
   harness = await createHarness();
 });
 
 beforeEach(async () => {
-  controlPlaneMutationCounter = 0;
+  controlPlaneOperationCounter = 0;
   await resetWorkerState();
 });
 
@@ -642,12 +640,18 @@ async function createRedirectRoute(input: {
 }
 
 async function createControlPlaneRecord(entity: string, values: Record<string, unknown>) {
-  return postAdminJson<MutationResponse>(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`, {
-    mutationId: `mutation-${entity}-${++controlPlaneMutationCounter}`,
-    entity,
-    op: "create",
-    values: withoutLifecycleValues(values),
-  });
+  const created = await postAdminJson<OperationInvocationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/${entity}/create`,
+    {
+      idempotencyKey: `${entity}-${++controlPlaneOperationCounter}`,
+      input: withoutLifecycleValues(values),
+    },
+  );
+
+  return {
+    body: { record: operationRecord(created.body) },
+    response: created.response,
+  };
 }
 
 async function patchControlPlaneRecord(
@@ -655,13 +659,29 @@ async function patchControlPlaneRecord(
   recordId: string,
   values: Record<string, unknown>,
 ) {
-  return postAdminJson<MutationResponse>(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`, {
-    mutationId: `mutation-${recordId}:patch:${Object.keys(values).join("-")}`,
-    entity,
-    op: "patch",
-    recordId,
-    values,
-  });
+  const patched = await postAdminJson<OperationInvocationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/${entity}/update`,
+    {
+      idempotencyKey: `${recordId}:patch:${Object.keys(values).join("-")}`,
+      recordId,
+      input: values,
+    },
+  );
+
+  return {
+    body: { record: operationRecord(patched.body) },
+    response: patched.response,
+  };
+}
+
+function operationRecord(response: OperationInvocationResponse): StoredRecord {
+  if (response.output.type !== "create" && response.output.type !== "update") {
+    throw new Error(
+      `Expected control-plane write operation output, received "${response.output.type}".`,
+    );
+  }
+
+  return response.output.record;
 }
 
 function withoutLifecycleValues(values: Record<string, unknown>) {

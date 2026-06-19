@@ -41,7 +41,7 @@ export function selectHomeResultModel(
       ...(tableResult.deleteOperation === undefined
         ? {}
         : { deleteOperation: tableResult.deleteOperation }),
-      transitionActions: tableResult.transitionActions,
+      transitionOperations: tableResult.transitionOperations,
       ...(tableResult.ordering === undefined ? {} : { ordering: tableResult.ordering }),
       ...(footer.length === 0 ? {} : { footer }),
     };

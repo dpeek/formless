@@ -16,7 +16,8 @@ import {
 } from "../shared/deployment-runtime.ts";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import type { RecordInstanceDomainMappingApplyEvidenceResponse } from "../shared/instance-domain-mappings.ts";
-import type { BootstrapResponse, MutationResponse } from "../shared/protocol.ts";
+import type { BootstrapResponse } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
 import { INTERNAL_RESET_INSTANCE_DEPLOYMENT_RUNTIME_PATH } from "./deployment-runtime-api.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -525,35 +526,38 @@ async function postAdminJson<T>(path: string, body: unknown) {
 }
 
 async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
-  const created = await postAdminJson<MutationResponse>(
-    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`,
+  const created = await postAdminJson<OperationInvocationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/route/create`,
     {
-      mutationId: `mutation-${recordId}`,
-      entity: "route",
-      op: "create",
-      recordId,
-      values,
+      idempotencyKey: `route-${recordId}`,
+      input: values,
     },
   );
 
   expect(created.response.status).toBe(200);
-  routeRecordIds.set(recordId, created.body.record.id);
+  routeRecordIds.set(recordId, operationRecord(created.body).id);
 }
 
 async function patchRouteRecord(recordId: string, values: Record<string, unknown>) {
   const actualRecordId = routeRecordIds.get(recordId) ?? recordId;
-  const patched = await postAdminJson<MutationResponse>(
-    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/mutations`,
+  const patched = await postAdminJson<OperationInvocationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/route/update`,
     {
-      mutationId: `mutation-${actualRecordId}-patch`,
-      entity: "route",
-      op: "patch",
+      idempotencyKey: `route-${actualRecordId}-patch`,
       recordId: actualRecordId,
-      values,
+      input: values,
     },
   );
 
   expect(patched.response.status).toBe(200);
+}
+
+function operationRecord(response: OperationInvocationResponse) {
+  if (response.output.type !== "create" && response.output.type !== "update") {
+    throw new Error(`Expected route write operation output, received "${response.output.type}".`);
+  }
+
+  return response.output.record;
 }
 
 async function expectStatus(path: string, method: "DELETE" | "GET" | "POST", status: number) {

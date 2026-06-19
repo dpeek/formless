@@ -51,7 +51,7 @@ import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
+import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
@@ -648,10 +648,10 @@ function ContextRecordEditor({
           />
         );
       })}
-      {context.transitionActions.length > 0 ? (
+      {context.transitionOperations.length > 0 ? (
         <div className={density === "compact" ? "pt-1" : "self-end"}>
-          <RecordTransitionActionControls
-            actions={context.transitionActions}
+          <RecordTransitionOperationControls
+            operations={context.transitionOperations}
             entityName={context.entityName}
             recordId={recordId}
             values={record?.values}
@@ -917,9 +917,9 @@ function RecordDetail({
             updateOperation={result.updateOperation}
           />
         ))}
-        {result.transitionActions.length > 0 ? (
-          <RecordTransitionActionControls
-            actions={result.transitionActions}
+        {result.transitionOperations.length > 0 ? (
+          <RecordTransitionOperationControls
+            operations={result.transitionOperations}
             entityName={entityName}
             recordId={recordId}
             values={record?.values}
@@ -1124,7 +1124,7 @@ export function RecordList({
             recordUnion={recordUnion}
             recordId={item.recordId}
             showOrderingHandle={hasDragOrdering}
-            transitionActions={result.transitionActions}
+            transitionOperations={result.transitionOperations}
             updateOperation={result.updateOperation}
           />
         )}
@@ -1209,7 +1209,7 @@ function RecordRow({
   recordUnion,
   recordId,
   showOrderingHandle = false,
-  transitionActions,
+  transitionOperations,
   updateOperation,
 }: {
   deleteOperation?: ListResultModel["deleteOperation"];
@@ -1219,7 +1219,7 @@ function RecordRow({
   recordUnion?: RecordUnionPresentationConfig;
   recordId: string;
   showOrderingHandle?: boolean;
-  transitionActions: ListResultModel["transitionActions"];
+  transitionOperations: ListResultModel["transitionOperations"];
   updateOperation?: ListResultModel["updateOperation"];
 }) {
   const record = useRecord(recordId);
@@ -1243,9 +1243,9 @@ function RecordRow({
             />
           ))}
         </div>
-        {transitionActions.length > 0 ? (
-          <RecordTransitionActionControls
-            actions={transitionActions}
+        {transitionOperations.length > 0 ? (
+          <RecordTransitionOperationControls
+            operations={transitionOperations}
             className="shrink-0"
             entityName={entityName}
             recordId={recordId}

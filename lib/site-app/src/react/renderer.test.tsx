@@ -140,6 +140,7 @@ describe("public Site renderer characterization", () => {
             publicOperation: {
               entityName: "subscription",
               operationName: "subscribe",
+              canonicalKey: "subscription.subscribe",
               route: "/api/site/public/operations/subscription/subscribe",
               challenge: {
                 kind: "turnstile",

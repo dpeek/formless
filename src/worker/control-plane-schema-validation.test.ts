@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
+import type { ActionResponse } from "../shared/protocol.ts";
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema } from "../test/schema-apps.ts";
@@ -41,8 +41,7 @@ describe("control-plane schema runtime validation", () => {
       title: "Immutable title",
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-task-patch-immutable",
         entity: "task",
@@ -53,8 +52,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "task.title" is immutable.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-history-create",
         entity: "deploy-attempt",
@@ -66,7 +64,7 @@ describe("control-plane schema runtime validation", () => {
       'Unknown operation "create" for entity "deploy-attempt".',
     );
 
-    const install = await authority.postJson<MutationResponse>("/api/mutations", {
+    const install = await authority.postMutationRequest({
       mutationId: "mutation-control-plane-install",
       entity: "app-install",
       op: "create",
@@ -75,8 +73,7 @@ describe("control-plane schema runtime validation", () => {
       },
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-route-missing-target",
         entity: "app-route",
@@ -88,8 +85,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "appInstall" references unknown app-install record "missing-install".',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-route-reserved",
         entity: "app-route",
@@ -101,8 +97,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "path" must be a route-safe path.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-route-capability",
         entity: "app-route",
@@ -116,7 +111,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "packageCapability" is incompatible with route kind "admin".',
     );
 
-    await authority.postJson<MutationResponse>("/api/mutations", {
+    await authority.postMutationRequest({
       mutationId: "mutation-control-plane-route",
       entity: "app-route",
       op: "create",
@@ -125,8 +120,7 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-control-plane-route-duplicate",
         entity: "app-route",
@@ -144,7 +138,7 @@ describe("control-plane schema runtime validation", () => {
 
     const siteInstall = await createControlPlaneAppInstall("site", "Personal Site");
     const tasksInstall = await createControlPlaneAppInstall("tasks", "Team Tasks");
-    const deploymentConfig = await authority.postJson<MutationResponse>("/api/mutations", {
+    const deploymentConfig = await authority.postMutationRequest({
       mutationId: "mutation-control-plane-deployment-config",
       entity: "deployment-config",
       op: "create",
@@ -158,7 +152,7 @@ describe("control-plane schema runtime validation", () => {
       },
     });
 
-    const hostedMount = await authority.postJson<MutationResponse>("/api/mutations", {
+    const hostedMount = await authority.postMutationRequest({
       mutationId: "mutation-route-exact-host-provider-config",
       entity: "route",
       op: "create",
@@ -176,7 +170,7 @@ describe("control-plane schema runtime validation", () => {
       targetProfile: "app",
     });
 
-    const redirect = await authority.postJson<MutationResponse>("/api/mutations", {
+    const redirect = await authority.postMutationRequest({
       mutationId: "mutation-route-redirect-to-url",
       entity: "route",
       op: "create",
@@ -201,8 +195,7 @@ describe("control-plane schema runtime validation", () => {
       preserveQueryString: false,
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-host-normalized",
         entity: "route",
@@ -214,8 +207,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchHost" must be a normalized exact host.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-path-normalized",
         entity: "route",
@@ -227,8 +219,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPath" must be a normalized absolute path.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-path-case-normalized",
         entity: "route",
@@ -240,8 +231,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPath" must be a normalized absolute path.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-prefix-normalized",
         entity: "route",
@@ -256,8 +246,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPrefix" must be a normalized absolute path prefix.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-prefix-below-path",
         entity: "route",
@@ -272,8 +261,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPrefix" must begin at or below field "matchPath".',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-hostless-deployment-config",
         entity: "route",
@@ -285,8 +273,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "deploymentConfig" can only be set on exact-host route records.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-deployment-config-reference",
         entity: "route",
@@ -299,8 +286,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "deploymentConfig" references unknown deployment-config record "missing-provider".',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-access",
         entity: "route",
@@ -312,8 +298,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "access" must be a known enum value.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-public-site-capability",
         entity: "route",
@@ -328,8 +313,7 @@ describe("control-plane schema runtime validation", () => {
       'Package app "tasks" does not support public Site routes.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-host-required",
         entity: "route",
@@ -341,8 +325,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchHost" is required for redirect routes.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-target",
         entity: "route",
@@ -354,8 +337,7 @@ describe("control-plane schema runtime validation", () => {
       'Redirect routes must set exactly one of field "toHost" or field "toUrl".',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-app-target",
         entity: "route",
@@ -367,8 +349,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "appInstall" is incompatible with redirect routes.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-host-normalized",
         entity: "route",
@@ -380,8 +361,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "toHost" must be a normalized exact host.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-url-normalized",
         entity: "route",
@@ -394,8 +374,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "toUrl" must be a normalized absolute HTTPS URL without credentials or fragment.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-status-required",
         entity: "route",
@@ -407,8 +386,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "statusCode" is required for redirect routes.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-redirect-preserve-path-boolean",
         entity: "route",
@@ -420,8 +398,7 @@ describe("control-plane schema runtime validation", () => {
       'Field "preservePath" must be a boolean.',
     );
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-host-public-site-root",
         entity: "route",
@@ -437,7 +414,7 @@ describe("control-plane schema runtime validation", () => {
       'Host-mounted public Site routes must set field "matchPath" to "/" and field "matchPrefix" to "/".',
     );
 
-    await authority.postJson<MutationResponse>("/api/mutations", {
+    await authority.postMutationRequest({
       mutationId: "mutation-route-host-public-site",
       entity: "route",
       op: "create",
@@ -450,8 +427,7 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-host-public-site-conflict",
         entity: "route",
@@ -464,7 +440,7 @@ describe("control-plane schema runtime validation", () => {
       'Enabled route match "www.example.com/apps/personal" conflicts with enabled route',
     );
 
-    await authority.postJson<MutationResponse>("/api/mutations", {
+    await authority.postMutationRequest({
       mutationId: "mutation-route-hostless-admin",
       entity: "route",
       op: "create",
@@ -473,8 +449,7 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-hostless-admin-conflict",
         entity: "route",
@@ -486,7 +461,7 @@ describe("control-plane schema runtime validation", () => {
       'Enabled route match "<hostless>/apps/personal" conflicts with enabled route',
     );
 
-    await authority.postJson<MutationResponse>("/api/mutations", {
+    await authority.postMutationRequest({
       mutationId: "mutation-route-hostless-public-site",
       entity: "route",
       op: "create",
@@ -498,8 +473,7 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectError(
-      "/api/mutations",
+    await authority.expectMutationError(
       {
         mutationId: "mutation-route-hostless-public-site-prefix-conflict",
         entity: "route",
@@ -575,7 +549,7 @@ describe("control-plane schema runtime validation", () => {
 async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", label: string) {
   const installId = packageAppKey === "site" ? "personal" : "tasks";
 
-  return authority.postJson<MutationResponse>("/api/mutations", {
+  return authority.postMutationRequest({
     mutationId: `mutation-control-plane-install-${installId}`,
     entity: "app-install",
     op: "create",

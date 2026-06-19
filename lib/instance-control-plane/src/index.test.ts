@@ -188,6 +188,100 @@ describe("instance control-plane schema contracts", () => {
     ]);
   });
 
+  it("declares operation contracts for generated instance management records", () => {
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+
+    expect(
+      Object.fromEntries(
+        Object.entries(schema.entities["app-install"]?.operations ?? {}).map(
+          ([operationName, operation]) => [
+            operationName,
+            {
+              kind: operation.kind,
+              scope: operation.scope,
+              effect: operation.effect,
+              output: operation.output,
+            },
+          ],
+        ),
+      ),
+    ).toEqual({
+      create: {
+        kind: "create",
+        scope: "collection",
+        effect: { type: "createRecord" },
+        output: { type: "create" },
+      },
+      update: {
+        kind: "update",
+        scope: "record",
+        effect: { type: "patchRecord" },
+        output: { type: "update" },
+      },
+    });
+    expect(Object.keys(schema.entities.route?.operations?.create.input?.fields ?? {})).toEqual([
+      "enabled",
+      "matchHost",
+      "matchPath",
+      "matchPrefix",
+      "kind",
+      "targetProfile",
+      "appInstall",
+      "surface",
+      "access",
+      "deploymentConfig",
+      "toHost",
+      "toUrl",
+      "statusCode",
+      "preservePath",
+      "preserveQueryString",
+    ]);
+    expect(Object.keys(schema.entities.route?.operations?.update.input?.fields ?? {})).toEqual([
+      "enabled",
+      "matchHost",
+      "matchPath",
+      "matchPrefix",
+      "kind",
+      "targetProfile",
+      "appInstall",
+      "surface",
+      "access",
+      "deploymentConfig",
+      "toHost",
+      "toUrl",
+      "statusCode",
+      "preservePath",
+      "preserveQueryString",
+    ]);
+    expect(
+      Object.keys(schema.entities["deployment-config"]?.operations?.create.input?.fields ?? {}),
+    ).toEqual([
+      "targetId",
+      "targetKind",
+      "label",
+      "enabled",
+      "targetUrl",
+      "providerFamily",
+      "accountId",
+      "workerName",
+      "credentialRef",
+    ]);
+    expect(
+      Object.keys(schema.entities["deployment-config"]?.operations?.update.input?.fields ?? {}),
+    ).toEqual([
+      "targetId",
+      "targetKind",
+      "label",
+      "enabled",
+      "targetUrl",
+      "providerFamily",
+      "accountId",
+      "workerName",
+      "credentialRef",
+      ...instanceControlPlaneDeploymentConfigObservedFields,
+    ]);
+  });
+
   it("defines flat unified route fields for mount and redirect intent", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const routeFields = schema.entities.route?.fields;
@@ -388,8 +482,8 @@ describe("instance control-plane schema contracts", () => {
       { field: "statusCode", display: "readOnly" },
       { type: "invokeAction", actions: ["editRoute"] },
     ]);
-    expect(routeCreateFields).not.toContain("deploymentConfig");
-    expect(routeEditFields).not.toContain("deploymentConfig");
+    expect(routeCreateFields).toContain("deploymentConfig");
+    expect(routeEditFields).toContain("deploymentConfig");
     expect(
       schema.views.routeEdit?.type === "edit" ? schema.views.routeEdit.fields : undefined,
     ).toMatchObject({
@@ -404,6 +498,11 @@ describe("instance control-plane schema contracts", () => {
   it("renders deployment intent as generated sections without execution history", () => {
     const schema = parseAppSchema(instanceControlPlaneSchema);
     const deployments = schema.screens?.deployments;
+    const deploymentConfigTable = schema.tableViews.deploymentConfigTable;
+    const deploymentConfigEditFields =
+      schema.views.deploymentConfigEdit?.type === "edit"
+        ? Object.keys(schema.views.deploymentConfigEdit.fields)
+        : [];
 
     expect(deployments?.layout.sections.map((section) => section.view)).toEqual([
       "deploymentConfigList",
@@ -414,10 +513,30 @@ describe("instance control-plane schema contracts", () => {
         ? schema.views.deploymentConfigList.operations
         : undefined,
     ).toEqual([{ operation: "deployment-config.create", createView: "deploymentConfigCreate" }]);
+    expect(
+      deploymentConfigTable?.actions?.editDeploymentConfig?.type === "editRecord"
+        ? deploymentConfigTable.actions.editDeploymentConfig.editView
+        : undefined,
+    ).toBe("deploymentConfigEdit");
+    expect(deploymentConfigEditFields).toEqual([
+      "label",
+      "enabled",
+      "targetUrl",
+      "accountId",
+      "workerName",
+      "credentialRef",
+    ]);
+    expect(
+      deploymentConfigEditFields.filter((field) =>
+        instanceControlPlaneDeploymentConfigObservedFields.includes(
+          field as (typeof instanceControlPlaneDeploymentConfigObservedFields)[number],
+        ),
+      ),
+    ).toEqual([]);
     expect(schema.views.deployAttemptList).toBeUndefined();
     expect(schema.views.deployEvidenceSummaryList).toBeUndefined();
     expect(schema.views.deployDriftReportList).toBeUndefined();
-    expect(schema.tableViews.deploymentConfigTable?.columns).toMatchObject([
+    expect(deploymentConfigTable?.columns).toMatchObject([
       { field: "label", display: "readOnly" },
       { field: "targetId", display: "readOnly" },
       { field: "targetKind", display: "readOnly" },
@@ -432,6 +551,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "observedSummary", display: "readOnly" },
       { field: "observedError", display: "readOnly" },
       { field: "observedRunnerId", display: "readOnly" },
+      { type: "invokeAction", actions: ["editDeploymentConfig"] },
     ]);
     expect(schema.tableViews.deployDesiredResourceTable).toBeUndefined();
     expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();

@@ -36,7 +36,7 @@ import type {
   ReferenceFieldTableColumnConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
-  TransitionStateActionConfig,
+  TransitionStateOperationConfig,
 } from "../../client/views.ts";
 import { recordFieldIsWritable } from "../../client/views.ts";
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
@@ -61,8 +61,8 @@ import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
-import { InvokeActionTableCell } from "./table-actions.tsx";
+import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
+import { TableOperationControlsCell } from "./table-actions.tsx";
 import {
   selectGeneratedTablePresentation,
   type GeneratedTableCellPresentation,
@@ -118,7 +118,7 @@ export function RecordTable({
     pendingDragRecordId,
     query,
     queryName,
-    transitionActions: result.transitionActions,
+    transitionOperations: result.transitionOperations,
   });
 
   async function handleOrderingDragEnd(event: DragEndEvent) {
@@ -460,7 +460,7 @@ function RecordTableCellContent({
   if (cell.column.type === "transition") {
     return (
       <RecordTransitionTableCell
-        actions={cell.column.actions}
+        operations={cell.column.operations}
         entityName={entityName}
         recordId={cell.recordId}
       />
@@ -481,19 +481,19 @@ function RecordTableCellContent({
 }
 
 function RecordTransitionTableCell({
-  actions,
+  operations,
   entityName,
   recordId,
 }: {
-  actions: TransitionStateActionConfig[];
+  operations: TransitionStateOperationConfig[];
   entityName: string;
   recordId: string;
 }) {
   const record = useRecord(recordId);
 
   return (
-    <RecordTransitionActionControls
-      actions={actions}
+    <RecordTransitionOperationControls
+      operations={operations}
       className="justify-end"
       entityName={entityName}
       recordId={recordId}
@@ -668,10 +668,10 @@ function RecordTableCell({
     );
   }
 
-  if (column.type === "invokeAction") {
+  if (column.type === "operationControl") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
-        <InvokeActionTableCell
+        <TableOperationControlsCell
           column={column}
           orderingContext={orderingContext}
           sourceRecordId={recordId}
@@ -1049,6 +1049,8 @@ function tablePaddingClass(column: TableColumnConfig) {
 function isIconUtilityColumn(column: TableColumnConfig) {
   return (
     column.type === "orderingHandle" ||
-    (column.type === "invokeAction" && column.presentation === "dropdown" && column.label === "")
+    (column.type === "operationControl" &&
+      column.presentation === "dropdown" &&
+      column.label === "")
   );
 }

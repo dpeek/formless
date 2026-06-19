@@ -46,7 +46,7 @@ export type SiteMediaNode = {
   kind: "image";
 };
 
-export type SitePublicActionChallengeNode = {
+export type SitePublicOperationChallengeNode = {
   kind: "turnstile";
   siteKey?: string;
 };
@@ -54,8 +54,9 @@ export type SitePublicActionChallengeNode = {
 export type SitePublicOperationNode = {
   entityName: string;
   operationName: string;
+  canonicalKey: string;
   route: string;
-  challenge: SitePublicActionChallengeNode;
+  challenge: SitePublicOperationChallengeNode;
 };
 
 export type SiteTreeRoute =

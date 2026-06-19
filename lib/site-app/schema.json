@@ -176,7 +176,7 @@
         "actionName": {
           "type": "text",
           "required": false,
-          "label": "Action name"
+          "label": "Operation"
         },
         "buttonLabel": {
           "type": "text",
@@ -893,10 +893,10 @@
           "type": "enum",
           "required": true,
           "label": "Source kind",
-          "default": "publicAction",
+          "default": "publicOperation",
           "values": {
-            "publicAction": {
-              "label": "Public action"
+            "publicOperation": {
+              "label": "Public operation"
             }
           }
         },
@@ -933,10 +933,10 @@
           "required": true,
           "label": "API route prefix"
         },
-        "sourceActionName": {
+        "sourceOperationKey": {
           "type": "text",
           "required": true,
-          "label": "Action"
+          "label": "Operation key"
         },
         "sourceHost": {
           "type": "text",
@@ -1032,8 +1032,8 @@
               "sourceApiRoutePrefix": {
                 "field": "sourceApiRoutePrefix"
               },
-              "sourceActionName": {
-                "field": "sourceActionName"
+              "sourceOperationKey": {
+                "field": "sourceOperationKey"
               },
               "sourceHost": {
                 "field": "sourceHost"

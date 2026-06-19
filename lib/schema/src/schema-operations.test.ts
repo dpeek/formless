@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  classifyCollectionOperationBinding,
+  entityOperationBindingKinds,
+  entityOperationCommandEffectKinds,
+  entityOperationCommandEffectTypes,
   formatEntityOperationKey,
+  isEntityOperationBindingKind,
+  isEntityOperationCommandEffect,
+  isEntityOperationReadKind,
+  isEntityOperationWriteKind,
+  isLegacyEntityOperationCommandEffect,
   parseAppSchema,
   parseEntityOperationKey,
   stringifySchema,
@@ -148,10 +157,101 @@ describe("schema entity operations", () => {
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });
 
-  it("does not project mutation policies or entity actions to operations", () => {
-    const schema = parseAppSchema(baseTaskSchema());
+  it("classifies operations, operation bindings, and command effects", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskLogOperations({
+        activeList: {
+          kind: "list",
+          scope: "collection",
+          target: { query: "taskActive" },
+        },
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "command",
+          scope: "collection",
+          target: { query: "taskCompleted" },
+          effect: {
+            type: "runActionKind",
+            kind: "clear-completed",
+            action: "clearCompletedTasks",
+            query: "taskCompleted",
+          },
+        },
+        submitIntake: recordPlanOperation(),
+      }),
+    );
+    const operations = schema.entities.task?.operations;
+    const clearCompletedEffect = operations?.clearCompletedTasks.effect;
+    const submitIntakeEffect = operations?.submitIntake.effect;
+    const binding = classifyCollectionOperationBinding({
+      operation: "task.clearCompletedTasks",
+      count: { type: "count" },
+    });
+
+    expect(isEntityOperationReadKind("list")).toBe(true);
+    expect(isEntityOperationReadKind("command")).toBe(false);
+    expect(isEntityOperationWriteKind("command")).toBe(true);
+    expect(entityOperationBindingKinds).toEqual(["collection"]);
+    expect(isEntityOperationBindingKind(binding.kind)).toBe(true);
+    expect(binding).toEqual({
+      kind: "collection",
+      operationKey: { entityKey: "task", operationKey: "clearCompletedTasks" },
+      canonicalOperationKey: "task.clearCompletedTasks",
+    });
+    expect(entityOperationCommandEffectKinds).toContain("create-tree-child");
+    expect(entityOperationCommandEffectTypes).toEqual(["runActionKind", "recordPlan"]);
+    expect(isEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
+    expect(isLegacyEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
+    expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
+    expect(isLegacyEntityOperationCommandEffect(submitIntakeEffect)).toBe(false);
+  });
+
+  it("does not synthesize operations or operation bindings from mutation policies, entity actions, or public action metadata", () => {
+    const schema = parseAppSchema(
+      baseTaskSchema({
+        entities: {
+          task: taskEntity({
+            actions: {
+              subscribePublic: {
+                label: "Subscribe",
+                kind: "subscribe",
+                access: anonymousPublicAccess(),
+                publicInput: {
+                  fields: {
+                    email: { type: "text", required: true, label: "Email" },
+                  },
+                },
+              },
+            },
+          }),
+        },
+      }),
+    );
+    const view = schema.views.taskHome;
+
+    if (view?.type !== "collection") {
+      throw new Error("Missing taskHome collection view.");
+    }
 
     expect(schema.entities.task?.operations).toBeUndefined();
+    expect(schema.entities.task?.actions?.subscribePublic).toMatchObject({
+      kind: "subscribe",
+      access: anonymousPublicAccess(),
+      publicInput: { fields: { email: { type: "text", required: true, label: "Email" } } },
+    });
+    expect(view.operations).toBeUndefined();
+
+    expect(() =>
+      parseAppSchema(
+        baseTaskSchema({
+          views: {
+            taskHome: taskHomeCollectionView({
+              operations: [{ operation: "task.clearCompletedTasks" }],
+            }),
+          },
+        }),
+      ),
+    ).toThrow('references unknown operation "task.clearCompletedTasks"');
   });
 
   it("keeps browser-hidden collection operation bindings parseable for client selection", () => {
@@ -756,14 +856,7 @@ function baseTaskSchema(overrides: Record<string, unknown> = {}) {
     },
     tableViews: {},
     views: {
-      taskHome: {
-        type: "collection",
-        label: "Tasks",
-        entity: "task",
-        queries: [{ query: "taskAll" }, { query: "taskActive" }, { query: "taskCompleted" }],
-        defaultQuery: "taskAll",
-        result: { type: "list", itemView: "taskItem" },
-      },
+      taskHome: taskHomeCollectionView(),
     },
     screens: {
       home: {
@@ -780,7 +873,19 @@ function baseTaskSchema(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function taskEntity() {
+function taskHomeCollectionView(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "collection",
+    label: "Tasks",
+    entity: "task",
+    queries: [{ query: "taskAll" }, { query: "taskActive" }, { query: "taskCompleted" }],
+    defaultQuery: "taskAll",
+    result: { type: "list", itemView: "taskItem" },
+    ...overrides,
+  };
+}
+
+function taskEntity(overrides: Record<string, unknown> = {}) {
   return {
     label: "Task",
     fields: {
@@ -800,6 +905,7 @@ function taskEntity() {
         target: { query: "taskCompleted" },
       },
     },
+    ...overrides,
   };
 }
 

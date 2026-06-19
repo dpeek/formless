@@ -11,10 +11,13 @@ import type {
   ActionAccessPolicySchema,
   ActionChallengePolicySchema,
   ActionOriginPolicySchema,
+  CollectionOperationBindingSchema,
   CollectionQuerySchema,
   CreateRecordEntityOperationEffectSchema,
   DeleteRecordEntityOperationEffectSchema,
   EntityActionKind,
+  EntityOperationCommandEffectSchema,
+  EntityOperationCommandEffectType,
   EntityOperationActorKind,
   EntityOperationAuditInputPolicy,
   EntityOperationAuditSchema,
@@ -32,6 +35,7 @@ import type {
   EntitySchema,
   EnumValueSchema,
   FieldSchema,
+  LegacyEntityOperationCommandEffectType,
   PatchRecordEntityOperationEffectSchema,
   RecordPlanActorContextField,
   RecordPlanEntityOperationEffectSchema,
@@ -66,7 +70,11 @@ const entityOperationActorKinds = [
   "anonymous",
 ] as const satisfies readonly EntityOperationActorKind[];
 
-const entityActionKinds = [
+export const entityOperationBindingKinds = ["collection"] as const;
+
+export type EntityOperationBindingKind = (typeof entityOperationBindingKinds)[number];
+
+export const entityOperationCommandEffectKinds = [
   "clear-completed",
   "create-missing-join-records",
   "create-selected-join-record",
@@ -76,6 +84,15 @@ const entityActionKinds = [
   "subscribe",
   "transition-state",
 ] as const satisfies readonly EntityActionKind[];
+
+export const entityOperationCommandEffectTypes = [
+  "runActionKind",
+  "recordPlan",
+] as const satisfies readonly EntityOperationCommandEffectType[];
+
+export const legacyEntityOperationCommandEffectTypes = [
+  "runActionKind",
+] as const satisfies readonly LegacyEntityOperationCommandEffectType[];
 
 const entityOperationAuditInputPolicies = [
   "none",
@@ -102,9 +119,15 @@ const recordPlanSourceContextFields = [
   "path",
 ] as const satisfies readonly RecordPlanSourceContextField[];
 
-type ParsedEntityOperationKey = {
+export type ParsedEntityOperationKey = {
   entityKey: string;
   operationKey: string;
+};
+
+export type EntityOperationBindingClassification = {
+  kind: EntityOperationBindingKind;
+  operationKey: ParsedEntityOperationKey;
+  canonicalOperationKey: string;
 };
 
 type ParsedRecordPlanStep = {
@@ -140,6 +163,63 @@ export function parseEntityOperationKey(context: string, value: unknown): Parsed
 
 export function isEntityOperationWriteKind(kind: EntityOperationKind): boolean {
   return kind === "create" || kind === "update" || kind === "delete" || kind === "command";
+}
+
+export function isEntityOperationReadKind(kind: EntityOperationKind): boolean {
+  return kind === "list" || kind === "get";
+}
+
+export function isEntityOperationCommandKind(kind: EntityOperationKind): boolean {
+  return kind === "command";
+}
+
+export function isEntityOperationBindingKind(value: unknown): value is EntityOperationBindingKind {
+  return entityOperationBindingKinds.includes(value as EntityOperationBindingKind);
+}
+
+export function classifyCollectionOperationBinding(
+  binding: CollectionOperationBindingSchema,
+): EntityOperationBindingClassification {
+  const operationKey = parseEntityOperationKey(
+    "Collection operation binding operation",
+    binding.operation,
+  );
+
+  return {
+    kind: "collection",
+    operationKey,
+    canonicalOperationKey: formatEntityOperationKey(operationKey),
+  };
+}
+
+export function isEntityOperationCommandEffectKind(value: unknown): value is EntityActionKind {
+  return entityOperationCommandEffectKinds.includes(value as EntityActionKind);
+}
+
+export function isEntityOperationCommandEffectType(
+  value: unknown,
+): value is EntityOperationCommandEffectType {
+  return entityOperationCommandEffectTypes.includes(value as EntityOperationCommandEffectType);
+}
+
+export function isEntityOperationCommandEffect(
+  effect: EntityOperationEffectSchema | undefined,
+): effect is EntityOperationCommandEffectSchema {
+  return effect !== undefined && isEntityOperationCommandEffectType(effect.type);
+}
+
+export function isLegacyEntityOperationCommandEffectType(
+  value: unknown,
+): value is LegacyEntityOperationCommandEffectType {
+  return legacyEntityOperationCommandEffectTypes.includes(
+    value as LegacyEntityOperationCommandEffectType,
+  );
+}
+
+export function isLegacyEntityOperationCommandEffect(
+  effect: EntityOperationEffectSchema | undefined,
+): effect is RunActionKindEntityOperationEffectSchema {
+  return effect !== undefined && isLegacyEntityOperationCommandEffectType(effect.type);
 }
 
 export function isEntityOperationVisibleToBrowser(operation: EntityOperationSchema) {
@@ -743,8 +823,8 @@ function parseRunActionKindEffect(
   entity: EntitySchema,
   queries: Record<string, CollectionQuerySchema>,
 ): RunActionKindEntityOperationEffectSchema {
-  if (!isEntityActionKind(value.kind)) {
-    throw new Error(`${context} kind must be a supported schema action kind.`);
+  if (!isEntityOperationCommandEffectKind(value.kind)) {
+    throw new Error(`${context} kind must be a supported schema command effect kind.`);
   }
 
   const actionName = parseOptionalNonEmptyString(`${context} action`, value.action);
@@ -1517,10 +1597,6 @@ function parseOptionalBoolean(context: string, value: unknown): boolean | undefi
   }
 
   return value;
-}
-
-function isEntityActionKind(value: unknown): value is EntityActionKind {
-  return entityActionKinds.includes(value as EntityActionKind);
 }
 
 function isEntityOperationActorKind(value: unknown): value is EntityOperationActorKind {

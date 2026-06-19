@@ -99,9 +99,9 @@ describe("home view model collections", () => {
     const createOperation = listModel.operations.find((action) => action.type === "create");
     const listFields = listModel.result.type === "list" ? listModel.result.recordFields : [];
     const tableColumns = tableModel.result.type === "table" ? tableModel.result.columns : [];
-    const editAction = tableColumns
-      .find((column) => column.type === "invokeAction")
-      ?.actions.find((action) => action.type === "editRecord");
+    const editControl = tableColumns
+      .find((column) => column.type === "operationControl")
+      ?.controls.find((control) => control.type === "editRecord");
 
     expect(
       listFields.map((field) => ({
@@ -147,8 +147,8 @@ describe("home view model collections", () => {
         : [],
     ).toEqual(["title"]);
     expect(
-      editAction?.type === "editRecord"
-        ? editAction.editView.fields.map((field) => field.fieldName)
+      editControl?.type === "editRecord"
+        ? editControl.editView.fields.map((field) => field.fieldName)
         : [],
     ).toEqual(["title"]);
   });
@@ -173,13 +173,13 @@ describe("home view model collections", () => {
             (column) => column.type === "field" && column.fieldName === "status",
           )
         : undefined;
-    const tableActionColumn =
+    const tableOperationColumn =
       tableModel.result.type === "table"
-        ? tableModel.result.columns.find((column) => column.type === "invokeAction")
+        ? tableModel.result.columns.find((column) => column.type === "operationControl")
         : undefined;
-    const editAction =
-      tableActionColumn?.type === "invokeAction"
-        ? tableActionColumn.actions.find((action) => action.type === "editRecord")
+    const editControl =
+      tableOperationColumn?.type === "operationControl"
+        ? tableOperationColumn.controls.find((control) => control.type === "editRecord")
         : undefined;
 
     expect(listStatus?.stateMachine).toMatchObject({
@@ -192,25 +192,27 @@ describe("home view model collections", () => {
     expect(tableStatus?.type === "field" ? tableStatus.stateMachine?.machineName : undefined).toBe(
       "statusFlow",
     );
-    expect(listModel.result.type === "list" ? listModel.result.transitionActions : []).toEqual([
+    expect(listModel.result.type === "list" ? listModel.result.transitionOperations : []).toEqual([
       expect.objectContaining({
         operationName: "startTask",
+        operation: expect.objectContaining({ canonicalKey: "task.startTask" }),
         fieldName: "status",
         machineName: "statusFlow",
         transitionName: "start",
       }),
       expect.objectContaining({
         operationName: "completeTask",
+        operation: expect.objectContaining({ canonicalKey: "task.completeTask" }),
         fieldName: "status",
         machineName: "statusFlow",
         transitionName: "complete",
       }),
     ]);
     expect(
-      recordModel.result.type === "record" ? recordModel.result.transitionActions : [],
+      recordModel.result.type === "record" ? recordModel.result.transitionOperations : [],
     ).toHaveLength(2);
     expect(
-      tableModel.result.type === "table" ? tableModel.result.transitionActions : [],
+      tableModel.result.type === "table" ? tableModel.result.transitionOperations : [],
     ).toHaveLength(2);
     expect(
       createOperation?.type === "create"
@@ -219,7 +221,7 @@ describe("home view model collections", () => {
         : undefined,
     ).toBe("todo");
     expect(
-      editAction?.type === "editRecord" ? editAction.editView.transitionActions : [],
+      editControl?.type === "editRecord" ? editControl.editView.transitionOperations : [],
     ).toHaveLength(2);
   });
 
@@ -230,11 +232,11 @@ describe("home view model collections", () => {
     const createOperation = listModel.operations.find((action) => action.type === "create");
     const editColumn =
       editModel.result.type === "table"
-        ? editModel.result.columns.find((column) => column.type === "invokeAction")
+        ? editModel.result.columns.find((column) => column.type === "operationControl")
         : undefined;
-    const editAction =
-      editColumn?.type === "invokeAction"
-        ? editColumn.actions.find((action) => action.type === "editRecord")
+    const editControl =
+      editColumn?.type === "operationControl"
+        ? editColumn.controls.find((control) => control.type === "editRecord")
         : undefined;
 
     expect(
@@ -289,27 +291,27 @@ describe("home view model collections", () => {
         },
       ],
     });
-    expect(editAction?.type === "editRecord" ? editAction.editView.union : undefined).toMatchObject(
-      {
-        unionName: "taskByKind",
-        variants: [
-          {
-            variantValue: "role",
-            presentation: {
-              type: "fields",
-              fields: [{ fieldName: "title", editor: "text", commit: "field-commit" }],
-            },
+    expect(
+      editControl?.type === "editRecord" ? editControl.editView.union : undefined,
+    ).toMatchObject({
+      unionName: "taskByKind",
+      variants: [
+        {
+          variantValue: "role",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "title", editor: "text", commit: "field-commit" }],
           },
-          {
-            variantValue: "stream",
-            presentation: {
-              type: "fields",
-              fields: [{ fieldName: "done", editor: "boolean", commit: "immediate" }],
-            },
+        },
+        {
+          variantValue: "stream",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "done", editor: "boolean", commit: "immediate" }],
           },
-        ],
-      },
-    );
+        },
+      ],
+    });
   });
 
   it("exposes literal create defaults for fixed discriminator create actions", () => {
@@ -352,10 +354,10 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves collection operations and clear-completed target query", () => {
+  it("resolves collection operation bindings and clear-completed command target query", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
-    expect(model?.operations.map((action) => action.label)).toEqual([
+    expect(model?.operations.map((operation) => operation.label)).toEqual([
       "Create Task",
       "Clear completed",
     ]);
@@ -365,6 +367,11 @@ describe("home view model collections", () => {
 
     expect(create).toMatchObject({
       type: "create",
+      operationName: "create",
+      operation: {
+        canonicalKey: "task.create",
+        operation: { kind: "create" },
+      },
       enabled: true,
     });
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
@@ -375,7 +382,15 @@ describe("home view model collections", () => {
     expect(create?.type === "create" ? create.defaults : []).toEqual([]);
     expect(clearCompleted).toMatchObject({
       type: "command",
-      actionName: "clearCompletedTasks",
+      operationName: "clearCompletedTasks",
+      operation: {
+        canonicalKey: "task.clearCompletedTasks",
+        operation: {
+          kind: "command",
+          effect: { type: "runActionKind", kind: "clear-completed" },
+          target: { query: "taskCompleted" },
+        },
+      },
       ui: {
         showAffectedCountOnSuccess: true,
         targetCount: {
@@ -387,7 +402,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("uses default generated UI facts for non-target-count action kinds", () => {
+  it("uses default generated UI facts for non-target-count command operations", () => {
     const rateHome = rateCardSchema.views.rateHome;
 
     if (rateHome?.type !== "collection") {
@@ -410,21 +425,88 @@ describe("home view model collections", () => {
       },
     };
     const model = requiredCollectionModel(schema, "rateHome");
-    const action = model.operations[0];
+    const operation = model.operations[0];
 
-    expect(action).toMatchObject({
+    expect(operation).toMatchObject({
       type: "command",
       label: "Regenerate missing rates",
       entityName: "rate",
-      actionName: "regenerateMissingRates",
-      action: {
-        kind: "create-missing-join-records",
+      operationName: "regenerateMissingRates",
+      operation: {
+        canonicalKey: "rate.regenerateMissingRates",
+        operation: {
+          kind: "command",
+          effect: { type: "runActionKind", kind: "create-missing-join-records" },
+        },
       },
       ui: {
         showAffectedCountOnSuccess: true,
       },
     });
-    expect(action?.type === "command" ? action.ui.targetCount : undefined).toBeUndefined();
+    expect(operation?.type === "command" ? operation.ui.targetCount : undefined).toBeUndefined();
+  });
+
+  it("does not synthesize collection toolbar controls from mutation policy or entity action slots", () => {
+    const taskHome = appSchema.views.taskHome;
+
+    if (taskHome?.type !== "collection") {
+      throw new Error("Missing task home collection view.");
+    }
+
+    const schema: AppSchema = {
+      ...appSchema,
+      views: {
+        ...appSchema.views,
+        taskHome: {
+          ...taskHome,
+          operations: undefined,
+        },
+      },
+    };
+    const model = requiredCollectionModel(schema, "taskHome");
+
+    expect(model.operations).toEqual([]);
+  });
+
+  it("selects command toolbar controls from operation bindings without entity action slots", () => {
+    const task = appSchema.entities.task;
+
+    if (!task) {
+      throw new Error("Missing task entity.");
+    }
+
+    const schema: AppSchema = {
+      ...appSchema,
+      entities: {
+        ...appSchema.entities,
+        task: {
+          ...task,
+          actions: undefined,
+        },
+      },
+    };
+    const model = requiredCollectionModel(schema, "taskHome");
+    const clearCompleted = model.operations.find(
+      (operation) =>
+        operation.type === "command" && operation.operationName === "clearCompletedTasks",
+    );
+
+    expect(clearCompleted).toMatchObject({
+      type: "command",
+      label: "Clear completed",
+      operation: {
+        canonicalKey: "task.clearCompletedTasks",
+        operation: {
+          kind: "command",
+          effect: { type: "runActionKind", kind: "clear-completed" },
+        },
+      },
+      ui: {
+        targetCount: {
+          query: appSchema.queries.taskCompleted?.expression,
+        },
+      },
+    });
   });
 
   it("filters bound collection operations through browser visibility", () => {
@@ -644,8 +726,9 @@ describe("home view model collections", () => {
           type: "command",
           label: "Clear completed",
           entityName: "task",
-          actionName: "clearCompletedTasks",
-          actionKind: "clear-completed",
+          operationName: "clearCompletedTasks",
+          operationKey: "task.clearCompletedTasks",
+          commandEffectKind: "clear-completed",
           showAffectedCountOnSuccess: true,
           targetCountQueryKind: "where",
           targetCountDisplay: "count",
@@ -973,7 +1056,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves table invokeAction columns to render-ready action facts", () => {
+  it("resolves table invokeAction columns to render-ready operation control facts", () => {
     const schema = parseAppSchema({
       ...rateCardSchema,
       tableViews: {
@@ -997,7 +1080,7 @@ describe("home view model collections", () => {
             {
               type: "invokeAction",
               actions: ["inspectRate", "blockedRate", "hiddenRate"],
-              label: "Rate actions",
+              label: "Rate operations",
             },
           ],
         },
@@ -1005,42 +1088,42 @@ describe("home view model collections", () => {
     });
     const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
     const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
-    const singleActionColumn = columns.at(-2);
-    const multipleActionColumn = columns.at(-1);
+    const singleOperationColumn = columns.at(-2);
+    const multipleOperationColumn = columns.at(-1);
 
-    expect(singleActionColumn).toMatchObject({
-      type: "invokeAction",
-      key: "invokeAction:inspectRate",
+    expect(singleOperationColumn).toMatchObject({
+      type: "operationControl",
+      key: "operationControl:inspectRate",
       label: "",
       headerLabel: "Inspect rate",
       align: "end",
       width: "xs",
       display: "readOnly",
       presentation: "button",
-      actions: [
+      controls: [
         {
-          actionName: "inspectRate",
+          bindingName: "inspectRate",
           label: "Inspect rate",
           variant: "default",
           disabled: false,
         },
       ],
     });
-    expect(multipleActionColumn).toMatchObject({
-      type: "invokeAction",
-      key: "invokeAction:inspectRate,blockedRate,hiddenRate",
-      label: "Rate actions",
-      headerLabel: "Rate actions",
+    expect(multipleOperationColumn).toMatchObject({
+      type: "operationControl",
+      key: "operationControl:inspectRate,blockedRate,hiddenRate",
+      label: "Rate operations",
+      headerLabel: "Rate operations",
       presentation: "dropdown",
-      actions: [
+      controls: [
         {
-          actionName: "inspectRate",
+          bindingName: "inspectRate",
           label: "Inspect rate",
           variant: "default",
           disabled: false,
         },
         {
-          actionName: "blockedRate",
+          bindingName: "blockedRate",
           label: "Blocked rate",
           variant: "default",
           disabled: true,
@@ -1050,7 +1133,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves editRecord table actions to edit dialog facts", () => {
+  it("resolves editRecord table controls to edit operation dialog facts", () => {
     const schema = parseAppSchema({
       ...rateCardSchema,
       tableViews: {
@@ -1085,15 +1168,16 @@ describe("home view model collections", () => {
     });
     const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
     const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
-    const actionColumn = columns.at(-1);
+    const operationColumn = columns.at(-1);
 
-    expect(actionColumn).toMatchObject({
-      type: "invokeAction",
-      actions: [
+    expect(operationColumn).toMatchObject({
+      type: "operationControl",
+      controls: [
         {
           type: "editRecord",
-          actionName: "editResource",
+          bindingName: "editResource",
           label: "Edit resource",
+          operation: { canonicalKey: "resource.update" },
           target: {
             kind: "reference",
             fieldName: "resource",
@@ -1128,11 +1212,11 @@ describe("home view model collections", () => {
       presentations: ["moveMenu"],
     });
     expect(result.columns.at(-1)).toMatchObject({
-      type: "invokeAction",
-      key: "invokeAction:ordering",
+      type: "operationControl",
+      key: "operationControl:ordering",
       label: "",
       headerLabel: "Actions",
-      actions: [],
+      controls: [],
       presentation: "dropdown",
       includeOrdering: true,
       ordering: {
@@ -1164,7 +1248,7 @@ describe("home view model collections", () => {
       width: "xs",
       display: "readOnly",
     });
-    expect(result.columns.some((column) => column.key === "invokeAction:ordering")).toBe(false);
+    expect(result.columns.some((column) => column.key === "operationControl:ordering")).toBe(false);
   });
 
   it("resolves result-level ordering models for list, table, and tree results", () => {
@@ -1221,14 +1305,23 @@ describe("home view model collections", () => {
       presentations: ["moveMenu"],
     });
     expect(tableResult.type === "table" ? tableResult.columns.at(-1) : undefined).toMatchObject({
-      type: "invokeAction",
-      key: "invokeAction:ordering",
+      type: "operationControl",
+      key: "operationControl:ordering",
     });
+    expect(listResult.type === "list" ? listResult.updateOperation?.canonicalKey : undefined).toBe(
+      "rate.update",
+    );
+    expect(
+      tableResult.type === "table" ? tableResult.updateOperation?.canonicalKey : undefined,
+    ).toBe("rate.update");
     expect(treeResult.type === "tree" ? treeResult.ordering : undefined).toMatchObject({
       fieldName: "order",
       scope: [{ fieldName: "parent" }],
       presentations: ["dragHandle"],
     });
+    expect(
+      treeResult.type === "tree" ? treeResult.placementUpdateOperation?.canonicalKey : undefined,
+    ).toBe("block-placement.update");
   });
 
   it("resolves tree branch policy model facts from the child item view union", () => {
@@ -1395,26 +1488,92 @@ describe("home view model collections", () => {
     );
   });
 
-  it("resolves Site tree composition action facts", () => {
+  it("resolves Site tree composition operation bindings", () => {
     const treeResult = requiredCollectionModel(siteSourceSchema, "siteCompositionHome").result;
 
     expect(treeResult.type === "tree" ? treeResult.composition : undefined).toMatchObject({
       create: {
-        actionName: "addTreeChild",
-        action: {
+        operationName: "addTreeChild",
+        operation: {
+          canonicalKey: "block-placement.addTreeChild",
+          operation: {
+            kind: "command",
+            scope: "record",
+            effect: {
+              type: "runActionKind",
+              kind: "create-tree-child",
+              action: "addTreeChild",
+            },
+          },
+        },
+        effect: {
+          type: "runActionKind",
           kind: "create-tree-child",
-          relationship: "blockPlacements",
-          childField: "block",
-          orderField: "order",
+          action: "addTreeChild",
         },
       },
       remove: {
-        actionName: "removeTreePlacement",
-        action: {
+        operationName: "removeTreePlacement",
+        operation: {
+          canonicalKey: "block-placement.removeTreePlacement",
+          operation: {
+            kind: "command",
+            scope: "record",
+            effect: {
+              type: "runActionKind",
+              kind: "remove-tree-placement",
+              action: "removeTreePlacement",
+            },
+          },
+        },
+        effect: {
+          type: "runActionKind",
           kind: "remove-tree-placement",
-          relationship: "blockPlacements",
+          action: "removeTreePlacement",
         },
       },
+    });
+  });
+
+  it("declares Site source operations and authoring operation bindings", () => {
+    const siteEntityOperations = Object.fromEntries(
+      Object.entries(siteSourceSchema.entities).map(([entityName, entity]) => [
+        entityName,
+        Object.keys(entity.operations ?? {}),
+      ]),
+    );
+    const collectionOperationBindings = Object.fromEntries(
+      Object.entries(siteSourceSchema.views).flatMap(([viewName, view]) =>
+        view.type === "collection" && view.operations
+          ? [[viewName, view.operations.map((operation) => operation.operation)]]
+          : [],
+      ),
+    );
+    const treeComposition =
+      siteSourceSchema.views.siteCompositionHome?.type === "collection" &&
+      siteSourceSchema.views.siteCompositionHome.result.type === "tree"
+        ? siteSourceSchema.views.siteCompositionHome.result.composition
+        : undefined;
+
+    expect(siteEntityOperations).toMatchObject({
+      site: ["update"],
+      block: ["create", "update", "delete"],
+      "block-placement": ["create", "update", "addTreeChild", "removeTreePlacement"],
+      "contact-message": ["submit"],
+      subscription: ["update", "subscribe"],
+    });
+    expect(collectionOperationBindings).toMatchObject({
+      blockHome: ["block.create"],
+      pageCompositionHome: ["block-placement.create"],
+      navigationCompositionHome: ["block-placement.create"],
+      blockCompositionHome: ["block-placement.create"],
+    });
+    expect(treeComposition).toEqual({
+      createOperation: "block-placement.addTreeChild",
+      removeOperation: "block-placement.removeTreePlacement",
+    });
+    expect(siteSourceSchema.entities.block.fields.actionName).toMatchObject({
+      label: "Operation",
     });
   });
 
@@ -2023,6 +2182,11 @@ describe("home view model collections", () => {
       presentations: ["dragHandle", "moveMenu"],
     });
     expect(
+      placementModel.result.type === "table"
+        ? placementModel.result.updateOperation?.canonicalKey
+        : undefined,
+    ).toBe("block-placement.update");
+    expect(
       columns.map((column) => ({
         type: column.type,
         key: column.key,
@@ -2080,8 +2244,8 @@ describe("home view model collections", () => {
         format: "plain",
       },
       {
-        type: "invokeAction",
-        key: "invokeAction:editChildBlock,ordering",
+        type: "operationControl",
+        key: "operationControl:editChildBlock,ordering",
         label: "",
         editor: null,
         commit: null,
@@ -2397,6 +2561,10 @@ describe("home view model collections", () => {
     expect(apps.layout.sections.map((section) => section.collection.entity.label)).toEqual([
       "App install",
     ]);
+    expect(apps.layout.sections[0]?.collection.updateOperation?.canonicalKey).toBe(
+      "app-install.update",
+    );
+    expect(apps.layout.sections[0]?.collection.operations).toEqual([]);
   });
 
   it("selects the unified route control-plane surface without route filter tabs", () => {
@@ -2422,20 +2590,49 @@ describe("home view model collections", () => {
       ],
     });
     const routeSection = routes.layout.sections[0];
-
-    expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual(["Routes"]);
-    expect(routeSection?.collection.result.type).toBe("table");
-    expect(
-      routeSection?.collection.result.type === "table"
-        ? routeSection.collection.result.columns.some((column) => column.type === "invokeAction")
-        : false,
-    ).toBe(true);
-    expect(
+    const routeColumns =
       routeSection?.collection.result.type === "table"
         ? routeSection.collection.result.columns
-            .filter((column): column is FieldTableColumnConfig => column.type === "field")
-            .map((column) => column.fieldName)
+        : [];
+    const routeOperationColumn = routeColumns.find((column) => column.type === "operationControl");
+    const routeEditControl =
+      routeOperationColumn?.type === "operationControl"
+        ? routeOperationColumn.controls.find((control) => control.type === "editRecord")
+        : undefined;
+
+    expect(routeSection?.collection.queries.tabs.map((tab) => tab.label)).toEqual(["Routes"]);
+    expect(
+      routeSection?.collection.operations.map((operation) => ({
+        type: operation.type,
+        operationKey: operation.operation.canonicalKey,
+      })),
+    ).toEqual([{ type: "create", operationKey: "route.create" }]);
+    expect(routeSection?.collection.updateOperation?.canonicalKey).toBe("route.update");
+    expect(routeSection?.collection.result.type).toBe("table");
+    expect(routeOperationColumn?.type).toBe("operationControl");
+    expect(routeEditControl?.type).toBe("editRecord");
+    expect(
+      routeEditControl?.type === "editRecord" ? routeEditControl.editView.viewName : undefined,
+    ).toBe("routeEdit");
+    expect(
+      routeEditControl?.type === "editRecord"
+        ? routeEditControl.operation?.canonicalKey
+        : undefined,
+    ).toBe("route.update");
+    expect(
+      routeEditControl?.type === "editRecord"
+        ? routeEditControl.editView.updateOperation?.canonicalKey
+        : undefined,
+    ).toBe("route.update");
+    expect(
+      routeEditControl?.type === "editRecord"
+        ? routeEditControl.editView.fields.map((field) => field.fieldName)
         : [],
+    ).toContain("deploymentConfig");
+    expect(
+      routeColumns
+        .filter((column): column is FieldTableColumnConfig => column.type === "field")
+        .map((column) => column.fieldName),
     ).not.toContain("deploymentConfig");
   });
 
@@ -2466,6 +2663,39 @@ describe("home view model collections", () => {
       deploymentSection?.collection.result.type === "table"
         ? deploymentSection.collection.result.columns
         : [];
+    const deploymentOperationColumn = deploymentColumns.find(
+      (column) => column.type === "operationControl",
+    );
+    const deploymentEditControl =
+      deploymentOperationColumn?.type === "operationControl"
+        ? deploymentOperationColumn.controls.find((control) => control.type === "editRecord")
+        : undefined;
+
+    expect(
+      deploymentSection?.collection.operations.map((operation) => ({
+        type: operation.type,
+        operationKey: operation.operation.canonicalKey,
+      })),
+    ).toEqual([{ type: "create", operationKey: "deployment-config.create" }]);
+    expect(deploymentSection?.collection.updateOperation?.canonicalKey).toBe(
+      "deployment-config.update",
+    );
+    expect(deploymentEditControl?.type).toBe("editRecord");
+    expect(
+      deploymentEditControl?.type === "editRecord"
+        ? deploymentEditControl.operation?.canonicalKey
+        : undefined,
+    ).toBe("deployment-config.update");
+    expect(
+      deploymentEditControl?.type === "editRecord"
+        ? deploymentEditControl.editView.updateOperation?.canonicalKey
+        : undefined,
+    ).toBe("deployment-config.update");
+    expect(
+      deploymentEditControl?.type === "editRecord"
+        ? deploymentEditControl.editView.fields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["label", "enabled", "targetUrl", "accountId", "workerName", "credentialRef"]);
 
     expect(
       deploymentColumns
@@ -3431,27 +3661,31 @@ function summarizeScreenModel(model: HomeScreenModel) {
   };
 }
 
-function summarizeHomeOperation(action: HomeOperationConfig) {
-  if (action.type === "create") {
+function summarizeHomeOperation(operation: HomeOperationConfig) {
+  if (operation.type === "create") {
     return {
-      type: action.type,
-      label: action.label,
-      entityName: action.entityName,
-      fields: action.fields.map((field) => field.fieldName),
-      defaults: action.defaults.map((defaultValue) => defaultValue.fieldName),
-      enabled: action.enabled,
+      type: operation.type,
+      label: operation.label,
+      entityName: operation.entityName,
+      fields: operation.fields.map((field) => field.fieldName),
+      defaults: operation.defaults.map((defaultValue) => defaultValue.fieldName),
+      enabled: operation.enabled,
     };
   }
 
+  const commandEffect = operation.operation.operation.effect;
+
   return {
-    type: action.type,
-    label: action.label,
-    entityName: action.entityName,
-    actionName: action.actionName,
-    actionKind: action.action.kind,
-    showAffectedCountOnSuccess: action.ui.showAffectedCountOnSuccess,
-    targetCountQueryKind: action.ui.targetCount?.query.kind ?? null,
-    targetCountDisplay: action.ui.targetCount?.display.type ?? null,
+    type: operation.type,
+    label: operation.label,
+    entityName: operation.entityName,
+    operationName: operation.operationName,
+    operationKey: operation.operation.canonicalKey,
+    commandEffectKind:
+      commandEffect?.type === "runActionKind" ? commandEffect.kind : (commandEffect?.type ?? null),
+    showAffectedCountOnSuccess: operation.ui.showAffectedCountOnSuccess,
+    targetCountQueryKind: operation.ui.targetCount?.query.kind ?? null,
+    targetCountDisplay: operation.ui.targetCount?.display.type ?? null,
   };
 }
 

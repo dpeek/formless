@@ -92,7 +92,7 @@ describe("generated table app paths", () => {
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
 
-  it("keeps Site placement table actions and ordering controls on the React Aria table path", () => {
+  it("keeps Site placement table operation controls and ordering controls on the React Aria table path", () => {
     const html = renderGeneratedTableCollectionHtml({
       records: testSiteSeedRecords,
       schema: siteSourceSchema,

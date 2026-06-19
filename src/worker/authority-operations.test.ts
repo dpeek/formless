@@ -14,6 +14,7 @@ import type { OperationInvocationResponse } from "../shared/operation-invocation
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
   AppSchema,
+  EntitySchema,
   EntityOperationSchema,
   RecordPlanStepSchema,
 } from "@dpeek/formless-schema";
@@ -281,6 +282,388 @@ describe("authority operation execution", () => {
     expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
     expect(replay.body.result.body.status).toBe("replayed");
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
+  });
+
+  it("commits operation-only CRUD writes without legacy mutation policy", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithOperationOnlyTaskCrud(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const created = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-only-crud-create",
+        input: {
+          title: "Operation-only CRUD",
+          done: false,
+        },
+      },
+    });
+    const createOutput = created.body.result.body.output;
+
+    if (createOutput.type !== "create") {
+      throw new Error("Expected create operation output.");
+    }
+
+    const listed = await executeOperation<OperationInvocationResponse>({
+      method: "GET",
+      path: "/operations/task/activeList",
+    });
+    const listOutput = listed.body.result.body.output;
+
+    if (listOutput.type !== "list") {
+      throw new Error("Expected list operation output.");
+    }
+
+    const updated = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/update",
+      body: {
+        idempotencyKey: "operation-only-crud-update",
+        recordId: createOutput.record.id,
+        input: {
+          title: "Operation-only CRUD updated",
+          done: true,
+        },
+      },
+    });
+    const updateOutput = updated.body.result.body.output;
+
+    if (updateOutput.type !== "update") {
+      throw new Error("Expected update operation output.");
+    }
+
+    const read = await executeOperation<OperationInvocationResponse>({
+      method: "GET",
+      path: "/operations/task/read",
+      search: `recordId=${encodeURIComponent(createOutput.record.id)}`,
+    });
+    const readOutput = read.body.result.body.output;
+
+    if (readOutput.type !== "get") {
+      throw new Error("Expected get operation output.");
+    }
+
+    const deleted = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/delete",
+      body: {
+        idempotencyKey: "operation-only-crud-delete",
+        recordId: createOutput.record.id,
+      },
+    });
+    const deleteReplay = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/delete",
+      body: {
+        idempotencyKey: "operation-only-crud-delete",
+        recordId: createOutput.record.id,
+      },
+    });
+    const deleteOutput = deleted.body.result.body.output;
+
+    if (deleteOutput.type !== "delete") {
+      throw new Error("Expected delete operation output.");
+    }
+
+    expect(schema.entities.task?.mutations).toEqual(disabledMutations());
+    expect(created.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(createOutput.record.createdAt).toBe(created.body.result.body.invocation.receivedAt);
+    expect(createOutput.record.updatedAt).toBe(created.body.result.body.invocation.receivedAt);
+    expect(createOutput.changes).toEqual([
+      expect.objectContaining({
+        createdAt: created.body.result.body.invocation.receivedAt,
+        entity: "task",
+        mutationId: "operation:task.create:operation-only-crud-create",
+        op: "create",
+        payload: createOutput.record,
+        recordId: createOutput.record.id,
+      }),
+    ]);
+    expect(createOutput.affectedChangeIds).toEqual(
+      createOutput.changes.map((change) => String(change.seq)),
+    );
+    expect(listOutput.records).toContainEqual(createOutput.record);
+    expect(updateOutput.record).toMatchObject({
+      id: createOutput.record.id,
+      createdAt: createOutput.record.createdAt,
+      updatedAt: updated.body.result.body.invocation.receivedAt,
+      values: {
+        title: "Operation-only CRUD updated",
+        done: true,
+      },
+    });
+    expect(updateOutput.changes).toEqual([
+      expect.objectContaining({
+        createdAt: updated.body.result.body.invocation.receivedAt,
+        entity: "task",
+        mutationId: "operation:task.update:operation-only-crud-update",
+        op: "patch",
+        payload: updateOutput.record,
+        recordId: createOutput.record.id,
+      }),
+    ]);
+    expect(readOutput.record).toEqual(updateOutput.record);
+    expect(deleteOutput).toMatchObject({
+      affectedChangeIds: deleteOutput.changes.map((change) => String(change.seq)),
+      recordId: createOutput.record.id,
+      type: "delete",
+    });
+    expect(deleteOutput.changes).toEqual([
+      expect.objectContaining({
+        createdAt: deleted.body.result.body.invocation.receivedAt,
+        entity: "task",
+        mutationId: "operation:task.delete:operation-only-crud-delete",
+        op: "delete",
+        payload: {
+          ...updateOutput.record,
+          deletedAt: deleted.body.result.body.invocation.receivedAt,
+          updatedAt: deleted.body.result.body.invocation.receivedAt,
+        },
+        recordId: createOutput.record.id,
+      }),
+    ]);
+    expect(deleteReplay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
+    expect(deleteReplay.body.result.body).toMatchObject({
+      output: deleteOutput,
+      status: "replayed",
+    });
+  });
+
+  it("enforces operation unique constraints before CRUD write-log append", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithOperationOnlyTaskCrud(bootstrap.body.result.body.schema);
+
+    schema.entities.task = {
+      ...schema.entities.task,
+      constraints: {
+        uniqueTitle: {
+          kind: "unique",
+          fields: ["title"],
+        },
+      },
+    };
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const baseline = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const first = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-unique-first",
+        input: {
+          title: "Unique operation title",
+          done: false,
+        },
+      },
+    });
+    const second = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-unique-second",
+        input: {
+          title: "Other operation title",
+          done: false,
+        },
+      },
+    });
+    const duplicateCreate = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-unique-duplicate-create",
+        input: {
+          title: "Unique operation title",
+          done: false,
+        },
+      },
+    });
+    const secondOutput = second.body.result.body.output;
+
+    if (secondOutput.type !== "create") {
+      throw new Error("Expected create operation output.");
+    }
+
+    const duplicateUpdate = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/update",
+      body: {
+        idempotencyKey: "operation-unique-duplicate-update",
+        recordId: secondOutput.record.id,
+        input: {
+          title: "Unique operation title",
+        },
+      },
+    });
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${baseline.body.result.body.cursor}&schemaUpdatedAt=${encodeURIComponent(
+        baseline.body.result.body.schemaUpdatedAt,
+      )}`,
+    });
+    const rows = await readOperationInvocations();
+
+    expect(first.response.status).toBe(200);
+    expect(duplicateCreate.response.status).toBe(400);
+    expect(duplicateCreate.body).toEqual({
+      error: 'Unique constraint "task.uniqueTitle" would be violated.',
+      writes: [],
+    });
+    expect(duplicateUpdate.response.status).toBe(400);
+    expect(duplicateUpdate.body).toEqual({
+      error: 'Unique constraint "task.uniqueTitle" would be violated.',
+      writes: [],
+    });
+    expect(sync.body.result.body.changes.map((change) => change.mutationId)).toEqual([
+      "operation:task.create:operation-unique-first",
+      "operation:task.create:operation-unique-second",
+    ]);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          affectedChangeIds: [],
+          errorMessage: 'Unique constraint "task.uniqueTitle" would be violated.',
+          operationKey: "task.create",
+          status: "failed",
+        }),
+        expect.objectContaining({
+          affectedChangeIds: [],
+          errorMessage: 'Unique constraint "task.uniqueTitle" would be violated.',
+          operationKey: "task.update",
+          status: "failed",
+        }),
+      ]),
+    );
+  });
+
+  it("enforces operation reference validation and delete blockers before CRUD write-log append", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithOperationOnlyTaskProjectReference(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const baseline = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const project = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/project/create",
+      body: {
+        idempotencyKey: "operation-reference-project",
+        input: {
+          name: "Operation project",
+        },
+      },
+    });
+    const projectOutput = project.body.result.body.output;
+
+    if (projectOutput.type !== "create") {
+      throw new Error("Expected project create output.");
+    }
+
+    const missingReference = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-reference-missing",
+        input: {
+          title: "Missing reference task",
+          done: false,
+          project: "missing-project",
+        },
+      },
+    });
+    const task = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "operation-reference-task",
+        input: {
+          title: "Referenced task",
+          done: false,
+          project: projectOutput.record.id,
+        },
+      },
+    });
+    const blockedDelete = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/project/delete",
+      body: {
+        idempotencyKey: "operation-reference-delete-blocked",
+        recordId: projectOutput.record.id,
+      },
+    });
+    const projectRead = await executeOperation<OperationInvocationResponse>({
+      method: "GET",
+      path: "/operations/project/read",
+      search: `recordId=${encodeURIComponent(projectOutput.record.id)}`,
+    });
+    const projectReadOutput = projectRead.body.result.body.output;
+
+    if (projectReadOutput.type !== "get") {
+      throw new Error("Expected project get output.");
+    }
+
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${baseline.body.result.body.cursor}&schemaUpdatedAt=${encodeURIComponent(
+        baseline.body.result.body.schemaUpdatedAt,
+      )}`,
+    });
+
+    expect(missingReference.response.status).toBe(400);
+    expect(missingReference.body).toEqual({
+      error: 'Field "project" references unknown project record "missing-project".',
+      writes: [],
+    });
+    expect(task.response.status).toBe(200);
+    expect(blockedDelete.response.status).toBe(400);
+    expect(blockedDelete.body.error).toContain(
+      `Cannot delete record "${projectOutput.record.id}" because active task record`,
+    );
+    expect(blockedDelete.body.writes).toEqual([]);
+    expect(projectReadOutput.record).toMatchObject({
+      id: projectOutput.record.id,
+      values: {
+        name: "Operation project",
+      },
+    });
+    expect(projectReadOutput.record.deletedAt).toBeUndefined();
+    expect(sync.body.result.body.changes.map((change) => change.mutationId)).toEqual([
+      "operation:project.create:operation-reference-project",
+      "operation:task.create:operation-reference-task",
+    ]);
   });
 
   it("stores committed and replayed operation invocation rows outside sync and snapshots", async () => {
@@ -563,6 +946,185 @@ describe("authority operation execution", () => {
     expect(JSON.stringify(commandRow?.auditInput)).not.toContain("secret-challenge");
   });
 
+  it("executes registered command effects through operation policy and replays command outcomes", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithScopedClearCompletedCommand(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const created = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "command-effect-completed-task",
+        input: {
+          title: "Operation command completed",
+          done: true,
+        },
+      },
+    });
+    const createdOutput = created.body.result.body.output;
+
+    if (createdOutput.type !== "create") {
+      throw new Error("Expected create operation output.");
+    }
+
+    const body = { idempotencyKey: "command-effect-clear-completed" };
+    const committed = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/clearCompletedTasks",
+      body,
+    });
+    const replay = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/clearCompletedTasks",
+      body,
+    });
+    const output = committed.body.result.body.output;
+    const rows = await readOperationInvocations();
+    const commandRow = rows.find((row) => row.operationKey === "task.clearCompletedTasks");
+
+    if (output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
+    expect(replay.body.result.body.status).toBe("replayed");
+    expect(replay.body.result.body.output).toEqual(output);
+    expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
+    expect(output.response.actionId).toBe(
+      "operation:task.clearCompletedTasks:command-effect-clear-completed",
+    );
+    const createdRecordChange = output.changes.find(
+      (change) => change.recordId === createdOutput.record.id,
+    );
+
+    expect(createdRecordChange).toMatchObject({
+      entity: "task",
+      mutationId: "operation:task.clearCompletedTasks:command-effect-clear-completed",
+      op: "action",
+      payload: {
+        id: createdOutput.record.id,
+        deletedAt: committed.body.result.body.invocation.receivedAt,
+        updatedAt: committed.body.result.body.invocation.receivedAt,
+        values: {
+          title: "Operation command completed",
+        },
+      },
+      recordId: createdOutput.record.id,
+    });
+    expect(createdRecordChange?.payload.values).not.toHaveProperty("done");
+    expect(commandRow).toMatchObject({
+      affectedChangeIds: output.affectedChangeIds,
+      operationKey: "task.clearCompletedTasks",
+      operationKind: "command",
+      output,
+      status: "replayed",
+    });
+    expect(commandRow?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+      "replayed",
+    ]);
+  });
+
+  it("commits transition-state command operations through operation invocation", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithTransitionCommandOperation(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const created = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "transition-command-task",
+        input: {
+          title: "Transition command task",
+          done: false,
+        },
+      },
+    });
+    const createdOutput = created.body.result.body.output;
+
+    if (createdOutput.type !== "create") {
+      throw new Error("Expected create operation output.");
+    }
+
+    const committed = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/startTask",
+      body: {
+        idempotencyKey: "transition-command-start",
+        recordId: createdOutput.record.id,
+      },
+    });
+    const output = committed.body.result.body.output;
+    const receivedAt = committed.body.result.body.invocation.receivedAt;
+    const rows = await readOperationInvocations();
+    const transitionRow = rows.find((row) => row.operationKey === "task.startTask");
+
+    if (output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
+    expect(output.changes.map((change) => change.entity)).toEqual(["task", "task-event"]);
+    expect(output.changes[0]).toMatchObject({
+      entity: "task",
+      op: "action",
+      payload: {
+        id: createdOutput.record.id,
+        updatedAt: receivedAt,
+        values: {
+          status: "doing",
+        },
+      },
+    });
+    expect(output.changes[1]).toMatchObject({
+      entity: "task-event",
+      op: "action",
+      payload: {
+        createdAt: receivedAt,
+        updatedAt: receivedAt,
+        values: {
+          actorMode: "owner",
+          nextState: "doing",
+          occurredAt: receivedAt.slice(0, 10),
+          previousState: "todo",
+          sourceEntity: "task",
+          sourceRecordId: createdOutput.record.id,
+          transitionKey: "start",
+        },
+      },
+    });
+    expect(transitionRow).toMatchObject({
+      affectedChangeIds: output.affectedChangeIds,
+      operationKey: "task.startTask",
+      operationKind: "command",
+      output,
+      status: "committed",
+    });
+  });
+
   it("materializes record-plan command operations through operation writes", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
@@ -596,6 +1158,7 @@ describe("authority operation execution", () => {
       },
     });
     const output = committed.body.result.body.output;
+    const rows = await readOperationInvocations();
 
     if (output.type !== "command") {
       throw new Error("Expected command operation output.");
@@ -618,14 +1181,22 @@ describe("authority operation execution", () => {
 
     const taskId = output.response.recordPlan?.steps[0]?.recordId;
     const log = output.changes[1]?.payload;
+    const receivedAt = committed.body.result.body.invocation.receivedAt;
 
     expect(taskId).toMatch(/^task_/);
+    expect(output.changes.map((change) => change.createdAt)).toEqual([
+      receivedAt,
+      receivedAt,
+      receivedAt,
+    ]);
     expect(output.response.recordPlan?.steps.map((step) => step.changeId)).toEqual(
       output.affectedChangeIds,
     );
     expect(output.changes[0]?.payload).toMatchObject({
       id: taskId,
       entity: "task",
+      createdAt: receivedAt,
+      updatedAt: receivedAt,
       values: {
         title: "Record-plan task",
         done: false,
@@ -638,16 +1209,27 @@ describe("authority operation execution", () => {
         task: taskId,
         label: "Created by plan",
         actorMode: "owner",
+        occurredAt: receivedAt,
         sourcePath: "/intake",
       },
     });
     expect(output.changes[2]?.payload).toMatchObject({
       id: taskId,
       entity: "task",
+      updatedAt: receivedAt,
       values: {
         title: "Record-plan task",
       },
     });
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        affectedChangeIds: output.affectedChangeIds,
+        operationKey: "task.submitPlan",
+        operationKind: "command",
+        output,
+        status: "committed",
+      }),
+    );
   });
 
   it("rejects record-plan validation failures without partial writes", async () => {
@@ -1021,6 +1603,114 @@ function cloneSchema(schema: AppSchema): AppSchema {
   return JSON.parse(JSON.stringify(schema)) as AppSchema;
 }
 
+function schemaWithScopedClearCompletedCommand(sourceSchema: AppSchema): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+  const action = taskEntity.actions?.clearCompletedTasks;
+  const operation = taskEntity.operations?.clearCompletedTasks;
+
+  if (
+    !action ||
+    action.kind !== "clear-completed" ||
+    !operation ||
+    operation.effect?.type !== "runActionKind"
+  ) {
+    throw new Error("Expected clearCompletedTasks action and operation.");
+  }
+
+  schema.entities.task = {
+    ...taskEntity,
+    actions: {
+      ...taskEntity.actions,
+      clearCompletedTasks: {
+        ...action,
+        exposure: { actors: ["runner"] },
+      },
+    },
+    operations: {
+      ...taskEntity.operations,
+      clearCompletedTasks: {
+        ...operation,
+        policy: {
+          actors: ["owner"],
+          responseFields: {
+            owner: ["title"],
+          },
+        },
+      },
+    },
+  };
+
+  return schema;
+}
+
+function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+  const taskFields = {
+    ...taskEntity.fields,
+    status: {
+      type: "enum",
+      required: true,
+      label: "Status",
+      default: "todo",
+      values: {
+        todo: { label: "Todo" },
+        doing: { label: "Doing" },
+        done: { label: "Done" },
+      },
+    },
+  } satisfies EntitySchema["fields"];
+
+  schema.entities.task = {
+    ...taskEntity,
+    fields: taskFields,
+    mutations: disabledMutations(),
+    stateMachines: {
+      statusFlow: {
+        field: "status",
+        initial: "todo",
+        terminal: ["done"],
+        transitions: {
+          start: { label: "Start", from: ["todo"], to: "doing" },
+          finish: { label: "Finish", from: ["doing"], to: "done" },
+        },
+        event: {
+          entity: "task-event",
+          fields: transitionEventFieldMappings(),
+        },
+      },
+    },
+    actions: {
+      ...taskEntity.actions,
+      startTask: {
+        label: "Start",
+        kind: "transition-state",
+        machine: "statusFlow",
+        transition: "start",
+        exposure: { actors: ["runner"] },
+      },
+    },
+    operations: {
+      ...taskEntity.operations,
+      ...recordCrudOperations("Task", taskFields),
+      startTask: {
+        label: "Start",
+        kind: "command",
+        scope: "record",
+        effect: { type: "runActionKind", kind: "transition-state", action: "startTask" },
+        output: { type: "command" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
+        policy: { actors: ["owner"] },
+      },
+    },
+  };
+  schema.entities["task-event"] = transitionEventEntity();
+
+  return schema;
+}
+
 function schemaWithRecordPlanOperation(
   sourceSchema: AppSchema,
   operationName: string,
@@ -1036,6 +1726,7 @@ function schemaWithRecordPlanOperation(
   schema.entities["task-log"] = taskLogEntity();
   schema.entities.task = {
     ...taskEntity,
+    mutations: disabledMutations(),
     operations: {
       ...taskEntity.operations,
       [operationName]: recordPlanOperation(steps),
@@ -1062,11 +1753,39 @@ function taskLogEntity(): AppSchema["entities"][string] {
       occurredAt: { type: "text", required: true, label: "Occurred at" },
     },
     mutations: {
-      create: { enabled: true },
+      create: { enabled: false },
       patch: { enabled: false },
       delete: { enabled: false },
     },
   };
+}
+
+function transitionEventEntity(): AppSchema["entities"][string] {
+  return {
+    label: "Task event",
+    fields: {
+      sourceEntity: { type: "text", required: true, label: "Source entity" },
+      sourceRecordId: { type: "text", required: true, label: "Source record id" },
+      transitionKey: { type: "text", required: true, label: "Transition" },
+      previousState: { type: "text", required: true, label: "Previous state" },
+      nextState: { type: "text", required: true, label: "Next state" },
+      actorMode: { type: "text", required: true, label: "Actor mode" },
+      occurredAt: { type: "date", required: true, label: "Occurred at" },
+    },
+    mutations: disabledMutations(),
+  };
+}
+
+function transitionEventFieldMappings() {
+  return {
+    sourceEntity: "sourceEntity",
+    sourceRecordId: "sourceRecordId",
+    transitionKey: "transitionKey",
+    previousState: "previousState",
+    nextState: "nextState",
+    actorMode: "actorMode",
+    occurredAt: "occurredAt",
+  } as const;
 }
 
 function recordPlanOperation(steps: RecordPlanStepSchema[]): EntityOperationSchema {
@@ -1153,6 +1872,141 @@ function brokenRecordPlanSteps(): RecordPlanStepSchema[] {
       },
     },
   ];
+}
+
+function schemaWithOperationOnlyTaskCrud(sourceSchema: AppSchema): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+
+  schema.entities.task = {
+    ...taskEntity,
+    mutations: disabledMutations(),
+    operations: {
+      ...taskEntity.operations,
+      ...recordCrudOperations("Task", taskEntity.fields),
+      activeList: listOperation("taskActive"),
+    },
+  };
+
+  return schema;
+}
+
+function schemaWithOperationOnlyTaskProjectReference(sourceSchema: AppSchema): AppSchema {
+  const schema = schemaWithOperationOnlyTaskCrud(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+  const taskFields = {
+    ...taskEntity.fields,
+    project: {
+      type: "reference",
+      required: false,
+      label: "Project",
+      to: "project",
+      displayField: "name",
+    },
+  } satisfies EntitySchema["fields"];
+  const projectFields = {
+    name: {
+      type: "text",
+      required: true,
+      label: "Name",
+    },
+  } satisfies EntitySchema["fields"];
+
+  schema.entities.task = {
+    ...taskEntity,
+    fields: taskFields,
+    operations: {
+      ...taskEntity.operations,
+      ...recordCrudOperations("Task", taskFields),
+      activeList: listOperation("taskActive"),
+    },
+  };
+  schema.entities.project = {
+    label: "Project",
+    fields: projectFields,
+    mutations: disabledMutations(),
+    operations: recordCrudOperations("Project", projectFields),
+  };
+
+  return schema;
+}
+
+function requireEntity(schema: AppSchema, entityName: string): EntitySchema {
+  const entity = schema.entities[entityName];
+
+  if (!entity) {
+    throw new Error(`Expected ${entityName} entity.`);
+  }
+
+  return entity;
+}
+
+function disabledMutations(): EntitySchema["mutations"] {
+  return {
+    create: { enabled: false },
+    patch: { enabled: false },
+    delete: { enabled: false },
+  };
+}
+
+function recordCrudOperations(
+  label: string,
+  fields: EntitySchema["fields"],
+): NonNullable<EntitySchema["operations"]> {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    delete: {
+      label: `Delete ${label}`,
+      kind: "delete",
+      scope: "record",
+      effect: { type: "tombstoneRecord" },
+      output: { type: "delete" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    read: {
+      label: `Read ${label}`,
+      kind: "get",
+      scope: "record",
+      output: { type: "get" },
+      idempotency: { required: false },
+      audit: { input: "summary" },
+    },
+  };
+}
+
+function listOperation(query: string): EntityOperationSchema {
+  return {
+    kind: "list",
+    scope: "collection",
+    target: { query },
+    output: { type: "list", query },
+    idempotency: { required: false },
+    audit: { input: "summary" },
+  };
 }
 
 async function executeOperation<TBody>(input: ExecuteOperationInput) {

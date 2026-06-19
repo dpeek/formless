@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import type { BootstrapResponse, MutationResponse, OwnerIdentity } from "../shared/protocol.ts";
+import type { BootstrapResponse, OwnerIdentity } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -76,7 +76,7 @@ describe("authority admin guard", () => {
   });
 
   it("rejects invalid admin tokens without mutating storage", async () => {
-    const created = await postAdminJson<MutationResponse>("/api/tasks/mutations", {
+    const created = await postAdminTaskMutation({
       mutationId: "mutation-admin-guard-keep",
       entity: "task",
       op: "create",
@@ -98,7 +98,7 @@ describe("authority admin guard", () => {
   });
 
   it("accepts the configured admin bearer token for write endpoints", async () => {
-    const created = await postAdminJson<MutationResponse>("/api/tasks/mutations", {
+    const created = await postAdminTaskMutation({
       mutationId: "mutation-admin-guard-allowed",
       entity: "task",
       op: "create",
@@ -111,7 +111,7 @@ describe("authority admin guard", () => {
   });
 
   it("accepts signed owner session cookies for write endpoints", async () => {
-    const created = await postOwnerJson<MutationResponse>("/api/tasks/mutations", {
+    const created = await postOwnerTaskMutation({
       mutationId: "mutation-owner-session-allowed",
       entity: "task",
       op: "create",
@@ -195,9 +195,22 @@ async function postAdminJson<T>(path: string, body: unknown) {
   return request.response(await response.json()) as T;
 }
 
-async function postOwnerJson<T>(path: string, body: unknown) {
-  const request = operationWriteRequest(path, body);
-  const response = await harness.fetch(request.path, {
+async function postAdminTaskMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
+    body: JSON.stringify(request.body),
+    headers: adminHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json());
+}
+
+async function postOwnerTaskMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: {
       ...(await ownerSessionHeaders()),
@@ -208,7 +221,7 @@ async function postOwnerJson<T>(path: string, body: unknown) {
 
   expect(response.status).toBe(200);
 
-  return request.response(await response.json()) as T;
+  return request.response(await response.json());
 }
 
 function adminHeaders() {

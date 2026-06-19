@@ -3,9 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   isEntityActionExposedToActor,
   isEntityActionVisibleToBrowser,
+  isLegacyMigrationDeclarationKind,
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
+  legacyMigrationDeclarationKinds,
   parseAppSchema,
   type AppSchema,
 } from "./index.ts";
@@ -85,6 +87,40 @@ describe("control-plane schema runtime metadata", () => {
         },
       }),
     ).toThrow('references unknown field "missing"');
+  });
+
+  it("classifies legacy migration declarations without renaming JSON history kinds", () => {
+    const source = controlPlaneTaskSchema();
+    const schema = parseAppSchema({
+      ...source,
+      entities: {
+        ...source.entities,
+        task: {
+          ...source.entities.task,
+          mutations: {
+            create: { enabled: false },
+            patch: { enabled: false },
+            delete: { enabled: false },
+          },
+        },
+      },
+      runtime: {
+        owner: "runtime",
+        controlPlane: {
+          entities: {
+            task: {
+              history: { kind: "actionCreated" },
+            },
+          },
+        },
+      },
+    });
+
+    expect(legacyMigrationDeclarationKinds).toEqual(["appendOnly", "actionCreated"]);
+    expect(isLegacyMigrationDeclarationKind("appendOnly")).toBe(true);
+    expect(isLegacyMigrationDeclarationKind("actionCreated")).toBe(true);
+    expect(isLegacyMigrationDeclarationKind("operationCreated")).toBe(false);
+    expect(schema.runtime?.controlPlane?.entities.task?.history?.kind).toBe("actionCreated");
   });
 });
 

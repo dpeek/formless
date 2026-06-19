@@ -1,11 +1,11 @@
 import type {
   AppSchema,
   CollectionViewSchema,
-  EntityActionSchema,
   EntitySchema,
   EntityUnionVariantSchema,
   FieldSchema,
   FieldVisibilityValue,
+  RunActionKindEntityOperationEffectSchema,
   ToManyRelationshipSchema,
   TreeBranchChildVariantSchema,
   TreeBranchVariantPolicySchema,
@@ -39,18 +39,16 @@ export type TreeBranchPolicyConfig = {
   variants: TreeVariantBranchPolicyConfig;
 };
 
-export type TreeCompositionActionConfig = {
+export type TreeCompositionOperationConfig = {
   create?: {
-    actionName: string;
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    action: Extract<EntityActionSchema, { kind: "create-tree-child" }>;
+    effect: RunActionKindEntityOperationEffectSchema & { kind: "create-tree-child" };
   };
   remove?: {
-    actionName: string;
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>;
+    effect: RunActionKindEntityOperationEffectSchema & { kind: "remove-tree-placement" };
   };
 };
 
@@ -97,7 +95,7 @@ export function selectTreeResultModel(
       ? undefined
       : selectRecordUnionPresentation(schema, placementItemView, entity);
   const branches = selectTreeBranchPolicyConfig(result.branches, childRecordUnion);
-  const composition = selectTreeCompositionActionConfig(result.composition, entityName, entity);
+  const composition = selectTreeCompositionOperationConfig(result.composition, entityName, entity);
   const childUpdateOperation = selectEntityOperationByKind(
     childField.to,
     childEntity,
@@ -214,11 +212,11 @@ function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): b
   return policy === "leaf" || (typeof policy === "object" && policy.action === "leaf");
 }
 
-function selectTreeCompositionActionConfig(
+function selectTreeCompositionOperationConfig(
   composition: Extract<CollectionViewSchema["result"], { type: "tree" }>["composition"],
   entityName: string,
   entity: EntitySchema,
-): TreeCompositionActionConfig | undefined {
+): TreeCompositionOperationConfig | undefined {
   if (composition === undefined) {
     return undefined;
   }
@@ -236,41 +234,42 @@ function selectTreeCompositionActionConfig(
       : recordOperations.find(
           (operation) => operation.canonicalKey === composition.removeOperation,
         );
-  const createActionName =
-    createOperation?.operation.effect?.type === "runActionKind"
-      ? createOperation.operation.effect.action
-      : undefined;
-  const removeActionName =
-    removeOperation?.operation.effect?.type === "runActionKind"
-      ? removeOperation.operation.effect.action
-      : undefined;
-  const createAction =
-    createActionName === undefined ? undefined : entity.actions?.[createActionName];
-  const removeAction =
-    removeActionName === undefined ? undefined : entity.actions?.[removeActionName];
+  const createEffect = selectTreeCompositionEffect(createOperation, "create-tree-child");
+  const removeEffect = selectTreeCompositionEffect(removeOperation, "remove-tree-placement");
 
   return {
-    ...(createOperation !== undefined && createAction?.kind === "create-tree-child"
+    ...(createOperation !== undefined && createEffect !== undefined
       ? {
           create: {
-            actionName: createOperation.operationName,
             operationName: createOperation.operationName,
             operation: createOperation,
-            action: createAction,
+            effect: createEffect,
           },
         }
       : {}),
-    ...(removeOperation !== undefined && removeAction?.kind === "remove-tree-placement"
+    ...(removeOperation !== undefined && removeEffect !== undefined
       ? {
           remove: {
-            actionName: removeOperation.operationName,
             operationName: removeOperation.operationName,
             operation: removeOperation,
-            action: removeAction,
+            effect: removeEffect,
           },
         }
       : {}),
   };
+}
+
+function selectTreeCompositionEffect<Kind extends "create-tree-child" | "remove-tree-placement">(
+  operation: EntityOperationPresentationConfig | undefined,
+  kind: Kind,
+): (RunActionKindEntityOperationEffectSchema & { kind: Kind }) | undefined {
+  const effect = operation?.operation.effect;
+
+  if (effect?.type !== "runActionKind" || effect.kind !== kind) {
+    return undefined;
+  }
+
+  return effect as RunActionKindEntityOperationEffectSchema & { kind: Kind };
 }
 
 // Compatibility fallback for tree results that predate result-level ordering.

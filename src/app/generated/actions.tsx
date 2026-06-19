@@ -4,7 +4,7 @@ import { Button } from "@dpeek/formless-ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
-import type { EntityActionTargetCountConfig } from "../../client/action-ui.ts";
+import type { CommandOperationTargetCountConfig } from "../../client/views.ts";
 import type { HomeOperationConfig } from "../../client/views.ts";
 import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateDialog } from "./create.tsx";
@@ -24,74 +24,74 @@ export function HomeOperationRow({
 }) {
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [pendingOperationName, setPendingOperationName] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeOperationConfig | null>(
     null,
   );
 
-  async function runAction(action: CommandHomeOperationConfig) {
-    if (pendingAction) {
+  async function runCommandOperation(operation: CommandHomeOperationConfig) {
+    if (pendingOperationName) {
       return;
     }
 
-    setPendingAction(action.operationName);
-    setSyncStatus({ state: "syncing", message: `${action.label}...` });
+    setPendingOperationName(operation.operationName);
+    setSyncStatus({ state: "syncing", message: `${operation.label}...` });
 
     try {
       const response = await submitOperation(
         appTarget,
-        action.entityName,
-        action.operationName,
+        operation.entityName,
+        operation.operationName,
         {},
         undefined,
         writeOptions,
       );
       const affected = "changes" in response.output ? response.output.changes.length : 0;
-      const message = action.ui.showAffectedCountOnSuccess
-        ? `${action.label} synced. ${affected} affected.`
-        : `${action.label} synced.`;
+      const message = operation.ui.showAffectedCountOnSuccess
+        ? `${operation.label} synced. ${affected} affected.`
+        : `${operation.label} synced.`;
 
       setSyncStatus({ state: "idle", message });
     } catch (error) {
       setSyncStatus({
         state: "error",
-        message: error instanceof Error ? error.message : "Action failed.",
+        message: error instanceof Error ? error.message : "Operation failed.",
       });
     } finally {
-      setPendingAction(null);
+      setPendingOperationName(null);
     }
   }
 
   return (
     <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
-      {operations.map((action) => {
-        if (action.type === "create") {
+      {operations.map((operation) => {
+        if (operation.type === "create") {
           const canOpen =
-            action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
+            operation.enabled && createDefaultsAreResolved(operation.defaults, queryContext);
 
           return (
             <Button
               isDisabled={!canOpen}
-              key={`${action.type}:${action.entityName}`}
+              key={`${operation.type}:${operation.entityName}`}
               onPress={() => {
                 if (canOpen) {
-                  setCreateDialogAction(action);
+                  setCreateDialogAction(operation);
                 }
               }}
               type="button"
             >
-              {action.enabled ? action.label : "Create disabled"}
+              {operation.enabled ? operation.label : "Create disabled"}
             </Button>
           );
         }
 
         return (
-          <HomeEntityActionButton
-            action={action}
-            disabled={pendingAction !== null}
-            key={`${action.type}:${action.operationName}`}
-            onRun={runAction}
-            pending={pendingAction === action.operationName}
+          <HomeCommandOperationButton
+            disabled={pendingOperationName !== null}
+            key={`${operation.type}:${operation.operationName}`}
+            onRun={runCommandOperation}
+            operation={operation}
+            pending={pendingOperationName === operation.operationName}
             queryContext={queryContext}
           />
         );
@@ -112,68 +112,73 @@ export function HomeOperationRow({
   );
 }
 
-function HomeEntityActionButton({
-  action,
+function HomeCommandOperationButton({
   disabled,
   onRun,
+  operation,
   pending,
   queryContext,
 }: {
-  action: CommandHomeOperationConfig;
   disabled: boolean;
-  onRun: (action: CommandHomeOperationConfig) => Promise<void>;
+  onRun: (operation: CommandHomeOperationConfig) => Promise<void>;
+  operation: CommandHomeOperationConfig;
   pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
-  if (!action.ui.targetCount) {
+  if (!operation.ui.targetCount) {
     return (
       <Button
         isDisabled={disabled}
-        onPress={() => void onRun(action)}
+        onPress={() => void onRun(operation)}
         type="button"
         intent="outline"
       >
-        {pending ? `${action.label}...` : action.label}
+        {pending ? `${operation.label}...` : operation.label}
       </Button>
     );
   }
 
   return (
-    <CountedHomeEntityActionButton
-      action={action}
+    <CountedHomeCommandOperationButton
       disabled={disabled}
       onRun={onRun}
+      operation={operation}
       pending={pending}
       queryContext={queryContext}
-      targetCount={action.ui.targetCount}
+      targetCount={operation.ui.targetCount}
     />
   );
 }
 
-function CountedHomeEntityActionButton({
-  action,
+function CountedHomeCommandOperationButton({
   disabled,
   onRun,
+  operation,
   pending,
   queryContext,
   targetCount,
 }: {
-  action: CommandHomeOperationConfig;
   disabled: boolean;
-  onRun: (action: CommandHomeOperationConfig) => Promise<void>;
+  onRun: (operation: CommandHomeOperationConfig) => Promise<void>;
+  operation: CommandHomeOperationConfig;
   pending: boolean;
   queryContext: QueryEvaluationContext;
-  targetCount: EntityActionTargetCountConfig;
+  targetCount: CommandOperationTargetCountConfig;
 }) {
   const count = useEntityRecordCountMatchingQuery(
-    action.entityName,
+    operation.entityName,
     targetCount.query,
     queryContext,
   );
 
   return (
-    <Button isDisabled={disabled} onPress={() => void onRun(action)} type="button" intent="outline">
-      <span>{pending ? `${action.label}...` : action.label}</span>
+    <Button
+      isDisabled={disabled}
+      onPress={() => void onRun(operation)}
+      type="button"
+      intent="outline"
+    >
+      <span>{pending ? `${operation.label}...` : operation.label}</span>
       <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" intent="outline">
         {count}
       </Badge>

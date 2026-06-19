@@ -43,6 +43,7 @@ export type ValidatedMutation =
 
 type MutationValidationOptions = {
   additionalRecords?: StoredRecord[];
+  enforceGenericMutationPolicy?: boolean;
   packageResolver?: AppPackageResolver;
 };
 
@@ -78,18 +79,20 @@ export function validateMutationRequest(
     return { outcome: replayedWrite(replay) };
   }
 
-  assertRuntimeHistoryAllowsGenericMutation(schema, value.entity, value.op);
+  if (options.enforceGenericMutationPolicy !== false) {
+    assertRuntimeHistoryAllowsGenericMutation(schema, value.entity, value.op);
 
-  if (value.op === "create" && !entity.mutations.create.enabled) {
-    throw new BadRequestError(`Create mutations are disabled for entity "${value.entity}".`);
-  }
+    if (value.op === "create" && !entity.mutations.create.enabled) {
+      throw new BadRequestError(`Create mutations are disabled for entity "${value.entity}".`);
+    }
 
-  if (value.op === "patch" && !entity.mutations.patch.enabled) {
-    throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
-  }
+    if (value.op === "patch" && !entity.mutations.patch.enabled) {
+      throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
+    }
 
-  if (value.op === "delete" && !entity.mutations.delete.enabled) {
-    throw new BadRequestError(`Delete mutations are disabled for entity "${value.entity}".`);
+    if (value.op === "delete" && !entity.mutations.delete.enabled) {
+      throw new BadRequestError(`Delete mutations are disabled for entity "${value.entity}".`);
+    }
   }
 
   if (value.op === "delete") {

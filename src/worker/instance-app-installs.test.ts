@@ -6,9 +6,9 @@ import type {
   AppInstallsResponse,
   BootstrapResponse,
   CreateAppInstallResponse,
-  MutationResponse,
   OwnerIdentity,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import {
   crmSeedRecords,
@@ -285,14 +285,12 @@ describe("instance app install API routes", () => {
       label: "Personal Site",
     });
     const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
-    const patchedRoute = await postAdminJson<MutationResponse>(
-      "/api/formless/control-plane/mutations",
+    const patchedRoute = await postAdminJson<OperationInvocationResponse>(
+      "/api/formless/control-plane/operations/route/update",
       {
-        mutationId: "mutation-personal-admin-route",
-        entity: "route",
-        op: "patch",
+        idempotencyKey: "personal-admin-route",
         recordId: "route:personal:admin",
-        values: {
+        input: {
           matchPath: "/apps/personal-admin",
         },
       },
@@ -326,13 +324,11 @@ describe("instance app install API routes", () => {
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {
-    const conflictingRoute = await postAdminJson<MutationResponse>(
-      "/api/formless/control-plane/mutations",
+    const conflictingRoute = await postAdminJson<OperationInvocationResponse>(
+      "/api/formless/control-plane/operations/route/create",
       {
-        mutationId: "mutation-reserve-personal-admin-route",
-        entity: "route",
-        op: "create",
-        values: {
+        idempotencyKey: "reserve-personal-admin-route",
+        input: {
           enabled: true,
           matchPath: "/apps/personal",
           kind: "mount",
@@ -362,14 +358,12 @@ describe("instance app install API routes", () => {
       installId: "personal",
       label: "Personal Site",
     });
-    const routeEdit = await postAdminJson<MutationResponse>(
-      "/api/formless/control-plane/mutations",
+    const routeEdit = await postAdminJson<OperationInvocationResponse>(
+      "/api/formless/control-plane/operations/route/update",
       {
-        mutationId: "mutation-personal-admin-storage-identity-route",
-        entity: "route",
-        op: "patch",
+        idempotencyKey: "personal-admin-storage-identity-route",
         recordId: "route:personal:admin",
-        values: {
+        input: {
           matchPath: "/apps/personal-admin",
         },
       },

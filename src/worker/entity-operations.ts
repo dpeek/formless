@@ -41,11 +41,9 @@ import type {
   OperationInvocationSourceProtocol,
 } from "../shared/operation-invocation.ts";
 import {
+  executeEntityCommandEffectOutcome,
   executeCreateAfterCreateHooks,
-  executeEntityActionOutcome,
   executePublicEntityActionOutcome,
-  filterEntityActionResponseForActor,
-  validateEntityActionRequest,
 } from "./actions.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
@@ -279,70 +277,89 @@ export function executeReadOperationInvocation(input: {
   recordOperationInvocationAccepted(input.storage, envelope);
 
   try {
-    if (envelope.operation.kind === "list") {
-      const queryName =
-        envelope.operation.output.type === "list" ? envelope.operation.output.query : undefined;
-      const query = queryName === undefined ? undefined : input.schema.queries[queryName];
+    const response = executeReadOperationInvocationResponse(input);
 
-      if (!query) {
-        throw new BadRequestError(
-          `Operation "${envelope.operation.canonicalKey}" references unknown query.`,
-        );
-      }
+    recordOperationInvocationOutcome(input.storage, {
+      envelope,
+      output: response.output,
+      status: response.status,
+    });
 
-      const records = getActiveRecordsByEntity(input.storage, query.entity).filter((record) =>
-        matchesQuery(record, query.expression),
-      );
-      const response = {
-        invocation: envelope,
-        output: { type: "list", records },
-        status: "accepted",
-      } satisfies OperationInvocationResponse;
-
-      recordOperationInvocationOutcome(input.storage, {
-        envelope,
-        output: response.output,
-        status: response.status,
-      });
-
-      return response;
-    }
-
-    if (envelope.operation.kind === "get") {
-      if (envelope.input.type !== "get") {
-        throw new BadRequestError(
-          `Operation "${envelope.operation.canonicalKey}" requires a record id.`,
-        );
-      }
-
-      const record = getStoredRecord(input.storage, envelope.input.recordId);
-
-      if (!record || record.deletedAt || record.entity !== envelope.operation.entityName) {
-        throw new BadRequestError(`Unknown active record "${envelope.input.recordId}".`);
-      }
-
-      const response = {
-        invocation: envelope,
-        output: { type: "get", record },
-        status: "accepted",
-      } satisfies OperationInvocationResponse;
-
-      recordOperationInvocationOutcome(input.storage, {
-        envelope,
-        output: response.output,
-        status: response.status,
-      });
-
-      return response;
-    }
-
-    throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" is not a read operation.`,
-    );
+    return response;
   } catch (error) {
     recordOperationInvocationFailed(input.storage, envelope, error);
     throw error;
   }
+}
+
+function executeReadOperationInvocationResponse(input: {
+  envelope: OperationInvocationEnvelope;
+  schema: AppSchema;
+  storage: DurableObjectStorage;
+}): OperationInvocationResponse {
+  if (input.envelope.operation.kind === "list") {
+    return executeListOperationInvocation(input);
+  }
+
+  if (input.envelope.operation.kind === "get") {
+    return executeGetOperationInvocation(input);
+  }
+
+  throw new BadRequestError(
+    `Operation "${input.envelope.operation.canonicalKey}" is not a read operation.`,
+  );
+}
+
+function executeListOperationInvocation(input: {
+  envelope: OperationInvocationEnvelope;
+  schema: AppSchema;
+  storage: DurableObjectStorage;
+}): OperationInvocationResponse {
+  const { envelope } = input;
+  const queryName =
+    envelope.operation.output.type === "list" ? envelope.operation.output.query : undefined;
+  const query = queryName === undefined ? undefined : input.schema.queries[queryName];
+
+  if (!query) {
+    throw new BadRequestError(
+      `Operation "${envelope.operation.canonicalKey}" references unknown query.`,
+    );
+  }
+
+  const records = getActiveRecordsByEntity(input.storage, query.entity).filter((record) =>
+    matchesQuery(record, query.expression),
+  );
+
+  return {
+    invocation: envelope,
+    output: { type: "list", records },
+    status: "accepted",
+  };
+}
+
+function executeGetOperationInvocation(input: {
+  envelope: OperationInvocationEnvelope;
+  storage: DurableObjectStorage;
+}): OperationInvocationResponse {
+  const { envelope } = input;
+
+  if (envelope.input.type !== "get") {
+    throw new BadRequestError(
+      `Operation "${envelope.operation.canonicalKey}" requires a record id.`,
+    );
+  }
+
+  const record = getStoredRecord(input.storage, envelope.input.recordId);
+
+  if (!record || record.deletedAt || record.entity !== envelope.operation.entityName) {
+    throw new BadRequestError(`Unknown active record "${envelope.input.recordId}".`);
+  }
+
+  return {
+    invocation: envelope,
+    output: { type: "get", record },
+    status: "accepted",
+  };
 }
 
 export function executeWriteOperationInvocation(input: {
@@ -405,16 +422,30 @@ function executeWriteOperationInvocationOutcome(
     );
   }
 
-  return executeMutationOperationInvocationOutcome(
-    storage,
-    envelope,
-    schema,
-    packageResolver,
-    validateConstraints,
-  );
+  if (envelope.operation.kind === "create") {
+    return executeCreateOperationInvocationOutcome(
+      storage,
+      envelope,
+      schema,
+      packageResolver,
+      validateConstraints,
+    );
+  }
+
+  if (envelope.operation.kind === "update") {
+    return executeUpdateOperationInvocationOutcome(
+      storage,
+      envelope,
+      schema,
+      packageResolver,
+      validateConstraints,
+    );
+  }
+
+  return executeDeleteOperationInvocationOutcome(storage, envelope, schema, packageResolver);
 }
 
-function executeMutationOperationInvocationOutcome(
+function executeCreateOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
@@ -426,8 +457,8 @@ function executeMutationOperationInvocationOutcome(
     schema,
     validateConstraints,
   );
-  const validatedMutation = validateMutationRequest(
-    operationMutationRequest(envelope, schema, storage),
+  const validatedMutation = validateRecordOperationMutationRequest(
+    operationCreateMutationRequest(envelope, schema, storage),
     schema,
     storage,
     { packageResolver },
@@ -439,32 +470,102 @@ function executeMutationOperationInvocationOutcome(
 
   const mutation = validatedMutation.mutation;
 
-  if (mutation.op === "create") {
-    return createStoredRecordOutcome(
-      storage,
-      mutation,
-      (context) => {
-        executeCreateAfterCreateHooks(
-          context.storage,
-          context.mutation,
-          schema,
-          context.createRecords,
-        );
-      },
-      validateRecordConstraints,
-    );
+  if (mutation.op !== "create") {
+    throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a create.`);
   }
 
-  if (mutation.op === "delete") {
-    return deleteStoredRecordOutcome(storage, mutation);
+  return createStoredRecordOutcome(
+    storage,
+    mutation,
+    (context) => {
+      executeCreateAfterCreateHooks(
+        context.storage,
+        context.mutation,
+        schema,
+        context.createRecords,
+      );
+    },
+    validateRecordConstraints,
+    { now: envelope.receivedAt },
+  );
+}
+
+function executeUpdateOperationInvocationOutcome(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+  schema: AppSchema,
+  packageResolver?: AppPackageResolver,
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<MutationResponse> {
+  const validateRecordConstraints = operationRecordConstraintValidator(
+    storage,
+    schema,
+    validateConstraints,
+  );
+  const validatedMutation = validateRecordOperationMutationRequest(
+    operationPatchMutationRequest(envelope, schema, storage),
+    schema,
+    storage,
+    { packageResolver },
+  );
+
+  if ("outcome" in validatedMutation) {
+    return validatedMutation.outcome;
+  }
+
+  const mutation = validatedMutation.mutation;
+
+  if (!("recordValues" in mutation)) {
+    throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce an update.`);
   }
 
   return patchStoredRecordOutcome(
     storage,
     mutation,
-    "recordValues" in mutation ? mutation.recordValues : undefined,
+    mutation.recordValues,
     validateRecordConstraints,
+    { now: envelope.receivedAt },
   );
+}
+
+function executeDeleteOperationInvocationOutcome(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+  schema: AppSchema,
+  packageResolver?: AppPackageResolver,
+): WriteOutcome<MutationResponse> {
+  const validatedMutation = validateRecordOperationMutationRequest(
+    operationDeleteMutationRequest(envelope),
+    schema,
+    storage,
+    { packageResolver },
+  );
+
+  if ("outcome" in validatedMutation) {
+    return validatedMutation.outcome;
+  }
+
+  const mutation = validatedMutation.mutation;
+
+  if (mutation.op !== "delete") {
+    throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a delete.`);
+  }
+
+  return deleteStoredRecordOutcome(storage, mutation, { now: envelope.receivedAt });
+}
+
+function validateRecordOperationMutationRequest(
+  mutation: unknown,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+  options: {
+    packageResolver?: AppPackageResolver;
+  } = {},
+) {
+  return validateMutationRequest(mutation, schema, storage, {
+    enforceGenericMutationPolicy: false,
+    packageResolver: options.packageResolver,
+  });
 }
 
 function executeCommandOperationInvocationOutcome(
@@ -497,19 +598,23 @@ function executeCommandOperationInvocationOutcome(
 
   const actorKind = envelope.actor.kind as SchemaActionActorKind;
   const commandInput = privateCommandOperationInput(envelope, schema, storage);
-  const request = validateEntityActionRequest(
-    {
-      actionId: requiredWriteIdentity(envelope),
-      entity: envelope.operation.entityName,
-      action: envelope.operation.effect.action,
-      ...(commandInput === undefined ? {} : { input: commandInput }),
-    },
-    schema,
-    { actorKind },
-  );
 
-  return mapWriteOutcome(executeEntityActionOutcome(storage, request, schema), (response) =>
-    filterEntityActionResponseForActor(response, schema, request, actorKind),
+  return mapWriteOutcome(
+    executeEntityCommandEffectOutcome(
+      storage,
+      {
+        actionId: requiredWriteIdentity(envelope),
+        actorKind,
+        entity: envelope.operation.entityName,
+        action: envelope.operation.effect.action,
+        kind: envelope.operation.effect.kind,
+        ...(commandInput === undefined ? {} : { input: commandInput }),
+        receivedAt: envelope.receivedAt,
+        ...(validateConstraints === undefined ? {} : { validateConstraints }),
+      },
+      schema,
+    ),
+    (response) => filterCommandOperationResponseForActor(response, envelope),
   );
 }
 
@@ -534,7 +639,7 @@ function executePublicCommandOperationInvocationOutcome(
     actionId,
     actor: { mode: "anonymous" },
     proof: payload.proof,
-    source: publicOperationActionSource(envelope, envelope.operation.effect.action),
+    source: publicOperationActionSource(envelope),
     input: payload.input,
     idempotencyKey,
     receivedAt: envelope.receivedAt,
@@ -565,7 +670,9 @@ function executeRecordPlanOperationInvocationOutcome(
   const replay = getActionResponseById(storage, actionId);
 
   if (replay) {
-    return replayedWrite(recordPlanActionResponse(replay, effect));
+    return replayedWrite(
+      filterCommandOperationResponseForActor(recordPlanActionResponse(replay, effect), envelope),
+    );
   }
 
   const inputValues = recordPlanCommandInput(envelope, schema, storage);
@@ -587,8 +694,10 @@ function executeRecordPlanOperationInvocationOutcome(
       envelope.operation.operationName,
       plans,
       operationRecordConstraintValidator(storage, schema, validateConstraints),
+      { now: envelope.receivedAt },
     ),
-    (response) => recordPlanActionResponse(response, effect),
+    (response) =>
+      filterCommandOperationResponseForActor(recordPlanActionResponse(response, effect), envelope),
   );
 }
 
@@ -762,6 +871,7 @@ function validateRecordPlanStepMutation(
 ) {
   const result = validateMutationRequest(mutation, state.schema, state.storage, {
     additionalRecords: [...state.plannedRecordsById.values()],
+    enforceGenericMutationPolicy: false,
     packageResolver: state.packageResolver,
   });
 
@@ -1149,7 +1259,6 @@ function parsePublicOperationProof(value: unknown): PublicActionProof {
 
 function publicOperationActionSource(
   envelope: OperationInvocationEnvelope,
-  actionName: string,
 ): PublicActionExecutionEnvelope["source"] {
   if (envelope.appStorageIdentity.kind === "instanceControlPlane") {
     throw new BadRequestError("Public operations are only available for app storage.");
@@ -1160,7 +1269,7 @@ function publicOperationActionSource(
 
   if (envelope.appStorageIdentity.kind === "schemaKey") {
     return {
-      actionName,
+      operationKey: envelope.operation.canonicalKey,
       host,
       path,
       target: {
@@ -1176,7 +1285,7 @@ function publicOperationActionSource(
   }
 
   return {
-    actionName,
+    operationKey: envelope.operation.canonicalKey,
     host,
     path,
     target: {
@@ -1200,6 +1309,34 @@ function operationInvocationResponseFromWriteOutcome(
     invocation: envelope,
     output: operationOutput(envelope, outcome.response),
     status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function filterCommandOperationResponseForActor(
+  response: ActionResponse,
+  envelope: OperationInvocationEnvelope,
+): ActionResponse {
+  const allowedFields = envelope.operation.policy?.responseFields?.[envelope.actor.kind];
+
+  if (allowedFields === undefined) {
+    return response;
+  }
+
+  const allowedFieldSet = new Set(allowedFields);
+
+  return {
+    ...response,
+    changes: response.changes.map((change) => ({
+      ...change,
+      payload: {
+        ...change.payload,
+        values: Object.fromEntries(
+          Object.entries(change.payload.values).filter(([fieldName]) =>
+            allowedFieldSet.has(fieldName),
+          ),
+        ),
+      },
+    })),
   };
 }
 
@@ -1240,7 +1377,7 @@ function affectedChangeIds(changes: MutationResponse["changes"]) {
   return changes.map((change) => String(change.seq));
 }
 
-function operationMutationRequest(
+function operationCreateMutationRequest(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   storage: DurableObjectStorage,
@@ -1256,6 +1393,18 @@ function operationMutationRequest(
     } satisfies Omit<CreateMutation, "values"> & { values: unknown };
   }
 
+  throw new BadRequestError(
+    `Operation "${envelope.operation.canonicalKey}" cannot materialize a create.`,
+  );
+}
+
+function operationPatchMutationRequest(
+  envelope: OperationInvocationEnvelope,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+) {
+  const mutationId = requiredWriteIdentity(envelope);
+
   if (envelope.operation.kind === "update" && envelope.input.type === "update") {
     return {
       mutationId,
@@ -1265,6 +1414,14 @@ function operationMutationRequest(
       values: operationPatchValues(envelope, schema, storage),
     } satisfies Omit<PatchMutation, "values"> & { values: unknown };
   }
+
+  throw new BadRequestError(
+    `Operation "${envelope.operation.canonicalKey}" cannot materialize an update.`,
+  );
+}
+
+function operationDeleteMutationRequest(envelope: OperationInvocationEnvelope) {
+  const mutationId = requiredWriteIdentity(envelope);
 
   if (envelope.operation.kind === "delete" && envelope.input.type === "delete") {
     return {
@@ -1276,7 +1433,7 @@ function operationMutationRequest(
   }
 
   throw new BadRequestError(
-    `Operation "${envelope.operation.canonicalKey}" cannot materialize records.`,
+    `Operation "${envelope.operation.canonicalKey}" cannot materialize a delete.`,
   );
 }
 

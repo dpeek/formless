@@ -17,7 +17,7 @@
     "key": "site",
     "path": "seed-records.json"
   },
-  "sourceSchemaHash": "sha256:abbb4fc1657238935a198402716bf737108485dacf85e754fff0f49a9c33c095",
+  "sourceSchemaHash": "sha256:33f3c7f33b41b92904ffb80a3f37e811a2688129b337ed2cdb242e4ae04b6a8e",
   "capabilities": [
     {
       "kind": "generatedAdmin",

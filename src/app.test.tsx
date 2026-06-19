@@ -133,7 +133,7 @@ function listResult(
     itemViewName: "testItem",
     recordFields,
     updateOperation: testUpdateOperation("task"),
-    transitionActions: [],
+    transitionOperations: [],
     ...options,
   };
 }
@@ -147,7 +147,7 @@ function tableResult(
     tableViewName: "testTable",
     columns,
     updateOperation: testUpdateOperation("task"),
-    transitionActions: [],
+    transitionOperations: [],
     ...options,
   };
 }
@@ -3136,10 +3136,16 @@ describe("generated collection home", () => {
     expect(emptyRootHtml).toContain("No records yet.");
     expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
     expect(emptyRootHtml).toContain(
+      'data-formless-tree-add-operation="block-placement.addTreeChild"',
+    );
+    expect(emptyRootHtml).toContain(
       'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList subscribeForm"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
+    expect(emptyRootHtml).toContain(
+      'data-formless-tree-add-variant-operations="block-placement.addTreeChild block-placement.addTreeChild',
+    );
 
     resetClientStore();
     bootstrapSiteEditor([siteBlockRecord("post-1", { type: "post", label: "Blank post" })]);
@@ -3242,6 +3248,9 @@ describe("generated collection home", () => {
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
     expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');
     expect(nestedHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(nestedHtml).toContain(
+      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
+    );
     expect(nestedHtml).toContain('aria-label="Remove child placement"');
   });
 
@@ -3322,8 +3331,14 @@ describe("generated collection home", () => {
     );
 
     expect(disabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(disabledHtml).toContain(
+      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
+    );
     expect(disabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
     expect(enabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(enabledHtml).toContain(
+      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
+    );
     expect(enabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
     expect(enabledHtml).toContain('aria-label="Remove child placement"');
     expect(enabledHtml).toContain("absolute right-2 top-2");
@@ -3518,7 +3533,7 @@ describe("generated collection home", () => {
     expect(html).not.toMatch(/<button[^>]*disabled[^>]*>[^<]*Clear completed/);
   });
 
-  it("updates action target counts after local record merges", () => {
+  it("updates command operation target counts after local record merges", () => {
     applyBootstrapResponse(bootstrap([taskRecord("record-1", "Open", false)]));
     const before = renderRoute("/tasks");
 
@@ -3529,7 +3544,7 @@ describe("generated collection home", () => {
     expect(after).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
   });
 
-  it("renders seeded task records with useful query and action counts", () => {
+  it("renders seeded task records with useful query and command operation counts", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
     if (!model) {
@@ -4982,18 +4997,18 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Edit shared resource"');
   });
 
-  it("renders table invokeAction columns as a button or dropdown", () => {
+  it("renders table operation control columns as a button or dropdown", () => {
     const rate = rateCardSchema.entities.rate;
     const columns: TableColumnConfig[] = [
       {
-        type: "invokeAction",
-        key: "invokeAction:inspectRate",
+        type: "operationControl",
+        key: "operationControl:inspectRate",
         label: "",
         headerLabel: "Inspect rate",
-        actions: [
+        controls: [
           {
             type: "static",
-            actionName: "inspectRate",
+            bindingName: "inspectRate",
             label: "Inspect rate",
             variant: "default",
             disabled: false,
@@ -5007,21 +5022,21 @@ describe("generated forms and records", () => {
         format: "plain",
       },
       {
-        type: "invokeAction",
-        key: "invokeAction:inspectRate,blockedRate",
-        label: "Rate actions",
-        headerLabel: "Rate actions",
-        actions: [
+        type: "operationControl",
+        key: "operationControl:inspectRate,blockedRate",
+        label: "Rate operations",
+        headerLabel: "Rate operations",
+        controls: [
           {
             type: "static",
-            actionName: "inspectRate",
+            bindingName: "inspectRate",
             label: "Inspect rate",
             variant: "default",
             disabled: false,
           },
           {
             type: "static",
-            actionName: "blockedRate",
+            bindingName: "blockedRate",
             label: "Blocked rate",
             variant: "destructive",
             disabled: true,
@@ -5051,8 +5066,8 @@ describe("generated forms and records", () => {
 
     expect(html).toContain("Inspect rate");
     expect(html).toContain('aria-label="Inspect rate"');
-    expect(html).toContain("Rate actions");
-    expect(html).toContain('aria-label="Rate actions"');
+    expect(html).toContain("Rate operations");
+    expect(html).toContain('aria-label="Rate operations"');
   });
 
   it("renders Site placement row action dropdowns", () => {
@@ -6564,19 +6579,21 @@ function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {
     throw new Error(`Collection ${viewName} does not render a table.`);
   }
 
-  const actionColumn = model.result.columns.find((column) => column.type === "invokeAction");
+  const operationColumn = model.result.columns.find((column) => column.type === "operationControl");
 
-  if (!actionColumn || actionColumn.type !== "invokeAction") {
-    throw new Error(`Collection ${viewName} does not expose edit actions.`);
+  if (!operationColumn || operationColumn.type !== "operationControl") {
+    throw new Error(`Collection ${viewName} does not expose edit operation controls.`);
   }
 
-  const action = actionColumn.actions.find((candidate) => candidate.type === "editRecord");
+  const operationControl = operationColumn.controls.find(
+    (candidate) => candidate.type === "editRecord",
+  );
 
-  if (!action || action.type !== "editRecord") {
-    throw new Error(`Collection ${viewName} does not expose an edit record action.`);
+  if (!operationControl || operationControl.type !== "editRecord") {
+    throw new Error(`Collection ${viewName} does not expose an edit record operation control.`);
   }
 
-  return action.editView;
+  return operationControl.editView;
 }
 
 function generatedDiscriminatedTaskSchema(

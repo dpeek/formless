@@ -20,15 +20,15 @@ import {
 import { useRecord, useRecordField } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import type {
-  EditRecordTableActionConfig,
+  EditRecordTableOperationControlConfig,
   EditViewConfig,
-  InvokeActionTableColumnConfig,
-  TableActionConfig,
+  OperationControlTableColumnConfig,
+  TableOperationControlConfig,
 } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { RecordTransitionActionControls } from "./state-machine-ui.tsx";
+import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
@@ -39,22 +39,22 @@ import {
   type ResultOrderingContext,
 } from "./ordering-ui.ts";
 
-type ReferenceEditRecordTableActionConfig = EditRecordTableActionConfig & {
-  target: Extract<EditRecordTableActionConfig["target"], { kind: "reference" }>;
+type ReferenceEditRecordTableOperationControlConfig = EditRecordTableOperationControlConfig & {
+  target: Extract<EditRecordTableOperationControlConfig["target"], { kind: "reference" }>;
 };
 
-export function InvokeActionTableCell({
+export function TableOperationControlsCell({
   column,
   orderingContext,
   sourceRecordId,
 }: {
-  column: InvokeActionTableColumnConfig;
+  column: OperationControlTableColumnConfig;
   orderingContext?: ResultOrderingContext;
   sourceRecordId: string;
 }) {
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
-  const [openActionName, setOpenActionName] = useState<string | null>(null);
+  const [openBindingName, setOpenBindingName] = useState<string | null>(null);
   const [pendingOrderingDirection, setPendingOrderingDirection] =
     useState<OrderingMoveDirection | null>(null);
   const orderingItems = selectOrderingMoveMenuItems({
@@ -63,18 +63,18 @@ export function InvokeActionTableCell({
     sourceRecordId,
   });
 
-  if (column.actions.length === 0 && orderingItems.length === 0) {
+  if (column.controls.length === 0 && orderingItems.length === 0) {
     return null;
   }
 
-  const openAction = column.actions.find(
-    (action): action is EditRecordTableActionConfig =>
-      action.actionName === openActionName && action.type === "editRecord",
+  const openControl = column.controls.find(
+    (control): control is EditRecordTableOperationControlConfig =>
+      control.bindingName === openBindingName && control.type === "editRecord",
   );
 
-  function openActionDialog(action: TableActionConfig) {
-    if (action.type === "editRecord" && !action.disabled) {
-      setOpenActionName(action.actionName);
+  function openControlDialog(control: TableOperationControlConfig) {
+    if (control.type === "editRecord" && !control.disabled) {
+      setOpenBindingName(control.bindingName);
     }
   }
 
@@ -101,24 +101,24 @@ export function InvokeActionTableCell({
 
   if (
     column.presentation === "button" &&
-    column.actions.length === 1 &&
+    column.controls.length === 1 &&
     orderingItems.length === 0
   ) {
-    const action = column.actions[0];
+    const control = column.controls[0];
 
-    if (!action) {
+    if (!control) {
       return null;
     }
 
     return (
       <>
-        <TableActionButton action={action} onOpen={() => openActionDialog(action)} />
-        {openAction ? (
-          <EditRecordTableActionDialog
-            action={openAction}
+        <TableOperationControlButton control={control} onOpen={() => openControlDialog(control)} />
+        {openControl ? (
+          <EditRecordTableOperationDialog
+            control={openControl}
             onOpenChange={(open) => {
               if (!open) {
-                setOpenActionName(null);
+                setOpenBindingName(null);
               }
             }}
             open={true}
@@ -129,14 +129,14 @@ export function InvokeActionTableCell({
     );
   }
 
-  const actionLabels = column.actions.map((action) => action.label).join("|");
-  const disabledActionLabels = column.actions
-    .filter((action) => action.disabled)
-    .map(actionAriaLabel)
+  const controlLabels = column.controls.map((control) => control.label).join("|");
+  const disabledControlLabels = column.controls
+    .filter((control) => control.disabled)
+    .map(operationControlAriaLabel)
     .join("|");
-  const dangerActionLabels = column.actions
-    .filter((action) => action.variant === "destructive")
-    .map((action) => action.label)
+  const dangerControlLabels = column.controls
+    .filter((control) => control.variant === "destructive")
+    .map((control) => control.label)
     .join("|");
   const orderingLabels = orderingItems.map(orderingMoveAriaLabel).join("|");
 
@@ -146,9 +146,9 @@ export function InvokeActionTableCell({
         <MenuTrigger
           aria-label={column.headerLabel}
           className={buttonStyles({ intent: "outline", size: "sq-xs" })}
-          data-formless-table-action-labels={actionLabels || undefined}
-          data-formless-table-danger-action-labels={dangerActionLabels || undefined}
-          data-formless-table-disabled-action-labels={disabledActionLabels || undefined}
+          data-formless-table-operation-labels={controlLabels || undefined}
+          data-formless-table-danger-operation-labels={dangerControlLabels || undefined}
+          data-formless-table-disabled-operation-labels={disabledControlLabels || undefined}
           data-formless-table-ordering-labels={orderingLabels || undefined}
           type="button"
         >
@@ -157,18 +157,18 @@ export function InvokeActionTableCell({
         <MenuContent
           popover={{ placement: column.align === "end" ? "bottom end" : "bottom start" }}
         >
-          {column.actions.map((action) => (
+          {column.controls.map((control) => (
             <MenuItem
-              aria-label={actionAriaLabel(action)}
-              isDisabled={action.disabled}
-              intent={action.variant === "destructive" ? "danger" : undefined}
-              key={action.actionName}
-              onAction={() => openActionDialog(action)}
+              aria-label={operationControlAriaLabel(control)}
+              isDisabled={control.disabled}
+              intent={control.variant === "destructive" ? "danger" : undefined}
+              key={control.bindingName}
+              onAction={() => openControlDialog(control)}
             >
-              <MenuLabel>{action.label}</MenuLabel>
+              <MenuLabel>{control.label}</MenuLabel>
             </MenuItem>
           ))}
-          {column.actions.length > 0 && orderingItems.length > 0 ? <MenuSeparator /> : null}
+          {column.controls.length > 0 && orderingItems.length > 0 ? <MenuSeparator /> : null}
           {orderingItems.map((item) => (
             <MenuItem
               aria-label={orderingMoveAriaLabel(item)}
@@ -183,12 +183,12 @@ export function InvokeActionTableCell({
           ))}
         </MenuContent>
       </Menu>
-      {openAction ? (
-        <EditRecordTableActionDialog
-          action={openAction}
+      {openControl ? (
+        <EditRecordTableOperationDialog
+          control={openControl}
           onOpenChange={(open) => {
             if (!open) {
-              setOpenActionName(null);
+              setOpenBindingName(null);
             }
           }}
           open={true}
@@ -199,44 +199,50 @@ export function InvokeActionTableCell({
   );
 }
 
-function TableActionButton({ action, onOpen }: { action: TableActionConfig; onOpen: () => void }) {
+function TableOperationControlButton({
+  control,
+  onOpen,
+}: {
+  control: TableOperationControlConfig;
+  onOpen: () => void;
+}) {
   return (
     <Button
-      aria-label={actionAriaLabel(action)}
-      isDisabled={action.disabled}
-      onPress={action.type === "editRecord" ? onOpen : undefined}
+      aria-label={operationControlAriaLabel(control)}
+      isDisabled={control.disabled}
+      onPress={control.type === "editRecord" ? onOpen : undefined}
       size="xs"
       type="button"
-      intent={action.variant === "destructive" ? "danger" : "outline"}
+      intent={control.variant === "destructive" ? "danger" : "outline"}
     >
-      {action.label}
+      {control.label}
     </Button>
   );
 }
 
-function actionAriaLabel(action: TableActionConfig) {
-  if (action.disabled && action.disabledReason) {
-    return `${action.label}: ${action.disabledReason}`;
+function operationControlAriaLabel(control: TableOperationControlConfig) {
+  if (control.disabled && control.disabledReason) {
+    return `${control.label}: ${control.disabledReason}`;
   }
 
-  return action.label;
+  return control.label;
 }
 
-function EditRecordTableActionDialog({
-  action,
+function EditRecordTableOperationDialog({
+  control,
   onOpenChange,
   open,
   sourceRecordId,
 }: {
-  action: EditRecordTableActionConfig;
+  control: EditRecordTableOperationControlConfig;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   sourceRecordId: string;
 }) {
-  if (action.target.kind === "row") {
+  if (control.target.kind === "row") {
     return (
       <RecordEditDialog
-        action={action}
+        control={control}
         onOpenChange={onOpenChange}
         open={open}
         targetRecordId={sourceRecordId}
@@ -244,13 +250,13 @@ function EditRecordTableActionDialog({
     );
   }
 
-  if (!isReferenceEditRecordAction(action)) {
+  if (!isReferenceEditRecordControl(control)) {
     return null;
   }
 
   return (
-    <ReferencedRecordEditActionDialog
-      action={action}
+    <ReferencedRecordEditOperationDialog
+      control={control}
       onOpenChange={onOpenChange}
       open={open}
       sourceRecordId={sourceRecordId}
@@ -258,22 +264,22 @@ function EditRecordTableActionDialog({
   );
 }
 
-function ReferencedRecordEditActionDialog({
-  action,
+function ReferencedRecordEditOperationDialog({
+  control,
   onOpenChange,
   open,
   sourceRecordId,
 }: {
-  action: ReferenceEditRecordTableActionConfig;
+  control: ReferenceEditRecordTableOperationControlConfig;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   sourceRecordId: string;
 }) {
-  const targetRecordId = useRecordField(sourceRecordId, action.target.fieldName);
+  const targetRecordId = useRecordField(sourceRecordId, control.target.fieldName);
 
   return (
     <RecordEditDialog
-      action={action}
+      control={control}
       onOpenChange={onOpenChange}
       open={open}
       targetRecordId={typeof targetRecordId === "string" ? targetRecordId : undefined}
@@ -281,19 +287,19 @@ function ReferencedRecordEditActionDialog({
   );
 }
 
-function isReferenceEditRecordAction(
-  action: EditRecordTableActionConfig,
-): action is ReferenceEditRecordTableActionConfig {
-  return action.target.kind === "reference";
+function isReferenceEditRecordControl(
+  control: EditRecordTableOperationControlConfig,
+): control is ReferenceEditRecordTableOperationControlConfig {
+  return control.target.kind === "reference";
 }
 
 function RecordEditDialog({
-  action,
+  control,
   onOpenChange,
   open,
   targetRecordId,
 }: {
-  action: EditRecordTableActionConfig;
+  control: EditRecordTableOperationControlConfig;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   targetRecordId: string | undefined;
@@ -303,22 +309,22 @@ function RecordEditDialog({
   return (
     <ModalContent isOpen={open} onOpenChange={onOpenChange} size="3xl">
       <ModalHeader>
-        <ModalTitle>{action.label}</ModalTitle>
-        <ModalDescription>{action.editView.entity.label}</ModalDescription>
+        <ModalTitle>{control.label}</ModalTitle>
+        <ModalDescription>{control.editView.entity.label}</ModalDescription>
       </ModalHeader>
       <ModalBody>
         {targetRecord && targetRecordId ? (
           <>
             <EditViewFields
-              editView={action.editView}
+              editView={control.editView}
               targetRecord={targetRecord}
               targetRecordId={targetRecordId}
             />
-            {action.editView.transitionActions.length > 0 ? (
+            {control.editView.transitionOperations.length > 0 ? (
               <div className="mt-3">
-                <RecordTransitionActionControls
-                  actions={action.editView.transitionActions}
-                  entityName={action.editView.entityName}
+                <RecordTransitionOperationControls
+                  operations={control.editView.transitionOperations}
+                  entityName={control.editView.entityName}
                   recordId={targetRecordId}
                   values={targetRecord.values}
                 />
@@ -328,9 +334,9 @@ function RecordEditDialog({
         ) : (
           <p className="text-sm text-slate-600">Record unavailable.</p>
         )}
-        {!action.editView.updateOperation ? (
+        {!control.operation ? (
           <p className="text-sm text-slate-600">
-            Editing is disabled for {action.editView.entity.label}.
+            Editing is disabled for {control.editView.entity.label}.
           </p>
         ) : null}
       </ModalBody>

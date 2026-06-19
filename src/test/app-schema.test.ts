@@ -4914,7 +4914,7 @@ describe("personal site sample schema", () => {
     expect(schema.entities.block?.fields.actionName).toEqual({
       type: "text",
       required: false,
-      label: "Action name",
+      label: "Operation",
     });
     expect(schema.entities.block?.fields.buttonLabel).toEqual({
       type: "text",

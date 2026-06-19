@@ -11,8 +11,8 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
-import type { MutationResponse } from "../shared/protocol.ts";
+import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -59,7 +59,7 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
-    await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
+    await postInstalledAppMutation("site", installId, {
       mutationId: "mutation-custom-domain-home-label",
       entity: "block",
       op: "patch",
@@ -93,7 +93,7 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("serves mapped host indexing, icons, and core media from the instance", async () => {
     await setupMappedSite();
-    await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
+    await postInstalledAppMutation("site", installId, {
       mutationId: "mutation-custom-domain-sitemap-page",
       entity: "block",
       op: "create",
@@ -103,7 +103,7 @@ describe("installed Site custom-domain Worker routing", () => {
         href: "/custom-domain-sitemap-page",
       },
     });
-    await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
+    await postInstalledAppMutation("site", installId, {
       mutationId: "mutation-custom-domain-site-icon",
       entity: "site",
       op: "patch",
@@ -307,7 +307,7 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("resolves exact-host public Site route records before ordinary host behavior", async () => {
     await setupMappedSiteRouteRecord();
-    await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
+    await postInstalledAppMutation("site", installId, {
       mutationId: "mutation-route-record-home-label",
       entity: "block",
       op: "patch",
@@ -550,34 +550,36 @@ async function setupMappedAppRouteRecord() {
 }
 
 async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
-  const request = operationWriteRequest(`${controlPlaneApi}/mutations`, {
-    mutationId: `mutation-${recordId}`,
-    entity: "route",
-    op: "create",
-    recordId,
-    values: withoutLifecycleValues(values),
-  });
-  const response = await harness.fetch(request.path, {
-    body: JSON.stringify(request.body),
+  const response = await harness.fetch(`${controlPlaneApi}/operations/route/create`, {
+    body: JSON.stringify({
+      idempotencyKey: `route-${recordId}`,
+      input: withoutLifecycleValues(values),
+    }),
     headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",
   });
 
   expect([200, 201]).toContain(response.status);
 
-  const body = request.response(await response.json()) as MutationResponse;
-  routeRecordIds.set(recordId, body.record.id);
+  const body = (await response.json()) as OperationInvocationResponse;
+  routeRecordIds.set(recordId, operationRecord(body).id);
 }
 
 async function patchRouteRecord(recordId: string, values: Record<string, unknown>) {
   const actualRecordId = routeRecordIds.get(recordId) ?? recordId;
-  await postAdminJson(`${controlPlaneApi}/mutations`, {
-    mutationId: `mutation-${actualRecordId}-patch`,
-    entity: "route",
-    op: "patch",
+  await postAdminJson(`${controlPlaneApi}/operations/route/update`, {
+    idempotencyKey: `route-${actualRecordId}-patch`,
     recordId: actualRecordId,
-    values: withoutLifecycleValues(values),
+    input: withoutLifecycleValues(values),
   });
+}
+
+function operationRecord(response: OperationInvocationResponse) {
+  if (response.output.type !== "create" && response.output.type !== "update") {
+    throw new Error(`Expected route write operation output, received "${response.output.type}".`);
+  }
+
+  return response.output.record;
 }
 
 function withoutLifecycleValues(values: Record<string, unknown>) {
@@ -616,6 +618,26 @@ async function postAdminJson(path: string, body: unknown) {
   expect([200, 201]).toContain(response.status);
 
   return response;
+}
+
+async function postInstalledAppMutation(
+  packageAppKey: string,
+  appInstallId: string,
+  body: Parameters<typeof mutationOperationRequest>[0],
+) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${appInstallId}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    },
+  );
+
+  expect([200, 201]).toContain(response.status);
+
+  return request.response(await response.json());
 }
 
 async function putAdminBytes(path: string, body: Uint8Array, contentType: string) {

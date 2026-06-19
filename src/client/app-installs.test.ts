@@ -11,6 +11,7 @@ import {
   listInstallableAppPackages,
   type InstallableAppPackage,
 } from "@dpeek/formless-installed-apps";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 
@@ -95,7 +96,7 @@ describe("client app install API helpers", () => {
 
     expect(created.install).toEqual({ installId: "personal" });
     expect(autoSave.inputs).toEqual([
-      { source: "app-install", storageIdentity: "instance:control-plane" },
+      { source: "app-install", storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY },
     ]);
 
     await expect(
@@ -129,7 +130,7 @@ describe("client app install API helpers", () => {
       status: 409,
     } satisfies Partial<AppInstallApiError>);
     expect(autoSave.inputs).toEqual([
-      { source: "app-install", storageIdentity: "instance:control-plane" },
+      { source: "app-install", storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY },
     ]);
   });
 

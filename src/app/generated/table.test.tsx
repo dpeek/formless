@@ -108,7 +108,7 @@ describe("RecordTable", () => {
     expect(html).not.toContain('value="2026-05-26T00:30:00.000Z"');
   });
 
-  it("uses icon-sized utility columns for placement reordering and row actions", () => {
+  it("uses icon-sized utility columns for placement reordering and row operation controls", () => {
     const html = renderTableViewHtml({
       records: testSiteSeedRecords,
       schema: siteSourceSchema,
@@ -120,7 +120,7 @@ describe("RecordTable", () => {
     expect(html.match(/w-6 min-w-6 max-w-6/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
-  it("renders action menu labels, disabled reasons, destructive intent, and ordering moves", () => {
+  it("renders operation menu labels, disabled reasons, destructive intent, and ordering moves", () => {
     const rateEntity = rateSourceSchema.entities.rate;
     const ordering: TableOrderingConfig = {
       fieldName: "cost",
@@ -130,21 +130,21 @@ describe("RecordTable", () => {
     };
     const columns: TableColumnConfig[] = [
       {
-        type: "invokeAction",
-        key: "invokeAction:inspectRate,blockedRate,deleteRate,ordering",
-        label: "Rate actions",
-        headerLabel: "Rate actions",
-        actions: [
+        type: "operationControl",
+        key: "operationControl:inspectRate,blockedRate,deleteRate,ordering",
+        label: "Rate operations",
+        headerLabel: "Rate operations",
+        controls: [
           {
             type: "static",
-            actionName: "inspectRate",
+            bindingName: "inspectRate",
             label: "Inspect rate",
             variant: "default",
             disabled: false,
           },
           {
             type: "static",
-            actionName: "blockedRate",
+            bindingName: "blockedRate",
             label: "Blocked rate",
             variant: "default",
             disabled: true,
@@ -152,7 +152,7 @@ describe("RecordTable", () => {
           },
           {
             type: "static",
-            actionName: "deleteRate",
+            bindingName: "deleteRate",
             label: "Delete rate",
             variant: "destructive",
             disabled: false,
@@ -176,14 +176,14 @@ describe("RecordTable", () => {
       schema: rateSourceSchema,
     });
 
-    expect(html).toContain('aria-label="Rate actions"');
+    expect(html).toContain('aria-label="Rate operations"');
     expect(html).toContain(
-      'data-formless-table-action-labels="Inspect rate|Blocked rate|Delete rate"',
+      'data-formless-table-operation-labels="Inspect rate|Blocked rate|Delete rate"',
     );
     expect(html).toContain(
-      'data-formless-table-disabled-action-labels="Blocked rate: No selected card"',
+      'data-formless-table-disabled-operation-labels="Blocked rate: No selected card"',
     );
-    expect(html).toContain('data-formless-table-danger-action-labels="Delete rate"');
+    expect(html).toContain('data-formless-table-danger-operation-labels="Delete rate"');
     expect(html).toContain("Move up");
     expect(html).toContain("Move to bottom");
   });

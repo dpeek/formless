@@ -2,13 +2,16 @@ import { useState } from "react";
 import { Badge, type BadgeProps } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import {
-  selectTransitionStateActionAvailability,
+  selectTransitionStateOperationAvailability,
   stateMachineStateIsTerminal,
 } from "../../client/state-machine-model.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation, type BrowserWriteOptions } from "../../client/sync.ts";
-import type { StateMachineFieldConfig, TransitionStateActionConfig } from "../../client/views.ts";
+import type {
+  StateMachineFieldConfig,
+  TransitionStateOperationConfig,
+} from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { enumValuePresentation, GeneratedFieldPresentationIcon } from "./field-presentation.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
@@ -50,14 +53,14 @@ export function StateMachineStateBadge({
   );
 }
 
-export function RecordTransitionActionControls({
-  actions,
+export function RecordTransitionOperationControls({
+  operations,
   className,
   entityName,
   recordId,
   values,
 }: {
-  actions: TransitionStateActionConfig[];
+  operations: TransitionStateOperationConfig[];
   className?: string;
   entityName: string;
   recordId: string;
@@ -65,37 +68,37 @@ export function RecordTransitionActionControls({
 }) {
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
-  const [pendingActionName, setPendingActionName] = useState<string | null>(null);
+  const [pendingOperationName, setPendingOperationName] = useState<string | null>(null);
 
-  if (actions.length === 0) {
+  if (operations.length === 0) {
     return null;
   }
 
-  async function runAction(action: TransitionStateActionConfig) {
-    if (pendingActionName !== null) {
+  async function runOperation(operation: TransitionStateOperationConfig) {
+    if (pendingOperationName !== null) {
       return;
     }
 
-    setPendingActionName(action.operationName);
-    setSyncStatus({ state: "syncing", message: `${action.label}...` });
+    setPendingOperationName(operation.operationName);
+    setSyncStatus({ state: "syncing", message: `${operation.label}...` });
 
     try {
-      await submitTransitionStateAction(
+      await submitTransitionStateOperation(
         appTarget,
         entityName,
-        action.operationName,
+        operation.operationName,
         recordId,
         undefined,
         writeOptions,
       );
-      setSyncStatus({ state: "idle", message: `${action.label} synced.` });
+      setSyncStatus({ state: "idle", message: `${operation.label} synced.` });
     } catch (error) {
       setSyncStatus({
         state: "error",
         message: error instanceof Error ? error.message : "Transition failed.",
       });
     } finally {
-      setPendingActionName(null);
+      setPendingOperationName(null);
     }
   }
 
@@ -105,35 +108,35 @@ export function RecordTransitionActionControls({
       className={`flex flex-wrap items-center gap-1.5 ${className ?? ""}`}
       data-formless-transition-controls={recordId}
     >
-      {actions.map((action) => {
-        const field = action.machine.field;
+      {operations.map((operation) => {
+        const field = operation.machine.field;
         const currentValue = values?.[field];
-        const availability = selectTransitionStateActionAvailability({
-          action,
+        const availability = selectTransitionStateOperationAvailability({
+          operation,
           currentValue,
-          field: action.field,
+          field: operation.field,
         });
-        const pending = pendingActionName === action.operationName;
-        const disabled = pendingActionName !== null || !availability.valid;
-        const label = pending ? `${action.label}...` : action.label;
+        const pending = pendingOperationName === operation.operationName;
+        const disabled = pendingOperationName !== null || !availability.valid;
+        const label = pending ? `${operation.label}...` : operation.label;
 
         return (
           <Button
             aria-label={
               availability.valid
-                ? action.label
-                : `${action.label}: ${availability.disabledReason ?? "Unavailable"}`
+                ? operation.label
+                : `${operation.label}: ${availability.disabledReason ?? "Unavailable"}`
             }
-            data-formless-transition-action={action.operationName}
+            data-formless-transition-operation={operation.operationName}
             data-formless-transition-disabled-reason={availability.disabledReason}
-            data-formless-transition-machine={action.machineName}
+            data-formless-transition-machine={operation.machineName}
             data-formless-transition-state-valid={availability.valid ? "true" : "false"}
-            data-formless-transition-target-state={action.transition.to}
+            data-formless-transition-target-state={operation.transition.to}
             isDisabled={disabled}
-            key={action.operationName}
+            key={operation.operationName}
             onPress={() => {
               if (availability.valid) {
-                void runAction(action);
+                void runOperation(operation);
               }
             }}
             size="xs"
@@ -148,7 +151,7 @@ export function RecordTransitionActionControls({
   );
 }
 
-export async function submitTransitionStateAction(
+export async function submitTransitionStateOperation(
   target: ClientAppTarget,
   entityName: string,
   operationName: string,

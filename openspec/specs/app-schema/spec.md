@@ -2,7 +2,10 @@
 
 ## Purpose
 
-App schema is runtime data that defines how a schema key stores flat records and exposes queries, read models, views, screens, operations, actions, state machines, and mutations. It is the durable contract for source schemas, seed records, generated UI, Authority storage, and browser replicas.
+App schema is runtime data that defines how a schema key stores flat records,
+projects those records, and exposes operations over them. It is the durable
+contract for source schemas, seed records, generated UI, Authority storage,
+browser replicas, public bindings, automation, and package adapters.
 
 ## Requirements
 
@@ -173,6 +176,48 @@ The system MUST parse app schemas into validated runtime models before use.
 - AND generated UI may route `/schema` as an ordinary app screen where the
   active runtime profile exposes that app route
 
+### Requirement: Operations-Centered Schema Contract
+
+The system SHALL organize app schema interaction semantics around records,
+projections, operations, bindings, and adapters.
+
+#### Scenario: Classify schema primitives
+
+- GIVEN app schema source is parsed
+- WHEN runtime models are selected
+- THEN entities and fields describe flat stored records
+- AND queries, read models, views, table views, item views, screens, public
+  outputs, and result models describe projections over stored records
+- AND operations describe the allowed interactions with records or projections
+- AND generated UI placements, protocol routes, public forms, CLI calls,
+  automation triggers, and workflow triggers are bindings that reference
+  operation keys
+- AND package-specific React, Worker, Node, provider, media, Site, or deployment
+  behavior is selected through adapters declared by runtime capability facts
+
+#### Scenario: Keep operation meaning out of bindings
+
+- GIVEN a binding references an operation key
+- WHEN the schema is parsed
+- THEN the binding may declare route, placement, ordering, display, or
+  surface-specific availability facts
+- AND the binding does not redefine the operation input, output, effect, actor
+  policy, idempotency policy, audit policy, or storage target
+
+#### Scenario: Retire peer interaction models
+
+- GIVEN source schema declares mutation policy, entity actions, public action
+  metadata, or generated action slots
+- WHEN operation-centered runtime models are selected
+- THEN those declarations are treated only as legacy migration inputs or
+  implementation details behind source-declared operations
+- AND they do not create browser controls, protocol write routes, public write
+  routes, audit roots, or authorization decisions without a source-declared
+  operation
+- AND new schema behavior that affects invocation semantics is added to
+  operations or operation bindings rather than to a separate peer interaction
+  model
+
 ### Requirement: Schema Package Boundary
 
 The system SHALL expose reusable App schema language contracts, parsers, and
@@ -230,7 +275,7 @@ identifiers.
 #### Scenario: Leave other schema keys unchanged
 
 - WHEN an app schema declares fields, queries, read models, views, screens,
-  operations, actions, or mutations
+  operations, operation bindings, or legacy migration declarations
 - THEN this entity-key grammar does not rename or normalize those keys
 - AND existing validation for those schema sections remains separately owned by
   their current parser rules
@@ -422,25 +467,27 @@ separate from entity value fields.
 - AND generated ids and generated timestamps may still be used for normal value
   fields declared by the entity schema
 
-### Requirement: Action Kinds
+### Requirement: Command Effect Kinds
 
-The system SHALL declare schema action kinds as data-owned command effect
-targets over flat records.
+The system SHALL declare command effect kinds as data-owned implementation
+targets for command operations over flat records.
 
 #### Scenario: Compose tree child
 
-- GIVEN a `create-tree-child` action for a relationship-backed tree result
-- WHEN the action is invoked
+- GIVEN a `create-tree-child` command effect for a relationship-backed tree
+  result
+- WHEN the owning command operation is invoked
 - THEN one child record and one placement edge are created
 - AND `remove-tree-placement` tombstones the placement edge without deleting the child record
 
-#### Scenario: Action kind module dispatch
+#### Scenario: Command effect module dispatch
 
-- GIVEN a schema action kind is parsed
-- WHEN runtime and generated UI select behavior for the action
-- THEN shared action kind capability facts drive runtime eligibility and UI
-  input facts
-- AND action writes remain schema-declared commands over flat records
+- GIVEN a command operation references a registered effect kind
+- WHEN runtime and generated UI select behavior for that operation
+- THEN shared effect capability facts drive runtime eligibility and UI input
+  facts
+- AND the operation remains the invocation, authorization, idempotency, and
+  audit root for the command write
 
 ### Requirement: Entity Operations
 
@@ -485,10 +532,10 @@ public forms, automation, audit, and authorization.
 - GIVEN an entity operation declares an effect
 - WHEN the schema is parsed
 - THEN first-pass effects support creating one record, patching one record,
-  deleting or tombstoning one record, dispatching one registered schema action
+  deleting or tombstoning one record, dispatching one registered command effect
   kind, or executing a declarative record plan
 - AND create, update, and delete effects target the containing entity
-- AND command effects can reference schema action kinds and schema queries
+- AND command effects can reference registered command effect kinds and schema queries
   declared for the same schema
 
 #### Scenario: Validate command record plan
@@ -553,34 +600,37 @@ fields without adding nested stored workflow state.
   states, and transition destination states all reference values declared by
   that enum field
 
-#### Scenario: Parse transition action kind
+#### Scenario: Parse transition command effect
 
-- GIVEN an entity action declares transition-state behavior
+- GIVEN an entity command operation declares transition-state behavior
 - WHEN the schema is parsed
-- THEN the action references a state machine on the same entity
-- AND the action references one transition from that machine
-- AND the action uses normal actor exposure metadata for owner, admin, CLI
+- THEN the command effect references a state machine on the same entity
+- AND the command effect references one transition from that machine
+- AND the operation uses normal actor exposure metadata for owner, admin, CLI
   deployer, and runner callers
-- AND anonymous public access is rejected for this action kind
+- AND anonymous public access is rejected unless a later transition operation
+  policy explicitly supports it
 
 #### Scenario: Preserve flat lifecycle records
 
 - GIVEN a record belongs to an entity with a state machine
-- WHEN the record is created, patched through transition actions, synced,
+- WHEN the record is created, patched through transition operations, synced,
   snapshotted, archived, or restored
 - THEN the current state is represented by the normal enum field value
 - AND state machine metadata does not create nested record values
 
-### Requirement: Action Access Policy Schema
+### Requirement: Legacy Public Action Metadata
 
-The system SHALL parse action access policy from app schema data.
+The system SHALL keep legacy public action metadata from creating public
+execution behavior outside operation policy and public operation bindings.
 
-#### Scenario: Parse anonymous action access
+#### Scenario: Reject anonymous action-only access
 
-- GIVEN an app schema declares an action with anonymous public access
-- WHEN the schema is parsed
-- THEN the parsed action preserves the action access policy for runtime execution
-- AND generated admin action behavior remains separate from public execution policy
+- GIVEN an app schema declares anonymous public access on an entity action
+  without a matching source-declared public operation binding
+- WHEN public execution models are selected
+- THEN the declaration does not create a public execution route
+- AND anonymous callers cannot invoke the action through public operation routes
 
 #### Scenario: Reject unsupported public action policy
 
@@ -589,47 +639,53 @@ The system SHALL parse action access policy from app schema data.
 - THEN parsing fails
 - AND the invalid app schema is not used for generated UI or writes
 
-### Requirement: Public Action Input Contract
+### Requirement: Public Operation Input Contract
 
-The system SHALL let app schemas declare the public input accepted by public actions.
+The system SHALL let app schemas declare public input on operations that expose
+anonymous public bindings.
 
 #### Scenario: Parse public input fields
 
-- GIVEN an app schema declares public input fields for an action
+- GIVEN an app schema declares public input fields for an operation
 - WHEN the schema is parsed
 - THEN field names, scalar types, required flags, and labels are validated
-- AND the parsed action exposes that input contract to the public action executor
+- AND the parsed operation exposes that input contract to the public operation
+  executor
 
-#### Scenario: Require public input for anonymous action
+#### Scenario: Require public input for anonymous operation
 
-- GIVEN an app schema declares anonymous public access for an action
+- GIVEN an app schema declares anonymous public access for an operation
 - WHEN the schema is parsed
 - THEN parsing requires an explicit public input contract
 - AND anonymous callers cannot submit undeclared record values directly
 
-### Requirement: Public Action Kind Eligibility
+### Requirement: Public Command Effect Eligibility
 
-The system MUST only expose action kinds that are safe for public execution through public action policy.
+The system MUST only expose command effect kinds that are safe for public
+execution through operation policy and public operation bindings.
 
-#### Scenario: Reject ineligible action kind
+#### Scenario: Reject ineligible command effect
 
-- GIVEN an action kind has no public execution module
-- WHEN the schema declares anonymous public access for that action
+- GIVEN a command effect kind has no public execution module
+- WHEN the schema declares anonymous public access for an operation using that
+  effect
 - THEN parsing rejects the public access policy
-- AND the action can still exist for generated admin use when its non-public schema is valid
+- AND the command operation can still exist for non-public actors when its
+  schema is valid
 
-#### Scenario: Subscribe action kind is eligible
+#### Scenario: Subscribe command effect is eligible
 
-- GIVEN an app schema declares the subscribe action kind with anonymous public access and valid public input
+- GIVEN an app schema declares a subscribe command operation with anonymous
+  public access and valid public input
 - WHEN the schema is parsed
-- THEN parsing accepts the action
-- AND the runtime can dispatch it through the public action executor
+- THEN parsing accepts the operation
+- AND the runtime can dispatch it through the public operation executor
 
 ### Requirement: Runtime-Owned Control-Plane Schemas
 
 The system SHALL support runtime-owned control-plane app schemas that use normal
 schema entities, fields, relationships, queries, read models, views, screens,
-operations, mutations, and actions.
+operations, and operation bindings.
 
 #### Scenario: Parse control-plane schema
 
@@ -656,7 +712,7 @@ after record creation.
 
 - GIVEN an `app-install` record has been created
 - WHEN a patch targets install identity, package app key, or storage identity
-- THEN generated UI, CLI, sync, and action writes reject the change
+- THEN generated UI, CLI, sync, and operation writes reject the change
 - AND mutable fields such as label can still be patched when schema policy
   allows
 
@@ -667,24 +723,24 @@ after record creation.
 - THEN schema validation prevents the route from pointing at a missing,
   incompatible, or tombstoned app install record
 
-### Requirement: Actor-Scoped Schema Actions
+### Requirement: Actor-Scoped Command Operations
 
-The system SHALL let schema actions declare actor exposure for owner, admin, CLI
+The system SHALL support actor-scoped command operations for owner, admin, CLI
 deployer, and runner callers.
 
-#### Scenario: Authorized actor invokes action
+#### Scenario: Authorized actor invokes command operation
 
-- GIVEN a caller invokes a schema action exposed to its actor kind
+- GIVEN a caller invokes a command operation exposed to its actor kind
 - WHEN auth, input, idempotency, and schema validation pass
-- THEN the runtime accepts the action
-- AND the action response includes only fields allowed for that actor
+- THEN the runtime accepts the operation
+- AND the operation response includes only fields allowed for that actor
 
-#### Scenario: Unexposed action is hidden
+#### Scenario: Unexposed command operation is hidden
 
-- GIVEN a generated browser surface renders schema actions
-- WHEN an action is exposed only to CLI deployers or runners
-- THEN the action is not rendered as a browser control
-- AND direct browser invocation of that actor-only action is rejected
+- GIVEN a generated browser surface renders operation controls
+- WHEN a command operation is exposed only to CLI deployers or runners
+- THEN the operation is not rendered as a browser control
+- AND direct browser invocation of that actor-only operation is rejected
 
 ### Requirement: Secret Reference Fields
 
@@ -715,12 +771,12 @@ fields against runtime topology constraints.
 ### Requirement: Append-Only Control-Plane History
 
 The system SHALL let runtime-owned schemas mark control-plane history records as
-append-only or action-created.
+append-only or operation-created.
 
 #### Scenario: Append-only evidence
 
 - GIVEN deployment attempt, evidence, cleanup, or drift history is recorded
 - WHEN the history record is created
-- THEN it is created through an allowed action or runtime write path
+- THEN it is created through an allowed operation or runtime write path
 - AND ordinary generated patch or delete controls are not exposed for that
   history record

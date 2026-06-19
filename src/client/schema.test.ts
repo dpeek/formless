@@ -42,7 +42,7 @@ describe("task source schema", () => {
     });
   });
 
-  it("contains the task collection, item view, and clear-completed query target", () => {
+  it("contains the task collection, item view, and operation bindings", () => {
     const priority = taskSourceSchema.entities.task?.fields.priority;
 
     expect(priority?.type === "enum" ? priority.values : undefined).toMatchObject({
@@ -81,6 +81,41 @@ describe("task source schema", () => {
       { query: "taskCompleted", count: { type: "count" } },
       { query: "taskOverdue", count: { type: "count" } },
     ]);
+    const operations = taskSourceSchema.entities.task?.operations;
+
+    expect(operations?.create).toMatchObject({
+      kind: "create",
+      scope: "collection",
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+    });
+    expect(operations?.update).toMatchObject({
+      kind: "update",
+      scope: "record",
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+    });
+    expect(operations?.clearCompletedTasks).toMatchObject({
+      kind: "command",
+      scope: "collection",
+      target: { query: "taskCompleted" },
+      effect: {
+        type: "runActionKind",
+        kind: "clear-completed",
+        action: "clearCompletedTasks",
+        query: "taskCompleted",
+      },
+      output: { type: "command" },
+    });
+    expect(
+      taskSourceSchema.views.taskHome?.type === "collection"
+        ? taskSourceSchema.views.taskHome.operations
+        : [],
+    ).toEqual([
+      { operation: "task.create", createView: "taskCreate" },
+      { operation: "task.clearCompletedTasks", count: { type: "count" } },
+    ]);
+
     const clearCompleted = taskSourceSchema.entities.task?.actions?.clearCompletedTasks;
     expect(
       clearCompleted?.kind === "clear-completed" ? clearCompleted.target.query : undefined,

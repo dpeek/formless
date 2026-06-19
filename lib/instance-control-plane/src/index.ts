@@ -42,7 +42,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:29496619fd5efc71e0dfa8a9cc4fa8385c5dc5f62ae6ef89d037be6ed482ce72" satisfies SourceSchemaHash;
+  "sha256:1475709ad954c32bf97351b5cee7c9f9b7ed83fe9f66422cc8a6905d005dde3a" satisfies SourceSchemaHash;
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
   sourceSchemaHash: INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
@@ -476,25 +476,39 @@ export const instanceControlPlaneSchema = {
             editView: "routeEdit",
           },
         },
-        actionLabel: "Route actions",
+        actionLabel: "Route operations",
       },
     ),
-    deploymentConfigTable: tableView("deployment-config", [
-      "label",
-      "targetId",
-      "targetKind",
-      "providerFamily",
-      "accountId",
-      "workerName",
-      "targetUrl",
-      "enabled",
-      "observedStatus",
-      "observedAt",
-      "observedDesiredStateHash",
-      "observedSummary",
-      "observedError",
-      "observedRunnerId",
-    ]),
+    deploymentConfigTable: tableView(
+      "deployment-config",
+      [
+        "label",
+        "targetId",
+        "targetKind",
+        "providerFamily",
+        "accountId",
+        "workerName",
+        "targetUrl",
+        "enabled",
+        "observedStatus",
+        "observedAt",
+        "observedDesiredStateHash",
+        "observedSummary",
+        "observedError",
+        "observedRunnerId",
+      ],
+      {
+        actions: {
+          editDeploymentConfig: {
+            type: "editRecord",
+            label: "Edit deployment config",
+            target: { kind: "row" },
+            editView: "deploymentConfigEdit",
+          },
+        },
+        actionLabel: "Deployment config operations",
+      },
+    ),
   },
   views: {
     appInstallCreate: createView("app-install", [
@@ -531,6 +545,7 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
+      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -552,6 +567,7 @@ export const instanceControlPlaneSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
+      "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "statusCode", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -569,6 +585,14 @@ export const instanceControlPlaneSchema = {
       "enabled",
       "targetUrl",
       "providerFamily",
+      "accountId",
+      "workerName",
+      "credentialRef",
+    ]),
+    deploymentConfigEdit: editView("deployment-config", [
+      "label",
+      "enabled",
+      "targetUrl",
       "accountId",
       "workerName",
       "credentialRef",

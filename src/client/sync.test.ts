@@ -250,7 +250,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
-        changes: [change(2, "record-2", "Second")],
+        changes: [writeLogChange(2, "record-2", "Second")],
         cursor: 2,
       } satisfies SyncResponse),
     );
@@ -287,7 +287,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=0", {
-        changes: [change(1, "record-1", "Authority")],
+        changes: [writeLogChange(1, "record-1", "Authority")],
         cursor: 1,
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
@@ -336,7 +336,7 @@ describe("client sync", () => {
         expect(headers.get(FORMLESS_CLIENT_PACKAGE_REVISION_HEADER)).toBe("3");
         expect(headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(storedSourceSchemaHash);
 
-        const changes = [change(1, "record-1", "Headers")];
+        const changes = [writeLogChange(1, "record-1", "Headers")];
 
         return Response.json(
           operationResponse({
@@ -381,7 +381,7 @@ describe("client sync", () => {
           /^sha256:[a-f0-9]{64}$/,
         );
 
-        const changes = [change(1, "record-1", "Bundled install")];
+        const changes = [writeLogChange(1, "record-1", "Bundled install")];
 
         return Response.json(
           operationResponse({
@@ -426,7 +426,7 @@ describe("client sync", () => {
           privateSourceSchemaHash,
         );
 
-        const changes = [change(1, "record-1", "Workspace install")];
+        const changes = [writeLogChange(1, "record-1", "Workspace install")];
 
         return Response.json(
           operationResponse({
@@ -523,7 +523,7 @@ describe("client sync", () => {
     await refreshClientStoreFromDb("tasks");
 
     await applySyncResponse("tasks", {
-      changes: [change(2, "record-2", "Second")],
+      changes: [writeLogChange(2, "record-2", "Second")],
       cursor: 2,
     } satisfies SyncResponse);
 
@@ -670,7 +670,7 @@ describe("client sync", () => {
       sockets.instances[0]?.receive({
         type: "sync",
         payload: {
-          changes: [change(2, "record-2", "Second")],
+          changes: [writeLogChange(2, "record-2", "Second")],
           cursor: 2,
         },
       });
@@ -720,7 +720,7 @@ describe("client sync", () => {
       sockets.instances[0]?.receive({
         type: "sync",
         payload: {
-          changes: [change(2, "record-2", "Second")],
+          changes: [writeLogChange(2, "record-2", "Second")],
           cursor: 2,
           schema: nextSchema,
           schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
@@ -772,7 +772,7 @@ describe("client sync", () => {
       sockets.instances[0]?.receive({
         type: "sync",
         payload: {
-          changes: [change(2, "record-2", "Second")],
+          changes: [writeLogChange(2, "record-2", "Second")],
           cursor: 2,
         },
       });
@@ -810,6 +810,59 @@ describe("client sync", () => {
       expect(parseSocketClientMessage(sockets.instances[0]?.sentMessages[1])).toEqual({
         type: "sync-requested",
         cursor: 1,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      });
+    } finally {
+      stop();
+    }
+  });
+
+  it("uses operation output cursors for later push sync requests", async () => {
+    const sockets = fakeSocketFactory();
+    const acceptedRecord = record("record-2", "Second");
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    try {
+      sockets.instances[0]?.open();
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
+
+      await submitOperation(
+        "tasks",
+        "task",
+        "create",
+        { input: { title: "Second", done: false } },
+        async (_input, init) => {
+          const operation = parseOperationRequestBody(init?.body);
+          const changes = [
+            materializedRecordChange(2, operation.idempotencyKey, acceptedRecord, "create"),
+          ];
+
+          return Response.json(
+            operationResponse({
+              type: "create",
+              affectedChangeIds: changes.map((change) => String(change.seq)),
+              changes,
+              cursor: 2,
+              record: acceptedRecord,
+            }),
+          );
+        },
+      );
+
+      requestSync("tasks");
+
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 2);
+      expect(parseSocketClientMessage(sockets.instances[0]?.sentMessages[1])).toEqual({
+        type: "sync-requested",
+        cursor: 2,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       });
     } finally {
@@ -858,7 +911,9 @@ describe("client sync", () => {
       { input: { title: "First", done: false } },
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(1, operation.idempotencyKey, acceptedRecord, "create")];
+        const changes = [
+          materializedRecordChange(1, operation.idempotencyKey, acceptedRecord, "create"),
+        ];
 
         expect(input).toBe("/api/tasks/operations/task/create");
         expect(init?.method).toBe("POST");
@@ -889,6 +944,48 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
+  it("merges replayed operation outputs without marking workspace source dirty", async () => {
+    const autoSave = captureAutoSave();
+    const replayedRecord = record("record-1", "Replayed");
+
+    const response = await submitOperation(
+      "tasks",
+      "task",
+      "create",
+      { idempotencyKey: "operation-replay-key", input: { title: "Ignored", done: false } },
+      async (_input, init) => {
+        const operation = parseOperationRequestBody(init?.body);
+        const changes = [
+          materializedRecordChange(1, operation.idempotencyKey, replayedRecord, "create"),
+        ];
+
+        return Response.json(
+          operationResponse(
+            {
+              type: "create",
+              affectedChangeIds: changes.map((change) => String(change.seq)),
+              changes,
+              cursor: 1,
+              record: replayedRecord,
+            },
+            "replayed",
+          ),
+        );
+      },
+      { autoSave },
+    );
+
+    const snapshot = await readLocalSnapshot("tasks");
+
+    expect(response.status).toBe("replayed");
+    expect(response.output.type === "create" ? response.output.record : undefined).toEqual(
+      replayedRecord,
+    );
+    expect(snapshot.records).toEqual([replayedRecord]);
+    expect(snapshot.cursor).toBe(1);
+    expect(autoSave.inputs).toEqual([]);
+  });
+
   it("posts update operations and merges accepted records", async () => {
     const acceptedRecord = record("record-1", "First", true);
 
@@ -899,7 +996,9 @@ describe("client sync", () => {
       { input: { done: true }, recordId: "record-1" },
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(2, operation.idempotencyKey, acceptedRecord, "patch")];
+        const changes = [
+          materializedRecordChange(2, operation.idempotencyKey, acceptedRecord, "patch"),
+        ];
 
         expect(input).toBe("/api/tasks/operations/task/update");
         expect(init?.method).toBe("POST");
@@ -953,7 +1052,9 @@ describe("client sync", () => {
       { recordId: "record-1" },
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(2, operation.idempotencyKey, tombstone, "delete")];
+        const changes = [
+          materializedRecordChange(2, operation.idempotencyKey, tombstone, "delete"),
+        ];
 
         expect(input).toBe("/api/tasks/operations/task/delete");
         expect(init?.method).toBe("POST");
@@ -1000,8 +1101,8 @@ describe("client sync", () => {
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
-          mutationChange(1, operation.idempotencyKey, primaryRecord, "create"),
-          mutationChange(2, operation.idempotencyKey, lifecycleRecord, "action"),
+          materializedRecordChange(1, operation.idempotencyKey, primaryRecord, "create"),
+          materializedRecordChange(2, operation.idempotencyKey, lifecycleRecord, "action"),
         ];
 
         return Response.json(
@@ -1035,7 +1136,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
-        changes: [change(2, "record-1", "First", true, "patch")],
+        changes: [writeLogChange(2, "record-1", "First", true, "patch")],
         cursor: 2,
       } satisfies SyncResponse),
     );
@@ -1065,7 +1166,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=3&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
-        changes: [mutationChange(4, "mutation-http-delete-catchup", tombstone, "delete")],
+        changes: [materializedRecordChange(4, "write-http-delete-catchup", tombstone, "delete")],
         cursor: 4,
       } satisfies SyncResponse),
     );
@@ -1103,7 +1204,7 @@ describe("client sync", () => {
       {},
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [actionChange(2, tombstone, operation.idempotencyKey)];
+        const changes = [commandMaterializationChange(2, tombstone, operation.idempotencyKey)];
 
         expect(input).toBe("/api/tasks/operations/task/clearCompletedTasks");
         expect(init?.method).toBe("POST");
@@ -1130,6 +1231,10 @@ describe("client sync", () => {
     const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
+    expect(response.status).toBe("committed");
+    expect(
+      response.output.type === "command" ? response.output.affectedChangeIds : undefined,
+    ).toEqual(["2"]);
     expect(
       response.output.type === "command" ? response.output.changes[0]?.payload : undefined,
     ).toEqual(tombstone);
@@ -1154,7 +1259,9 @@ describe("client sync", () => {
       { input: { title: "First", done: false } },
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(1, operation.idempotencyKey, acceptedRecord, "create")];
+        const changes = [
+          materializedRecordChange(1, operation.idempotencyKey, acceptedRecord, "create"),
+        ];
 
         return Response.json(
           operationResponse({
@@ -1254,7 +1361,9 @@ describe("client sync", () => {
       { input: { enabled: true }, recordId: routeRecord.id },
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(1, operation.idempotencyKey, routeRecord, "patch")];
+        const changes = [
+          materializedRecordChange(1, operation.idempotencyKey, routeRecord, "patch"),
+        ];
 
         return Response.json(
           operationResponse({
@@ -1276,7 +1385,9 @@ describe("client sync", () => {
       { input: { enabled: true }, recordId: deploymentRecord.id },
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(2, operation.idempotencyKey, deploymentRecord, "patch")];
+        const changes = [
+          materializedRecordChange(2, operation.idempotencyKey, deploymentRecord, "patch"),
+        ];
 
         return Response.json(
           operationResponse({
@@ -1298,7 +1409,9 @@ describe("client sync", () => {
       { input: { mediaAsset: "hero.webp" }, recordId: mediaRecord.id },
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(3, operation.idempotencyKey, mediaRecord, "patch")];
+        const changes = [
+          materializedRecordChange(3, operation.idempotencyKey, mediaRecord, "patch"),
+        ];
 
         return Response.json(
           operationResponse({
@@ -1368,7 +1481,7 @@ describe("client sync", () => {
       jsonFetcher(
         "/api/app-installs/tasks/work/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
         {
-          changes: [change(2, "record-2", "Created in work")],
+          changes: [writeLogChange(2, "record-2", "Created in work")],
           cursor: 2,
         } satisfies SyncResponse,
       ),
@@ -1381,7 +1494,9 @@ describe("client sync", () => {
       { input: { title: "Created in work", done: false } },
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(3, operation.idempotencyKey, createdRecord, "create")];
+        const changes = [
+          materializedRecordChange(3, operation.idempotencyKey, createdRecord, "create"),
+        ];
 
         expect(input).toBe("/api/app-installs/tasks/work/operations/task/create");
         expect(init?.method).toBe("POST");
@@ -1400,7 +1515,7 @@ describe("client sync", () => {
 
     await submitOperation(work, "task", "clearCompletedTasks", {}, async (input, init) => {
       const operation = parseOperationRequestBody(init?.body);
-      const changes = [actionChange(4, tombstone, operation.idempotencyKey)];
+      const changes = [commandMaterializationChange(4, tombstone, operation.idempotencyKey)];
 
       expect(input).toBe("/api/app-installs/tasks/work/operations/task/clearCompletedTasks");
       expect(init?.method).toBe("POST");
@@ -1480,7 +1595,7 @@ describe("client sync", () => {
     const existingRate = rateRecord("rate-1", "resource-1", "card-1");
     const syncedRate = rateRecord("rate-2", "resource-2", "card-1");
     const createdResource = resourceRecord("resource-2", "Writer");
-    const actionRate = rateRecord("rate-3", createdResource.id, "card-2");
+    const commandRate = rateRecord("rate-3", createdResource.id, "card-2");
     const restoredRate = rateRecord("rate-4", "resource-4", "card-2");
 
     await saveBootstrapResponse(rates, {
@@ -1496,7 +1611,7 @@ describe("client sync", () => {
       jsonFetcher(
         "/api/app-installs/crm/rates/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
         {
-          changes: [mutationChange(2, "mutation-rate-sync", syncedRate, "create")],
+          changes: [materializedRecordChange(2, "write-rate-sync", syncedRate, "create")],
           cursor: 2,
         } satisfies SyncResponse,
       ),
@@ -1509,7 +1624,9 @@ describe("client sync", () => {
       { input: { name: "Writer", kind: "role", unit: "day" } },
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [mutationChange(3, operation.idempotencyKey, createdResource, "create")];
+        const changes = [
+          materializedRecordChange(3, operation.idempotencyKey, createdResource, "create"),
+        ];
 
         expect(input).toBe("/api/app-installs/crm/rates/operations/resource/create");
         expect(init?.method).toBe("POST");
@@ -1528,7 +1645,7 @@ describe("client sync", () => {
 
     await submitOperation(rates, "rate", "regenerateMissingRates", {}, async (input, init) => {
       const operation = parseOperationRequestBody(init?.body);
-      const changes = [actionChange(4, actionRate, operation.idempotencyKey)];
+      const changes = [commandMaterializationChange(4, commandRate, operation.idempotencyKey)];
 
       expect(input).toBe("/api/app-installs/crm/rates/operations/rate/regenerateMissingRates");
       expect(init?.method).toBe("POST");
@@ -1556,7 +1673,7 @@ describe("client sync", () => {
           schemaKey: "crm",
           storageIdentity: "app:rates",
           schema: rateCardSchema,
-          records: [actionRate],
+          records: [commandRate],
           sourceCursor: 4,
         }),
       ),
@@ -1603,7 +1720,7 @@ describe("client sync", () => {
       } satisfies BootstrapResponse),
     );
 
-    expect(exported.records).toEqual([actionRate]);
+    expect(exported.records).toEqual([commandRate]);
     expect(restored.records).toEqual([restoredRate]);
     expect(reset.records).toEqual([rateRecord("rate-5", "resource-5", "card-2")]);
     expect((await readLocalSnapshot("crm")).records).toEqual([]);
@@ -1635,7 +1752,7 @@ describe("client sync", () => {
       {},
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
-        const changes = [actionChange(1, createdRate, operation.idempotencyKey)];
+        const changes = [commandMaterializationChange(1, createdRate, operation.idempotencyKey)];
 
         expect(input).toBe("/api/crm/operations/rate/regenerateMissingRates");
         expect(init?.method).toBe("POST");
@@ -1690,7 +1807,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
-        changes: [actionChange(2, tombstone, "action-1")],
+        changes: [commandMaterializationChange(2, tombstone, "command-1")],
         cursor: 2,
       } satisfies SyncResponse),
     );
@@ -2213,11 +2330,12 @@ function parseOperationRequestBody(body: BodyInit | null | undefined) {
 
 function operationResponse(
   output: OperationInvocationResponse["output"],
+  status: OperationInvocationResponse["status"] = "committed",
 ): OperationInvocationResponse {
   return {
     invocation: {} as OperationInvocationResponse["invocation"],
     output,
-    status: "committed",
+    status,
   };
 }
 
@@ -2428,7 +2546,7 @@ function rateRecord(id: string, resourceId: string, cardId: string): StoredRecor
   };
 }
 
-function change(
+function writeLogChange(
   seq: number,
   recordId: string,
   title: string,
@@ -2437,7 +2555,7 @@ function change(
 ): ChangeRow {
   return {
     seq,
-    mutationId: `mutation-${seq}`,
+    mutationId: `write-${seq}`,
     op,
     entity: "task",
     recordId,
@@ -2446,15 +2564,15 @@ function change(
   };
 }
 
-function mutationChange(
+function materializedRecordChange(
   seq: number,
-  mutationId: string,
+  writeIdentity: string,
   payload: StoredRecord,
   op: "create" | "patch" | "delete" | "action",
 ): ChangeRow {
   return {
     seq,
-    mutationId,
+    mutationId: writeIdentity,
     op,
     entity: payload.entity,
     recordId: payload.id,
@@ -2463,10 +2581,14 @@ function mutationChange(
   };
 }
 
-function actionChange(seq: number, payload: StoredRecord, actionId: string): ChangeRow {
+function commandMaterializationChange(
+  seq: number,
+  payload: StoredRecord,
+  writeIdentity: string,
+): ChangeRow {
   return {
     seq,
-    mutationId: actionId,
+    mutationId: writeIdentity,
     op: "action",
     entity: payload.entity,
     recordId: payload.id,

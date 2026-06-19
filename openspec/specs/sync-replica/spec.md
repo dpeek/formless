@@ -60,7 +60,7 @@ errors.
 
 #### Scenario: Reject stale write
 
-- WHEN a browser replica sends a mutation or action using a stale runtime
+- WHEN a browser replica sends an operation write using a stale runtime
   protocol, schema timestamp, or package app revision that is no longer write
   compatible
 - THEN the Authority rejects the write with a reload-required error
@@ -174,7 +174,7 @@ The system SHALL use push sync messages to catch up clients and deliver committe
 
 #### Scenario: Committed write broadcast
 
-- GIVEN a create, patch, delete, action, schema write, reset schema, or reset seed write commits
+- GIVEN an operation, schema write, reset schema, or reset seed write commits
 - WHEN push sync sockets are connected
 - THEN the Authority broadcasts a sync message for the committed write
 - AND one stale socket does not prevent later sockets from receiving the broadcast
@@ -186,14 +186,14 @@ sync notification policy.
 
 #### Scenario: Committed write notifies
 
-- WHEN a create, patch, delete, action, schema write, reset schema, reset seed,
-  or snapshot restore write returns a committed storage outcome
+- WHEN an operation, schema write, reset schema, reset seed, or snapshot restore
+  write returns a committed storage outcome
 - THEN the Authority broadcasts a push sync message for that committed write
 - AND connected browser replicas can catch up from their stored cursors
 
 #### Scenario: Replay or failed write does not notify
 
-- WHEN a mutation or action write returns a replayed storage outcome
+- WHEN an operation write returns a replayed storage outcome
 - THEN the Authority does not broadcast a committed-write push notification
 - AND no duplicate local replica merge is caused by that replay
 
@@ -234,7 +234,7 @@ The system MUST NOT depend on push sync for validation or replay behavior.
 
 #### Scenario: Failed or replayed write
 
-- GIVEN a write fails validation or replays an already committed mutation or action
+- GIVEN a write fails validation or replays an already committed operation
 - WHEN push sync sockets are connected
 - THEN no committed-write push notification is broadcast for that request
 - AND local replicas must wait for a later committed write or explicit sync request to change state

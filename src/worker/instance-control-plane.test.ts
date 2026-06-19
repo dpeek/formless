@@ -14,11 +14,11 @@ import type {
   ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
-  MutationResponse,
   OwnerIdentity,
   SchemaResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
 import {
   bundledSourceSchemaHashFixtures,
@@ -35,7 +35,7 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -49,6 +49,7 @@ type FailureResponse = {
 
 const adminToken = "test-admin-token";
 const controlPlaneApi = "/api/formless/control-plane";
+const createAppInstallOperation = `${controlPlaneApi}/operations/app-install/createAppInstall`;
 const owner: OwnerIdentity = {
   id: "owner-1",
   name: "Ada Owner",
@@ -119,17 +120,14 @@ describe("instance control-plane API routes", () => {
   });
 
   it("exports control-plane storage snapshots with the control-plane identity", async () => {
-    const created = await postAdminJson<ActionResponse>(
-      `${controlPlaneApi}/actions/createAppInstall`,
-      {
-        actionId: "action-create-snapshot-export",
-        input: {
-          packageAppKey: "site",
-          installId: "snapshot-export",
-          label: "Snapshot Export Site",
-        },
+    const created = await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-snapshot-export",
+      input: {
+        packageAppKey: "site",
+        installId: "snapshot-export",
+        label: "Snapshot Export Site",
       },
-    );
+    });
     const bootstrap = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
     const snapshot = await getJson<StorageSnapshot>(`${controlPlaneApi}/snapshot`);
 
@@ -140,49 +138,45 @@ describe("instance control-plane API routes", () => {
       schemaKey: "instance-control-plane",
       exportedAt: expect.any(String),
       schemaUpdatedAt: bootstrap.body.schemaUpdatedAt,
-      sourceCursor: created.body.cursor,
+      sourceCursor: operationCommandResponse(created).cursor,
       schema: parseAppSchema(instanceControlPlaneSchema),
     });
     expect(snapshot.body.records).toEqual(bootstrap.body.records);
   });
 
-  it("creates app install and default route records as one idempotent control-plane action", async () => {
-    const created = await postAdminJson<ActionResponse>(
-      `${controlPlaneApi}/actions/createAppInstall`,
-      {
-        actionId: "action-create-personal",
-        input: {
-          packageAppKey: "site",
-          installId: "personal",
-          label: "Personal Site",
-        },
+  it("creates app install and default route records as one idempotent control-plane operation", async () => {
+    const created = await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-personal",
+      input: {
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Personal Site",
       },
-    );
-    const replay = await postAdminJson<ActionResponse>(
-      `${controlPlaneApi}/actions/createAppInstall`,
-      {
-        actionId: "action-create-personal",
-        input: {
-          packageAppKey: "site",
-          installId: "personal",
-          label: "Personal Site",
-        },
+    });
+    const replay = await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-personal",
+      input: {
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Personal Site",
       },
-    );
+    });
     const controlPlane = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
     const installedSite = await getJson<BootstrapResponse>(
       "/api/app-installs/site/personal/bootstrap",
     );
 
-    expect(created.response.status).toBe(201);
-    expect(created.body.cursor).toBe(3);
-    expect(created.body.changes.map((change) => change.payload.id)).toEqual([
+    expect(created.response.status).toBe(200);
+    expect(created.body.status).toBe("committed");
+    expect(operationCommandResponse(created).cursor).toBe(3);
+    expect(operationCommandResponse(created).changes.map((change) => change.payload.id)).toEqual([
       "personal",
       "route:personal:admin",
       "route:personal:public-site",
     ]);
     expect(replay.response.status).toBe(200);
-    expect(replay.body).toEqual(created.body);
+    expect(replay.body.status).toBe("replayed");
+    expect(replay.body.output).toEqual(created.body.output);
     expect(installedSite.body.schema).toEqual(siteSourceSchema);
     expect(installedSite.body.records).toEqual(siteSeedRecords);
     expect(controlPlane.body.records).toHaveLength(3);
@@ -200,27 +194,24 @@ describe("instance control-plane API routes", () => {
   });
 
   it("keeps control-plane records isolated from installed app storage writes", async () => {
-    await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
-      actionId: "action-create-work",
+    await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-work",
       input: {
         packageAppKey: "site",
         installId: "work",
         label: "Work Site",
       },
     });
-    const appMutation = await postAdminJson<MutationResponse>(
-      "/api/app-installs/site/work/mutations",
-      {
-        mutationId: "mutation-installed-site-page",
-        entity: "block",
-        op: "create",
-        values: {
-          type: "page",
-          label: "Installed only",
-          href: "/installed-only",
-        },
+    const appMutation = await postInstalledAppMutation("site", "work", {
+      mutationId: "mutation-installed-site-page",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "page",
+        label: "Installed only",
+        href: "/installed-only",
       },
-    );
+    });
     const controlPlane = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
     const installedSite = await getJson<BootstrapResponse>("/api/app-installs/site/work/bootstrap");
     const sync = await getJson<SyncResponse>(`${controlPlaneApi}/sync?after=0`);
@@ -239,8 +230,8 @@ describe("instance control-plane API routes", () => {
   });
 
   it("derives installed app API summaries from real control-plane route records", async () => {
-    await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
-      actionId: "action-create-route-validation",
+    await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-route-validation",
       input: {
         packageAppKey: "site",
         installId: "personal",
@@ -249,15 +240,16 @@ describe("instance control-plane API routes", () => {
     });
     const before = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
-    const routeEdit = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-route-edit",
-      entity: "route",
-      op: "patch",
-      recordId: "route:personal:admin",
-      values: {
-        matchPath: "/apps/personal-admin",
+    const routeEdit = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/update`,
+      {
+        idempotencyKey: "route-edit",
+        recordId: "route:personal:admin",
+        input: {
+          matchPath: "/apps/personal-admin",
+        },
       },
-    });
+    );
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(before.body.installs[0]).toMatchObject({
@@ -272,21 +264,22 @@ describe("instance control-plane API routes", () => {
   });
 
   it("validates app install package keys and route capabilities against resolved packages", async () => {
-    const missingPackage = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-missing-package-install",
-      entity: "app-install",
-      op: "create",
-      values: {
-        installId: "missing",
-        packageAppKey: "missing-package",
-        label: "Missing",
-        status: "installed",
-        storageIdentity: "app:missing",
+    const missingPackage = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/app-install/create`,
+      {
+        idempotencyKey: "missing-package-install",
+        input: {
+          installId: "missing",
+          packageAppKey: "missing-package",
+          label: "Missing",
+          status: "installed",
+          storageIdentity: "app:missing",
+        },
       },
-    });
+    );
 
-    await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
-      actionId: "action-create-tasks",
+    await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-tasks",
       input: {
         packageAppKey: "tasks",
         installId: "tasks",
@@ -295,12 +288,10 @@ describe("instance control-plane API routes", () => {
     });
 
     const unsupportedPublicRoute = await postAdminJson<FailureResponse>(
-      `${controlPlaneApi}/mutations`,
+      `${controlPlaneApi}/operations/route/create`,
       {
-        mutationId: "mutation-tasks-public-route",
-        entity: "route",
-        op: "create",
-        values: {
+        idempotencyKey: "tasks-public-route",
+        input: {
           enabled: true,
           matchPath: "/sites/tasks",
           matchPrefix: "/sites/tasks/",
@@ -343,11 +334,11 @@ describe("instance control-plane API routes", () => {
     );
 
     try {
-      const install = await postHarnessAdminJson<ActionResponse>(
+      const install = await postHarnessAdminJson<OperationInvocationResponse>(
         privateHarness,
-        `${controlPlaneApi}/actions/createAppInstall`,
+        createAppInstallOperation,
         {
-          actionId: "action-private-site-install",
+          idempotencyKey: "private-site-install",
           input: {
             packageAppKey: "private-site",
             label: "Private Site",
@@ -355,14 +346,12 @@ describe("instance control-plane API routes", () => {
           },
         },
       );
-      const route = await postHarnessAdminJson<MutationResponse>(
+      const route = await postHarnessAdminJson<OperationInvocationResponse>(
         privateHarness,
-        `${controlPlaneApi}/mutations`,
+        `${controlPlaneApi}/operations/route/create`,
         {
-          mutationId: "mutation-private-site-public-route",
-          entity: "route",
-          op: "create",
-          values: {
+          idempotencyKey: "private-site-public-route",
+          input: {
             enabled: true,
             matchPath: "/sites/private-site-alt",
             matchPrefix: "/sites/private-site-alt/",
@@ -375,15 +364,112 @@ describe("instance control-plane API routes", () => {
         },
       );
 
-      expect(install.response.status).toBe(201);
+      expect(install.response.status).toBe(200);
+      expect(install.body.status).toBe("committed");
       expect(route.response.status).toBe(200);
-      expect(route.body.record.values).toMatchObject({
+      expect(operationRecord(route).values).toMatchObject({
         appInstall: "private-site",
         surface: "public-site",
       });
     } finally {
       await privateHarness.dispose();
     }
+  });
+
+  it("commits generated route and deployment config management writes through operation routes", async () => {
+    await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-operation-managed-site",
+      input: {
+        packageAppKey: "site",
+        installId: "operation-managed-site",
+        label: "Operation Managed Site",
+      },
+    });
+
+    const deploymentConfig = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/deployment-config/create`,
+      {
+        idempotencyKey: "operation-deployment-config-create",
+        input: {
+          targetId: "instance.primary",
+          targetKind: "instance",
+          label: "Primary",
+          enabled: true,
+          targetUrl: "https://operation-managed.example.workers.dev",
+          providerFamily: "cloudflare",
+          accountId: "account-123",
+          workerName: "operation-managed",
+          credentialRef: "secret:cloudflare:primary",
+        },
+      },
+    );
+    const deploymentConfigRecord = operationRecord(deploymentConfig);
+    const route = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "operation-route-create",
+        input: {
+          enabled: true,
+          matchHost: "operation-managed.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "operation-managed-site",
+          surface: "public-site",
+          access: "anonymous",
+          deploymentConfig: deploymentConfigRecord.id,
+        },
+      },
+    );
+    const routePatch = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/update`,
+      {
+        idempotencyKey: "operation-route-update",
+        recordId: operationRecord(route).id,
+        input: {
+          enabled: false,
+          deploymentConfig: deploymentConfigRecord.id,
+        },
+      },
+    );
+    const deploymentPatch = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/deployment-config/update`,
+      {
+        idempotencyKey: "operation-deployment-config-update",
+        recordId: deploymentConfigRecord.id,
+        input: {
+          label: "Primary Cloudflare",
+          enabled: false,
+        },
+      },
+    );
+
+    expect(deploymentConfig.response.status).toBe(200);
+    expect(deploymentConfig.body.invocation.operation.canonicalKey).toBe(
+      "deployment-config.create",
+    );
+    expect(deploymentConfigRecord.values).toMatchObject({
+      targetId: "instance.primary",
+      providerFamily: "cloudflare",
+    });
+    expect(route.response.status).toBe(200);
+    expect(route.body.invocation.operation.canonicalKey).toBe("route.create");
+    expect(operationRecord(route).values).toMatchObject({
+      deploymentConfig: deploymentConfigRecord.id,
+      appInstall: "operation-managed-site",
+    });
+    expect(routePatch.body.invocation.operation.canonicalKey).toBe("route.update");
+    expect(operationRecord(routePatch).values).toMatchObject({
+      enabled: false,
+      deploymentConfig: deploymentConfigRecord.id,
+    });
+    expect(deploymentPatch.body.invocation.operation.canonicalKey).toBe("deployment-config.update");
+    expect(operationRecord(deploymentPatch).values).toMatchObject({
+      label: "Primary Cloudflare",
+      enabled: false,
+    });
+    expect(operationRecord(deploymentPatch).values).not.toHaveProperty("observedStatus");
   });
 
   it("leaves legacy route intent records inert without deployment execution history records", async () => {
@@ -501,21 +587,18 @@ describe("instance control-plane API routes", () => {
   });
 
   it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {
-    const unauthenticated = await postJson<FailureResponse>(
-      `${controlPlaneApi}/actions/createAppInstall`,
-      {
-        actionId: "action-create-private",
-        input: {
-          packageAppKey: "site",
-          installId: "private",
-          label: "Private",
-        },
+    const unauthenticated = await postJson<FailureResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-private",
+      input: {
+        packageAppKey: "site",
+        installId: "private",
+        label: "Private",
       },
-    );
+    });
     const runner = await postAdminJson<FailureResponse>(
-      `${controlPlaneApi}/actions/createAppInstall`,
+      createAppInstallOperation,
       {
-        actionId: "action-create-runner",
+        idempotencyKey: "create-runner",
         input: {
           packageAppKey: "site",
           installId: "runner",
@@ -525,12 +608,10 @@ describe("instance control-plane API routes", () => {
       { actorKind: "runner" },
     );
     const runnerMutation = await postAdminJson<FailureResponse>(
-      `${controlPlaneApi}/mutations`,
+      `${controlPlaneApi}/operations/app-install/create`,
       {
-        mutationId: "mutation-runner-install",
-        entity: "app-install",
-        op: "create",
-        values: {
+        idempotencyKey: "runner-install",
+        input: {
           installId: "runner",
           packageAppKey: "site",
           label: "Runner",
@@ -546,7 +627,9 @@ describe("instance control-plane API routes", () => {
       "Owner session or admin authorization is required for this write endpoint.",
     );
     expect(runner.response.status).toBe(400);
-    expect(runner.body.error).toBe('Action "createAppInstall" is not exposed to actor "runner".');
+    expect(runner.body.error).toBe(
+      'Operation "app-install.createAppInstall" is not exposed to actor "runner".',
+    );
     expect(runnerMutation.response.status).toBe(400);
     expect(runnerMutation.body.error).toBe(
       'Control-plane entityOperation writes are not exposed to actor "runner".',
@@ -555,34 +638,36 @@ describe("instance control-plane API routes", () => {
 
   it("allows secret references but rejects secret values in records and snapshot restore", async () => {
     const now = "2026-05-28T00:00:00.000Z";
-    const deploymentConfig = await postAdminJson<MutationResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-deployment-config",
-      entity: "deployment-config",
-      op: "create",
-      values: {
-        targetId: "instance.primary",
-        targetKind: "instance",
-        label: "Cloudflare",
-        enabled: true,
-        targetUrl: "https://instance.example.workers.dev",
-        providerFamily: "cloudflare",
-        credentialRef: "secret:cloudflare:primary",
+    const deploymentConfig = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/deployment-config/create`,
+      {
+        idempotencyKey: "deployment-config",
+        input: {
+          targetId: "instance.primary",
+          targetKind: "instance",
+          label: "Cloudflare",
+          enabled: true,
+          targetUrl: "https://instance.example.workers.dev",
+          providerFamily: "cloudflare",
+          credentialRef: "secret:cloudflare:primary",
+        },
       },
-    });
-    const rejectedRecord = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
-      mutationId: "mutation-secret-deployment-config",
-      entity: "deployment-config",
-      op: "create",
-      values: {
-        targetId: "instance.secret",
-        targetKind: "instance",
-        label: "Secret",
-        enabled: true,
-        targetUrl: "https://secret.example.workers.dev",
-        providerFamily: "cloudflare",
-        accountId: "CF_API_TOKEN",
+    );
+    const rejectedRecord = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/deployment-config/create`,
+      {
+        idempotencyKey: "secret-deployment-config",
+        input: {
+          targetId: "instance.secret",
+          targetKind: "instance",
+          label: "Secret",
+          enabled: true,
+          targetUrl: "https://secret.example.workers.dev",
+          providerFamily: "cloudflare",
+          accountId: "CF_API_TOKEN",
+        },
       },
-    });
+    );
     const rejectedSnapshot = await postAdminJson<FailureResponse>(
       `${controlPlaneApi}/snapshot/restore`,
       secretSnapshot(now),
@@ -592,7 +677,9 @@ describe("instance control-plane API routes", () => {
     );
 
     expect(deploymentConfig.response.status).toBe(200);
-    expect(deploymentConfig.body.record.values.credentialRef).toBe("secret:cloudflare:primary");
+    expect(operationRecord(deploymentConfig).values.credentialRef).toBe(
+      "secret:cloudflare:primary",
+    );
     expect(JSON.stringify(browserBootstrap.body)).not.toContain("CF_API_TOKEN");
     expect(JSON.stringify(browserBootstrap.body)).not.toContain("ALCHEMY_PASSWORD");
     expect(rejectedRecord.response.status).toBe(400);
@@ -651,6 +738,31 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
 
   return {
     body: (response.ok ? request.response(bodyJson) : bodyJson) as T,
+    response,
+  };
+}
+
+async function postInstalledAppMutation(
+  packageAppKey: string,
+  installId: string,
+  body: Parameters<typeof mutationOperationRequest>[0],
+) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${installId}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+  const bodyJson = await response.json();
+
+  return {
+    body: request.response(bodyJson),
     response,
   };
 }
@@ -739,6 +851,30 @@ function routeValues(bootstrap: BootstrapResponse): InstanceControlPlaneRouteVal
   return bootstrap.records
     .filter((record) => record.entity === "route")
     .map((record) => record.values as InstanceControlPlaneRouteValues);
+}
+
+function operationRecord(response: { body: OperationInvocationResponse }) {
+  const output = response.body.output;
+
+  if (output === undefined) {
+    throw new Error(`Expected operation response, received ${JSON.stringify(response.body)}.`);
+  }
+
+  if (output.type !== "create" && output.type !== "update") {
+    throw new Error(`Expected create or update operation output, received "${output.type}".`);
+  }
+
+  return output.record;
+}
+
+function operationCommandResponse(response: { body: OperationInvocationResponse }): ActionResponse {
+  const output = response.body.output;
+
+  if (output.type !== "command") {
+    throw new Error(`Expected command operation output, received "${output.type}".`);
+  }
+
+  return output.response;
 }
 
 function secretSnapshot(now: string): StorageSnapshot {

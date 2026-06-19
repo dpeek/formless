@@ -3,10 +3,72 @@ import rawCrmSeedRecords from "../../schema/apps/crm/seed-records.json";
 import rawCrmSchema from "../../schema/apps/crm/schema.json";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { isValidStoredFieldValue, parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
-import { selectPrimaryScreenModels } from "./views.ts";
+import { selectCollectionModels, selectPrimaryScreenModels } from "./views.ts";
 
 const crmSchema = parseAppSchema(rawCrmSchema);
 const crmSeedRecords = rawCrmSeedRecords as unknown as StoredRecord[];
+const crmCollectionOperationCoverage = [
+  {
+    viewName: "companyHome",
+    entityName: "company",
+    operationKeys: ["company.create"],
+    updateOperationKey: "company.update",
+  },
+  {
+    viewName: "contactHome",
+    entityName: "contact",
+    operationKeys: ["contact.create"],
+    updateOperationKey: "contact.update",
+  },
+  {
+    viewName: "emailAddressHome",
+    entityName: "email-address",
+    operationKeys: ["email-address.create"],
+    updateOperationKey: "email-address.update",
+  },
+  {
+    viewName: "audienceHome",
+    entityName: "audience",
+    operationKeys: ["audience.create"],
+    updateOperationKey: "audience.update",
+  },
+  {
+    viewName: "subscriptionHome",
+    entityName: "subscription",
+    operationKeys: ["subscription.create"],
+    updateOperationKey: "subscription.update",
+  },
+  {
+    viewName: "campaignHome",
+    entityName: "campaign",
+    operationKeys: ["campaign.create"],
+    updateOperationKey: "campaign.update",
+  },
+  {
+    viewName: "campaignMessageHome",
+    entityName: "campaign-message",
+    operationKeys: ["campaign-message.create"],
+    updateOperationKey: "campaign-message.update",
+  },
+  {
+    viewName: "broadcastHome",
+    entityName: "broadcast",
+    operationKeys: ["broadcast.create"],
+    updateOperationKey: "broadcast.update",
+  },
+  {
+    viewName: "broadcastRecipientHome",
+    entityName: "broadcast-recipient",
+    operationKeys: ["broadcast-recipient.create"],
+    updateOperationKey: "broadcast-recipient.update",
+  },
+  {
+    viewName: "deliveryEventHome",
+    entityName: "delivery-event",
+    operationKeys: [],
+    updateOperationKey: null,
+  },
+];
 
 describe("crm source schema", () => {
   it("parses the checked-in flat CRM entities", () => {
@@ -67,6 +129,73 @@ describe("crm source schema", () => {
       from: { entity: "broadcast-recipient" },
       to: { entity: "delivery-event", field: "broadcastRecipient" },
     });
+  });
+
+  it("declares CRM source operations and collection bindings for generated controls", () => {
+    const entityOperationNames = Object.fromEntries(
+      Object.entries(crmSchema.entities).map(([entityName, entity]) => [
+        entityName,
+        Object.keys(entity.operations ?? {}),
+      ]),
+    );
+    const entityActionNames = Object.fromEntries(
+      Object.entries(crmSchema.entities).flatMap(([entityName, entity]) => {
+        const actionNames = Object.keys(entity.actions ?? {});
+
+        return actionNames.length === 0 ? [] : [[entityName, actionNames]];
+      }),
+    );
+    const collectionOperationBindings = Object.fromEntries(
+      Object.entries(crmSchema.views).flatMap(([viewName, view]) => {
+        if (view.type !== "collection") {
+          return [];
+        }
+
+        return [[viewName, (view.operations ?? []).map((operation) => operation.operation)]];
+      }),
+    );
+
+    expect(entityOperationNames).toEqual({
+      company: ["create", "update"],
+      contact: ["create", "update"],
+      "email-address": ["create", "update"],
+      audience: ["create", "update"],
+      subscription: ["create", "update"],
+      campaign: ["create", "update"],
+      "campaign-message": ["create", "update"],
+      broadcast: ["create", "update"],
+      "broadcast-recipient": ["create", "update"],
+      "delivery-event": [],
+    });
+    expect(entityActionNames).toEqual({});
+    expect(collectionOperationBindings).toEqual(
+      Object.fromEntries(
+        crmCollectionOperationCoverage.map((coverage) => [
+          coverage.viewName,
+          coverage.operationKeys,
+        ]),
+      ),
+    );
+  });
+
+  it("selects CRM generated controls from operation bindings", () => {
+    expect(
+      selectCollectionModels(crmSchema).map((model) => ({
+        viewName: model.viewName,
+        entityName: model.entityName,
+        operationKeys: model.operations.map((operation) => operation.operation.canonicalKey),
+        updateOperationKey: model.collection.updateOperation?.canonicalKey ?? null,
+        resultUpdateOperationKey:
+          model.result.type === "table"
+            ? (model.result.updateOperation?.canonicalKey ?? null)
+            : null,
+      })),
+    ).toEqual(
+      crmCollectionOperationCoverage.map((coverage) => ({
+        ...coverage,
+        resultUpdateOperationKey: coverage.updateOperationKey,
+      })),
+    );
   });
 
   it("defines generated admin queries, views, and primary workspace screens", () => {

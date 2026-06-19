@@ -445,8 +445,8 @@ function TreeChildAddControls({
   const writeOptions = useSchemaAppWriteOptions();
   const [activeVariant, setActiveVariant] = useState<TreeAllowedChildVariantConfig | null>(null);
   const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
-  const createAction = activeVariant
-    ? createTreeChildCreateAction(result, activeVariant)
+  const createOperation = activeVariant
+    ? createTreeChildCreateOperation(result, activeVariant)
     : undefined;
 
   if (allowedChildVariants.length === 0) {
@@ -457,12 +457,16 @@ function TreeChildAddControls({
     <div
       className={["flex", className].filter(Boolean).join(" ")}
       data-formless-tree-add-parent={parentRecord.id}
+      data-formless-tree-add-operation={result.composition?.create?.operation.canonicalKey}
       data-formless-tree-add-labels={allowedChildVariants.map((variant) => variant.label).join("|")}
       data-formless-tree-add-slots={allowedChildVariants
         .map((variant) => stringValue(variant.placementValues?.slot) ?? "default")
         .join(" ")}
       data-formless-tree-add-variants={allowedChildVariants
         .map((variant) => variant.variantValue)
+        .join(" ")}
+      data-formless-tree-add-variant-operations={allowedChildVariants
+        .map(() => result.composition?.create?.operation.canonicalKey ?? "")
         .join(" ")}
     >
       <Menu>
@@ -480,6 +484,9 @@ function TreeChildAddControls({
             <MenuItem
               aria-label={`Add ${variant.label} child`}
               data-formless-tree-add-variant={variant.variantValue}
+              data-formless-tree-add-variant-operation={
+                result.composition?.create?.operation.canonicalKey
+              }
               data-formless-tree-add-slot={stringValue(variant.placementValues?.slot) ?? undefined}
               isDisabled={!result.composition?.create}
               key={variant.variantValue}
@@ -494,7 +501,7 @@ function TreeChildAddControls({
           ))}
         </MenuContent>
       </Menu>
-      {activeVariant && createAction ? (
+      {activeVariant && createOperation ? (
         <ModalContent
           isOpen={true}
           onOpenChange={(open) => {
@@ -504,14 +511,14 @@ function TreeChildAddControls({
           }}
         >
           <ModalHeader>
-            <ModalTitle>{createAction.label}</ModalTitle>
+            <ModalTitle>{createOperation.label}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <GeneratedCreateDialogForm
-              action={createAction}
+              action={createOperation}
               onSuccess={() => setActiveVariant(null)}
               submitValues={(values) =>
-                submitTreeChildCreateAction(
+                submitTreeChildCreateOperation(
                   appTarget,
                   result,
                   parentRecord,
@@ -620,6 +627,7 @@ function TreePlacementRemoveButton({
   return (
     <Button
       aria-label="Remove child placement"
+      data-formless-tree-remove-operation={removeOperation.operation.canonicalKey}
       data-formless-tree-remove-placement={placement.id}
       isPending={isRemoving}
       onPress={() => void removePlacement()}
@@ -910,15 +918,15 @@ function selectAllowedTreeChildVariants(
   return variantPolicy.allowedChildVariantsByParentVariant[variantValue] ?? [];
 }
 
-function createTreeChildCreateAction(
+function createTreeChildCreateOperation(
   result: TreeResultConfig,
   variant: TreeAllowedChildVariantConfig,
 ): CreateHomeOperationConfig | undefined {
-  const createAction = result.composition?.create;
+  const createOperation = result.composition?.create;
   const discriminatorFieldName = result.branches?.variants.discriminatorFieldName;
   const discriminatorField = result.branches?.variants.discriminatorField;
 
-  if (!createAction || !discriminatorFieldName || !discriminatorField) {
+  if (!createOperation || !discriminatorFieldName || !discriminatorField) {
     return undefined;
   }
 
@@ -942,8 +950,8 @@ function createTreeChildCreateAction(
     label: `Add ${variant.label}`,
     entityName: result.childEntityName,
     entity: result.childEntity,
-    operationName: createAction.operationName,
-    operation: createAction.operation,
+    operationName: createOperation.operationName,
+    operation: createOperation.operation,
     fields,
     defaults,
     enabled: true,
@@ -986,7 +994,7 @@ function uniqueCreateFields(fields: CreateFieldConfig[]): CreateFieldConfig[] {
   return uniqueFields;
 }
 
-async function submitTreeChildCreateAction(
+async function submitTreeChildCreateOperation(
   target: ClientAppTarget,
   result: TreeResultConfig,
   parentRecord: StoredRecord,
@@ -994,16 +1002,16 @@ async function submitTreeChildCreateAction(
   placementValues?: RecordValues,
   options: SubmitOperationOptions = {},
 ): Promise<{ recordId: string }> {
-  const createAction = result.composition?.create;
+  const createOperation = result.composition?.create;
 
-  if (!createAction) {
+  if (!createOperation) {
     throw new Error("Tree child creation is not configured.");
   }
 
   const response = await submitOperation(
     target,
     result.relationship.to.entity,
-    createAction.operationName,
+    createOperation.operationName,
     {
       input: {
         parentRecordId: parentRecord.id,
@@ -1032,7 +1040,7 @@ function selectCreatedTreeChildRecord(
   )?.payload;
 
   if (!record) {
-    throw new Error("Tree child action did not create a child record.");
+    throw new Error("Tree child operation did not create a child record.");
   }
 
   return record;

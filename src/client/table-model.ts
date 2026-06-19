@@ -11,23 +11,22 @@ import type {
   TableViewSchema,
 } from "@dpeek/formless-schema";
 import type {
-  EditRecordTableActionConfig,
   EditViewConfig,
   FieldTableColumnConfig,
-  InvokeActionTableColumnConfig,
+  OperationControlTableColumnConfig,
   OrderingHandleTableColumnConfig,
   RecordFieldConfig,
-  TableActionConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
+  TableOperationControlConfig,
   TableOrderingConfig,
-  TransitionStateActionConfig,
+  TransitionStateOperationConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
 import { selectAggregateSlot } from "./collection-shell-model.ts";
 import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
-import { selectStateMachineField, selectTransitionStateActions } from "./state-machine-model.ts";
+import { selectStateMachineField, selectTransitionStateOperations } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import { selectAddressableRecordFieldConfig } from "./field-configs.ts";
 import { humanizeFieldName } from "./view-labels.ts";
@@ -36,7 +35,7 @@ export type TableResultModel = {
   columns: TableColumnConfig[];
   updateOperation?: EditViewConfig["updateOperation"];
   deleteOperation?: EditViewConfig["updateOperation"];
-  transitionActions: TransitionStateActionConfig[];
+  transitionOperations: TransitionStateOperationConfig[];
   ordering?: ResultOrderingConfig;
 };
 
@@ -75,7 +74,7 @@ export function selectTableResultModel(
     columns,
     ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(deleteOperation === undefined ? {} : { deleteOperation }),
-    transitionActions: selectTransitionStateActions(entityName, entity),
+    transitionOperations: selectTransitionStateOperations(entityName, entity),
     ...(ordering === undefined ? {} : { ordering }),
   };
 }
@@ -167,27 +166,29 @@ function selectTableColumns(
     }
 
     if (column.type === "invokeAction") {
-      const actions = selectTableActionConfigs(schema, view, invokeActionNames(column));
+      const bindingNames = invokeActionBindingNames(column);
+      const controls = selectTableOperationControlConfigs(schema, view, bindingNames);
       const includeOrdering =
         column.includeOrdering === true && ordering?.presentations.includes("moveMenu") === true;
       const presentation =
-        column.presentation ?? (actions.length === 1 && !includeOrdering ? "button" : "dropdown");
+        column.presentation ?? (controls.length === 1 && !includeOrdering ? "button" : "dropdown");
       const headerLabel =
-        column.label ?? (includeOrdering ? "Actions" : defaultInvokeActionHeaderLabel(actions));
+        column.label ??
+        (includeOrdering ? "Actions" : defaultOperationControlHeaderLabel(controls));
 
       return {
-        type: "invokeAction",
-        key: `invokeAction:${[...invokeActionNames(column), ...(includeOrdering ? ["ordering"] : [])].join(",")}`,
+        type: "operationControl",
+        key: `operationControl:${[...bindingNames, ...(includeOrdering ? ["ordering"] : [])].join(",")}`,
         label: column.label ?? "",
         headerLabel,
-        actions,
+        controls,
         presentation,
         includeOrdering,
         ...(includeOrdering && ordering ? { ordering } : {}),
         ...(column.align === undefined ? { align: "end" as const } : { align: column.align }),
         ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
         display:
-          actions.length === 0 && !includeOrdering ? "hidden" : (column.display ?? "readOnly"),
+          controls.length === 0 && !includeOrdering ? "hidden" : (column.display ?? "readOnly"),
         format: "plain",
       };
     }
@@ -278,7 +279,7 @@ function tableFooterColumnName(column: TableColumnConfig) {
     return column.computedValueName;
   }
 
-  if (column.type === "invokeAction" || column.type === "orderingHandle") {
+  if (column.type === "operationControl" || column.type === "orderingHandle") {
     return "";
   }
 
@@ -299,13 +300,13 @@ function selectFieldColumnDisplay(
 
 function selectSyntheticOrderingMenuColumn(
   ordering: TableOrderingConfig,
-): InvokeActionTableColumnConfig {
+): OperationControlTableColumnConfig {
   return {
-    type: "invokeAction",
-    key: "invokeAction:ordering",
+    type: "operationControl",
+    key: "operationControl:ordering",
     label: "",
     headerLabel: "Actions",
-    actions: [],
+    controls: [],
     presentation: "dropdown",
     includeOrdering: true,
     ordering,
@@ -329,22 +330,22 @@ function selectSyntheticOrderingHandleColumn(): OrderingHandleTableColumnConfig 
   };
 }
 
-function selectTableActionConfigs(
+function selectTableOperationControlConfigs(
   schema: AppSchema,
   tableView: TableViewSchema,
-  actionNames: string[],
-): TableActionConfig[] {
-  const configs: TableActionConfig[] = [];
+  bindingNames: string[],
+): TableOperationControlConfig[] {
+  const configs: TableOperationControlConfig[] = [];
 
-  for (const actionName of actionNames) {
-    const action = tableView.actions?.[actionName];
+  for (const bindingName of bindingNames) {
+    const action = tableView.actions?.[bindingName];
 
     if (!action || action.availability?.state === "hidden") {
       continue;
     }
 
     const base = {
-      actionName,
+      bindingName,
       label: action.label,
       variant: action.variant ?? "default",
       disabled: action.availability?.state === "disabled",
@@ -358,11 +359,14 @@ function selectTableActionConfigs(
       continue;
     }
 
+    const editView = selectEditViewConfig(schema, action.editView);
+
     configs.push({
       ...base,
       type: "editRecord",
+      ...(editView.updateOperation === undefined ? {} : { operation: editView.updateOperation }),
       target: selectEditRecordTarget(schema, tableView, action),
-      editView: selectEditViewConfig(schema, action.editView),
+      editView,
     });
   }
 
@@ -373,7 +377,7 @@ function selectEditRecordTarget(
   schema: AppSchema,
   tableView: TableViewSchema,
   action: EditRecordTableActionSchema,
-): EditRecordTableActionConfig["target"] {
+): Extract<TableOperationControlConfig, { type: "editRecord" }>["target"] {
   const tableEntity = schema.entities[tableView.entity];
 
   if (!tableEntity) {
@@ -430,7 +434,7 @@ function selectEditViewConfig(schema: AppSchema, editViewName: string): EditView
     entity,
     ...(updateOperation === undefined ? {} : { updateOperation }),
     fields: selectEditFields(view, entity),
-    transitionActions: selectTransitionStateActions(view.entity, entity),
+    transitionOperations: selectTransitionStateOperations(view.entity, entity),
     ...(union === undefined ? {} : { union }),
   };
 }
@@ -487,15 +491,15 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
   });
 }
 
-function invokeActionNames(
+function invokeActionBindingNames(
   column: Extract<TableViewSchema["columns"][number], { type: "invokeAction" }>,
 ): string[] {
   return column.action === undefined ? (column.actions ?? []) : [column.action];
 }
 
-function defaultInvokeActionHeaderLabel(actions: TableActionConfig[]) {
-  if (actions.length === 1) {
-    return actions[0]?.label ?? "Action";
+function defaultOperationControlHeaderLabel(controls: TableOperationControlConfig[]) {
+  if (controls.length === 1) {
+    return controls[0]?.label ?? "Operation";
   }
 
   return "Actions";

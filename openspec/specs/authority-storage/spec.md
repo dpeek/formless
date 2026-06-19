@@ -168,10 +168,9 @@ The system MUST protect stored records during normal schema changes and SHALL su
 
 The system MUST commit writes only when Authority validation succeeds.
 
-#### Scenario: Mutation replay
+#### Scenario: Operation replay
 
-- GIVEN an operation, mutation, or action write was already committed with a
-  client-provided identity
+- GIVEN an operation write was already committed with a client-provided identity
 - WHEN the same write is replayed
 - THEN the stored response is returned
 - AND duplicate changes are not inserted
@@ -199,28 +198,29 @@ The system MUST commit writes only when Authority validation succeeds.
 #### Scenario: State machine field patch guard
 
 - GIVEN an active record belongs to an entity with a state machine
-- WHEN a generic patch mutation attempts to change the machine-owned enum field
-- THEN the mutation is rejected before commit
-- AND the field can change only through a declared transition action, source
+- WHEN a generic update operation or internal patch materializer attempts to
+  change the machine-owned enum field directly
+- THEN the write is rejected before commit
+- AND the field can change only through a declared transition operation, source
   bootstrap, reset, restore, or migration path
 
-#### Scenario: State machine transition action
+#### Scenario: State machine transition operation
 
-- GIVEN an authorized caller invokes a declared transition action for an active
+- GIVEN an authorized caller invokes a declared transition operation for an active
   record
 - WHEN the record's current enum state is accepted by that transition
-- THEN Authority commits the enum field patch through the action write path
-- AND any declared transition event record is committed in the same action
+- THEN Authority commits the enum field patch through the operation write path
+- AND any declared transition event record is committed in the same operation
   outcome
-- AND action idempotency and write-log cursor behavior match other committed
-  action writes
+- AND operation idempotency and write-log cursor behavior match other committed
+  operation writes
 
 #### Scenario: Invalid state machine transition
 
-- GIVEN a caller invokes a transition action for a missing, tombstoned, or
+- GIVEN a caller invokes a transition operation for a missing, tombstoned, or
   incompatible-state record
-- WHEN Authority validates the action
-- THEN the action is rejected before materialization
+- WHEN Authority validates the operation
+- THEN the operation is rejected before materialization
 - AND no partial record patch, event record, write-log change, or action
   execution is stored
 
@@ -251,8 +251,8 @@ materialization.
 - WHEN Authority evaluates the invocation
 - THEN operation actor policy is evaluated before field validation and storage
   materialization
-- AND rejected invocations do not create, patch, delete, tombstone, or dispatch
-  action effects
+- AND rejected invocations do not create, patch, delete, tombstone, dispatch
+  command effects, or run record plans
 - AND operation policy becomes the primary authorization boundary for operation
   execution
 
@@ -264,7 +264,7 @@ materialization.
   explicit runtime-generated write identity
 - AND replaying the same operation for the same app storage identity and
   idempotency key returns the stored outcome without duplicate change rows,
-  action execution rows, or operation invocation rows
+  command effect rows, or operation invocation rows
 - AND list and get operations do not require idempotency keys
 
 #### Scenario: Return operation output
@@ -317,14 +317,14 @@ writes.
 - THEN each plan step is validated against the active app schema before any
   step is committed
 - AND create, patch, delete, and tombstone steps reuse the same field,
-  reference, unique constraint, mutation, and state-machine write protections as
-  the equivalent single-record operation effects
+  reference, unique constraint, operation, and state-machine write protections
+  as the equivalent single-record operation effects
 - AND later steps can reference ids and scalar outputs from earlier successful
   steps in the same plan
 - AND all committed steps share the invocation id, app storage identity, actor,
   source context, and idempotency key from the operation envelope
 - AND if any step fails validation or materialization, no plan step writes an
-  app record, tombstone, action execution row, or sync change row
+  app record, tombstone, command effect row, or sync change row
 
 #### Scenario: Return record plan outcome
 
@@ -337,7 +337,7 @@ writes.
   write
 - AND replaying the same operation for the same app storage identity and
   idempotency key returns the stored command response without duplicate app
-  records, tombstones, action execution rows, operation invocation rows, or sync
+  records, tombstones, command effect rows, operation invocation rows, or sync
   change rows
 
 ### Requirement: Operation Invocation Audit
@@ -368,7 +368,7 @@ separate from stored app records and sync change rows.
   rejected or failed status, public source protocol, source host and path,
   target app storage identity, canonical operation key, idempotency facts when
   available, input hash, and safe input audit metadata
-- AND no sync change rows, action execution rows, stored app records, or
+- AND no sync change rows, command effect rows, stored app records, or
   tombstones are written for the rejected attempt
 
 #### Scenario: Change rows remain materialization log
@@ -382,13 +382,15 @@ separate from stored app records and sync change rows.
 ### Requirement: Storage Write Log Boundary
 
 The system SHALL keep committed Authority write facts behind a storage
-write-log boundary that owns write outcome classification, operation, mutation,
-and action idempotency, change-row append, cursor calculation, and committed
-change readback.
+write-log boundary that owns write outcome classification, operation
+idempotency, change-row append, cursor calculation, and committed change
+readback. Mutation and action materializers may remain internal implementation
+helpers, but they are not Authority write interfaces for callers after the
+operation migration.
 
 #### Scenario: Committed write facts
 
-- WHEN a mutation, action, schema reset, seed reset, or snapshot restore commits
+- WHEN an operation, schema reset, seed reset, or snapshot restore commits
   storage changes
 - THEN the storage write outcome identifies the result as committed
 - AND committed change rows are appended once for that write identity
@@ -396,11 +398,11 @@ change readback.
 
 #### Scenario: Replayed write facts
 
-- WHEN an operation, mutation, or action with a previously committed client-provided
+- WHEN an operation with a previously committed client-provided
   identity is replayed
 - THEN the storage write outcome identifies the result as replayed
 - AND the original stored response is returned
-- AND duplicate change rows or action execution rows are not inserted
+- AND duplicate change rows or command effect rows are not inserted
 
 #### Scenario: Change readback
 
@@ -414,21 +416,21 @@ change readback.
 The system SHALL keep stored record materialization explicit and separate from
 write-log append behavior.
 
-#### Scenario: Mutation materialization
+#### Scenario: Operation materialization
 
-- WHEN create, patch, delete, action-created record, or action tombstone effects
-  are committed
+- WHEN create, update, delete, command-created record, or command tombstone
+  effects are committed through an operation invocation
 - THEN record materializers write flat stored records or tombstones
 - AND write-log change payloads describe the committed stored records
 - AND schema validation, value validation, reference validation, and delete
-  blocker checks happen before mutation
+  blocker checks happen before materialization
 
 #### Scenario: Reset and restore materialization
 
 - WHEN source schema reset, seed reset, snapshot restore, or archive app data
   restore runs
 - THEN the reset or restore plan remains explicit before durable mutation
-- AND action executions are cleared only by operations whose storage semantics
+- AND command effect executions are cleared only by operations whose storage semantics
   require clearing them
 - AND sync cursors remain monotonic after the operation
 
@@ -436,10 +438,10 @@ write-log append behavior.
 
 The system SHALL represent record deletes as tombstones.
 
-#### Scenario: Delete commits a tombstone
+#### Scenario: Delete operation commits a tombstone
 
 - GIVEN a target record has no active referencing records
-- WHEN a delete mutation commits
+- WHEN a delete operation commits
 - THEN the stored record row remains with its id, entity, values, created
   timestamp, and updated timestamp
 - AND the record has a deleted timestamp

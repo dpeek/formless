@@ -4,7 +4,7 @@ import type {
   HomeQueryTabConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
-  TransitionStateActionConfig,
+  TransitionStateOperationConfig,
 } from "../../client/views.ts";
 import type { RecordLabelFieldConfig } from "./record-delete.tsx";
 import {
@@ -39,7 +39,7 @@ export type GeneratedTableTransitionColumnPresentation = {
   type: "transition";
   id: typeof transitionColumnId;
   key: Key;
-  actions: TransitionStateActionConfig[];
+  operations: TransitionStateOperationConfig[];
   header: GeneratedTableHeaderPresentation;
   isRowHeader: false;
   isUtility: true;
@@ -146,7 +146,7 @@ export function selectGeneratedTablePresentation({
   orderingDragPatchEnabled,
   pendingDragRecordId = null,
   queryName,
-  transitionActions = [],
+  transitionOperations = [],
 }: {
   canDelete: boolean;
   canPatch: boolean;
@@ -158,7 +158,7 @@ export function selectGeneratedTablePresentation({
   pendingDragRecordId?: string | null;
   query: HomeQueryTabConfig["query"];
   queryName?: string;
-  transitionActions?: TransitionStateActionConfig[];
+  transitionOperations?: TransitionStateOperationConfig[];
 }): GeneratedTablePresentation {
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
   const rowHeaderColumnIndex = selectRowHeaderColumnIndex(visibleColumns);
@@ -177,9 +177,9 @@ export function selectGeneratedTablePresentation({
     };
   });
   const columnsWithTransitions =
-    transitionActions.length === 0
+    transitionOperations.length === 0
       ? dataColumns
-      : [...dataColumns, transitionColumnPresentation(transitionActions)];
+      : [...dataColumns, transitionColumnPresentation(transitionOperations)];
   const tableColumns: GeneratedTableColumnPresentation[] = canDelete
     ? [...columnsWithTransitions, deleteColumnPresentation()]
     : columnsWithTransitions;
@@ -339,7 +339,7 @@ function emptyFooterCell(
 
 function tableHeaderPresentation(column: TableColumnConfig): GeneratedTableHeaderPresentation {
   const accessibleLabel =
-    column.type === "invokeAction" || column.type === "orderingHandle"
+    column.type === "operationControl" || column.type === "orderingHandle"
       ? column.headerLabel
       : column.label;
 
@@ -366,13 +366,13 @@ function deleteColumnPresentation(): GeneratedTableDeleteColumnPresentation {
 }
 
 function transitionColumnPresentation(
-  actions: TransitionStateActionConfig[],
+  operations: TransitionStateOperationConfig[],
 ): GeneratedTableTransitionColumnPresentation {
   return {
     type: "transition",
     id: transitionColumnId,
     key: transitionColumnId,
-    actions,
+    operations,
     header: {
       label: "",
       accessibleLabel: "Lifecycle transitions",
@@ -397,7 +397,7 @@ function selectRowHeaderColumnIndex(columns: TableColumnConfig[]) {
 }
 
 function isUtilityColumn(column: TableColumnConfig) {
-  return column.type === "invokeAction" || column.type === "orderingHandle";
+  return column.type === "operationControl" || column.type === "orderingHandle";
 }
 
 function labelFieldsForTableColumns(columns: TableColumnConfig[]): RecordLabelFieldConfig[] {

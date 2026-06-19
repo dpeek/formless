@@ -8,7 +8,6 @@ import type {
   ComputedValueSchema,
   CountDisplaySchema,
   CreateViewSchema,
-  EntityActionSchema,
   EntitySchema,
   FieldSchema,
   ItemViewSchema,
@@ -16,12 +15,12 @@ import type {
   ToManyRelationshipSchema,
   ViewSchema,
 } from "@dpeek/formless-schema";
-import { type QueryExpression } from "@dpeek/formless-schema";
+import { parseEntityOperationKey, type QueryExpression } from "@dpeek/formless-schema";
 import {
-  selectEntityActionUi,
-  type EntityActionTargetCountConfig,
-  type EntityActionUiConfig,
-} from "./action-ui.ts";
+  selectCommandOperationUi,
+  type CommandOperationTargetCountConfig,
+  type CommandOperationUiConfig,
+} from "./command-operation-ui.ts";
 import {
   selectAvailableEntityOperations,
   selectEntityOperationByKind,
@@ -33,8 +32,8 @@ import {
 } from "./union-presentation-model.ts";
 import {
   selectStateMachineField,
-  selectTransitionStateActions,
-  type TransitionStateActionConfig,
+  selectTransitionStateOperations,
+  type TransitionStateOperationConfig,
 } from "./state-machine-model.ts";
 import { selectAddressableRecordFieldConfig } from "./field-configs.ts";
 import { humanizeFieldName } from "./view-labels.ts";
@@ -107,7 +106,7 @@ export type HomeContextConfig = {
   recordFields?: RecordFieldConfig[];
   updateOperation?: EntityOperationPresentationConfig;
   deleteOperation?: EntityOperationPresentationConfig;
-  transitionActions: TransitionStateActionConfig[];
+  transitionOperations: TransitionStateOperationConfig[];
   recordUnion?: RecordUnionPresentationConfig;
 };
 
@@ -128,11 +127,9 @@ export type HomeOperationConfig =
       type: "command";
       label: string;
       entityName: string;
-      actionName: string;
       operationName: string;
       operation: EntityOperationPresentationConfig;
-      action: EntityActionSchema;
-      ui: EntityActionUiConfig;
+      ui: CommandOperationUiConfig;
     };
 
 export type HomeCollectionShellConfig = {
@@ -146,7 +143,7 @@ export type HomeCollectionShellConfig = {
   summary?: HomeSummarySlotConfig[];
 };
 
-export type { EntityActionTargetCountConfig, EntityActionUiConfig };
+export type { CommandOperationTargetCountConfig, CommandOperationUiConfig };
 
 export function selectHomeCollectionShell(
   schema: AppSchema,
@@ -323,7 +320,10 @@ function selectContext(
     ...(createOperation === undefined ? {} : { createOperation }),
     ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(deleteOperation === undefined ? {} : { deleteOperation }),
-    transitionActions: selectTransitionStateActions(collectionView.context.entity, contextEntity),
+    transitionOperations: selectTransitionStateOperations(
+      collectionView.context.entity,
+      contextEntity,
+    ),
     ...(itemViewName === undefined
       ? {}
       : {
@@ -417,18 +417,7 @@ function selectHomeOperations(
       continue;
     }
 
-    if (
-      operation.operation.kind !== "command" ||
-      operation.operation.effect?.type !== "runActionKind" ||
-      operation.operation.effect.action === undefined
-    ) {
-      continue;
-    }
-
-    const commandEntity = schema.entities[operation.entityName];
-    const action = commandEntity?.actions?.[operation.operation.effect.action];
-
-    if (!action) {
+    if (operation.operation.kind !== "command") {
       continue;
     }
 
@@ -438,11 +427,9 @@ function selectHomeOperations(
       type: "command",
       label,
       entityName: operation.entityName,
-      actionName: operation.operation.effect.action,
       operationName: operation.operationName,
       operation,
-      action,
-      ui: selectEntityActionUi(schema, label, action, binding.count),
+      ui: selectCommandOperationUi(schema, label, operation.operation, binding.count),
     });
   }
 
@@ -555,11 +542,10 @@ function selectBoundCollectionOperation(
   schema: AppSchema,
   canonicalKey: string,
 ): EntityOperationPresentationConfig | undefined {
-  const [entityName, operationName, extra] = canonicalKey.split(".");
-
-  if (!entityName || !operationName || extra !== undefined) {
-    throw new Error(`Invalid operation binding "${canonicalKey}".`);
-  }
+  const { entityKey: entityName, operationKey: operationName } = parseEntityOperationKey(
+    "Collection operation binding",
+    canonicalKey,
+  );
 
   const entity = schema.entities[entityName];
   const operation = entity?.operations?.[operationName];

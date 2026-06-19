@@ -12,13 +12,12 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   BootstrapResponse,
   ChangeRow,
-  MutationResponse,
   PublicOperationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
 
@@ -158,12 +157,12 @@ describe("public operation runtime", () => {
       emailAddress: records.emailAddresses[0]?.id,
       audience: records.audiences[0]?.id,
       status: "subscribed",
-      sourceKind: "publicAction",
+      sourceKind: "publicOperation",
       sourceTargetKind: "schemaKey",
       sourcePackageAppKey: "site",
       sourceSchemaKey: "site",
       sourceApiRoutePrefix: "/api/site",
-      sourceActionName: "subscribe",
+      sourceOperationKey: "subscription.subscribe",
       sourceHost: "example.com",
       sourcePath: "/api/site/public/operations/subscription/subscribe",
       sourceSiteBlockId: "rec_site_subscribe_form",
@@ -178,6 +177,52 @@ describe("public operation runtime", () => {
         idempotency_key: "schema-key-exec",
       },
     ]);
+  });
+
+  it("uses operation policy instead of legacy public action metadata for subscribe availability", async () => {
+    await installSiteSchema((schema) => {
+      const subscribe = schema.entities.subscription?.actions?.subscribe;
+
+      if (!subscribe) {
+        throw new Error("Expected subscribe action.");
+      }
+
+      delete subscribe.access;
+      delete subscribe.publicInput;
+    });
+
+    const accepted = await postPublicAction(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "operation-policy-only" }),
+    );
+    const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const records = contactSubscriptionRecords(after.records);
+
+    expect(accepted.status).toBe(200);
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.subscriptions[0]?.values).toMatchObject({
+      sourceKind: "publicOperation",
+      sourceOperationKey: "subscription.subscribe",
+    });
+
+    await resetSchemaApp("site");
+    await installSiteSchema((schema) => {
+      delete schema.entities.subscription?.operations?.subscribe;
+    });
+    turnstileRequests = [];
+
+    const rejected = await postPublicAction(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "legacy-action-only" }),
+    );
+    const rejectedAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
+
+    expect(rejected.status).toBe(404);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: "Public operation is not available.",
+    });
+    expect(contactSubscriptionRecords(rejectedAfter.records).subscriptions).toHaveLength(0);
+    expect(turnstileRequests).toEqual([]);
   });
 
   it("supports installed app public operation routes with accepted replay idempotency", async () => {
@@ -788,7 +833,7 @@ describe("public operation runtime", () => {
   });
 
   it("projects configured Turnstile site key without exposing the secret", async () => {
-    const block = await postAdminJson<MutationResponse>("/api/site/mutations", {
+    const block = await postAdminMutation({
       mutationId: "mutation-create-configured-subscribe-form",
       entity: "block",
       op: "create",
@@ -799,7 +844,7 @@ describe("public operation runtime", () => {
         buttonLabel: "Join",
       },
     });
-    await postAdminJson<MutationResponse>("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-place-configured-subscribe-form",
       entity: "block-placement",
       op: "create",
@@ -819,6 +864,7 @@ describe("public operation runtime", () => {
     expect(subscribePlacement?.block.publicOperation).toEqual({
       entityName: "subscription",
       operationName: "subscribe",
+      canonicalKey: "subscription.subscribe",
       route: "/api/site/public/operations/subscription/subscribe",
       challenge: {
         kind: "turnstile",
@@ -847,8 +893,7 @@ describe("public operation runtime", () => {
 
     try {
       await resetSchemaApp("site", deployedHarness);
-      const block = await postAdminJson<MutationResponse>(
-        "/api/site/mutations",
+      const block = await postAdminMutation(
         {
           mutationId: "mutation-create-deployed-subscribe-form",
           entity: "block",
@@ -862,8 +907,7 @@ describe("public operation runtime", () => {
         },
         deployedHarness,
       );
-      await postAdminJson<MutationResponse>(
-        "/api/site/mutations",
+      await postAdminMutation(
         {
           mutationId: "mutation-place-deployed-subscribe-form",
           entity: "block-placement",
@@ -1234,6 +1278,15 @@ async function resetInstalledApp(packageAppKey: "site" | "tasks", appInstallId: 
   expect(response.status).toBe(200);
 }
 
+async function installSiteSchema(transform: (schema: AppSchema) => void) {
+  const current = await getJson<SchemaResponse>("/api/site/schema");
+  const schema = structuredClone(current.schema);
+
+  transform(schema);
+
+  await postAdminJson<SchemaUpdateResponse>("/api/site/schema", { schema });
+}
+
 function publicSubscribeBody(input: {
   idempotencyKey: string;
   input?: Record<string, unknown>;
@@ -1420,7 +1473,7 @@ function taskRecordPlanRecords(records: StoredRecord[]) {
 }
 
 async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {
-  return postAdminJson<MutationResponse>("/api/site/mutations", {
+  return postAdminMutation({
     mutationId: `test-subscription-status-${status}`,
     entity: "subscription",
     op: "patch",
@@ -1453,15 +1506,29 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
   return request.response(JSON.parse(text)) as T;
 }
 
+async function postAdminMutation(
+  body: Parameters<typeof mutationOperationRequest>[0],
+  target: Harness = harness,
+) {
+  const request = mutationOperationRequest(body);
+  const response = await target.fetch(`/api/site${request.path.slice("/api".length)}`, {
+    body: JSON.stringify(request.body),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+  const text = await response.text();
+
+  expect([200, 201], text).toContain(response.status);
+
+  return request.response(JSON.parse(text));
+}
+
 async function createMappedPublicSiteRoute(target: Harness, host: string, appInstallId: string) {
   await postAdminJson(
-    "/api/formless/control-plane/mutations",
+    "/api/formless/control-plane/operations/route/create",
     {
-      mutationId: `mutation-route-host-publicSite-${host}`,
-      entity: "route",
-      op: "create",
-      recordId: `route:host:publicSite:${host}`,
-      values: {
+      idempotencyKey: `route-host-publicSite-${host}`,
+      input: {
         enabled: true,
         matchHost: host,
         matchPath: "/",

@@ -385,6 +385,14 @@ type ApplyCreateMutationSideEffects = (context: {
   createRecords: CreateMutationCausedRecordWriter;
 }) => void;
 
+type RecordMutationMaterializationOptions = {
+  now?: string;
+};
+
+type ActionMaterializationOptions = {
+  now?: string;
+};
+
 export function committedWrite<T>(response: T): WriteOutcome<T> {
   return { kind: "committed", response };
 }
@@ -1978,6 +1986,7 @@ export function createStoredRecordOutcome(
   mutation: CreateMutation,
   applySideEffects?: ApplyCreateMutationSideEffects,
   validateConstraints?: RecordConstraintValidator,
+  options: RecordMutationMaterializationOptions = {},
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
     const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
@@ -1986,7 +1995,7 @@ export function createStoredRecordOutcome(
       return replayedWrite(existingResponse);
     }
 
-    const createdAt = nowIsoString();
+    const createdAt = options.now ?? nowIsoString();
     const record = materializeCreatedMutationRecord(
       storage,
       {
@@ -2010,7 +2019,7 @@ export function createStoredRecordOutcome(
       mutation,
       record,
       createRecords: (entity, recordValuesToCreate) => {
-        const sideEffectCreatedAt = nowIsoString();
+        const sideEffectCreatedAt = options.now ?? nowIsoString();
         const records = materializeCreatedMutationRecords(
           storage,
           entity,
@@ -2054,6 +2063,7 @@ export function patchStoredRecordOutcome(
   mutation: PatchMutation,
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
+  options: RecordMutationMaterializationOptions = {},
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
     const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
@@ -2068,7 +2078,7 @@ export function patchStoredRecordOutcome(
       throw new Error(`Record "${mutation.recordId}" does not exist.`);
     }
 
-    const changedAt = nowIsoString();
+    const changedAt = options.now ?? nowIsoString();
     const record = materializePatchedMutationRecord(
       storage,
       {
@@ -2107,6 +2117,7 @@ export function deleteStoredRecord(
 export function deleteStoredRecordOutcome(
   storage: DurableObjectStorage,
   mutation: DeleteMutation,
+  options: RecordMutationMaterializationOptions = {},
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
     const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
@@ -2121,7 +2132,7 @@ export function deleteStoredRecordOutcome(
       throw new Error(`Record "${mutation.recordId}" does not exist.`);
     }
 
-    const deletedAt = nowIsoString();
+    const deletedAt = options.now ?? nowIsoString();
     assertDeleteMutationCanMaterialize(mutation, existingRecord);
     const record = materializeDeletedMutationRecord(storage, existingRecord, deletedAt);
 
@@ -2148,9 +2159,17 @@ export function tombstoneRecordsForAction(
   entity: string,
   action: string,
   recordsToTombstone: StoredRecord[],
+  options: ActionMaterializationOptions = {},
 ): ActionResponse {
   return writeOutcomeResponse(
-    tombstoneRecordsForActionOutcome(storage, actionId, entity, action, recordsToTombstone),
+    tombstoneRecordsForActionOutcome(
+      storage,
+      actionId,
+      entity,
+      action,
+      recordsToTombstone,
+      options,
+    ),
   );
 }
 
@@ -2160,6 +2179,7 @@ export function tombstoneRecordsForActionOutcome(
   entity: string,
   action: string,
   recordsToTombstone: StoredRecord[],
+  options: ActionMaterializationOptions = {},
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getActionResponseById(storage, actionId);
@@ -2168,7 +2188,7 @@ export function tombstoneRecordsForActionOutcome(
       return replayedWrite(existingResponse);
     }
 
-    const deletedAt = nowIsoString();
+    const deletedAt = options.now ?? nowIsoString();
     const records = materializeActionTombstoneRecords(storage, recordsToTombstone, deletedAt);
 
     appendActionRecordChanges(storage, {
@@ -2196,6 +2216,7 @@ export function createRecordsForAction(
   action: string,
   recordValuesToCreate: RecordValues[],
   validateConstraints?: RecordConstraintValidator,
+  options: ActionMaterializationOptions = {},
 ): ActionResponse {
   return writeOutcomeResponse(
     createRecordsForActionOutcome(
@@ -2205,6 +2226,7 @@ export function createRecordsForAction(
       action,
       recordValuesToCreate,
       validateConstraints,
+      options,
     ),
   );
 }
@@ -2216,6 +2238,7 @@ export function createRecordsForActionOutcome(
   action: string,
   recordValuesToCreate: RecordValues[],
   validateConstraints?: RecordConstraintValidator,
+  options: ActionMaterializationOptions = {},
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getActionResponseById(storage, actionId);
@@ -2224,7 +2247,7 @@ export function createRecordsForActionOutcome(
       return replayedWrite(existingResponse);
     }
 
-    const createdAt = nowIsoString();
+    const createdAt = options.now ?? nowIsoString();
     const records = materializeCreatedActionRecords(
       storage,
       entity,
@@ -2258,6 +2281,7 @@ export function createRecordSetForActionOutcome(
   action: string,
   plans: ActionRecordCreatePlan[],
   validateConstraints?: RecordConstraintValidator,
+  options: ActionMaterializationOptions = {},
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getActionResponseById(storage, actionId);
@@ -2266,7 +2290,7 @@ export function createRecordSetForActionOutcome(
       return replayedWrite(existingResponse);
     }
 
-    const createdAt = nowIsoString();
+    const createdAt = options.now ?? nowIsoString();
     const records = materializeCreatedActionRecordSet(
       storage,
       plans,
@@ -2298,6 +2322,7 @@ export function writeRecordSetForActionOutcome(
   action: string,
   plans: ActionRecordWritePlan[],
   validateConstraints?: RecordConstraintValidator,
+  options: ActionMaterializationOptions = {},
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getActionResponseById(storage, actionId);
@@ -2306,7 +2331,7 @@ export function writeRecordSetForActionOutcome(
       return replayedWrite(existingResponse);
     }
 
-    const changedAt = nowIsoString();
+    const changedAt = options.now ?? nowIsoString();
     const records = materializeActionRecordWrites(storage, plans, changedAt, validateConstraints);
 
     appendActionRecordChanges(storage, {

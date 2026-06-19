@@ -246,17 +246,21 @@ export async function submitOperation(
     },
   );
 
-  if ("changes" in response.output) {
-    await mergeChanges(identity, response.output.changes, response.output.cursor);
-    applyChanges(response.output.changes, response.output.cursor, identity);
+  const materializedOutput = operationMaterializationOutput(response.output);
+
+  if (materializedOutput) {
+    await mergeChanges(identity, materializedOutput.changes, materializedOutput.cursor);
+    applyChanges(materializedOutput.changes, materializedOutput.cursor, identity);
     notifyLocalDataChanged(identity);
-    await enqueueLocalWorkspaceAutoSave(
-      {
-        source: options.autoSaveSource ?? autoSaveSourceForOperation(identity, entity),
-        storageIdentity: identity.authorityName,
-      },
-      options,
-    );
+    if (response.status === "committed") {
+      await enqueueLocalWorkspaceAutoSave(
+        {
+          source: options.autoSaveSource ?? autoSaveSourceForOperation(identity, entity),
+          storageIdentity: identity.authorityName,
+        },
+        options,
+      );
+    }
   }
 
   return response;
@@ -641,6 +645,26 @@ function autoSaveSourceForOperation(
   }
 
   return entity === "deployment-config" ? "deployment-intent" : "control-plane-write";
+}
+
+type OperationMaterializationOutput = Extract<
+  OperationInvocationResponse["output"],
+  { changes: unknown[]; cursor: number }
+>;
+
+function operationMaterializationOutput(
+  output: OperationInvocationResponse["output"],
+): OperationMaterializationOutput | undefined {
+  switch (output.type) {
+    case "create":
+    case "update":
+    case "delete":
+    case "command":
+      return output;
+    case "get":
+    case "list":
+      return undefined;
+  }
 }
 
 function isErrorResponse(value: unknown): value is { error: string } {

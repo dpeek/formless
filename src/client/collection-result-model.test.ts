@@ -110,10 +110,19 @@ describe("collection result model", () => {
         presentations: ["dragHandle"],
       },
       composition: {
-        create: { actionName: "addTreeChild" },
-        remove: { actionName: "removeTreePlacement" },
+        create: {
+          operationName: "addTreeChild",
+          operation: { canonicalKey: "block-placement.addTreeChild" },
+          effect: { kind: "create-tree-child" },
+        },
+        remove: {
+          operationName: "removeTreePlacement",
+          operation: { canonicalKey: "block-placement.removeTreePlacement" },
+          effect: { kind: "remove-tree-placement" },
+        },
       },
     });
+    expect(result.placementUpdateOperation?.canonicalKey).toBe("block-placement.update");
     expect(result.childRecordUnion?.unionName).toBe("blockByType");
     expect(result.branches?.variants.leafVariantValues).toEqual(
       expect.arrayContaining(["postList", "projectList", "subscribeForm", "header", "footer"]),

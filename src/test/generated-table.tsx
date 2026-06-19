@@ -129,7 +129,7 @@ function tableResultFromProps({
     type: "table",
     tableViewName,
     columns,
-    transitionActions: [],
+    transitionOperations: [],
     ...(ordering === undefined ? {} : { ordering }),
     ...(footer === undefined ? {} : { footer }),
   };

@@ -1,55 +1,65 @@
 # Formless Vision
 
-Last updated: 2026-06-02
+Last updated: 2026-06-19
 
 Purpose: big-picture product vision for Formless V1.
 
 This is not shipped behavior. Shipped behavior lives in `openspec/specs/*/spec.md`.
 
 This is not a backlog. Backlog and ideas live in `doc/roadmap.md`. Work starts
-when a committed OpenSpec change owns the work.
+when a committed OpenSpec or Git-backed change owns the work.
 
 ## North Star
 
-Formless is a schema-as-data app runtime for building custom software on
-Cloudflare.
+Formless is a schema-as-data app runtime centered on operations.
+
+An app schema defines flat records, projections, source-declared operations,
+operation bindings, and runtime capability adapters. Every human, agent,
+public, CLI, automation, generated UI, and runtime interaction should invoke an
+operation or a runtime-declared operation analogue.
 
 One command should give a person or agent a flexible data store in the cloud,
-with a generated app, durable storage, sync, auth, media, and deploy paths ready
-by default.
-
-From there, humans and agents should be able to shape the runtime into a custom
-workflow app without writing the same boilerplate for storage, screens, forms,
-permissions, media, jobs, email, and deployment every time.
+with generated operation-bound UI, durable storage, sync, owner auth, media,
+public bindings, archives, and deploy paths ready by default.
 
 ## Product Promise
 
-Define the app once. Run it many ways.
+Define the app once. Invoke it many ways.
 
-An app definition should be able to describe:
+An app definition should describe:
 
-- records, fields, relationships, queries, read models, views, screens, and
-  actions;
-- the generated UI humans use to inspect and edit records;
-- the API and data surfaces agents use to read, write, and automate work;
-- public outputs such as HTML, Markdown, JSON, feeds, and printable documents;
-- the Cloudflare primitives the app needs.
+- flat records, fields, and relationships;
+- projections such as queries, read models, views, screens, public outputs, and
+  result models;
+- operations with input, output, effect, actor policy, idempotency, and audit
+  contracts;
+- bindings that expose operations through generated UI, protocol routes, public
+  forms, CLI calls, automation triggers, or runtime surfaces;
+- package and platform adapters selected by runtime capability facts.
 
 The runtime should turn that definition into a working cloud app with strong
 defaults and clear escape hatches.
 
 ## Current Anchors
 
-- App schema already defines entities, fields, relationships, mutations,
-  queries, read models, views, screens, and actions.
+- `openspec/specs/app-schema/spec.md` defines the operations-centered schema
+  contract: records, projections, operations, bindings, and adapters.
+- `openspec/specs/authority-storage/spec.md` defines Authority storage around
+  operation invocation envelopes, idempotency, operation audit rows, and change
+  rows as the materialization log.
+- `openspec/specs/generated-ui/spec.md` defines generated React surfaces that
+  select operation bindings for collection, table, and app controls.
+- `openspec/specs/public-actions/spec.md` defines public exposure as anonymous
+  operation policy plus target-scoped public operation bindings.
+- Current code still contains mutation and action materializers. Under the
+  current specs, they are internal or legacy migration details behind
+  source-declared operations, not peer interaction models.
 - Durable Object Authority storage, browser IndexedDB replicas, HTTP sync, and
   push sync already exist.
-- Generated React app surfaces already render schema-declared screens,
-  collections, tables, trees, fields, and actions.
 - Site already proves one definition can produce generated admin UI and public
   HTML output.
-- `formless dev` already creates a local Formless workspace before
-  Cloudflare mutation.
+- `formless dev` already creates a local Formless workspace before changing
+  Cloudflare resources.
 - `formless deploy` is the explicit Cloudflare deployment boundary for a saved
   workspace.
 - Portable app and instance archives already prove backup, restore, and import
@@ -58,8 +68,6 @@ defaults and clear escape hatches.
   routes, domain intent, and deployment intent.
 - Owner passkey setup, owner sessions, logout, and admin bearer recovery
   boundaries already exist.
-- Public actions and Site contact subscription records already prove anonymous
-  write paths for public Sites.
 - Deployment desired-state versions, attempts, leases, status, and upgrade
   metadata already exist.
 - Media and Deploy package slices already expose reusable contracts, helpers,
@@ -67,44 +75,48 @@ defaults and clear escape hatches.
 
 ## V1 Shape
 
-V1 should make Formless feel like a Cloudflare-native app runtime, not a library
-of unrelated helpers.
+V1 should make Formless feel like a Cloudflare-native operations runtime, not a
+library of unrelated helpers.
 
 The runtime owns:
 
 - app installation and routing;
-- durable record storage;
+- durable flat record storage;
 - schema parsing and validation;
-- generated authoring surfaces;
+- operation invocation, idempotency, audit, and write classification;
+- generated authoring surfaces selected from operation bindings;
 - local browser replica and sync;
+- target-scoped public operation bindings;
 - media upload and delivery;
-- auth, roles, orgs, and groups;
-- queues, workflows, scheduled work, and long-running jobs;
-- AI, agents, browser rendering, image optimization, video delivery, and email
-  integration;
+- owner auth, owner sessions, logout, and admin bearer recovery;
 - deploy, backup, restore, import, and ejection paths.
 
-The schema stays the product contract. Custom code extends that contract instead
-of replacing it.
+The schema stays the product contract. Custom code extends operations or
+adapters instead of replacing that contract.
+
+Broad platform axes are deferred until a concrete operation requires them.
+Roles, orgs, groups, app marketplace, durable workflow UI, broad provider
+management UI, AI surfaces, browser rendering jobs, video delivery, and email
+product flows should not become V1 peers of operations.
+
+CRM launch is the forcing function for the first complete operation set.
 
 ## Cloudflare Boundary
 
-Formless should wrap Cloudflare primitives in product-shaped defaults:
+Formless should wrap Cloudflare primitives in product-shaped defaults through
+operations and adapters:
 
 - Workers and Assets for the runtime shell, API routes, and public output.
-- Durable Objects for authority, storage invariants, sync, and app-local state.
+- Durable Objects for Authority storage, operation invariants, sync, and
+  app-local state.
 - R2 for media originals, generated artifacts, backups, and portable archives.
-- Queues for async jobs and fan-out work.
-- Workflows for durable multi-step processes.
-- Agents and AI Gateway for agentic app behavior and model access.
-- Browser Rendering for capture, scrape, preview, and document generation jobs.
-- Stream and media transformations for video delivery and derived media.
-- Image optimization for responsive public and admin image output.
-- Email integration for inbound and outbound product workflows.
+- Queues, Workflows, Agents, AI Gateway, Browser Rendering, Stream, Image
+  optimization, and email integrations only when a concrete operation needs the
+  primitive and an adapter boundary is defined.
 
 The user should not have to start by learning every primitive. The runtime
-should provide the first useful path for each primitive, then expose the
-underlying Cloudflare concepts when the app needs more control.
+should provide the first useful operation path for each primitive it supports,
+then expose the underlying Cloudflare concepts when the app needs more control.
 
 ## App Definition
 
@@ -115,35 +127,35 @@ It should describe:
 - flat stored record types;
 - field behavior, validation, defaults, and generated editors;
 - relationships over stored references;
-- queries and read models;
-- generated views and screens;
-- actions and mutations;
-- public routes and output formats;
-- automation hooks;
-- auth and permission rules;
+- queries, read models, views, screens, and result models;
+- operations and operation bindings;
+- public routes and output formats as bindings or projections;
+- actor, permission, idempotency, and audit policy for operations;
 - integration adapters;
 - import, export, and archive behavior.
 
-The runtime should keep data flat and compose richer behavior in the query, view,
-projection, and action layers.
+The runtime should keep data flat and compose richer behavior in the query,
+view, projection, and operation layers.
 
 ## Surfaces
 
-One definition should be able to expose multiple surfaces:
+One definition should expose multiple surfaces without changing the operation
+contract:
 
 - generated admin UI for humans;
-- compact custom UI for a specific workflow;
+- compact custom UI for a specific domain flow;
 - public HTML for sites and documents;
 - Markdown for content, summaries, and agent-readable output;
 - JSON for APIs, automation, and app-to-app exchange;
 - feeds, sitemaps, and metadata for public publishing;
-- email templates and notifications;
-- background-job inputs and outputs.
+- email templates and notifications when backed by concrete operations;
+- background inputs and outputs when backed by concrete operations.
 
 Generated UI should be the default starting point. Custom UIs should be
-first-class when a workflow deserves a custom shape.
+first-class when a domain flow deserves a custom shape, but they should still
+bind to operations for writes and commands.
 
-## Human And Agent Workflows
+## Human And Agent Work
 
 Formless should treat humans and agents as collaborators over the same app
 definition and data.
@@ -151,25 +163,24 @@ definition and data.
 Humans need:
 
 - fast generated screens;
-- safe edits;
-- permissions;
+- safe operation-bound edits;
+- clear authorization boundaries;
 - clear history;
-- workflow-specific views;
+- domain-specific views;
 - understandable deployment and backup controls.
 
 Agents need:
 
 - stable schemas;
 - typed data surfaces;
-- action contracts;
+- operation contracts;
 - Markdown and JSON output;
 - safe write paths;
-- background jobs;
 - audit trails and permission boundaries.
 
 The goal is not generic UI generation for its own sake. The goal is custom-fit
-software where agents and humans can both see the domain model and do useful
-work.
+software where agents and humans can both see the domain model and invoke the
+same domain operations.
 
 ## Batteries And Escape Hatches
 
@@ -177,13 +188,10 @@ Formless should remove boilerplate without trapping the project.
 
 Built in:
 
-- passkey auth;
-- roles;
-- orgs and groups;
+- passkey owner auth;
 - app installs;
-- admin and public surfaces;
+- admin and public operation surfaces;
 - media;
-- email templates;
 - common Cloudflare primitive adapters;
 - backup, restore, and import;
 - local development;
@@ -193,8 +201,8 @@ Escape hatches:
 
 - raw schema source editing;
 - custom generated view presentations;
-- app-specific action handlers;
-- custom UI surfaces;
+- app-specific operation handlers;
+- custom UI surfaces that bind to operations;
 - direct primitive configuration when defaults are too small;
 - portable archives;
 - ejection into a normal Cloudflare project when ownership matters more than
@@ -218,9 +226,8 @@ From the browser, the user should be able to:
 - create the owner identity;
 - install or create an app;
 - edit the app schema;
-- use the generated UI immediately;
-- add media, auth, email, jobs, and AI capabilities when the workflow needs
-  them;
+- use generated operation-bound UI immediately;
+- add media and public operation bindings when the domain needs them;
 - save workspace archives locally;
 - deploy the workspace to Cloudflare when ready;
 - publish or expose the app through HTML, Markdown, JSON, and custom UI
@@ -229,9 +236,14 @@ From the browser, the user should be able to:
 ## Product Principles
 
 - Schema is the durable contract.
-- Data stays flat; composition lives in views, queries, projections, and actions.
+- Data stays flat; composition lives in views, queries, projections, and
+  operations.
+- Operations are the interaction seam for humans, agents, public callers, CLI,
+  automation, generated UI, and runtime surfaces.
+- Bindings expose operations; they do not redefine operation meaning.
+- Adapters handle package-specific or platform-specific behavior.
 - Generated UI gets the user to working software quickly.
-- Custom UI exists for workflows where generic screens are not enough.
+- Custom UI exists for domain flows where generic screens are not enough.
 - Cloudflare primitives are wrapped, not hidden forever.
 - Local, remote, backup, restore, and ejection paths are part of the product.
 - Agents and humans use the same domain model.
@@ -240,12 +252,11 @@ From the browser, the user should be able to:
 ## Open Questions
 
 - What is the exact V1 browser-first setup path after `formless dev`?
-- Which Cloudflare primitive gets the next first-class adapter after core
-  instance, deployment, and media work?
-- What is the smallest useful permission model for passkeys, roles, orgs, and
-  groups?
+- Which CRM interaction is not covered by first-pass operation kinds?
+- What is the smallest useful permission model beyond owner sessions?
 - What does ejection produce: a generated Worker project, an app package, an
   archive, or all three?
-- Which public output formats are V1: HTML, Markdown, JSON, feeds, PDF, or email?
-- What is the first agent-native workflow that proves schema, actions, AI, jobs,
+- Which public output formats are V1: HTML, Markdown, JSON, feeds, PDF, or
+  email?
+- What is the first agent-native use case that proves schema, operations, audit,
   and permissions together?

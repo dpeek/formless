@@ -25,7 +25,10 @@ import {
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH } from "./instance-control-plane.ts";
+import {
+  CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH,
+  INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
+} from "./instance-control-plane.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import {
   activeAppPackageResolver,
@@ -384,10 +387,13 @@ async function createControlPlaneAppInstall(
 
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(
-      new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/actions/createAppInstall`, request.url),
+      new URL(
+        `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH}`,
+        request.url,
+      ),
       {
         body: JSON.stringify({
-          actionId: `appInstallApi:${input.installId}:${crypto.randomUUID()}`,
+          idempotencyKey: `appInstallApi:${input.installId}:${crypto.randomUUID()}`,
           input,
         }),
         headers,

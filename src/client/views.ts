@@ -4,10 +4,10 @@ import type {
   CollectionViewSchema,
   ComputedValueSchema,
   CreateDefaultValueSchema,
-  EntityActionSchema,
   EntitySchema,
   EntityUnionSchema,
   EntityUnionVariantSchema,
+  RunActionKindEntityOperationEffectSchema,
   FieldCommitPolicy,
   FieldEditor,
   FieldRef,
@@ -43,13 +43,13 @@ import {
 import type { EntityOperationPresentationConfig } from "./operation-presentation-model.ts";
 import type {
   StateMachineFieldConfig,
-  TransitionStateActionConfig,
+  TransitionStateOperationConfig,
 } from "./state-machine-model.ts";
 
 export { selectRelatedCollectionModels } from "./collection-shell-model.ts";
 export type {
-  EntityActionTargetCountConfig,
-  EntityActionUiConfig,
+  CommandOperationTargetCountConfig,
+  CommandOperationUiConfig,
   HomeCollectionShellConfig,
   HomeContextConfig,
   HomeContextNavigationConfig,
@@ -60,7 +60,7 @@ export type {
   HomeSummarySlotConfig,
   RelatedCollectionConfig,
 } from "./collection-shell-model.ts";
-export type { StateMachineFieldConfig, TransitionStateActionConfig };
+export type { StateMachineFieldConfig, TransitionStateOperationConfig };
 export { fieldLabel } from "./view-labels.ts";
 
 export function recordFieldRef(fieldConfig: { fieldName: string; fieldRef?: FieldRef }): FieldRef {
@@ -129,25 +129,28 @@ export type ComputedTableColumnConfig = TableColumnBaseConfig & {
   computedValue: ComputedValueSchema;
 };
 
-export type TableActionBaseConfig = {
-  actionName: string;
+export type TableOperationControlBaseConfig = {
+  bindingName: string;
   label: string;
   variant: TableActionVariant;
   disabled: boolean;
   disabledReason?: string;
 };
 
-export type StaticTableActionConfig = TableActionBaseConfig & {
+export type StaticTableOperationControlConfig = TableOperationControlBaseConfig & {
   type: "static";
 };
 
-export type EditRecordTableActionConfig = TableActionBaseConfig & {
+export type EditRecordTableOperationControlConfig = TableOperationControlBaseConfig & {
   type: "editRecord";
+  operation?: EntityOperationPresentationConfig;
   target: TableEditRecordTargetConfig;
   editView: EditViewConfig;
 };
 
-export type TableActionConfig = StaticTableActionConfig | EditRecordTableActionConfig;
+export type TableOperationControlConfig =
+  | StaticTableOperationControlConfig
+  | EditRecordTableOperationControlConfig;
 
 export type TableEditRecordTargetConfig =
   | {
@@ -169,7 +172,7 @@ export type EditViewConfig = {
   entity: EntitySchema;
   updateOperation?: EntityOperationPresentationConfig;
   fields: RecordFieldConfig[];
-  transitionActions: TransitionStateActionConfig[];
+  transitionOperations: TransitionStateOperationConfig[];
   union?: RecordUnionPresentationConfig;
 };
 
@@ -178,10 +181,10 @@ export type { ResultOrderingConfig, ResultOrderingScopeConfig };
 export type TableOrderingScopeConfig = ResultOrderingScopeConfig;
 export type TableOrderingConfig = ResultOrderingConfig;
 
-export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
-  type: "invokeAction";
+export type OperationControlTableColumnConfig = TableColumnBaseConfig & {
+  type: "operationControl";
   headerLabel: string;
-  actions: TableActionConfig[];
+  controls: TableOperationControlConfig[];
   presentation: TableActionPresentation;
   includeOrdering: boolean;
   ordering?: TableOrderingConfig;
@@ -196,7 +199,7 @@ export type TableColumnConfig =
   | FieldTableColumnConfig
   | ReferenceFieldTableColumnConfig
   | ComputedTableColumnConfig
-  | InvokeActionTableColumnConfig
+  | OperationControlTableColumnConfig
   | OrderingHandleTableColumnConfig;
 
 export type CreateFieldConfig = {
@@ -304,18 +307,16 @@ export type TreeBranchPolicyConfig = {
   variants: TreeVariantBranchPolicyConfig;
 };
 
-export type TreeCompositionActionConfig = {
+export type TreeCompositionOperationConfig = {
   create?: {
-    actionName: string;
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    action: Extract<EntityActionSchema, { kind: "create-tree-child" }>;
+    effect: RunActionKindEntityOperationEffectSchema & { kind: "create-tree-child" };
   };
   remove?: {
-    actionName: string;
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>;
+    effect: RunActionKindEntityOperationEffectSchema & { kind: "remove-tree-placement" };
   };
 };
 
@@ -326,7 +327,7 @@ export type HomeResultConfig =
       recordFields: RecordFieldConfig[];
       updateOperation?: EntityOperationPresentationConfig;
       deleteOperation?: EntityOperationPresentationConfig;
-      transitionActions: TransitionStateActionConfig[];
+      transitionOperations: TransitionStateOperationConfig[];
       recordUnion?: RecordUnionPresentationConfig;
       ordering?: ResultOrderingConfig;
     }
@@ -336,7 +337,7 @@ export type HomeResultConfig =
       recordFields: RecordFieldConfig[];
       updateOperation?: EntityOperationPresentationConfig;
       deleteOperation?: EntityOperationPresentationConfig;
-      transitionActions: TransitionStateActionConfig[];
+      transitionOperations: TransitionStateOperationConfig[];
       recordUnion?: RecordUnionPresentationConfig;
     }
   | {
@@ -345,7 +346,7 @@ export type HomeResultConfig =
       columns: TableColumnConfig[];
       updateOperation?: EntityOperationPresentationConfig;
       deleteOperation?: EntityOperationPresentationConfig;
-      transitionActions: TransitionStateActionConfig[];
+      transitionOperations: TransitionStateOperationConfig[];
       ordering?: ResultOrderingConfig;
       footer?: TableFooterSlotConfig[];
     }
@@ -367,7 +368,7 @@ export type HomeResultConfig =
       placementUpdateOperation?: EntityOperationPresentationConfig;
       ordering?: ResultOrderingConfig;
       branches?: TreeBranchPolicyConfig;
-      composition?: TreeCompositionActionConfig;
+      composition?: TreeCompositionOperationConfig;
       maxDepth: number;
     };
 

@@ -209,10 +209,12 @@ describe("app storage identity", () => {
       path: "/bootstrap",
     });
     expect(
-      parseInstanceControlPlaneApiRoute("/api/formless/control-plane/actions/createAppInstall"),
+      parseInstanceControlPlaneApiRoute(
+        "/api/formless/control-plane/operations/app-install/createAppInstall",
+      ),
     ).toEqual({
       identity: instanceControlPlaneStorageIdentity(),
-      path: "/actions/createAppInstall",
+      path: "/operations/app-install/createAppInstall",
     });
     expect(parseAuthorityApiRoute("/api/formless/control-plane/bootstrap")).toBeUndefined();
   });

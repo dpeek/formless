@@ -17,7 +17,7 @@ import {
 } from "@dpeek/formless-instance-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
-import type { ActionResponse, AppInstallsResponse, BootstrapResponse } from "../shared/protocol.ts";
+import type { AppInstallsResponse, BootstrapResponse } from "../shared/protocol.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   crmSeedRecords,
@@ -25,7 +25,7 @@ import {
   siteSourceSchema,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { actionOperationRequest } from "../test/authority-write.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -142,14 +142,11 @@ describe("instance archive restore API", () => {
       }),
     );
     const before = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
-    const firstAction = await postInstalledAppJson<ActionResponse>(
-      "/api/app-installs/tasks/work/actions",
-      {
-        actionId: "action-archive-clear",
-        entity: "task",
-        action: "clearCompletedTasks",
-      },
-    );
+    const firstAction = await postInstalledAppAction("tasks", "work", {
+      actionId: "action-archive-clear",
+      entity: "task",
+      action: "clearCompletedTasks",
+    });
     const replacementRecord = taskRecord({
       done: true,
       id: "task-after-replace",
@@ -163,14 +160,11 @@ describe("instance archive restore API", () => {
       }),
     );
     const after = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
-    const secondAction = await postInstalledAppJson<ActionResponse>(
-      "/api/app-installs/tasks/work/actions",
-      {
-        actionId: "action-archive-clear",
-        entity: "task",
-        action: "clearCompletedTasks",
-      },
-    );
+    const secondAction = await postInstalledAppAction("tasks", "work", {
+      actionId: "action-archive-clear",
+      entity: "task",
+      action: "clearCompletedTasks",
+    });
 
     expect(initial.response.status).toBe(200);
     expect(before.body.cursor).toBe(1);
@@ -572,20 +566,27 @@ async function getJson<T>(path: string) {
   };
 }
 
-async function postInstalledAppJson<T>(path: string, body: unknown) {
-  const request = operationWriteRequest(path, body);
-  const response = await harness.fetch(request.path, {
-    body: JSON.stringify(request.body),
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      "Content-Type": "application/json",
+async function postInstalledAppAction(
+  packageAppKey: string,
+  installId: string,
+  body: Parameters<typeof actionOperationRequest>[0],
+) {
+  const request = actionOperationRequest(body);
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${installId}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
     },
-    method: "POST",
-  });
+  );
 
   expect(response.status).toBe(200);
 
-  return request.response(await response.json()) as T;
+  return request.response(await response.json());
 }
 
 function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {

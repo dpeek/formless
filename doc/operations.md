@@ -1,17 +1,39 @@
-# Operations Proposal
+# Operations Architecture
 
-Last updated: 2026-06-11
+Last updated: 2026-06-19
 
-Purpose: proposal for making entity operations the shared interaction contract
-for UI, APIs, public forms, automation, audit, auth, and workflows.
+Purpose: controlling architecture note for the Formless operation seam.
 
 This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
 
-## Domain Conventions
+## Contract
 
-Operations are the domain contract for what can happen. Bindings are the
-surface contract for where and how that operation is exposed.
+Operations are the domain contract for what can happen.
+
+Bindings are the surface contract for where and how an operation is exposed.
+
+Adapters are the package or platform contract for behavior that cannot live in
+portable schema data.
+
+App schema should organize interaction semantics around:
+
+- flat stored records;
+- projections over records;
+- operations over records or projections;
+- bindings that invoke operations from generated UI, protocol routes, public
+  forms, CLI calls, automation triggers, or runtime surfaces;
+- adapters selected by package and runtime capability facts.
+
+Mutation policy, entity actions, public action metadata, generated action
+slots, table action columns, tree controls, workflow triggers, and provider
+commands are not peer interaction models. While migration is incomplete, those
+declarations can remain legacy inputs or internal materializers behind
+source-declared operations. They must not create browser controls, protocol
+write routes, public write routes, audit roots, or authorization decisions
+without a source-declared operation.
+
+## Domain Conventions
 
 Names use different casing by purpose:
 
@@ -22,7 +44,14 @@ Names use different casing by purpose:
   TypeScript;
 - cross-schema entity boundaries use `<schema-key>:<entity-key>`.
 
-First-pass platform targets are:
+First-pass app operations are entity-local:
+`entities.<entityKey>.operations.<operationKey>`.
+
+The canonical key for an entity-local app operation is
+`<entityKey>.<operationKey>`.
+
+Runtime platform operations use target-prefixed canonical keys when they need a
+runtime target:
 
 - `app`: app entity records in Authority;
 - `instance`: installs, routes, domain intent, and deploy intent;
@@ -32,6 +61,11 @@ First-pass platform targets are:
 - `archive`: app and instance export and restore;
 - `auth`: owner setup, login, and session bootstrap.
 
+These targets do not authorize standalone command systems. A platform surface
+must still answer which operation it invokes, which binding exposes it, which
+records or projections it touches, and which adapter handles target-specific
+behavior.
+
 App-related nouns stay separate:
 
 - `package-app`: bundled or reusable app package metadata, source schema key,
@@ -40,44 +74,15 @@ App-related nouns stay separate:
 - `app-install`: instance-local installation metadata that binds an install id
   to a package app, label, status, storage identity, and routes;
 - `app`: the running app storage target containing entity records, schema,
-  changes, snapshots, sync state, and app-local operation invocations.
+  changes, snapshots, sync state, and operation invocations.
 
 `package-app` is installed as an `app-install`; an `app-install` points to one
 app storage identity. The app storage identity owns records. The install record
 does not embed app data.
 
-## Problem
+## Operation Kinds
 
-Formless already models entities, fields, relationships, queries, read models,
-views, screens, mutations, and actions.
-
-The interaction surface is split across several concepts:
-
-- generic mutations for create, patch, and delete;
-- entity actions for schema-declared commands;
-- collection action slots;
-- table action columns;
-- tree composition controls;
-- public action forms;
-- route records for app, Site, instance, and redirect mounts.
-
-This makes generated UI, public APIs, audit, auth, and future workflows reason
-about related behavior through different paths.
-
-## Proposal
-
-Introduce operations as the semantic unit for interacting with an entity.
-
-An operation describes what can be done in domain terms. UI buttons, menus,
-forms, REST routes, public routes, hooks, CLI calls, and workflow triggers are
-bindings onto operations.
-
-For the first pass, operations are declared under their target entity. The
-runtime derives the canonical operation key as `<entityKey>.<operationKey>`.
-Top-level and cross-entity operations are deferred until entity-local operations
-prove the contract.
-
-First-pass operations should cover:
+First-pass entity operation kinds:
 
 - `list`: return records selected by a query.
 - `get`: return one record by identity.
@@ -86,15 +91,15 @@ First-pass operations should cover:
 - `delete`: tombstone or remove a record through declared policy.
 - `command`: run a domain command that may affect one or more records.
 
-`workflow` remains a reserved operation kind until there is a concrete
-long-running workflow use case.
+Public access is not an operation scope. It is actor policy plus a public
+binding on an operation.
 
-Existing mutations and actions can be represented as built-in operations before
-the storage or UI contract changes.
+`selection` and `workflow` remain reserved operation scopes or kinds until their
+contracts are introduced by a concrete use case.
 
 ## Operation Shape
 
-An operation should declare:
+An operation declares:
 
 - key and label;
 - target;
@@ -107,76 +112,20 @@ An operation should declare:
 - actor and permission policy;
 - audit policy.
 
-Public access is not an operation scope. It is an actor policy and binding on a
-collection, record, or command operation. Selection and workflow operations are
-reserved until their contracts are introduced.
-
 Protocol, CLI, and UI placement do not define the domain operation. They bind
 to it from separate binding declarations.
 
-Entity-local operations use the current app-schema shape:
-`entities.<entityKey>.operations.<operationKey>`. Runtime platform operations
-should use a target-prefixed canonical key such as
-`instance.app-install.create`, `workspace.source.save`, or
-`deployment.desired-state.apply`.
-
 ## Schema Direction
 
-Source schema should declare first-pass operations under
+Source schema declares first-pass operations under
 `entities.<entityKey>.operations`.
-
-```json
-{
-  "entities": {
-    "task": {
-      "operations": {
-        "create": {
-          "kind": "create",
-          "scope": "collection",
-          "input": {
-            "fields": {
-              "title": { "field": "title", "required": true },
-              "dueDate": { "field": "dueDate" },
-              "priority": { "field": "priority" }
-            }
-          },
-          "effect": { "type": "createRecord" }
-        },
-        "update": {
-          "kind": "update",
-          "scope": "record",
-          "input": {
-            "fields": {
-              "title": { "field": "title" },
-              "done": { "field": "done" },
-              "dueDate": { "field": "dueDate" },
-              "priority": { "field": "priority" }
-            }
-          },
-          "effect": { "type": "patchRecord" }
-        },
-        "clearCompletedTasks": {
-          "label": "Clear completed",
-          "kind": "command",
-          "scope": "collection",
-          "target": { "query": "taskCompleted" },
-          "effect": {
-            "type": "runActionKind",
-            "kind": "clear-completed"
-          }
-        }
-      }
-    }
-  }
-}
-```
 
 Operation input is its own contract. An input field can reference an entity
 field to reuse field validation, labels, defaults, and generated editors. Inline
 scalar input fields can cover command-only input that is not stored directly on
 the target record.
 
-First-pass output contracts should stay minimal and kind-shaped:
+First-pass output contracts are kind-shaped:
 
 - `list`: records selected by the referenced query.
 - `get`: one active record selected by record id.
@@ -185,23 +134,20 @@ First-pass output contracts should stay minimal and kind-shaped:
 - `delete`: tombstoned record id plus affected change ids.
 - `command`: typed command response plus affected change ids.
 
-These shapes are the stable result boundary for generated UI, public bindings,
-protocol adapters, automation callers, idempotency replay, and audit summaries.
-
 Queries remain query primitives. `list` operations reference query keys instead
 of replacing query declarations.
 
-First-pass effects should stay small: create one record, patch one record,
-delete or tombstone one record, or dispatch one registered schema action kind.
-Declarative multi-step effects can come after the operation envelope, policy,
-audit, and UI bindings are stable.
+First-pass effects stay small: create one record, patch one record, delete or
+tombstone one record, dispatch one registered command effect kind, or execute a
+declarative record plan. Plans write flat records only.
 
 ## Invocation Envelope
 
-Every operation call should normalize into one invocation envelope before auth,
-validation, execution, and audit.
+Every operation call normalizes into one invocation envelope before
+authorization, validation, execution, replay classification, audit, or
+materialization.
 
-The envelope should include:
+The envelope includes:
 
 - invocation id;
 - operation key;
@@ -212,37 +158,38 @@ The envelope should include:
 - source protocol;
 - source route, host, UI surface, or public block when relevant;
 - input;
-- idempotency key;
+- idempotency key when required;
 - received timestamp.
 
-This envelope becomes the root fact for execution, replay, audit, and workflow
-state.
+The envelope is the root fact for execution, replay, audit, and later durable
+runtime state.
 
 ## Bindings
 
 Bindings are external declarations that reference operation keys. They compose
-operations into generated UI, CLI, API, public forms, hooks, workflow triggers,
-and automation entry points.
+operations into generated UI, CLI, API, public forms, hooks, automation entry
+points, and future runtime triggers.
 
-A binding may define route, command, placement, form, output formatting, and
-surface-specific availability. It must not redefine operation input, output,
-effect, actor policy, idempotency, or audit behavior.
+A binding may define route, command name, placement, form presentation, output
+formatting, ordering, display, and surface-specific availability. It must not
+redefine operation input, output, effect, actor policy, idempotency, audit, or
+storage target.
 
 ### Generated UI
 
 Generated record, list, table, tree, and detail presentations should ask for
 available operations for the presented entity and scope.
 
-The UI can then render a consistent action menu or button group:
+Generated UI can render:
 
-- record menu for record-scoped operations;
-- collection toolbar for collection-scoped operations;
-- selection toolbar for selection-scoped operations;
-- public form for publicly exposed operations;
-- workflow status controls for resumable operations.
+- record controls for record-scoped operations;
+- collection toolbar controls for collection-scoped operations;
+- public forms for publicly exposed operations;
+- future selection or resumable controls only after those operation contracts
+  exist.
 
 Create, edit, delete, move, tree add, tree remove, and custom commands should be
-presented through the same operation model.
+presented through operation bindings.
 
 Views can bind operation keys for placement and ordering while leaving operation
 meaning on the entity operation declaration.
@@ -260,9 +207,9 @@ meaning on the entity operation declaration.
 }
 ```
 
-### REST
+### Protocol Routes
 
-REST routes should be protocol bindings onto operations.
+Protocol routes are bindings onto operations.
 
 Examples:
 
@@ -276,71 +223,59 @@ Examples:
 Instance route records can mount operation API surfaces at specific host and
 path matches.
 
-REST should not be publicly exposed by schema declaration alone. A route record
-must explicitly mount an operation API surface for an app install or schema-key
-app. Schema-owned protocol binding hints can define method and path templates;
-route records mount the surface and path prefix rather than duplicating every
-operation binding.
+Protocol routes are not publicly exposed by schema declaration alone. A route
+record or target-scoped public operation route must explicitly expose the
+operation surface.
 
 ### Public Forms
 
-Public actions already prove the shape: a public route resolves a schema
-action, validates public input, verifies challenge policy, and commits through
-Authority.
+Public forms are target-scoped bindings onto operations with anonymous actor
+policy.
 
-That should become a public binding and anonymous actor policy on an operation
-instead of a separate action-only path.
+The public route resolves a declared operation, validates public input, verifies
+challenge policy, builds an anonymous operation envelope, commits through
+Authority, and returns a public-safe operation response.
+
+Legacy public action metadata can remain as migration input only. It does not
+create public execution without a matching source-declared public operation
+binding.
 
 ### Hooks And Automation
 
 After-create hooks, CLI calls, worker tasks, scheduled work, and agent calls
 should invoke operations through the same envelope.
 
-System callers should be actors with explicit policy, not bypasses.
+System callers are actors with explicit policy, not bypasses.
 
 ## Audit
 
-Authority should keep one operation invocation log.
+Authority stores operation invocation rows as the semantic audit log.
 
-The current write log and action execution table are close, but they do not yet
-store enough invocation context for a single audit trail.
+Change rows remain the sync materialization log. Operation invocation rows are
+Authority-owned system rows. They are not normal app records and are not emitted
+as browser replica sync changes by default.
 
-The audit log should preserve:
+The audit row stores:
 
 - operation key and kind;
 - actor and auth decision;
-- source protocol and route;
+- source protocol and route context;
 - target app storage identity;
-- input summary or safe input snapshot;
-- affected changes;
+- input hash;
+- safe input summary or explicitly allowed safe snapshot;
+- affected change ids;
 - idempotency facts;
-- status: accepted, rejected, committed, replayed, failed, or resumed;
+- status;
 - timestamps.
 
-Change rows remain the sync materialization log. Operation invocations become
-the semantic audit log.
-
-Operation invocation rows are Authority-owned system rows. They are not normal
-app records and are not the sync materialization log by default.
-
-By default, audit should store envelope metadata, status, affected change ids,
-an input hash, and a safe input summary. Full input snapshots require explicit
-operation audit policy and must exclude secret fields and challenge proofs.
-
-```json
-{
-  "audit": {
-    "input": "summary"
-  }
-}
-```
+Secret field values, challenge proofs, provider secrets, and runtime secrets are
+not stored in full input snapshots.
 
 ## Auth And Permissions
 
-Operation policy should become the main authorization boundary.
+Operation policy is the main authorization boundary.
 
-Current owner/admin/session/public action behavior can map into the first actor
-set:
+First actor modes:
 
 - owner;
 - admin bearer;
@@ -348,7 +283,7 @@ set:
 - CLI deployer;
 - runner.
 
-Later actor support should include:
+Later actor support may include:
 
 - app user;
 - role;
@@ -356,7 +291,7 @@ Later actor support should include:
 - organization;
 - service actor.
 
-Policies should be able to cover:
+Policies should cover:
 
 - who can invoke the operation;
 - which records can be read or mutated;
@@ -365,47 +300,47 @@ Policies should be able to cover:
 - whether response fields are filtered by actor;
 - whether the operation is visible in generated UI.
 
-## Custom Actions And Workflows
+## Custom Operations
 
 Custom operations should support two levels.
 
-Declarative operations use schema-owned primitives: validate input, read
-records, create records, patch records, delete records, branch, and emit events.
+Declarative operations use schema-owned primitives: validate input, read records,
+create records, patch records, delete or tombstone records, branch, and emit
+events.
 
 Registered runtime operations call trusted package code by key. They still use
 the same input, policy, audit, idempotency, and output envelope.
 
-Workflow operations should store durable invocation and step state as flat
-records. Cloudflare Durable Objects, Queues, and Workflows can execute or resume
-steps, but committed app data should still flow through Authority.
+Long-running work is deferred behind the reserved `workflow` operation kind. If
+added, it should store durable invocation and step state as flat records and
+present resumable controls through operation bindings.
 
-Workflow operation status should be deferred with the `workflow` operation kind.
-When added, generated UI should read status from operation invocation records or
-workflow state records and present resumable controls through the same operation
-binding model.
+## Migration Guardrails
 
-## Migration Path
-
-1. Add entity-local operation model types that can wrap existing mutations and
-   entity actions.
+1. Add source-declared operation model types.
 2. Derive canonical operation keys as `<entityKey>.<operationKey>`.
-3. Add invocation envelope and operation audit rows while preserving existing
+3. Add invocation envelopes and operation audit rows while preserving existing
    sync change rows.
-4. Project CRUD operations from entity mutation policy and queries.
-5. Project existing entity actions as command operations.
-6. Move generated UI menus and buttons to operation presentation models.
-7. Add REST protocol bindings for explicitly mounted app operation API
-   surfaces.
-8. Move public actions to public operation bindings.
-9. Add custom operation registration and workflow state.
+4. Move generated UI menus, buttons, table controls, tree controls, and ordering
+   controls to operation presentation models.
+5. Move public forms to public operation bindings.
+6. Keep mutation and action materializers internal until all callers cross the
+   operation boundary.
+7. Remove legacy route, metadata, and control synthesis after operation coverage
+   is complete.
+
+Do not add workflow, marketplace, broad provider management, roles/orgs,
+AI/agent, or deployment-console primitives under this seam unless a CRM
+operation proves the primitive is needed.
 
 ## Open Questions
 
 - What exact contract should introduce selection-scoped operations for bulk
-  workflows?
+  commands?
 - What is the exact JSON grammar for field-referenced input and inline
   operation-only input?
 - What are the default idempotency rules for each operation kind?
-- Which REST path templates should be available as built-in binding presets?
-- When workflow operations are added, are invocation records enough for status
-  UI or do they need separate workflow state records?
+- Which protocol path templates should be available as built-in binding
+  presets?
+- When long-running operations are added, are invocation records enough for
+  status UI or do they need separate state records?

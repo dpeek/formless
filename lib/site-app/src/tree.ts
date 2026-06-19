@@ -10,7 +10,11 @@ import type {
   SiteTreeWarning,
   StoredRecord,
 } from "./types.ts";
-import { type AppSchema, type EntityOperationSchema } from "@dpeek/formless-schema";
+import {
+  formatEntityOperationKey,
+  type AppSchema,
+  type EntityOperationSchema,
+} from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
   resolveSiteRoute,
@@ -395,9 +399,9 @@ function projectedPublicOperationFields(
 
   if (!operationName) {
     context.warnings.push({
-      code: "missing-public-action",
+      code: "missing-public-operation",
       recordId: record.id,
-      message: `Subscribe form block "${record.id}" does not declare an action name.`,
+      message: `Subscribe form block "${record.id}" does not declare an operation name.`,
     });
     return undefined;
   }
@@ -415,7 +419,7 @@ function projectedPublicOperationFields(
 
   if (context.turnstileSiteKey === undefined) {
     context.warnings.push({
-      code: "missing-public-action-challenge-config",
+      code: "missing-public-operation-challenge-config",
       recordId: record.id,
       message: `Subscribe form operation "${operationName}" requires Turnstile site key configuration.`,
     });
@@ -425,6 +429,7 @@ function projectedPublicOperationFields(
   return {
     entityName: operation.entityName,
     operationName,
+    canonicalKey: operation.canonicalKey,
     route: `${context.publicOperationApiRoutePrefix}/public/operations/${encodeURIComponent(
       operation.entityName,
     )}/${encodeURIComponent(operationName)}`,
@@ -439,7 +444,7 @@ function selectPublicSubscribeOperation(
   schema: AppSchema,
   operationName: string,
 ):
-  | { kind: "available"; entityName: string }
+  | { kind: "available"; entityName: string; canonicalKey: string }
   | { kind: "unavailable"; code: string; message: string } {
   const candidates = Object.entries(schema.entities)
     .map(([entityName, entity]) => {
@@ -455,7 +460,7 @@ function selectPublicSubscribeOperation(
   if (candidates.length === 0) {
     return {
       kind: "unavailable",
-      code: "missing-public-action",
+      code: "missing-public-operation",
       message: `Subscribe form operation "${operationName}" does not exist.`,
     };
   }
@@ -478,7 +483,7 @@ function selectPublicSubscribeOperation(
   if (publicSubscribeOperations.length !== 1) {
     return {
       kind: "unavailable",
-      code: "invalid-public-action",
+      code: "invalid-public-operation",
       message: `Subscribe form operation "${operationName}" is not publicly executable.`,
     };
   }
@@ -489,7 +494,14 @@ function selectPublicSubscribeOperation(
     throw new Error("Public subscribe operation selection was empty after validation.");
   }
 
-  return { kind: "available", entityName: publicOperation.entityName };
+  return {
+    kind: "available",
+    entityName: publicOperation.entityName,
+    canonicalKey: formatEntityOperationKey({
+      entityKey: publicOperation.entityName,
+      operationKey: operationName,
+    }),
+  };
 }
 
 function projectedMediaFields(

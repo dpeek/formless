@@ -2,7 +2,7 @@ import type { AppSchema, CollectionViewSchema, EntitySchema } from "@dpeek/forml
 import { selectRecordFields } from "./collection-shell-model.ts";
 import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
-import { selectTransitionStateActions } from "./state-machine-model.ts";
+import { selectTransitionStateOperations } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import type { HomeResultConfig } from "./views.ts";
 
@@ -31,7 +31,7 @@ export function selectListResultModel(
     recordFields: selectRecordFields(itemView, entity),
     ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(deleteOperation === undefined ? {} : { deleteOperation }),
-    transitionActions: selectTransitionStateActions(entityName, entity),
+    transitionOperations: selectTransitionStateOperations(entityName, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
     ...(ordering === undefined ? {} : { ordering }),
   };
@@ -58,7 +58,7 @@ export function selectRecordResultModel(
     recordFields: selectRecordFields(itemView, entity),
     ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(deleteOperation === undefined ? {} : { deleteOperation }),
-    transitionActions: selectTransitionStateActions(entityName, entity),
+    transitionOperations: selectTransitionStateOperations(entityName, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }

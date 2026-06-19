@@ -114,7 +114,7 @@ export type PublicActionStorageTarget =
     };
 
 export type PublicActionSource = {
-  actionName: string;
+  operationKey: string;
   host: string;
   path: string;
   target: PublicActionStorageTarget;

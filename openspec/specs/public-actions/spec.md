@@ -13,6 +13,16 @@ write APIs.
 The system SHALL let schema-declared operations opt in to public execution
 through an explicit actor policy and public binding.
 
+#### Scenario: Public exposure is a binding
+
+- GIVEN a schema-declared operation can be invoked by an anonymous actor
+- WHEN public execution models are selected
+- THEN the public form, target-scoped route, challenge requirement, origin rule,
+  and response filtering are public bindings or operation policy facts
+- AND those facts do not redefine the operation input, output, effect,
+  idempotency, audit, or app storage identity
+- AND public access does not create a separate public action interaction model
+
 #### Scenario: Reject operation without public policy
 
 - GIVEN an anonymous request targets a schema operation that has no public

@@ -11,7 +11,7 @@ describe("selectGeneratedTablePresentation", () => {
       orderingHandleColumn(),
       fieldColumn("title", textField()),
       hiddenFieldColumn("internalNote", textField()),
-      invokeActionColumn("archiveTask", ""),
+      operationControlColumn("archiveTask", ""),
     ];
 
     const presentation = selectGeneratedTablePresentation({
@@ -25,13 +25,13 @@ describe("selectGeneratedTablePresentation", () => {
     expect(presentation.columns.map((column) => column.id)).toEqual([
       "orderingHandle",
       "field:title",
-      "invokeAction:archiveTask",
+      "operationControl:archiveTask",
       "__formless_delete",
     ]);
     expect(presentation.dataColumns.map((column) => column.column.key)).toEqual([
       "orderingHandle",
       "field:title",
-      "invokeAction:archiveTask",
+      "operationControl:archiveTask",
     ]);
     expect(
       presentation.dataColumns.find((column) => column.id === "field:title")?.isRowHeader,
@@ -40,7 +40,8 @@ describe("selectGeneratedTablePresentation", () => {
       presentation.dataColumns.find((column) => column.id === "orderingHandle")?.isRowHeader,
     ).toBe(false);
     expect(
-      presentation.dataColumns.find((column) => column.id === "invokeAction:archiveTask")?.header,
+      presentation.dataColumns.find((column) => column.id === "operationControl:archiveTask")
+        ?.header,
     ).toEqual({
       label: "",
       accessibleLabel: "Archive task",
@@ -51,7 +52,7 @@ describe("selectGeneratedTablePresentation", () => {
     expect(presentation.rows[0]?.cells.map((cell) => cell.columnId)).toEqual([
       "orderingHandle",
       "field:title",
-      "invokeAction:archiveTask",
+      "operationControl:archiveTask",
       "__formless_delete",
     ]);
     expect(presentation.rows[0]?.readinessWarning).toEqual({
@@ -233,19 +234,19 @@ function computedColumn(
   };
 }
 
-function invokeActionColumn(
-  actionName: string,
+function operationControlColumn(
+  bindingName: string,
   label: string,
-): Extract<TableColumnConfig, { type: "invokeAction" }> {
+): Extract<TableColumnConfig, { type: "operationControl" }> {
   return {
-    type: "invokeAction",
-    key: `invokeAction:${actionName}`,
+    type: "operationControl",
+    key: `operationControl:${bindingName}`,
     label,
     headerLabel: "Archive task",
-    actions: [
+    controls: [
       {
         type: "static",
-        actionName,
+        bindingName,
         label: "Archive task",
         variant: "default",
         disabled: false,

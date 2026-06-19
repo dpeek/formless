@@ -19,6 +19,19 @@ export type AuthorityTestActionResult = {
   changes: ChangeRow[];
   cursor: number;
 };
+export type AuthorityTestMutationRequest = {
+  entity: string;
+  mutationId: string;
+  op: string;
+  recordId?: string;
+  values?: unknown;
+};
+export type AuthorityTestActionRequest = {
+  action: string;
+  actionId: string;
+  entity: string;
+  input?: unknown;
+};
 
 export function createAuthorityWriteHelpers(
   harness: AuthorityHarness,
@@ -57,16 +70,15 @@ export function createAuthorityWriteHelpers(
   }
 
   async function postJson<T>(path: string, body: unknown) {
-    const request = operationWriteRequest(path, body);
-    const response = await harness.fetch(apiPath(request.path), {
-      body: JSON.stringify(request.body),
+    const response = await harness.fetch(apiPath(path), {
+      body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
 
     expect(response.status).toBe(200);
 
-    return request.response(await response.json()) as T;
+    return (await response.json()) as T;
   }
 
   async function postMutation(mutationId: string, values: Record<string, unknown>) {
@@ -117,13 +129,50 @@ export function createAuthorityWriteHelpers(
     return operation.output.response satisfies AuthorityTestActionResult;
   }
 
-  async function expectError(path: string, body: unknown, message: string) {
-    const request =
-      body === undefined
-        ? { body, path, response: (value: unknown) => value }
-        : operationWriteRequest(path, body);
+  async function postMutationRequest(requestBody: AuthorityTestMutationRequest) {
+    const request = mutationOperationRequest(requestBody);
     const response = await harness.fetch(apiPath(request.path), {
-      body: body === undefined ? undefined : JSON.stringify(request.body),
+      body: JSON.stringify(request.body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+
+    return request.response(await response.json());
+  }
+
+  async function expectMutationError(requestBody: AuthorityTestMutationRequest, message: string) {
+    const request = mutationOperationRequest(requestBody);
+    const response = await harness.fetch(apiPath(request.path), {
+      body: JSON.stringify(request.body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: expect.stringContaining(message),
+    });
+  }
+
+  async function expectActionError(requestBody: AuthorityTestActionRequest, message: string) {
+    const request = actionOperationRequest(requestBody);
+    const response = await harness.fetch(apiPath(request.path), {
+      body: JSON.stringify(request.body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: expect.stringContaining(message),
+    });
+  }
+
+  async function expectError(path: string, body: unknown, message: string) {
+    const response = await harness.fetch(apiPath(path), {
+      body: body === undefined ? undefined : JSON.stringify(body),
       headers: body === undefined ? undefined : { "Content-Type": "application/json" },
       method: body === undefined ? "GET" : "POST",
     });
@@ -142,7 +191,9 @@ export function createAuthorityWriteHelpers(
 
   return {
     apiPath,
+    expectActionError,
     expectError,
+    expectMutationError,
     expectNotFound,
     getJson,
     postAction,
@@ -150,6 +201,7 @@ export function createAuthorityWriteHelpers(
     postJson,
     postMutation,
     postMutationForEntity,
+    postMutationRequest,
     resetSchemaApp,
     useSchemaApp,
   };
@@ -167,6 +219,15 @@ export function operationWriteRequest(
   const actionSuffix = "/actions";
   const mutationPath = path.endsWith(mutationSuffix);
   const actionPath = path.endsWith(actionSuffix);
+
+  if (isControlPlaneLegacyWritePath(path)) {
+    throw new Error(`Control-plane tests must call operation routes instead of "${path}".`);
+  }
+
+  if ((mutationPath || actionPath) && isAppStorageLegacyWritePath(path)) {
+    throw new Error(`App storage tests must call operation routes instead of "${path}".`);
+  }
+
   const prefix = mutationPath
     ? path.slice(0, -mutationSuffix.length)
     : actionPath
@@ -236,6 +297,92 @@ export function operationWriteRequest(
   }
 
   return { body, path, response: (value) => value };
+}
+
+export function mutationOperationRequest(requestBody: AuthorityTestMutationRequest): {
+  body: unknown;
+  path: string;
+  response: (value: unknown) => AuthorityTestMutationResult;
+} {
+  const mutationId = parseNonEmptyString("mutationId", requestBody.mutationId);
+  const entity = parseNonEmptyString("entity", requestBody.entity);
+  const op = parseNonEmptyString("op", requestBody.op);
+
+  if (op === "create") {
+    return {
+      body: {
+        idempotencyKey: mutationId,
+        input: requestBody.values,
+      },
+      path: `/api/operations/${entity}/create`,
+      response: (value) => mutationResultFromOperation(value, mutationId),
+    };
+  }
+
+  if (op === "patch") {
+    return {
+      body: {
+        idempotencyKey: mutationId,
+        input: requestBody.values,
+        recordId: requestBody.recordId,
+      },
+      path: `/api/operations/${entity}/update`,
+      response: (value) => mutationResultFromOperation(value, mutationId),
+    };
+  }
+
+  if (op === "delete") {
+    return {
+      body: {
+        idempotencyKey: mutationId,
+        ...(requestBody.values === undefined ? {} : { input: requestBody.values }),
+        recordId: requestBody.recordId,
+      },
+      path: `/api/operations/${entity}/delete`,
+      response: (value) => mutationResultFromOperation(value, mutationId),
+    };
+  }
+
+  throw new Error(`Unsupported mutation operation "${op}".`);
+}
+
+export function actionOperationRequest(requestBody: AuthorityTestActionRequest): {
+  body: unknown;
+  path: string;
+  response: (value: unknown) => AuthorityTestActionResult;
+} {
+  const actionId = parseNonEmptyString("actionId", requestBody.actionId);
+  const entity = parseNonEmptyString("entity", requestBody.entity);
+  const action = parseNonEmptyString("action", requestBody.action);
+
+  return {
+    body: {
+      idempotencyKey: actionId,
+      ...(requestBody.input === undefined ? {} : { input: requestBody.input }),
+    },
+    path: `/api/operations/${entity}/${action}`,
+    response: actionResultFromOperation,
+  };
+}
+
+function isAppStorageLegacyWritePath(path: string) {
+  if (path === "/mutations" || path === "/actions") {
+    return true;
+  }
+
+  if (path === "/api/mutations" || path === "/api/actions") {
+    return true;
+  }
+
+  if (/^\/api\/(?:tasks|site|crm)\/(?:mutations|actions)$/.test(path)) {
+    return true;
+  }
+
+  return /^\/api\/app-installs\/[^/]+\/[^/]+\/(?:mutations|actions)$/.test(path);
+}
+
+function isControlPlaneLegacyWritePath(path: string) {
+  return /^\/api\/formless\/control-plane\/(?:mutations|actions)(?:\/.*)?$/.test(path);
 }
 
 function mutationResultFromOperation(

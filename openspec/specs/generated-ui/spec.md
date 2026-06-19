@@ -2,7 +2,10 @@
 
 ## Purpose
 
-Generated UI renders React app surfaces selected from app schema models and runtime profiles. It turns screens, views, fields, read models, operations, actions, and app storage identity into browser behavior for records without requiring custom app code.
+Generated UI renders React app surfaces selected from app schema models and
+runtime profiles. It turns screens, views, fields, read models, operation
+bindings, and app storage identity into browser behavior for records without
+requiring custom app code.
 
 ## Requirements
 
@@ -27,7 +30,7 @@ The system SHALL select generated surfaces from the active runtime profile and r
   active install registry response
 - **AND** the source schema key can be a resolved package source schema key
   outside the bundled `tasks`, `site`, and `crm` source app set
-- **AND** app bootstrap, sync, mutations, reset, and schema reads use the
+- **AND** app bootstrap, sync, operations, reset, and schema reads use the
   install-scoped app API prefix for that app install
 - **AND** generated UI does not require the package source schema to be bundled
   into the browser build before the installed route can mount
@@ -50,7 +53,7 @@ The system SHALL select generated surfaces from the active runtime profile and r
   runtime React registry using the target package app key
 - **AND** the public component receives route base, app storage identity,
   runtime profile, and package metadata from Formless core
-- **AND** generated admin screens, sync, field editors, and mutation behavior
+- **AND** generated admin screens, sync, field editors, and operation behavior
   remain schema-driven core generated UI behavior
 - **AND** React routing does not hard-code the bundled Site route component
   when the selected package has no registered public adapter
@@ -152,8 +155,8 @@ The system SHALL render generated screens from screen models and collection sect
 - GIVEN a generated app route has effective access `anonymous`
 - WHEN an anonymous browser navigates to that route
 - THEN generated UI can render the selected screen without an owner session
-- AND operation, mutation, action, or management controls still use their
-  existing write and authorization contracts
+- AND operation and management controls still use their existing write and
+  authorization contracts
 
 ### Requirement: Collection Rendering
 
@@ -206,13 +209,14 @@ summary slots, operation controls, and schema-declared result types.
 
 ### Requirement: Table Surfaces
 
-The system SHALL render generated table results with field, reference-field, computed, invoke-action, and ordering-handle columns.
+The system SHALL render generated table results with field, reference-field,
+computed, invoke-operation, and ordering-handle columns.
 
-#### Scenario: Table edit dialog
+#### Scenario: Table operation dialog
 
-- GIVEN a table row action opens an edit dialog
+- GIVEN a table row operation opens an edit dialog
 - WHEN the user edits fields and closes with Done
-- THEN edits live-patch through field editors
+- THEN edits submit through the declared update operation and field editors
 - AND active union variant fields can render in row and reference-field dialogs
 
 #### Scenario: Table ordering and aggregates
@@ -284,7 +288,8 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 
 - GIVEN a create form has hidden literal defaults and `visibleWhen` fields
 - WHEN the user submits the form
-- THEN hidden literal defaults are submitted
+- THEN hidden literal defaults are submitted through the declared create
+  operation
 - AND hidden `visibleWhen` fields are not submitted
 - AND active union variant fields follow draft discriminator values
 
@@ -350,14 +355,28 @@ entity operations and view operation bindings.
 - AND generated controls invoke source-declared operations as the primary
   browser interaction model
 
+#### Scenario: Operation is the control contract
+
+- GIVEN generated UI renders create dialogs, edit dialogs, delete controls,
+  table row controls, tree controls, ordering controls, state transition
+  controls, public form controls, or instance management controls
+- WHEN the user submits the control
+- THEN generated UI invokes a source-declared operation or a runtime-declared
+  workspace operation
+- AND generated UI does not call mutation routes, action routes, public action
+  routes, provider routes, or workspace sidecar routes as independent
+  interaction contracts
+- AND operation response shape drives success, failure, replay, local
+  auto-save, and compact status presentation
+
 ### Requirement: Operations And Tree Composition
 
 The system SHALL render schema operations through generated operation UI and
 SHALL use relationship context and readiness facts to shape command inputs.
 
-#### Scenario: Many-to-many selection action
+#### Scenario: Many-to-many selection operation
 
-- GIVEN a selected join action targets a `manyToMany` relationship
+- GIVEN a selected join command operation targets a `manyToMany` relationship
 - WHEN the user submits selected related records
 - THEN explicit join records are created or removed
 - AND generic field defaults fill other required through fields when join records are created
@@ -407,7 +426,7 @@ status fields.
 
 The system SHALL render instance management in the instance shell from
 schema-owned app install, route, deployment config, deployment observation
-cache, provider evidence, view, screen, read model, and action models.
+cache, provider evidence, view, screen, read model, and operation models.
 
 #### Scenario: Instance management surface
 

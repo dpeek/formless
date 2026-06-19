@@ -1,9 +1,9 @@
-import {
-  type EntityActionSchema,
-  type EntitySchema,
-  type FieldSchema,
-  type StateMachineSchema,
-  type StateMachineTransitionSchema,
+import type {
+  EntitySchema,
+  FieldSchema,
+  RunActionKindEntityOperationEffectSchema,
+  StateMachineSchema,
+  StateMachineTransitionSchema,
 } from "@dpeek/formless-schema";
 import type { FieldValue } from "@dpeek/formless-storage";
 import {
@@ -19,11 +19,10 @@ export type StateMachineFieldConfig = {
   terminalStates: string[];
 };
 
-export type TransitionStateActionConfig = {
+export type TransitionStateOperationConfig = {
   operationName: string;
   operation: EntityOperationPresentationConfig;
   label: string;
-  action: Extract<EntityActionSchema, { kind: "transition-state" }>;
   machineName: string;
   machine: StateMachineSchema;
   transitionName: string;
@@ -32,7 +31,7 @@ export type TransitionStateActionConfig = {
   field: Extract<FieldSchema, { type: "enum" }>;
 };
 
-export type TransitionStateActionAvailability = {
+export type TransitionStateOperationAvailability = {
   valid: boolean;
   disabledReason?: string;
 };
@@ -58,29 +57,27 @@ export function selectStateMachineField(
   return undefined;
 }
 
-export function selectTransitionStateActions(
+export function selectTransitionStateOperations(
   entityName: string,
   entity: EntitySchema,
-): TransitionStateActionConfig[] {
+): TransitionStateOperationConfig[] {
   return selectAvailableEntityOperations(entityName, entity, "record").flatMap((operation) => {
     if (
       operation.operation.kind !== "command" ||
       operation.operation.effect?.type !== "runActionKind" ||
-      operation.operation.effect.kind !== "transition-state" ||
-      operation.operation.effect.action === undefined
+      operation.operation.effect.kind !== "transition-state"
     ) {
       return [];
     }
 
-    const actionName = operation.operation.effect.action;
-    const action = entity.actions?.[actionName];
+    const transitionTarget = selectTransitionOperationTarget(entity, operation.operation.effect);
 
-    if (action?.kind !== "transition-state") {
+    if (transitionTarget === undefined) {
       return [];
     }
 
-    const machine = entity.stateMachines?.[action.machine];
-    const transition = machine?.transitions[action.transition];
+    const machine = entity.stateMachines?.[transitionTarget.machineName];
+    const transition = machine?.transitions[transitionTarget.transitionName];
     const field = machine === undefined ? undefined : entity.fields[machine.field];
 
     if (!machine || !transition || field?.type !== "enum") {
@@ -91,11 +88,10 @@ export function selectTransitionStateActions(
       {
         operationName: operation.operationName,
         operation,
-        label: action.label,
-        action,
-        machineName: action.machine,
+        label: operation.label,
+        machineName: transitionTarget.machineName,
         machine,
-        transitionName: action.transition,
+        transitionName: transitionTarget.transitionName,
         transition,
         fieldName: machine.field,
         field,
@@ -104,19 +100,19 @@ export function selectTransitionStateActions(
   });
 }
 
-export function selectTransitionStateActionAvailability({
-  action,
+export function selectTransitionStateOperationAvailability({
+  operation,
   currentValue,
   field,
 }: {
-  action: TransitionStateActionConfig;
+  operation: TransitionStateOperationConfig;
   currentValue: FieldValue | undefined;
   field: Extract<FieldSchema, { type: "enum" }>;
-}): TransitionStateActionAvailability {
+}): TransitionStateOperationAvailability {
   if (typeof currentValue !== "string" || currentValue.trim() === "") {
     return {
       valid: false,
-      disabledReason: `Requires ${transitionSourceStateLabels(action, field).join(", ")}.`,
+      disabledReason: `Requires ${transitionSourceStateLabels(operation, field).join(", ")}.`,
     };
   }
 
@@ -127,10 +123,10 @@ export function selectTransitionStateActionAvailability({
     };
   }
 
-  if (!action.transition.from.includes(currentValue)) {
+  if (!operation.transition.from.includes(currentValue)) {
     return {
       valid: false,
-      disabledReason: `Requires ${transitionSourceStateLabels(action, field).join(", ")}.`,
+      disabledReason: `Requires ${transitionSourceStateLabels(operation, field).join(", ")}.`,
     };
   }
 
@@ -145,8 +141,28 @@ export function stateMachineStateIsTerminal(
 }
 
 function transitionSourceStateLabels(
-  action: TransitionStateActionConfig,
+  operation: TransitionStateOperationConfig,
   field: Extract<FieldSchema, { type: "enum" }>,
 ) {
-  return action.transition.from.map((state) => field.values[state]?.label ?? state);
+  return operation.transition.from.map((state) => field.values[state]?.label ?? state);
+}
+
+function selectTransitionOperationTarget(
+  entity: EntitySchema,
+  effect: RunActionKindEntityOperationEffectSchema,
+): { machineName: string; transitionName: string } | undefined {
+  if (effect.action === undefined) {
+    return undefined;
+  }
+
+  const action = entity.actions?.[effect.action];
+
+  if (action?.kind !== "transition-state") {
+    return undefined;
+  }
+
+  return {
+    machineName: action.machine,
+    transitionName: action.transition,
+  };
 }

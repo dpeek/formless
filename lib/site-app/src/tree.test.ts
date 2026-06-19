@@ -1021,6 +1021,7 @@ describe("site page tree projection", () => {
       publicOperation: {
         entityName: "subscription",
         operationName: "subscribe",
+        canonicalKey: "subscription.subscribe",
         route: "/api/app-installs/site/site/public/operations/subscription/subscribe",
         challenge: {
           kind: "turnstile",
@@ -1059,7 +1060,7 @@ describe("site page tree projection", () => {
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "missing-public-action-challenge-config",
+          code: "missing-public-operation-challenge-config",
           recordId: "rec_site_block_subscribe",
         }),
       ]),
@@ -1106,11 +1107,11 @@ describe("site page tree projection", () => {
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "missing-public-action",
+          code: "missing-public-operation",
           recordId: "rec_site_block_missing_subscribe",
         }),
         expect.objectContaining({
-          code: "invalid-public-action",
+          code: "invalid-public-operation",
           recordId: "rec_site_block_private_subscribe",
         }),
       ]),

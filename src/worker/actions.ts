@@ -42,6 +42,7 @@ import {
   getActionResponseById,
   getActiveRecordsByEntity,
   getStoredRecord,
+  type RecordConstraintValidator,
   replayedWrite,
   tombstoneRecordsForActionOutcome,
   type WriteOutcome,
@@ -62,6 +63,8 @@ type EntityActionExecutionContext<TAction extends EntityActionSchema> = {
   request: ActionRequest;
   schema: AppSchema;
   action: TAction;
+  receivedAt?: string;
+  validateConstraints?: RecordConstraintValidator;
 };
 
 export type PublicEntityActionRequest = {
@@ -77,6 +80,17 @@ type PublicEntityActionExecutionContext<TAction extends EntityActionSchema> = {
   request: PublicEntityActionRequest;
   schema: AppSchema;
   action: TAction;
+};
+
+export type EntityCommandEffectInvocation = {
+  actionId: string;
+  actorKind: SchemaActionActorKind;
+  entity: string;
+  action: string;
+  kind: EntityActionKind;
+  input?: unknown;
+  receivedAt?: string;
+  validateConstraints?: RecordConstraintValidator;
 };
 
 type EntityActionCreateAfterCreateHookContext<TAction extends EntityActionSchema> = {
@@ -284,7 +298,27 @@ export function executeEntityActionOutcome(
     throw new Error(`Unsupported action "${request.action}".`);
   }
 
-  return getEntityActionKindRuntimeModule(action).execute({ storage, request, schema, action });
+  return executeEntityActionRuntimeOutcome(storage, request, schema, action);
+}
+
+export function executeEntityCommandEffectOutcome(
+  storage: DurableObjectStorage,
+  invocation: EntityCommandEffectInvocation,
+  schema: AppSchema,
+): WriteOutcome<ActionResponse> {
+  const replay = getActionResponseById(storage, invocation.actionId);
+  if (replay) {
+    return replayedWrite(replay);
+  }
+
+  const { action, request } = validateEntityCommandEffectInvocation(invocation, schema);
+
+  return executeEntityActionRuntimeOutcome(storage, request, schema, action, {
+    ...(invocation.receivedAt === undefined ? {} : { receivedAt: invocation.receivedAt }),
+    ...(invocation.validateConstraints === undefined
+      ? {}
+      : { validateConstraints: invocation.validateConstraints }),
+  });
 }
 
 export function executePublicEntityActionOutcome(
@@ -300,15 +334,75 @@ export function executePublicEntityActionOutcome(
 
   const actionModule = getEntityActionKindRuntimeModule(action);
 
-  if (
-    action.access?.actor !== "anonymous" ||
-    !actionModule.capabilities.publicExecution ||
-    !actionModule.executePublic
-  ) {
+  if (!actionModule.capabilities.publicExecution || !actionModule.executePublic) {
     throw new BadRequestError(`Action "${request.action}" is not available for public execution.`);
   }
 
   return actionModule.executePublic({ storage, request, schema, action });
+}
+
+function executeEntityActionRuntimeOutcome<TAction extends EntityActionSchema>(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: TAction,
+  options: {
+    receivedAt?: string;
+    validateConstraints?: RecordConstraintValidator;
+  } = {},
+): WriteOutcome<ActionResponse> {
+  return getEntityActionKindRuntimeModule(action).execute({
+    storage,
+    request,
+    schema,
+    action,
+    ...(options.receivedAt === undefined ? {} : { receivedAt: options.receivedAt }),
+    ...(options.validateConstraints === undefined
+      ? {}
+      : { validateConstraints: options.validateConstraints }),
+  });
+}
+
+function validateEntityCommandEffectInvocation(
+  invocation: EntityCommandEffectInvocation,
+  schema: AppSchema,
+): { action: EntityActionSchema; request: ActionRequest } {
+  const entity = schema.entities[invocation.entity];
+  if (!entity) {
+    throw new BadRequestError(`Unknown entity "${invocation.entity}".`);
+  }
+
+  const action = entity.actions?.[invocation.action];
+  if (!action) {
+    throw new BadRequestError(
+      `Unknown action "${invocation.action}" for entity "${invocation.entity}".`,
+    );
+  }
+
+  if (action.kind !== invocation.kind) {
+    throw new BadRequestError(
+      `Action "${invocation.action}" does not implement command effect "${invocation.kind}".`,
+    );
+  }
+
+  const input = getEntityActionKindRuntimeModule(action).validateInput({
+    actionName: invocation.action,
+    entityName: invocation.entity,
+    entity,
+    action,
+    value: invocation.input,
+  });
+
+  return {
+    action,
+    request: {
+      actionId: invocation.actionId,
+      entity: invocation.entity,
+      action: invocation.action,
+      actorKind: invocation.actorKind,
+      ...(input === undefined ? {} : { input }),
+    },
+  };
 }
 
 export function executeCreateAfterCreateHooks(
@@ -369,7 +463,12 @@ function executeClearCompletedAction(
     context.action,
   );
 
-  return executeActionEffect(context.storage, context.request, records);
+  return executeActionEffect(
+    context.storage,
+    context.request,
+    records,
+    actionMaterializationOptions(context.receivedAt),
+  );
 }
 
 function executeCreateMissingJoinRecordsAction(
@@ -390,9 +489,8 @@ function executeCreateMissingJoinRecordsAction(
     context.request.entity,
     context.request.action,
     values,
-    (entity, recordValues, options) => {
-      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
-    },
+    entityActionRecordConstraintValidator(context),
+    actionMaterializationOptions(context.receivedAt),
   );
 }
 
@@ -404,6 +502,7 @@ function executeTransitionStateAction(
     context.request,
     context.schema,
     context.action,
+    actionTransitionOptions(context.receivedAt),
   );
 
   return writeRecordSetForActionOutcome(
@@ -412,9 +511,8 @@ function executeTransitionStateAction(
     context.request.entity,
     context.request.action,
     plans,
-    (entity, recordValues, options) => {
-      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
-    },
+    entityActionRecordConstraintValidator(context),
+    actionMaterializationOptions(context.receivedAt),
   );
 }
 
@@ -436,9 +534,8 @@ function executeCreateSelectedJoinRecordAction(
     context.request.entity,
     context.request.action,
     [values],
-    (entity, recordValues, options) => {
-      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
-    },
+    entityActionRecordConstraintValidator(context),
+    actionMaterializationOptions(context.receivedAt),
   );
 }
 
@@ -454,7 +551,12 @@ function executeRemoveSelectedJoinRecordsAction(
     context.action,
   );
 
-  return executeActionEffect(context.storage, context.request, records);
+  return executeActionEffect(
+    context.storage,
+    context.request,
+    records,
+    actionMaterializationOptions(context.receivedAt),
+  );
 }
 
 function executeCreateTreeChildAction(
@@ -473,9 +575,8 @@ function executeCreateTreeChildAction(
     context.request.entity,
     context.request.action,
     plans,
-    (entity, recordValues, options) => {
-      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
-    },
+    entityActionRecordConstraintValidator(context),
+    actionMaterializationOptions(context.receivedAt),
   );
 }
 
@@ -491,13 +592,18 @@ function executeRemoveTreePlacementAction(
     context.action,
   );
 
-  return executeActionEffect(context.storage, context.request, [record]);
+  return executeActionEffect(
+    context.storage,
+    context.request,
+    [record],
+    actionMaterializationOptions(context.receivedAt),
+  );
 }
 
 function executeSubscribeAction(
   _context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
 ): never {
-  throw new BadRequestError('Action kind "subscribe" must use public action execution.');
+  throw new BadRequestError('Action kind "subscribe" must use public operation execution.');
 }
 
 function executeSubscribePublicAction(
@@ -621,7 +727,25 @@ function executeSubscribePublicAction(
     (entity, recordValues, options) => {
       assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
     },
+    { now: context.request.envelope.receivedAt },
   );
+}
+
+function entityActionRecordConstraintValidator(
+  context: EntityActionExecutionContext<EntityActionSchema>,
+): RecordConstraintValidator {
+  return (entity, recordValues, options) => {
+    context.validateConstraints?.(entity, recordValues, options);
+    assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+  };
+}
+
+function actionMaterializationOptions(receivedAt: string | undefined): { now?: string } {
+  return receivedAt === undefined ? {} : { now: receivedAt };
+}
+
+function actionTransitionOptions(receivedAt: string | undefined): { receivedAt?: string } {
+  return receivedAt === undefined ? {} : { receivedAt };
 }
 
 const defaultAudienceKey = "default";
@@ -688,12 +812,12 @@ function findActiveRecordByField(
 
 function subscribeSourceValues(envelope: PublicActionExecutionEnvelope): RecordValues {
   const values: RecordValues = {
-    sourceKind: "publicAction",
+    sourceKind: "publicOperation",
     sourceTargetKind: envelope.source.target.kind,
     sourcePackageAppKey: envelope.source.target.packageAppKey,
     sourceSchemaKey: envelope.source.target.sourceSchemaKey,
     sourceApiRoutePrefix: envelope.source.target.apiRoutePrefix,
-    sourceActionName: envelope.source.actionName,
+    sourceOperationKey: envelope.source.operationKey,
     sourceHost: envelope.source.host,
     sourcePath: envelope.source.path,
   };
@@ -934,6 +1058,7 @@ function selectTransitionStateWritePlans(
   request: ActionRequest,
   schema: AppSchema,
   action: Extract<EntityActionSchema, { kind: "transition-state" }>,
+  options: { receivedAt?: string } = {},
 ): ActionRecordWritePlan[] {
   const input = requireTransitionStateInput(request);
   const entity = schema.entities[request.entity];
@@ -992,6 +1117,7 @@ function selectTransitionStateWritePlans(
       action.transition,
       previousState,
       transition.to,
+      options.receivedAt,
     );
 
     plans.push({
@@ -1015,6 +1141,7 @@ function transitionEventRecordValues(
   transitionKey: string,
   previousState: string,
   nextState: string,
+  receivedAt: string | undefined,
 ): RecordValues {
   return {
     [fields.sourceEntity]: request.entity,
@@ -1023,7 +1150,7 @@ function transitionEventRecordValues(
     [fields.previousState]: previousState,
     [fields.nextState]: nextState,
     [fields.actorMode]: request.actorKind ?? "owner",
-    [fields.occurredAt]: nowIsoString().slice(0, 10),
+    [fields.occurredAt]: (receivedAt ?? nowIsoString()).slice(0, 10),
   };
 }
 
@@ -1606,6 +1733,7 @@ function executeActionEffect(
   storage: DurableObjectStorage,
   request: ActionRequest,
   records: StoredRecord[],
+  options: { now?: string } = {},
 ): WriteOutcome<ActionResponse> {
   return tombstoneRecordsForActionOutcome(
     storage,
@@ -1613,6 +1741,7 @@ function executeActionEffect(
     request.entity,
     request.action,
     records,
+    options,
   );
 }
 

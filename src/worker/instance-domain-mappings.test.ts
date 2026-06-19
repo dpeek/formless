@@ -178,12 +178,9 @@ async function createAppInstall(input: {
 }
 
 async function createDomainRoute(recordId: string, values: Record<string, unknown>) {
-  const created = await postAdminJson("/api/formless/control-plane/mutations", {
-    mutationId: `mutation-${recordId}`,
-    entity: "route",
-    op: "create",
-    recordId,
-    values,
+  const created = await postAdminJson("/api/formless/control-plane/operations/route/create", {
+    idempotencyKey: `route-${recordId}`,
+    input: values,
   });
 
   expect(created.response.status).toBe(200);

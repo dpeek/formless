@@ -49,7 +49,7 @@ describe("table model", () => {
     });
   });
 
-  it("selects table ordering, row actions, and edit-dialog facts", () => {
+  it("selects table ordering, row operation controls, and edit-dialog facts", () => {
     const siteSourceSchema = sourceLikeSiteSchema();
     const result = selectTableResultModel(
       siteSourceSchema,
@@ -57,7 +57,7 @@ describe("table model", () => {
       "block-placement",
       siteSourceSchema.entities["block-placement"],
     );
-    const actionsColumn = result.columns.find((column) => column.type === "invokeAction");
+    const operationColumn = result.columns.find((column) => column.type === "operationControl");
 
     expect(result.ordering).toMatchObject({
       fieldName: "order",
@@ -67,13 +67,14 @@ describe("table model", () => {
       ],
       presentations: ["dragHandle", "moveMenu"],
     });
-    expect(actionsColumn).toMatchObject({
-      type: "invokeAction",
-      key: "invokeAction:editChildBlock,ordering",
-      actions: [
+    expect(operationColumn).toMatchObject({
+      type: "operationControl",
+      key: "operationControl:editChildBlock,ordering",
+      controls: [
         {
           type: "editRecord",
-          actionName: "editChildBlock",
+          bindingName: "editChildBlock",
+          operation: { canonicalKey: "block.update" },
           target: { kind: "reference", fieldName: "block", entityName: "block" },
           editView: { viewName: "blockEdit", entityName: "block" },
         },

@@ -1,4 +1,7 @@
-import { parseInstanceControlPlaneApiRoute } from "../shared/app-storage-identity.ts";
+import {
+  parseInstanceControlPlaneApiRoute,
+  type InstanceControlPlaneStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import {
   appInstallRegistryError,
   createAppInstall,
@@ -10,7 +13,6 @@ import {
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
-  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneAppInstallsFromRecords,
@@ -35,7 +37,11 @@ import {
   type ActionResponse,
   type CreateAppInstallRequest,
 } from "../shared/protocol.ts";
-import { parseAppSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
+import {
+  parseAppSchema,
+  type EntityOperationSchema,
+  type SchemaActionActorKind,
+} from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -66,10 +72,18 @@ import {
   getStoredRecord,
   initializeStorageFromSource,
   patchStoredRecordOutcome,
+  recordOperationInvocationAccepted,
+  recordOperationInvocationFailed,
+  recordOperationInvocationOutcome,
   type RecordConstraintValidator,
   type StorageSource,
   writeRecordSetForActionOutcome,
 } from "./storage.ts";
+import type {
+  OperationInvocationEnvelope,
+  OperationInvocationOutput,
+  OperationInvocationResponse,
+} from "../shared/operation-invocation.ts";
 import {
   INTERNAL_RESOLVE_INSTANCE_RUNTIME_ROUTE_PATH,
   resolveInstanceRuntimeRouteFromRecords,
@@ -85,7 +99,19 @@ import {
 } from "./launch-fixtures.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
-const createAppInstallControlPlaneAction = "createAppInstall";
+const createAppInstallControlPlaneOperation = "createAppInstall";
+const createAppInstallControlPlaneOperationKey = "app-install.createAppInstall";
+export const CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH =
+  "/operations/app-install/createAppInstall";
+const createAppInstallControlPlaneOperationSchema = {
+  label: "Create app install",
+  kind: "command",
+  scope: "collection",
+  output: { type: "command" },
+  idempotency: { required: true },
+  audit: { input: "summary" },
+  policy: { actors: ["admin", "owner"], visible: false },
+} satisfies EntityOperationSchema;
 export const INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH =
   "/_internal/update-app-install-package-facts";
 export const INTERNAL_READ_RECORDS_PATH = "/_internal/read-records";
@@ -129,8 +155,9 @@ type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv &
     FORMLESS_AUTHORITY: DurableObjectNamespace;
   } & LaunchFixtureStartupEnv;
 
-type ParsedCreateAppInstallActionRequest = {
+type ParsedCreateAppInstallOperationRequest = {
   actionId: string;
+  idempotencyKey: string;
   input: CreateAppInstallRequest;
 };
 
@@ -192,12 +219,8 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
       return await handleInternalSyncDeploymentProjection(request, storage, env);
     }
 
-    if (route.path === `/${createAppInstallControlPlaneAction}`) {
-      return redirectControlPlaneActionRoute(request, createAppInstallControlPlaneAction);
-    }
-
-    if (route.path === `/actions/${createAppInstallControlPlaneAction}`) {
-      return await handleCreateAppInstallAction(request, storage, env);
+    if (route.path === CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH) {
+      return await handleCreateAppInstallOperation(request, route.identity, storage, env);
     }
 
     const operation = selectAuthorityOperation({
@@ -428,8 +451,9 @@ function handleInternalResolveRuntimeRoute(
   });
 }
 
-async function handleCreateAppInstallAction(
+async function handleCreateAppInstallOperation(
   request: Request,
+  identity: InstanceControlPlaneStorageIdentity,
   storage: DurableObjectStorage,
   env: InstanceControlPlaneApiEnv,
 ): Promise<Response> {
@@ -438,7 +462,7 @@ async function handleCreateAppInstallAction(
   }
 
   const actorKind = controlPlaneActorKindFromRequest(request, new URL(request.url));
-  assertBrowserControlPlaneActionActor(actorKind, createAppInstallControlPlaneAction);
+  assertBrowserControlPlaneOperationActor(actorKind, createAppInstallControlPlaneOperationKey);
 
   const authorization = await authorizeInstanceWrite(request, env);
 
@@ -452,59 +476,83 @@ async function handleCreateAppInstallAction(
 
   ensureControlPlaneStorage(storage, env);
 
-  const parsed = parseCreateAppInstallActionRequest(await readJson(request));
-  const replay = getActionResponseById(storage, parsed.actionId);
-
-  if (replay) {
-    return jsonResponse(replay);
-  }
-
-  const now = nowIsoString();
-  const packageResolver = activeAppPackageResolver(env);
-  const result = createAppInstall({
-    existingInstalls: readControlPlaneAppInstalls(storage, packageResolver),
-    installId: parsed.input.installId,
-    label: parsed.input.label,
-    now,
-    packageAppKey: parsed.input.packageAppKey,
-    packageResolver,
-    validateInitialSource: ({ initialization }) => {
-      const source = findActiveWorkerSchemaAppDefinition(initialization.sourceSchemaKey, env);
-      const seed = findActiveWorkerSchemaAppDefinition(initialization.seedRecordsKey, env);
-
-      if (!source || !seed) {
-        return appInstallRegistryError(
-          "source-validation-failed",
-          "source",
-          `Package app "${initialization.packageAppKey}" source is unavailable.`,
-        );
-      }
-
-      return undefined;
-    },
+  const parsed = parseCreateAppInstallOperationRequest(await readJson(request));
+  const receivedAt = nowIsoString();
+  const envelope = createAppInstallOperationEnvelope({
+    actorKind,
+    identity,
+    input: parsed.input,
+    receivedAt,
+    writeIdentity: parsed.actionId,
+    idempotencyKey: parsed.idempotencyKey,
   });
 
-  if (!result.ok) {
-    return jsonResponse(
-      {
-        error: result.error.message,
-        code: result.error.code,
-        ...(result.error.field === undefined ? {} : { field: result.error.field }),
-        installs: result.installs,
+  recordOperationInvocationAccepted(storage, envelope);
+
+  try {
+    const replay = getActionResponseById(storage, parsed.actionId);
+
+    if (replay) {
+      const response = createAppInstallOperationResponse(envelope, replay, "replayed");
+
+      recordOperationInvocationOutcome(storage, {
+        envelope,
+        output: response.output,
+        status: response.status,
+      });
+
+      return jsonResponse(response);
+    }
+
+    const packageResolver = activeAppPackageResolver(env);
+    const result = createAppInstall({
+      existingInstalls: readControlPlaneAppInstalls(storage, packageResolver),
+      installId: parsed.input.installId,
+      label: parsed.input.label,
+      now: receivedAt,
+      packageAppKey: parsed.input.packageAppKey,
+      packageResolver,
+      validateInitialSource: ({ initialization }) => {
+        const source = findActiveWorkerSchemaAppDefinition(initialization.sourceSchemaKey, env);
+        const seed = findActiveWorkerSchemaAppDefinition(initialization.seedRecordsKey, env);
+
+        if (!source || !seed) {
+          return appInstallRegistryError(
+            "source-validation-failed",
+            "source",
+            `Package app "${initialization.packageAppKey}" source is unavailable.`,
+          );
+        }
+
+        return undefined;
       },
-      result.error.code === "duplicate-install-id" ? 409 : 400,
-    );
-  }
+    });
 
-  const records = instanceControlPlaneRecordsForAppInstall({ install: result.install, now });
-  preflightAppInstallRecordSet(storage, records, now, packageResolver);
+    if (!result.ok) {
+      recordOperationInvocationFailed(storage, envelope, new BadRequestError(result.error.message));
 
-  const outcome = noopWriteNotifier.apply(() =>
-    createRecordSetForActionOutcome(
+      return jsonResponse(
+        {
+          error: result.error.message,
+          code: result.error.code,
+          ...(result.error.field === undefined ? {} : { field: result.error.field }),
+          installs: result.installs,
+        },
+        result.error.code === "duplicate-install-id" ? 409 : 400,
+      );
+    }
+
+    const records = instanceControlPlaneRecordsForAppInstall({
+      install: result.install,
+      now: receivedAt,
+    });
+    preflightAppInstallRecordSet(storage, records, receivedAt, packageResolver);
+
+    const outcome = createRecordSetForActionOutcome(
       storage,
       parsed.actionId,
       "app-install",
-      createAppInstallControlPlaneAction,
+      createAppInstallControlPlaneOperation,
       records.map((record) => ({
         entity: record.entity,
         id: record.id,
@@ -513,10 +561,103 @@ async function handleCreateAppInstallAction(
       validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema, {
         packageResolver,
       }),
-    ),
-  );
+      { now: receivedAt },
+    );
+    const response = createAppInstallOperationResponse(
+      envelope,
+      outcome.response,
+      outcome.kind === "replay" ? "replayed" : "committed",
+    );
 
-  return jsonResponse(outcome.response satisfies ActionResponse, 201);
+    recordOperationInvocationOutcome(storage, {
+      envelope,
+      output: response.output,
+      status: response.status,
+    });
+
+    return jsonResponse(response);
+  } catch (error) {
+    recordOperationInvocationFailed(storage, envelope, error);
+    throw error;
+  }
+}
+
+function createAppInstallOperationEnvelope(input: {
+  actorKind: SchemaActionActorKind;
+  identity: InstanceControlPlaneStorageIdentity;
+  input: CreateAppInstallRequest;
+  idempotencyKey: string;
+  receivedAt: string;
+  writeIdentity: string;
+}): OperationInvocationEnvelope {
+  return {
+    invocationId: input.writeIdentity,
+    appStorageIdentity: input.identity,
+    actor: { kind: input.actorKind },
+    source: {
+      protocol: controlPlaneOperationSourceProtocol(input.actorKind),
+      route: CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH,
+    },
+    input: {
+      type: "command",
+      input: input.input,
+    },
+    idempotency: {
+      required: true,
+      key: input.idempotencyKey,
+      source: "caller",
+      writeIdentity: input.writeIdentity,
+    },
+    operation: {
+      entityName: "app-install",
+      operationName: createAppInstallControlPlaneOperation,
+      canonicalKey: createAppInstallControlPlaneOperationKey,
+      kind: createAppInstallControlPlaneOperationSchema.kind,
+      scope: createAppInstallControlPlaneOperationSchema.scope,
+      output: createAppInstallControlPlaneOperationSchema.output,
+      policy: createAppInstallControlPlaneOperationSchema.policy,
+    },
+    receivedAt: input.receivedAt,
+    schemaOperation: createAppInstallControlPlaneOperationSchema,
+  };
+}
+
+function createAppInstallOperationResponse(
+  envelope: OperationInvocationEnvelope,
+  response: ActionResponse,
+  status: OperationInvocationResponse["status"],
+): OperationInvocationResponse {
+  const output: OperationInvocationOutput = {
+    type: "command",
+    affectedChangeIds: response.changes.map((change) => String(change.seq)),
+    changes: response.changes,
+    cursor: response.cursor,
+    response,
+  };
+
+  return {
+    invocation: envelope,
+    output,
+    status,
+  };
+}
+
+function createAppInstallOperationWriteIdentity(idempotencyKey: string) {
+  return `operation:${createAppInstallControlPlaneOperationKey}:${idempotencyKey}`;
+}
+
+function controlPlaneOperationSourceProtocol(
+  actorKind: SchemaActionActorKind,
+): OperationInvocationEnvelope["source"]["protocol"] {
+  if (actorKind === "cliDeployer") {
+    return "cli";
+  }
+
+  if (actorKind === "runner") {
+    return "runner";
+  }
+
+  return "protocol";
 }
 
 function preflightAppInstallRecordSet(
@@ -650,28 +791,39 @@ function findControlPlaneRecord(
   return stored?.entity === entity && !stored.deletedAt ? stored : undefined;
 }
 
-function parseCreateAppInstallActionRequest(value: unknown): ParsedCreateAppInstallActionRequest {
+function parseCreateAppInstallOperationRequest(
+  value: unknown,
+): ParsedCreateAppInstallOperationRequest {
   if (!isRecord(value)) {
-    throw new BadRequestError("Control-plane action request must be an object.");
+    throw new BadRequestError("Control-plane operation request must be an object.");
   }
 
   const inputValue = isRecord(value.input) ? value.input : value;
   const input = parseCreateAppInstallRequest(inputValue);
-  const actionId =
-    parseOptionalActionIdentity(value.actionId) ??
-    parseOptionalActionIdentity(value.idempotencyKey) ??
-    `createAppInstall:${input.installId}`;
+  const idempotencyKey = parseOptionalOperationIdentity(value.idempotencyKey);
 
-  return { actionId, input };
+  if (idempotencyKey === undefined) {
+    throw new BadRequestError(
+      `Operation "${createAppInstallControlPlaneOperationKey}" requires an idempotency key.`,
+    );
+  }
+
+  return {
+    actionId: createAppInstallOperationWriteIdentity(idempotencyKey),
+    idempotencyKey,
+    input,
+  };
 }
 
-function parseOptionalActionIdentity(value: unknown): string | undefined {
+function parseOptionalOperationIdentity(value: unknown): string | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   if (typeof value !== "string" || value.trim() === "") {
-    throw new BadRequestError("Control-plane action id must be a non-empty string.");
+    throw new BadRequestError(
+      "Control-plane operation idempotency key must be a non-empty string.",
+    );
   }
 
   return value.trim();
@@ -1386,23 +1538,15 @@ function assertBrowserControlPlaneWriteActor(
   );
 }
 
-function assertBrowserControlPlaneActionActor(actorKind: SchemaActionActorKind, action: string) {
+function assertBrowserControlPlaneOperationActor(
+  actorKind: SchemaActionActorKind,
+  operationKey: string,
+) {
   if (actorKind === "owner" || actorKind === "admin") {
     return;
   }
 
-  throw new BadRequestError(`Action "${action}" is not exposed to actor "${actorKind}".`);
-}
-
-function redirectControlPlaneActionRoute(request: Request, action: string) {
-  if (request.method !== "POST") {
-    return methodNotAllowedResponse("POST");
-  }
-
-  return Response.redirect(
-    new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/actions/${action}`, request.url),
-    308,
-  );
+  throw new BadRequestError(`Operation "${operationKey}" is not exposed to actor "${actorKind}".`);
 }
 
 const noopWriteNotifier: AuthorityWriteNotifier = {

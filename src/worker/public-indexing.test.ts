@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { mutationOperationRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
@@ -55,7 +55,7 @@ Sitemap: http://example.com/sitemap.xml
   });
 
   it("serves sitemap.xml from public Site routes instead of the client shell", async () => {
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-public-sitemap-page",
       entity: "block",
       op: "create",
@@ -66,7 +66,7 @@ Sitemap: http://example.com/sitemap.xml
         href: "/launch-check",
       },
     });
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-public-sitemap-post",
       entity: "block",
       op: "create",
@@ -78,7 +78,7 @@ Sitemap: http://example.com/sitemap.xml
         date: "2026-05-15",
       },
     });
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-public-sitemap-undated-post",
       entity: "block",
       op: "create",
@@ -89,7 +89,7 @@ Sitemap: http://example.com/sitemap.xml
         href: "/blog/undated-draft",
       },
     });
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-public-sitemap-blocked-app-route",
       entity: "block",
       op: "create",
@@ -123,7 +123,7 @@ Sitemap: http://example.com/sitemap.xml
     const beforeResponse = await harness.fetch("/sitemap.xml");
     const beforeBody = await beforeResponse.text();
 
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-public-sitemap-site-settings",
       entity: "site",
       op: "patch",
@@ -172,9 +172,9 @@ async function resetSchemaApp(schemaKey: SchemaKey) {
   expect(response.status).toBe(200);
 }
 
-async function postAdminJson(path: string, body: unknown) {
-  const request = operationWriteRequest(path, body);
-  const response = await harness.fetch(request.path, {
+async function postAdminMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",

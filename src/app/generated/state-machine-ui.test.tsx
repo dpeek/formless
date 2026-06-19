@@ -10,7 +10,7 @@ import {
 } from "../../client/store.ts";
 import {
   selectStateMachineField,
-  selectTransitionStateActions,
+  selectTransitionStateOperations,
 } from "../../client/state-machine-model.ts";
 import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -18,9 +18,9 @@ import type { ChangeRow } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
-  RecordTransitionActionControls,
+  RecordTransitionOperationControls,
   StateMachineStateBadge,
-  submitTransitionStateAction,
+  submitTransitionStateOperation,
 } from "./state-machine-ui.tsx";
 
 beforeEach(async () => {
@@ -58,20 +58,25 @@ describe("generated state-machine UI", () => {
 
   it("renders valid and invalid transition controls with schema-derived reasons", () => {
     const schema = lifecycleSchema();
-    const actions = selectTransitionStateActions("task", schema.entities.task);
+    const operations = selectTransitionStateOperations("task", schema.entities.task);
     const html = renderToStaticMarkup(
-      <RecordTransitionActionControls
-        actions={actions}
+      <RecordTransitionOperationControls
+        operations={operations}
         entityName="task"
         recordId="task-1"
         values={{ status: "todo", title: "First" }}
       />,
     );
 
-    expect(html).toContain('data-formless-transition-action="startTask"');
+    expect(operations[0]).toEqual(
+      expect.not.objectContaining({
+        action: expect.anything(),
+      }),
+    );
+    expect(html).toContain('data-formless-transition-operation="startTask"');
     expect(html).toContain('data-formless-transition-state-valid="true"');
     expect(html).toContain('data-formless-transition-target-state="doing"');
-    expect(html).toContain('data-formless-transition-action="completeTask"');
+    expect(html).toContain('data-formless-transition-operation="completeTask"');
     expect(html).toContain('data-formless-transition-state-valid="false"');
     expect(html).toContain('data-formless-transition-disabled-reason="Requires Doing."');
   });
@@ -144,7 +149,7 @@ describe("generated state-machine UI", () => {
     expect(html).not.toContain("<select");
   });
 
-  it("submits transition actions through the generated operation endpoint with recordId input", async () => {
+  it("submits transition operations through the generated operation endpoint with recordId input", async () => {
     const schema = lifecycleSchema();
     const changed = taskRecord("task-1", "doing");
     let submittedOperation: {
@@ -161,7 +166,7 @@ describe("generated state-machine UI", () => {
     });
     await refreshClientStoreFromDb("tasks");
 
-    await submitTransitionStateAction(
+    await submitTransitionStateOperation(
       "tasks",
       "task",
       "startTask",

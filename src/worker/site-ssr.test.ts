@@ -9,7 +9,7 @@ import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "@dpeek/formless-site-app/react
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { mutationOperationRequest } from "../test/authority-write.ts";
 import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { handlePublicSiteDocumentRequest } from "./public-site-worker-runtime.ts";
@@ -310,7 +310,7 @@ describe("published Site Worker SSR", () => {
   });
 
   it("uses the current public tree from the Site authority", async () => {
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-site-ssr-extra-page",
       entity: "block",
       op: "create",
@@ -332,7 +332,7 @@ describe("published Site Worker SSR", () => {
   it("escapes embedded initial tree data for hostile Site content", async () => {
     const hostileLabel = 'Hostile </script><script type="module">alert(1)</script> & text';
 
-    await postAdminJson("/api/site/mutations", {
+    await postAdminMutation({
       mutationId: "mutation-site-ssr-hostile-home-label",
       entity: "block",
       op: "patch",
@@ -478,9 +478,9 @@ async function headDocumentWithoutFollowingRedirect(path: string) {
   });
 }
 
-async function postAdminJson(path: string, body: unknown) {
-  const request = operationWriteRequest(path, body);
-  const response = await harness.fetch(request.path, {
+async function postAdminMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
+  const request = mutationOperationRequest(body);
+  const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders(),
     method: "POST",
