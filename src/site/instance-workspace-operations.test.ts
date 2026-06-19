@@ -205,8 +205,12 @@ describe("Formless workspace operations", () => {
     const observation = capturedRequestJson<{
       idempotencyKey: string;
       input: {
+        observedAt: string;
         observedDesiredStateHash: string;
+        observedError: string;
+        observedRunnerId: string;
         observedStatus: string;
+        observedSummary: string;
       };
       recordId: string;
     }>(requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"));
@@ -243,12 +247,16 @@ describe("Formless workspace operations", () => {
         "POST /api/formless/control-plane/operations/deployment-config/update",
       ],
     );
-    expect(observation).toMatchObject({
+    expect(observation).toEqual({
       idempotencyKey: expect.any(String),
       recordId: "instance.primary",
       input: {
+        observedAt: expect.any(String),
         observedDesiredStateHash: desiredState.hash,
+        observedError: "",
+        observedRunnerId: "local-gateway",
         observedStatus: "unknown",
+        observedSummary: expect.any(String),
       },
     });
   });

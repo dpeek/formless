@@ -120,7 +120,6 @@ describe("Deploy control-plane client helpers", () => {
       observedRunnerId: "local-gateway",
       observedStatus: "deployed",
       observedSummary: "",
-      updatedAt: "2026-06-11T01:00:00.000Z",
     });
     expect(
       deployDeploymentObservationPatchIdempotencyKey({

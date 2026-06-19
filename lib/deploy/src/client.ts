@@ -185,7 +185,6 @@ export function deployDeploymentObservationPatchValues(
     observedRunnerId: observation.observedRunnerId ?? "",
     observedStatus: observation.observedStatus,
     observedSummary: observation.observedSummary ?? "",
-    updatedAt: observation.observedAt,
   };
 }
 

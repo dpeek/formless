@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { DeployEvidenceSummary, DeployResourceGraph } from "@dpeek/formless-deploy";
@@ -41,6 +42,13 @@ export const FORMLESS_WORKER_COMPATIBILITY_DATE = "2026-04-28";
 export const FORMLESS_OWNER_SETUP_ROUTE_PATH = "/setup";
 
 const FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH = "/api/formless/setup/capability";
+const FORMLESS_INSTANCE_WORKER_BUILD_COMMAND = "node_modules/.bin/vp build";
+const CLOUDFLARE_API_TOKEN_ENV_NAME = "CLOUDFLARE_API_TOKEN";
+const CLOUDFLARE_CREDENTIAL_ENV_NAMES = [
+  "CF_API_TOKEN",
+  "CLOUDFLARE_API_KEY",
+  CLOUDFLARE_API_TOKEN_ENV_NAME,
+] as const;
 
 export type FormlessInstanceDeploymentAccount = {
   id: string;
@@ -283,7 +291,7 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
   };
   bindings: Record<string, unknown>;
   build: {
-    command: "bun run build";
+    command: typeof FORMLESS_INSTANCE_WORKER_BUILD_COMMAND;
     env: FormlessInstanceDeploymentPlan["runtimeVars"] & {
       [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?: string;
     };
@@ -868,7 +876,7 @@ async function declareFormlessInstanceAlchemyResourceTree(
       [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,
     },
     build: {
-      command: "bun run build",
+      command: FORMLESS_INSTANCE_WORKER_BUILD_COMMAND,
       env: {
         ...input.plan.runtimeVars,
         ...(input.workspaceAppPackages === undefined
@@ -983,43 +991,153 @@ export async function destroyFormlessInstanceWithAlchemy(
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.adoptExistingDeployment;
 
+  if (cloudflareApiToken !== undefined) {
+    await removeStoredAlchemyCloudflareApiTokens(stateRoot);
+  }
+
+  return withExplicitCloudflareApiTokenEnv(cloudflareApiToken, async () => {
+    try {
+      const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
+        adopt: adoptExistingDeployment,
+        phase: "destroy",
+        password: alchemyPassword,
+        ...profileOptions,
+        rootDir: stateRoot,
+        stage: plan.instanceName,
+      });
+      await declareFormlessInstanceAlchemyResourceTree({
+        adminToken: "destroy-placeholder",
+        adoptExistingDeployment,
+        alchemyPassword,
+        ...(cloudflareApiToken === undefined ? {} : { cloudflareApiToken }),
+        credentialProfile,
+        dependencies: resolvedDependencies,
+        packageRoot,
+        plan,
+        ...(input.domainProviderResources === undefined
+          ? {}
+          : { resourceGraph: input.domainProviderResources }),
+      });
+
+      await app.finalize();
+
+      return {
+        resources: destroyResourceSummary("destroyed", input),
+      };
+    } catch (error) {
+      if (!isProviderAlreadyMissingError(error)) {
+        throw error;
+      }
+
+      return {
+        resources: destroyResourceSummary("already-missing", input),
+      };
+    }
+  });
+}
+
+async function withExplicitCloudflareApiTokenEnv<T>(
+  cloudflareApiToken: string | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (cloudflareApiToken === undefined) {
+    return run();
+  }
+
+  const previousValues = new Map<string, string | undefined>();
+
+  for (const name of CLOUDFLARE_CREDENTIAL_ENV_NAMES) {
+    previousValues.set(name, process.env[name]);
+    delete process.env[name];
+  }
+
+  process.env[CLOUDFLARE_API_TOKEN_ENV_NAME] = cloudflareApiToken;
+
   try {
-    const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
-      adopt: adoptExistingDeployment,
-      phase: "destroy",
-      password: alchemyPassword,
-      ...profileOptions,
-      rootDir: stateRoot,
-      stage: plan.instanceName,
-    });
-    await declareFormlessInstanceAlchemyResourceTree({
-      adminToken: "destroy-placeholder",
-      adoptExistingDeployment,
-      alchemyPassword,
-      ...(cloudflareApiToken === undefined ? {} : { cloudflareApiToken }),
-      credentialProfile,
-      dependencies: resolvedDependencies,
-      packageRoot,
-      plan,
-      ...(input.domainProviderResources === undefined
-        ? {}
-        : { resourceGraph: input.domainProviderResources }),
-    });
+    return await run();
+  } finally {
+    for (const [name, value] of previousValues) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  }
+}
 
-    await app.finalize();
+async function removeStoredAlchemyCloudflareApiTokens(stateRoot: string): Promise<void> {
+  const alchemyStateRoot = path.join(stateRoot, ".alchemy");
+  const files = await listAlchemyStateJsonFiles(alchemyStateRoot);
 
-    return {
-      resources: destroyResourceSummary("destroyed", input),
-    };
+  await Promise.all(
+    files.map(async (file) => {
+      const raw = await readFile(file, "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!removeApiTokenKeys(parsed)) {
+        return;
+      }
+
+      await writeFile(file, `${JSON.stringify(parsed, null, 2)}\n`);
+    }),
+  );
+}
+
+async function listAlchemyStateJsonFiles(root: string): Promise<string[]> {
+  let entries: Array<Dirent<string>>;
+
+  try {
+    entries = await readdir(root, { withFileTypes: true });
   } catch (error) {
-    if (!isProviderAlreadyMissingError(error)) {
-      throw error;
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [];
     }
 
-    return {
-      resources: destroyResourceSummary("already-missing", input),
-    };
+    throw error;
   }
+
+  const nestedFiles = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(root, entry.name);
+
+      if (entry.isDirectory()) {
+        return listAlchemyStateJsonFiles(entryPath);
+      }
+
+      if (entry.isFile() && entry.name.endsWith(".json")) {
+        return [entryPath];
+      }
+
+      return [];
+    }),
+  );
+
+  return nestedFiles.flat();
+}
+
+function removeApiTokenKeys(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.reduce((changed, item) => removeApiTokenKeys(item) || changed, false);
+  }
+
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  let changed = false;
+
+  if (Object.prototype.hasOwnProperty.call(record, "apiToken")) {
+    delete record.apiToken;
+    changed = true;
+  }
+
+  for (const item of Object.values(record)) {
+    changed = removeApiTokenKeys(item) || changed;
+  }
+
+  return changed;
 }
 
 export const alchemyFormlessInstanceDeploymentAdapter: FormlessInstanceDeploymentAdapter = {

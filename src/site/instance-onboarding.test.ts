@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import type { DeployResourceGraph } from "@dpeek/formless-deploy";
 
@@ -993,7 +996,7 @@ describe("Alchemy Formless instance deployment", () => {
             FORMLESS_TURNSTILE_SITE_KEY: "turnstile-site-key",
           },
           build: {
-            command: "bun run build",
+            command: "node_modules/.bin/vp build",
             env: {
               FORMLESS_DEPLOY_VERSION: "0.1.8",
               FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
@@ -1567,9 +1570,22 @@ describe("Alchemy Formless instance deployment", () => {
     const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
     const secrets: string[] = [];
     const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
+    const providerCredentialEnvReads: Array<{
+      CF_API_TOKEN?: string;
+      CLOUDFLARE_API_KEY?: string;
+      CLOUDFLARE_API_TOKEN?: string;
+    }> = [];
     let finalized = 0;
+    const captureProviderCredentialEnv = () => {
+      providerCredentialEnvReads.push({
+        CF_API_TOKEN: process.env.CF_API_TOKEN,
+        CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
+        CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+      });
+    };
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async (name, options) => {
+        captureProviderCredentialEnv();
         events.push("app");
         apps.push({ name, options });
 
@@ -1581,6 +1597,7 @@ describe("Alchemy Formless instance deployment", () => {
         };
       },
       createCustomDomain: async (id, props) => {
+        captureProviderCredentialEnv();
         events.push("custom-domain");
         routeResourceCalls.push({ id, kind: "CustomDomain", props });
 
@@ -1597,12 +1614,14 @@ describe("Alchemy Formless instance deployment", () => {
         >;
       },
       createDurableObjectNamespace: (_id, props) => {
+        captureProviderCredentialEnv();
         events.push("durable-object");
         namespaces.push({ props });
 
         return { type: "durable-object-namespace" };
       },
       createDnsRecords: async (id, props) => {
+        captureProviderCredentialEnv();
         events.push("dns-records");
         routeResourceCalls.push({ id, kind: "DnsRecords", props });
 
@@ -1617,6 +1636,7 @@ describe("Alchemy Formless instance deployment", () => {
         >;
       },
       createR2Bucket: async (_id, props) => {
+        captureProviderCredentialEnv();
         events.push("r2");
         buckets.push({ props });
 
@@ -1628,6 +1648,7 @@ describe("Alchemy Formless instance deployment", () => {
         return { type: "secret", index: secrets.length };
       },
       createTurnstileWidget: async (id, props) => {
+        captureProviderCredentialEnv();
         events.push("turnstile");
 
         return fakeTurnstileWidgetOutput({
@@ -1637,6 +1658,7 @@ describe("Alchemy Formless instance deployment", () => {
         });
       },
       deployViteWorker: async (_id, props) => {
+        captureProviderCredentialEnv();
         events.push("worker");
         workers.push({ props });
 
@@ -1651,6 +1673,33 @@ describe("Alchemy Formless instance deployment", () => {
       instanceName: "brother-instance",
       packageVersion: "0.1.8",
     });
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "formless-destroy-"));
+    const staleStatePath = path.join(
+      stateRoot,
+      ".alchemy",
+      "formless-instance",
+      "brother-instance",
+      "stale-custom-domain.json",
+    );
+    await mkdir(path.dirname(staleStatePath), { recursive: true });
+    await writeFile(
+      staleStatePath,
+      `${JSON.stringify(
+        {
+          output: {
+            apiToken: { "@secret": "stale-output-token" },
+            id: "custom-domain-output",
+          },
+          props: {
+            apiToken: { "@secret": "stale-props-token" },
+            name: "app.example.com",
+            nested: [{ apiToken: { "@secret": "stale-nested-token" }, kept: true }],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const domainProviderResources: DeployResourceGraph = {
       targetId: "instance.brother-instance",
       resources: [
@@ -1710,12 +1759,44 @@ describe("Alchemy Formless instance deployment", () => {
         ALCHEMY_PASSWORD: "alchemy-password",
         CLOUDFLARE_API_TOKEN: "cf-token",
       },
-      stateRoot: "/workspace/.formless/deploy/brother-instance",
+      stateRoot,
     };
 
-    const result = await destroyFormlessInstanceWithAlchemy(input, dependencies);
+    const previousCloudflareApiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const previousCloudflareApiKey = process.env.CLOUDFLARE_API_KEY;
+    const previousCfApiToken = process.env.CF_API_TOKEN;
+    process.env.CLOUDFLARE_API_TOKEN = "ambient-stale-token";
+    process.env.CLOUDFLARE_API_KEY = "ambient-stale-key";
+    process.env.CF_API_TOKEN = "ambient-stale-fallback-token";
+    let result: Awaited<ReturnType<typeof destroyFormlessInstanceWithAlchemy>> | undefined;
+    let staleStateAfterDestroy: string | undefined;
 
-    expect(result.resources).toEqual({
+    try {
+      result = await destroyFormlessInstanceWithAlchemy(input, dependencies);
+      staleStateAfterDestroy = await readFile(staleStatePath, "utf8");
+    } finally {
+      if (previousCloudflareApiToken === undefined) {
+        delete process.env.CLOUDFLARE_API_TOKEN;
+      } else {
+        process.env.CLOUDFLARE_API_TOKEN = previousCloudflareApiToken;
+      }
+
+      if (previousCloudflareApiKey === undefined) {
+        delete process.env.CLOUDFLARE_API_KEY;
+      } else {
+        process.env.CLOUDFLARE_API_KEY = previousCloudflareApiKey;
+      }
+
+      if (previousCfApiToken === undefined) {
+        delete process.env.CF_API_TOKEN;
+      } else {
+        process.env.CF_API_TOKEN = previousCfApiToken;
+      }
+
+      await rm(stateRoot, { force: true, recursive: true });
+    }
+
+    expect(result?.resources).toEqual({
       alchemyState: "destroyed",
       customDomains: 2,
       dnsRecords: 0,
@@ -1726,6 +1807,27 @@ describe("Alchemy Formless instance deployment", () => {
       workerAssets: "destroyed",
       workerSecrets: "destroyed",
     });
+    expect(providerCredentialEnvReads.length).toBeGreaterThan(0);
+    expect(providerCredentialEnvReads).toEqual(
+      providerCredentialEnvReads.map(() => ({
+        CF_API_TOKEN: undefined,
+        CLOUDFLARE_API_KEY: undefined,
+        CLOUDFLARE_API_TOKEN: "cf-token",
+      })),
+    );
+    expect(JSON.parse(staleStateAfterDestroy ?? "")).toEqual({
+      output: {
+        id: "custom-domain-output",
+      },
+      props: {
+        name: "app.example.com",
+        nested: [{ kept: true }],
+      },
+    });
+    expect(staleStateAfterDestroy).not.toContain("apiToken");
+    expect(process.env.CLOUDFLARE_API_TOKEN).toBe(previousCloudflareApiToken);
+    expect(process.env.CLOUDFLARE_API_KEY).toBe(previousCloudflareApiKey);
+    expect(process.env.CF_API_TOKEN).toBe(previousCfApiToken);
     expect(apps).toEqual([
       {
         name: FORMLESS_ALCHEMY_APP_NAME,
@@ -1734,7 +1836,7 @@ describe("Alchemy Formless instance deployment", () => {
           phase: "destroy",
           password: "alchemy-password",
           profile: "personal",
-          rootDir: "/workspace/.formless/deploy/brother-instance",
+          rootDir: stateRoot,
           stage: "brother-instance",
         },
       },

@@ -590,11 +590,14 @@ describe("Formless instance target control-plane client", () => {
     const requestBody = requests[0]?.body;
 
     expect(typeof requestBody).toBe("string");
-    expect(JSON.parse(requestBody as string)).toMatchObject({
+    expect(JSON.parse(requestBody as string)).toEqual({
       idempotencyKey: "observe:instance.primary",
       recordId: "instance.primary",
       input: {
+        observedAt: "2026-06-11T01:00:00.000Z",
         observedDesiredStateHash: `sha256:${"b".repeat(64)}`,
+        observedError: "",
+        observedRunnerId: "local-gateway",
         observedStatus: "deployed",
         observedSummary: "1 deployment resource applied from workspace source.",
       },

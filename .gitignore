@@ -1,6 +1,7 @@
 node_modules
 bin
 .wrangler
+.humanlayer
 .playwright-cli
 dist
 .DS_Store
