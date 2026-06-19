@@ -1482,7 +1482,7 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema path" });
     expect(frameHtml).toContain('href="/schema"');
     expect(linkHtml(frameHtml, "/schema")).toContain("Schema path");
     expect(html).toContain('aria-label="Schema path tasks"');

@@ -42,7 +42,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:c7591a4db25fa821ef2f46620318414cea01bfb3627cff7c4b0230b4bde6dd0a" satisfies SourceSchemaHash;
+  "sha256:29496619fd5efc71e0dfa8a9cc4fa8385c5dc5f62ae6ef89d037be6ed482ce72" satisfies SourceSchemaHash;
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
   sourceSchemaHash: INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,

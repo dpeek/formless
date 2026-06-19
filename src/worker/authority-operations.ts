@@ -363,7 +363,9 @@ export function executeAuthorityOperation(
       });
 
       return writeOperationResult(
-        input.writes.apply(() => restoreStorageSnapshotOutcome(input.storage, snapshot)),
+        input.writes.apply(() =>
+          restoreStorageSnapshotOutcome(input.storage, snapshot, input.source),
+        ),
       );
     }
 

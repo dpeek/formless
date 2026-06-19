@@ -982,15 +982,7 @@ describe("public operation runtime", () => {
         },
         mappedHarness,
       );
-      await postAdminJson(
-        "/api/formless/domain-mappings",
-        {
-          host: mappedHost,
-          surface: "site",
-          installId,
-        },
-        mappedHarness,
-      );
+      await createMappedPublicSiteRoute(mappedHarness, mappedHost, installId);
 
       const accepted = await fetchHost(
         mappedHarness,
@@ -1459,6 +1451,29 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
   expect([200, 201], text).toContain(response.status);
 
   return request.response(JSON.parse(text)) as T;
+}
+
+async function createMappedPublicSiteRoute(target: Harness, host: string, appInstallId: string) {
+  await postAdminJson(
+    "/api/formless/control-plane/mutations",
+    {
+      mutationId: `mutation-route-host-publicSite-${host}`,
+      entity: "route",
+      op: "create",
+      recordId: `route:host:publicSite:${host}`,
+      values: {
+        enabled: true,
+        matchHost: host,
+        matchPath: "/",
+        matchPrefix: "/",
+        kind: "mount",
+        targetProfile: "public-site",
+        appInstall: appInstallId,
+        surface: "public-site",
+      },
+    },
+    target,
+  );
 }
 
 function postPublicAction(path: string, body: unknown, target: Harness = harness) {

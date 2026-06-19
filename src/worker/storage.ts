@@ -895,6 +895,7 @@ export function restoreStorageSnapshot(
 export function restoreStorageSnapshotOutcome(
   storage: DurableObjectStorage,
   snapshot: StorageSnapshot,
+  source?: Pick<StorageSource, "schema" | "schemaProvenance">,
 ): WriteOutcome<BootstrapResponse> {
   return storage.transactionSync(() => {
     assertSnapshotRecordIdsAreUnique(snapshot.records);
@@ -902,7 +903,16 @@ export function restoreStorageSnapshotOutcome(
     const restoredAt = nowIsoString();
     const currentRecords = getBootstrapRecords(storage);
     const plan = planSnapshotRestore(snapshot.records, currentRecords, restoredAt);
-    const storedSchema = writeActiveSchemaAt(storage, snapshot.schema, restoredAt);
+    const schemaProvenance =
+      source?.schemaProvenance && schemasEqual(snapshot.schema, source.schema)
+        ? source.schemaProvenance
+        : undefined;
+    const storedSchema = writeActiveSchemaAt(
+      storage,
+      snapshot.schema,
+      restoredAt,
+      schemaProvenance,
+    );
 
     materializeSnapshotRestoreRecords(storage, plan);
     appendSnapshotRestoreChanges(storage, plan);
@@ -910,6 +920,9 @@ export function restoreStorageSnapshotOutcome(
 
     return committedWrite({
       schema: storedSchema.schema,
+      ...(storedSchema.schemaProvenance === undefined
+        ? {}
+        : { schemaProvenance: storedSchema.schemaProvenance }),
       schemaUpdatedAt: storedSchema.updatedAt,
       records: getBootstrapRecords(storage),
       cursor: getCurrentCursor(storage),

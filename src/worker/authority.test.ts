@@ -54,6 +54,21 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 let harness: Harness;
 let authority: AuthorityWriteHelpers;
 
+function taskSchemaProvenance() {
+  const packageFacts = packageAppFactsForKey("tasks", bundledAppPackageResolver);
+
+  if (!packageFacts) {
+    throw new Error("Expected bundled Tasks package facts.");
+  }
+
+  return {
+    kind: "package-app" as const,
+    packageAppKey: "tasks",
+    packageRevision: packageFacts.packageRevision,
+    sourceSchemaHash: packageFacts.sourceSchemaHash,
+  };
+}
+
 beforeAll(async () => {
   harness = await createWorkerHarness("src/worker/index.ts", {
     FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
@@ -78,6 +93,7 @@ describe("authority", () => {
 
     expect(body).toEqual({
       schema: appSchema,
+      schemaProvenance: taskSchemaProvenance(),
       schemaUpdatedAt: expect.any(String),
       records: taskSeedRecords,
       cursor: taskSeedRecords.length,
@@ -843,6 +859,7 @@ describe("authority", () => {
 
     expect(reset).toEqual({
       schema: appSchema,
+      schemaProvenance: taskSchemaProvenance(),
       schemaUpdatedAt: expect.any(String),
       records: taskSeedRecords,
       cursor: taskSeedRecords.length,
@@ -976,6 +993,7 @@ describe("authority", () => {
           ],
           cursor: restored.cursor,
           schema: restored.schema,
+          schemaProvenance: restored.schemaProvenance,
           schemaUpdatedAt: restored.schemaUpdatedAt,
         },
       });
@@ -1825,6 +1843,7 @@ describe("authority", () => {
           changes: [],
           cursor: schemaReset.cursor,
           schema: schemaReset.schema,
+          schemaProvenance: schemaReset.schemaProvenance,
           schemaUpdatedAt: schemaReset.schemaUpdatedAt,
         },
       });
@@ -1851,6 +1870,7 @@ describe("authority", () => {
           changes: [],
           cursor: seedReset.cursor,
           schema: seedReset.schema,
+          schemaProvenance: seedReset.schemaProvenance,
           schemaUpdatedAt: seedReset.schemaUpdatedAt,
         },
       });
