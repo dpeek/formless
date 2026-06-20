@@ -28,7 +28,7 @@ describe("Media Worker adapter", () => {
     });
   });
 
-  it("preserves core media route matching and rejects legacy media routes", () => {
+  it("preserves core media route matching", () => {
     expect(imageMediaRouteFromPathname("/api/formless/media/images")).toEqual({
       media: {
         imageKeyPrefix: "media/images",
@@ -45,10 +45,6 @@ describe("Media Worker adapter", () => {
       },
       path: "/media/media/images/hero.png",
     });
-    expect(imageMediaRouteFromPathname("/api/site/media/images")).toBeUndefined();
-    expect(
-      imageMediaRouteFromPathname("/api/app-installs/site/personal/media/images"),
-    ).toBeUndefined();
   });
 
   it("preserves list, read, and HEAD behavior for /api/formless/media", async () => {
@@ -322,20 +318,12 @@ describe("Media Worker adapter", () => {
       }),
     });
 
-    const ignored = await handleMediaRequest(
-      new Request("https://example.test/api/site/media/images"),
-      {
-        authorizeWrite: () => ({ authorized: true }),
-        store: createMemoryStore().store,
-      },
-    );
     const rejected = await harness.dispatch("/api/formless/media/images", {
       body: multipartFormData([{ body: pngBytes, contentType: "image/png", filename: "hero.png" }]),
       headers: { "Content-Type": "multipart/form-data; boundary=formless-media-test" },
       method: "POST",
     });
 
-    expect(ignored).toBeUndefined();
     expect(rejected.status).toBe(401);
     expect(rejected.headers.get("WWW-Authenticate")).toBe("Bearer");
     expect((await rejected.json()) as unknown).toEqual({ error: "Write denied." });

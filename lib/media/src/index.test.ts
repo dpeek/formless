@@ -105,7 +105,6 @@ describe("Media runtime-neutral contract helpers", () => {
     expect(coreMediaKeyFromHref("/api/formless/media/media/images/hero.webp?cache=1")).toBe(
       "media/images/hero.webp",
     );
-    expect(coreMediaKeyFromHref("/api/site/media/media/images/hero.webp")).toBeUndefined();
     expect(coreMediaKeyFromHref("/api/formless/media/media/images/%25bad.webp")).toBeUndefined();
     expect(coreMediaKeyFromAssetId("hero.webp")).toBe("media/images/hero.webp");
     expect(coreMediaKeyFromAssetId("../hero.webp")).toBeUndefined();

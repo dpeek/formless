@@ -272,7 +272,7 @@ function selectTreeCompositionEffect<Kind extends "create-tree-child" | "remove-
   return effect as RegisteredCommandEntityOperationEffectSchema & { kind: Kind };
 }
 
-// Compatibility fallback for tree results that predate result-level ordering.
+// Infer tree ordering from entity fields when result-level ordering is absent.
 function selectImplicitTreeOrderingFallback(
   entity: EntitySchema,
   relationship: ToManyRelationshipSchema,

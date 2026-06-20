@@ -69,7 +69,7 @@ describe("home view model collections", () => {
     expect(
       priority?.field.type === "enum" ? priority.field.values.high.presentation : undefined,
     ).toEqual({
-      icon: "flag",
+      icon: "priority-marker",
       color: "priority.high",
     });
     expect(
@@ -3233,9 +3233,9 @@ function taskSchemaWithFieldPresentations(): AppSchema {
     throw new Error("Missing task presentation fixture shape.");
   }
 
-  priority.values.low.presentation = { icon: "flag", color: "priority.low" };
-  priority.values.normal.presentation = { icon: "flag", color: "priority.normal" };
-  priority.values.high.presentation = { icon: "flag", color: "priority.high" };
+  priority.values.low.presentation = { icon: "priority-marker", color: "priority.low" };
+  priority.values.normal.presentation = { icon: "priority-marker", color: "priority.normal" };
+  priority.values.high.presentation = { icon: "priority-marker", color: "priority.high" };
   itemView.fields.dueDate = {
     ...itemView.fields.dueDate,
     presentation: { visibility: "valueOrInteraction" as const },
@@ -3451,9 +3451,12 @@ function lifecycleTaskSchema() {
             required: true,
             default: "todo",
             values: {
-              todo: { label: "Todo", presentation: { color: "warning", icon: "flag" } },
-              doing: { label: "Doing", presentation: { color: "success", icon: "flag" } },
-              done: { label: "Done", presentation: { color: "success", icon: "check" } },
+              todo: { label: "Todo", presentation: { color: "warning", icon: "priority-marker" } },
+              doing: {
+                label: "Doing",
+                presentation: { color: "success", icon: "priority-marker" },
+              },
+              done: { label: "Done", presentation: { color: "success", icon: "confirm" } },
             },
           },
         },

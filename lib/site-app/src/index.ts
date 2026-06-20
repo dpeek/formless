@@ -33,12 +33,10 @@ export {
   sanitizeSiteIconSvgSource,
 } from "./site-icon-source.ts";
 export {
-  isLegacySiteMediaHref,
   siteImageExtensionForContentType,
   siteMediaContentTypeForKey,
   siteSourceMediaAssetsFromRecords,
   siteSourceMediaPathForKey,
-  unsupportedLegacySiteMediaMessage,
 } from "./source-media.ts";
 export type { SiteSourceMediaAsset } from "./source-media.ts";
 export { buildSitePageTree } from "./tree.ts";

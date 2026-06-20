@@ -177,9 +177,6 @@ export type EditViewConfig = {
 };
 
 export type { ResultOrderingConfig, ResultOrderingScopeConfig };
-// Table ordering aliases stay for table result compatibility; generic result models use ResultOrdering.
-export type TableOrderingScopeConfig = ResultOrderingScopeConfig;
-export type TableOrderingConfig = ResultOrderingConfig;
 
 export type OperationControlTableColumnConfig = TableColumnBaseConfig & {
   type: "operationControl";
@@ -187,7 +184,7 @@ export type OperationControlTableColumnConfig = TableColumnBaseConfig & {
   controls: TableOperationControlConfig[];
   presentation: TableOperationControlPresentation;
   includeOrdering: boolean;
-  ordering?: TableOrderingConfig;
+  ordering?: ResultOrderingConfig;
 };
 
 export type OrderingHandleTableColumnConfig = TableColumnBaseConfig & {

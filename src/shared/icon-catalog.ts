@@ -278,13 +278,6 @@ export const iconCatalogEntries = [
   ),
 ] as const satisfies readonly IconCatalogEntry[];
 
-const iconCatalogAliasKeys: Record<string, string> = {
-  check: "confirm",
-  flag: "priority-marker",
-  "priority-flag": "priority-marker",
-  twitter: "x",
-};
-
 export function listIconCatalogEntries(): readonly IconCatalogEntry[] {
   return iconCatalogEntries;
 }
@@ -301,10 +294,7 @@ export function findIconCatalogEntry(key: string | undefined): IconCatalogEntry 
     return undefined;
   }
 
-  const normalizedKey = normalizeIconCatalogKey(key);
-  const catalogKey = iconCatalogAliasKeys[normalizedKey] ?? normalizedKey;
-
-  return iconCatalogEntries.find((entry) => entry.key === catalogKey);
+  return iconCatalogEntries.find((entry) => entry.key === normalizeIconCatalogKey(key));
 }
 
 export function resolveIconCatalogSvg(key: string | undefined): string | undefined {

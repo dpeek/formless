@@ -50,7 +50,7 @@ pull synchronization.
 - AND unsupported future package, runtime, schema, or archive facts fail through
   ordinary sync validation until an explicit upgrade capability is reintroduced
 
-### Requirement: Stale Runtime Compatibility
+### Requirement: Stale Runtime Reloads
 
 The system SHALL prefer reload-required behavior over blocking server-side
 future migrations for stale browser clients.

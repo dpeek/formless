@@ -644,21 +644,6 @@ canonical provider state out of control-plane records and change rows.
 - THEN records store summaries and ids needed for display, audit, and cleanup
 - AND Alchemy or provider storage remains the canonical provider resource state
 
-### Requirement: Legacy Instance State Migration
-
-The system SHALL migrate existing app install, custom-domain, and
-deployment-runtime intent facts into control-plane records without changing
-route behavior.
-
-#### Scenario: Backfill legacy state
-
-- GIVEN legacy app install, domain mapping, redirect, attempt, evidence, or
-  drift tables exist during migration
-- WHEN compatibility reads or writes touch those facts
-- THEN equivalent schema-owned control-plane records are created
-- AND compatibility reads can verify old and new state before legacy writes are
-  retired
-
 ### Requirement: SQL Migration Runner
 
 The system SHALL run registered Durable Object SQLite migrations before upgraded
@@ -678,19 +663,6 @@ code depends on migrated table shape.
   are already recorded as applied
 - THEN the migration runner skips that migration
 - AND storage initialization continues without duplicate table rewrites
-
-### Requirement: Introspective SQL Migrations
-
-SQL migrations MUST be idempotent and inspect current SQLite metadata before
-rewriting storage.
-
-#### Scenario: Existing legacy table shape
-
-- WHEN a migration sees a legacy table shape through `sqlite_master` or
-  `PRAGMA table_info`
-- THEN it can rewrite the table into the current shape while preserving
-  compatible rows
-- AND rerunning the same migration after success is a no-op
 
 ### Requirement: Authority Record Migrations
 

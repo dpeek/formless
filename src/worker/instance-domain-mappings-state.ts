@@ -125,7 +125,6 @@ export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage)
     ${appliedStateTableSql};
     ${auditEventsTableSql};
   `);
-  dropLegacyDesiredDomainMappingTables(storage);
   runSqlStorageMigrations(storage, {
     family: instanceDomainMappingsSqlMigrationFamily,
     migrations: instanceDomainMappingsSqlMigrations,
@@ -139,8 +138,6 @@ export function resetInstanceDomainMappingTables(storage: DurableObjectStorage) 
     storage.sql.exec(`
       DELETE FROM instance_domain_mapping_applied_state;
       DELETE FROM instance_domain_mapping_audit_events;
-      DROP TABLE IF EXISTS instance_domain_mappings;
-      DROP TABLE IF EXISTS instance_domain_mapping_desired_cleanup_events;
       DELETE FROM sqlite_sequence
       WHERE name = 'instance_domain_mapping_audit_events';
     `);
@@ -475,13 +472,6 @@ function migrateLegacySurfaceTables(storage: DurableObjectStorage) {
   ) {
     migrateLegacyAuditEventsTable(storage);
   }
-}
-
-function dropLegacyDesiredDomainMappingTables(storage: DurableObjectStorage) {
-  storage.sql.exec(`
-    DROP TABLE IF EXISTS instance_domain_mappings;
-    DROP TABLE IF EXISTS instance_domain_mapping_desired_cleanup_events;
-  `);
 }
 
 function migrateProviderEvidenceColumns(storage: DurableObjectStorage) {

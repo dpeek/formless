@@ -45,10 +45,6 @@ import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
-import {
-  isLegacySiteMediaHref,
-  unsupportedLegacySiteMediaMessage,
-} from "@dpeek/formless-site-app/node";
 import { resolveSiteCliAdminToken, siteCliTargetFetchHeaders } from "./instance-target-context.ts";
 
 export {
@@ -485,10 +481,6 @@ function appMediaReferences(records: readonly StoredRecord[]): AppArchiveMediaOb
             coreMediaReference(coreStorageKey, coreMediaHrefForKey(coreStorageKey)),
           );
           continue;
-        }
-
-        if (isLegacySiteMediaHref(value)) {
-          throw new Error(unsupportedLegacySiteMediaMessage(value, "archive export"));
         }
       }
     }

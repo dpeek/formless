@@ -66,9 +66,9 @@ errors.
 - THEN the Authority rejects the write with a reload-required error
 - AND no committed change row is appended
 
-#### Scenario: Read compatibility remains best effort
+#### Scenario: Stale reads return reload facts
 
-- WHEN a stale browser replica requests bootstrap or sync through a compatible
+- WHEN a stale browser replica requests bootstrap or sync through the current
   read protocol
 - THEN the runtime can return read data
 - AND the response can include current schema facts needed for reload or

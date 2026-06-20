@@ -43,27 +43,6 @@ describe("Site source media", () => {
     ]);
   });
 
-  it("rejects unsupported legacy Site media hrefs", () => {
-    expect(() =>
-      siteSourceMediaAssetsFromRecords([
-        blockRecord("legacy", "/api/site/media/site/images/cover.png"),
-      ]),
-    ).toThrow(
-      'Unsupported legacy Site media href "/api/site/media/site/images/cover.png". Use core media before source Site media collection.',
-    );
-
-    expect(() =>
-      siteSourceMediaAssetsFromRecords([
-        blockRecord(
-          "installed-legacy",
-          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
-        ),
-      ]),
-    ).toThrow(
-      'Unsupported legacy Site media href "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png". Use core media before source Site media collection.',
-    );
-  });
-
   it("rejects unsupported or unsafe core source media keys", () => {
     expect(() =>
       siteSourceMediaAssetsFromRecords([

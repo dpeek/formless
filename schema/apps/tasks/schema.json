@@ -29,21 +29,21 @@
             "low": {
               "label": "Low",
               "presentation": {
-                "icon": "flag",
+                "icon": "priority-marker",
                 "color": "priority.low"
               }
             },
             "normal": {
               "label": "Normal",
               "presentation": {
-                "icon": "flag",
+                "icon": "priority-marker",
                 "color": "priority.normal"
               }
             },
             "high": {
               "label": "High",
               "presentation": {
-                "icon": "flag",
+                "icon": "priority-marker",
                 "color": "priority.high"
               }
             }

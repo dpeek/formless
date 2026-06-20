@@ -3,7 +3,6 @@ import type {
   AppSchema,
   EntitySchema,
   FieldSchema,
-  LegacyMigrationDeclarationKind,
   RuntimeSchemaControlPlaneEntitySchema,
   RuntimeSchemaControlPlaneSchema,
   RuntimeSchemaHistorySchema,
@@ -11,15 +10,13 @@ import type {
   RuntimeSchemaRouteValidationSchema,
 } from "./types.ts";
 
-export const legacyMigrationDeclarationKinds = [
+const runtimeSchemaHistoryKinds = [
   "appendOnly",
   "actionCreated",
-] as const satisfies readonly LegacyMigrationDeclarationKind[];
+] as const satisfies readonly RuntimeSchemaHistorySchema["kind"][];
 
-export function isLegacyMigrationDeclarationKind(
-  value: unknown,
-): value is LegacyMigrationDeclarationKind {
-  return legacyMigrationDeclarationKinds.includes(value as LegacyMigrationDeclarationKind);
+function isRuntimeSchemaHistoryKind(value: unknown): value is RuntimeSchemaHistorySchema["kind"] {
+  return runtimeSchemaHistoryKinds.includes(value as RuntimeSchemaHistorySchema["kind"]);
 }
 
 export function parseRuntimeMetadata(
@@ -332,7 +329,7 @@ function parseHistory(
 
   assertExactKeys(context, value, ["kind"]);
 
-  if (!isLegacyMigrationDeclarationKind(value.kind)) {
+  if (!isRuntimeSchemaHistoryKind(value.kind)) {
     throw new Error(`${context} kind must be "appendOnly" or "actionCreated".`);
   }
 

@@ -72,7 +72,6 @@ import {
   type RecordFieldConfig,
   type ResultOrderingConfig,
   type TableColumnConfig,
-  type TableOrderingConfig,
 } from "./client/views.ts";
 import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -862,7 +861,6 @@ describe("App smoke routes", () => {
       localWorkspaceGatewayAvailable: true,
     });
     const unavailableDeploymentsHtml = renderRoute("/deployments", instanceProfile);
-    const legacyHtml = renderRoute("/site", instanceProfile);
     const adminHtml = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
         <App
@@ -889,10 +887,6 @@ describe("App smoke routes", () => {
     expect(unavailableDeploymentsHtml).not.toContain("Deployment setup and progress");
     expect(shellHtml).not.toContain('data-frame="workbench"');
     expect(shellHtml).not.toContain('aria-label="Runtime apps"');
-    expect(legacyHtml).toContain("Not found");
-    expect(legacyHtml).not.toContain('data-frame="workbench"');
-    expect(legacyHtml).not.toContain('href="/tasks"');
-    expect(legacyHtml).not.toContain('href="/site"');
     expect(adminHtml).toContain('data-frame="generated-app"');
     expect(adminHtml).toContain('data-target-kind="appInstall"');
     expect(adminHtml).toContain('data-install-id="personal"');
@@ -4887,7 +4881,7 @@ describe("generated forms and records", () => {
       },
     ];
 
-    applyBootstrapResponse(bootstrap([enumRecord("legacy")]));
+    applyBootstrapResponse(bootstrap([enumRecord("unlisted")]));
     const html = renderToStaticMarkup(
       <RecordList
         entity={task}
@@ -4897,7 +4891,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("legacy");
+    expect(html).toContain("unlisted");
     expect(html).toContain("Role");
     expect(html).toContain("Stream");
   });
@@ -5109,7 +5103,7 @@ describe("generated forms and records", () => {
       throw new Error("Missing placement order field.");
     }
 
-    const ordering: TableOrderingConfig = {
+    const ordering: ResultOrderingConfig = {
       fieldName: "order",
       field: orderField,
       scope: [{ kind: "field", fieldName: "parent", field: blockPlacement.fields.parent }],

@@ -6,10 +6,6 @@
  * extracted into this package.
  */
 export const INSTANCE_WORKSPACE_MANIFEST_FILE = "formless.json";
-export const LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES = [
-  "formless.instance-workspace.json",
-  "formless-workspace.json",
-] as const;
 export const INSTANCE_WORKSPACE_MANIFEST_VERSION = 1;
 export const INSTANCE_WORKSPACE_KIND = "formless-instance-workspace";
 export const DEFAULT_INSTANCE_WORKSPACE_TARGET_ALIAS = "remote";

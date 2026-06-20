@@ -103,33 +103,39 @@ export const testSiteSeedRecords: StoredRecord[] = [
   block("rec_site_content_link_home", "2026-05-05T00:00:12.100Z", {
     type: "link",
     label: "Home",
-    href: "/",
+    linkTargetMode: "internal",
+    linkTargetBlock: "rec_site_content_home",
   }),
   block("rec_site_content_link_blog", "2026-05-05T00:00:12.200Z", {
     type: "link",
     label: "Blog",
-    href: "/blog",
+    linkTargetMode: "internal",
+    linkTargetBlock: "rec_site_content_blog",
   }),
   block("rec_site_content_link_projects", "2026-05-05T00:00:12.300Z", {
     type: "link",
     label: "Projects",
-    href: "/projects",
+    linkTargetMode: "internal",
+    linkTargetBlock: "rec_site_content_projects",
   }),
   block("rec_site_content_link_resume", "2026-05-05T00:00:12.400Z", {
     type: "link",
     label: "Resume",
-    href: "/resume",
+    linkTargetMode: "internal",
+    linkTargetBlock: "rec_site_content_resume",
   }),
   block("rec_site_content_link_github", "2026-05-05T00:00:13.000Z", {
     type: "link",
     label: "GitHub",
     href: "https://github.com/dpeek",
+    linkTargetMode: "external",
     icon: githubIconSource,
   }),
   block("rec_site_content_link_linkedin", "2026-05-05T00:00:14.000Z", {
     type: "link",
     label: "LinkedIn",
     href: "https://linkedin.com/in/dpeekdotcom",
+    linkTargetMode: "external",
     icon: linkedInIconSource,
   }),
   block("rec_site_content_group_header", "2026-05-05T00:00:16.000Z", {

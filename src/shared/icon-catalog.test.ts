@@ -25,6 +25,7 @@ describe("icon catalog", () => {
   it("includes current UI purpose, social, and provider entries", () => {
     expect(findIconCatalogEntry("add")?.label).toBe("Add");
     expect(findIconCatalogEntry("copy")?.label).toBe("Copy");
+    expect(findIconCatalogEntry("priority-marker")?.label).toBe("Priority marker");
     expect(findIconCatalogEntry("publish")?.label).toBe("Publish");
     expect(findIconCatalogEntry("github")?.label).toBe("GitHub");
     expect(findIconCatalogEntry("linkedin")?.label).toBe("LinkedIn");
@@ -45,9 +46,11 @@ describe("icon catalog", () => {
     expect(findIconCatalogEntry("npm")?.label).toBe("npm");
   });
 
-  it("keeps compatibility aliases for existing presentation tokens", () => {
-    expect(findIconCatalogEntry("flag")?.key).toBe("priority-marker");
-    expect(resolveIconCatalogSvg("flag")).toBe(resolveIconCatalogSvg("priority-marker"));
+  it("resolves current presentation tokens", () => {
+    expect(resolveIconCatalogSvg("priority-marker")).toBe(
+      findIconCatalogEntry("priority-marker")?.source,
+    );
+    expect(resolveIconCatalogSvg("x")).toBe(findIconCatalogEntry("x")?.source);
     expect(findIconCatalogEntry("missing")).toBeUndefined();
   });
 

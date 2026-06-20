@@ -48,8 +48,8 @@ Read this when editing `lib/schema/*`.
 - Import this package from the public root only: `@dpeek/formless-schema`.
 - Do not add client, React, Worker, Node, or sidecar subpaths.
 - Do not deep-import `lib/schema/src/*` from external runtime code.
-- Do not retain legacy package-owned `src/shared/schema*`, `src/shared/field-types.ts`,
-  `src/shared/fields.ts`, `src/shared/query.ts`, or `src/shared/read-model.ts` modules.
+- Keep schema contracts in `lib/schema` public exports.
+- Do not add package-owned schema helper modules under `src/shared`.
 - Do not import app records, Durable Object storage, browser state, React, filesystem APIs, provider SDKs, or bundled schema JSON files.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, or a dev server from package tests.

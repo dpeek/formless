@@ -7,24 +7,6 @@ import {
 } from "./link-targets.ts";
 
 describe("site link target resolver", () => {
-  it("keeps legacy link href strings unchanged", () => {
-    const relative = linkRecord("rec_site_link_relative", {
-      href: "/blog?draft=1#intro",
-    });
-    const external = linkRecord("rec_site_link_external", {
-      href: "https://example.com/profile?tab=links#top",
-    });
-
-    expect(resolveSiteLinkHref(relative, new Map())).toEqual({
-      href: "/blog?draft=1#intro",
-      warnings: [],
-    });
-    expect(resolveSiteLinkHref(external, new Map())).toEqual({
-      href: "https://example.com/profile?tab=links#top",
-      warnings: [],
-    });
-  });
-
   it("resolves internal link targets through page, post, and project hrefs", () => {
     const targets = [
       blockRecord("rec_site_page_home", { type: "page", label: "Home", href: "/" }),

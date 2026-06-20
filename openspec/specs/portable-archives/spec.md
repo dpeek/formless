@@ -149,8 +149,9 @@ package slice.
   archive directory IO
 - **THEN** they import that behavior from `@dpeek/formless-archive` or
   `@dpeek/formless-archive/node`
-- **AND** they do not import package-owned archive behavior from old
-  `src/shared/archive*` modules or unexported package internals
+- **AND** they import package-owned archive behavior only through exported
+  Archive package entrypoints, not source-tree modules or unexported package
+  internals
 
 #### Scenario: Package consumes public contract packages
 
@@ -184,8 +185,7 @@ package slice.
   checks read an archive envelope
 - **WHEN** the archive version differs from the current portable archive version
 - **THEN** the archive is rejected with an unsupported archive version error
-- **AND** package facts are not filled from bundled defaults or other
-  compatibility paths
+- **AND** package facts are read only from current archive fields
 
 ### Requirement: Workspace Source Of Truth
 
@@ -365,8 +365,9 @@ semantic operation contracts through the Workspace package slice.
   or deterministic local filesystem workspace IO
 - **THEN** they import that behavior from `@dpeek/formless-workspace` or
   `@dpeek/formless-workspace/node`
-- **AND** they do not import package-owned workspace behavior from old
-  `src/site` workspace modules or unexported package internals
+- **AND** they import package-owned workspace behavior only through exported
+  Workspace package entrypoints, not source-tree modules or unexported package
+  internals
 
 #### Scenario: Package consumes public contract packages
 
@@ -424,9 +425,6 @@ manifest.
 - **AND** the workflow applies the composed instance archive restore through
   runtime APIs without requiring apply, replace, stale acknowledgement, or
   install-set replacement flags
-- **AND** push does not enter archive restore through public restore CLI policy
-  flags, gateway compatibility adapters, or caller-supplied replacement policy
-  shims
 - **AND** remote app installs, control-plane records, app data, and media are
   reconciled to match the composed workspace state
 - **AND** `formless push --dry-run` validates and reports the restore plan

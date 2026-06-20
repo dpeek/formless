@@ -56,8 +56,6 @@ app install can be created.
   workspace, request, or deployment target
 - **AND** globally bundled package metadata is used only as input to the default
   resolver when no workspace-linked packages are present
-- **AND** code paths do not expose or call bundled-only compatibility package
-  list or lookup APIs for active installs
 
 #### Scenario: Runtime adapter availability
 
@@ -363,8 +361,6 @@ records and the active package resolver.
 - **THEN** the response derives installed apps from schema-owned app install and
   route records
 - **AND** package lists come from the active package resolver
-- **AND** no legacy install registry, SQL table, backfill path, or bundled-only
-  compatibility API is used as an alternate source of truth
 
 #### Scenario: Browser active package registry
 

@@ -509,11 +509,11 @@ describe("schema field presentation metadata", () => {
             values: {
               role: {
                 label: "Role",
-                presentation: { icon: "flag", color: "priority.high" },
+                presentation: { icon: "priority-marker", color: "priority.high" },
               },
               stream: {
                 label: "Stream",
-                presentation: { icon: "flag", color: "priority.low" },
+                presentation: { icon: "priority-marker", color: "priority.low" },
               },
             },
           }),
@@ -579,8 +579,8 @@ describe("schema field presentation metadata", () => {
     expect(schema.entities.task?.fields.kind).toMatchObject({
       type: "enum",
       values: {
-        role: { presentation: { icon: "flag", color: "priority.high" } },
-        stream: { presentation: { icon: "flag", color: "priority.low" } },
+        role: { presentation: { icon: "priority-marker", color: "priority.high" } },
+        stream: { presentation: { icon: "priority-marker", color: "priority.low" } },
       },
     });
     expect(schema.itemViews.taskListItem?.fields).toMatchObject({
@@ -6210,18 +6210,18 @@ describe("personal site sample schema", () => {
       },
     });
 
-    for (const [id, targetBlock, href] of [
-      ["rec_site_content_link_home", "rec_site_content_home", "/"],
-      ["rec_site_content_link_blog", "rec_site_content_blog", "/blog"],
-      ["rec_site_content_link_projects", "rec_site_content_projects", "/projects"],
-      ["rec_site_content_link_resume", "rec_site_content_resume", "/resume"],
+    for (const [id, targetBlock] of [
+      ["rec_site_content_link_home", "rec_site_content_home"],
+      ["rec_site_content_link_blog", "rec_site_content_blog"],
+      ["rec_site_content_link_projects", "rec_site_content_projects"],
+      ["rec_site_content_link_resume", "rec_site_content_resume"],
     ]) {
       expect(valuesFor(id)).toMatchObject({
         type: "link",
         linkTargetMode: "internal",
         linkTargetBlock: targetBlock,
-        href,
       });
+      expect(valuesFor(id)).not.toHaveProperty("href");
     }
 
     for (const [id, href] of [
@@ -6444,7 +6444,7 @@ describe("schema relationships", () => {
             ...rateRelationships(),
             rateCard: {
               ...rateRelationships().rateCard,
-              to: { entity: "legacy:card" },
+              to: { entity: "external:card" },
             },
           },
         }),

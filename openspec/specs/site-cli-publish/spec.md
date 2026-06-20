@@ -10,9 +10,7 @@ manage selected instance access.
 ### Requirement: CLI Command Families
 
 The package SHALL expose one top-level `formless` command spelling for each
-normal workspace operation and SHALL keep raw archive movement, instance
-aliases, status, check, refresh, init, reset, and domain repair commands out of
-the public CLI surface.
+normal workspace operation.
 
 #### Scenario: Local workspace commands
 
@@ -42,14 +40,13 @@ the public CLI surface.
 - **AND** the no-op message is the exact command output and is not accompanied
   by sync plan, drift, deploy, migration, retry, or warning text
 
-#### Scenario: Removed command families
+#### Scenario: Unsupported command families
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs a removed archive, deploy, instance alias, status,
-  check, refresh, init, reset, or domain command
+- **WHEN** a user runs a command with no public CLI binding
 - **THEN** the command is handled by ordinary unsupported-command behavior
 - **AND** provider, Authority, filesystem, deploy adapter, command, and state
-  mutation code is not run for the removed command name
+  mutation code is not run for the unsupported command name
 
 #### Scenario: Owner setup command
 
@@ -124,9 +121,6 @@ local execution binding handles it.
 - **AND** public workspace operation definitions do not expose apply, replace,
   stale acknowledgement, install-set replacement, deploy plan/apply, or
   migration policy inputs
-- **AND** removed deploy, drift, apply, replace, stale acknowledgement,
-  install-set replacement, and migration policy inputs are deleted rather than
-  translated into push or pull through compatibility aliases or gateway shims
 
 #### Scenario: Gateway binding from operation definition
 
@@ -564,9 +558,5 @@ deployment intent records.
   removal, or provider repair workflows need desired domain or redirect intent
 - **THEN** they read schema-owned `route` records through the control-plane
   protocol or workspace storage snapshots
-- **AND** route-derived domain and redirect intent is not read from
-  `/api/formless/domain-mappings`,
-  `/api/formless/domain-provider/redirects`, legacy desired-intent SQL stores,
-  or legacy control-plane `domain-mapping` and `redirect-intent` records
 - **AND** route removal or redirect removal writes the corresponding `route`
-  record change rather than writing a legacy desired cleanup row
+  record change

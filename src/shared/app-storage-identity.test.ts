@@ -8,7 +8,7 @@ import {
 } from "./app-storage-identity.ts";
 
 describe("app storage identity", () => {
-  it("preserves legacy schema-key storage and route names", () => {
+  it("maps source schema keys to package-level storage names and API paths", () => {
     expect(schemaKeyStorageIdentity("tasks")).toMatchObject({
       apiRoutePrefix: "/api/tasks",
       authorityName: "tasks",
@@ -29,7 +29,6 @@ describe("app storage identity", () => {
       seedRecordsKey: "site",
       sourceSchemaKey: "site",
     });
-    expect(schemaKeyStorageIdentity("site")).not.toHaveProperty("siteMedia");
   });
 
   it("maps an installed Site to install-scoped storage names and API paths", () => {
@@ -49,12 +48,6 @@ describe("app storage identity", () => {
       seedRecordsKey: "site",
       sourceSchemaKey: "site",
     });
-    expect(
-      installedAppStorageIdentity({
-        installId: "personal",
-        packageAppKey: "site",
-      }),
-    ).not.toHaveProperty("siteMedia");
   });
 
   it("maps installed non-Site apps without Site media facts", () => {
@@ -110,8 +103,8 @@ describe("app storage identity", () => {
     );
   });
 
-  it("keeps installed app identity separate from legacy schema identity", () => {
-    const legacySite = schemaKeyStorageIdentity("site");
+  it("keeps installed app identity separate from source schema-key identity", () => {
+    const schemaSite = schemaKeyStorageIdentity("site");
     const personal = installedAppStorageIdentity({
       installId: "personal",
       packageAppKey: "site",
@@ -125,7 +118,7 @@ describe("app storage identity", () => {
       throw new Error("Expected installed Site identities.");
     }
 
-    expect(personal.authorityName).not.toBe(legacySite.authorityName);
+    expect(personal.authorityName).not.toBe(schemaSite.authorityName);
     expect(personal.authorityName).not.toBe(docs.authorityName);
     expect(personal.browserDatabaseName).not.toBe(docs.browserDatabaseName);
     expect(personal.broadcastChannelName).not.toBe(docs.broadcastChannelName);
@@ -142,28 +135,7 @@ describe("app storage identity", () => {
     });
   });
 
-  it("exposes no Site-owned media scope on storage identities", () => {
-    const schemaSite = schemaKeyStorageIdentity("site");
-    const personal = installedAppStorageIdentity({
-      installId: "personal",
-      packageAppKey: "site",
-    });
-    const tasks = installedAppStorageIdentity({ installId: "tasks", packageAppKey: "tasks" });
-
-    expect(schemaSite).not.toHaveProperty("imageKeyPrefix");
-    expect(schemaSite).not.toHaveProperty("imageUploadPath");
-    expect(schemaSite).not.toHaveProperty("routePrefix");
-    expect(personal).not.toHaveProperty("imageKeyPrefix");
-    expect(personal).not.toHaveProperty("imageUploadPath");
-    expect(personal).not.toHaveProperty("routePrefix");
-    expect(tasks).not.toHaveProperty("imageKeyPrefix");
-    expect(tasks).not.toHaveProperty("imageUploadPath");
-    expect(tasks).not.toHaveProperty("routePrefix");
-    expect(JSON.stringify([schemaSite, personal, tasks])).not.toContain("site/images");
-    expect(JSON.stringify([schemaSite, personal, tasks])).not.toContain("/media");
-  });
-
-  it("parses legacy and installed app API route identities", () => {
+  it("parses source schema-key and installed app API route identities", () => {
     expect(parseAuthorityApiRoute("/api/site/bootstrap")).toMatchObject({
       identity: {
         authorityName: "site",

@@ -3,7 +3,6 @@ import path from "node:path";
 
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE,
-  LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES,
   normalizeInstanceWorkspaceTargetUrl,
   parseInstanceWorkspaceManifestJson,
   type InstanceWorkspaceManifest,
@@ -235,32 +234,10 @@ async function readSiteCliWorkspaceManifest(workspaceRoot: string): Promise<{
 }> {
   const manifestPath = path.join(workspaceRoot, INSTANCE_WORKSPACE_MANIFEST_FILE);
 
-  await assertNoLegacySiteCliWorkspaceManifest(workspaceRoot);
-
   return {
     manifest: parseInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
     manifestPath,
   };
-}
-
-async function assertNoLegacySiteCliWorkspaceManifest(workspaceRoot: string) {
-  for (const fileName of LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES) {
-    const manifestPath = path.join(workspaceRoot, fileName);
-
-    try {
-      await readFile(manifestPath, "utf8");
-    } catch (error) {
-      if (isNodeError(error) && error.code === "ENOENT") {
-        continue;
-      }
-
-      throw error;
-    }
-
-    throw new Error(
-      `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
-    );
-  }
 }
 
 async function resolveSiteCliWorkspaceTarget(input: {
@@ -395,8 +372,4 @@ function stringRecordValue(
   const value = record?.values[fieldName];
 
   return typeof value === "string" ? value : undefined;
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }

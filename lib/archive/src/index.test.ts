@@ -121,21 +121,6 @@ describe("portable archive protocol", () => {
     expect(parsePortableArchive(archive)).toEqual(archive);
   });
 
-  it("rejects source-record app archive data without a compatibility parser", () => {
-    expect(() =>
-      parseAppArchive({
-        ...appArchive({ capabilities: ["core-media-assets"] }),
-        data: {
-          kind: "sourceRecords",
-          schemaKey: "site",
-          schemaUpdatedAt: now,
-          schema: siteSourceSchema,
-          records: [activeSiteRecord("rec_site_settings_primary")],
-        },
-      }),
-    ).toThrow('App archive data kind must be "formless.storageSnapshot".');
-  });
-
   it("parses instance archives as app archive collections", () => {
     const archive = instanceArchive({
       apps: [
@@ -320,9 +305,9 @@ describe("portable archive protocol", () => {
     expect(() =>
       parseAppArchive({
         ...appArchive(),
-        capabilities: ["app-media"],
+        capabilities: ["unknown-capability"],
       }),
-    ).toThrow('App archive capabilities[0] "app-media" is unsupported.');
+    ).toThrow('App archive capabilities[0] "unknown-capability" is unsupported.');
 
     expect(() =>
       parseAppArchive({
@@ -399,24 +384,6 @@ describe("portable archive protocol", () => {
     expect(formatInstanceArchive(reparsed)).toBe(formatted);
     expect(reparsed.capabilities).toEqual(["installed-app-registry", "core-media-assets"]);
     expect(reparsed.apps.map((app) => app.app.installId)).toEqual(["alpha", "zeta"]);
-  });
-
-  it("rejects old app-scoped media capability", () => {
-    expect(() =>
-      parseAppArchive({
-        ...appArchive(),
-        capabilities: ["app-scoped-media"],
-      }),
-    ).toThrow('App archive capabilities[0] "app-scoped-media" is unsupported.');
-  });
-
-  it("rejects old app-scoped media capability in instance archives", () => {
-    expect(() =>
-      parseInstanceArchive({
-        ...instanceArchive(),
-        capabilities: ["app-scoped-media"],
-      }),
-    ).toThrow('Instance archive capabilities[0] "app-scoped-media" is unsupported.');
   });
 });
 

@@ -5,7 +5,6 @@ export function cn(...inputs: ClassNameValue[]) {
   return twMerge(...inputs);
 }
 
-/** @deprecated Use cx */
 export function composeTailwindRenderProps<T>(
   className: string | ((v: T) => string) | undefined,
   tailwind: ClassNameValue,

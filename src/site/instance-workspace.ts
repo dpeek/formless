@@ -92,7 +92,6 @@ import {
   DEFAULT_INSTANCE_WORKSPACE_APP_STATE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_STATE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  LEGACY_INSTANCE_WORKSPACE_MANIFEST_FILES as LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
   nextWorkspaceAutoSaveSavedState,
@@ -158,10 +157,6 @@ import {
   restoreWorkspacePushArchive,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
-import {
-  isLegacySiteMediaHref,
-  unsupportedLegacySiteMediaMessage,
-} from "@dpeek/formless-site-app/node";
 import {
   ALCHEMY_PASSWORD_ENV_NAME,
   FORMLESS_INSTANCE_LOCAL_ENV_FILE,
@@ -967,8 +962,6 @@ export async function discoverFormlessInstanceWorkspaceRoot(
   let directory = path.resolve(cwd);
 
   while (true) {
-    await assertNoLegacyWorkspaceManifest(directory);
-
     const manifestPath = workspaceManifestPath(directory);
 
     if (await pathExists(manifestPath)) {
@@ -1000,7 +993,6 @@ export async function resolveFormlessInstanceWorkspaceRoot(input: {
 
   const workspaceRoot = workspaceRootForInput(input.cwd, input.workspacePath);
 
-  await assertNoLegacyWorkspaceManifest(workspaceRoot);
   return workspaceRoot;
 }
 
@@ -2038,8 +2030,6 @@ export async function ensureFormlessInstanceWorkspaceDevBootstrap(
   const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
   const manifestPath = workspaceManifestPath(workspaceRoot);
   let manifest: FormlessInstanceWorkspaceManifest;
-
-  await assertNoLegacyWorkspaceManifest(workspaceRoot);
 
   if (await pathExists(manifestPath)) {
     manifest = parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8"));
@@ -4307,10 +4297,6 @@ function appMediaReferences(records: readonly StoredRecord[]): AppArchive["media
           );
           continue;
         }
-
-        if (isLegacySiteMediaHref(value)) {
-          throw new Error(unsupportedLegacySiteMediaMessage(value, "workspace state"));
-        }
       }
     }
   }
@@ -5212,8 +5198,6 @@ async function readWorkspaceManifest(workspaceRoot: string): Promise<{
 }> {
   const manifestPath = workspaceManifestPath(workspaceRoot);
 
-  await assertNoLegacyWorkspaceManifest(workspaceRoot);
-
   return {
     manifest: parseFormlessInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
     manifestPath,
@@ -5221,8 +5205,6 @@ async function readWorkspaceManifest(workspaceRoot: string): Promise<{
 }
 
 async function assertNoExistingWorkspaceManifest(workspaceRoot: string) {
-  await assertNoLegacyWorkspaceManifest(workspaceRoot);
-
   const manifestPath = workspaceManifestPath(workspaceRoot);
 
   if (await pathExists(manifestPath)) {
@@ -5287,18 +5269,6 @@ async function assertNoLocalOnboardingIgnoredStateConflict(workspaceRoot: string
   throw new Error(
     `Workspace browser setup cannot initialize because ignored .formless state exists at ${stateRoot}. Remove or move existing local state before browser setup.`,
   );
-}
-
-async function assertNoLegacyWorkspaceManifest(workspaceRoot: string) {
-  for (const fileName of LEGACY_FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILES) {
-    const manifestPath = path.join(workspaceRoot, fileName);
-
-    if (await pathExists(manifestPath)) {
-      throw new Error(
-        `Legacy Formless workspace manifest found at ${manifestPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
-      );
-    }
-  }
 }
 
 async function fileSystemPathExists(filePath: string): Promise<boolean> {

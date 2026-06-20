@@ -213,9 +213,12 @@ function lifecycleSchema(): AppSchema {
             required: true,
             default: "todo",
             values: {
-              todo: { label: "Todo", presentation: { color: "warning", icon: "flag" } },
-              doing: { label: "Doing", presentation: { color: "success", icon: "flag" } },
-              done: { label: "Done", presentation: { color: "success", icon: "check" } },
+              todo: { label: "Todo", presentation: { color: "warning", icon: "priority-marker" } },
+              doing: {
+                label: "Doing",
+                presentation: { color: "success", icon: "priority-marker" },
+              },
+              done: { label: "Done", presentation: { color: "success", icon: "confirm" } },
             },
           },
         },

@@ -106,10 +106,10 @@ The system SHALL define the Git-backed change workflow in repo-owned agent skill
 - **THEN** the rendered prompt is generated from Git-backed workflow instructions owned by the repo skill definitions or skill-local templates
 - **AND** equivalent operational rules are not maintained separately in `doc/agents/local-openspec-implement.md` or `doc/agents/local-openspec-finalize.md`
 
-#### Scenario: Legacy OpenSpec skills are clearly bounded
+#### Scenario: OpenSpec-directory skills are clearly bounded
 
 - **WHEN** repo `.agents/skills/openspec-*` skills remain during migration
-- **THEN** their descriptions and bodies identify them as legacy OpenSpec-directory workflows
+- **THEN** their descriptions and bodies identify them as OpenSpec-directory workflows
 - **AND** they instruct agents to use the Git-backed Formless change skills for new work
 
 ### Requirement: Shared local coordination state

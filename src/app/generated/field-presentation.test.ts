@@ -4,7 +4,7 @@ import { resolveFieldPresentationIcon } from "./field-presentation.tsx";
 
 describe("field presentation icons", () => {
   it("resolves schema presentation tokens through the central icon catalog", () => {
-    expect(resolveFieldPresentationIcon("flag")).toEqual({
+    expect(resolveFieldPresentationIcon("priority-marker")).toEqual({
       kind: "svg",
       source: resolveIconCatalogSvg("priority-marker"),
     });

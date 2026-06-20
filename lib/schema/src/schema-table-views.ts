@@ -24,7 +24,7 @@ import type {
   TableOperationControlPresentation,
   TableOperationControlVariant,
   TableOperationBindingSchema,
-  TableOrderingSchema,
+  ResultOrderingSchema,
   TableViewSchema,
   ViewSchema,
 } from "./types.ts";
@@ -278,7 +278,7 @@ function parseTableColumns(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   operations: TableOperationBindingSchema[] | undefined,
-  ordering: TableOrderingSchema | undefined,
+  ordering: ResultOrderingSchema | undefined,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
@@ -310,7 +310,7 @@ function parseTableColumn(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   operations: TableOperationBindingSchema[] | undefined,
-  ordering: TableOrderingSchema | undefined,
+  ordering: ResultOrderingSchema | undefined,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -641,7 +641,7 @@ function parseOperationControlTableColumn(
   context: string,
   value: Record<string, unknown>,
   operations: TableOperationBindingSchema[] | undefined,
-  ordering: TableOrderingSchema | undefined,
+  ordering: ResultOrderingSchema | undefined,
 ): TableColumnSchema {
   assertExactKeys(
     context,
@@ -725,7 +725,7 @@ function parseOperationControlTableColumn(
 function parseOrderingHandleTableColumn(
   context: string,
   value: Record<string, unknown>,
-  ordering: TableOrderingSchema | undefined,
+  ordering: ResultOrderingSchema | undefined,
 ): TableColumnSchema {
   assertExactKeys(context, value, ["type"], ["label", "align", "width", "display"]);
 

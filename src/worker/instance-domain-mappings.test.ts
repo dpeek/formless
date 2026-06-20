@@ -129,21 +129,6 @@ describe("instance domain mapping route boundary", () => {
     });
   });
 
-  it("removes legacy desired mapping read and write endpoints", async () => {
-    await expectStatus("/api/formless/domain-mappings", "GET", 404);
-    await expectStatus("/api/formless/domain-mappings", "POST", 404);
-    await expectStatus(
-      "/api/formless/domain-mappings?host=example.com&profile=publicSite",
-      "DELETE",
-      404,
-    );
-    await expectStatus(
-      "/api/formless/domain-mappings/forget?host=example.com&profile=publicSite",
-      "DELETE",
-      404,
-    );
-  });
-
   it("requires instance write authorization for apply evidence", async () => {
     const rejected = await harness.fetch("/api/formless/domain-mappings/apply-evidence", {
       body: JSON.stringify({
@@ -245,17 +230,4 @@ async function postAdminJson<T = unknown>(path: string, body: unknown) {
     body: request.response(await response.json()) as T,
     response,
   };
-}
-
-async function expectStatus(path: string, method: "DELETE" | "GET" | "POST", status: number) {
-  const response = await harness.fetch(path, {
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
-    },
-    method,
-    ...(method === "POST" ? { body: "{}" } : {}),
-  });
-
-  expect(response.status).toBe(status);
 }

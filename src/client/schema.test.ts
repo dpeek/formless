@@ -46,9 +46,12 @@ describe("task source schema", () => {
     const priority = taskSourceSchema.entities.task?.fields.priority;
 
     expect(priority?.type === "enum" ? priority.values : undefined).toMatchObject({
-      low: { label: "Low", presentation: { icon: "flag", color: "priority.low" } },
-      normal: { label: "Normal", presentation: { icon: "flag", color: "priority.normal" } },
-      high: { label: "High", presentation: { icon: "flag", color: "priority.high" } },
+      low: { label: "Low", presentation: { icon: "priority-marker", color: "priority.low" } },
+      normal: {
+        label: "Normal",
+        presentation: { icon: "priority-marker", color: "priority.normal" },
+      },
+      high: { label: "High", presentation: { icon: "priority-marker", color: "priority.high" } },
     });
     expect(taskSourceSchema.itemViews.taskListItem?.fields).toEqual({
       title: { editor: "text", commit: "field-commit" },

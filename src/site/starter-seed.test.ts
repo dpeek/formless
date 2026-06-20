@@ -181,11 +181,7 @@ function ownedOrInlineImageHrefs(): string[] {
     .map((record) => stringField(record, "href"))
     .filter(
       (href): href is string =>
-        href !== undefined &&
-        (href.startsWith("/api/formless/media/") ||
-          href.startsWith("/api/site/media/") ||
-          /^\/api\/app-installs\/site\/[^/]+\/media\//.test(href) ||
-          href.startsWith("data:")),
+        href !== undefined && (href.startsWith("/api/formless/media/") || href.startsWith("data:")),
     );
 }
 

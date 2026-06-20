@@ -6,7 +6,7 @@ Runtime topology defines the observable profile, route policy, route access,
 mapped host, and request routing contracts for a Formless instance. It keeps
 product instance, dev workbench, app, Site authoring, and published Site
 behavior coherent across browser shells, APIs, static assets, SSR documents,
-indexing, icons, and public Site compatibility routes.
+indexing, icons, and public Site routes.
 
 ## Requirements
 
@@ -182,16 +182,17 @@ The system SHALL distinguish static asset fallback from dynamic public Site reso
 - AND the resource body is produced by the public Site adapter selected for the
   target package app key
 
-### Requirement: Preview Route Compatibility
+### Requirement: Published Site Clean Redirects
 
-The system MUST preserve published Site redirects from legacy preview paths to clean public paths.
+The system SHALL redirect published Site collection paths to their clean public
+paths.
 
 #### Scenario: Clean published redirects
 
 - GIVEN the runtime profile is `publishedSite`
-- WHEN a read request targets `/pages`, `/pages/home`, or `/pages/blog/agents?ref=old`
+- WHEN a read request targets `/pages`, `/pages/home`, or `/pages/blog/agents?ref=preview`
 - THEN the system redirects with status `308`
-- AND the redirect locations are `/`, `/`, and `/blog/agents?ref=old`
+- AND the redirect locations are `/`, `/`, and `/blog/agents?ref=preview`
 
 #### Scenario: Non-published profiles do not apply preview redirects
 

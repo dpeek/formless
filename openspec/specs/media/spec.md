@@ -137,7 +137,7 @@ generated form layout, generic UI primitives, or Site usage metadata.
 - WHEN parsing runs
 - THEN parsing remains outside the Media package
 
-### Requirement: Media Behavior Compatibility
+### Requirement: Media Behavior Preservation
 
 The Media extraction SHALL preserve existing user-visible media behavior.
 

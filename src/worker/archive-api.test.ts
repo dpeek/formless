@@ -441,30 +441,6 @@ describe("instance archive restore API", () => {
     expect(media.objects.map((object) => object.key)).toEqual([]);
   });
 
-  it("rejects old app-scoped Site media archives before restore mutation", async () => {
-    const rejected = await postArchiveRestore(appArchiveWithLegacyMedia({ dryRun: false }), [
-      legacyMediaFile(),
-    ]);
-    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
-
-    expect(rejected.response.status).toBe(400);
-    expect(rejected.body).toMatchObject({
-      ok: false,
-      errors: expect.arrayContaining([
-        expect.objectContaining({
-          code: "invalid-media",
-          storageKey: legacyStorageKey,
-        }),
-        expect.objectContaining({
-          code: "invalid-media",
-          field: "block.href",
-          recordId: "rec_site_media_avatar",
-        }),
-      ]),
-    });
-    expect(installs.body.installs).toEqual([]);
-  });
-
   it("requires write authorization", async () => {
     const response = await harness.fetch("/api/formless/archive/restore", {
       body: JSON.stringify({ archive: appArchive({ dryRun: true }) }),
@@ -889,8 +865,6 @@ function crmAppArchive(input: { dryRun: boolean }): AppArchive {
 const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const coreMediaStorageKey = "media/images/installed.png";
 const coreMediaHref = `/api/formless/media/${coreMediaStorageKey}`;
-const legacyStorageKey = "app-installs/personal/site/images/installed.png";
-const legacyMediaHref = `/api/app-installs/site/personal/media/${legacyStorageKey}`;
 
 function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
   return {
@@ -947,61 +921,7 @@ function imageAssetRecord(record: StoredRecord): StoredRecord {
   };
 }
 
-function appArchiveWithLegacyMedia(input: { dryRun: boolean }): AppArchive {
-  return {
-    ...appArchive(input),
-    capabilities: ["app-store-snapshots"],
-    data: {
-      kind: STORAGE_SNAPSHOT_KIND,
-      version: STORAGE_SNAPSHOT_VERSION,
-      storageIdentity: "app:personal",
-      schemaKey: "site",
-      exportedAt: "2026-05-12T00:00:00.000Z",
-      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
-      sourceCursor: testSiteSeedRecords.length,
-      schema: siteSourceSchema,
-      records: testSiteSeedRecords.map((record) =>
-        record.id === "rec_site_media_avatar" ? legacyImageHrefRecord(record) : record,
-      ),
-    },
-    media: {
-      objects: [
-        {
-          archivePath: "media/personal/installed.png",
-          byteSize: mediaBytes.byteLength,
-          contentType: "image/png",
-          deliveryHref: legacyMediaHref,
-          storageKey: legacyStorageKey,
-        },
-      ],
-    },
-  };
-}
-
-function legacyImageHrefRecord(record: StoredRecord): StoredRecord {
-  const values = { ...record.values };
-
-  delete values.mediaAssetId;
-
-  return {
-    ...record,
-    values: {
-      ...values,
-      href: legacyMediaHref,
-    },
-  };
-}
-
 function mediaFile() {
-  return {
-    archivePath: "media/personal/installed.png",
-    byteSize: mediaBytes.byteLength,
-    bytesBase64: Buffer.from(mediaBytes).toString("base64"),
-    contentType: "image/png",
-  };
-}
-
-function legacyMediaFile() {
   return {
     archivePath: "media/personal/installed.png",
     byteSize: mediaBytes.byteLength,

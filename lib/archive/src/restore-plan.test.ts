@@ -286,56 +286,6 @@ function writeOperations(label: string, fields: string[], options: { delete?: bo
 }
 
 describe("archive restore planner", () => {
-  it("rejects old app-scoped Site media archive input", () => {
-    const archive = instanceArchive({
-      apps: [
-        appArchive({
-          app: archivedInstall("personal", "Personal"),
-          data: {
-            ...storageSnapshot(),
-            records: [
-              legacySiteMediaImageBlock("personal", "hero"),
-              siteRecord("rec_site_settings_personal", "personal"),
-            ],
-          },
-          media: {
-            objects: [legacySiteMediaObject("personal", "hero")],
-          },
-        }),
-        appArchive({
-          app: archivedInstall("docs", "Docs"),
-          data: {
-            ...storageSnapshot({ storageIdentity: "app:docs" }),
-            records: [siteRecord("rec_site_settings_docs", "docs")],
-          },
-          media: { objects: [] },
-        }),
-      ],
-    });
-
-    const errors = expectFailure(
-      planInstanceArchiveRestore(archive, {
-        packages: archiveTestInstallablePackages,
-        mediaFiles: [legacySiteMediaFile("personal", "hero")],
-        sourceSchemas: { site: siteSourceSchema },
-      }),
-    );
-
-    expect(errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "invalid-media",
-          storageKey: "app-installs/personal/site/images/hero.png",
-        }),
-        expect.objectContaining({
-          code: "invalid-media",
-          field: "block.href",
-          recordId: "rec_block_hero",
-        }),
-      ]),
-    );
-  });
-
   it("plans mixed Site, Tasks, and CRM instance archive restores with current core media", () => {
     const archive = instanceArchive({
       apps: [
@@ -524,37 +474,6 @@ describe("archive restore planner", () => {
       "rec_duplicate_key",
       "rec_place_broken",
       "rec_unknown_field",
-    ]);
-  });
-
-  it("rejects legacy Site media href references before restore", () => {
-    const errors = expectFailure(
-      planAppArchiveRestore(
-        appArchive({
-          data: {
-            ...storageSnapshot({
-              records: [
-                siteRecord("rec_site_settings_media", "media"),
-                legacySiteMediaImageBlock("personal", "missing"),
-              ],
-            }),
-          },
-          media: { objects: [] },
-        }),
-        {
-          packages: archiveTestInstallablePackages,
-          mediaFiles: [],
-          sourceSchemas: { site: siteSourceSchema },
-        },
-      ),
-    );
-
-    expect(errors).toEqual([
-      expect.objectContaining({
-        code: "invalid-media",
-        field: "block.href",
-        recordId: "rec_block_missing",
-      }),
     ]);
   });
 
@@ -766,16 +685,6 @@ function blockRecord(id: string, label: string, values: StoredRecord["values"] =
   };
 }
 
-function legacySiteMediaImageBlock(installId: string, name: string): StoredRecord {
-  const object = legacySiteMediaObject(installId, name);
-
-  return blockRecord(`rec_block_${name}`, `${name} image`, {
-    href: object.deliveryHref,
-    width: 1200,
-    height: 800,
-  });
-}
-
 function coreImageBlock(name: string): StoredRecord {
   return blockRecord(`rec_block_${name}`, `${name} image`, {
     mediaAssetId: `${name}.png`,
@@ -797,31 +706,6 @@ function placementRecord(id: string, parent: string, block: string): StoredRecor
     },
     createdAt,
     updatedAt: createdAt,
-  };
-}
-
-function legacySiteMediaObject(
-  installId: string,
-  name: string,
-  overrides: Partial<AppArchiveMediaObject> = {},
-): AppArchiveMediaObject {
-  const storageKey = `app-installs/${installId}/site/images/${name}.png`;
-
-  return {
-    storageKey,
-    archivePath: `media/${installId}/${name}.png`,
-    contentType: "image/png",
-    byteSize: 8,
-    deliveryHref: `/api/app-installs/site/${installId}/media/${storageKey}`,
-    ...overrides,
-  };
-}
-
-function legacySiteMediaFile(installId: string, name: string): ArchiveRestoreMediaFile {
-  return {
-    archivePath: `media/${installId}/${name}.png`,
-    byteSize: 8,
-    contentType: "image/png",
   };
 }
 

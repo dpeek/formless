@@ -43,7 +43,6 @@ exact-host `route` records before ordinary host profile behavior.
 - **THEN** reads are projected from active `route` records
 - **AND** disabled desired routes do not create mapped hosts or desired
   provider resources
-- **AND** no legacy domain-mapping desired store is read as a fallback
 
 #### Scenario: Profile-specific target
 
@@ -149,8 +148,6 @@ semantics.
 - **WHEN** deployment desired state is built for a target
 - **THEN** enabled mapping routes are projected into deployment graph resources
 - **AND** disabled mapping routes do not create desired provider resources
-- **AND** legacy domain-mapping storage is not used as a deployment projection
-  fallback
 
 #### Scenario: Project redirect intent
 
@@ -161,8 +158,6 @@ semantics.
 - **AND** disabled redirect routes do not create desired provider resources
 - **AND** redirect source-host graph resources are limited to Worker
   custom-domain resources
-- **AND** legacy redirect-intent storage is not used as a deployment projection
-  fallback
 
 #### Scenario: Route records are the projection source
 
@@ -172,8 +167,6 @@ semantics.
 - **THEN** only schema-owned active `route` records can project those provider
   resources
 - **AND** absent route records mean absent custom-domain provider resources
-- **AND** legacy domain-mapping and redirect-intent stores are not synchronized
-  into route records during projection
 
 #### Scenario: Removed routes disappear from desired state
 
@@ -209,8 +202,6 @@ explicit.
 - **GIVEN** a desired route is disabled and has no current provider evidence
 - **WHEN** an authorized route delete or route removal command runs
 - **THEN** the desired route is removed from active reads
-- **AND** no legacy domain-mapping or redirect-intent desired cleanup row is
-  written
 
 #### Scenario: Manual provider cleanup
 
@@ -265,8 +256,6 @@ through generic deployment attempts.
 - **WHEN** the workflow reads or writes desired intent
 - **THEN** it reads or writes schema-owned `route` records through the
   control-plane protocol
-- **AND** it does not call legacy domain-mapping or redirect-intent desired
-  store APIs
 
 #### Scenario: Pure planning helper reuse
 
@@ -298,28 +287,3 @@ schema-owned `route` control-plane records.
 - **THEN** the redirect is stored as a `route` record with source host, target,
   status code, path/query policy, enabled state, and timestamps
 - **AND** provider resources are not mutated by the intent write
-
-### Requirement: No Legacy Domain Intent Stores
-
-The system SHALL remove legacy custom-domain desired-intent stores and keep
-routes as the only desired source of truth.
-
-#### Scenario: Legacy desired stores are absent
-
-- **WHEN** custom-domain mapping or redirect desired state is read, written,
-  saved, pulled, pushed, restored, or projected
-- **THEN** the active desired state comes from schema-owned `route` records
-- **AND** `instance_domain_mappings`,
-  `instance_domain_provider_redirect_intents`, legacy `domain-mapping`
-  records, and legacy `redirect-intent` records are not desired-state sources
-- **AND** runtime reads do not backfill, merge, or synchronize those legacy
-  sources into route records
-
-#### Scenario: Cleanup evidence remains separate
-
-- **GIVEN** provider cleanup, manual cleanup, or route removal workflows run
-- **WHEN** the workflow records its result
-- **THEN** desired route records and provider evidence remain separate records
-  or projections
-- **AND** provider repair evidence is not stored in legacy desired-intent
-  tables

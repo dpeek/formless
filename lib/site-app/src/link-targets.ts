@@ -28,8 +28,7 @@ export function resolveSiteLinkHref(
   }
 
   return {
-    href: stringValue(link.values.href),
-    ...optionalStringField("icon", link.values.icon),
+    href: undefined,
     warnings: [],
   };
 }

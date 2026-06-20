@@ -20,7 +20,6 @@ Read this when editing `lib/workspace/*`.
 - Owner session cookies or runtime topology selection.
 - Authority storage, browser replica state, app records, bundled app schemas, or control-plane mutation execution.
 - Archive remote APIs, deployment provider execution, credential setup execution, Cloudflare mutation, or Alchemy state.
-- Legacy standalone Site project imports.
 
 ## Map
 

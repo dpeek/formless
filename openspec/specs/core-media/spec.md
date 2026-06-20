@@ -47,28 +47,6 @@ The system SHALL expose instance media APIs under `/api/formless/media`.
 - THEN the object is returned without touching app Authority storage
 - AND public media reads are allowed
 
-### Requirement: Legacy App-Scoped Media Retirement
-
-The system MUST reject legacy Site-owned media storage paths as active media
-input.
-
-#### Scenario: Legacy routes are inactive
-
-- GIVEN a client targets `/api/site/media/*` or
-  `/api/app-installs/site/:installId/media/*`
-- WHEN the request is handled by current media routing
-- THEN those paths are not active media routes
-- AND normal app storage identities do not expose Site-owned media route or key
-  facts
-
-#### Scenario: Legacy archive input is rejected
-
-- GIVEN an archive, publish, save, or import workflow sees legacy same-origin
-  Site media hrefs or legacy Site media storage keys
-- WHEN validation runs
-- THEN the workflow fails with a migration error before mutation
-- AND no app-scoped Site media archive objects are emitted
-
 ### Requirement: Generated Media Authoring
 
 The system SHALL let generated UI use core media assets through text-backed

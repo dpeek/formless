@@ -332,67 +332,6 @@ describe("media worker routes", () => {
     expect(headResponse.headers.get("ETag")).toBe(getResponse.headers.get("ETag"));
     expect((await headResponse.arrayBuffer()).byteLength).toBe(0);
   });
-
-  it("keeps legacy app-scoped media routes inactive", async () => {
-    const bucket = await harness.mf.getR2Bucket(mediaBinding);
-
-    await bucket.put("site/images/public.png", pngBytes, {
-      httpMetadata: {
-        cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
-        contentType: "image/png",
-      },
-    });
-
-    const schemaUpload = await uploadForm(
-      harness,
-      multipartFormData([imageFile("hero.png", "image/png", pngBytes)]),
-      {},
-      "/api/site/media/images",
-    );
-    const installedUpload = await uploadForm(
-      harness,
-      multipartFormData([imageFile("hero.png", "image/png", pngBytes)]),
-      {},
-      "/api/app-installs/site/personal/media/images",
-    );
-    const schemaList = await harness.fetch("/api/site/media/images");
-    const installedList = await harness.fetch("/api/app-installs/site/personal/media/images");
-    const schemaRead = await harness.fetch("/api/site/media/site/images/public.png");
-    const installedRead = await harness.fetch(
-      "/api/app-installs/site/personal/media/app-installs/personal/site/images/public.png",
-    );
-    const schemaRestore = await harness.fetch("/api/site/media/site/images/restored.png", {
-      body: pngBytes,
-      headers: { "Content-Type": "image/png" },
-      method: "PUT",
-    });
-    const installedRestore = await harness.fetch(
-      "/api/app-installs/site/personal/media/app-installs/personal/site/images/restored.png",
-      {
-        body: pngBytes,
-        headers: { "Content-Type": "image/png" },
-        method: "PUT",
-      },
-    );
-    const schemaHead = await harness.fetch("/api/site/media/site/images/public.png", {
-      method: "HEAD",
-    });
-
-    expect(
-      [
-        schemaUpload,
-        installedUpload,
-        schemaList,
-        installedList,
-        schemaRead,
-        installedRead,
-        schemaRestore,
-        installedRestore,
-        schemaHead,
-      ].map((response) => response.status),
-    ).toEqual([404, 404, 404, 404, 404, 404, 404, 404, 404]);
-    expect(await schemaHead.text()).toBe("");
-  });
 });
 
 async function uploadCoreImage(

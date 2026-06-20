@@ -28,7 +28,7 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('data-formless-field-presentation-list="both"');
     expect(html).toContain('data-formless-field-presentation-color="danger"');
     expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
-    expect(html).toContain('data-formless-field-presentation-icon="flag"');
+    expect(html).toContain('data-formless-field-presentation-icon="priority-marker"');
     expect(html).toContain("h-9 w-12");
     expect(html).toContain('data-web-svg-icon="svg"');
     expect(html).toContain('d="M4 15s1-1 4-1');
@@ -49,7 +49,7 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain(">High</span>");
   });
 
-  it("renders enum icon-only controls from non-compat catalog presentation tokens", () => {
+  it("renders enum icon-only controls from catalog presentation tokens", () => {
     const html = renderRecordControl(
       {
         ...priorityFieldConfig,
@@ -388,9 +388,12 @@ const priorityField = {
   type: "enum",
   required: true,
   values: {
-    low: { label: "Low", presentation: { color: "priority.low", icon: "flag" } },
-    normal: { label: "Normal", presentation: { color: "priority.normal", icon: "flag" } },
-    high: { label: "High", presentation: { color: "priority.high", icon: "flag" } },
+    low: { label: "Low", presentation: { color: "priority.low", icon: "priority-marker" } },
+    normal: {
+      label: "Normal",
+      presentation: { color: "priority.normal", icon: "priority-marker" },
+    },
+    high: { label: "High", presentation: { color: "priority.high", icon: "priority-marker" } },
   },
 } satisfies FieldSchema;
 

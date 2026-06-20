@@ -169,9 +169,7 @@ describe("archive restore execution", () => {
     const events: string[] = [];
     const result = await applyPortableArchiveRestore(
       {
-        ...legacyV1Archive(
-          appArchive({ restorePolicy: { dryRun: false, installCollisions: "reject" } }),
-        ),
+        ...appArchive({ restorePolicy: { dryRun: false, installCollisions: "reject" } }),
         version: 0,
       },
       memoryRestoreTarget({ events }),
@@ -228,31 +226,6 @@ describe("archive restore execution", () => {
         key: "media/images/hero.png",
       }),
     ]);
-  });
-
-  it("rejects direct legacy Site media restore as unsupported input", async () => {
-    const identity = installedAppStorageIdentity({
-      installId: "personal",
-      packageAppKey: "site",
-    });
-
-    if (!identity) {
-      throw new Error("Expected installed app identity.");
-    }
-
-    await expect(
-      restoreArchiveMediaObjectToStore(
-        {
-          getObject: async () => undefined,
-          putObject: async () => undefined,
-        },
-        identity,
-        legacySiteMediaObject("personal", "hero"),
-        pngBytes,
-      ),
-    ).rejects.toThrow(
-      'Archive media key "app-installs/personal/site/images/hero.png" is not core image media for "personal".',
-    );
   });
 });
 
@@ -340,31 +313,6 @@ function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
   };
 }
 
-function legacyV1Archive(archive: AppArchive | InstanceArchive): Record<string, unknown> {
-  const copy = JSON.parse(JSON.stringify(archive)) as {
-    app?: Record<string, unknown>;
-    apps?: unknown[];
-    kind: string;
-    version: number;
-  };
-
-  copy.version = 1;
-
-  if (copy.kind === INSTANCE_ARCHIVE_KIND) {
-    copy.apps = (copy.apps ?? []).map((app) =>
-      legacyV1Archive(app as AppArchive | InstanceArchive),
-    );
-    return copy;
-  }
-
-  if (copy.app) {
-    delete copy.app.packageRevision;
-    delete copy.app.sourceSchemaHash;
-  }
-
-  return copy;
-}
-
 function archivedInstall(installId: string, label: string): AppArchive["app"] {
   return {
     installId,
@@ -433,18 +381,6 @@ function coreImageBlock(name: string): StoredRecord {
     },
     createdAt: "2026-05-23T00:00:02.000Z",
     updatedAt: "2026-05-23T00:00:02.000Z",
-  };
-}
-
-function legacySiteMediaObject(installId: string, name: string): AppArchiveMediaObject {
-  const storageKey = `app-installs/${installId}/site/images/${name}.png`;
-
-  return {
-    storageKey,
-    archivePath: `media/${installId}/${name}.png`,
-    contentType: "image/png",
-    byteSize: pngBytes.byteLength,
-    deliveryHref: `/api/app-installs/site/${installId}/media/${storageKey}`,
   };
 }
 

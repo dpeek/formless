@@ -3,11 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   isEntityActionExposedToActor,
   isEntityActionVisibleToBrowser,
-  isLegacyMigrationDeclarationKind,
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
-  legacyMigrationDeclarationKinds,
   parseAppSchema,
 } from "./index.ts";
 
@@ -88,9 +86,9 @@ describe("control-plane schema runtime metadata", () => {
     ).toThrow('references unknown field "missing"');
   });
 
-  it("classifies legacy migration declarations without renaming JSON history kinds", () => {
+  it("parses runtime control-plane history declarations", () => {
     const source = controlPlaneTaskSchema();
-    const schema = parseAppSchema({
+    const actionCreatedSchema = parseAppSchema({
       ...source,
       runtime: {
         owner: "runtime",
@@ -103,12 +101,31 @@ describe("control-plane schema runtime metadata", () => {
         },
       },
     });
+    const appendOnlySchema = parseAppSchema({
+      ...source,
+      entities: {
+        ...source.entities,
+        task: {
+          ...source.entities.task,
+          operations: undefined,
+        },
+      },
+      runtime: {
+        owner: "runtime",
+        controlPlane: {
+          entities: {
+            task: {
+              history: { kind: "appendOnly" },
+            },
+          },
+        },
+      },
+    });
 
-    expect(legacyMigrationDeclarationKinds).toEqual(["appendOnly", "actionCreated"]);
-    expect(isLegacyMigrationDeclarationKind("appendOnly")).toBe(true);
-    expect(isLegacyMigrationDeclarationKind("actionCreated")).toBe(true);
-    expect(isLegacyMigrationDeclarationKind("operationCreated")).toBe(false);
-    expect(schema.runtime?.controlPlane?.entities.task?.history?.kind).toBe("actionCreated");
+    expect(actionCreatedSchema.runtime?.controlPlane?.entities.task?.history?.kind).toBe(
+      "actionCreated",
+    );
+    expect(appendOnlySchema.runtime?.controlPlane?.entities.task?.history?.kind).toBe("appendOnly");
   });
 });
 

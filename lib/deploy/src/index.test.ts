@@ -96,13 +96,13 @@ describe("Deploy control-plane projection helpers", () => {
       records: [
         ...sourceRecords,
         {
-          id: "route:disabled:legacy.example.com",
+          id: "route:disabled:disabled.example.com",
           entity: "route",
           createdAt: "2026-06-14T00:00:00.000Z",
           values: {
             enabled: false,
             kind: "mount",
-            matchHost: "legacy.example.com",
+            matchHost: "disabled.example.com",
             matchPath: "/",
             targetProfile: "instance",
           },
@@ -120,26 +120,6 @@ describe("Deploy control-plane projection helpers", () => {
             targetProfile: "instance",
           },
         },
-        {
-          id: "legacy:domain:legacy.example.com",
-          entity: "domain-mapping",
-          createdAt: "2026-06-14T00:00:00.000Z",
-          values: {
-            enabled: true,
-            host: "legacy.example.com",
-            profile: "instance",
-          },
-        },
-        {
-          id: "legacy:redirect:old.example.com",
-          entity: "redirect-intent",
-          createdAt: "2026-06-14T00:00:00.000Z",
-          values: {
-            enabled: true,
-            fromHost: "old.example.com",
-            toHost: "new.example.com",
-          },
-        },
       ],
       targetId: "instance.primary",
       workerName: "fallback-worker",
@@ -147,9 +127,8 @@ describe("Deploy control-plane projection helpers", () => {
     const serialized = JSON.stringify(projectionInput);
 
     expect(projectionInput.routes?.map((route) => route.id)).toEqual(["route:site:public"]);
-    expect(serialized).not.toContain("legacy.example.com");
+    expect(serialized).not.toContain("disabled.example.com");
     expect(serialized).not.toContain("gone.example.com");
-    expect(serialized).not.toContain("old.example.com");
   });
 
   it("projects enabled hostless mount routes as deterministic route targets", () => {

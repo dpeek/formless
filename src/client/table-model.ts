@@ -19,7 +19,6 @@ import type {
   TableColumnConfig,
   TableFooterSlotConfig,
   TableOperationControlConfig,
-  TableOrderingConfig,
   TransitionStateOperationConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
@@ -87,7 +86,7 @@ function selectTableColumns(
   schema: AppSchema,
   view: TableViewSchema,
   entity: EntitySchema,
-  ordering: TableOrderingConfig | undefined,
+  ordering: ResultOrderingConfig | undefined,
 ): TableColumnConfig[] {
   const columns: TableColumnConfig[] = view.columns.flatMap((column): TableColumnConfig[] => {
     if (column.type === "computed") {
@@ -313,7 +312,7 @@ function selectFieldColumnDisplay(
 }
 
 function selectSyntheticOrderingMenuColumn(
-  ordering: TableOrderingConfig,
+  ordering: ResultOrderingConfig,
 ): OperationControlTableColumnConfig {
   return {
     type: "operationControl",

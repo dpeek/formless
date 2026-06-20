@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { resetClientStore } from "../../client/store.ts";
-import type { TableColumnConfig, TableOrderingConfig } from "../../client/views.ts";
+import type { ResultOrderingConfig, TableColumnConfig } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
@@ -122,7 +122,7 @@ describe("RecordTable", () => {
 
   it("renders operation menu labels, disabled reasons, destructive intent, and ordering moves", () => {
     const rateEntity = rateSourceSchema.entities.rate;
-    const ordering: TableOrderingConfig = {
+    const ordering: ResultOrderingConfig = {
       fieldName: "cost",
       field: { type: "number", required: true },
       scope: [],
@@ -215,9 +215,15 @@ const presentationTaskSchema = {
           type: "enum",
           required: true,
           values: {
-            low: { label: "Low", presentation: { color: "priority.low", icon: "flag" } },
-            normal: { label: "Normal", presentation: { color: "priority.normal", icon: "flag" } },
-            high: { label: "High", presentation: { color: "priority.high", icon: "flag" } },
+            low: { label: "Low", presentation: { color: "priority.low", icon: "priority-marker" } },
+            normal: {
+              label: "Normal",
+              presentation: { color: "priority.normal", icon: "priority-marker" },
+            },
+            high: {
+              label: "High",
+              presentation: { color: "priority.high", icon: "priority-marker" },
+            },
           },
         },
       },

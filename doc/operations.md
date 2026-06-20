@@ -27,8 +27,7 @@ App schema should organize interaction semantics around:
 
 Mutation policy, entity actions, public action metadata, generated action
 slots, table action columns, tree controls, workflow triggers, and provider
-commands are not peer interaction models. While migration is incomplete, those
-declarations can remain legacy inputs or internal materializers behind
+commands are not peer interaction models. They are internal materializers behind
 source-declared operations. They must not create browser controls, protocol
 write routes, public write routes, audit roots, or authorization decisions
 without a source-declared operation.
@@ -236,9 +235,8 @@ The public route resolves a declared operation, validates public input, verifies
 challenge policy, builds an anonymous operation envelope, commits through
 Authority, and returns a public-safe operation response.
 
-Legacy public action metadata can remain as migration input only. It does not
-create public execution without a matching source-declared public operation
-binding.
+Public action metadata does not create public execution without a matching
+source-declared public operation binding.
 
 ### Hooks And Automation
 
@@ -326,8 +324,8 @@ present resumable controls through operation bindings.
 5. Move public forms to public operation bindings.
 6. Keep mutation and action materializers internal until all callers cross the
    operation boundary.
-7. Remove legacy route, metadata, and control synthesis after operation coverage
-   is complete.
+7. Remove route, metadata, and control synthesis after operation coverage is
+   complete.
 
 Do not add workflow, marketplace, broad provider management, roles/orgs,
 AI/agent, or deployment-console primitives under this seam unless a CRM

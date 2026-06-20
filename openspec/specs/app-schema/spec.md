@@ -233,11 +233,8 @@ pure helpers through the Schema package slice.
   facts
 - **THEN** they import those contracts and helpers from
   `@dpeek/formless-schema`
-- **AND** they do not import package-owned schema behavior from old
-  `src/shared/schema*`, `src/shared/field-types`, `src/shared/fields`,
-  `src/shared/query`, `src/shared/read-model`, or unexported package internals
-- **AND** old package-owned shared schema modules are not retained as alternate
-  export shims
+- **AND** they do not import package-owned schema behavior from unexported
+  package internals
 
 #### Scenario: Package does not own runtime app records
 
@@ -275,7 +272,7 @@ identifiers.
 #### Scenario: Leave other schema keys unchanged
 
 - WHEN an app schema declares fields, queries, read models, views, screens,
-  operations, operation bindings, or legacy migration declarations
+  operations, or operation bindings
 - THEN this entity-key grammar does not rename or normalize those keys
 - AND existing validation for those schema sections remains separately owned by
   their current parser rules

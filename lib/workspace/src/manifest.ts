@@ -24,16 +24,6 @@ import type {
 const rootKeys = new Set(["kind", "local", "media", "name", "state", "version"]);
 const workspacePackageLinksRootKeys = new Set(["kind", "links", "version"]);
 const workspacePackageLinkKeys = new Set(["manifest"]);
-const removedManifestSourceKeys = new Set([
-  "apps",
-  "archives",
-  "defaultAppPolicy",
-  "defaultTarget",
-  "deploy",
-  "domains",
-  "source",
-  "targets",
-]);
 const stateKeys = new Set(["root"]);
 const mediaKeys = new Set(["root"]);
 const localKeys = new Set(["secretStateRoot", "stateRoot"]);
@@ -128,7 +118,6 @@ export function parseInstanceWorkspaceManifest(value: unknown): InstanceWorkspac
   }
 
   assertNoForbiddenSecretKeys(value, INSTANCE_WORKSPACE_MANIFEST_FILE);
-  assertNoRemovedManifestSourceKeys(value);
   assertOnlyKeys(value, rootKeys, INSTANCE_WORKSPACE_MANIFEST_FILE);
 
   if (value.version !== INSTANCE_WORKSPACE_MANIFEST_VERSION) {
@@ -432,16 +421,6 @@ function assertOnlyKeys(value: Record<string, unknown>, allowedKeys: Set<string>
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`${context} has unsupported key "${key}".`);
-    }
-  }
-}
-
-function assertNoRemovedManifestSourceKeys(value: Record<string, unknown>) {
-  for (const key of Object.keys(value)) {
-    if (removedManifestSourceKeys.has(key)) {
-      throw new Error(
-        `${INSTANCE_WORKSPACE_MANIFEST_FILE} key "${key}" was removed from manifest version 1; store instance intent in workspace storage state instead.`,
-      );
     }
   }
 }

@@ -6,8 +6,8 @@ import {
   selectCollectionModels,
   type HomeQueryTabConfig,
   type HomeViewModel,
+  type ResultOrderingConfig,
   type TableColumnConfig,
-  type TableOrderingConfig,
 } from "../client/views.ts";
 import { RecordTable } from "../app/generated/table.tsx";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -61,7 +61,7 @@ export function renderRecordTableHtml({
   entity: EntitySchema;
   entityName: string;
   footer?: ReturnType<typeof requiredTableModel>["footer"];
-  ordering?: TableOrderingConfig;
+  ordering?: ResultOrderingConfig;
   query?: HomeQueryTabConfig["query"];
   queryName?: string;
   records: StoredRecord[];
@@ -118,7 +118,7 @@ function tableResultFromProps({
 }: {
   columns: TableColumnConfig[] | undefined;
   footer?: ReturnType<typeof requiredTableModel>["footer"];
-  ordering?: TableOrderingConfig;
+  ordering?: ResultOrderingConfig;
   tableViewName: string;
 }): TableCollectionResultModel {
   if (columns === undefined) {

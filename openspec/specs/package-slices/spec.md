@@ -429,8 +429,8 @@ archive filesystem adapters.
   or local archive file adapters
 - THEN they import from `@dpeek/formless-archive` or
   `@dpeek/formless-archive/node`
-- AND they do not deep-import archive package internals or old package-owned
-  `src/shared/archive*` modules
+- AND they import Archive package behavior only through exported package
+  entrypoints, not source-tree modules or package internals
 
 ### Requirement: Archive Package Non-Ownership
 
@@ -441,8 +441,8 @@ execution, workspace operation execution, or CLI command policy.
 #### Scenario: Package owns archive contracts
 
 - GIVEN archive envelope types, archive kind constants, archive version
-  constants, archive capability parsing, archive formatting, compatibility
-  rejection, restore dry-run planning, media manifest validation, or local
+  constants, archive capability parsing, archive formatting, restore dry-run
+  planning, media manifest validation, or local
   archive directory IO are needed
 - WHEN runtime-neutral or local Node code consumes portable archive behavior
 - THEN they come from `lib/archive`
@@ -575,11 +575,7 @@ runtime-neutral App schema language contracts, parsers, and pure helpers.
   helpers
 - WHEN they import schema language behavior
 - THEN they import from `@dpeek/formless-schema`
-- AND they do not deep-import schema package internals or old package-owned
-  `src/shared/schema*`, `src/shared/field-types`, `src/shared/fields`,
-  `src/shared/query`, or `src/shared/read-model` modules
-- AND old package-owned shared schema modules are not retained as
-  compatibility re-export shims
+- AND they do not deep-import schema package internals
 
 ### Requirement: Schema Package Non-Ownership
 
@@ -647,8 +643,8 @@ workspace operation contracts, and local Node filesystem adapters.
   payloads
 - THEN those docs and tests name current workspace source, state, operation,
   manifest, local state, secret state, and storage snapshot helpers
-- AND they do not direct agents or import allowlists toward removed
-  record-source helpers or old `src/site` workspace modules
+- AND they direct agents and import allowlists toward Workspace package helpers
+  and exported entrypoints
 
 ### Requirement: Workspace Package Non-Ownership
 
@@ -670,7 +666,7 @@ runtime storage, provider execution, or app records.
   of defining Gateway-owned operation shapes
 - AND package consumers import Workspace behavior only from
   `@dpeek/formless-workspace` or `@dpeek/formless-workspace/node`, never from
-  old `src/site` workspace modules or package internals
+  source-tree modules or package internals
 
 #### Scenario: Package does not own runtime execution
 

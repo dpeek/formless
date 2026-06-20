@@ -309,8 +309,6 @@ export type TableOperationControlVariant = "default" | "destructive";
 export type TableOperationControlAvailabilityState = "visible" | "hidden" | "disabled";
 export type TableOperationControlPresentation = "button" | "dropdown";
 export type ResultOrderingPresentation = "moveMenu" | "dragHandle";
-// Table ordering aliases stay for table view compatibility; new schemas should use result ordering.
-export type TableOrderingPresentation = ResultOrderingPresentation;
 
 export type TableOperationControlAvailabilitySchema = {
   state: TableOperationControlAvailabilityState;
@@ -331,15 +329,11 @@ export type ResultOrderingScopeSchema = {
   field: string;
 };
 
-export type TableOrderingScopeSchema = ResultOrderingScopeSchema;
-
 export type ResultOrderingSchema = {
   field: string;
   scope?: ResultOrderingScopeSchema[];
   presentations?: ResultOrderingPresentation[];
 };
-
-export type TableOrderingSchema = ResultOrderingSchema;
 
 export type ValueUnitEditorSchema = {
   unitField: string;
@@ -426,7 +420,7 @@ export type TableOperationBindingSchema = {
 export type TableViewSchema = {
   entity: string;
   operations?: TableOperationBindingSchema[];
-  ordering?: TableOrderingSchema;
+  ordering?: ResultOrderingSchema;
   columns: TableColumnSchema[];
 };
 
@@ -1239,8 +1233,6 @@ export type RuntimeSchemaRouteValidationSchema = {
 export type RuntimeSchemaHistorySchema = {
   kind: "actionCreated" | "appendOnly";
 };
-
-export type LegacyMigrationDeclarationKind = RuntimeSchemaHistorySchema["kind"];
 
 export type RuntimeSchemaControlPlaneEntitySchema = {
   immutableFields?: string[];

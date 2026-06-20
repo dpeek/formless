@@ -52,7 +52,7 @@ defaults and clear escape hatches.
 - `openspec/specs/public-actions/spec.md` defines public exposure as anonymous
   operation policy plus target-scoped public operation bindings.
 - Current code still contains mutation and action materializers. Under the
-  current specs, they are internal or legacy migration details behind
+  current specs, they are internal implementation details behind
   source-declared operations, not peer interaction models.
 - Durable Object Authority storage, browser IndexedDB replicas, HTTP sync, and
   push sync already exist.

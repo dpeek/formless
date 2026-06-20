@@ -9,8 +9,6 @@ import {
   isRestorableImageMediaKey,
 } from "@dpeek/formless-media";
 
-const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
-const INSTALLED_SITE_MEDIA_ROUTE_PREFIX = "/api/app-installs/site/";
 export const SITE_SOURCE_MEDIA_ROOT = "lib/site-app/media";
 
 export type SiteSourceMediaAsset = {
@@ -28,18 +26,6 @@ export function siteMediaContentTypeForKey(key: string): string | undefined {
   return imageMediaContentTypeForKey(key);
 }
 
-export function isLegacySiteMediaHref(href: string): boolean {
-  return (
-    href.startsWith(SITE_MEDIA_ROUTE_PREFIX) ||
-    (href.startsWith(INSTALLED_SITE_MEDIA_ROUTE_PREFIX) &&
-      /^\/api\/app-installs\/site\/[^/]+\/media\//.test(href))
-  );
-}
-
-export function unsupportedLegacySiteMediaMessage(href: string, workflow: string): string {
-  return `Unsupported legacy Site media href "${href}". Use core media before ${workflow}.`;
-}
-
 export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteSourceMediaAsset[] {
   const assetsByKey = new Map<string, SiteSourceMediaAsset>();
 
@@ -51,10 +37,6 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
     const href = record.values.href;
 
     if (typeof href === "string") {
-      if (isLegacySiteMediaHref(href)) {
-        throw new Error(unsupportedLegacySiteMediaMessage(href, "source Site media collection"));
-      }
-
       const key = coreMediaKeyFromHref(href);
 
       if (key) {

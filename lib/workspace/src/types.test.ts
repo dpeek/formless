@@ -184,17 +184,6 @@ describe("instance workspace manifest", () => {
     expect(() =>
       parseInstanceWorkspaceManifest({
         ...layoutManifestSource(),
-        deploy: {
-          workerName: "personal",
-        },
-      }),
-    ).toThrow(
-      'formless.json key "deploy" was removed from manifest version 1; store instance intent in workspace storage state instead.',
-    );
-
-    expect(() =>
-      parseInstanceWorkspaceManifest({
-        ...layoutManifestSource(),
         local: {
           stateRoot: ".formless/local",
           secretStateRoot: ".formless",
@@ -258,38 +247,6 @@ describe("instance workspace manifest", () => {
         local: { stateRoot: ".formless/local", secretStateRoot: ".." },
       }),
     ).toThrow("formless.json local.secretStateRoot must be a relative workspace path.");
-  });
-
-  it("rejects removed v1 source keys without a compatibility parser", () => {
-    for (const key of [
-      "apps",
-      "archives",
-      "defaultAppPolicy",
-      "defaultTarget",
-      "deploy",
-      "domains",
-      "source",
-      "targets",
-    ]) {
-      expect(() =>
-        parseInstanceWorkspaceManifest({
-          ...layoutManifestSource(),
-          [key]: key === "defaultTarget" ? "remote" : [],
-        }),
-      ).toThrow(
-        `formless.json key "${key}" was removed from manifest version 1; store instance intent in workspace storage state instead.`,
-      );
-    }
-
-    expect(() =>
-      parseInstanceWorkspaceManifest({
-        ...layoutManifestSource(),
-        state: {
-          root: "state",
-          apps: "state/apps",
-        },
-      }),
-    ).toThrow('formless.json state has unsupported key "apps".');
   });
 
   it("normalizes target URLs to origins", () => {

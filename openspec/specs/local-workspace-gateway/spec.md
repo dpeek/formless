@@ -121,9 +121,9 @@ through the Gateway package slice.
 - **THEN** they import those contracts and adapters from
   `@dpeek/formless-gateway`, `@dpeek/formless-gateway/client`,
   `@dpeek/formless-gateway/worker`, or `@dpeek/formless-gateway/sidecar`
-- **AND** they do not import package-owned gateway behavior from old
-  `src/shared`, `src/client`, `src/worker`, or `src/site` gateway modules or
-  from unexported package internals
+- **AND** they import package-owned gateway behavior only through exported
+  Gateway package entrypoints, not source-tree modules or unexported package
+  internals
 - **AND** Site runtime adapter modules may supply non-package-owned operation
   execution, Workspace package operation state, owner session, and runtime
   topology dependencies to the package sidecar adapter

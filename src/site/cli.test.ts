@@ -299,7 +299,6 @@ describe("Formless Site CLI", () => {
 
   it("keeps CLI parse error messages stable", () => {
     expect(() => parseFormlessCliArgs(["unknown"])).toThrow("Unknown command: unknown");
-    expect(() => parseFormlessCliArgs(["init"])).toThrow("Unknown command: init");
     expect(() => parseFormlessCliArgs(["dev", "--help"])).toThrow(
       "Usage: formless dev [--workspace <path>] [--open] [--reset]",
     );
@@ -340,7 +339,6 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["token", "forget"])).toThrow(
       "Usage: formless token <adopt|rotate>",
     );
-    expect(() => parseFormlessCliArgs(["publish", "--force"])).toThrow("Unknown command: publish");
   });
 
   it("parses local-first command defaults", () => {
@@ -367,83 +365,6 @@ describe("Formless Site CLI", () => {
       targetAlias: null,
       workspacePath: null,
     });
-  });
-
-  it("rejects removed public command families", () => {
-    const removedCommands = [
-      ["archive", "export"],
-      ["archive", "restore"],
-      ["check"],
-      ["domains", "forget-redirect"],
-      ["domains", "forget-route"],
-      ["domains", "mark-manually-removed"],
-      ["domains", "plan"],
-      ["domains", "run-delete"],
-      ["deploy"],
-      ["init"],
-      ["instance", "pull"],
-      ["instance", "push"],
-      ["instance", "status"],
-      ["refresh"],
-      ["reset-local"],
-      ["status"],
-    ];
-
-    for (const args of removedCommands) {
-      expect(() => parseFormlessCliArgs(args)).toThrow(`Unknown command: ${args[0]}`);
-    }
-  });
-
-  it("rejects removed public command families before side effects", async () => {
-    const tempDir = await makeTempDir();
-    const requests: CapturedFetchRequest[] = [];
-    const commands: CapturedCommand[] = [];
-    const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
-    const logs: string[] = [];
-    const openedUrls: string[] = [];
-    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
-    const stateWrites: WriteFormlessInstanceStateInput[] = [];
-    const removedCommands = [
-      ["archive", "export", "--target", "https://instance.example"],
-      ["archive", "restore", "--target", "https://instance.example"],
-      ["check"],
-      ["domains", "forget-redirect", "--host", "old.example"],
-      ["domains", "forget-route", "--host", "old.example"],
-      ["domains", "mark-manually-removed", "--host", "old.example"],
-      ["domains", "plan"],
-      ["domains", "run-delete", "--host", "old.example"],
-      ["deploy", "--target", "remote"],
-      ["init"],
-      ["instance", "pull"],
-      ["instance", "push"],
-      ["instance", "status"],
-      ["refresh"],
-      ["reset-local"],
-      ["status"],
-    ];
-    const dependencies = cliDeps(tempDir, {
-      commands,
-      fetch: responseQueue().fetcher(requests),
-      healthInputs,
-      logs,
-      openedUrls,
-      setupInputs,
-      stateWrites,
-    });
-
-    for (const args of removedCommands) {
-      await expect(runFormlessCli(args, dependencies)).rejects.toThrow(
-        `Unknown command: ${args[0]}`,
-      );
-    }
-
-    expect(requests).toEqual([]);
-    expect(commands).toEqual([]);
-    expect(healthInputs).toEqual([]);
-    expect(logs).toEqual([]);
-    expect(openedUrls).toEqual([]);
-    expect(setupInputs).toEqual([]);
-    expect(stateWrites).toEqual([]);
   });
 
   it("initializes an instance workspace from remote target status", async () => {
@@ -524,7 +445,7 @@ describe("Formless Site CLI", () => {
     expect(result.archiveSourcePath).toBe("archives/instance");
   });
 
-  it("discovers nearest Formless workspace manifest and rejects legacy manifest names", async () => {
+  it("discovers nearest Formless workspace manifest", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const nestedRoot = path.join(workspaceRoot, "app", "site");
@@ -539,24 +460,6 @@ describe("Formless Site CLI", () => {
     await expect(resolveFormlessInstanceWorkspaceRoot({ cwd: nestedRoot })).resolves.toBe(
       workspaceRoot,
     );
-
-    for (const fileName of ["formless.instance-workspace.json", "formless-workspace.json"]) {
-      const legacyRoot = path.join(tempDir, fileName.replace(".json", ""));
-      const legacyPath = path.join(legacyRoot, fileName);
-
-      await mkdir(path.join(legacyRoot, "nested"), { recursive: true });
-      await writeFile(legacyPath, "{}");
-      await expect(
-        discoverFormlessInstanceWorkspaceRoot(path.join(legacyRoot, "nested")),
-      ).rejects.toThrow(
-        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
-      );
-      await expect(
-        runFormlessCli(["pull", "--workspace", legacyRoot], cliDeps(tempDir)),
-      ).rejects.toThrow(
-        `Legacy Formless workspace manifest found at ${legacyPath}. Local-first workspaces use ${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE}; run \`formless dev\` and complete setup in the browser.`,
-      );
-    }
   });
 
   it("creates one owner setup URL with focused bootstrap reads and no secret logging", async () => {
@@ -2937,11 +2840,6 @@ describe("Formless Site CLI", () => {
       write: "dir" | "file";
     }> = [
       {
-        expected: "Legacy Formless workspace manifest found",
-        path: "formless-workspace.json",
-        write: "file",
-      },
-      {
         expected: "portable archive source exists",
         path: PORTABLE_ARCHIVE_MANIFEST_FILE,
         write: "file",
@@ -4202,86 +4100,6 @@ describe("Formless Site CLI", () => {
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
   });
 
-  it("does not retarget old Site media keys or hrefs during app archive restore", async () => {
-    const tempDir = await makeTempDir();
-    const outDir = path.join(tempDir, "legacy-site-media-backup");
-    const requests: CapturedFetchRequest[] = [];
-    const responses = responseQueue();
-    const legacyStorageKey = "app-installs/personal/site/images/cover.png";
-    const legacyHref = `/api/app-installs/site/personal/media/${legacyStorageKey}`;
-    const legacyArchive: AppArchive = {
-      ...appArchive("personal", "Personal", {
-        records: [
-          block("block-cover", "2026-05-05T00:00:02.000Z", {
-            type: "image",
-            label: "Cover",
-            href: legacyHref,
-          }),
-        ],
-      }),
-      capabilities: ["app-store-snapshots"],
-      media: {
-        objects: [
-          {
-            archivePath: "media/personal/site/images/cover.png",
-            byteSize: 3,
-            contentType: "image/png",
-            deliveryHref: legacyHref,
-            storageKey: legacyStorageKey,
-          },
-        ],
-      },
-    };
-
-    await writeArchiveDirectory(outDir, legacyArchive, { personal: new Uint8Array([4, 5, 6]) });
-    responses.queueJson({
-      ok: true,
-      report: {
-        applied: true,
-        summary: {
-          appCount: 1,
-          createdInstalls: ["personal-copy"],
-          mediaCountsByApp: { "personal-copy": 1 },
-          recordCountsByApp: { "personal-copy": { total: 1 } },
-          replacedInstalls: [],
-        },
-      },
-    });
-
-    await restoreAppArchive(
-      {
-        adminToken: null,
-        apply: true,
-        archiveDir: outDir,
-        installId: "personal-copy",
-        replace: false,
-        target: "https://instance.example",
-      },
-      cliDeps(tempDir, {
-        fetch: responses.fetcher(requests),
-      }),
-    );
-
-    const restoreRequest = requests.at(-1);
-    const restoreBody = capturedRequestJson<{
-      archive: AppArchive;
-      mediaFiles: { bytesBase64: string }[];
-    }>(restoreRequest);
-
-    expect(restoreBody.archive.app.installId).toBe("personal-copy");
-    expect(restoreBody.archive.media.objects[0]).toMatchObject({
-      deliveryHref: legacyHref,
-      storageKey: legacyStorageKey,
-    });
-    expect(
-      restoreBody.archive.data.kind === STORAGE_SNAPSHOT_KIND
-        ? restoreBody.archive.data.records[0]?.values.href
-        : undefined,
-    ).toBe(legacyHref);
-    expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
-    expect(JSON.stringify(restoreBody.archive)).not.toContain("personal-copy/site/images");
-  });
-
   it("exports installed Tasks app archives without media requests", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "tasks-backup");
@@ -4572,78 +4390,6 @@ describe("Formless Site CLI", () => {
     expect(result).not.toHaveProperty("upgradePlanning");
   });
 
-  it("rejects older archive restore dry-runs before posting to the target", async () => {
-    const tempDir = await makeTempDir();
-    const outDir = path.join(tempDir, "legacy-instance-restore");
-    const requests: CapturedFetchRequest[] = [];
-
-    await mkdir(outDir, { recursive: true });
-    await writeFile(
-      path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
-      `${JSON.stringify(legacyV1Archive(instanceArchive([appArchive("david", "David Peek")])), null, 2)}\n`,
-    );
-
-    await expect(
-      restorePortableArchive(
-        {
-          adminToken: null,
-          apply: false,
-          archiveDir: outDir,
-          replace: false,
-          target: "https://instance.example",
-        },
-        cliDeps(tempDir, {
-          fetch: responseQueue().fetcher(requests),
-        }),
-      ),
-    ).rejects.toThrow("Instance archive version must be 2.");
-    expect(requests).toEqual([]);
-  });
-
-  it("rejects legacy control-plane entity spellings in archive restore dry-runs", async () => {
-    const tempDir = await makeTempDir();
-    const outDir = path.join(tempDir, "legacy-control-plane-restore");
-    const requests: CapturedFetchRequest[] = [];
-    const archive: InstanceArchive = {
-      ...instanceArchive([appArchive("david", "David Peek")]),
-      capabilities: [
-        "installed-app-registry",
-        "schema-owned-control-plane",
-        "app-store-snapshots",
-        "core-media-assets",
-      ],
-      controlPlane: controlPlaneSnapshot(
-        controlPlaneRecords().map((record) =>
-          record.entity === "app-install" ? { ...record, entity: "appInstall" } : record,
-        ),
-      ),
-    };
-
-    await mkdir(outDir, { recursive: true });
-    await writeFile(
-      path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
-      `${JSON.stringify(archive, null, 2)}\n`,
-    );
-
-    await expect(
-      restorePortableArchive(
-        {
-          adminToken: null,
-          apply: false,
-          archiveDir: outDir,
-          replace: false,
-          target: "https://instance.example",
-        },
-        cliDeps(tempDir, {
-          fetch: responseQueue().fetcher(requests),
-        }),
-      ),
-    ).rejects.toThrow(
-      'Instance archive controlPlane records record "david" references unknown entity "appInstall".',
-    );
-    expect(requests).toEqual([]);
-  });
-
   it("rejects unsupported archive versions before restore mutation", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "unsupported-instance-restore");
@@ -4654,10 +4400,7 @@ describe("Formless Site CLI", () => {
       path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE),
       `${JSON.stringify(
         {
-          ...(legacyV1Archive(instanceArchive([appArchive("david", "David Peek")])) as Record<
-            string,
-            unknown
-          >),
+          ...instanceArchive([appArchive("david", "David Peek")]),
           version: 0,
         },
         null,
@@ -5082,31 +4825,6 @@ function instanceArchive(apps: AppArchive[]): InstanceArchive {
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps,
   };
-}
-
-function legacyV1Archive(archive: InstanceArchive | AppArchive): unknown {
-  const copy = JSON.parse(JSON.stringify(archive)) as {
-    app?: Record<string, unknown>;
-    apps?: unknown[];
-    kind: string;
-    version: number;
-  };
-
-  copy.version = 1;
-
-  if (copy.kind === INSTANCE_ARCHIVE_KIND) {
-    copy.apps = (copy.apps ?? []).map((app) =>
-      legacyV1Archive(app as InstanceArchive | AppArchive),
-    );
-    return copy;
-  }
-
-  if (copy.app) {
-    delete copy.app.packageRevision;
-    delete copy.app.sourceSchemaHash;
-  }
-
-  return copy;
 }
 
 function appArchive(

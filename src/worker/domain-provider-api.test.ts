@@ -35,8 +35,6 @@ const adminToken = "test-admin-token";
 const cloudflareToken = "secret-cloudflare-token";
 const alchemyPassword = "secret-alchemy-password";
 const domainMappingsApplyEvidenceApiPath = "/api/formless/domain-mappings/apply-evidence";
-const domainProviderRedirectsApiPath = "/api/formless/domain-provider/redirects";
-const domainProviderRedirectsForgetApiPath = `${domainProviderRedirectsApiPath}/forget`;
 
 let harness: Harness;
 let defaultHarness: Harness;
@@ -377,17 +375,6 @@ describe("instance domain provider API routes", () => {
       ]),
     );
   });
-
-  it("removes legacy redirect desired endpoints", async () => {
-    await expectStatus(domainProviderRedirectsApiPath, "GET", 404);
-    await expectStatus(domainProviderRedirectsApiPath, "POST", 404);
-    await expectStatus(`${domainProviderRedirectsApiPath}?fromHost=www.example.com`, "DELETE", 404);
-    await expectStatus(
-      `${domainProviderRedirectsForgetApiPath}?fromHost=www.example.com`,
-      "DELETE",
-      404,
-    );
-  });
 });
 
 async function createHarness(bindings: Record<string, string>) {
@@ -558,19 +545,6 @@ function operationRecord(response: OperationInvocationResponse) {
   }
 
   return response.output.record;
-}
-
-async function expectStatus(path: string, method: "DELETE" | "GET" | "POST", status: number) {
-  const response = await harness.fetch(path, {
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
-    },
-    method,
-    ...(method === "POST" ? { body: "{}" } : {}),
-  });
-
-  expect(response.status).toBe(status);
 }
 
 function routeAndAppIntentSnapshot(body: BootstrapResponse) {

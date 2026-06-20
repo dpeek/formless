@@ -797,19 +797,6 @@ function validateMediaReferences(
         continue;
       }
 
-      if (isLegacySiteMediaHref(value)) {
-        errors.push(
-          planError("invalid-media", {
-            appInstallId,
-            entity: record.entity,
-            field: `${record.entity}.${fieldName}`,
-            message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references unsupported legacy Site media.`,
-            recordId: record.id,
-          }),
-        );
-        continue;
-      }
-
       const mediaAssetDelivery =
         fieldName === "mediaAssetId" ? coreImageMediaDeliveryFactsForAssetId(value) : undefined;
       const deliveryHref = mediaAssetDelivery?.href ?? coreDeliveryHrefFromValue(value);
@@ -833,12 +820,6 @@ function validateMediaReferences(
 
 function coreDeliveryHrefFromValue(value: string): string | undefined {
   return value.startsWith(CORE_MEDIA_ROUTE_PREFIX) ? value : undefined;
-}
-
-function isLegacySiteMediaHref(value: string): boolean {
-  return (
-    value.startsWith("/api/site/media/") || /^\/api\/app-installs\/site\/[^/]+\/media\//.test(value)
-  );
 }
 
 function planSteps(

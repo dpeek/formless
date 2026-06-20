@@ -358,8 +358,6 @@ describe("authority", () => {
 
     expect(JSON.stringify(body)).toContain("/api/formless/media/media/images/installed.webp");
     expect(JSON.stringify(body)).toContain("https://cdn.example.com/installed-manual.webp");
-    expect(JSON.stringify(body)).not.toContain("/api/site/media/site/images/installed.webp");
-    expect(JSON.stringify(body)).not.toContain("/api/app-installs/site/personal/media/");
   });
 
   it("renders duplicate installed Site public slugs from the selected install storage", async () => {
