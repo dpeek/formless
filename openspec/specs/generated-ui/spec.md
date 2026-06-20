@@ -378,13 +378,15 @@ entity operations and view operation bindings.
   and reference-target editing remain presentation facts on the operation
   binding
 
-#### Scenario: State transitions read operation effects
+#### Scenario: State transitions read operation handler facts
 
 - GIVEN a state-machine field exposes transition controls
 - WHEN generated UI selects transition operation configs
 - THEN the machine, transition, availability, input, and response handling come
-  from operation-native transition effect facts
-- AND operation command kind helpers expose operation-native selection contracts
+  from operation-native transition handler facts
+- AND operation handler helpers expose operation-native selection contracts
+- AND generated UI does not inspect legacy entity action metadata or legacy
+  action kinds to discover transition controls
 
 ### Requirement: Operations And Tree Composition
 
@@ -393,7 +395,8 @@ SHALL use relationship context and readiness facts to shape command inputs.
 
 #### Scenario: Many-to-many selection operation
 
-- GIVEN a selected join command operation targets a `manyToMany` relationship
+- GIVEN a selected join command operation uses an operation handler targeting a
+  `manyToMany` relationship
 - WHEN the user submits selected related records
 - THEN explicit join records are created or removed
 - AND generic field defaults fill other required through fields when join records are created
@@ -405,6 +408,8 @@ SHALL use relationship context and readiness facts to shape command inputs.
 - THEN one child record and one placement edge are created
 - AND leaf policy renders leaf children without descendants
 - AND remove-placement controls tombstone placement edges without showing child delete controls on placement cards
+- AND tree controls are selected from operation handler capability facts rather
+  than registered action effect kinds
 
 ### Requirement: State Machine Controls
 
@@ -423,7 +428,8 @@ status fields.
 
 #### Scenario: Render valid transition controls
 
-- GIVEN a generated surface renders a record with transition-state operations
+- GIVEN a generated surface renders a record with transition-state operation
+  handlers
 - WHEN the record's current state allows one or more transitions
 - THEN generated UI renders controls for the valid transition operations
 - AND invalid transition operations are hidden or disabled with schema-derived
@@ -772,6 +778,6 @@ behavior for onboarding steps that write schema records.
 - **WHEN** app-specific setup flows such as a newly installed Site app template
   flow are considered in a later change
 - **THEN** the existing onboarding UI structure keeps step orchestration
-  separate from generated field rendering and mutation submission
+  separate from generated field rendering and operation submission
 - **AND** this change does not add a schema-declared onboarding or setup-flow
   language

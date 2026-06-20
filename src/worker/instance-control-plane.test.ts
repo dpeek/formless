@@ -183,7 +183,7 @@ describe("instance control-plane API routes", () => {
       "route:personal:admin",
       "route:personal:public-site",
     ]);
-    expect(createdOutput.changes.map((change) => change.mutationId)).toEqual([
+    expect(createdOutput.changes.map((change) => change.writeId)).toEqual([
       created.body.invocation.invocationId,
       created.body.invocation.invocationId,
       created.body.invocation.invocationId,

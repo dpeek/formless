@@ -143,8 +143,8 @@ export type UpgradeMigrationRegistryValidationResult =
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
 
 export const bundledSourceSchemaHashFixtures = {
-  tasks: "sha256:3c353fcab4afc03056c03c31e9c176d5056451a29f3fd7fd5659bbfbd91ccb88",
-  site: "sha256:231d25123a2147e81c48918a92775988562574753cf0aafd0761911b036d3a28",
+  tasks: "sha256:51428cbdf236029c81d97bafffcdad039be062472226b6adea7a249333081c56",
+  site: "sha256:22200c0a12e0b1dd433a7be19bc8c61bade09e2b4442a621a14451e8bc78a166",
   crm: "sha256:bc7a460e8d037f44dacc2af42c9bf49902232478bf9ab10ab6ec7c78b507e6f5",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 

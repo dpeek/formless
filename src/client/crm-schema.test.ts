@@ -93,11 +93,7 @@ describe("crm source schema", () => {
       type: "reference",
       to: "subscription",
     });
-    expect(crmSchema.entities["delivery-event"]?.mutations).toEqual({
-      create: { enabled: false },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    });
+    expect(crmSchema.entities["delivery-event"]).not.toHaveProperty("mutations");
   });
 
   it("defines CRM relationship metadata and membership constraints", () => {
@@ -138,13 +134,6 @@ describe("crm source schema", () => {
         Object.keys(entity.operations ?? {}),
       ]),
     );
-    const entityActionNames = Object.fromEntries(
-      Object.entries(crmSchema.entities).flatMap(([entityName, entity]) => {
-        const actionNames = Object.keys(entity.actions ?? {});
-
-        return actionNames.length === 0 ? [] : [[entityName, actionNames]];
-      }),
-    );
     const collectionOperationBindings = Object.fromEntries(
       Object.entries(crmSchema.views).flatMap(([viewName, view]) => {
         if (view.type !== "collection") {
@@ -167,7 +156,7 @@ describe("crm source schema", () => {
       "broadcast-recipient": ["create", "update"],
       "delivery-event": [],
     });
-    expect(entityActionNames).toEqual({});
+    expect(Object.values(crmSchema.entities).some((entity) => "actions" in entity)).toBe(false);
     expect(collectionOperationBindings).toEqual(
       Object.fromEntries(
         crmCollectionOperationCoverage.map((coverage) => [

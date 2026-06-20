@@ -125,9 +125,11 @@
             "query": "taskCompleted"
           },
           "effect": {
-            "type": "registeredCommand",
-            "kind": "clear-completed",
-            "query": "taskCompleted"
+            "type": "operationHandler",
+            "handler": "clear-completed",
+            "config": {
+              "query": "taskCompleted"
+            }
           },
           "output": {
             "type": "command"

@@ -7,7 +7,7 @@ import type {
   EntitySchema,
   EntityUnionSchema,
   EntityUnionVariantSchema,
-  RegisteredCommandEntityOperationEffectSchema,
+  OperationHandlerEffectSchemaForKind,
   FieldCommitPolicy,
   FieldEditor,
   FieldRef,
@@ -308,12 +308,12 @@ export type TreeCompositionOperationConfig = {
   create?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" };
+    effect: OperationHandlerEffectSchemaForKind<"create-tree-child">;
   };
   remove?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "remove-tree-placement" };
+    effect: OperationHandlerEffectSchemaForKind<"remove-tree-placement">;
   };
 };
 

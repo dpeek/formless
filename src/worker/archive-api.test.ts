@@ -134,7 +134,7 @@ describe("instance archive restore API", () => {
     expect(bootstrap.body.records).toEqual([taskRecord()]);
   });
 
-  it("replaces installed app archive data with monotonic cursors and cleared action replay", async () => {
+  it("replaces installed app archive data with monotonic cursors and cleared operation replay", async () => {
     const initial = await postArchiveRestore(
       tasksAppArchive({
         dryRun: false,
@@ -193,8 +193,8 @@ describe("instance archive restore API", () => {
     expect(secondAction.changes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          mutationId: "operation:task.clearCompletedTasks:action-archive-clear",
-          op: "action",
+          writeId: "operation:task.clearCompletedTasks:action-archive-clear",
+          operationKind: "command",
           recordId: replacementRecord.id,
           payload: expect.objectContaining({
             id: replacementRecord.id,

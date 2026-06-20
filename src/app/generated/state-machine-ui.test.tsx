@@ -68,11 +68,11 @@ describe("generated state-machine UI", () => {
       />,
     );
 
-    expect(operations[0]).toEqual(
-      expect.not.objectContaining({
-        action: expect.anything(),
-      }),
-    );
+    expect(operations[0]?.operation.operation.effect).toMatchObject({
+      type: "operationHandler",
+      handler: "transition-state",
+      config: { machine: "statusFlow", transition: "start" },
+    });
     expect(html).toContain('data-formless-transition-operation="startTask"');
     expect(html).toContain('data-formless-transition-state-valid="true"');
     expect(html).toContain('data-formless-transition-target-state="doing"');
@@ -181,7 +181,7 @@ describe("generated state-machine UI", () => {
           recordId: "task-1",
           source: { protocol: "generated-ui" },
         });
-        const changes = [actionChange(2, changed, submittedOperation.idempotencyKey)];
+        const changes = [commandChange(2, changed, submittedOperation.idempotencyKey)];
 
         return Response.json({
           invocation: {} as OperationInvocationResponse["invocation"],
@@ -259,10 +259,12 @@ function lifecycleSchema(): AppSchema {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "transition-state",
-              machine: "statusFlow",
-              transition: "start",
+              type: "operationHandler",
+              handler: "transition-state",
+              config: {
+                machine: "statusFlow",
+                transition: "start",
+              },
             },
             output: { type: "command" },
             idempotency: { required: true },
@@ -273,10 +275,12 @@ function lifecycleSchema(): AppSchema {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "transition-state",
-              machine: "statusFlow",
-              transition: "complete",
+              type: "operationHandler",
+              handler: "transition-state",
+              config: {
+                machine: "statusFlow",
+                transition: "complete",
+              },
             },
             output: { type: "command" },
             idempotency: { required: true },
@@ -335,11 +339,11 @@ function taskRecord(id: string, status: "todo" | "doing" | "done"): StoredRecord
   };
 }
 
-function actionChange(seq: number, payload: StoredRecord, actionId: string): ChangeRow {
+function commandChange(seq: number, payload: StoredRecord, operationId: string): ChangeRow {
   return {
     seq,
-    mutationId: actionId,
-    op: "action",
+    writeId: operationId,
+    operationKind: "command",
     entity: payload.entity,
     recordId: payload.id,
     payload,

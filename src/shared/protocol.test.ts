@@ -226,11 +226,15 @@ function record(id: string): StoredRecord {
   };
 }
 
-function change(seq: number, payload: StoredRecord, op: ChangeRow["op"] = "create"): ChangeRow {
+function change(
+  seq: number,
+  payload: StoredRecord,
+  operationKind: ChangeRow["operationKind"] = "create",
+): ChangeRow {
   return {
     seq,
-    mutationId: `mutation-${seq}`,
-    op,
+    writeId: `mutation-${seq}`,
+    operationKind,
     entity: payload.entity,
     recordId: payload.id,
     payload,

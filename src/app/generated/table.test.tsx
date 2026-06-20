@@ -227,11 +227,6 @@ const presentationTaskSchema = {
           },
         },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
     },
   },
   queries: {},

@@ -11,6 +11,7 @@ import { instanceControlPlaneReservedRoutePaths } from "@dpeek/formless-instance
 import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type {
   AppSchema,
+  EntityOperationKind,
   EntitySchema,
   RuntimeSchemaRouteValidationSchema,
 } from "@dpeek/formless-schema";
@@ -26,10 +27,10 @@ import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts"
 import { BadRequestError } from "./errors.ts";
 import {
   getBootstrapRecords,
-  getMutationResponseById,
+  getRecordWriteResponseById,
   getStoredRecord,
   replayedWrite,
-  type MutationResponse,
+  type RecordWriteResponse,
   type WriteOutcome,
 } from "./storage.ts";
 
@@ -38,11 +39,12 @@ export type ValidatedMutation =
       mutation: Mutation | (PatchMutation & { recordValues: RecordValues });
     }
   | {
-      outcome: WriteOutcome<MutationResponse>;
+      outcome: WriteOutcome<RecordWriteResponse>;
     };
 
 type MutationValidationOptions = {
   additionalRecords?: StoredRecord[];
+  allowStoredReplay?: boolean;
   enforceGenericMutationPolicy?: boolean;
   packageResolver?: AppPackageResolver;
 };
@@ -74,23 +76,25 @@ export function validateMutationRequest(
     throw new BadRequestError(`Unknown entity "${value.entity}".`);
   }
 
-  const replay = getMutationResponseById(storage, value.mutationId);
-  if (replay) {
-    return { outcome: replayedWrite(replay) };
+  if (options.allowStoredReplay !== false) {
+    const replay = getRecordWriteResponseById(storage, value.mutationId);
+    if (replay) {
+      return { outcome: replayedWrite(replay) };
+    }
   }
 
   if (options.enforceGenericMutationPolicy !== false) {
     assertRuntimeHistoryAllowsGenericMutation(schema, value.entity, value.op);
 
-    if (value.op === "create" && !entity.mutations.create.enabled) {
+    if (value.op === "create" && !entityHasOperationKind(entity, "create")) {
       throw new BadRequestError(`Create mutations are disabled for entity "${value.entity}".`);
     }
 
-    if (value.op === "patch" && !entity.mutations.patch.enabled) {
+    if (value.op === "patch" && !entityHasOperationKind(entity, "update")) {
       throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
     }
 
-    if (value.op === "delete" && !entity.mutations.delete.enabled) {
+    if (value.op === "delete" && !entityHasOperationKind(entity, "delete")) {
       throw new BadRequestError(`Delete mutations are disabled for entity "${value.entity}".`);
     }
   }
@@ -1370,6 +1374,10 @@ function isValidStoredFieldValue(
   }
 
   return true;
+}
+
+function entityHasOperationKind(entity: EntitySchema, kind: EntityOperationKind): boolean {
+  return Object.values(entity.operations ?? {}).some((operation) => operation.kind === kind);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

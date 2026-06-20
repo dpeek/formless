@@ -781,31 +781,6 @@ export type RelationshipSchema =
   | ToManyRelationshipSchema
   | ManyToManyRelationshipSchema;
 
-export type AfterCreateHookSchema = {
-  entity: string;
-  action: string;
-};
-
-export type GenericMutationPolicy = {
-  enabled: boolean;
-};
-
-export type CreateMutationPolicy = GenericMutationPolicy & {
-  afterCreate?: AfterCreateHookSchema[];
-};
-
-export type DeleteMutationPolicy = GenericMutationPolicy;
-
-export type EntityMutationPolicy = {
-  create: CreateMutationPolicy;
-  patch: GenericMutationPolicy;
-  delete: DeleteMutationPolicy;
-};
-
-export type EntityActionTargetSchema = {
-  query: string;
-};
-
 export type StateMachineTransitionSchema = {
   label: string;
   from: string[];
@@ -837,97 +812,7 @@ export type StateMachineSchema = {
   event?: StateMachineTransitionEventSchema;
 };
 
-export type EntityActionJoinSourceSchema = {
-  field: string;
-  query: string;
-};
-
-export type EntityActionJoinSchema = {
-  left: EntityActionJoinSourceSchema;
-  right: EntityActionJoinSourceSchema;
-};
-
-export type EntityActionCapabilities = {
-  createAfterCreateHook: boolean;
-  publicExecution: boolean;
-};
-
 export type SchemaActionActorKind = "admin" | "cliDeployer" | "owner" | "runner";
-
-export type EntityActionExposureSchema = {
-  actors: SchemaActionActorKind[];
-  responseFields?: Partial<Record<SchemaActionActorKind, string[]>>;
-};
-
-export type EntityActionRuntimeMetadata = {
-  exposure?: EntityActionExposureSchema;
-};
-
-export type EntityActionBaseSchema = EntityActionRuntimeMetadata & {
-  label: string;
-  access?: ActionAccessPolicySchema;
-  publicInput?: PublicOperationInputContractSchema;
-};
-
-export type ClearCompletedEntityActionSchema = EntityActionBaseSchema & {
-  kind: "clear-completed";
-  target: EntityActionTargetSchema;
-};
-
-export type CreateMissingJoinRecordsEntityActionSchema = EntityActionBaseSchema & {
-  kind: "create-missing-join-records";
-  join: EntityActionJoinSchema;
-};
-
-export type CreateSelectedJoinRecordEntityActionSchema = EntityActionBaseSchema & {
-  kind: "create-selected-join-record";
-  relationship: string;
-};
-
-export type RemoveSelectedJoinRecordsEntityActionSchema = EntityActionBaseSchema & {
-  kind: "remove-selected-join-records";
-  relationship: string;
-};
-
-export type CreateTreeChildEntityActionSchema = EntityActionBaseSchema & {
-  kind: "create-tree-child";
-  relationship: string;
-  childField: string;
-  orderField?: string;
-};
-
-export type RemoveTreePlacementEntityActionSchema = EntityActionBaseSchema & {
-  kind: "remove-tree-placement";
-  relationship: string;
-};
-
-export type SubscribeEntityActionSchema = EntityActionBaseSchema & {
-  kind: "subscribe";
-};
-
-export type TransitionStateEntityActionSchema = EntityActionBaseSchema & {
-  kind: "transition-state";
-  machine: string;
-  transition: string;
-};
-
-export type EntityActionSchemaByKind = {
-  "clear-completed": ClearCompletedEntityActionSchema;
-  "create-missing-join-records": CreateMissingJoinRecordsEntityActionSchema;
-  "create-selected-join-record": CreateSelectedJoinRecordEntityActionSchema;
-  "remove-selected-join-records": RemoveSelectedJoinRecordsEntityActionSchema;
-  "create-tree-child": CreateTreeChildEntityActionSchema;
-  "remove-tree-placement": RemoveTreePlacementEntityActionSchema;
-  subscribe: SubscribeEntityActionSchema;
-  "transition-state": TransitionStateEntityActionSchema;
-};
-
-export type EntityActionKind = keyof EntityActionSchemaByKind;
-
-export type EntityActionSchemaForKind<Kind extends EntityActionKind> =
-  EntityActionSchemaByKind[Kind];
-
-export type EntityActionSchema = EntityActionSchemaByKind[EntityActionKind];
 
 export type EntityOperationKind = "list" | "get" | "create" | "update" | "delete" | "command";
 
@@ -970,65 +855,105 @@ export type DeleteRecordEntityOperationEffectSchema = {
   entity?: string;
 };
 
-export type ClearCompletedEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "clear-completed";
+export type OperationHandlerJoinSourceSchema = {
+  field: string;
   query: string;
 };
 
-export type CreateMissingJoinRecordsEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "create-missing-join-records";
-  join: EntityActionJoinSchema;
+export type OperationHandlerJoinSchema = {
+  left: OperationHandlerJoinSourceSchema;
+  right: OperationHandlerJoinSourceSchema;
 };
 
-export type CreateSelectedJoinRecordEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "create-selected-join-record";
+export type OperationHandlerCapabilities = {
+  createAfterCreateHook: boolean;
+  publicExecution: boolean;
+};
+
+export type OperationHandlerKind =
+  | "clear-completed"
+  | "create-missing-join-records"
+  | "create-selected-join-record"
+  | "remove-selected-join-records"
+  | "create-tree-child"
+  | "remove-tree-placement"
+  | "subscribe"
+  | "transition-state";
+
+export type OperationHandlerSelectionCapability =
+  | "clearCompletedTargetCount"
+  | "createMissingJoinRecords"
+  | "createSelectedJoinRecord"
+  | "removeSelectedJoinRecords"
+  | "createTreeChild"
+  | "removeTreePlacement"
+  | "publicSubscribe"
+  | "transitionState";
+
+export type OperationHandlerKindBySelectionCapability = {
+  clearCompletedTargetCount: "clear-completed";
+  createMissingJoinRecords: "create-missing-join-records";
+  createSelectedJoinRecord: "create-selected-join-record";
+  removeSelectedJoinRecords: "remove-selected-join-records";
+  createTreeChild: "create-tree-child";
+  removeTreePlacement: "remove-tree-placement";
+  publicSubscribe: "subscribe";
+  transitionState: "transition-state";
+};
+
+export type ClearCompletedOperationHandlerConfigSchema = {
+  query: string;
+};
+
+export type CreateMissingJoinRecordsOperationHandlerConfigSchema = {
+  join: OperationHandlerJoinSchema;
+};
+
+export type CreateSelectedJoinRecordOperationHandlerConfigSchema = {
   relationship: string;
 };
 
-export type RemoveSelectedJoinRecordsEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "remove-selected-join-records";
+export type RemoveSelectedJoinRecordsOperationHandlerConfigSchema = {
   relationship: string;
 };
 
-export type CreateTreeChildEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "create-tree-child";
+export type CreateTreeChildOperationHandlerConfigSchema = {
   relationship: string;
   childField: string;
   orderField?: string;
 };
 
-export type RemoveTreePlacementEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "remove-tree-placement";
+export type RemoveTreePlacementOperationHandlerConfigSchema = {
   relationship: string;
 };
 
-export type SubscribeEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "subscribe";
-};
+export type SubscribeOperationHandlerConfigSchema = Record<string, never>;
 
-export type TransitionStateEntityOperationEffectSchema = {
-  type: "registeredCommand";
-  kind: "transition-state";
+export type TransitionStateOperationHandlerConfigSchema = {
   machine: string;
   transition: string;
 };
 
-export type RegisteredCommandEntityOperationEffectSchema =
-  | ClearCompletedEntityOperationEffectSchema
-  | CreateMissingJoinRecordsEntityOperationEffectSchema
-  | CreateSelectedJoinRecordEntityOperationEffectSchema
-  | RemoveSelectedJoinRecordsEntityOperationEffectSchema
-  | CreateTreeChildEntityOperationEffectSchema
-  | RemoveTreePlacementEntityOperationEffectSchema
-  | SubscribeEntityOperationEffectSchema
-  | TransitionStateEntityOperationEffectSchema;
+export type OperationHandlerConfigSchemaByKind = {
+  "clear-completed": ClearCompletedOperationHandlerConfigSchema;
+  "create-missing-join-records": CreateMissingJoinRecordsOperationHandlerConfigSchema;
+  "create-selected-join-record": CreateSelectedJoinRecordOperationHandlerConfigSchema;
+  "remove-selected-join-records": RemoveSelectedJoinRecordsOperationHandlerConfigSchema;
+  "create-tree-child": CreateTreeChildOperationHandlerConfigSchema;
+  "remove-tree-placement": RemoveTreePlacementOperationHandlerConfigSchema;
+  subscribe: SubscribeOperationHandlerConfigSchema;
+  "transition-state": TransitionStateOperationHandlerConfigSchema;
+};
+
+export type OperationHandlerEffectSchemaForKind<Kind extends OperationHandlerKind> = {
+  type: "operationHandler";
+  handler: Kind;
+  config: OperationHandlerConfigSchemaByKind[Kind];
+};
+
+export type OperationHandlerEntityOperationEffectSchema = {
+  [Kind in OperationHandlerKind]: OperationHandlerEffectSchemaForKind<Kind>;
+}[OperationHandlerKind];
 
 export type RecordPlanStepKind = "create" | "patch" | "delete" | "tombstone";
 
@@ -1139,7 +1064,7 @@ export type RecordPlanEntityOperationEffectSchema = {
 };
 
 export type EntityOperationCommandEffectSchema =
-  | RegisteredCommandEntityOperationEffectSchema
+  | OperationHandlerEntityOperationEffectSchema
   | RecordPlanEntityOperationEffectSchema;
 
 export type EntityOperationCommandEffectType = EntityOperationCommandEffectSchema["type"];
@@ -1212,10 +1137,8 @@ export type EntityConstraintSchema = UniqueConstraintSchema;
 export type EntitySchema = {
   label: string;
   fields: Record<string, FieldSchema>;
-  mutations: EntityMutationPolicy;
   constraints?: Record<string, EntityConstraintSchema>;
   stateMachines?: Record<string, StateMachineSchema>;
-  actions?: Record<string, EntityActionSchema>;
   operations?: Record<string, EntityOperationSchema>;
 };
 

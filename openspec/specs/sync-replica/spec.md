@@ -135,6 +135,8 @@ the matching app storage identity.
 - THEN the Authority returns committed write-log changes after that cursor
 - AND the response cursor advances to the latest committed cursor for that app
   storage identity
+- AND write-log change fields use `writeId` and `operationKind` instead of
+  action or mutation contract names
 
 #### Scenario: Push catch-up reads write-log changes
 
@@ -142,6 +144,7 @@ the matching app storage identity.
 - THEN the Authority reads committed write-log changes after that cursor
 - AND the socket catch-up omits duplicate changes already covered by the
   client's cursor
+- AND push catch-up preserves operation-named change fields used by HTTP sync
 
 ### Requirement: Push Sync Connection
 
@@ -178,6 +181,8 @@ The system SHALL use push sync messages to catch up clients and deliver committe
 - WHEN push sync sockets are connected
 - THEN the Authority broadcasts a sync message for the committed write
 - AND one stale socket does not prevent later sockets from receiving the broadcast
+- AND the broadcast tells clients to catch up from the write-log cursor rather
+  than exposing action or mutation response contracts
 
 ### Requirement: Write Outcome Push Notifications
 

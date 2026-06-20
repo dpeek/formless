@@ -167,11 +167,6 @@ function parseEntityBase(
     entity: {
       label,
       fields,
-      mutations: {
-        create: { enabled: false },
-        patch: { enabled: false },
-        delete: { enabled: false },
-      },
       ...(constraints === undefined ? {} : { constraints }),
     },
     operationsInput: value.operations,

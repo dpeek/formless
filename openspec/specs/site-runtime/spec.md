@@ -97,6 +97,8 @@ The system SHALL project subscribe form blocks into public Site trees without ex
 - GIVEN the public Site tree includes a `subscribeForm` block
 - WHEN the block references a publicly executable operation
 - THEN the projected block includes the operation key and target public operation route
+- AND the referenced operation is a public-eligible create, record-plan, or
+  subscribe operation handler, not legacy public action metadata
 - AND the projected block does not include Turnstile secrets or subscriber data
 
 #### Scenario: Warn for missing public operation
@@ -148,6 +150,8 @@ The system SHALL support a Site `subscribeForm` block that binds public page con
 - GIVEN the Site source schema declares the `subscribeForm` block type
 - WHEN the schema is parsed
 - THEN `subscribeForm` is a valid block type and union variant
+- AND its stored operation reference resolves through source-declared operation
+  keys and operation handler capability facts
 - AND generated Site authoring exposes the fields needed to configure the form
 
 ### Requirement: Public Routes

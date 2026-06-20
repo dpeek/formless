@@ -1,6 +1,7 @@
 import { assertExactKeys, isRecord, parseRequiredNonEmptyString } from "./schema-parse-helpers.ts";
 import type {
   AppSchema,
+  EntityOperationKind,
   EntitySchema,
   FieldSchema,
   RuntimeSchemaControlPlaneEntitySchema,
@@ -334,18 +335,22 @@ function parseHistory(
   }
 
   if (value.kind === "appendOnly") {
-    if (entity.mutations.patch.enabled || entity.mutations.delete.enabled) {
-      throw new Error(`${context} appendOnly entities must disable patch and delete mutations.`);
+    if (entityHasOperationKind(entity, "update") || entityHasOperationKind(entity, "delete")) {
+      throw new Error(
+        `${context} appendOnly entities must not declare update or delete operations.`,
+      );
     }
-  } else if (
-    entity.mutations.create.enabled ||
-    entity.mutations.patch.enabled ||
-    entity.mutations.delete.enabled
-  ) {
-    throw new Error(`${context} actionCreated entities must disable generic mutations.`);
+  } else if (entityHasOperationKind(entity, "create", "update", "delete")) {
+    throw new Error(
+      `${context} actionCreated entities must not declare create, update, or delete operations.`,
+    );
   }
 
   return { kind: value.kind };
+}
+
+function entityHasOperationKind(entity: EntitySchema, ...kinds: EntityOperationKind[]): boolean {
+  return Object.values(entity.operations ?? {}).some((operation) => kinds.includes(operation.kind));
 }
 
 function parseKnownFieldName(context: string, key: string, value: unknown, entity: EntitySchema) {

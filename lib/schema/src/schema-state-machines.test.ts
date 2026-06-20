@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { getEntityActionKindCapabilities, parseAppSchema, stringifySchema } from "./index.ts";
+import { getOperationHandlerCapabilities, parseAppSchema, stringifySchema } from "./index.ts";
 
 describe("schema state machines", () => {
   it("parses enum-backed state machines, transition operations, events, and stringify output", () => {
@@ -34,14 +34,20 @@ describe("schema state machines", () => {
         },
       },
     });
-    expect(schema.entities.task?.actions?.startWork).toEqual({
-      label: "Start work",
-      kind: "transition-state",
-      machine: "statusFlow",
-      transition: "start",
-      exposure: { actors: ["owner"] },
+    expect(schema.entities.task?.operations?.startWork.effect).toEqual({
+      type: "operationHandler",
+      handler: "transition-state",
+      config: {
+        machine: "statusFlow",
+        transition: "start",
+      },
     });
-    expect(getEntityActionKindCapabilities("transition-state")).toEqual({
+    expect(schema.entities.task?.operations?.startWork).toMatchObject({
+      label: "Start work",
+      kind: "command",
+      policy: { actors: ["owner"] },
+    });
+    expect(getOperationHandlerCapabilities("transition-state")).toEqual({
       createAfterCreateHook: false,
       publicExecution: false,
     });
@@ -173,7 +179,12 @@ describe("schema state machines", () => {
     expect(() =>
       parseAppSchema(
         stateMachineSchema({
-          operation: { effect: { ...transitionEffect(), machine: "missing" } },
+          operation: {
+            effect: {
+              ...transitionEffect(),
+              config: { ...transitionEffect().config, machine: "missing" },
+            },
+          },
         }),
       ),
     ).toThrow('references unknown state machine "missing"');
@@ -181,7 +192,12 @@ describe("schema state machines", () => {
     expect(() =>
       parseAppSchema(
         stateMachineSchema({
-          operation: { effect: { ...transitionEffect(), transition: "missing" } },
+          operation: {
+            effect: {
+              ...transitionEffect(),
+              config: { ...transitionEffect().config, transition: "missing" },
+            },
+          },
         }),
       ),
     ).toThrow('references unknown transition "statusFlow.missing"');
@@ -299,10 +315,12 @@ function stateMachineSchema(
 
 function transitionEffect() {
   return {
-    type: "registeredCommand",
-    kind: "transition-state",
-    machine: "statusFlow",
-    transition: "start",
+    type: "operationHandler",
+    handler: "transition-state",
+    config: {
+      machine: "statusFlow",
+      transition: "start",
+    },
   };
 }
 

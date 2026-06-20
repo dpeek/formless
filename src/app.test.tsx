@@ -4798,7 +4798,7 @@ describe("generated forms and records", () => {
         },
       ],
       defaults: [],
-      enabled: task.mutations.create.enabled,
+      enabled: entityCreateEnabled(task),
     };
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm operation={createOperationConfig} renderDialogCancel={false} />,
@@ -5348,11 +5348,6 @@ describe("generated forms and records", () => {
       fields: {
         price: { type: "number", required: true, label: "Price" },
         margin: { type: "number", required: true, label: "Margin" },
-      },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
       },
     };
     const columns: TableColumnConfig[] = [
@@ -6093,11 +6088,6 @@ describe("generated forms and records", () => {
       fields: {
         mediaAssetId: { type: "text", required: false, label: "Image asset" },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
     };
 
     applyBootstrapResponse(
@@ -6161,11 +6151,6 @@ describe("generated forms and records", () => {
       fields: {
         href: { type: "text", required: false, label: "Image", format: "href" },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
     };
     const entityOperation = testCreateOperation("media");
     const createOperationConfig: Extract<HomeOperationConfig, { type: "create" }> = {
@@ -6177,7 +6162,7 @@ describe("generated forms and records", () => {
       operation: entityOperation,
       fields: [createFieldConfig(entity, "href", "media")],
       defaults: [],
-      enabled: entity.mutations.create.enabled,
+      enabled: entityCreateEnabled(entity),
     };
     const record: StoredRecord = {
       id: "media-1",
@@ -6535,7 +6520,7 @@ function createOperation(
     operation,
     fields: createFields(entity, fieldNames),
     defaults: [],
-    enabled: entity.mutations.create.enabled,
+    enabled: entityCreateEnabled(entity),
   };
 }
 
@@ -7204,7 +7189,7 @@ function scopedRateCreateOperation(): Extract<HomeOperationConfig, { type: "crea
         value: { kind: "context", name: "card" },
       },
     ],
-    enabled: rate.mutations.create.enabled,
+    enabled: entityCreateEnabled(rate),
   };
 }
 
@@ -7234,7 +7219,7 @@ function fieldEditorCharacterizationCreateOperation(
       createFieldConfig(entity, "resource", "reference"),
     ],
     defaults: [],
-    enabled: entity.mutations.create.enabled,
+    enabled: entityCreateEnabled(entity),
   };
 }
 
@@ -7712,11 +7697,6 @@ function taskEntityWithKindEnum(): EntitySchema {
         },
       },
     },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
   };
 }
 
@@ -7730,11 +7710,6 @@ function taskEntityWithMarkdownBody(): EntitySchema {
         label: "Body",
         format: "markdown",
       },
-    },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
     },
   };
 }
@@ -7751,11 +7726,6 @@ function rateEntity(): EntitySchema {
         displayField: "name",
       },
     },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
   };
 }
 
@@ -7771,11 +7741,6 @@ function taskEntityWithEstimateNumber(): EntitySchema {
         max: 10,
         integer: true,
       },
-    },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
     },
   };
 }
@@ -7804,11 +7769,6 @@ function fieldBehaviorEntity(): EntitySchema {
         to: "resource",
         displayField: "name",
       },
-    },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
     },
   };
 }
@@ -7842,11 +7802,6 @@ function fieldEditorCharacterizationEntity(): EntitySchema {
         to: "resource",
         displayField: "name",
       },
-    },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
     },
   };
 }
@@ -7891,26 +7846,24 @@ function withMutationPolicy(
   entity: EntitySchema,
   options: { create?: boolean; patch?: boolean; delete?: boolean },
 ): EntitySchema {
-  const mutations = {
-    create: { enabled: options.create ?? entity.mutations.create.enabled },
-    patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
-    delete: { enabled: options.delete ?? entity.mutations.delete.enabled },
-  };
+  const createEnabled = options.create ?? entityCreateEnabled(entity);
+  const patchEnabled = options.patch ?? entityPatchEnabled(entity);
+  const deleteEnabled = options.delete ?? entityDeleteEnabled(entity);
   const operations = { ...entity.operations };
 
-  if (mutations.create.enabled) {
+  if (createEnabled) {
     operations.create ??= testCreateOperation("entity").operation;
   } else {
     delete operations.create;
   }
 
-  if (mutations.patch.enabled) {
+  if (patchEnabled) {
     operations.update ??= testUpdateOperation("entity").operation;
   } else {
     delete operations.update;
   }
 
-  if (mutations.delete.enabled) {
+  if (deleteEnabled) {
     operations.delete ??= testDeleteOperation("entity").operation;
   } else {
     delete operations.delete;
@@ -7918,9 +7871,20 @@ function withMutationPolicy(
 
   return {
     ...entity,
-    mutations,
     operations,
   };
+}
+
+function entityCreateEnabled(entity: EntitySchema): boolean {
+  return entity.operations ? entity.operations.create?.kind === "create" : true;
+}
+
+function entityPatchEnabled(entity: EntitySchema): boolean {
+  return entity.operations ? entity.operations.update?.kind === "update" : true;
+}
+
+function entityDeleteEnabled(entity: EntitySchema): boolean {
+  return entity.operations ? entity.operations.delete?.kind === "delete" : false;
 }
 
 async function waitFor(predicate: () => boolean) {

@@ -996,7 +996,7 @@ describe("client sync", () => {
       async (input, init) => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
-          materializedRecordChange(2, operation.idempotencyKey, acceptedRecord, "patch"),
+          materializedRecordChange(2, operation.idempotencyKey, acceptedRecord, "update"),
         ];
 
         expect(input).toBe("/api/tasks/operations/task/update");
@@ -1101,7 +1101,7 @@ describe("client sync", () => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
           materializedRecordChange(1, operation.idempotencyKey, primaryRecord, "create"),
-          materializedRecordChange(2, operation.idempotencyKey, lifecycleRecord, "action"),
+          materializedRecordChange(2, operation.idempotencyKey, lifecycleRecord, "command"),
         ];
 
         return Response.json(
@@ -1135,7 +1135,7 @@ describe("client sync", () => {
     await syncClient(
       "tasks",
       jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
-        changes: [writeLogChange(2, "record-1", "First", true, "patch")],
+        changes: [writeLogChange(2, "record-1", "First", true, "update")],
         cursor: 2,
       } satisfies SyncResponse),
     );
@@ -1356,7 +1356,7 @@ describe("client sync", () => {
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
-          materializedRecordChange(1, operation.idempotencyKey, routeRecord, "patch"),
+          materializedRecordChange(1, operation.idempotencyKey, routeRecord, "update"),
         ];
 
         return Response.json(
@@ -1380,7 +1380,7 @@ describe("client sync", () => {
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
-          materializedRecordChange(2, operation.idempotencyKey, deploymentRecord, "patch"),
+          materializedRecordChange(2, operation.idempotencyKey, deploymentRecord, "update"),
         ];
 
         return Response.json(
@@ -1404,7 +1404,7 @@ describe("client sync", () => {
       async (_input, init) => {
         const operation = parseOperationRequestBody(init?.body);
         const changes = [
-          materializedRecordChange(3, operation.idempotencyKey, mediaRecord, "patch"),
+          materializedRecordChange(3, operation.idempotencyKey, mediaRecord, "update"),
         ];
 
         return Response.json(
@@ -2521,12 +2521,12 @@ function writeLogChange(
   recordId: string,
   title: string,
   done = false,
-  op: "create" | "patch" = "create",
+  operationKind: "create" | "update" = "create",
 ): ChangeRow {
   return {
     seq,
-    mutationId: `write-${seq}`,
-    op,
+    writeId: `write-${seq}`,
+    operationKind,
     entity: "task",
     recordId,
     payload: record(recordId, title, done),
@@ -2538,12 +2538,12 @@ function materializedRecordChange(
   seq: number,
   writeIdentity: string,
   payload: StoredRecord,
-  op: "create" | "patch" | "delete" | "action",
+  operationKind: ChangeRow["operationKind"],
 ): ChangeRow {
   return {
     seq,
-    mutationId: writeIdentity,
-    op,
+    writeId: writeIdentity,
+    operationKind,
     entity: payload.entity,
     recordId: payload.id,
     payload,
@@ -2558,8 +2558,8 @@ function commandMaterializationChange(
 ): ChangeRow {
   return {
     seq,
-    mutationId: writeIdentity,
-    op: "action",
+    writeId: writeIdentity,
+    operationKind: "command",
     entity: payload.entity,
     recordId: payload.id,
     payload,

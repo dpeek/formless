@@ -5,6 +5,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { isOperationHandlerEffectForKind } from "./schema-operation-execution.ts";
 import { parseEntityOperationKey } from "./schema-operations.ts";
 import { parseOptionalTableColumnFormat, tableFooterColumnName } from "./schema-table-views.ts";
 import { parseFieldVisibilityValue } from "./schema-view-fields.ts";
@@ -654,20 +655,16 @@ function parseOptionalTreeCompositionActions(
       !operation ||
       operation.scope !== "record" ||
       operation.kind !== "command" ||
-      effect?.type !== "registeredCommand"
+      !isOperationHandlerEffectForKind(effect, "create-tree-child")
     ) {
       throw new Error(`${context} createOperation must use a record command operation.`);
     }
 
-    if (effect.kind !== "create-tree-child") {
-      throw new Error(`${context} createOperation must use kind "create-tree-child".`);
-    }
-
-    if (effect.relationship !== relationshipName) {
+    if (effect.config.relationship !== relationshipName) {
       throw new Error(`${context} createOperation must use relationship "${relationshipName}".`);
     }
 
-    if (effect.childField !== childFieldName) {
+    if (effect.config.childField !== childFieldName) {
       throw new Error(`${context} createOperation must use childField "${childFieldName}".`);
     }
   }
@@ -685,16 +682,12 @@ function parseOptionalTreeCompositionActions(
       !operation ||
       operation.scope !== "record" ||
       operation.kind !== "command" ||
-      effect?.type !== "registeredCommand"
+      !isOperationHandlerEffectForKind(effect, "remove-tree-placement")
     ) {
       throw new Error(`${context} removeOperation must use a record command operation.`);
     }
 
-    if (effect.kind !== "remove-tree-placement") {
-      throw new Error(`${context} removeOperation must use kind "remove-tree-placement".`);
-    }
-
-    if (effect.relationship !== relationshipName) {
+    if (effect.config.relationship !== relationshipName) {
       throw new Error(`${context} removeOperation must use relationship "${relationshipName}".`);
     }
   }

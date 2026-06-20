@@ -84,11 +84,6 @@ export function stringifySchema(schema: AppSchema) {
 function sourceSchemaForStringify(schema: AppSchema): unknown {
   return {
     ...schema,
-    entities: Object.fromEntries(
-      Object.entries(schema.entities).map(([entityName, entity]) => {
-        const { actions: _actions, mutations: _mutations, ...sourceEntity } = entity;
-        return [entityName, sourceEntity];
-      }),
-    ),
+    entities: schema.entities,
   };
 }

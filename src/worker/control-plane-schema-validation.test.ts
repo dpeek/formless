@@ -1,16 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
-import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema } from "../test/schema-apps.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   createAuthorityWriteHelpers,
   type AuthorityWriteHelpers,
 } from "../test/authority-write.ts";
-import { filterEntityActionResponseForActor, validateEntityActionRequest } from "./actions.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import type { ActionResponse } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -487,63 +485,6 @@ describe("control-plane schema runtime validation", () => {
       'Enabled route match "<hostless>/sites/personal/blog" conflicts with enabled route',
     );
   });
-
-  it("authorizes actor-scoped actions and filters response fields for the actor", () => {
-    const schema = parseAppSchema(controlPlaneRuntimeSchema());
-    const request = validateEntityActionRequest(
-      {
-        actionId: "action-runner-clear",
-        entity: "task",
-        action: "runnerClear",
-      },
-      schema,
-      { actorKind: "runner" },
-    );
-
-    expect(() =>
-      validateEntityActionRequest(
-        {
-          actionId: "action-owner-clear",
-          entity: "task",
-          action: "runnerClear",
-        },
-        schema,
-        { actorKind: "owner" },
-      ),
-    ).toThrow('Action "runnerClear" is not exposed to actor "owner".');
-
-    const filtered = filterEntityActionResponseForActor(
-      {
-        actionId: request.actionId,
-        changes: [
-          {
-            seq: 1,
-            mutationId: request.actionId,
-            op: "action",
-            entity: "task",
-            recordId: "task-1",
-            createdAt: "2026-05-28T00:00:00.000Z",
-            payload: {
-              id: "task-1",
-              entity: "task",
-              createdAt: "2026-05-28T00:00:00.000Z",
-              updatedAt: "2026-05-28T00:00:00.000Z",
-              values: {
-                title: "Hidden",
-                done: true,
-              },
-            },
-          },
-        ],
-        cursor: 1,
-      } satisfies ActionResponse,
-      schema,
-      request,
-      "runner",
-    );
-
-    expect(filtered.changes[0]?.payload.values).toEqual({ done: true });
-  });
 });
 
 async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", label: string) {
@@ -708,9 +649,9 @@ function controlPlaneRuntimeSchema(): AppSchema {
             scope: "collection",
             target: { query: "taskCompleted" },
             effect: {
-              type: "registeredCommand",
-              kind: "clear-completed",
-              query: "taskCompleted",
+              type: "operationHandler",
+              handler: "clear-completed",
+              config: { query: "taskCompleted" },
             },
             output: { type: "command" },
             idempotency: { required: true },

@@ -113,12 +113,24 @@ describe("collection result model", () => {
         create: {
           operationName: "addTreeChild",
           operation: { canonicalKey: "block-placement.addTreeChild" },
-          effect: { kind: "create-tree-child" },
+          effect: {
+            type: "operationHandler",
+            handler: "create-tree-child",
+            config: {
+              relationship: "blockPlacements",
+              childField: "block",
+              orderField: "order",
+            },
+          },
         },
         remove: {
           operationName: "removeTreePlacement",
           operation: { canonicalKey: "block-placement.removeTreePlacement" },
-          effect: { kind: "remove-tree-placement" },
+          effect: {
+            type: "operationHandler",
+            handler: "remove-tree-placement",
+            config: { relationship: "blockPlacements" },
+          },
         },
       },
     });

@@ -7,7 +7,11 @@ import type {
   PublicOperationResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
-import { formatEntityOperationKey } from "@dpeek/formless-schema";
+import {
+  formatEntityOperationKey,
+  getOperationHandlerCapabilities,
+  isOperationHandlerEffect,
+} from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
 import type {
   OperationInvocationEnvelope,
@@ -245,7 +249,9 @@ function selectPublicOperation(
 
   const publicCommand =
     operation.kind === "command" &&
-    (operation.effect?.type === "registeredCommand" || operation.effect?.type === "recordPlan");
+    (operation.effect?.type === "recordPlan" ||
+      (isOperationHandlerEffect(operation.effect) &&
+        getOperationHandlerCapabilities(operation.effect.handler).publicExecution));
   const publicCreate =
     operation.kind === "create" &&
     operation.scope === "collection" &&

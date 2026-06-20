@@ -87,6 +87,21 @@ through an explicit actor policy and public binding.
 - AND challenge proof values, provider secrets, and protected internal fields
   are not stored in committed app records or returned in the public response
 
+#### Scenario: Execute public operation handler command
+
+- GIVEN a Site app declares an anonymous public command operation with an
+  `operationHandler` effect whose handler is public-eligible
+- WHEN a visitor posts declared input and proof data to the target-scoped public
+  operation route
+- THEN the executor validates the operation input contract before challenge
+  verification or handler materialization
+- AND successful execution commits only records planned or written by that
+  operation handler for the target app storage identity
+- AND handler execution receives operation source facts such as host, path,
+  canonical operation key, and Site block id through the operation envelope
+- AND public execution does not construct action requests, inspect entity action
+  metadata, or return action response metadata
+
 ### Requirement: Target-Scoped Public Operation API
 
 The system SHALL expose public operation execution through target-scoped public
@@ -148,6 +163,8 @@ invocation envelope before validating input or committing effects.
   context to identify the operation, target app storage identity, host, path,
   and Site block that caused the write
 - AND source records identify the causing operation by canonical operation key
+- AND source records are produced by operation-native create, record-plan, or
+  operation handler execution, not by legacy public action metadata
 
 #### Scenario: Public operation contracts are operation-named
 

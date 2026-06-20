@@ -383,8 +383,8 @@ describe("authority operation execution", () => {
       expect.objectContaining({
         createdAt: created.body.result.body.invocation.receivedAt,
         entity: "task",
-        mutationId: "operation:task.create:operation-only-crud-create",
-        op: "create",
+        writeId: "operation:task.create:operation-only-crud-create",
+        operationKind: "create",
         payload: createOutput.record,
         recordId: createOutput.record.id,
       }),
@@ -406,8 +406,8 @@ describe("authority operation execution", () => {
       expect.objectContaining({
         createdAt: updated.body.result.body.invocation.receivedAt,
         entity: "task",
-        mutationId: "operation:task.update:operation-only-crud-update",
-        op: "patch",
+        writeId: "operation:task.update:operation-only-crud-update",
+        operationKind: "update",
         payload: updateOutput.record,
         recordId: createOutput.record.id,
       }),
@@ -422,8 +422,8 @@ describe("authority operation execution", () => {
       expect.objectContaining({
         createdAt: deleted.body.result.body.invocation.receivedAt,
         entity: "task",
-        mutationId: "operation:task.delete:operation-only-crud-delete",
-        op: "delete",
+        writeId: "operation:task.delete:operation-only-crud-delete",
+        operationKind: "delete",
         payload: {
           ...updateOutput.record,
           deletedAt: deleted.body.result.body.invocation.receivedAt,
@@ -536,7 +536,7 @@ describe("authority operation execution", () => {
       error: 'Unique constraint "task.uniqueTitle" would be violated.',
       writes: [],
     });
-    expect(sync.body.result.body.changes.map((change) => change.mutationId)).toEqual([
+    expect(sync.body.result.body.changes.map((change) => change.writeId)).toEqual([
       "operation:task.create:operation-unique-first",
       "operation:task.create:operation-unique-second",
     ]);
@@ -660,7 +660,7 @@ describe("authority operation execution", () => {
       },
     });
     expect(projectReadOutput.record.deletedAt).toBeUndefined();
-    expect(sync.body.result.body.changes.map((change) => change.mutationId)).toEqual([
+    expect(sync.body.result.body.changes.map((change) => change.writeId)).toEqual([
       "operation:project.create:operation-reference-project",
       "operation:task.create:operation-reference-task",
     ]);
@@ -1014,8 +1014,8 @@ describe("authority operation execution", () => {
 
     expect(createdRecordChange).toMatchObject({
       entity: "task",
-      mutationId: "operation:task.clearCompletedTasks:command-effect-clear-completed",
-      op: "action",
+      writeId: "operation:task.clearCompletedTasks:command-effect-clear-completed",
+      operationKind: "command",
       payload: {
         id: createdOutput.record.id,
         deletedAt: committed.body.result.body.invocation.receivedAt,
@@ -1096,7 +1096,7 @@ describe("authority operation execution", () => {
     expect(output.changes.map((change) => change.entity)).toEqual(["task", "task-event"]);
     expect(output.changes[0]).toMatchObject({
       entity: "task",
-      op: "action",
+      operationKind: "command",
       payload: {
         id: createdOutput.record.id,
         updatedAt: receivedAt,
@@ -1107,7 +1107,7 @@ describe("authority operation execution", () => {
     });
     expect(output.changes[1]).toMatchObject({
       entity: "task-event",
-      op: "action",
+      operationKind: "command",
       payload: {
         createdAt: receivedAt,
         updatedAt: receivedAt,
@@ -1613,7 +1613,7 @@ function schemaWithScopedClearCompletedCommand(sourceSchema: AppSchema): AppSche
   const taskEntity = requireEntity(schema, "task");
   const operation = taskEntity.operations?.clearCompletedTasks;
 
-  if (!operation || operation.effect?.type !== "registeredCommand") {
+  if (!operation || operation.effect?.type !== "operationHandler") {
     throw new Error("Expected clearCompletedTasks operation.");
   }
 
@@ -1680,10 +1680,12 @@ function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchem
         kind: "command",
         scope: "record",
         effect: {
-          type: "registeredCommand",
-          kind: "transition-state",
-          machine: "statusFlow",
-          transition: "start",
+          type: "operationHandler",
+          handler: "transition-state",
+          config: {
+            machine: "statusFlow",
+            transition: "start",
+          },
         },
         output: { type: "command" },
         idempotency: { required: true },

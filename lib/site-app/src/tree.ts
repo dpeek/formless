@@ -12,6 +12,7 @@ import type {
 } from "./types.ts";
 import {
   formatEntityOperationKey,
+  isOperationHandlerEffectForKind,
   type AppSchema,
   type EntityOperationSchema,
 } from "@dpeek/formless-schema";
@@ -470,8 +471,7 @@ function selectPublicSubscribeOperation(
 
     return (
       operation.kind === "command" &&
-      operation.effect?.type === "registeredCommand" &&
-      operation.effect.kind === "subscribe" &&
+      isOperationHandlerEffectForKind(operation.effect, "subscribe") &&
       operation.policy?.actors.includes("anonymous") &&
       access?.actor === "anonymous" &&
       access.challenge.kind === "turnstile" &&

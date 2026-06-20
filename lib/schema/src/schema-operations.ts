@@ -1,7 +1,10 @@
 import { assertSchemaLocalEntityKey } from "./entity-names.ts";
-import { fieldRefsEqual, isSystemFieldName } from "./fields.ts";
-import { fieldHasCreateDefault } from "./field-types.ts";
-import { collectQueryContextNames } from "./query.ts";
+import { isSystemFieldName } from "./fields.ts";
+import {
+  isEntityOperationCommandEffectType,
+  isOperationHandlerEffectForKind,
+  parseOperationHandlerEffect,
+} from "./schema-operation-execution.ts";
 import {
   assertExactKeys,
   isFiniteNumber,
@@ -13,18 +16,13 @@ import type {
   ActionAccessPolicySchema,
   ActionChallengePolicySchema,
   ActionOriginPolicySchema,
-  AfterCreateHookSchema,
   CollectionOperationBindingSchema,
   CollectionQuerySchema,
   CreateRecordEntityOperationEffectSchema,
-  CreateMutationPolicy,
   DeleteRecordEntityOperationEffectSchema,
-  EntityActionKind,
-  EntityActionJoinSchema,
   EntityOperationActorKind,
   EntityOperationAuditInputPolicy,
   EntityOperationAuditSchema,
-  EntityOperationCommandEffectType,
   EntityOperationEffectSchema,
   EntityOperationIdempotencySchema,
   EntityOperationInlineInputFieldSchema,
@@ -36,14 +34,11 @@ import type {
   EntityOperationSchema,
   EntityOperationScope,
   EntityOperationTargetSchema,
-  EntityActionSchema,
   EntitySchema,
-  EntityMutationPolicy,
   EnumValueSchema,
   FieldSchema,
+  OperationHandlerEntityOperationEffectSchema,
   PatchRecordEntityOperationEffectSchema,
-  PublicOperationInputContractSchema,
-  RegisteredCommandEntityOperationEffectSchema,
   RelationshipSchema,
   RecordPlanActorContextField,
   RecordPlanEntityOperationEffectSchema,
@@ -53,7 +48,6 @@ import type {
   RecordPlanStepOutputExpressionSchema,
   RecordPlanStepSchema,
   RecordPlanValueExpressionSchema,
-  SchemaActionActorKind,
   TableOperationBindingSchema,
 } from "./types.ts";
 
@@ -82,22 +76,6 @@ const entityOperationActorKinds = [
 export const entityOperationBindingKinds = ["collection", "table"] as const;
 
 export type EntityOperationBindingKind = (typeof entityOperationBindingKinds)[number];
-
-export const entityOperationCommandEffectKinds = [
-  "clear-completed",
-  "create-missing-join-records",
-  "create-selected-join-record",
-  "remove-selected-join-records",
-  "create-tree-child",
-  "remove-tree-placement",
-  "subscribe",
-  "transition-state",
-] as const satisfies readonly EntityActionKind[];
-
-export const entityOperationCommandEffectTypes = [
-  "registeredCommand",
-  "recordPlan",
-] as const satisfies readonly EntityOperationCommandEffectType[];
 
 const entityOperationAuditInputPolicies = [
   "none",
@@ -212,19 +190,9 @@ export function classifyTableOperationBinding(
   };
 }
 
-export function isEntityOperationCommandEffectKind(value: unknown): value is EntityActionKind {
-  return entityOperationCommandEffectKinds.includes(value as EntityActionKind);
-}
-
-export function isEntityOperationCommandEffectType(
-  value: unknown,
-): value is EntityOperationCommandEffectType {
-  return entityOperationCommandEffectTypes.includes(value as EntityOperationCommandEffectType);
-}
-
 export function isEntityOperationCommandEffect(
   effect: EntityOperationEffectSchema | undefined,
-): effect is RegisteredCommandEntityOperationEffectSchema | RecordPlanEntityOperationEffectSchema {
+): effect is OperationHandlerEntityOperationEffectSchema | RecordPlanEntityOperationEffectSchema {
   return effect !== undefined && isEntityOperationCommandEffectType(effect.type);
 }
 
@@ -263,7 +231,7 @@ export function parseEntityOperationsForEntities(
     }),
   );
 
-  return projectEntityInteractionState(entitiesWithOperations, queries);
+  return entitiesWithOperations;
 }
 
 function parseEntityOperations(
@@ -394,10 +362,7 @@ function validateOperationPublicPolicy(
 
   if (
     kind === "command" &&
-    !(
-      effect?.type === "recordPlan" ||
-      (effect?.type === "registeredCommand" && effect.kind === "subscribe")
-    )
+    !(effect?.type === "recordPlan" || isOperationHandlerEffectForKind(effect, "subscribe"))
   ) {
     throw new Error(`${context} command effect is not eligible for public execution.`);
   }
@@ -795,9 +760,9 @@ function parseOperationEffect(
     };
   }
 
-  if (value.type === "registeredCommand") {
+  if (value.type === "operationHandler") {
     validateOperationEffectKind(context, kind, "command");
-    return parseRegisteredCommandEffect(
+    return parseOperationHandlerEffect(
       context,
       value,
       target,
@@ -869,380 +834,6 @@ function validateOperationEffectKind(
   if (operationKind !== expectedKind) {
     throw new Error(`${context} type is only valid for ${expectedKind} operations.`);
   }
-}
-
-function parseRegisteredCommandEffect(
-  context: string,
-  value: Record<string, unknown>,
-  target: EntityOperationTargetSchema | undefined,
-  entityName: string,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
-  relationships: Record<string, RelationshipSchema> | undefined,
-): RegisteredCommandEntityOperationEffectSchema {
-  if (!isEntityOperationCommandEffectKind(value.kind)) {
-    throw new Error(`${context} kind must be a supported schema command effect kind.`);
-  }
-
-  if (value.kind === "clear-completed") {
-    assertExactKeys(context, value, ["type", "kind"], ["query"]);
-    return parseClearCompletedCommandEffect(context, value, target, entityName, entity, queries);
-  }
-
-  if (value.kind === "create-missing-join-records") {
-    assertExactKeys(context, value, ["type", "kind", "join"]);
-    const join = parseRegisteredCommandJoin(context, value.join, entityName, entity, queries);
-    validateCreateMissingJoinRecordDefaults(context, entity, join);
-    return { type: "registeredCommand", kind: "create-missing-join-records", join };
-  }
-
-  if (value.kind === "create-selected-join-record") {
-    assertExactKeys(context, value, ["type", "kind", "relationship"]);
-    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
-    const relationship = requireManyToManyCommandRelationship(
-      context,
-      relationshipName,
-      entityName,
-      relationships,
-    );
-    validateJoinRecordDefaults(context, entity, [
-      relationship.through.fromField,
-      relationship.through.toField,
-    ]);
-    return {
-      type: "registeredCommand",
-      kind: "create-selected-join-record",
-      relationship: relationshipName,
-    };
-  }
-
-  if (value.kind === "remove-selected-join-records") {
-    assertExactKeys(context, value, ["type", "kind", "relationship"]);
-    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
-    requireManyToManyCommandRelationship(context, relationshipName, entityName, relationships);
-    return {
-      type: "registeredCommand",
-      kind: "remove-selected-join-records",
-      relationship: relationshipName,
-    };
-  }
-
-  if (value.kind === "create-tree-child") {
-    assertExactKeys(context, value, ["type", "kind", "relationship", "childField"], ["orderField"]);
-    return parseCreateTreeChildCommandEffect(context, value, entityName, entity, relationships);
-  }
-
-  if (value.kind === "remove-tree-placement") {
-    assertExactKeys(context, value, ["type", "kind", "relationship"]);
-    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
-    requireToManyCommandRelationship(context, relationshipName, entityName, relationships);
-    return {
-      type: "registeredCommand",
-      kind: "remove-tree-placement",
-      relationship: relationshipName,
-    };
-  }
-
-  if (value.kind === "subscribe") {
-    assertExactKeys(context, value, ["type", "kind"]);
-    return { type: "registeredCommand", kind: "subscribe" };
-  }
-
-  assertExactKeys(context, value, ["type", "kind", "machine", "transition"]);
-  return parseTransitionStateCommandEffect(context, value, entity);
-}
-
-function parseClearCompletedCommandEffect(
-  context: string,
-  value: Record<string, unknown>,
-  target: EntityOperationTargetSchema | undefined,
-  entityName: string,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
-): RegisteredCommandEntityOperationEffectSchema & { kind: "clear-completed" } {
-  if (entity.fields.done?.type !== "boolean") {
-    throw new Error(`${context} kind "clear-completed" requires a boolean "done" field.`);
-  }
-
-  const queryName = parseOptionalCommandQueryReference(
-    `${context} query`,
-    value.query,
-    target,
-    entityName,
-    queries,
-  );
-  const targetQuery = queries[queryName];
-
-  if (!targetQuery || !isClearCompletedTargetQuery(targetQuery.expression)) {
-    throw new Error(`${context} kind "clear-completed" target must be value.done eq true.`);
-  }
-
-  return { type: "registeredCommand", kind: "clear-completed", query: queryName };
-}
-
-function parseCreateTreeChildCommandEffect(
-  context: string,
-  value: Record<string, unknown>,
-  entityName: string,
-  entity: EntitySchema,
-  relationships: Record<string, RelationshipSchema> | undefined,
-): RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" } {
-  const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
-  const relationship = requireToManyCommandRelationship(
-    context,
-    relationshipName,
-    entityName,
-    relationships,
-  );
-  const childFieldName = parseRequiredNonEmptyString(`${context} childField`, value.childField);
-  const childField = entity.fields[childFieldName];
-
-  if (!childField) {
-    throw new Error(`${context} childField references unknown field "${childFieldName}".`);
-  }
-
-  if (childField.type !== "reference") {
-    throw new Error(`${context} childField must be a reference field.`);
-  }
-
-  if (childField.to !== relationship.from.entity) {
-    throw new Error(`${context} childField must reference entity "${relationship.from.entity}".`);
-  }
-
-  const orderFieldName = parseOptionalNonEmptyString(`${context} orderField`, value.orderField);
-  const orderField = orderFieldName === undefined ? undefined : entity.fields[orderFieldName];
-
-  if (orderFieldName !== undefined && !orderField) {
-    throw new Error(`${context} orderField references unknown field "${orderFieldName}".`);
-  }
-
-  if (orderFieldName !== undefined && orderField?.type !== "number") {
-    throw new Error(`${context} orderField must be a number field.`);
-  }
-
-  return {
-    type: "registeredCommand",
-    kind: "create-tree-child",
-    relationship: relationshipName,
-    childField: childFieldName,
-    ...(orderFieldName === undefined ? {} : { orderField: orderFieldName }),
-  };
-}
-
-function parseTransitionStateCommandEffect(
-  context: string,
-  value: Record<string, unknown>,
-  entity: EntitySchema,
-): RegisteredCommandEntityOperationEffectSchema & { kind: "transition-state" } {
-  const machineName = parseRequiredNonEmptyString(`${context} machine`, value.machine);
-  const transitionName = parseRequiredNonEmptyString(`${context} transition`, value.transition);
-  const stateMachine = entity.stateMachines?.[machineName];
-
-  if (!stateMachine) {
-    throw new Error(`${context} references unknown state machine "${machineName}".`);
-  }
-
-  if (!stateMachine.transitions[transitionName]) {
-    throw new Error(`${context} references unknown transition "${machineName}.${transitionName}".`);
-  }
-
-  return {
-    type: "registeredCommand",
-    kind: "transition-state",
-    machine: machineName,
-    transition: transitionName,
-  };
-}
-
-function parseOptionalCommandQueryReference(
-  context: string,
-  value: unknown,
-  target: EntityOperationTargetSchema | undefined,
-  entityName: string,
-  queries: Record<string, CollectionQuerySchema>,
-): string {
-  const queryName =
-    value === undefined
-      ? target?.query
-      : parseOperationQueryReference(context, value, entityName, queries);
-
-  if (queryName === undefined) {
-    throw new Error(`${context} is required when command target is omitted.`);
-  }
-
-  if (target !== undefined && target.query !== queryName) {
-    throw new Error(`${context} must match target query "${target.query}".`);
-  }
-
-  return queryName;
-}
-
-function parseRegisteredCommandJoin(
-  context: string,
-  value: unknown,
-  entityName: string,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
-): EntityActionJoinSchema {
-  if (!isRecord(value)) {
-    throw new Error(`${context} join must be an object.`);
-  }
-
-  assertExactKeys(`${context} join`, value, ["left", "right"]);
-
-  const left = parseRegisteredCommandJoinSource(
-    `${context} join left`,
-    value.left,
-    entityName,
-    entity,
-    queries,
-  );
-  const right = parseRegisteredCommandJoinSource(
-    `${context} join right`,
-    value.right,
-    entityName,
-    entity,
-    queries,
-  );
-
-  if (left.field === right.field) {
-    throw new Error(`${context} join fields must be different.`);
-  }
-
-  return { left, right };
-}
-
-function parseRegisteredCommandJoinSource(
-  context: string,
-  value: unknown,
-  entityName: string,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
-): EntityActionJoinSchema["left"] {
-  if (!isRecord(value)) {
-    throw new Error(`${context} must be an object.`);
-  }
-
-  assertExactKeys(context, value, ["field", "query"]);
-
-  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
-  const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
-  const field = entity.fields[fieldName];
-
-  if (!field) {
-    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
-  }
-
-  if (field.type !== "reference") {
-    throw new Error(`${context} field "${fieldName}" must be a reference field.`);
-  }
-
-  const query = queries[queryName];
-  if (!query) {
-    throw new Error(`${context} references unknown query "${queryName}".`);
-  }
-
-  if (query.entity !== field.to) {
-    throw new Error(`${context} query "${queryName}" must use entity "${field.to}".`);
-  }
-
-  if (collectQueryContextNames(query.expression).length > 0) {
-    throw new Error(`${context} query "${queryName}" must not require context.`);
-  }
-
-  return {
-    field: fieldName,
-    query: queryName,
-  };
-}
-
-function validateCreateMissingJoinRecordDefaults(
-  context: string,
-  entity: EntitySchema,
-  join: EntityActionJoinSchema,
-) {
-  validateJoinRecordDefaults(context, entity, [join.left.field, join.right.field]);
-}
-
-function validateJoinRecordDefaults(
-  context: string,
-  entity: EntitySchema,
-  joinFieldNames: string[],
-) {
-  const joinFields = new Set(joinFieldNames);
-
-  for (const [fieldName, field] of Object.entries(entity.fields)) {
-    if (joinFields.has(fieldName) || !field.required || fieldHasCreateDefault(field)) {
-      continue;
-    }
-
-    throw new Error(
-      `${context} kind "create-selected-join-record" requires field "${fieldName}" to have a default.`,
-    );
-  }
-}
-
-function parseRegisteredCommandRelationshipName(context: string, value: unknown): string {
-  return parseRequiredNonEmptyString(`${context} relationship`, value);
-}
-
-function requireManyToManyCommandRelationship(
-  context: string,
-  relationshipName: string,
-  entityName: string,
-  relationships: Record<string, RelationshipSchema> | undefined,
-): Extract<RelationshipSchema, { kind: "manyToMany" }> {
-  const relationship = relationships?.[relationshipName];
-
-  if (!relationship) {
-    throw new Error(`${context} references unknown relationship "${relationshipName}".`);
-  }
-
-  if (relationship.kind !== "manyToMany") {
-    throw new Error(`${context} relationship "${relationshipName}" must be manyToMany.`);
-  }
-
-  if (relationship.through.entity !== entityName) {
-    throw new Error(
-      `${context} relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${entityName}".`,
-    );
-  }
-
-  return relationship;
-}
-
-function requireToManyCommandRelationship(
-  context: string,
-  relationshipName: string,
-  entityName: string,
-  relationships: Record<string, RelationshipSchema> | undefined,
-): Extract<RelationshipSchema, { kind: "toMany" }> {
-  const relationship = relationships?.[relationshipName];
-
-  if (!relationship) {
-    throw new Error(`${context} references unknown relationship "${relationshipName}".`);
-  }
-
-  if (relationship.kind !== "toMany") {
-    throw new Error(`${context} relationship "${relationshipName}" must be toMany.`);
-  }
-
-  if (relationship.to.entity !== entityName) {
-    throw new Error(
-      `${context} relationship "${relationshipName}" targets entity "${relationship.to.entity}", not "${entityName}".`,
-    );
-  }
-
-  return relationship;
-}
-
-function isClearCompletedTargetQuery(query: CollectionQuerySchema["expression"]) {
-  return (
-    query.kind === "where" &&
-    query.op === "eq" &&
-    query.value === true &&
-    fieldRefsEqual(query.ref, { kind: "value", name: "done" })
-  );
 }
 
 function parseRecordPlanEffect(
@@ -1984,257 +1575,6 @@ function parseOptionalBoolean(context: string, value: unknown): boolean | undefi
   }
 
   return value;
-}
-
-function projectEntityInteractionState(
-  entities: Record<string, EntitySchema>,
-  queries: Record<string, CollectionQuerySchema>,
-): Record<string, EntitySchema> {
-  const afterCreateHooks = deriveAfterCreateHooks(entities, queries);
-
-  return Object.fromEntries(
-    Object.entries(entities).map(([entityName, entity]) => {
-      const actions = projectEntityActions(entity);
-      const { actions: _actions, mutations: _mutations, ...sourceEntity } = entity;
-      const projectedEntity = { ...sourceEntity } as EntitySchema;
-
-      Object.defineProperty(projectedEntity, "mutations", {
-        configurable: true,
-        enumerable: false,
-        value: deriveEntityMutationPolicy(entity, afterCreateHooks[entityName]),
-        writable: true,
-      });
-
-      if (actions !== undefined) {
-        Object.defineProperty(projectedEntity, "actions", {
-          configurable: true,
-          enumerable: false,
-          value: actions,
-          writable: true,
-        });
-      }
-
-      return [entityName, projectedEntity];
-    }),
-  );
-}
-
-function deriveEntityMutationPolicy(
-  entity: EntitySchema,
-  afterCreate: AfterCreateHookSchema[] | undefined,
-): EntityMutationPolicy {
-  const operations = Object.values(entity.operations ?? {});
-  const create: CreateMutationPolicy = {
-    enabled: operations.some((operation) => operation.kind === "create"),
-  };
-
-  if (afterCreate !== undefined && afterCreate.length > 0) {
-    create.afterCreate = afterCreate;
-  }
-
-  return {
-    create,
-    patch: { enabled: operations.some((operation) => operation.kind === "update") },
-    delete: { enabled: operations.some((operation) => operation.kind === "delete") },
-  };
-}
-
-function deriveAfterCreateHooks(
-  entities: Record<string, EntitySchema>,
-  queries: Record<string, CollectionQuerySchema>,
-): Record<string, AfterCreateHookSchema[]> {
-  const hooks: Record<string, AfterCreateHookSchema[]> = {};
-
-  for (const [entityName, entity] of Object.entries(entities)) {
-    for (const [operationName, operation] of Object.entries(entity.operations ?? {})) {
-      if (
-        operation.kind !== "command" ||
-        operation.effect?.type !== "registeredCommand" ||
-        operation.effect.kind !== "create-missing-join-records"
-      ) {
-        continue;
-      }
-
-      for (const source of [operation.effect.join.left, operation.effect.join.right]) {
-        const sourceEntity = queries[source.query]?.entity;
-        if (sourceEntity === undefined) {
-          continue;
-        }
-
-        const hook = { entity: entityName, action: operationName };
-        const entityHooks = (hooks[sourceEntity] ??= []);
-        if (
-          !entityHooks.some(
-            (candidate) => candidate.entity === hook.entity && candidate.action === hook.action,
-          )
-        ) {
-          entityHooks.push(hook);
-        }
-      }
-    }
-  }
-
-  return hooks;
-}
-
-function projectEntityActions(
-  entity: EntitySchema,
-): Record<string, EntityActionSchema> | undefined {
-  const entries = Object.entries(entity.operations ?? {}).flatMap(([operationName, operation]) => {
-    if (operation.kind !== "command" || operation.effect?.type !== "registeredCommand") {
-      return [];
-    }
-
-    return [
-      [
-        operationName,
-        projectRegisteredCommandAction(operationName, {
-          ...operation,
-          effect: operation.effect,
-        }),
-      ],
-    ] as const;
-  });
-
-  return entries.length === 0 ? undefined : Object.fromEntries(entries);
-}
-
-function projectRegisteredCommandAction(
-  operationName: string,
-  operation: EntityOperationSchema & { effect: RegisteredCommandEntityOperationEffectSchema },
-): EntityActionSchema {
-  const base = {
-    label: operation.label ?? humanizeOperationName(operationName),
-    ...projectOperationActionPolicy(operation),
-  };
-
-  if (operation.effect.kind === "clear-completed") {
-    return {
-      ...base,
-      kind: "clear-completed",
-      target: { query: operation.effect.query },
-    };
-  }
-
-  if (operation.effect.kind === "create-missing-join-records") {
-    return { ...base, kind: "create-missing-join-records", join: operation.effect.join };
-  }
-
-  if (operation.effect.kind === "create-selected-join-record") {
-    return {
-      ...base,
-      kind: "create-selected-join-record",
-      relationship: operation.effect.relationship,
-    };
-  }
-
-  if (operation.effect.kind === "remove-selected-join-records") {
-    return {
-      ...base,
-      kind: "remove-selected-join-records",
-      relationship: operation.effect.relationship,
-    };
-  }
-
-  if (operation.effect.kind === "create-tree-child") {
-    return {
-      ...base,
-      kind: "create-tree-child",
-      relationship: operation.effect.relationship,
-      childField: operation.effect.childField,
-      ...(operation.effect.orderField === undefined
-        ? {}
-        : { orderField: operation.effect.orderField }),
-    };
-  }
-
-  if (operation.effect.kind === "remove-tree-placement") {
-    return {
-      ...base,
-      kind: "remove-tree-placement",
-      relationship: operation.effect.relationship,
-    };
-  }
-
-  if (operation.effect.kind === "subscribe") {
-    return { ...base, kind: "subscribe" };
-  }
-
-  return {
-    ...base,
-    kind: "transition-state",
-    machine: operation.effect.machine,
-    transition: operation.effect.transition,
-  };
-}
-
-function projectOperationActionPolicy(
-  operation: EntityOperationSchema,
-): Pick<EntityActionSchema, "access" | "publicInput" | "exposure"> {
-  const policy = operation.policy;
-  if (policy === undefined) {
-    return {};
-  }
-
-  const actors = policy.actors.filter(isSchemaActionActorKind);
-  const exposure =
-    actors.length === 0
-      ? undefined
-      : {
-          actors,
-          ...(policy.responseFields === undefined
-            ? {}
-            : { responseFields: projectOperationResponseFields(policy.responseFields) }),
-        };
-  const publicInput =
-    policy.access === undefined ? undefined : projectPublicOperationInput(operation.input);
-
-  return {
-    ...(policy.access === undefined ? {} : { access: policy.access }),
-    ...(publicInput === undefined ? {} : { publicInput }),
-    ...(exposure === undefined ? {} : { exposure }),
-  };
-}
-
-function projectOperationResponseFields(
-  responseFields: Partial<Record<EntityOperationActorKind, string[]>>,
-): Partial<Record<SchemaActionActorKind, string[]>> {
-  return Object.fromEntries(
-    Object.entries(responseFields).filter(([actor]) => isSchemaActionActorKind(actor)),
-  );
-}
-
-function projectPublicOperationInput(
-  input: EntityOperationInputContractSchema | undefined,
-): PublicOperationInputContractSchema | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-
-  const fields = Object.fromEntries(
-    Object.entries(input.fields).flatMap(([fieldName, field]) => {
-      if ("field" in field) {
-        return [];
-      }
-
-      return [[fieldName, field]] as const;
-    }),
-  );
-
-  return Object.keys(fields).length === 0 ? undefined : { fields };
-}
-
-function isSchemaActionActorKind(actor: string): actor is SchemaActionActorKind {
-  return actor === "admin" || actor === "cliDeployer" || actor === "owner" || actor === "runner";
-}
-
-function humanizeOperationName(operationName: string) {
-  return operationName
-    .replace(/[-_]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^./, (first) => first.toUpperCase());
 }
 
 function isEntityOperationActorKind(value: unknown): value is EntityOperationActorKind {

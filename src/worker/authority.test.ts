@@ -29,12 +29,7 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
-import {
-  parseAppSchema,
-  type AppSchema,
-  type EntitySchema,
-  type RegisteredCommandEntityOperationEffectSchema,
-} from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
 import {
   crmSeedRecords,
   crmSourceSchema,
@@ -545,7 +540,7 @@ describe("authority", () => {
     const body = await getJson<SyncResponse>("/api/sync?after=0");
 
     expect(body.cursor).toBe(taskSeedRecords.length);
-    expect(body.changes.map((change) => change.mutationId)).toEqual(
+    expect(body.changes.map((change) => change.writeId)).toEqual(
       taskSeedRecords.map((record) => `seed-task:${record.id}`),
     );
     expect(body.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
@@ -822,7 +817,7 @@ describe("authority", () => {
     expect(reset.cursor).toBe(created.cursor + 1);
     expect(sync.changes).toEqual([
       expect.objectContaining({
-        op: "patch",
+        operationKind: "update",
         entity: "task",
         recordId: created.record.id,
         payload: expect.objectContaining({
@@ -869,10 +864,12 @@ describe("authority", () => {
     expect(sync.cursor).toBe(taskSeedRecords.length);
     expect(sync.changes).toHaveLength(taskSeedRecords.length);
     expect(sync.changes.map((change) => change.seq)).toEqual([1, 2, 3, 4, 5]);
-    expect(sync.changes.map((change) => change.mutationId)).toEqual(
+    expect(sync.changes.map((change) => change.writeId)).toEqual(
       taskSeedRecords.map((record) => `seed-task:${record.id}`),
     );
-    expect(sync.changes.map((change) => change.op)).toEqual(taskSeedRecords.map(() => "create"));
+    expect(sync.changes.map((change) => change.operationKind)).toEqual(
+      taskSeedRecords.map(() => "create"),
+    );
     expect(sync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
   });
 
@@ -985,8 +982,8 @@ describe("authority", () => {
         payload: {
           changes: [
             expect.objectContaining({
-              mutationId: `snapshot-restore:${restored.schemaUpdatedAt}`,
-              op: "action",
+              writeId: `snapshot-restore:${restored.schemaUpdatedAt}`,
+              operationKind: "command",
               entity: "task",
               recordId: restoredRecord.id,
               payload: restoredRecord,
@@ -1203,7 +1200,7 @@ describe("authority", () => {
     }
 
     expect(added.changes).toHaveLength(2);
-    expect(added.changes.every((change) => change.op === "action")).toBe(true);
+    expect(added.changes.every((change) => change.operationKind === "command")).toBe(true);
     expect(child.values).toEqual({
       type: "image",
       label: "Primary image",
@@ -1381,7 +1378,7 @@ describe("authority", () => {
     expect(body.cursor).toBe(taskSeedRecords.length + 2);
     expect(body.changes).toHaveLength(1);
     expect(body.changes[0]).toMatchObject({
-      mutationId: second.writeIdentity,
+      writeId: second.writeIdentity,
       recordId: second.record.id,
       payload: second.record,
     });
@@ -1482,8 +1479,8 @@ describe("authority", () => {
       expect(httpSync.changes).toEqual([
         {
           seq: deleted.cursor,
-          mutationId: deleted.writeIdentity,
-          op: "delete",
+          writeId: deleted.writeIdentity,
+          operationKind: "delete",
           entity: "task",
           recordId: created.record.id,
           payload: {
@@ -1948,7 +1945,7 @@ describe("authority", () => {
 
       expect(replay).toEqual(created);
       expect(
-        sync.changes.filter((change) => change.mutationId === created.writeIdentity),
+        sync.changes.filter((change) => change.writeId === created.writeIdentity),
       ).toHaveLength(1);
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
@@ -1990,7 +1987,7 @@ describe("authority", () => {
       const sync = await getJson<SyncResponse>(`/api/sync?after=${completed.cursor}`);
 
       expect(replay).toEqual(action);
-      expect(sync.changes.filter((change) => change.mutationId === action.writeIdentity)).toEqual(
+      expect(sync.changes.filter((change) => change.writeId === action.writeIdentity)).toEqual(
         action.changes,
       );
       await expectNoCapturedMessages(replayCapture);
@@ -2000,7 +1997,7 @@ describe("authority", () => {
     }
   });
 
-  it("does not broadcast failed schema or action validation", async () => {
+  it("does not broadcast failed schema or command operation validation", async () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
 
@@ -2034,21 +2031,21 @@ describe("authority", () => {
       await expectNoCapturedMessages(schemaCapture);
       schemaCapture.stop();
 
-      const actionCapture = captureSyncSocketMessages(socket);
-      const invalidActionRequest = commandOperationRequest({
-        idempotencyKey: "action-invalid-no-broadcast",
+      const commandCapture = captureSyncSocketMessages(socket);
+      const invalidCommandRequest = commandOperationRequest({
+        idempotencyKey: "command-invalid-no-broadcast",
         entity: "task",
         operationName: "missing",
       });
-      const invalidAction = await harness.fetch(apiPath(invalidActionRequest.path), {
-        body: JSON.stringify(invalidActionRequest.body),
+      const invalidCommand = await harness.fetch(apiPath(invalidCommandRequest.path), {
+        body: JSON.stringify(invalidCommandRequest.body),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
 
-      expect(invalidAction.status).toBe(400);
-      await expectNoCapturedMessages(actionCapture);
-      actionCapture.stop();
+      expect(invalidCommand.status).toBe(400);
+      await expectNoCapturedMessages(commandCapture);
+      commandCapture.stop();
     } finally {
       socket.close();
     }
@@ -2464,8 +2461,8 @@ describe("authority", () => {
     });
     expect(sync.changes).toHaveLength(1);
     expect(sync.changes[0]).toMatchObject({
-      mutationId: patched.writeIdentity,
-      op: "patch",
+      writeId: patched.writeIdentity,
+      operationKind: "update",
       recordId: created.record.id,
       payload: patched.record,
     });
@@ -2517,8 +2514,8 @@ describe("authority", () => {
       },
       changes: [
         {
-          mutationId: deleted.writeIdentity,
-          op: "delete",
+          writeId: deleted.writeIdentity,
+          operationKind: "delete",
           entity: "task",
           recordId: created.record.id,
           payload: {
@@ -2805,8 +2802,8 @@ describe("authority", () => {
     expect(action.changes.map((change) => change.recordId).sort()).toEqual(
       [seedCompleted.id, completed.record.id].sort(),
     );
-    expect(action.changes.every((change) => change.mutationId === action.writeIdentity)).toBe(true);
-    expect(action.changes.every((change) => change.op === "action")).toBe(true);
+    expect(action.changes.every((change) => change.writeId === action.writeIdentity)).toBe(true);
+    expect(action.changes.every((change) => change.operationKind === "command")).toBe(true);
     expect(bootstrap.records).toContainEqual(
       expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
     );
@@ -2829,7 +2826,7 @@ describe("authority", () => {
     expect(first.changes.map((change) => change.recordId).sort()).toEqual(
       [seedCompleted.id, completed.record.id].sort(),
     );
-    expect(sync.changes.filter((change) => change.op === "action")).toHaveLength(2);
+    expect(sync.changes.filter((change) => change.operationKind === "command")).toHaveLength(2);
   });
 
   it("replays action IDs without selecting newly matching records", async () => {
@@ -2905,8 +2902,8 @@ describe("authority", () => {
 
     expect(created.record.values.priority).toBe("normal");
     expect(first.changes).toHaveLength(2);
-    expect(first.changes.every((change) => change.mutationId === first.writeIdentity)).toBe(true);
-    expect(first.changes.every((change) => change.op === "action")).toBe(true);
+    expect(first.changes.every((change) => change.writeId === first.writeIdentity)).toBe(true);
+    expect(first.changes.every((change) => change.operationKind === "command")).toBe(true);
     expect(taskChange?.payload).toMatchObject({
       id: created.record.id,
       values: { priority: "high" },
@@ -2930,9 +2927,7 @@ describe("authority", () => {
     expect(bootstrap.records.filter((record) => record.entity === "priority-event")).toHaveLength(
       1,
     );
-    expect(sync.changes.filter((change) => change.mutationId === first.writeIdentity)).toHaveLength(
-      2,
-    );
+    expect(sync.changes.filter((change) => change.writeId === first.writeIdentity)).toHaveLength(2);
   });
 
   it("rejects transition actions for incompatible and tombstoned target records", async () => {
@@ -3125,7 +3120,7 @@ describe("authority", () => {
     });
 
     expect(explicit.entities.task?.fields.title?.label).toBe("Task title");
-    expect(explicit.entities.task?.mutations).toEqual(defaultMutations());
+    expect(explicit.entities.task).not.toHaveProperty("mutations");
   });
 
   it("parses collection, item, and create views", () => {
@@ -3446,14 +3441,6 @@ describe("authority", () => {
   });
 });
 
-function defaultMutations(): AppSchema["entities"][string]["mutations"] {
-  return {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
-  };
-}
-
 function expectUniqueIds(records: Array<{ id: string }>) {
   expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
 }
@@ -3638,12 +3625,22 @@ function schemaWithPriorityStateMachine({
         priority: priorityFieldForMachine,
       },
       {
-        ...task.actions,
+        ...commandOperationsFromSource(task.operations),
         raisePriority: {
           label: "Raise priority",
-          kind: "transition-state",
-          machine: "priorityFlow",
-          transition: "raise",
+          kind: "command",
+          scope: "collection",
+          effect: {
+            type: "operationHandler",
+            handler: "transition-state",
+            config: {
+              machine: "priorityFlow",
+              transition: "raise",
+            },
+          },
+          output: { type: "command" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
         },
       },
       { delete: deleteEnabled },
@@ -3709,7 +3706,7 @@ function schemaWithTaskNotesField(): AppSchema {
             ...appSchema.entities.task.fields,
             notes: { type: "text", required: false, label: "Notes" },
           },
-          appSchema.entities.task.actions,
+          commandOperationsFromSource(appSchema.entities.task.operations),
         ),
       },
     },
@@ -3740,26 +3737,12 @@ function schemaWithMutations(mutations: unknown) {
 function taskOperations(
   label: string,
   fields: Record<string, unknown>,
-  actions?: EntitySchema["actions"],
+  commandOperations: Record<string, unknown> = {},
   options: { delete?: boolean } = {},
 ): NonNullable<AppSchema["entities"][string]["operations"]> {
   const input = {
     fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
   };
-  const commandOperations = Object.fromEntries(
-    Object.entries(actions ?? {}).map(([actionName, action]) => [
-      actionName,
-      {
-        label: action.label ?? actionName,
-        kind: "command",
-        scope: "collection",
-        effect: registeredCommandEffectForAction(action),
-        output: { type: "command" },
-        idempotency: { required: true },
-        audit: { input: "summary" },
-      },
-    ]),
-  );
 
   return {
     create: {
@@ -3799,45 +3782,12 @@ function taskOperations(
   };
 }
 
-function registeredCommandEffectForAction(
-  action: NonNullable<EntitySchema["actions"]>[string],
-): RegisteredCommandEntityOperationEffectSchema {
-  if (action.kind === "clear-completed") {
-    return { type: "registeredCommand", kind: action.kind, query: action.target.query };
-  }
-
-  if (action.kind === "create-missing-join-records") {
-    return { type: "registeredCommand", kind: action.kind, join: action.join };
-  }
-
-  if (
-    action.kind === "create-selected-join-record" ||
-    action.kind === "remove-selected-join-records" ||
-    action.kind === "remove-tree-placement"
-  ) {
-    return { type: "registeredCommand", kind: action.kind, relationship: action.relationship };
-  }
-
-  if (action.kind === "create-tree-child") {
-    return {
-      type: "registeredCommand",
-      kind: action.kind,
-      relationship: action.relationship,
-      childField: action.childField,
-      ...(action.orderField === undefined ? {} : { orderField: action.orderField }),
-    };
-  }
-
-  if (action.kind === "transition-state") {
-    return {
-      type: "registeredCommand",
-      kind: action.kind,
-      machine: action.machine,
-      transition: action.transition,
-    };
-  }
-
-  return { type: "registeredCommand", kind: action.kind };
+function commandOperationsFromSource(
+  operations: AppSchema["entities"][string]["operations"] | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(operations ?? {}).filter(([, operation]) => operation.kind === "command"),
+  );
 }
 
 function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
@@ -3849,7 +3799,7 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
         operations: taskOperations(
           "Task",
           appSchema.entities.task.fields,
-          appSchema.entities.task.actions,
+          commandOperationsFromSource(appSchema.entities.task.operations),
           { delete: true },
         ),
       },
@@ -3881,7 +3831,7 @@ function schemaWithTaskDeleteOperation(): AppSchema {
         operations: taskOperations(
           "Task",
           appSchema.entities.task.fields,
-          appSchema.entities.task.actions,
+          commandOperationsFromSource(appSchema.entities.task.operations),
           { delete: true },
         ),
       },
@@ -3928,7 +3878,11 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
       task: {
         label: "Task",
         fields,
-        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
+        operations: taskOperations(
+          "Task",
+          fields,
+          commandOperationsFromSource(appSchema.entities.task.operations),
+        ),
       },
     },
     queries: appSchema.queries,
@@ -3962,7 +3916,11 @@ function schemaWithRequiredScore() {
       task: {
         label: "Task",
         fields,
-        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
+        operations: taskOperations(
+          "Task",
+          fields,
+          commandOperationsFromSource(appSchema.entities.task.operations),
+        ),
       },
     },
     queries: defaultQueries(),
@@ -4080,7 +4038,11 @@ function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
         label: "Task",
         fields,
         constraints,
-        operations: taskOperations("Task", fields, appSchema.entities.task.actions),
+        operations: taskOperations(
+          "Task",
+          fields,
+          commandOperationsFromSource(appSchema.entities.task.operations),
+        ),
       },
     },
     queries: defaultQueries(),
@@ -4166,7 +4128,11 @@ function schemaWithTaskProjectReference({
     task: {
       label: "Task",
       fields: taskFields,
-      operations: taskOperations("Task", taskFields, appSchema.entities.task.actions),
+      operations: taskOperations(
+        "Task",
+        taskFields,
+        commandOperationsFromSource(appSchema.entities.task.operations),
+      ),
     },
     project: {
       label: "Project",

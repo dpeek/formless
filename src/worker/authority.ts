@@ -607,7 +607,13 @@ async function readJson(request: Request): Promise<unknown> {
 }
 
 function isRetiredWriteRoute(method: string, path: string) {
-  return method === "POST" && (path === "/mutations" || path === "/actions");
+  if (method !== "POST" || !path.startsWith("/")) {
+    return false;
+  }
+
+  const retiredWriteRouteNames = new Set(["mutations", "actions"]);
+
+  return retiredWriteRouteNames.has(path.slice(1));
 }
 
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {

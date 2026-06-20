@@ -1103,11 +1103,6 @@ const taskEntity = {
       displayField: "name",
     },
   },
-  mutations: {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
-  },
 } satisfies EntitySchema;
 
 const catalog = getEntityFieldCatalog(taskEntity);

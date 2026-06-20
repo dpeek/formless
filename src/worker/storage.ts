@@ -42,21 +42,26 @@ import type {
   PackageAppMigrationRecordTombstone,
 } from "./package-app-migrations.ts";
 import {
-  appendActionWriteLogChange,
-  appendMutationWriteLogChange,
+  appendCommandWriteLogChange,
+  appendRecordWriteLogChange,
   appendWriteLogChange,
-  commitActionWriteLog,
-  readActionReplayResponse,
-  readCommittedMutationResponse,
+  commitCommandWriteLog,
+  readCommandWriteReplayResponse,
+  readCommittedRecordWriteResponse,
   readCurrentWriteLogCursor,
-  readMutationReplayResponse,
+  readRecordWriteReplayResponse,
   readWriteLogChangesAfter,
-  readWriteLogChangesByMutationId,
-  type ActionResponse,
-  type MutationResponse,
+  readWriteLogChangesByWriteId,
+  type CommandWriteResponse,
+  type RecordWriteResponse,
 } from "./storage-write-log.ts";
 
-export type { ActionResponse, MutationResponse } from "./storage-write-log.ts";
+export type {
+  CommandWriteResponse,
+  OperationRecordPlanResponse,
+  OperationRecordPlanStepResponse,
+  RecordWriteResponse,
+} from "./storage-write-log.ts";
 import {
   createSqlStorageMigrationRegistry,
   runSqlStorageMigrations,
@@ -279,35 +284,35 @@ export type RecordConstraintValidator = (
   options?: { ignoreRecordId?: string },
 ) => void;
 
-export type ActionRecordCreatePlan = {
+export type OperationRecordCreatePlan = {
   entity: string;
   id?: string;
   values: RecordValues | ((createdRecords: StoredRecord[]) => RecordValues);
 };
 
-export type ActionRecordWriteValues =
+export type OperationRecordWriteValues =
   | RecordValues
   | ((writtenRecords: StoredRecord[]) => RecordValues);
 
-export type ActionRecordWriteTarget =
+export type OperationRecordWriteTarget =
   | StoredRecord
   | ((writtenRecords: StoredRecord[]) => StoredRecord);
 
-export type ActionRecordWritePlan =
+export type OperationRecordWritePlan =
   | {
       kind: "create";
       entity: string;
       id?: string;
-      values: ActionRecordWriteValues;
+      values: OperationRecordWriteValues;
     }
   | {
       kind: "patch";
-      record: ActionRecordWriteTarget;
-      values: ActionRecordWriteValues;
+      record: OperationRecordWriteTarget;
+      values: OperationRecordWriteValues;
     }
   | {
       kind: "delete" | "tombstone";
-      record: ActionRecordWriteTarget;
+      record: OperationRecordWriteTarget;
     };
 
 export type AppliedPackageAppMigration = {
@@ -363,7 +368,7 @@ type SourceSchemaResetPlan = {
 
 type SnapshotRestorePlan = {
   restoredAt: string;
-  restoreMutationId: string;
+  restoreWriteId: string;
   recordsToRestore: StoredRecord[];
   recordsToTombstone: StoredRecord[];
   changedRecords: StoredRecord[];
@@ -371,7 +376,7 @@ type SnapshotRestorePlan = {
 
 type PackageAppMigrationRecordChange = {
   entity: string;
-  op: ChangeRow["op"];
+  operationKind: ChangeRow["operationKind"];
   record: StoredRecord;
 };
 
@@ -390,10 +395,12 @@ type ApplyCreateMutationSideEffects = (context: {
 }) => void;
 
 type RecordMutationMaterializationOptions = {
+  allowStoredReplay?: boolean;
   now?: string;
 };
 
-type ActionMaterializationOptions = {
+type OperationMaterializationOptions = {
+  allowStoredReplay?: boolean;
   now?: string;
 };
 
@@ -1190,8 +1197,8 @@ function appendSourceSchemaResetChanges(
 ) {
   for (const record of plan.prunedRecords) {
     appendWriteLogChange(storage, {
-      mutationId: `schema-reset:${plan.changedAt}:${record.id}`,
-      op: "patch",
+      writeId: `schema-reset:${plan.changedAt}:${record.id}`,
+      operationKind: "update",
       entity: record.entity,
       record,
       createdAt: plan.changedAt,
@@ -1235,8 +1242,8 @@ function materializeSourceRecord(storage: DurableObjectStorage, record: StoredRe
 function appendSourceRecordChanges(storage: DurableObjectStorage, plan: SourceDataPlan) {
   for (const record of plan.records) {
     appendWriteLogChange(storage, {
-      mutationId: `${plan.changeMutationPrefix}:${record.id}`,
-      op: "create",
+      writeId: `${plan.changeMutationPrefix}:${record.id}`,
+      operationKind: "create",
       entity: record.entity,
       record,
       createdAt: record.createdAt,
@@ -1272,7 +1279,7 @@ function planSnapshotRestore(
 
   return {
     restoredAt,
-    restoreMutationId: `snapshot-restore:${restoredAt}`,
+    restoreWriteId: `snapshot-restore:${restoredAt}`,
     recordsToRestore: snapshotRecords,
     recordsToTombstone,
     changedRecords,
@@ -1316,8 +1323,8 @@ function materializeSnapshotRestoreRecords(
 function appendSnapshotRestoreChanges(storage: DurableObjectStorage, plan: SnapshotRestorePlan) {
   for (const record of plan.changedRecords) {
     appendWriteLogChange(storage, {
-      mutationId: plan.restoreMutationId,
-      op: "action",
+      writeId: plan.restoreWriteId,
+      operationKind: "command",
       entity: record.entity,
       record,
       createdAt: plan.restoredAt,
@@ -1354,7 +1361,7 @@ function planPackageAppMigrationMaterialization(input: {
     } satisfies StoredRecord;
 
     recordsById.set(record.id, record);
-    changes.push({ entity: create.entity, op: "create", record });
+    changes.push({ entity: create.entity, operationKind: "create", record });
   }
 
   for (const patch of input.plan.patches ?? []) {
@@ -1367,7 +1374,7 @@ function planPackageAppMigrationMaterialization(input: {
     } satisfies StoredRecord;
 
     recordsById.set(record.id, record);
-    changes.push({ entity: patch.entity, op: "patch", record });
+    changes.push({ entity: patch.entity, operationKind: "update", record });
   }
 
   for (const tombstone of input.plan.tombstones ?? []) {
@@ -1379,7 +1386,7 @@ function planPackageAppMigrationMaterialization(input: {
     } satisfies StoredRecord;
 
     recordsById.set(record.id, record);
-    changes.push({ entity: tombstone.entity, op: "delete", record });
+    changes.push({ entity: tombstone.entity, operationKind: "delete", record });
   }
 
   const records = [...recordsById.values()];
@@ -1413,13 +1420,13 @@ function materializePackageAppMigration(
         input.schemaProvenance,
       )
     : input.storedSchema;
-  const mutationId = `package-migration:${input.migration.id}`;
+  const writeId = `package-migration:${input.migration.id}`;
 
   for (const change of input.materialization.changes) {
     upsertPackageAppMigrationRecord(storage, change.record);
     appendWriteLogChange(storage, {
-      mutationId,
-      op: change.op,
+      writeId,
+      operationKind: change.operationKind,
       entity: change.entity,
       record: change.record,
       createdAt: input.changedAt,
@@ -1980,7 +1987,7 @@ export function createStoredRecord(
   mutation: CreateMutation,
   applySideEffects?: ApplyCreateMutationSideEffects,
   validateConstraints?: RecordConstraintValidator,
-): MutationResponse {
+): RecordWriteResponse {
   return writeOutcomeResponse(
     createStoredRecordOutcome(storage, mutation, applySideEffects, validateConstraints),
   );
@@ -1992,9 +1999,12 @@ export function createStoredRecordOutcome(
   applySideEffects?: ApplyCreateMutationSideEffects,
   validateConstraints?: RecordConstraintValidator,
   options: RecordMutationMaterializationOptions = {},
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
+    const existingResponse =
+      options.allowStoredReplay === false
+        ? undefined
+        : readRecordWriteReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
@@ -2011,9 +2021,9 @@ export function createStoredRecordOutcome(
       validateConstraints,
     );
 
-    appendMutationWriteLogChange(storage, {
-      mutationId: mutation.mutationId,
-      op: mutation.op,
+    appendRecordWriteLogChange(storage, {
+      writeId: mutation.mutationId,
+      operationKind: "create",
       entity: mutation.entity,
       record,
       createdAt,
@@ -2033,9 +2043,9 @@ export function createStoredRecordOutcome(
           validateConstraints,
         );
 
-        appendMutationRecordChanges(storage, {
-          mutationId: mutation.mutationId,
-          op: "action",
+        appendRecordWriteChanges(storage, {
+          writeId: mutation.mutationId,
+          operationKind: "command",
           entity,
           records,
           createdAt: sideEffectCreatedAt,
@@ -2044,8 +2054,8 @@ export function createStoredRecordOutcome(
     });
 
     return committedWrite(
-      readCommittedMutationResponse(storage, {
-        mutationId: mutation.mutationId,
+      readCommittedRecordWriteResponse(storage, {
+        writeId: mutation.mutationId,
         record,
       }),
     );
@@ -2057,7 +2067,7 @@ export function patchStoredRecord(
   mutation: PatchMutation,
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
-): MutationResponse {
+): RecordWriteResponse {
   return writeOutcomeResponse(
     patchStoredRecordOutcome(storage, mutation, values, validateConstraints),
   );
@@ -2069,9 +2079,12 @@ export function patchStoredRecordOutcome(
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
   options: RecordMutationMaterializationOptions = {},
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
+    const existingResponse =
+      options.allowStoredReplay === false
+        ? undefined
+        : readRecordWriteReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
@@ -2095,17 +2108,17 @@ export function patchStoredRecordOutcome(
       validateConstraints,
     );
 
-    appendMutationWriteLogChange(storage, {
-      mutationId: mutation.mutationId,
-      op: mutation.op,
+    appendRecordWriteLogChange(storage, {
+      writeId: mutation.mutationId,
+      operationKind: "update",
       entity: mutation.entity,
       record,
       createdAt: changedAt,
     });
 
     return committedWrite(
-      readCommittedMutationResponse(storage, {
-        mutationId: mutation.mutationId,
+      readCommittedRecordWriteResponse(storage, {
+        writeId: mutation.mutationId,
         record,
       }),
     );
@@ -2115,7 +2128,7 @@ export function patchStoredRecordOutcome(
 export function deleteStoredRecord(
   storage: DurableObjectStorage,
   mutation: DeleteMutation,
-): MutationResponse {
+): RecordWriteResponse {
   return writeOutcomeResponse(deleteStoredRecordOutcome(storage, mutation));
 }
 
@@ -2123,9 +2136,12 @@ export function deleteStoredRecordOutcome(
   storage: DurableObjectStorage,
   mutation: DeleteMutation,
   options: RecordMutationMaterializationOptions = {},
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
+    const existingResponse =
+      options.allowStoredReplay === false
+        ? undefined
+        : readRecordWriteReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
@@ -2141,94 +2157,94 @@ export function deleteStoredRecordOutcome(
     assertDeleteMutationCanMaterialize(mutation, existingRecord);
     const record = materializeDeletedMutationRecord(storage, existingRecord, deletedAt);
 
-    appendMutationWriteLogChange(storage, {
-      mutationId: mutation.mutationId,
-      op: mutation.op,
+    appendRecordWriteLogChange(storage, {
+      writeId: mutation.mutationId,
+      operationKind: "delete",
       entity: mutation.entity,
       record,
       createdAt: deletedAt,
     });
 
     return committedWrite(
-      readCommittedMutationResponse(storage, {
-        mutationId: mutation.mutationId,
+      readCommittedRecordWriteResponse(storage, {
+        writeId: mutation.mutationId,
         record,
       }),
     );
   });
 }
 
-export function tombstoneRecordsForAction(
+export function tombstoneRecordsForOperation(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
+  operationName: string,
   recordsToTombstone: StoredRecord[],
-  options: ActionMaterializationOptions = {},
-): ActionResponse {
+  options: OperationMaterializationOptions = {},
+): CommandWriteResponse {
   return writeOutcomeResponse(
-    tombstoneRecordsForActionOutcome(
+    tombstoneRecordsForOperationOutcome(
       storage,
-      actionId,
+      writeId,
       entity,
-      action,
+      operationName,
       recordsToTombstone,
       options,
     ),
   );
 }
 
-export function tombstoneRecordsForActionOutcome(
+export function tombstoneRecordsForOperationOutcome(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
+  operationName: string,
   recordsToTombstone: StoredRecord[],
-  options: ActionMaterializationOptions = {},
-): WriteOutcome<ActionResponse> {
+  options: OperationMaterializationOptions = {},
+): WriteOutcome<CommandWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getActionResponseById(storage, actionId);
+    const existingResponse = getCommandWriteResponseById(storage, writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const deletedAt = options.now ?? nowIsoString();
-    const records = materializeActionTombstoneRecords(storage, recordsToTombstone, deletedAt);
+    const records = materializeOperationTombstoneRecords(storage, recordsToTombstone, deletedAt);
 
-    appendActionRecordChanges(storage, {
-      actionId,
+    appendOperationRecordChanges(storage, {
+      writeId,
       entity,
       records,
       createdAt: deletedAt,
     });
 
     return committedWrite(
-      commitActionWriteLog(storage, {
-        actionId,
+      commitCommandWriteLog(storage, {
+        writeId,
         entity,
-        action,
+        operationName,
         createdAt: deletedAt,
       }),
     );
   });
 }
 
-export function createRecordsForAction(
+export function createRecordsForOperation(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
+  operationName: string,
   recordValuesToCreate: RecordValues[],
   validateConstraints?: RecordConstraintValidator,
-  options: ActionMaterializationOptions = {},
-): ActionResponse {
+  options: OperationMaterializationOptions = {},
+): CommandWriteResponse {
   return writeOutcomeResponse(
-    createRecordsForActionOutcome(
+    createRecordsForOperationOutcome(
       storage,
-      actionId,
+      writeId,
       entity,
-      action,
+      operationName,
       recordValuesToCreate,
       validateConstraints,
       options,
@@ -2236,24 +2252,24 @@ export function createRecordsForAction(
   );
 }
 
-export function createRecordsForActionOutcome(
+export function createRecordsForOperationOutcome(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
+  operationName: string,
   recordValuesToCreate: RecordValues[],
   validateConstraints?: RecordConstraintValidator,
-  options: ActionMaterializationOptions = {},
-): WriteOutcome<ActionResponse> {
+  options: OperationMaterializationOptions = {},
+): WriteOutcome<CommandWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getActionResponseById(storage, actionId);
+    const existingResponse = getCommandWriteResponseById(storage, writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const createdAt = options.now ?? nowIsoString();
-    const records = materializeCreatedActionRecords(
+    const records = materializeCreatedOperationRecords(
       storage,
       entity,
       recordValuesToCreate,
@@ -2261,95 +2277,100 @@ export function createRecordsForActionOutcome(
       validateConstraints,
     );
 
-    appendActionRecordChanges(storage, {
-      actionId,
+    appendOperationRecordChanges(storage, {
+      writeId,
       entity,
       records,
       createdAt,
     });
 
     return committedWrite(
-      commitActionWriteLog(storage, {
-        actionId,
+      commitCommandWriteLog(storage, {
+        writeId,
         entity,
-        action,
+        operationName,
         createdAt,
       }),
     );
   });
 }
 
-export function createRecordSetForActionOutcome(
+export function createRecordSetForOperationOutcome(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
-  plans: ActionRecordCreatePlan[],
+  operationName: string,
+  plans: OperationRecordCreatePlan[],
   validateConstraints?: RecordConstraintValidator,
-  options: ActionMaterializationOptions = {},
-): WriteOutcome<ActionResponse> {
+  options: OperationMaterializationOptions = {},
+): WriteOutcome<CommandWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getActionResponseById(storage, actionId);
+    const existingResponse = getCommandWriteResponseById(storage, writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const createdAt = options.now ?? nowIsoString();
-    const records = materializeCreatedActionRecordSet(
+    const records = materializeCreatedOperationRecordSet(
       storage,
       plans,
       createdAt,
       validateConstraints,
     );
 
-    appendActionRecordChanges(storage, {
-      actionId,
+    appendOperationRecordChanges(storage, {
+      writeId,
       records,
       createdAt,
     });
 
     return committedWrite(
-      commitActionWriteLog(storage, {
-        actionId,
+      commitCommandWriteLog(storage, {
+        writeId,
         entity,
-        action,
+        operationName,
         createdAt,
       }),
     );
   });
 }
 
-export function writeRecordSetForActionOutcome(
+export function writeRecordSetForOperationOutcome(
   storage: DurableObjectStorage,
-  actionId: string,
+  writeId: string,
   entity: string,
-  action: string,
-  plans: ActionRecordWritePlan[],
+  operationName: string,
+  plans: OperationRecordWritePlan[],
   validateConstraints?: RecordConstraintValidator,
-  options: ActionMaterializationOptions = {},
-): WriteOutcome<ActionResponse> {
+  options: OperationMaterializationOptions = {},
+): WriteOutcome<CommandWriteResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getActionResponseById(storage, actionId);
+    const existingResponse = getCommandWriteResponseById(storage, writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const changedAt = options.now ?? nowIsoString();
-    const records = materializeActionRecordWrites(storage, plans, changedAt, validateConstraints);
+    const records = materializeOperationRecordWrites(
+      storage,
+      plans,
+      changedAt,
+      validateConstraints,
+    );
 
-    appendActionRecordChanges(storage, {
-      actionId,
+    appendOperationRecordChanges(storage, {
+      writeId,
       records,
       createdAt: changedAt,
     });
 
     return committedWrite(
-      commitActionWriteLog(storage, {
-        actionId,
+      commitCommandWriteLog(storage, {
+        writeId,
         entity,
-        action,
+        operationName,
         createdAt: changedAt,
       }),
     );
@@ -2359,19 +2380,25 @@ export function writeRecordSetForActionOutcome(
 export function writeRecordSetForCommandOperationOutcome(
   storage: DurableObjectStorage,
   operationId: string,
-  plans: ActionRecordWritePlan[],
+  plans: OperationRecordWritePlan[],
   validateConstraints?: RecordConstraintValidator,
-  options: ActionMaterializationOptions = {},
+  options: OperationMaterializationOptions = {},
 ): WriteOutcome<OperationCommandOutput> {
   return storage.transactionSync(() => {
-    const existingChanges = readWriteLogChangesByMutationId(storage, operationId);
+    const existingChanges =
+      options.allowStoredReplay === false ? [] : readWriteLogChangesByWriteId(storage, operationId);
 
     if (existingChanges.length > 0) {
       return replayedWrite(operationCommandOutputFromChanges(storage, existingChanges));
     }
 
     const changedAt = options.now ?? nowIsoString();
-    const records = materializeActionRecordWrites(storage, plans, changedAt, validateConstraints);
+    const records = materializeOperationRecordWrites(
+      storage,
+      plans,
+      changedAt,
+      validateConstraints,
+    );
 
     appendOperationCommandRecordChanges(storage, {
       operationId,
@@ -2379,7 +2406,7 @@ export function writeRecordSetForCommandOperationOutcome(
       createdAt: changedAt,
     });
 
-    const changes = readWriteLogChangesByMutationId(storage, operationId);
+    const changes = readWriteLogChangesByWriteId(storage, operationId);
 
     return committedWrite(operationCommandOutputFromChanges(storage, changes));
   });
@@ -2397,17 +2424,17 @@ function operationCommandOutputFromChanges(
   };
 }
 
-function materializeActionTombstoneRecords(
+function materializeOperationTombstoneRecords(
   storage: DurableObjectStorage,
   recordsToTombstone: StoredRecord[],
   deletedAt: string,
 ): StoredRecord[] {
   return recordsToTombstone.map((record) =>
-    materializeActionTombstoneRecord(storage, record, deletedAt),
+    materializeOperationTombstoneRecord(storage, record, deletedAt),
   );
 }
 
-function materializeActionTombstoneRecord(
+function materializeOperationTombstoneRecord(
   storage: DurableObjectStorage,
   existingRecord: StoredRecord,
   deletedAt: string,
@@ -2433,7 +2460,7 @@ function materializeActionTombstoneRecord(
   return record;
 }
 
-function materializeCreatedActionRecords(
+function materializeCreatedOperationRecords(
   storage: DurableObjectStorage,
   entity: string,
   recordValuesToCreate: RecordValues[],
@@ -2441,7 +2468,7 @@ function materializeCreatedActionRecords(
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
   return recordValuesToCreate.map((values) =>
-    materializeCreatedActionRecord(
+    materializeCreatedOperationRecord(
       storage,
       {
         entity,
@@ -2453,9 +2480,9 @@ function materializeCreatedActionRecords(
   );
 }
 
-function materializeCreatedActionRecordSet(
+function materializeCreatedOperationRecordSet(
   storage: DurableObjectStorage,
-  plans: ActionRecordCreatePlan[],
+  plans: OperationRecordCreatePlan[],
   createdAt: string,
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
@@ -2464,7 +2491,7 @@ function materializeCreatedActionRecordSet(
   for (const plan of plans) {
     const values =
       typeof plan.values === "function" ? plan.values([...createdRecords]) : plan.values;
-    const record = materializeCreatedActionRecord(
+    const record = materializeCreatedOperationRecord(
       storage,
       {
         entity: plan.entity,
@@ -2481,9 +2508,9 @@ function materializeCreatedActionRecordSet(
   return createdRecords;
 }
 
-function materializeActionRecordWrites(
+function materializeOperationRecordWrites(
   storage: DurableObjectStorage,
-  plans: ActionRecordWritePlan[],
+  plans: OperationRecordWritePlan[],
   changedAt: string,
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
@@ -2493,7 +2520,7 @@ function materializeActionRecordWrites(
     if (plan.kind === "create") {
       const values =
         typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
-      const record = materializeCreatedActionRecord(
+      const record = materializeCreatedOperationRecord(
         storage,
         {
           entity: plan.entity,
@@ -2508,32 +2535,32 @@ function materializeActionRecordWrites(
       continue;
     }
 
-    const record = resolveActionRecordWriteTarget(plan.record, writtenRecords);
+    const record = resolveOperationRecordWriteTarget(plan.record, writtenRecords);
 
     if (plan.kind === "patch") {
       const values =
         typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
 
       writtenRecords.push(
-        materializePatchedActionRecord(storage, record, values, changedAt, validateConstraints),
+        materializePatchedOperationRecord(storage, record, values, changedAt, validateConstraints),
       );
       continue;
     }
 
-    writtenRecords.push(materializeActionTombstoneRecord(storage, record, changedAt));
+    writtenRecords.push(materializeOperationTombstoneRecord(storage, record, changedAt));
   }
 
   return writtenRecords;
 }
 
-function resolveActionRecordWriteTarget(
-  target: ActionRecordWriteTarget,
+function resolveOperationRecordWriteTarget(
+  target: OperationRecordWriteTarget,
   writtenRecords: StoredRecord[],
 ) {
   return typeof target === "function" ? target([...writtenRecords]) : target;
 }
 
-function materializePatchedActionRecord(
+function materializePatchedOperationRecord(
   storage: DurableObjectStorage,
   existingRecord: StoredRecord,
   values: RecordValues,
@@ -2563,7 +2590,7 @@ function materializePatchedActionRecord(
   return record;
 }
 
-function materializeCreatedActionRecord(
+function materializeCreatedOperationRecord(
   storage: DurableObjectStorage,
   input: {
     entity: string;
@@ -2684,20 +2711,20 @@ function materializeDeletedMutationRecord(
   return record;
 }
 
-function appendMutationRecordChanges(
+function appendRecordWriteChanges(
   storage: DurableObjectStorage,
   input: {
-    mutationId: string;
-    op: ChangeRow["op"];
+    writeId: string;
+    operationKind: ChangeRow["operationKind"];
     entity: string;
     records: StoredRecord[];
     createdAt: string;
   },
 ) {
   for (const record of input.records) {
-    appendMutationWriteLogChange(storage, {
-      mutationId: input.mutationId,
-      op: input.op,
+    appendRecordWriteLogChange(storage, {
+      writeId: input.writeId,
+      operationKind: input.operationKind,
       entity: input.entity,
       record,
       createdAt: input.createdAt,
@@ -2705,18 +2732,18 @@ function appendMutationRecordChanges(
   }
 }
 
-function appendActionRecordChanges(
+function appendOperationRecordChanges(
   storage: DurableObjectStorage,
   input: {
-    actionId: string;
+    writeId: string;
     entity?: string;
     records: StoredRecord[];
     createdAt: string;
   },
 ) {
   for (const record of input.records) {
-    appendActionWriteLogChange(storage, {
-      actionId: input.actionId,
+    appendCommandWriteLogChange(storage, {
+      writeId: input.writeId,
       entity: input.entity ?? record.entity,
       record,
       createdAt: input.createdAt,
@@ -2734,8 +2761,8 @@ function appendOperationCommandRecordChanges(
 ) {
   for (const record of input.records) {
     appendWriteLogChange(storage, {
-      mutationId: input.operationId,
-      op: "action",
+      writeId: input.operationId,
+      operationKind: "command",
       entity: record.entity,
       record,
       createdAt: input.createdAt,
@@ -2773,11 +2800,11 @@ function insertCreatedRecord(
   return record;
 }
 
-export function getActionResponseById(
+export function getCommandWriteResponseById(
   storage: DurableObjectStorage,
-  actionId: string,
-): ActionResponse | undefined {
-  return readActionReplayResponse(storage, actionId);
+  writeId: string,
+): CommandWriteResponse | undefined {
+  return readCommandWriteReplayResponse(storage, writeId);
 }
 
 function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): RecordValues {
@@ -2843,11 +2870,11 @@ export function getStoredRecord(
   return row.done ? undefined : recordFromRow(row.value);
 }
 
-export function getMutationResponseById(
+export function getRecordWriteResponseById(
   storage: DurableObjectStorage,
-  mutationId: string,
-): MutationResponse | undefined {
-  return readMutationReplayResponse(storage, mutationId);
+  writeId: string,
+): RecordWriteResponse | undefined {
+  return readRecordWriteReplayResponse(storage, writeId);
 }
 
 function fallbackPackageAppMigrationState(
@@ -3114,6 +3141,7 @@ function operationInvocationAuditInput(
   envelope: OperationInvocationEnvelope,
 ): OperationInvocationAuditInput {
   const policy = envelope.schemaOperation.audit.input;
+  const auditInput = operationInvocationAuditEnvelopeInput(envelope);
 
   if (policy === "none") {
     return { kind: "none" };
@@ -3126,13 +3154,34 @@ function operationInvocationAuditInput(
   if (policy === "snapshot") {
     return {
       kind: "snapshot",
-      snapshot: redactUnsafeAuditValue(envelope.input),
+      snapshot: redactUnsafeAuditValue(auditInput),
     };
   }
 
   return {
     kind: "summary",
-    summary: summarizeOperationInvocationInput(envelope.input),
+    summary: summarizeOperationInvocationInput(auditInput),
+  };
+}
+
+function operationInvocationAuditEnvelopeInput(
+  envelope: OperationInvocationEnvelope,
+): OperationInvocationInput {
+  if (
+    envelope.input.type !== "command" ||
+    envelope.source.protocol !== "public" ||
+    envelope.operation.effect?.type !== "operationHandler"
+  ) {
+    return envelope.input;
+  }
+
+  if (!isJsonObject(envelope.input.input) || !Object.hasOwn(envelope.input.input, "input")) {
+    return envelope.input;
+  }
+
+  return {
+    ...envelope.input,
+    input: envelope.input.input.input,
   };
 }
 

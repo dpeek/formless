@@ -464,27 +464,29 @@ separate from entity value fields.
 - AND generated ids and generated timestamps may still be used for normal value
   fields declared by the entity schema
 
-### Requirement: Command Effect Kinds
+### Requirement: Operation Command Execution
 
-The system SHALL declare command effect kinds as data-owned implementation
-targets for command operations over flat records.
+The system SHALL represent command behavior through declarative record plans or
+operation-native handler effects. Entity actions and mutation policies are not
+schema interaction models.
 
-#### Scenario: Compose tree child
+#### Scenario: Compose tree child through a handler
 
-- GIVEN a `create-tree-child` command effect for a relationship-backed tree
-  result
+- GIVEN an operation handler effect composes a relationship-backed tree result
 - WHEN the owning command operation is invoked
 - THEN one child record and one placement edge are created
-- AND `remove-tree-placement` tombstones the placement edge without deleting the child record
+- AND the paired placement removal handler tombstones the placement edge without
+  deleting the child record
 
-#### Scenario: Command effect module dispatch
+#### Scenario: Operation handler module dispatch
 
-- GIVEN a command operation references a registered effect kind
+- GIVEN a command operation references an operation handler kind
 - WHEN runtime and generated UI select behavior for that operation
-- THEN shared effect capability facts drive runtime eligibility and UI input
-  facts
+- THEN operation handler capability facts drive runtime eligibility, UI input
+  facts, public eligibility, and response filtering
 - AND the operation remains the invocation, authorization, idempotency, and
   audit root for the command write
+- AND handler dispatch does not synthesize, project, or invoke entity actions
 
 ### Requirement: Entity Operations
 
@@ -529,11 +531,12 @@ public forms, automation, audit, and authorization.
 - GIVEN an entity operation declares an effect
 - WHEN the schema is parsed
 - THEN first-pass effects support creating one record, patching one record,
-  deleting or tombstoning one record, dispatching one registered command effect
-  kind, or executing a declarative record plan
+  deleting or tombstoning one record, dispatching one operation handler, or
+  executing a declarative record plan
 - AND create, update, and delete effects target the containing entity
-- AND command effects can reference registered command effect kinds and schema queries
-  declared for the same schema
+- AND command handler effects can reference declared schema queries,
+  relationships, state machines, fields, and handler configuration from the
+  same schema
 
 #### Scenario: Validate command record plan
 
@@ -556,8 +559,9 @@ public forms, automation, audit, and authorization.
   declared reference target and whose id resolves to a flat record id
 - AND references to earlier steps resolve through flat record ids, not nested
   record values
-- AND plans that include loops, arbitrary code, provider calls, cross-app
-  writes, or undeclared entity/field targets are rejected
+- AND plans that include query fan-out, loops, arbitrary code, provider calls,
+  cross-app writes, conditional dedupe, computed sibling ordering, state-machine
+  transition semantics, or undeclared entity/field targets are rejected
 
 #### Scenario: Validate operation output contract
 
@@ -588,11 +592,25 @@ public forms, automation, audit, and authorization.
 - WHEN the command effect is parsed
 - THEN the effect identifies operation-native command behavior and declared
   input/output facts from the operation declaration
-- AND the only supported command effect types are `registeredCommand` and
+- AND the only supported command effect types are `operationHandler` and
   `recordPlan`
 - AND command effect parsing selects one of those operation-native shapes
+- AND operation handler effects declare a handler kind plus typed handler
+  configuration, not an entity action kind
 - AND operation visibility, policy, audit, and idempotency come from the
   operation declaration
+
+#### Scenario: Reject legacy peer interaction contracts
+
+- GIVEN a source schema or runtime schema shape includes legacy entity action
+  metadata, mutation policy metadata, registered command bridge effects, or
+  action/mutation request or response contracts
+- WHEN the schema is parsed, stringified, exported from the schema package, or
+  used for generated UI selection
+- THEN those contracts are rejected or absent
+- AND no hidden runtime projection recreates actions or mutation policies from
+  operations
+- AND parser modules, exported helpers, and public types are operation-named
 
 #### Scenario: Parse table operation bindings
 
@@ -623,10 +641,11 @@ fields without adding nested stored workflow state.
 
 #### Scenario: Parse transition command effect
 
-- GIVEN an entity command operation declares transition-state behavior
+- GIVEN an entity command operation declares an operation handler for
+  transition-state behavior
 - WHEN the schema is parsed
-- THEN the command effect references a state machine on the same entity
-- AND the command effect references one transition from that machine
+- THEN the handler configuration references a state machine on the same entity
+- AND the handler configuration references one transition from that machine
 - AND the operation uses normal actor exposure metadata for owner, admin, CLI
   deployer, and runner callers
 - AND anonymous public access is rejected unless a later transition operation
@@ -690,21 +709,21 @@ anonymous public bindings.
 - THEN parsing requires an explicit public input contract
 - AND anonymous callers cannot submit undeclared record values directly
 
-### Requirement: Public Command Effect Eligibility
+### Requirement: Public Command Handler Eligibility
 
-The system MUST only expose command effect kinds that are safe for public
-execution through operation policy and public operation bindings.
+The system MUST only expose command handlers that are safe for public execution
+through operation policy and public operation bindings.
 
-#### Scenario: Reject ineligible command effect
+#### Scenario: Reject ineligible command handler
 
-- GIVEN a command effect kind has no public execution module
+- GIVEN a command handler kind has no public execution module
 - WHEN the schema declares anonymous public access for an operation using that
-  effect
+  handler
 - THEN parsing rejects the public access policy
 - AND the command operation can still exist for non-public actors when its
   schema is valid
 
-#### Scenario: Subscribe command effect is eligible
+#### Scenario: Subscribe command handler is eligible
 
 - GIVEN an app schema declares a subscribe command operation with anonymous
   public access and valid public input

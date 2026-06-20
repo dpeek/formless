@@ -4,13 +4,13 @@ import {
   classifyCollectionOperationBinding,
   classifyTableOperationBinding,
   entityOperationBindingKinds,
-  entityOperationCommandEffectKinds,
   entityOperationCommandEffectTypes,
   formatEntityOperationKey,
   isEntityOperationBindingKind,
   isEntityOperationCommandEffect,
   isEntityOperationReadKind,
   isEntityOperationWriteKind,
+  operationHandlerKinds,
   parseAppSchema,
   parseEntityOperationKey,
   stringifySchema,
@@ -67,9 +67,9 @@ describe("schema entity operations", () => {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "registeredCommand",
-            kind: "clear-completed",
-            query: "taskCompleted",
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
           },
         },
         annotate: {
@@ -89,7 +89,11 @@ describe("schema entity operations", () => {
               },
             },
           },
-          effect: { type: "registeredCommand", kind: "clear-completed", query: "taskCompleted" },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
           policy: {
             actors: ["owner"],
           },
@@ -133,8 +137,9 @@ describe("schema entity operations", () => {
       scope: "collection",
       target: { query: "taskCompleted" },
       effect: {
-        type: "registeredCommand",
-        kind: "clear-completed",
+        type: "operationHandler",
+        handler: "clear-completed",
+        config: { query: "taskCompleted" },
       },
       output: { type: "command" },
     });
@@ -168,9 +173,9 @@ describe("schema entity operations", () => {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "registeredCommand",
-            kind: "clear-completed",
-            query: "taskCompleted",
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
           },
         },
         submitIntake: recordPlanOperation(),
@@ -204,8 +209,8 @@ describe("schema entity operations", () => {
       operationKey: { entityKey: "task", operationKey: "update" },
       canonicalOperationKey: "task.update",
     });
-    expect(entityOperationCommandEffectKinds).toContain("create-tree-child");
-    expect(entityOperationCommandEffectTypes).toEqual(["registeredCommand", "recordPlan"]);
+    expect(operationHandlerKinds).toContain("create-tree-child");
+    expect(entityOperationCommandEffectTypes).toEqual(["operationHandler", "recordPlan"]);
     expect(isEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
     expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
   });
@@ -286,12 +291,8 @@ describe("schema entity operations", () => {
     }
 
     expect(schema.entities.task?.operations).toBeUndefined();
-    expect(schema.entities.task?.actions).toBeUndefined();
-    expect(schema.entities.task?.mutations).toEqual({
-      create: { enabled: false },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    });
+    expect(schema.entities.task).not.toHaveProperty("actions");
+    expect(schema.entities.task).not.toHaveProperty("mutations");
     expect(view.operations).toBeUndefined();
 
     expect(() =>
@@ -307,7 +308,7 @@ describe("schema entity operations", () => {
     ).toThrow('references unknown operation "task.clearCompletedTasks"');
   });
 
-  it("projects runtime action and mutation state from source-declared operations", () => {
+  it("does not project runtime action or mutation state from source-declared operations", () => {
     const schema = parseAppSchema(
       schemaWithTaskOperations({
         create: {
@@ -326,23 +327,20 @@ describe("schema entity operations", () => {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "registeredCommand",
-            kind: "clear-completed",
-            query: "taskCompleted",
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
           },
         },
       }),
     );
 
-    expect(schema.entities.task?.mutations).toEqual({
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    });
-    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
-      label: "Clear completed",
-      kind: "clear-completed",
-      target: { query: "taskCompleted" },
+    expect(schema.entities.task).not.toHaveProperty("mutations");
+    expect(schema.entities.task).not.toHaveProperty("actions");
+    expect(schema.entities.task?.operations?.clearCompletedTasks.effect).toEqual({
+      type: "operationHandler",
+      handler: "clear-completed",
+      config: { query: "taskCompleted" },
     });
   });
 
@@ -358,9 +356,9 @@ describe("schema entity operations", () => {
                 kind: "command",
                 scope: "collection",
                 effect: {
-                  type: "registeredCommand",
-                  kind: "clear-completed",
-                  query: "taskCompleted",
+                  type: "operationHandler",
+                  handler: "clear-completed",
+                  config: { query: "taskCompleted" },
                 },
                 policy: { actors: ["owner"], visible: false },
               },
@@ -369,9 +367,9 @@ describe("schema entity operations", () => {
                 kind: "command",
                 scope: "collection",
                 effect: {
-                  type: "registeredCommand",
-                  kind: "clear-completed",
-                  query: "taskCompleted",
+                  type: "operationHandler",
+                  handler: "clear-completed",
+                  config: { query: "taskCompleted" },
                 },
                 policy: { actors: ["runner"] },
               },

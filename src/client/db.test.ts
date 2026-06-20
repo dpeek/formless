@@ -469,8 +469,8 @@ function taskOperations(
 function change(seq: number, recordId: string, title: string, done = false): ChangeRow {
   return {
     seq,
-    mutationId: `mutation-${seq}`,
-    op: seq === 2 && recordId === "record-1" ? "patch" : "create",
+    writeId: `mutation-${seq}`,
+    operationKind: seq === 2 && recordId === "record-1" ? "update" : "create",
     entity: "task",
     recordId,
     payload: record(recordId, title, done),

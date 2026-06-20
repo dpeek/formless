@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  isEntityActionExposedToActor,
-  isEntityActionVisibleToBrowser,
+  isEntityOperationVisibleToBrowser,
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
@@ -10,9 +9,9 @@ import {
 } from "./index.ts";
 
 describe("control-plane schema runtime metadata", () => {
-  it("parses runtime-owned metadata, secret references, route validation, and action exposure", () => {
+  it("parses runtime-owned metadata, secret references, route validation, and operation policy", () => {
     const schema = parseAppSchema(controlPlaneTaskSchema());
-    const action = schema.entities.task?.actions?.runnerApply;
+    const operation = schema.entities.task?.operations?.runnerApply;
 
     expect(schema.runtime).toEqual({
       owner: "runtime",
@@ -45,13 +44,13 @@ describe("control-plane schema runtime metadata", () => {
     expect(isRuntimeControlPlaneObservedField(schema, "task", "done")).toBe(true);
     expect(isRuntimeControlPlaneObservedField(schema, "task", "title")).toBe(false);
     expect(isRuntimeControlPlaneSecretReferenceField(schema, "task", "secretRef")).toBe(true);
-    expect(action?.exposure).toEqual({
+    expect(operation?.policy).toEqual({
       actors: ["runner"],
       responseFields: { runner: ["done"] },
     });
-    expect(action && isEntityActionExposedToActor(action, "runner")).toBe(true);
-    expect(action && isEntityActionExposedToActor(action, "owner")).toBe(false);
-    expect(action && isEntityActionVisibleToBrowser(action)).toBe(false);
+    expect(operation?.policy?.actors.includes("runner")).toBe(true);
+    expect(operation?.policy?.actors.includes("owner")).toBe(false);
+    expect(operation && isEntityOperationVisibleToBrowser(operation)).toBe(false);
   });
 
   it("rejects control-plane metadata that references unsupported fields", () => {
@@ -147,9 +146,9 @@ function controlPlaneTaskSchema() {
             scope: "collection",
             target: { query: "taskCompleted" },
             effect: {
-              type: "registeredCommand",
-              kind: "clear-completed",
-              query: "taskCompleted",
+              type: "operationHandler",
+              handler: "clear-completed",
+              config: { query: "taskCompleted" },
             },
             policy: {
               actors: ["runner"],

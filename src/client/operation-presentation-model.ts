@@ -1,11 +1,14 @@
 import {
   formatEntityOperationKey,
   isEntityOperationVisibleToBrowser,
-  type EntityActionKind,
+  isOperationHandlerEffectForSelectionCapability,
   type EntityOperationKind,
   type EntityOperationSchema,
   type EntityOperationScope,
   type EntitySchema,
+  type OperationHandlerEffectSchemaForKind,
+  type OperationHandlerKindBySelectionCapability,
+  type OperationHandlerSelectionCapability,
 } from "@dpeek/formless-schema";
 
 export type EntityOperationPresentationConfig = {
@@ -14,6 +17,17 @@ export type EntityOperationPresentationConfig = {
   canonicalKey: string;
   label: string;
   operation: EntityOperationSchema;
+};
+
+export type CommandOperationPresentationConfigForCapability<
+  Capability extends OperationHandlerSelectionCapability,
+> = EntityOperationPresentationConfig & {
+  operation: EntityOperationSchema & {
+    kind: "command";
+    effect: OperationHandlerEffectSchemaForKind<
+      OperationHandlerKindBySelectionCapability[Capability]
+    >;
+  };
 };
 
 export function selectAvailableEntityOperations(
@@ -41,17 +55,40 @@ export function selectEntityOperationByKind(
   );
 }
 
-export function selectCommandOperationByActionKind(
+export function selectCommandOperationsByHandlerCapability<
+  Capability extends OperationHandlerSelectionCapability,
+>(
   entityName: string,
   entity: EntitySchema,
-  actionKind: EntityActionKind,
+  capability: Capability,
   scope: EntityOperationScope,
-): EntityOperationPresentationConfig | undefined {
-  return selectAvailableEntityOperations(entityName, entity, scope).find(
-    (operation) =>
-      operation.operation.kind === "command" &&
-      operation.operation.effect?.type === "registeredCommand" &&
-      operation.operation.effect.kind === actionKind,
+): CommandOperationPresentationConfigForCapability<Capability>[] {
+  return selectAvailableEntityOperations(entityName, entity, scope).filter(
+    (operation): operation is CommandOperationPresentationConfigForCapability<Capability> =>
+      commandOperationHasHandlerCapability(operation, capability),
+  );
+}
+
+export function selectCommandOperationByHandlerCapability<
+  Capability extends OperationHandlerSelectionCapability,
+>(
+  entityName: string,
+  entity: EntitySchema,
+  capability: Capability,
+  scope: EntityOperationScope,
+): CommandOperationPresentationConfigForCapability<Capability> | undefined {
+  return selectCommandOperationsByHandlerCapability(entityName, entity, capability, scope)[0];
+}
+
+export function commandOperationHasHandlerCapability<
+  Capability extends OperationHandlerSelectionCapability,
+>(
+  operation: EntityOperationPresentationConfig,
+  capability: Capability,
+): operation is CommandOperationPresentationConfigForCapability<Capability> {
+  return (
+    operation.operation.kind === "command" &&
+    isOperationHandlerEffectForSelectionCapability(operation.operation.effect, capability)
   );
 }
 

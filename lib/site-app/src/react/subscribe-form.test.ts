@@ -42,10 +42,6 @@ describe("public Site subscribe form submit helpers", () => {
           type: "command",
           affectedChangeIds: ["10"],
           cursor: 12,
-          response: {
-            actionId: "operation:subscription.subscribe:key-1",
-            cursor: 12,
-          },
         },
         status: "committed",
       });
@@ -72,10 +68,6 @@ describe("public Site subscribe form submit helpers", () => {
         type: "command",
         affectedChangeIds: ["10"],
         cursor: 12,
-        response: {
-          actionId: "operation:subscription.subscribe:key-1",
-          cursor: 12,
-        },
       },
       status: "committed",
     });

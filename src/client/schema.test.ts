@@ -103,9 +103,9 @@ describe("task source schema", () => {
       scope: "collection",
       target: { query: "taskCompleted" },
       effect: {
-        type: "registeredCommand",
-        kind: "clear-completed",
-        query: "taskCompleted",
+        type: "operationHandler",
+        handler: "clear-completed",
+        config: { query: "taskCompleted" },
       },
       output: { type: "command" },
     });
@@ -117,10 +117,12 @@ describe("task source schema", () => {
       { operation: "task.create", createView: "taskCreate" },
       { operation: "task.clearCompletedTasks", count: { type: "count" } },
     ]);
-
-    const clearCompleted = taskSourceSchema.entities.task?.actions?.clearCompletedTasks;
+    const clearCompletedEffect = operations?.clearCompletedTasks.effect;
     expect(
-      clearCompleted?.kind === "clear-completed" ? clearCompleted.target.query : undefined,
+      clearCompletedEffect?.type === "operationHandler" &&
+        clearCompletedEffect.handler === "clear-completed"
+        ? clearCompletedEffect.config.query
+        : undefined,
     ).toBe("taskCompleted");
   });
 

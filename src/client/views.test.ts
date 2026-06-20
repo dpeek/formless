@@ -20,7 +20,14 @@ import {
   type HomeViewModel,
   type TableColumnConfig,
 } from "./views.ts";
-import { parseAppSchema, type AppSchema, type NumericExpression } from "@dpeek/formless-schema";
+import {
+  isOperationHandlerEffectForSelectionCapability,
+  parseAppSchema,
+  type AppSchema,
+  type EntityOperationEffectSchema,
+  type EntitySchema,
+  type NumericExpression,
+} from "@dpeek/formless-schema";
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {
@@ -387,7 +394,11 @@ describe("home view model collections", () => {
         canonicalKey: "task.clearCompletedTasks",
         operation: {
           kind: "command",
-          effect: { type: "registeredCommand", kind: "clear-completed" },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
           target: { query: "taskCompleted" },
         },
       },
@@ -436,7 +447,10 @@ describe("home view model collections", () => {
         canonicalKey: "rate.regenerateMissingRates",
         operation: {
           kind: "command",
-          effect: { type: "registeredCommand", kind: "create-missing-join-records" },
+          effect: {
+            type: "operationHandler",
+            handler: "create-missing-join-records",
+          },
         },
       },
       ui: {
@@ -446,7 +460,7 @@ describe("home view model collections", () => {
     expect(operation?.type === "command" ? operation.ui.targetCount : undefined).toBeUndefined();
   });
 
-  it("does not synthesize collection toolbar controls from mutation policy or entity action slots", () => {
+  it("does not synthesize collection toolbar controls from handler capabilities or legacy action metadata", () => {
     const taskHome = appSchema.views.taskHome;
 
     if (taskHome?.type !== "collection") {
@@ -462,30 +476,23 @@ describe("home view model collections", () => {
           operations: undefined,
         },
       },
+      entities: {
+        ...appSchema.entities,
+        task: {
+          ...appSchema.entities.task,
+          actions: {
+            clearCompletedTasks: { kind: "clear-completed" },
+          },
+        } as unknown as EntitySchema,
+      },
     };
     const model = requiredCollectionModel(schema, "taskHome");
 
     expect(model.operations).toEqual([]);
   });
 
-  it("selects command toolbar controls from operation bindings without entity action slots", () => {
-    const task = appSchema.entities.task;
-
-    if (!task) {
-      throw new Error("Missing task entity.");
-    }
-
-    const schema: AppSchema = {
-      ...appSchema,
-      entities: {
-        ...appSchema.entities,
-        task: {
-          ...task,
-          actions: undefined,
-        },
-      },
-    };
-    const model = requiredCollectionModel(schema, "taskHome");
+  it("selects command toolbar controls from operation bindings without legacy action metadata", () => {
+    const model = requiredCollectionModel(appSchema, "taskHome");
     const clearCompleted = model.operations.find(
       (operation) =>
         operation.type === "command" && operation.operationName === "clearCompletedTasks",
@@ -498,7 +505,11 @@ describe("home view model collections", () => {
         canonicalKey: "task.clearCompletedTasks",
         operation: {
           kind: "command",
-          effect: { type: "registeredCommand", kind: "clear-completed" },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
         },
       },
       ui: {
@@ -530,9 +541,9 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
+                type: "operationHandler",
+                handler: "clear-completed",
+                config: { query: "taskCompleted" },
               },
               output: { type: "command" },
               idempotency: { required: true },
@@ -544,9 +555,9 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
+                type: "operationHandler",
+                handler: "clear-completed",
+                config: { query: "taskCompleted" },
               },
               output: { type: "command" },
               idempotency: { required: true },
@@ -558,9 +569,9 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
+                type: "operationHandler",
+                handler: "clear-completed",
+                config: { query: "taskCompleted" },
               },
               output: { type: "command" },
               idempotency: { required: true },
@@ -572,9 +583,9 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
+                type: "operationHandler",
+                handler: "clear-completed",
+                config: { query: "taskCompleted" },
               },
               output: { type: "command" },
               idempotency: { required: true },
@@ -586,9 +597,9 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
+                type: "operationHandler",
+                handler: "clear-completed",
+                config: { query: "taskCompleted" },
               },
               output: { type: "command" },
               idempotency: { required: true },
@@ -668,7 +679,7 @@ describe("home view model collections", () => {
           entityName: "task",
           operationName: "clearCompletedTasks",
           operationKey: "task.clearCompletedTasks",
-          commandEffectKind: "clear-completed",
+          commandHandlerCapability: "clearCompletedTargetCount",
           showAffectedCountOnSuccess: true,
           targetCountQueryKind: "where",
           targetCountDisplay: "count",
@@ -1457,20 +1468,24 @@ describe("home view model collections", () => {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "create-tree-child",
-              relationship: "blockPlacements",
-              childField: "block",
-              orderField: "order",
+              type: "operationHandler",
+              handler: "create-tree-child",
+              config: {
+                relationship: "blockPlacements",
+                childField: "block",
+                orderField: "order",
+              },
             },
           },
         },
         effect: {
-          type: "registeredCommand",
-          kind: "create-tree-child",
-          relationship: "blockPlacements",
-          childField: "block",
-          orderField: "order",
+          type: "operationHandler",
+          handler: "create-tree-child",
+          config: {
+            relationship: "blockPlacements",
+            childField: "block",
+            orderField: "order",
+          },
         },
       },
       remove: {
@@ -1481,16 +1496,16 @@ describe("home view model collections", () => {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "remove-tree-placement",
-              relationship: "blockPlacements",
+              type: "operationHandler",
+              handler: "remove-tree-placement",
+              config: { relationship: "blockPlacements" },
             },
           },
         },
         effect: {
-          type: "registeredCommand",
-          kind: "remove-tree-placement",
-          relationship: "blockPlacements",
+          type: "operationHandler",
+          handler: "remove-tree-placement",
+          config: { relationship: "blockPlacements" },
         },
       },
     });
@@ -3478,10 +3493,12 @@ function lifecycleTaskSchema() {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "transition-state",
-              machine: "statusFlow",
-              transition: "start",
+              type: "operationHandler",
+              handler: "transition-state",
+              config: {
+                machine: "statusFlow",
+                transition: "start",
+              },
             },
             output: { type: "command" },
             idempotency: { required: true },
@@ -3492,10 +3509,12 @@ function lifecycleTaskSchema() {
             kind: "command",
             scope: "record",
             effect: {
-              type: "registeredCommand",
-              kind: "transition-state",
-              machine: "statusFlow",
-              transition: "complete",
+              type: "operationHandler",
+              handler: "transition-state",
+              config: {
+                machine: "statusFlow",
+                transition: "complete",
+              },
             },
             output: { type: "command" },
             idempotency: { required: true },
@@ -3618,22 +3637,27 @@ function summarizeHomeOperation(operation: HomeOperationConfig) {
     };
   }
 
-  const commandEffect = operation.operation.operation.effect;
-
   return {
     type: operation.type,
     label: operation.label,
     entityName: operation.entityName,
     operationName: operation.operationName,
     operationKey: operation.operation.canonicalKey,
-    commandEffectKind:
-      commandEffect?.type === "registeredCommand"
-        ? commandEffect.kind
-        : (commandEffect?.type ?? null),
+    commandHandlerCapability: summarizeCommandHandlerCapability(
+      operation.operation.operation.effect,
+    ),
     showAffectedCountOnSuccess: operation.ui.showAffectedCountOnSuccess,
     targetCountQueryKind: operation.ui.targetCount?.query.kind ?? null,
     targetCountDisplay: operation.ui.targetCount?.display.type ?? null,
   };
+}
+
+function summarizeCommandHandlerCapability(effect: EntityOperationEffectSchema | undefined) {
+  if (isOperationHandlerEffectForSelectionCapability(effect, "clearCompletedTargetCount")) {
+    return "clearCompletedTargetCount";
+  }
+
+  return effect?.type ?? null;
 }
 
 function testWriteOperations(label: string, fields: string[]) {

@@ -4,6 +4,7 @@ import type {
   EntityOperationSchema,
   QueryExpression,
 } from "@dpeek/formless-schema";
+import { isOperationHandlerEffectForSelectionCapability } from "@dpeek/formless-schema";
 
 export type CommandOperationTargetCountConfig = {
   display: CountDisplaySchema;
@@ -26,14 +27,16 @@ export function selectCommandOperationUi(
 
   if (
     operation.kind !== "command" ||
-    operation.effect?.type !== "registeredCommand" ||
-    operation.effect.kind !== "clear-completed" ||
+    !isOperationHandlerEffectForSelectionCapability(
+      operation.effect,
+      "clearCompletedTargetCount",
+    ) ||
     count?.type !== "count"
   ) {
     return ui;
   }
 
-  const targetQueryName = operation.target?.query ?? operation.effect.query;
+  const targetQueryName = operation.target?.query ?? operation.effect.config.query;
 
   if (targetQueryName === undefined) {
     return ui;

@@ -9,15 +9,19 @@ import {
 import { testSiteSeedRecords } from "./site-records.ts";
 import {
   formatQualifiedEntityName,
-  getEntityActionKindCapabilities,
+  getOperationHandlerCapabilities,
   parseAppSchema,
   parseQualifiedEntityName,
   stringifySchema,
 } from "@dpeek/formless-schema";
-import type { AppSchema, EntityActionCapabilities, EntityActionKind } from "@dpeek/formless-schema";
+import type {
+  AppSchema,
+  OperationHandlerCapabilities,
+  OperationHandlerKind,
+} from "@dpeek/formless-schema";
 
-describe("schema operation-derived mutation projection", () => {
-  it("derives mutation policy from operations and omits it from source stringify", () => {
+describe("schema operation-only write contracts", () => {
+  it("keeps operation write contracts without mutation projection", () => {
     const schema = parseAppSchema(baseSchema());
     const enabledSchema = parseAppSchema(
       baseSchema({
@@ -43,10 +47,14 @@ describe("schema operation-derived mutation projection", () => {
     const serialized = JSON.parse(stringifySchema(schema));
     const serializedEnabled = JSON.parse(stringifySchema(enabledSchema));
 
-    expect(schema.entities.task?.mutations.delete).toEqual({ enabled: false });
+    expect(schema.entities.task).not.toHaveProperty("mutations");
     expect(serialized.entities.task).not.toHaveProperty("mutations");
     expect(parseAppSchema(serialized)).toEqual(schema);
-    expect(enabledSchema.entities.task?.mutations.delete).toEqual({ enabled: true });
+    expect(enabledSchema.entities.task?.operations?.delete).toMatchObject({
+      kind: "delete",
+      effect: { type: "deleteRecord" },
+    });
+    expect(enabledSchema.entities.task).not.toHaveProperty("mutations");
     expect(serializedEnabled.entities.task).not.toHaveProperty("mutations");
     expect(parseAppSchema(serializedEnabled)).toEqual(enabledSchema);
   });
@@ -4148,9 +4156,9 @@ describe("schema collection views", () => {
                   scope: "collection",
                   target: { query: "ratesForSelectedCard" },
                   effect: {
-                    type: "registeredCommand",
-                    kind: "clear-completed",
-                    query: "ratesForSelectedCard",
+                    type: "operationHandler",
+                    handler: "clear-completed",
+                    config: { query: "ratesForSelectedCard" },
                   },
                   output: { type: "command" },
                   idempotency: { required: true },
@@ -4162,7 +4170,7 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow(
-      'Entity operation "rate.clearCompletedRates" effect kind "clear-completed" target must be value.done eq true.',
+      'Entity operation "rate.clearCompletedRates" effect config handler "clear-completed" target must be value.done eq true.',
     );
   });
 
@@ -4323,12 +4331,18 @@ describe("rate-card sample schema", () => {
       kind: "unique",
       fields: ["resource", "card"],
     });
-    expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual({
+    expect(schema.entities.rate?.operations?.regenerateMissingRates).toMatchObject({
       label: "Regenerate missing rates",
-      kind: "create-missing-join-records",
-      join: {
-        left: { field: "resource", query: "resourceAll" },
-        right: { field: "card", query: "cardAll" },
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "create-missing-join-records",
+        config: {
+          join: {
+            left: { field: "resource", query: "resourceAll" },
+            right: { field: "card", query: "cardAll" },
+          },
+        },
       },
     });
     expect(schema.relationships).toMatchObject({
@@ -4604,10 +4618,12 @@ describe("source schemas", () => {
         kind: "command",
         scope: "record",
         effect: {
-          type: "registeredCommand",
-          kind: "transition-state",
-          machine: "priorityFlow",
-          transition: "escalate",
+          type: "operationHandler",
+          handler: "transition-state",
+          config: {
+            machine: "priorityFlow",
+            transition: "escalate",
+          },
         },
         output: { type: "command" },
         idempotency: { required: true },
@@ -4622,11 +4638,17 @@ describe("source schemas", () => {
       initial: "normal",
       terminal: ["high"],
     });
-    expect(parsed.entities.task?.actions?.escalatePriority).toEqual({
+    expect(parsed.entities.task?.operations?.escalatePriority).toMatchObject({
       label: "Escalate priority",
-      kind: "transition-state",
-      machine: "priorityFlow",
-      transition: "escalate",
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "transition-state",
+        config: {
+          machine: "priorityFlow",
+          transition: "escalate",
+        },
+      },
     });
     expect(parseAppSchema(JSON.parse(stringifySchema(parsed)))).toEqual(parsed);
 
@@ -4885,10 +4907,10 @@ describe("personal site sample schema", () => {
         format: "color",
       },
     });
-    expect(schema.entities.site?.mutations).toEqual({
-      create: { enabled: false },
-      patch: { enabled: true },
-      delete: { enabled: false },
+    expect(schema.entities.site).not.toHaveProperty("mutations");
+    expect(schema.entities.site?.operations?.update).toMatchObject({
+      kind: "update",
+      effect: { type: "patchRecord" },
     });
     expect(schema.entities.site?.constraints?.uniqueSiteKey).toEqual({
       kind: "unique",
@@ -5008,18 +5030,28 @@ describe("personal site sample schema", () => {
       "label",
       "slot",
     ]);
-    expect(schema.entities["block-placement"]?.actions).toMatchObject({
+    expect(schema.entities["block-placement"]?.operations).toMatchObject({
       addTreeChild: {
         label: "Add child",
-        kind: "create-tree-child",
-        relationship: "blockPlacements",
-        childField: "block",
-        orderField: "order",
+        kind: "command",
+        effect: {
+          type: "operationHandler",
+          handler: "create-tree-child",
+          config: {
+            relationship: "blockPlacements",
+            childField: "block",
+            orderField: "order",
+          },
+        },
       },
       removeTreePlacement: {
         label: "Remove child",
-        kind: "remove-tree-placement",
-        relationship: "blockPlacements",
+        kind: "command",
+        effect: {
+          type: "operationHandler",
+          handler: "remove-tree-placement",
+          config: { relationship: "blockPlacements" },
+        },
       },
     });
     expect(schema.entities["email-address"]?.constraints?.uniqueNormalizedAddress).toEqual({
@@ -5030,17 +5062,20 @@ describe("personal site sample schema", () => {
       kind: "unique",
       fields: ["emailAddress", "audience"],
     });
-    expect(schema.entities.subscription?.actions?.subscribe).toMatchObject({
+    expect(schema.entities.subscription?.operations?.subscribe).toMatchObject({
       label: "Subscribe",
-      kind: "subscribe",
-      access: {
-        actor: "anonymous",
-        challenge: { kind: "turnstile" },
-        origin: { kind: "same-origin" },
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "subscribe",
+        config: {},
       },
-      publicInput: {
-        fields: {
-          email: { type: "text", required: true, label: "Email" },
+      policy: {
+        actors: ["anonymous"],
+        access: {
+          actor: "anonymous",
+          challenge: { kind: "turnstile" },
+          origin: { kind: "same-origin" },
         },
       },
     });
@@ -6594,7 +6629,7 @@ describe("schema relationships", () => {
   });
 });
 
-describe("schema operation command projection", () => {
+describe("schema operation handler contracts", () => {
   it("exposes module-owned capabilities for every command effect kind", () => {
     const capabilitiesByKind = {
       "clear-completed": { createAfterCreateHook: false, publicExecution: false },
@@ -6605,24 +6640,28 @@ describe("schema operation command projection", () => {
       "remove-tree-placement": { createAfterCreateHook: false, publicExecution: false },
       subscribe: { createAfterCreateHook: false, publicExecution: true },
       "transition-state": { createAfterCreateHook: false, publicExecution: false },
-    } satisfies Record<EntityActionKind, EntityActionCapabilities>;
+    } satisfies Record<OperationHandlerKind, OperationHandlerCapabilities>;
 
     for (const [kind, capabilities] of Object.entries(capabilitiesByKind)) {
-      expect(getEntityActionKindCapabilities(kind as EntityActionKind)).toEqual(capabilities);
+      expect(getOperationHandlerCapabilities(kind as OperationHandlerKind)).toEqual(capabilities);
     }
   });
 
-  it("projects registered command operations as runtime action facts", () => {
+  it("parses command operations as operation handler effects", () => {
     const schema = parseAppSchema(baseSchema());
 
-    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
+    expect(schema.entities.task?.operations?.clearCompletedTasks).toMatchObject({
       label: "Clear completed",
-      kind: "clear-completed",
-      target: { query: "taskCompleted" },
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "clear-completed",
+        config: { query: "taskCompleted" },
+      },
     });
   });
 
-  it("projects anonymous subscribe operation policy and input", () => {
+  it("parses anonymous subscribe operation policy and input", () => {
     const schema = parseAppSchema(
       baseSchema({
         entities: {
@@ -6632,17 +6671,25 @@ describe("schema operation command projection", () => {
       }),
     );
 
-    expect(schema.entities.subscriber?.actions?.subscribe).toEqual({
+    expect(schema.entities.subscriber?.operations?.subscribe).toMatchObject({
       label: "Subscribe",
-      kind: "subscribe",
-      access: {
-        actor: "anonymous",
-        challenge: { kind: "turnstile" },
-        origin: { kind: "same-origin" },
-      },
-      publicInput: {
+      kind: "command",
+      input: {
         fields: {
           email: { type: "text", required: true, label: "Email" },
+        },
+      },
+      effect: {
+        type: "operationHandler",
+        handler: "subscribe",
+        config: {},
+      },
+      policy: {
+        actors: ["anonymous"],
+        access: {
+          actor: "anonymous",
+          challenge: { kind: "turnstile" },
+          origin: { kind: "same-origin" },
         },
       },
     });
@@ -6807,7 +6854,9 @@ describe("schema operation command projection", () => {
       }),
     );
 
-    expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual(rateJoinAction());
+    expect(schema.entities.rate?.operations?.regenerateMissingRates).toMatchObject(
+      rateJoinOperation(),
+    );
   });
 
   it("accepts selected join operations over many-to-many relationships", () => {
@@ -6827,15 +6876,23 @@ describe("schema operation command projection", () => {
       }),
     );
 
-    expect(schema.entities.rate?.actions?.addSelectedRate).toEqual({
+    expect(schema.entities.rate?.operations?.addSelectedRate).toMatchObject({
       label: "Add selected rate",
-      kind: "create-selected-join-record",
-      relationship: "cardResources",
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "create-selected-join-record",
+        config: { relationship: "cardResources" },
+      },
     });
-    expect(schema.entities.rate?.actions?.removeSelectedRates).toEqual({
+    expect(schema.entities.rate?.operations?.removeSelectedRates).toMatchObject({
       label: "Remove selected rates",
-      kind: "remove-selected-join-records",
-      relationship: "cardResources",
+      kind: "command",
+      effect: {
+        type: "operationHandler",
+        handler: "remove-selected-join-records",
+        config: { relationship: "cardResources" },
+      },
     });
   });
 
@@ -6898,7 +6955,7 @@ describe("schema operation command projection", () => {
     ).toThrow('relationship "cardResources" uses through entity "rate", not "card"');
   });
 
-  it("derives create afterCreate hooks from create-missing-join-records operations", () => {
+  it("keeps create-missing-join-records source facts on operation handlers", () => {
     const entities = scopedRateEntities();
     const schema = parseAppSchema(
       scopedRateSchema({
@@ -6915,12 +6972,18 @@ describe("schema operation command projection", () => {
       }),
     );
 
-    expect(schema.entities.resource?.mutations.create.afterCreate).toEqual([
-      { entity: "rate", action: "regenerateMissingRates" },
-    ]);
-    expect(schema.entities.card?.mutations.create.afterCreate).toEqual([
-      { entity: "rate", action: "regenerateMissingRates" },
-    ]);
+    expect(schema.entities.resource).not.toHaveProperty("mutations");
+    expect(schema.entities.card).not.toHaveProperty("mutations");
+    expect(schema.entities.rate?.operations?.regenerateMissingRates.effect).toMatchObject({
+      type: "operationHandler",
+      handler: "create-missing-join-records",
+      config: {
+        join: {
+          left: { field: "resource", query: "resourceAll" },
+          right: { field: "card", query: "cardAll" },
+        },
+      },
+    });
   });
 
   it("rejects create-missing-join-records operations without required defaults", () => {
@@ -7037,9 +7100,9 @@ function defaultEntities() {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "registeredCommand",
-            kind: "clear-completed",
-            query: "taskCompleted",
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
           },
           output: { type: "command" },
           idempotency: { required: true },
@@ -7068,7 +7131,7 @@ function subscribeOperation(overrides: Record<string, unknown> = {}) {
     kind: "command",
     scope: "collection",
     input: publicEmailInput(),
-    effect: { type: "registeredCommand", kind: "subscribe" },
+    effect: { type: "operationHandler", handler: "subscribe", config: {} },
     output: { type: "command" },
     idempotency: { required: true },
     audit: { input: "summary" },
@@ -7780,28 +7843,19 @@ function rateRelationships() {
   };
 }
 
-function rateJoinAction() {
-  return {
-    label: "Regenerate missing rates",
-    kind: "create-missing-join-records",
-    join: {
-      left: { field: "resource", query: "resourceAll" },
-      right: { field: "card", query: "cardAll" },
-    },
-  };
-}
-
 function rateJoinOperation(overrides: Record<string, unknown> = {}) {
   return {
     label: "Regenerate missing rates",
     kind: "command",
     scope: "collection",
     effect: {
-      type: "registeredCommand",
-      kind: "create-missing-join-records",
-      join: {
-        left: { field: "resource", query: "resourceAll" },
-        right: { field: "card", query: "cardAll" },
+      type: "operationHandler",
+      handler: "create-missing-join-records",
+      config: {
+        join: {
+          left: { field: "resource", query: "resourceAll" },
+          right: { field: "card", query: "cardAll" },
+        },
       },
     },
     output: { type: "command" },
@@ -7824,10 +7878,12 @@ function selectedJoinOperation(kind: string, overrides: Record<string, unknown> 
     kind: "command",
     scope: "record",
     effect: {
-      type: "registeredCommand",
-      kind,
-      relationship: "cardResources",
-      ...overrides,
+      type: "operationHandler",
+      handler: kind,
+      config: {
+        relationship: "cardResources",
+        ...overrides,
+      },
     },
     output: { type: "command" },
     idempotency: { required: true },

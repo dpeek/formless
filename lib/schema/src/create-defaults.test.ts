@@ -132,15 +132,8 @@ describe("create defaults primitive", () => {
   });
 });
 
-const defaultMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: false },
-} satisfies EntitySchema["mutations"];
-
 const rateEntity = {
   label: "Rate",
-  mutations: defaultMutations,
   fields: {
     resource: { type: "reference", required: true, to: "resource" },
     card: { type: "reference", required: true, to: "card" },
@@ -178,7 +171,6 @@ const rateCreateDefaults = [
 
 const blockEntity = {
   label: "Block",
-  mutations: defaultMutations,
   fields: {
     type: {
       type: "enum",

@@ -513,11 +513,13 @@
           "kind": "command",
           "scope": "record",
           "effect": {
-            "type": "registeredCommand",
-            "kind": "create-tree-child",
-            "relationship": "blockPlacements",
-            "childField": "block",
-            "orderField": "order"
+            "type": "operationHandler",
+            "handler": "create-tree-child",
+            "config": {
+              "relationship": "blockPlacements",
+              "childField": "block",
+              "orderField": "order"
+            }
           },
           "output": {
             "type": "command"
@@ -534,9 +536,11 @@
           "kind": "command",
           "scope": "record",
           "effect": {
-            "type": "registeredCommand",
-            "kind": "remove-tree-placement",
-            "relationship": "blockPlacements"
+            "type": "operationHandler",
+            "handler": "remove-tree-placement",
+            "config": {
+              "relationship": "blockPlacements"
+            }
           },
           "output": {
             "type": "command"
@@ -949,8 +953,9 @@
             }
           },
           "effect": {
-            "type": "registeredCommand",
-            "kind": "subscribe"
+            "type": "operationHandler",
+            "handler": "subscribe",
+            "config": {}
           },
           "output": {
             "type": "command"

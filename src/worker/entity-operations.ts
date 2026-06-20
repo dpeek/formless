@@ -9,8 +9,8 @@ import {
   type EntityOperationKind,
   type EntityOperationSchema,
   type EntitySchema,
+  type OperationHandlerEntityOperationEffectSchema,
   type RecordPlanEntityOperationEffectSchema,
-  type RegisteredCommandEntityOperationEffectSchema,
   type RecordPlanRecordIdExpressionSchema,
   type RecordPlanStepSchema,
   type RecordPlanValueExpressionSchema,
@@ -40,9 +40,12 @@ import type {
   OperationInvocationSource,
   OperationInvocationSourceProtocol,
 } from "../shared/operation-invocation.ts";
-import { executeEntityCommandEffectOutcome, executeCreateAfterCreateHooks } from "./actions.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
+import {
+  executeOperationHandlerCreateTriggers,
+  executeOperationHandlerOutcome,
+} from "./operation-handlers.ts";
 import { validateMutationRequest, validateRecordValues } from "./authority-validation.ts";
 import {
   committedWrite,
@@ -57,7 +60,7 @@ import {
   recordOperationInvocationFailed,
   recordOperationInvocationOutcome,
   replayedWrite,
-  type ActionRecordWritePlan,
+  type OperationRecordWritePlan,
   type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForCommandOperationOutcome,
@@ -494,7 +497,7 @@ function executeCreateOperationInvocationOutcome(
       storage,
       mutation,
       (context) => {
-        executeCreateAfterCreateHooks(
+        executeOperationHandlerCreateTriggers(
           context.storage,
           context.mutation,
           schema,
@@ -502,7 +505,7 @@ function executeCreateOperationInvocationOutcome(
         );
       },
       validateRecordConstraints,
-      { now: envelope.receivedAt },
+      { allowStoredReplay: false, now: envelope.receivedAt },
     ),
     (response) => recordWriteOperationOutput(envelope, response),
   );
@@ -541,6 +544,7 @@ function executeUpdateOperationInvocationOutcome(
 
   return mapWriteOutcome(
     patchStoredRecordOutcome(storage, mutation, mutation.recordValues, validateRecordConstraints, {
+      allowStoredReplay: false,
       now: envelope.receivedAt,
     }),
     (response) => recordWriteOperationOutput(envelope, response),
@@ -573,7 +577,10 @@ function executeDeleteOperationInvocationOutcome(
   }
 
   return mapWriteOutcome(
-    deleteStoredRecordOutcome(storage, mutation, { now: envelope.receivedAt }),
+    deleteStoredRecordOutcome(storage, mutation, {
+      allowStoredReplay: false,
+      now: envelope.receivedAt,
+    }),
     (response) => recordWriteOperationOutput(envelope, response),
   );
 }
@@ -587,6 +594,7 @@ function validateRecordOperationMutationRequest(
   } = {},
 ) {
   return validateMutationRequest(mutation, schema, storage, {
+    allowStoredReplay: false,
     enforceGenericMutationPolicy: false,
     packageResolver: options.packageResolver,
   });
@@ -610,64 +618,38 @@ function executeCommandOperationInvocationOutcome(
     );
   }
 
-  const commandEffect = registeredCommandEffect(envelope);
+  const commandEffect = operationHandlerEffect(envelope);
 
   if (commandEffect === undefined) {
     throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" requires a registered command effect.`,
+      `Operation "${envelope.operation.canonicalKey}" requires an operation handler effect.`,
     );
   }
 
-  if (envelope.actor.kind === "anonymous") {
-    return executePublicCommandOperationInvocationOutcome(storage, envelope, schema, commandEffect);
-  }
-
-  const actorKind = envelope.actor.kind as SchemaActionActorKind;
-  const commandInput = privateCommandOperationInput(envelope, schema, storage);
+  const commandInput =
+    envelope.actor.kind === "anonymous"
+      ? publicCommandOperationPayload(envelope).input
+      : privateCommandOperationInput(envelope, schema, storage);
 
   return mapWriteOutcome(
-    executeEntityCommandEffectOutcome(
+    executeOperationHandlerOutcome({
       storage,
-      {
-        actionId: requiredWriteIdentity(envelope),
-        actorKind,
-        entity: envelope.operation.entityName,
-        action: envelope.operation.operationName,
-        kind: commandEffect.kind,
-        effect: commandEffect,
-        ...(commandInput === undefined ? {} : { input: commandInput }),
-        receivedAt: envelope.receivedAt,
-        ...(validateConstraints === undefined ? {} : { validateConstraints }),
-      },
+      envelope,
       schema,
-    ),
-    (response) => filterCommandOperationOutputForActor(commandOperationOutput(response), envelope),
+      effect: commandEffect,
+      ...(commandInput === undefined ? {} : { input: commandInput }),
+      ...(validateConstraints === undefined ? {} : { validateConstraints }),
+    }),
+    (response) => filterCommandOperationOutputForActor(response, envelope),
   );
 }
 
-function executePublicCommandOperationInvocationOutcome(
-  storage: DurableObjectStorage,
+function operationHandlerEffect(
   envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
-  effect: RegisteredCommandEntityOperationEffectSchema,
-): WriteOutcome<OperationInvocationOutput> {
-  const payload = publicCommandOperationPayload(envelope);
-
-  if (effect.kind !== "subscribe") {
-    throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" is not available for public execution.`,
-    );
-  }
-
-  return executePublicSubscribeOperationInvocationOutcome(storage, envelope, schema, payload.input);
-}
-
-function registeredCommandEffect(
-  envelope: OperationInvocationEnvelope,
-): RegisteredCommandEntityOperationEffectSchema | undefined {
+): OperationHandlerEntityOperationEffectSchema | undefined {
   const effect = envelope.operation.effect;
 
-  return effect?.type === "registeredCommand" ? effect : undefined;
+  return effect?.type === "operationHandler" ? effect : undefined;
 }
 
 function executeRecordPlanOperationInvocationOutcome(
@@ -696,7 +678,7 @@ function executeRecordPlanOperationInvocationOutcome(
       actionId,
       plans,
       operationRecordConstraintValidator(storage, schema, validateConstraints),
-      { now: envelope.receivedAt },
+      { allowStoredReplay: false, now: envelope.receivedAt },
     ),
     (response) =>
       filterCommandOperationOutputForActor(recordPlanOperationOutput(response, effect), envelope),
@@ -754,7 +736,7 @@ function recordPlanWritePlans(
   inputValues: RecordPlanInputValues,
   actionId: string,
   packageResolver?: AppPackageResolver,
-): ActionRecordWritePlan[] {
+): OperationRecordWritePlan[] {
   const state: RecordPlanPlanningState = {
     actionId,
     envelope,
@@ -772,7 +754,7 @@ function recordPlanWritePlans(
 function recordPlanWritePlanForStep(
   step: RecordPlanStepSchema,
   state: RecordPlanPlanningState,
-): ActionRecordWritePlan {
+): OperationRecordWritePlan {
   if (step.kind === "create") {
     const recordId =
       step.recordId === undefined
@@ -1259,244 +1241,10 @@ function parsePublicOperationProof(value: unknown): PublicOperationProof {
   };
 }
 
-function executePublicSubscribeOperationInvocationOutcome(
-  storage: DurableObjectStorage,
-  envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
-  input: RecordValues,
-): WriteOutcome<OperationInvocationOutput> {
-  const contactEntity = requireSubscribeEntity(schema, "contact");
-  const emailAddressEntity = requireSubscribeEntity(schema, "email-address");
-  const audienceEntity = requireSubscribeEntity(schema, "audience");
-  const subscriptionEntity = requireSubscribeEntity(schema, "subscription");
-  const email = parseSubscribeEmail(input.email);
-  const existingEmailAddress = findActiveRecordByField(
-    storage,
-    "email-address",
-    "normalizedAddress",
-    email.normalizedAddress,
-  );
-  const existingContact = findExistingEmailContact(storage, existingEmailAddress);
-  const existingAudience = findActiveRecordByField(storage, "audience", "key", defaultAudienceKey);
-  const existingSubscription =
-    existingEmailAddress && existingAudience
-      ? findActiveSubscription(storage, existingEmailAddress.id, existingAudience.id)
-      : undefined;
-  const sourceValues = subscribeSourceValues(envelope);
-  const plans: ActionRecordWritePlan[] = [];
-  const contactRecordIndex = existingContact
-    ? undefined
-    : pushPlan(plans, {
-        kind: "create",
-        entity: "contact",
-        values: () =>
-          validateRecordValues({ label: email.normalizedAddress }, contactEntity, storage),
-      });
-  const emailAddressRecordIndex = existingEmailAddress
-    ? undefined
-    : pushPlan(plans, {
-        kind: "create",
-        entity: "email-address",
-        values: (writtenRecords) =>
-          validateRecordValues(
-            {
-              contact:
-                existingContact?.id ?? requireWrittenRecord(writtenRecords, contactRecordIndex).id,
-              address: email.address,
-              normalizedAddress: email.normalizedAddress,
-            },
-            emailAddressEntity,
-            storage,
-          ),
-      });
-
-  if (existingEmailAddress && !existingContact) {
-    plans.push({
-      kind: "patch",
-      record: existingEmailAddress,
-      values: (writtenRecords) =>
-        validateRecordValues(
-          {
-            ...existingEmailAddress.values,
-            contact: requireWrittenRecord(writtenRecords, contactRecordIndex).id,
-          },
-          emailAddressEntity,
-          storage,
-        ),
-    });
-  }
-
-  const audienceRecordIndex = existingAudience
-    ? undefined
-    : pushPlan(plans, {
-        kind: "create",
-        entity: "audience",
-        values: () =>
-          validateRecordValues(
-            { key: defaultAudienceKey, label: "Default audience" },
-            audienceEntity,
-            storage,
-          ),
-      });
-  const subscriptionValues = (writtenRecords: StoredRecord[]) =>
-    validateRecordValues(
-      {
-        ...existingSubscription?.values,
-        emailAddress:
-          existingEmailAddress?.id ??
-          requireWrittenRecord(writtenRecords, emailAddressRecordIndex).id,
-        audience:
-          existingAudience?.id ?? requireWrittenRecord(writtenRecords, audienceRecordIndex).id,
-        status: "subscribed",
-        consentedAt: envelope.receivedAt,
-        ...sourceValues,
-      },
-      subscriptionEntity,
-      storage,
-    );
-
-  if (existingSubscription) {
-    plans.push({
-      kind: "patch",
-      record: existingSubscription,
-      values: subscriptionValues,
-    });
-  } else {
-    plans.push({
-      kind: "create",
-      entity: "subscription",
-      values: subscriptionValues,
-    });
-  }
-
-  return writeRecordSetForCommandOperationOutcome(
-    storage,
-    requiredWriteIdentity(envelope),
-    plans,
-    (entity, recordValues, options) => {
-      assertUniqueConstraints(storage, schema, entity, recordValues, options);
-    },
-    { now: envelope.receivedAt },
-  );
-}
-
-const defaultAudienceKey = "default";
-
-function requireSubscribeEntity(schema: AppSchema, entityName: string): EntitySchema {
-  const entity = schema.entities[entityName];
-
-  if (!entity) {
-    throw new Error(`Subscribe operation requires entity "${entityName}".`);
-  }
-
-  return entity;
-}
-
-function parseSubscribeEmail(value: RecordValues[string] | undefined) {
-  if (typeof value !== "string") {
-    throw new BadRequestError('Subscribe operation public input "email" must be text.');
-  }
-
-  const address = value.trim();
-  const normalizedAddress = address.toLowerCase();
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedAddress)) {
-    throw new BadRequestError('Subscribe operation public input "email" must be an email address.');
-  }
-
-  return { address, normalizedAddress };
-}
-
-function findExistingEmailContact(
-  storage: DurableObjectStorage,
-  emailAddress: StoredRecord | undefined,
-) {
-  const contactId = emailAddress?.values.contact;
-
-  if (typeof contactId !== "string") {
-    return undefined;
-  }
-
-  const contact = getStoredRecord(storage, contactId);
-
-  return contact?.entity === "contact" && !contact.deletedAt ? contact : undefined;
-}
-
-function findActiveSubscription(
-  storage: DurableObjectStorage,
-  emailAddressId: string,
-  audienceId: string,
-) {
-  return getActiveRecordsByEntity(storage, "subscription").find(
-    (record) =>
-      record.values.emailAddress === emailAddressId && record.values.audience === audienceId,
-  );
-}
-
-function findActiveRecordByField(
-  storage: DurableObjectStorage,
-  entity: string,
-  field: string,
-  value: RecordValues[string],
-) {
-  return getActiveRecordsByEntity(storage, entity).find((record) => record.values[field] === value);
-}
-
-function subscribeSourceValues(envelope: OperationInvocationEnvelope): RecordValues {
-  if (envelope.appStorageIdentity.kind === "instanceControlPlane") {
-    throw new BadRequestError("Public operations are only available for app storage.");
-  }
-
-  const host = parseNonEmptyString("Public operation source host", envelope.source.host);
-  const path = parseNonEmptyString("Public operation source path", envelope.source.path);
-  const values: RecordValues = {
-    sourceKind: "publicOperation",
-    sourceTargetKind: envelope.appStorageIdentity.kind,
-    sourcePackageAppKey: envelope.appStorageIdentity.packageAppKey,
-    sourceSchemaKey: envelope.appStorageIdentity.sourceSchemaKey,
-    sourceApiRoutePrefix: envelope.appStorageIdentity.apiRoutePrefix,
-    sourceOperationKey: envelope.operation.canonicalKey,
-    sourceHost: host,
-    sourcePath: path,
-  };
-
-  if (envelope.appStorageIdentity.kind === "appInstall") {
-    values.sourceInstallId = envelope.appStorageIdentity.installId;
-  }
-
-  if (envelope.source.siteBlockId !== undefined) {
-    values.sourceSiteBlockId = envelope.source.siteBlockId;
-  }
-
-  return values;
-}
-
-function pushPlan(plans: ActionRecordWritePlan[], plan: ActionRecordWritePlan) {
-  plans.push(plan);
-
-  return plans.length - 1;
-}
-
-function requireWrittenRecord(records: StoredRecord[], index: number | undefined) {
-  const record = index === undefined ? undefined : records[index];
-
-  if (!record) {
-    throw new Error("Subscribe operation could not resolve a planned record.");
-  }
-
-  return record;
-}
-
 type RecordWriteMaterializerOutput = {
   record: StoredRecord;
   changes: OperationCommandOutput["changes"];
   cursor: number;
-};
-
-type CommandMaterializerOutput = {
-  changes: OperationCommandOutput["changes"];
-  cursor: number;
-  recordPlan?: OperationCommandOutput["recordPlan"];
 };
 
 function operationInvocationReplayResponse(
@@ -1609,16 +1357,6 @@ function recordWriteOperationOutput(
   throw new Error(
     `Operation "${envelope.operation.canonicalKey}" is not a record write operation.`,
   );
-}
-
-function commandOperationOutput(output: CommandMaterializerOutput): OperationCommandOutput {
-  return {
-    affectedChangeIds: affectedChangeIds(output.changes),
-    changes: output.changes,
-    cursor: output.cursor,
-    type: "command",
-    ...(output.recordPlan === undefined ? {} : { recordPlan: output.recordPlan }),
-  };
 }
 
 function affectedChangeIds(changes: OperationCommandOutput["changes"]) {

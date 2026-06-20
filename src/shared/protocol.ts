@@ -1,4 +1,4 @@
-import type { AppSchema, SchemaActionActorKind } from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { isStoredRecord, type RecordValues, type StoredRecord } from "@dpeek/formless-storage";
 import type {
   AppInstall,
@@ -33,44 +33,6 @@ export type DeleteMutation = {
 };
 
 export type Mutation = CreateMutation | PatchMutation | DeleteMutation;
-
-export type CreateSelectedJoinRecordActionInput = {
-  fromRecordId: string;
-  toRecordId: string;
-};
-
-export type RemoveSelectedJoinRecordsActionInput = {
-  recordIds: string[];
-};
-
-export type CreateTreeChildActionInput = {
-  parentRecordId: string;
-  childValues: RecordValues;
-  placementValues?: RecordValues;
-};
-
-export type RemoveTreePlacementActionInput = {
-  placementId: string;
-};
-
-export type TransitionStateActionInput = {
-  recordId: string;
-};
-
-export type ActionRequestInput =
-  | CreateSelectedJoinRecordActionInput
-  | RemoveSelectedJoinRecordsActionInput
-  | CreateTreeChildActionInput
-  | RemoveTreePlacementActionInput
-  | TransitionStateActionInput;
-
-export type ActionRequest = {
-  actionId: string;
-  entity: EntityName;
-  action: string;
-  input?: ActionRequestInput;
-  actorKind?: SchemaActionActorKind;
-};
 
 export type PublicOperationProofInput = {
   turnstileToken: string;
@@ -136,8 +98,8 @@ export type PublicOperationResponse = {
 
 export type ChangeRow = {
   seq: number;
-  mutationId: string;
-  op: "create" | "patch" | "delete" | "action";
+  writeId: string;
+  operationKind: "create" | "update" | "delete" | "command";
   entity: EntityName;
   recordId: string;
   payload: StoredRecord;
@@ -406,11 +368,11 @@ function isChangeRow(value: unknown): value is ChangeRow {
   return (
     isRecord(value) &&
     isCursor(value.seq) &&
-    typeof value.mutationId === "string" &&
-    (value.op === "create" ||
-      value.op === "patch" ||
-      value.op === "delete" ||
-      value.op === "action") &&
+    typeof value.writeId === "string" &&
+    (value.operationKind === "create" ||
+      value.operationKind === "update" ||
+      value.operationKind === "delete" ||
+      value.operationKind === "command") &&
     typeof value.entity === "string" &&
     typeof value.recordId === "string" &&
     isStoredRecord(value.payload) &&

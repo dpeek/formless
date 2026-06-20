@@ -395,16 +395,18 @@
           "kind": "command",
           "scope": "collection",
           "effect": {
-            "type": "registeredCommand",
-            "kind": "create-missing-join-records",
-            "join": {
-              "left": {
-                "field": "resource",
-                "query": "resourceAll"
-              },
-              "right": {
-                "field": "card",
-                "query": "cardAll"
+            "type": "operationHandler",
+            "handler": "create-missing-join-records",
+            "config": {
+              "join": {
+                "left": {
+                  "field": "resource",
+                  "query": "resourceAll"
+                },
+                "right": {
+                  "field": "card",
+                  "query": "cardAll"
+                }
               }
             }
           },

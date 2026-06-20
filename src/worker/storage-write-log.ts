@@ -1,14 +1,14 @@
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../shared/protocol.ts";
 
-export type MutationResponse = {
+export type RecordWriteResponse = {
   record: StoredRecord;
   changes: ChangeRow[];
   cursor: number;
-  mutationId: string;
+  writeId: string;
 };
 
-export type RecordPlanStepResponse = {
+export type OperationRecordPlanStepResponse = {
   name: string;
   kind: "create" | "patch" | "delete" | "tombstone";
   entity: string;
@@ -16,21 +16,23 @@ export type RecordPlanStepResponse = {
   changeId: string;
 };
 
-export type RecordPlanResponse = {
-  steps: RecordPlanStepResponse[];
+export type OperationRecordPlanResponse = {
+  steps: OperationRecordPlanStepResponse[];
 };
 
-export type ActionResponse = {
-  actionId: string;
+export type CommandWriteResponse = {
+  writeId: string;
   changes: ChangeRow[];
   cursor: number;
-  recordPlan?: RecordPlanResponse;
+  recordPlan?: OperationRecordPlanResponse;
 };
+
+type StoredWriteOperationKind = "create" | "patch" | "delete" | "action";
 
 type ChangeSqlRow = {
   seq: number;
   mutation_id: string;
-  op: "create" | "patch" | "delete" | "action";
+  op: StoredWriteOperationKind;
   entity: string;
   record_id: string;
   payload_json: string;
@@ -41,38 +43,38 @@ type CursorRow = {
   cursor: number | null;
 };
 
-type ActionExecutionRow = {
+type CommandExecutionRow = {
   action_id: string;
   cursor: number;
 };
 
 export type AppendWriteLogChangeInput = {
-  mutationId: string;
-  op: ChangeRow["op"];
+  writeId: string;
+  operationKind: ChangeRow["operationKind"];
   entity: string;
   record: StoredRecord;
   createdAt: string;
 };
 
-export type AppendActionWriteLogChangeInput = {
-  actionId: string;
+export type AppendCommandWriteLogChangeInput = {
+  writeId: string;
   entity: string;
   record: StoredRecord;
   createdAt: string;
 };
 
-export type PersistActionExecutionInput = {
-  actionId: string;
+export type PersistCommandExecutionInput = {
+  writeId: string;
   entity: string;
-  action: string;
+  operationName: string;
   cursor: number;
   createdAt: string;
 };
 
-export type CommitActionWriteLogInput = Omit<PersistActionExecutionInput, "cursor">;
+export type CommitCommandWriteLogInput = Omit<PersistCommandExecutionInput, "cursor">;
 
-export type ReadCommittedMutationResponseInput = {
-  mutationId: string;
+export type ReadCommittedRecordWriteResponseInput = {
+  writeId: string;
   record: StoredRecord;
 };
 
@@ -99,11 +101,11 @@ export function readWriteLogChangesAfter(
   return rows.map(changeFromRow);
 }
 
-export function readMutationReplayResponse(
+export function readRecordWriteReplayResponse(
   storage: DurableObjectStorage,
-  mutationId: string,
-): MutationResponse | undefined {
-  const changes = readWriteLogChangesByMutationId(storage, mutationId);
+  writeId: string,
+): RecordWriteResponse | undefined {
+  const changes = readWriteLogChangesByWriteId(storage, writeId);
   const change = changes[0];
 
   if (!change) {
@@ -114,59 +116,59 @@ export function readMutationReplayResponse(
     record: change.payload,
     changes,
     cursor: changes.at(-1)?.seq ?? change.seq,
-    mutationId,
+    writeId,
   };
 }
 
-export function readCommittedMutationResponse(
+export function readCommittedRecordWriteResponse(
   storage: DurableObjectStorage,
-  input: ReadCommittedMutationResponseInput,
-): MutationResponse {
-  const changes = readWriteLogChangesByMutationId(storage, input.mutationId);
+  input: ReadCommittedRecordWriteResponseInput,
+): RecordWriteResponse {
+  const changes = readWriteLogChangesByWriteId(storage, input.writeId);
 
   if (changes.length === 0) {
-    throw new Error(`Could not read mutation changes for "${input.mutationId}".`);
+    throw new Error(`Could not read record write changes for "${input.writeId}".`);
   }
 
   return {
     record: input.record,
     changes,
     cursor: changes.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
-    mutationId: input.mutationId,
+    writeId: input.writeId,
   };
 }
 
-export function readActionReplayResponse(
+export function readCommandWriteReplayResponse(
   storage: DurableObjectStorage,
-  actionId: string,
-): ActionResponse | undefined {
-  const existingExecution = readActionExecution(storage, actionId);
+  writeId: string,
+): CommandWriteResponse | undefined {
+  const existingExecution = readCommandExecution(storage, writeId);
 
   if (!existingExecution) {
     return undefined;
   }
 
   return {
-    actionId,
-    changes: readWriteLogChangesByMutationId(storage, actionId),
+    writeId,
+    changes: readWriteLogChangesByWriteId(storage, writeId),
     cursor: existingExecution.cursor,
   };
 }
 
-export function commitActionWriteLog(
+export function commitCommandWriteLog(
   storage: DurableObjectStorage,
-  input: CommitActionWriteLogInput,
-): ActionResponse {
+  input: CommitCommandWriteLogInput,
+): CommandWriteResponse {
   const cursor = readCurrentWriteLogCursor(storage);
 
-  persistActionExecution(storage, {
+  persistCommandExecution(storage, {
     ...input,
     cursor,
   });
 
   return {
-    actionId: input.actionId,
-    changes: readWriteLogChangesByMutationId(storage, input.actionId),
+    writeId: input.writeId,
+    changes: readWriteLogChangesByWriteId(storage, input.writeId),
     cursor,
   };
 }
@@ -180,8 +182,8 @@ export function appendWriteLogChange(
       INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `,
-    input.mutationId,
-    input.op,
+    input.writeId,
+    storedOperationKind(input.operationKind),
     input.entity,
     input.record.id,
     JSON.stringify(input.record),
@@ -189,62 +191,64 @@ export function appendWriteLogChange(
   );
 }
 
-export function appendMutationWriteLogChange(
+export function appendRecordWriteLogChange(
   storage: DurableObjectStorage,
   input: AppendWriteLogChangeInput,
 ): ChangeRow {
   appendWriteLogChange(storage, input);
 
-  const change = readLatestWriteLogChangeForRecord(storage, input.mutationId, input.record.id);
+  const change = readLatestWriteLogChangeForRecord(storage, input.writeId, input.record.id);
 
   if (!change) {
-    throw new Error(`Could not read ${input.op} change for record "${input.record.id}".`);
+    throw new Error(
+      `Could not read ${input.operationKind} change for record "${input.record.id}".`,
+    );
   }
 
   return change;
 }
 
-export function appendActionWriteLogChange(
+export function appendCommandWriteLogChange(
   storage: DurableObjectStorage,
-  input: AppendActionWriteLogChangeInput,
+  input: AppendCommandWriteLogChangeInput,
 ): ChangeRow {
   appendWriteLogChange(storage, {
-    mutationId: input.actionId,
-    op: "action",
+    writeId: input.writeId,
+    operationKind: "command",
     entity: input.entity,
     record: input.record,
     createdAt: input.createdAt,
   });
 
-  const change = readLatestWriteLogChangeForRecord(storage, input.actionId, input.record.id);
+  const change = readLatestWriteLogChangeForRecord(storage, input.writeId, input.record.id);
 
   if (!change) {
-    throw new Error(`Could not read action change for record "${input.record.id}".`);
+    throw new Error(`Could not read command change for record "${input.record.id}".`);
   }
 
   return change;
 }
 
-export function persistActionExecution(
+export function persistCommandExecution(
   storage: DurableObjectStorage,
-  input: PersistActionExecutionInput,
+  input: PersistCommandExecutionInput,
 ) {
   storage.sql.exec(
     `
       INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
       VALUES (?, ?, ?, ?, ?)
     `,
-    input.actionId,
+    input.writeId,
     input.entity,
-    input.action,
+    input.operationName,
     input.cursor,
     input.createdAt,
   );
 }
 
-export function readWriteLogChangesByMutationId(
+export function readWriteLogChangesByWriteId(
   storage: DurableObjectStorage,
-  mutationId: string,
+  writeId: string,
 ): ChangeRow[] {
   const rows = storage.sql
     .exec<ChangeSqlRow>(
@@ -254,7 +258,7 @@ export function readWriteLogChangesByMutationId(
         WHERE mutation_id = ?
         ORDER BY seq ASC
       `,
-      mutationId,
+      writeId,
     )
     .toArray();
 
@@ -263,7 +267,7 @@ export function readWriteLogChangesByMutationId(
 
 export function readLatestWriteLogChangeForRecord(
   storage: DurableObjectStorage,
-  mutationId: string,
+  writeId: string,
   recordId: string,
 ): ChangeRow | undefined {
   const row = storage.sql
@@ -275,7 +279,7 @@ export function readLatestWriteLogChangeForRecord(
         ORDER BY seq DESC
         LIMIT 1
       `,
-      mutationId,
+      writeId,
       recordId,
     )
     .next();
@@ -283,14 +287,14 @@ export function readLatestWriteLogChangeForRecord(
   return row.done ? undefined : changeFromRow(row.value);
 }
 
-function readActionExecution(
+function readCommandExecution(
   storage: DurableObjectStorage,
-  actionId: string,
-): ActionExecutionRow | undefined {
+  writeId: string,
+): CommandExecutionRow | undefined {
   const row = storage.sql
-    .exec<ActionExecutionRow>(
+    .exec<CommandExecutionRow>(
       "SELECT action_id, cursor FROM action_executions WHERE action_id = ?",
-      actionId,
+      writeId,
     )
     .next();
 
@@ -300,13 +304,39 @@ function readActionExecution(
 function changeFromRow(row: ChangeSqlRow): ChangeRow {
   return {
     seq: row.seq,
-    mutationId: row.mutation_id,
-    op: row.op,
+    writeId: row.mutation_id,
+    operationKind: operationKindFromStoredOperation(row.op),
     entity: row.entity,
     recordId: row.record_id,
     payload: parseStoredRecord(row.payload_json),
     createdAt: row.created_at,
   };
+}
+
+function storedOperationKind(operationKind: ChangeRow["operationKind"]): StoredWriteOperationKind {
+  if (operationKind === "update") {
+    return "patch";
+  }
+
+  if (operationKind === "command") {
+    return "action";
+  }
+
+  return operationKind;
+}
+
+function operationKindFromStoredOperation(
+  operationKind: StoredWriteOperationKind,
+): ChangeRow["operationKind"] {
+  if (operationKind === "patch") {
+    return "update";
+  }
+
+  if (operationKind === "action") {
+    return "command";
+  }
+
+  return operationKind;
 }
 
 function parseStoredRecord(value: string): StoredRecord {

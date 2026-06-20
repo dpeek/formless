@@ -247,7 +247,7 @@ describe("public operation runtime", () => {
     expect(turnstileRequests).toEqual([]);
   });
 
-  it("does not synthesize public execution from action-only metadata", async () => {
+  it("does not synthesize public execution from legacy action-only metadata", async () => {
     const rejected = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "unsupported-action-only-no-audit" }),
@@ -265,6 +265,7 @@ describe("public operation runtime", () => {
     expect(state.invocations).toEqual([]);
     expect(contactSubscriptionRecords(state.records).subscriptions).toHaveLength(0);
     expect(JSON.stringify(state.records)).not.toContain("sourceOperationKey");
+    expect(JSON.stringify(state.records)).not.toContain("legacySubscribeAction");
     expect(turnstileRequests).toEqual([]);
   });
 
@@ -806,25 +807,120 @@ describe("public operation runtime", () => {
     ]);
   });
 
-  it("rejects undeclared public input before challenge verification or idempotency reservation", async () => {
-    const rejected = await postPublicOperation(
+  it("rejects undeclared public subscribe input before challenge verification and audits source facts", async () => {
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({
         idempotencyKey: "input-retry",
         input: { email: "ada@example.com", admin: true },
       }),
     );
-    const accepted = await postPublicOperation(
+    const rejectedAfter = await readPublicOperationHarnessState();
+    const accepted = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "input-retry" }),
     );
+    const acceptedAfter = await readPublicOperationHarnessState();
 
     expect(rejected.status).toBe(400);
     expect((await rejected.json()) as { error: string }).toEqual({
       error: 'Public operation input includes undeclared field "admin".',
     });
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toHaveLength(1);
+    expect(rejectedAfter.invocations[0]).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      appStorageIdentity: {
+        kind: "schemaKey",
+        sourceSchemaKey: "site",
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          inputFields: ["admin", "email"],
+          inputType: "object",
+          type: "command",
+        },
+      },
+      authDecision: "allowed",
+      errorMessage: 'Public operation input includes undeclared field "admin".',
+      idempotency: {
+        key: "input-retry",
+        source: "caller",
+        writeIdentity: "operation:subscription.subscribe:input-retry",
+      },
+      operationKey: "subscription.subscribe",
+      operationKind: "command",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/subscription/subscribe",
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_form",
+      },
+      status: "failed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "failed" }),
+      ],
+    });
+    expect(rejectedAfter.invocations[0]?.output).toBeUndefined();
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("token-ok");
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain(turnstileSecret);
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("turnstileToken");
     expect(accepted.status).toBe(200);
+    expect(contactSubscriptionRecords(acceptedAfter.records).subscriptions).toHaveLength(1);
     expect(turnstileRequests).toHaveLength(1);
+  });
+
+  it("audits public subscribe same-origin rejections without challenge verification", async () => {
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarnessHost(
+      "example.com",
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "origin-rejected" }),
+      "http://evil.example",
+    );
+    const rejectedAfter = await readPublicOperationHarnessState();
+
+    expect(rejected.status).toBe(403);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: "Public operation origin is not allowed.",
+    });
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toHaveLength(1);
+    expect(rejectedAfter.invocations[0]).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      auditInput: {
+        kind: "summary",
+        summary: {
+          inputFields: ["email"],
+          inputType: "object",
+          type: "command",
+        },
+      },
+      authDecision: "allowed",
+      errorMessage: "Public operation origin is not allowed.",
+      operationKey: "subscription.subscribe",
+      operationKind: "command",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/subscription/subscribe",
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_form",
+      },
+      status: "failed",
+    });
+    expect(rejectedAfter.invocations[0]?.output).toBeUndefined();
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("token-ok");
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain(turnstileSecret);
+    expect(turnstileRequests).toEqual([]);
   });
 
   it("fails closed when Turnstile verification fails", async () => {
@@ -1236,11 +1332,12 @@ async function createPublicOperationHarness(input: {
             }
 
             ensureStorageTables(this.ctx.storage);
-            const { schema } = initializeStorageFromSource(this.ctx.storage, {
-              schema: schemaForHarnessRequest(app.sourceSchema, request),
+            const stored = initializeStorageFromSource(this.ctx.storage, {
+              schema: app.sourceSchema,
               records: app.seedRecords,
               changeMutationPrefix: app.seedChangeMutationPrefix,
             });
+            const schema = schemaForHarnessRequest(stored.schema, request);
             const result = await executePublicOperationRequest({
               body: await request.json(),
               env: this.env,
@@ -1298,6 +1395,20 @@ async function createPublicOperationHarness(input: {
 
         const schema = structuredClone(sourceSchema);
         delete schema.entities.subscription?.operations?.subscribe;
+        if (schema.entities.subscription) {
+          schema.entities.subscription.actions = {
+            subscribe: {
+              label: "Legacy subscribe",
+              kind: "subscribe",
+              exposure: {
+                actors: ["anonymous"],
+                responseFields: {
+                  anonymous: ["legacySubscribeAction"],
+                },
+              },
+            },
+          };
+        }
 
         return schema;
       }
@@ -1647,6 +1758,18 @@ function postPublicOperationHarness(
       Origin: "http://example.com",
       "x-public-operation-harness-name": publicOperationHarnessName,
       ...headers,
+    },
+    method: "POST",
+  });
+}
+
+function postPublicOperationHarnessHost(host: string, path: string, body: unknown, origin: string) {
+  return publicOperationHarness.mf.dispatchFetch(`http://${host}${path}`, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      Origin: origin,
+      "x-public-operation-harness-name": publicOperationHarnessName,
     },
     method: "POST",
   });

@@ -5,11 +5,12 @@ import type {
   EntityUnionVariantSchema,
   FieldSchema,
   FieldVisibilityValue,
-  RegisteredCommandEntityOperationEffectSchema,
+  OperationHandlerEffectSchemaForKind,
   ToManyRelationshipSchema,
   TreeBranchChildVariantSchema,
   TreeBranchVariantPolicySchema,
 } from "@dpeek/formless-schema";
+import { isOperationHandlerEffectForSelectionCapability } from "@dpeek/formless-schema";
 import { selectRecordFields, selectToManyRelationship } from "./collection-shell-model.ts";
 import {
   selectAvailableEntityOperations,
@@ -43,12 +44,12 @@ export type TreeCompositionOperationConfig = {
   create?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" };
+    effect: OperationHandlerEffectSchemaForKind<"create-tree-child">;
   };
   remove?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "remove-tree-placement" };
+    effect: OperationHandlerEffectSchemaForKind<"remove-tree-placement">;
   };
 };
 
@@ -234,8 +235,8 @@ function selectTreeCompositionOperationConfig(
       : recordOperations.find(
           (operation) => operation.canonicalKey === composition.removeOperation,
         );
-  const createEffect = selectTreeCompositionEffect(createOperation, "create-tree-child");
-  const removeEffect = selectTreeCompositionEffect(removeOperation, "remove-tree-placement");
+  const createEffect = selectTreeCompositionEffect(createOperation, "createTreeChild");
+  const removeEffect = selectTreeCompositionEffect(removeOperation, "removeTreePlacement");
 
   return {
     ...(createOperation !== undefined && createEffect !== undefined
@@ -259,17 +260,25 @@ function selectTreeCompositionOperationConfig(
   };
 }
 
-function selectTreeCompositionEffect<Kind extends "create-tree-child" | "remove-tree-placement">(
+function selectTreeCompositionEffect<Capability extends "createTreeChild">(
   operation: EntityOperationPresentationConfig | undefined,
-  kind: Kind,
-): (RegisteredCommandEntityOperationEffectSchema & { kind: Kind }) | undefined {
+  capability: Capability,
+): OperationHandlerEffectSchemaForKind<"create-tree-child"> | undefined;
+function selectTreeCompositionEffect<Capability extends "removeTreePlacement">(
+  operation: EntityOperationPresentationConfig | undefined,
+  capability: Capability,
+): OperationHandlerEffectSchemaForKind<"remove-tree-placement"> | undefined;
+function selectTreeCompositionEffect(
+  operation: EntityOperationPresentationConfig | undefined,
+  capability: "createTreeChild" | "removeTreePlacement",
+) {
   const effect = operation?.operation.effect;
 
-  if (effect?.type !== "registeredCommand" || effect.kind !== kind) {
+  if (!isOperationHandlerEffectForSelectionCapability(effect, capability)) {
     return undefined;
   }
 
-  return effect as RegisteredCommandEntityOperationEffectSchema & { kind: Kind };
+  return effect;
 }
 
 // Infer tree ordering from entity fields when result-level ordering is absent.

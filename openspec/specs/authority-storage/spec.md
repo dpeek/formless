@@ -326,7 +326,7 @@ writes.
 - AND all committed steps share the invocation id, app storage identity, actor,
   source context, and idempotency key from the operation envelope
 - AND if any step fails validation or materialization, no plan step writes an
-  app record, tombstone, command effect row, or sync change row
+  app record, tombstone, operation handler replay row, or sync change row
 
 #### Scenario: Return record plan outcome
 
@@ -339,8 +339,37 @@ writes.
   write
 - AND replaying the same operation for the same app storage identity and
   idempotency key returns the stored operation output without duplicate app
-  records, tombstones, command effect rows, operation invocation rows, or sync
-  change rows
+  records, tombstones, operation handler replay rows, operation invocation rows,
+  or sync change rows
+
+### Requirement: Operation Handler Materialization
+
+The system SHALL materialize registered command behavior through operation
+handler modules, not entity action execution.
+
+#### Scenario: Execute operation handler
+
+- GIVEN an accepted command operation invocation has effect type
+  `operationHandler`
+- WHEN Authority materializes the handler
+- THEN the handler receives the operation invocation envelope, active schema,
+  storage identity, typed handler configuration, declared input, actor, source,
+  idempotency, and received timestamp
+- AND the handler returns operation-native command output or planned record
+  writes through operation-named storage materializers
+- AND handler execution does not construct legacy action requests, read legacy
+  entity action metadata, project mutation policies, or return action or
+  mutation response shapes
+
+#### Scenario: Handler-owned dynamic behavior
+
+- GIVEN command behavior requires query fan-out, selected-record array input,
+  conditional upsert, dedupe, computed ordering, state-transition validation, or
+  public source materialization
+- WHEN the operation is parsed and invoked
+- THEN the behavior is represented by an operation handler kind with typed
+  configuration
+- AND declarative record plans remain limited to deterministic flat write steps
 
 ### Requirement: Operation Invocation Audit
 
@@ -370,7 +399,7 @@ separate from stored app records and sync change rows.
   rejected or failed status, public source protocol, source host and path,
   target app storage identity, canonical operation key, idempotency facts when
   available, input hash, and safe input audit metadata
-- AND no sync change rows, command effect rows, stored app records, or
+- AND no sync change rows, operation handler replay rows, stored app records, or
   tombstones are written for the rejected attempt
 
 #### Scenario: Change rows remain materialization log
@@ -380,6 +409,9 @@ separate from stored app records and sync change rows.
 - THEN clients receive change rows from the existing write log
 - AND the operation invocation row remains the semantic audit and replay root
   for that operation
+- AND shared change-row fields use `writeId` and `operationKind`
+- AND shared change-row fields do not expose action or mutation identifiers as
+  public sync contract terms
 
 ### Requirement: Storage Write Log Boundary
 
@@ -401,6 +433,10 @@ outputs.
   operation response, replay, or command output boundary
 - AND replay storage is keyed by operation identity and returns the
   operation-native output shape
+- AND storage modules may expose `RecordWriteResponse` and
+  `CommandWriteResponse` as internal materializer response types
+- AND storage modules do not export legacy action response, mutation response,
+  or action/mutation request contracts
 
 #### Scenario: Committed write facts
 
@@ -416,7 +452,7 @@ outputs.
   identity is replayed
 - THEN the storage write outcome identifies the result as replayed
 - AND the original stored response is returned
-- AND duplicate change rows or command effect rows are not inserted
+- AND duplicate change rows or operation handler replay rows are not inserted
 
 #### Scenario: Change readback
 
@@ -444,8 +480,8 @@ write-log append behavior.
 - WHEN source schema reset, seed reset, snapshot restore, or archive app data
   restore runs
 - THEN the reset or restore plan remains explicit before durable mutation
-- AND command effect executions are cleared only by operations whose storage semantics
-  require clearing them
+- AND operation handler executions are cleared only by operations whose storage
+  semantics require clearing them
 - AND sync cursors remain monotonic after the operation
 
 ### Requirement: Tombstone Deletes
@@ -632,8 +668,8 @@ canonical provider state out of control-plane records and change rows.
 - GIVEN app install or route metadata records are stored, synced, snapshotted,
   or exported as control-plane records
 - WHEN installed app data exists for those installs
-- THEN the installed app's records, changes, active schema, and action
-  executions are not nested into control-plane records
+- THEN the installed app's records, changes, active schema, and operation
+  handler execution state are not nested into control-plane records
 - AND app data continues to move through storage snapshots scoped to
   `app:<installId>` identities
 

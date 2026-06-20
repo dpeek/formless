@@ -56,7 +56,7 @@ import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
-  createRecordSetForActionOutcome,
+  createRecordSetForOperationOutcome,
   ensureStorageTables,
   ActiveSchemaRefreshBlockedError,
   getBootstrapRecords,
@@ -70,7 +70,7 @@ import {
   readOperationInvocations,
   type RecordConstraintValidator,
   type StorageSource,
-  writeRecordSetForActionOutcome,
+  writeRecordSetForOperationOutcome,
   writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
 import type {
@@ -573,7 +573,7 @@ async function handleCreateAppInstallOperation(
       validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema, {
         packageResolver,
       }),
-      { now: receivedAt },
+      { allowStoredReplay: false, now: receivedAt },
     );
     const response = createAppInstallOperationResponse(
       envelope,
@@ -965,7 +965,7 @@ function upsertControlPlaneRecord(
   const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema);
 
   if (!existing || existing.deletedAt) {
-    createRecordSetForActionOutcome(
+    createRecordSetForOperationOutcome(
       storage,
       `controlPlane:${input.action}:create:${input.id}:${recordValuesHash(input.values)}`,
       input.entity,
@@ -1080,7 +1080,7 @@ function removeMissingControlPlaneIntentRecords(
   const actionId = `controlPlane:${input.action}:${removedRecordIds.join(",")}`;
   const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSourceSchema);
 
-  writeRecordSetForActionOutcome(
+  writeRecordSetForOperationOutcome(
     storage,
     actionId,
     "route",

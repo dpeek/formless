@@ -221,87 +221,6 @@ export function operationWriteRequest(
   path: string;
   response: (value: unknown) => unknown;
 } {
-  const mutationSuffix = "/mutations";
-  const actionSuffix = "/actions";
-  const mutationPath = path.endsWith(mutationSuffix);
-  const actionPath = path.endsWith(actionSuffix);
-
-  if (isControlPlaneLegacyWritePath(path)) {
-    throw new Error(`Control-plane tests must call operation routes instead of "${path}".`);
-  }
-
-  if ((mutationPath || actionPath) && isAppStorageLegacyWritePath(path)) {
-    throw new Error(`App storage tests must call operation routes instead of "${path}".`);
-  }
-
-  const prefix = mutationPath
-    ? path.slice(0, -mutationSuffix.length)
-    : actionPath
-      ? path.slice(0, -actionSuffix.length)
-      : path;
-
-  if (!mutationPath && !actionPath) {
-    return { body, path, response: (value) => value };
-  }
-
-  const request = parseRecord("Authority write helper request", body);
-
-  if (mutationPath) {
-    const mutationId = parseNonEmptyString("mutationId", request.mutationId);
-    const entity = parseNonEmptyString("entity", request.entity);
-    const op = parseNonEmptyString("op", request.op);
-
-    if (op === "create") {
-      return {
-        body: {
-          idempotencyKey: mutationId,
-          input: request.values,
-        },
-        path: `${prefix}/operations/${entity}/create`,
-        response: (value) => recordOperationResultFromOperation(value, mutationId),
-      };
-    }
-
-    if (op === "patch") {
-      return {
-        body: {
-          idempotencyKey: mutationId,
-          input: request.values,
-          recordId: request.recordId,
-        },
-        path: `${prefix}/operations/${entity}/update`,
-        response: (value) => recordOperationResultFromOperation(value, mutationId),
-      };
-    }
-
-    if (op === "delete") {
-      return {
-        body: {
-          idempotencyKey: mutationId,
-          ...(request.values === undefined ? {} : { input: request.values }),
-          recordId: request.recordId,
-        },
-        path: `${prefix}/operations/${entity}/delete`,
-        response: (value) => recordOperationResultFromOperation(value, mutationId),
-      };
-    }
-  }
-
-  if (actionPath) {
-    const actionId = parseNonEmptyString("actionId", request.actionId);
-    const entity = parseNonEmptyString("entity", request.entity);
-    const action = parseNonEmptyString("action", request.action);
-
-    return {
-      body: {
-        idempotencyKey: actionId,
-        ...(request.input === undefined ? {} : { input: request.input }),
-      },
-      path: `${prefix}/operations/${entity}/${action}`,
-      response: commandOperationResultFromOperation,
-    };
-  }
-
   return { body, path, response: (value) => value };
 }
 
@@ -371,26 +290,6 @@ export function commandOperationRequest(requestBody: AuthorityTestCommandOperati
   };
 }
 
-function isAppStorageLegacyWritePath(path: string) {
-  if (path === "/mutations" || path === "/actions") {
-    return true;
-  }
-
-  if (path === "/api/mutations" || path === "/api/actions") {
-    return true;
-  }
-
-  if (/^\/api\/(?:tasks|site|crm)\/(?:mutations|actions)$/.test(path)) {
-    return true;
-  }
-
-  return /^\/api\/app-installs\/[^/]+\/[^/]+\/(?:mutations|actions)$/.test(path);
-}
-
-function isControlPlaneLegacyWritePath(path: string) {
-  return /^\/api\/formless\/control-plane\/(?:mutations|actions)(?:\/.*)?$/.test(path);
-}
-
 function recordOperationResultFromOperation(
   value: unknown,
   fallbackWriteIdentity: string,
@@ -414,7 +313,7 @@ function recordOperationResultFromOperation(
         : operation.output.record,
     writeIdentity:
       operation.invocation.idempotency.writeIdentity ??
-      operation.output.changes[0]?.mutationId ??
+      operation.output.changes[0]?.writeId ??
       fallbackWriteIdentity,
   };
 }
@@ -442,14 +341,6 @@ function commandOperationResultFromResponse(
     writeIdentity:
       operation.invocation.idempotency.writeIdentity ?? operation.invocation.invocationId,
   };
-}
-
-function parseRecord(context: string, value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${context} must be an object.`);
-  }
-
-  return value as Record<string, unknown>;
 }
 
 function parseNonEmptyString(context: string, value: unknown): string {
