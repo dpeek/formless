@@ -1,13 +1,13 @@
-import { getFieldTypeBehavior } from "@dpeek/formless-schema";
+import { getFieldTypeBehavior, parseEntityOperationKey } from "@dpeek/formless-schema";
 import type {
   AppSchema,
   CollectionTableFooterSlotSchema,
-  EditRecordTableActionSchema,
   EditViewSchema,
   EntitySchema,
   FieldSchema,
   TableColumnDisplay,
   ItemViewSchema,
+  TableOperationBindingSchema,
   TableViewSchema,
 } from "@dpeek/formless-schema";
 import type {
@@ -24,7 +24,11 @@ import type {
   ValueUnitFieldConfig,
 } from "./views.ts";
 import { selectAggregateSlot } from "./collection-shell-model.ts";
-import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
+import {
+  selectAvailableEntityOperations,
+  selectEntityOperationByKind,
+  type EntityOperationPresentationConfig,
+} from "./operation-presentation-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectStateMachineField, selectTransitionStateOperations } from "./state-machine-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
@@ -85,7 +89,7 @@ function selectTableColumns(
   entity: EntitySchema,
   ordering: TableOrderingConfig | undefined,
 ): TableColumnConfig[] {
-  const columns: TableColumnConfig[] = view.columns.map((column): TableColumnConfig => {
+  const columns: TableColumnConfig[] = view.columns.flatMap((column): TableColumnConfig[] => {
     if (column.type === "computed") {
       const computedValue = schema.readModels?.computedValues?.[column.computedValue];
 
@@ -99,18 +103,20 @@ function selectTableColumns(
         );
       }
 
-      return {
-        type: "computed",
-        key: `computed:${column.computedValue}`,
-        computedValueName: column.computedValue,
-        computedValue,
-        label: column.label ?? humanizeFieldName(column.computedValue),
-        ...(column.align === undefined ? {} : { align: column.align }),
-        ...(column.width === undefined ? {} : { width: column.width }),
-        display: column.display === "hidden" ? "hidden" : "readOnly",
-        ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
-        format: column.format ?? "plain",
-      };
+      return [
+        {
+          type: "computed",
+          key: `computed:${column.computedValue}`,
+          computedValueName: column.computedValue,
+          computedValue,
+          label: column.label ?? humanizeFieldName(column.computedValue),
+          ...(column.align === undefined ? {} : { align: column.align }),
+          ...(column.width === undefined ? {} : { width: column.width }),
+          display: column.display === "hidden" ? "hidden" : "readOnly",
+          ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+          format: column.format ?? "plain",
+        },
+      ];
     }
 
     if (column.type === "referenceField") {
@@ -133,40 +139,46 @@ function selectTableColumns(
         "record",
       );
 
-      return {
-        type: "referenceField",
-        key: `referenceField:${column.referenceField}.${column.field}`,
-        sourceReferenceFieldName: column.referenceField,
-        referencedEntityName: sourceReferenceField.to,
-        referencedEntity,
-        ...(referencedUpdateOperation === undefined ? {} : { referencedUpdateOperation }),
-        fieldName: column.field,
-        fieldRef: selectedField.fieldRef,
-        field: selectedField.field,
-        editor:
-          selectedField.writable && column.editor !== undefined
-            ? column.editor
-            : getFieldTypeBehavior(selectedField.field).defaultEditor,
-        commit:
-          selectedField.writable && column.commit !== undefined
-            ? column.commit
-            : getFieldTypeBehavior(selectedField.field).defaultCommit,
-        writable: selectedField.writable,
-        label: column.label ?? selectedField.label,
-        ...(stateMachine === undefined ? {} : { stateMachine }),
-        ...(column.align === undefined ? {} : { align: column.align }),
-        ...(column.width === undefined ? {} : { width: column.width }),
-        display: selectFieldColumnDisplay(column.display, selectedField.writable, "editor"),
-        ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
-        format: column.format ?? "plain",
-        ...(selectedField.writable && column.presentation !== undefined
-          ? { presentation: column.presentation }
-          : {}),
-      };
+      return [
+        {
+          type: "referenceField",
+          key: `referenceField:${column.referenceField}.${column.field}`,
+          sourceReferenceFieldName: column.referenceField,
+          referencedEntityName: sourceReferenceField.to,
+          referencedEntity,
+          ...(referencedUpdateOperation === undefined ? {} : { referencedUpdateOperation }),
+          fieldName: column.field,
+          fieldRef: selectedField.fieldRef,
+          field: selectedField.field,
+          editor:
+            selectedField.writable && column.editor !== undefined
+              ? column.editor
+              : getFieldTypeBehavior(selectedField.field).defaultEditor,
+          commit:
+            selectedField.writable && column.commit !== undefined
+              ? column.commit
+              : getFieldTypeBehavior(selectedField.field).defaultCommit,
+          writable: selectedField.writable,
+          label: column.label ?? selectedField.label,
+          ...(stateMachine === undefined ? {} : { stateMachine }),
+          ...(column.align === undefined ? {} : { align: column.align }),
+          ...(column.width === undefined ? {} : { width: column.width }),
+          display: selectFieldColumnDisplay(column.display, selectedField.writable, "editor"),
+          ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+          format: column.format ?? "plain",
+          ...(selectedField.writable && column.presentation !== undefined
+            ? { presentation: column.presentation }
+            : {}),
+        },
+      ];
     }
 
     if (column.type === "invokeAction") {
-      const bindingNames = invokeActionBindingNames(column);
+      return [];
+    }
+
+    if (column.type === "operationControl") {
+      const bindingNames = operationControlBindingNames(column);
       const controls = selectTableOperationControlConfigs(schema, view, bindingNames);
       const includeOrdering =
         column.includeOrdering === true && ordering?.presentations.includes("moveMenu") === true;
@@ -176,34 +188,38 @@ function selectTableColumns(
         column.label ??
         (includeOrdering ? "Actions" : defaultOperationControlHeaderLabel(controls));
 
-      return {
-        type: "operationControl",
-        key: `operationControl:${[...bindingNames, ...(includeOrdering ? ["ordering"] : [])].join(",")}`,
-        label: column.label ?? "",
-        headerLabel,
-        controls,
-        presentation,
-        includeOrdering,
-        ...(includeOrdering && ordering ? { ordering } : {}),
-        ...(column.align === undefined ? { align: "end" as const } : { align: column.align }),
-        ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
-        display:
-          controls.length === 0 && !includeOrdering ? "hidden" : (column.display ?? "readOnly"),
-        format: "plain",
-      };
+      return [
+        {
+          type: "operationControl",
+          key: `operationControl:${[...bindingNames, ...(includeOrdering ? ["ordering"] : [])].join(",")}`,
+          label: column.label ?? "",
+          headerLabel,
+          controls,
+          presentation,
+          includeOrdering,
+          ...(includeOrdering && ordering ? { ordering } : {}),
+          ...(column.align === undefined ? { align: "end" as const } : { align: column.align }),
+          ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
+          display:
+            controls.length === 0 && !includeOrdering ? "hidden" : (column.display ?? "readOnly"),
+          format: "plain",
+        },
+      ];
     }
 
     if (column.type === "orderingHandle") {
-      return {
-        type: "orderingHandle",
-        key: "orderingHandle",
-        label: column.label ?? "",
-        headerLabel: column.label ?? "Reorder",
-        ...(column.align === undefined ? { align: "center" as const } : { align: column.align }),
-        ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
-        display: column.display ?? "readOnly",
-        format: "plain",
-      };
+      return [
+        {
+          type: "orderingHandle",
+          key: "orderingHandle",
+          label: column.label ?? "",
+          headerLabel: column.label ?? "Reorder",
+          ...(column.align === undefined ? { align: "center" as const } : { align: column.align }),
+          ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
+          display: column.display ?? "readOnly",
+          format: "plain",
+        },
+      ];
     }
 
     const selectedField = selectAddressableRecordFieldConfig(entity, column.field);
@@ -220,38 +236,40 @@ function selectTableColumns(
       ? selectValueUnitField(entity, column.valueUnit?.unitField)
       : undefined;
 
-    return {
-      type: "field",
-      key: `field:${column.field}`,
-      fieldName: column.field,
-      fieldRef: selectedField.fieldRef,
-      field: selectedField.field,
-      editor:
-        selectedField.writable && column.editor !== undefined
-          ? column.editor
-          : getFieldTypeBehavior(selectedField.field).defaultEditor,
-      commit:
-        selectedField.writable && column.commit !== undefined
-          ? column.commit
-          : getFieldTypeBehavior(selectedField.field).defaultCommit,
-      writable: selectedField.writable,
-      label: column.label ?? selectedField.label,
-      ...(stateMachine === undefined ? {} : { stateMachine }),
-      ...(column.align === undefined ? {} : { align: column.align }),
-      ...(column.width === undefined ? {} : { width: column.width }),
-      display: selectFieldColumnDisplay(
-        column.display,
-        selectedField.writable,
-        ordering?.fieldName === column.field ? "hidden" : "editor",
-      ),
-      ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
-      format: column.format ?? "plain",
-      ...(referenceItem === undefined ? {} : { referenceItem }),
-      ...(valueUnit === undefined ? {} : { valueUnit }),
-      ...(selectedField.writable && column.presentation !== undefined
-        ? { presentation: column.presentation }
-        : {}),
-    };
+    return [
+      {
+        type: "field",
+        key: `field:${column.field}`,
+        fieldName: column.field,
+        fieldRef: selectedField.fieldRef,
+        field: selectedField.field,
+        editor:
+          selectedField.writable && column.editor !== undefined
+            ? column.editor
+            : getFieldTypeBehavior(selectedField.field).defaultEditor,
+        commit:
+          selectedField.writable && column.commit !== undefined
+            ? column.commit
+            : getFieldTypeBehavior(selectedField.field).defaultCommit,
+        writable: selectedField.writable,
+        label: column.label ?? selectedField.label,
+        ...(stateMachine === undefined ? {} : { stateMachine }),
+        ...(column.align === undefined ? {} : { align: column.align }),
+        ...(column.width === undefined ? {} : { width: column.width }),
+        display: selectFieldColumnDisplay(
+          column.display,
+          selectedField.writable,
+          ordering?.fieldName === column.field ? "hidden" : "editor",
+        ),
+        ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+        format: column.format ?? "plain",
+        ...(referenceItem === undefined ? {} : { referenceItem }),
+        ...(valueUnit === undefined ? {} : { valueUnit }),
+        ...(selectedField.writable && column.presentation !== undefined
+          ? { presentation: column.presentation }
+          : {}),
+      },
+    ];
   });
 
   const columnsWithOrderingHandle =
@@ -262,7 +280,7 @@ function selectTableColumns(
 
   if (
     ordering?.presentations.includes("moveMenu") &&
-    !view.columns.some((column) => column.type === "invokeAction" && column.includeOrdering)
+    !view.columns.some((column) => column.type === "operationControl" && column.includeOrdering)
   ) {
     return [...columnsWithOrderingHandle, selectSyntheticOrderingMenuColumn(ordering)];
   }
@@ -333,39 +351,46 @@ function selectSyntheticOrderingHandleColumn(): OrderingHandleTableColumnConfig 
 function selectTableOperationControlConfigs(
   schema: AppSchema,
   tableView: TableViewSchema,
-  bindingNames: string[],
+  operationKeys: string[],
 ): TableOperationControlConfig[] {
   const configs: TableOperationControlConfig[] = [];
 
-  for (const bindingName of bindingNames) {
-    const action = tableView.actions?.[bindingName];
+  for (const operationKey of operationKeys) {
+    const binding = tableView.operations?.find((candidate) => candidate.operation === operationKey);
 
-    if (!action || action.availability?.state === "hidden") {
+    if (!binding || binding.availability?.state === "hidden") {
+      continue;
+    }
+
+    const operation = selectBoundTableOperation(schema, binding.operation);
+
+    if (operation === undefined) {
       continue;
     }
 
     const base = {
-      bindingName,
-      label: action.label,
-      variant: action.variant ?? "default",
-      disabled: action.availability?.state === "disabled",
-      ...(action.availability?.reason === undefined
+      bindingName: operation.canonicalKey,
+      operation,
+      label: binding.label ?? operation.label,
+      variant:
+        binding.variant ?? (operation.operation.kind === "delete" ? "destructive" : "default"),
+      disabled: binding.availability?.state === "disabled",
+      ...(binding.availability?.reason === undefined
         ? {}
-        : { disabledReason: action.availability.reason }),
+        : { disabledReason: binding.availability.reason }),
     };
 
-    if (action.type !== "editRecord") {
+    if (operation.operation.kind !== "update" || binding.editView === undefined) {
       configs.push({ ...base, type: "static" });
       continue;
     }
 
-    const editView = selectEditViewConfig(schema, action.editView);
+    const editView = selectEditViewConfig(schema, binding.editView);
 
     configs.push({
       ...base,
       type: "editRecord",
-      ...(editView.updateOperation === undefined ? {} : { operation: editView.updateOperation }),
-      target: selectEditRecordTarget(schema, tableView, action),
+      target: selectEditRecordTarget(schema, tableView, binding),
       editView,
     });
   }
@@ -373,10 +398,30 @@ function selectTableOperationControlConfigs(
   return configs;
 }
 
+function selectBoundTableOperation(
+  schema: AppSchema,
+  canonicalKey: string,
+): EntityOperationPresentationConfig | undefined {
+  const { entityKey: entityName, operationKey: operationName } = parseEntityOperationKey(
+    "Table operation binding",
+    canonicalKey,
+  );
+  const entity = schema.entities[entityName];
+  const operation = entity?.operations?.[operationName];
+
+  if (!entity || !operation) {
+    throw new Error(`Missing table operation binding "${canonicalKey}".`);
+  }
+
+  return selectAvailableEntityOperations(entityName, entity, "record").find(
+    (candidate) => candidate.operationName === operationName,
+  );
+}
+
 function selectEditRecordTarget(
   schema: AppSchema,
   tableView: TableViewSchema,
-  action: EditRecordTableActionSchema,
+  binding: TableOperationBindingSchema,
 ): Extract<TableOperationControlConfig, { type: "editRecord" }>["target"] {
   const tableEntity = schema.entities[tableView.entity];
 
@@ -384,7 +429,7 @@ function selectEditRecordTarget(
     throw new Error(`Missing table entity "${tableView.entity}".`);
   }
 
-  if (action.target.kind === "row") {
+  if (binding.target === undefined || binding.target.kind === "row") {
     return {
       kind: "row",
       entityName: tableView.entity,
@@ -392,10 +437,10 @@ function selectEditRecordTarget(
     };
   }
 
-  const field = tableEntity.fields[action.target.field];
+  const field = tableEntity.fields[binding.target.field];
 
   if (field?.type !== "reference") {
-    throw new Error(`Missing reference field "${tableView.entity}.${action.target.field}".`);
+    throw new Error(`Missing reference field "${tableView.entity}.${binding.target.field}".`);
   }
 
   const referencedEntity = schema.entities[field.to];
@@ -406,7 +451,7 @@ function selectEditRecordTarget(
 
   return {
     kind: "reference",
-    fieldName: action.target.field,
+    fieldName: binding.target.field,
     field,
     entityName: field.to,
     entity: referencedEntity,
@@ -491,10 +536,10 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
   });
 }
 
-function invokeActionBindingNames(
-  column: Extract<TableViewSchema["columns"][number], { type: "invokeAction" }>,
+function operationControlBindingNames(
+  column: Extract<TableViewSchema["columns"][number], { type: "operationControl" }>,
 ): string[] {
-  return column.action === undefined ? (column.actions ?? []) : [column.action];
+  return column.operation === undefined ? (column.operations ?? []) : [column.operation];
 }
 
 function defaultOperationControlHeaderLabel(controls: TableOperationControlConfig[]) {

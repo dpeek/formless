@@ -6,7 +6,7 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 import { HomeScreen } from "./screen.tsx";
 
 describe("generated home screen", () => {
-  it("renders injected section actions beside collection headings", () => {
+  it("renders injected section operation controls beside collection headings", () => {
     const screen = selectScreenModelByPath(parseAppSchema(instanceControlPlaneSchema), "/");
 
     if (!screen) {
@@ -19,7 +19,7 @@ describe("generated home screen", () => {
         onSelectContext={() => {}}
         onSelectQuery={() => {}}
         screen={screen}
-        sectionActions={{
+        sectionOperationControls={{
           "app-installs": <button type="button">Install</button>,
         }}
         today="2026-06-01"

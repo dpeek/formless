@@ -349,7 +349,7 @@ function AppRootRecordNavigationGroup({
           ))}
       {group.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={group.createOperation}
+          operation={group.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={onSelectRecord}
           open={true}

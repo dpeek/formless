@@ -307,6 +307,8 @@ control-plane records.
 - WHEN the runtime accepts the install
 - THEN it creates an `app-install` control-plane record with stable install
   identity, package app key, label, status, created time, and updated time
+- AND creation is exposed as a control-plane operation with operation
+  idempotency, audit, replay, and operation-native output
 - AND the install is initialized from the resolved package source schema and
   source seed records in the install-scoped app storage identity
 

@@ -9,7 +9,7 @@ import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "@dpeek/formless-site-app/react
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
-import { mutationOperationRequest } from "../test/authority-write.ts";
+import { recordOperationRequest } from "../test/authority-write.ts";
 import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { handlePublicSiteDocumentRequest } from "./public-site-worker-runtime.ts";
@@ -311,10 +311,10 @@ describe("published Site Worker SSR", () => {
 
   it("uses the current public tree from the Site authority", async () => {
     await postAdminMutation({
-      mutationId: "mutation-site-ssr-extra-page",
+      idempotencyKey: "mutation-site-ssr-extra-page",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "page",
         label: "Server rendered extra page",
         href: "/extra-page",
@@ -333,11 +333,11 @@ describe("published Site Worker SSR", () => {
     const hostileLabel = 'Hostile </script><script type="module">alert(1)</script> & text';
 
     await postAdminMutation({
-      mutationId: "mutation-site-ssr-hostile-home-label",
+      idempotencyKey: "mutation-site-ssr-hostile-home-label",
       entity: "block",
-      op: "patch",
+      operationName: "update",
       recordId: "rec_site_starter_page_home",
-      values: {
+      input: {
         label: hostileLabel,
       },
     });
@@ -478,8 +478,8 @@ async function headDocumentWithoutFollowingRedirect(path: string) {
   });
 }
 
-async function postAdminMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
-  const request = mutationOperationRequest(body);
+async function postAdminMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders(),

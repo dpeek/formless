@@ -648,23 +648,26 @@ function parseOptionalTreeCompositionActions(
     }
 
     const operation = entity.operations?.[operationKey.operationKey];
-    const actionName =
-      operation?.effect?.type === "runActionKind" ? operation.effect.action : undefined;
-    const action = actionName === undefined ? undefined : entity.actions?.[actionName];
+    const effect = operation?.effect;
 
-    if (!operation || operation.scope !== "record" || operation.kind !== "command" || !action) {
+    if (
+      !operation ||
+      operation.scope !== "record" ||
+      operation.kind !== "command" ||
+      effect?.type !== "registeredCommand"
+    ) {
       throw new Error(`${context} createOperation must use a record command operation.`);
     }
 
-    if (action.kind !== "create-tree-child") {
+    if (effect.kind !== "create-tree-child") {
       throw new Error(`${context} createOperation must use kind "create-tree-child".`);
     }
 
-    if (action.relationship !== relationshipName) {
+    if (effect.relationship !== relationshipName) {
       throw new Error(`${context} createOperation must use relationship "${relationshipName}".`);
     }
 
-    if (action.childField !== childFieldName) {
+    if (effect.childField !== childFieldName) {
       throw new Error(`${context} createOperation must use childField "${childFieldName}".`);
     }
   }
@@ -676,19 +679,22 @@ function parseOptionalTreeCompositionActions(
     }
 
     const operation = entity.operations?.[operationKey.operationKey];
-    const actionName =
-      operation?.effect?.type === "runActionKind" ? operation.effect.action : undefined;
-    const action = actionName === undefined ? undefined : entity.actions?.[actionName];
+    const effect = operation?.effect;
 
-    if (!operation || operation.scope !== "record" || operation.kind !== "command" || !action) {
+    if (
+      !operation ||
+      operation.scope !== "record" ||
+      operation.kind !== "command" ||
+      effect?.type !== "registeredCommand"
+    ) {
       throw new Error(`${context} removeOperation must use a record command operation.`);
     }
 
-    if (action.kind !== "remove-tree-placement") {
+    if (effect.kind !== "remove-tree-placement") {
       throw new Error(`${context} removeOperation must use kind "remove-tree-placement".`);
     }
 
-    if (action.relationship !== relationshipName) {
+    if (effect.relationship !== relationshipName) {
       throw new Error(`${context} removeOperation must use relationship "${relationshipName}".`);
     }
   }

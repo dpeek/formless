@@ -481,7 +481,6 @@ describe("client sync", () => {
           affectedChangeIds: [],
           changes: [],
           cursor: 0,
-          response: { actionId: "noop", changes: [], cursor: 0 },
         }),
       );
     });
@@ -1218,11 +1217,6 @@ describe("client sync", () => {
             affectedChangeIds: changes.map((change) => String(change.seq)),
             changes,
             cursor: 2,
-            response: {
-              actionId: operation.idempotencyKey,
-              changes,
-              cursor: 2,
-            },
           }),
         );
       },
@@ -1526,11 +1520,6 @@ describe("client sync", () => {
           affectedChangeIds: changes.map((change) => String(change.seq)),
           changes,
           cursor: 4,
-          response: {
-            actionId: operation.idempotencyKey,
-            changes,
-            cursor: 4,
-          },
         }),
       );
     });
@@ -1656,11 +1645,6 @@ describe("client sync", () => {
           affectedChangeIds: changes.map((change) => String(change.seq)),
           changes,
           cursor: 4,
-          response: {
-            actionId: operation.idempotencyKey,
-            changes,
-            cursor: 4,
-          },
         }),
       );
     });
@@ -1766,11 +1750,6 @@ describe("client sync", () => {
             affectedChangeIds: changes.map((change) => String(change.seq)),
             changes,
             cursor: 1,
-            response: {
-              actionId: operation.idempotencyKey,
-              changes,
-              cursor: 1,
-            },
           }),
         );
       },

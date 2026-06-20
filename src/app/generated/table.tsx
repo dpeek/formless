@@ -62,7 +62,7 @@ import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
-import { TableOperationControlsCell } from "./table-actions.tsx";
+import { TableOperationControlsCell } from "./table-operation-controls.tsx";
 import {
   selectGeneratedTablePresentation,
   type GeneratedTableCellPresentation,

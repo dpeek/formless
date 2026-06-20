@@ -12,7 +12,7 @@ import type {
   InstanceControlPlaneStorageIdentity,
 } from "./app-storage-identity.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import type { ActionResponse, ChangeRow } from "./protocol.ts";
+import type { ChangeRow } from "./protocol.ts";
 
 export type OperationInvocationActor = {
   kind: EntityOperationActorKind;
@@ -102,6 +102,26 @@ export type OperationInvocationEnvelope = {
 
 export type OperationInvocationEffect = EntityOperationEffectSchema;
 
+export type OperationCommandRecordPlanStepOutput = {
+  name: string;
+  kind: "create" | "patch" | "delete" | "tombstone";
+  entity: string;
+  recordId: string;
+  changeId: string;
+};
+
+export type OperationCommandRecordPlanOutput = {
+  steps: OperationCommandRecordPlanStepOutput[];
+};
+
+export type OperationCommandOutput = {
+  type: "command";
+  affectedChangeIds: string[];
+  changes: ChangeRow[];
+  cursor: number;
+  recordPlan?: OperationCommandRecordPlanOutput;
+};
+
 export type OperationInvocationOutput =
   | {
       type: "list";
@@ -132,13 +152,7 @@ export type OperationInvocationOutput =
       cursor: number;
       recordId: string;
     }
-  | {
-      type: "command";
-      affectedChangeIds: string[];
-      changes: ChangeRow[];
-      cursor: number;
-      response: ActionResponse;
-    };
+  | OperationCommandOutput;
 
 export type OperationInvocationResponse = {
   invocation: OperationInvocationEnvelope;

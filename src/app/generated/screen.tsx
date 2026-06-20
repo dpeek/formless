@@ -12,14 +12,14 @@ export function HomeScreen({
   onSelectContext,
   onSelectQuery,
   screen,
-  sectionActions = {},
+  sectionOperationControls = {},
   today,
 }: {
   getSectionSelection: (section: HomeScreenCollectionSectionModel) => HomeScreenSectionSelection;
   onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
   onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
   screen: HomeScreenModel;
-  sectionActions?: Record<string, ReactNode>;
+  sectionOperationControls?: Record<string, ReactNode>;
   today: string;
 }) {
   const sections = screen.layout.sections;
@@ -30,12 +30,15 @@ export function HomeScreen({
   }
 
   if (sections.length === 1) {
-    const sectionAction = sectionActions[firstSection.id];
+    const sectionOperationControl = sectionOperationControls[firstSection.id];
 
-    if (sectionAction) {
+    if (sectionOperationControl) {
       return (
         <section aria-label={firstSection.label} className="space-y-4">
-          <HomeScreenSectionHeader action={sectionAction} label={firstSection.label} />
+          <HomeScreenSectionHeader
+            operationControls={sectionOperationControl}
+            label={firstSection.label}
+          />
           <HomeScreenCollectionSection
             getSectionSelection={getSectionSelection}
             onSelectContext={onSelectContext}
@@ -61,11 +64,14 @@ export function HomeScreen({
   return (
     <div className="space-y-8">
       {sections.map((section) => {
-        const sectionAction = sectionActions[section.id];
+        const sectionOperationControl = sectionOperationControls[section.id];
 
         return (
           <section aria-label={section.label} className="space-y-4" key={section.id}>
-            <HomeScreenSectionHeader action={sectionAction} label={section.label} />
+            <HomeScreenSectionHeader
+              operationControls={sectionOperationControl}
+              label={section.label}
+            />
             <HomeScreenCollectionSection
               getSectionSelection={getSectionSelection}
               onSelectContext={onSelectContext}
@@ -80,15 +86,21 @@ export function HomeScreen({
   );
 }
 
-function HomeScreenSectionHeader({ action, label }: { action?: ReactNode; label: string }) {
-  if (!action) {
+function HomeScreenSectionHeader({
+  operationControls,
+  label,
+}: {
+  operationControls?: ReactNode;
+  label: string;
+}) {
+  if (!operationControls) {
     return <h2 className="text-lg font-semibold">{label}</h2>;
   }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">{label}</h2>
-      {action}
+      {operationControls}
     </div>
   );
 }

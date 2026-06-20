@@ -20,6 +20,7 @@ import type {
   EntityActionSchema,
   EntitySchema,
   ManyToManyRelationshipSchema,
+  RegisteredCommandEntityOperationEffectSchema,
   SchemaActionActorKind,
   StateMachineTransitionEventFieldMappingsSchema,
   ToManyRelationshipSchema,
@@ -88,6 +89,7 @@ export type EntityCommandEffectInvocation = {
   entity: string;
   action: string;
   kind: EntityActionKind;
+  effect?: RegisteredCommandEntityOperationEffectSchema;
   input?: unknown;
   receivedAt?: string;
   validateConstraints?: RecordConstraintValidator;
@@ -341,6 +343,22 @@ export function executePublicEntityActionOutcome(
   return actionModule.executePublic({ storage, request, schema, action });
 }
 
+export function executePublicEntityCommandEffectOutcome(
+  storage: DurableObjectStorage,
+  request: PublicEntityActionRequest,
+  schema: AppSchema,
+  effect: RegisteredCommandEntityOperationEffectSchema,
+): WriteOutcome<ActionResponse> {
+  const action = commandEffectAsInternalAction(request.action, effect);
+  const actionModule = getEntityActionKindRuntimeModule(action);
+
+  if (!actionModule.capabilities.publicExecution || !actionModule.executePublic) {
+    throw new BadRequestError(`Action "${request.action}" is not available for public execution.`);
+  }
+
+  return actionModule.executePublic({ storage, request, schema, action });
+}
+
 function executeEntityActionRuntimeOutcome<TAction extends EntityActionSchema>(
   storage: DurableObjectStorage,
   request: ActionRequest,
@@ -372,7 +390,10 @@ function validateEntityCommandEffectInvocation(
     throw new BadRequestError(`Unknown entity "${invocation.entity}".`);
   }
 
-  const action = entity.actions?.[invocation.action];
+  const action =
+    invocation.effect === undefined
+      ? entity.actions?.[invocation.action]
+      : commandEffectAsInternalAction(invocation.action, invocation.effect);
   if (!action) {
     throw new BadRequestError(
       `Unknown action "${invocation.action}" for entity "${invocation.entity}".`,
@@ -402,6 +423,63 @@ function validateEntityCommandEffectInvocation(
       actorKind: invocation.actorKind,
       ...(input === undefined ? {} : { input }),
     },
+  };
+}
+
+function commandEffectAsInternalAction(
+  actionName: string,
+  effect: RegisteredCommandEntityOperationEffectSchema,
+): EntityActionSchema {
+  if (effect.kind === "clear-completed") {
+    return {
+      label: actionName,
+      kind: effect.kind,
+      target: { query: effect.query },
+    };
+  }
+
+  if (effect.kind === "create-missing-join-records") {
+    return {
+      label: actionName,
+      kind: effect.kind,
+      join: effect.join,
+    };
+  }
+
+  if (
+    effect.kind === "create-selected-join-record" ||
+    effect.kind === "remove-selected-join-records" ||
+    effect.kind === "remove-tree-placement"
+  ) {
+    return {
+      label: actionName,
+      kind: effect.kind,
+      relationship: effect.relationship,
+    };
+  }
+
+  if (effect.kind === "create-tree-child") {
+    return {
+      label: actionName,
+      kind: effect.kind,
+      relationship: effect.relationship,
+      childField: effect.childField,
+      ...(effect.orderField === undefined ? {} : { orderField: effect.orderField }),
+    };
+  }
+
+  if (effect.kind === "transition-state") {
+    return {
+      label: actionName,
+      kind: effect.kind,
+      machine: effect.machine,
+      transition: effect.transition,
+    };
+  }
+
+  return {
+    label: actionName,
+    kind: effect.kind,
   };
 }
 

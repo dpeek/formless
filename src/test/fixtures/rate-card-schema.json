@@ -456,9 +456,18 @@
           "kind": "command",
           "scope": "collection",
           "effect": {
-            "type": "runActionKind",
+            "type": "registeredCommand",
             "kind": "create-missing-join-records",
-            "action": "regenerateMissingRates"
+            "join": {
+              "left": {
+                "field": "resource",
+                "query": "resourceAll"
+              },
+              "right": {
+                "field": "card",
+                "query": "cardAll"
+              }
+            }
           },
           "output": {
             "type": "command"

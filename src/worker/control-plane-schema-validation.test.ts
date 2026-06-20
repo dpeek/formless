@@ -37,72 +37,72 @@ describe("control-plane schema runtime validation", () => {
   it("enforces immutable fields, route validation, enabled uniqueness, and action-created history", async () => {
     await authority.postJson("/api/schema", { schema: controlPlaneRuntimeSchema() });
 
-    const task = await authority.postMutation("mutation-control-plane-task", {
+    const task = await authority.postCreateOperation("mutation-control-plane-task", {
       title: "Immutable title",
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-task-patch-immutable",
+        idempotencyKey: "mutation-control-plane-task-patch-immutable",
         entity: "task",
-        op: "patch",
+        operationName: "update",
         recordId: task.record.id,
-        values: { title: "Renamed" },
+        input: { title: "Renamed" },
       },
       'Field "task.title" is immutable.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-history-create",
+        idempotencyKey: "mutation-control-plane-history-create",
         entity: "deploy-attempt",
-        op: "create",
-        values: {
+        operationName: "create",
+        input: {
           label: "Attempt",
         },
       },
       'Unknown operation "create" for entity "deploy-attempt".',
     );
 
-    const install = await authority.postMutationRequest({
-      mutationId: "mutation-control-plane-install",
+    const install = await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-control-plane-install",
       entity: "app-install",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         label: "Site",
       },
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-route-missing-target",
+        idempotencyKey: "mutation-control-plane-route-missing-target",
         entity: "app-route",
-        op: "create",
-        values: routeValues("missing-install", {
+        operationName: "create",
+        input: routeValues("missing-install", {
           path: "/apps/missing",
         }),
       },
       'Field "appInstall" references unknown app-install record "missing-install".',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-route-reserved",
+        idempotencyKey: "mutation-control-plane-route-reserved",
         entity: "app-route",
-        op: "create",
-        values: routeValues(install.record.id, {
+        operationName: "create",
+        input: routeValues(install.record.id, {
           path: "/api/jobs",
         }),
       },
       'Field "path" must be a route-safe path.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-route-capability",
+        idempotencyKey: "mutation-control-plane-route-capability",
         entity: "app-route",
-        op: "create",
-        values: routeValues(install.record.id, {
+        operationName: "create",
+        input: routeValues(install.record.id, {
           packageCapability: "publicSite",
           path: "/apps/site",
           routeKind: "admin",
@@ -111,21 +111,21 @@ describe("control-plane schema runtime validation", () => {
       'Field "packageCapability" is incompatible with route kind "admin".',
     );
 
-    await authority.postMutationRequest({
-      mutationId: "mutation-control-plane-route",
+    await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-control-plane-route",
       entity: "app-route",
-      op: "create",
-      values: routeValues(install.record.id, {
+      operationName: "create",
+      input: routeValues(install.record.id, {
         path: "/apps/site",
       }),
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-control-plane-route-duplicate",
+        idempotencyKey: "mutation-control-plane-route-duplicate",
         entity: "app-route",
-        op: "create",
-        values: routeValues(install.record.id, {
+        operationName: "create",
+        input: routeValues(install.record.id, {
           path: "/apps/site",
         }),
       },
@@ -138,11 +138,11 @@ describe("control-plane schema runtime validation", () => {
 
     const siteInstall = await createControlPlaneAppInstall("site", "Personal Site");
     const tasksInstall = await createControlPlaneAppInstall("tasks", "Team Tasks");
-    const deploymentConfig = await authority.postMutationRequest({
-      mutationId: "mutation-control-plane-deployment-config",
+    const deploymentConfig = await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-control-plane-deployment-config",
       entity: "deployment-config",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         targetId: "instance.primary",
         targetKind: "instance",
         label: "Primary Cloudflare",
@@ -152,11 +152,11 @@ describe("control-plane schema runtime validation", () => {
       },
     });
 
-    const hostedMount = await authority.postMutationRequest({
-      mutationId: "mutation-route-exact-host-provider-config",
+    const hostedMount = await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-route-exact-host-provider-config",
       entity: "route",
-      op: "create",
-      values: mountRouteValues(siteInstall.record.id, {
+      operationName: "create",
+      input: mountRouteValues(siteInstall.record.id, {
         matchHost: "app.example.com",
         deploymentConfig: deploymentConfig.record.id,
       }),
@@ -170,11 +170,11 @@ describe("control-plane schema runtime validation", () => {
       targetProfile: "app",
     });
 
-    const redirect = await authority.postMutationRequest({
-      mutationId: "mutation-route-redirect-to-url",
+    const redirect = await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-route-redirect-to-url",
       entity: "route",
-      op: "create",
-      values: redirectRouteValues({
+      operationName: "create",
+      input: redirectRouteValues({
         matchHost: "docs.example.com",
         toHost: undefined,
         toUrl: "https://example.com/docs",
@@ -195,48 +195,48 @@ describe("control-plane schema runtime validation", () => {
       preserveQueryString: false,
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-host-normalized",
+        idempotencyKey: "mutation-route-host-normalized",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchHost: "WWW.Example.COM.",
         }),
       },
       'Field "matchHost" must be a normalized exact host.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-path-normalized",
+        idempotencyKey: "mutation-route-path-normalized",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/api/site",
         }),
       },
       'Field "matchPath" must be a normalized absolute path.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-path-case-normalized",
+        idempotencyKey: "mutation-route-path-case-normalized",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/Apps/personal",
         }),
       },
       'Field "matchPath" must be a normalized absolute path.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-prefix-normalized",
+        idempotencyKey: "mutation-route-prefix-normalized",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/sites/personal",
           matchPrefix: "/sites/personal",
           targetProfile: "public-site",
@@ -246,12 +246,12 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPrefix" must be a normalized absolute path prefix.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-prefix-below-path",
+        idempotencyKey: "mutation-route-prefix-below-path",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/sites/personal",
           matchPrefix: "/sites/",
           targetProfile: "public-site",
@@ -261,24 +261,24 @@ describe("control-plane schema runtime validation", () => {
       'Field "matchPrefix" must begin at or below field "matchPath".',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-hostless-deployment-config",
+        idempotencyKey: "mutation-route-hostless-deployment-config",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           deploymentConfig: deploymentConfig.record.id,
         }),
       },
       'Field "deploymentConfig" can only be set on exact-host route records.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-deployment-config-reference",
+        idempotencyKey: "mutation-route-deployment-config-reference",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchHost: "missing-provider.example.com",
           deploymentConfig: "missing-provider",
         }),
@@ -286,24 +286,24 @@ describe("control-plane schema runtime validation", () => {
       'Field "deploymentConfig" references unknown deployment-config record "missing-provider".',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-access",
+        idempotencyKey: "mutation-route-access",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           access: "admin",
         }),
       },
       'Field "access" must be a known enum value.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-public-site-capability",
+        idempotencyKey: "mutation-route-public-site-capability",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(tasksInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(tasksInstall.record.id, {
           matchPath: "/sites/tasks",
           matchPrefix: "/sites/tasks/",
           targetProfile: "public-site",
@@ -313,60 +313,60 @@ describe("control-plane schema runtime validation", () => {
       'Package app "tasks" does not support public Site routes.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-host-required",
+        idempotencyKey: "mutation-route-redirect-host-required",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           matchHost: undefined,
         }),
       },
       'Field "matchHost" is required for redirect routes.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-target",
+        idempotencyKey: "mutation-route-redirect-target",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           toHost: undefined,
         }),
       },
       'Redirect routes must set exactly one of field "toHost" or field "toUrl".',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-app-target",
+        idempotencyKey: "mutation-route-redirect-app-target",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           appInstall: siteInstall.record.id,
         }),
       },
       'Field "appInstall" is incompatible with redirect routes.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-host-normalized",
+        idempotencyKey: "mutation-route-redirect-host-normalized",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           toHost: "WWW.Example.COM.",
         }),
       },
       'Field "toHost" must be a normalized exact host.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-url-normalized",
+        idempotencyKey: "mutation-route-redirect-url-normalized",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           toHost: undefined,
           toUrl: "http://example.com",
         }),
@@ -374,36 +374,36 @@ describe("control-plane schema runtime validation", () => {
       'Field "toUrl" must be a normalized absolute HTTPS URL without credentials or fragment.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-status-required",
+        idempotencyKey: "mutation-route-redirect-status-required",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           statusCode: undefined,
         }),
       },
       'Field "statusCode" is required for redirect routes.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-redirect-preserve-path-boolean",
+        idempotencyKey: "mutation-route-redirect-preserve-path-boolean",
         entity: "route",
-        op: "create",
-        values: redirectRouteValues({
+        operationName: "create",
+        input: redirectRouteValues({
           preservePath: "yes",
         }),
       },
       'Field "preservePath" must be a boolean.',
     );
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-host-public-site-root",
+        idempotencyKey: "mutation-route-host-public-site-root",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchHost: "www.example.com",
           matchPath: "/sites/personal",
           matchPrefix: "/sites/personal/",
@@ -414,11 +414,11 @@ describe("control-plane schema runtime validation", () => {
       'Host-mounted public Site routes must set field "matchPath" to "/" and field "matchPrefix" to "/".',
     );
 
-    await authority.postMutationRequest({
-      mutationId: "mutation-route-host-public-site",
+    await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-route-host-public-site",
       entity: "route",
-      op: "create",
-      values: mountRouteValues(siteInstall.record.id, {
+      operationName: "create",
+      input: mountRouteValues(siteInstall.record.id, {
         matchHost: "www.example.com",
         matchPath: "/",
         matchPrefix: "/",
@@ -427,12 +427,12 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-host-public-site-conflict",
+        idempotencyKey: "mutation-route-host-public-site-conflict",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchHost: "www.example.com",
           matchPath: "/apps/personal",
         }),
@@ -440,32 +440,32 @@ describe("control-plane schema runtime validation", () => {
       'Enabled route match "www.example.com/apps/personal" conflicts with enabled route',
     );
 
-    await authority.postMutationRequest({
-      mutationId: "mutation-route-hostless-admin",
+    await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-route-hostless-admin",
       entity: "route",
-      op: "create",
-      values: mountRouteValues(siteInstall.record.id, {
+      operationName: "create",
+      input: mountRouteValues(siteInstall.record.id, {
         matchPath: "/apps/personal",
       }),
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-hostless-admin-conflict",
+        idempotencyKey: "mutation-route-hostless-admin-conflict",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/apps/personal",
         }),
       },
       'Enabled route match "<hostless>/apps/personal" conflicts with enabled route',
     );
 
-    await authority.postMutationRequest({
-      mutationId: "mutation-route-hostless-public-site",
+    await authority.postRecordOperationRequest({
+      idempotencyKey: "mutation-route-hostless-public-site",
       entity: "route",
-      op: "create",
-      values: mountRouteValues(siteInstall.record.id, {
+      operationName: "create",
+      input: mountRouteValues(siteInstall.record.id, {
         matchPath: "/sites/personal",
         matchPrefix: "/sites/personal/",
         targetProfile: "public-site",
@@ -473,12 +473,12 @@ describe("control-plane schema runtime validation", () => {
       }),
     });
 
-    await authority.expectMutationError(
+    await authority.expectRecordOperationError(
       {
-        mutationId: "mutation-route-hostless-public-site-prefix-conflict",
+        idempotencyKey: "mutation-route-hostless-public-site-prefix-conflict",
         entity: "route",
-        op: "create",
-        values: mountRouteValues(siteInstall.record.id, {
+        operationName: "create",
+        input: mountRouteValues(siteInstall.record.id, {
           matchPath: "/sites/personal/blog",
           targetProfile: "public-site",
           surface: "public-site",
@@ -549,11 +549,11 @@ describe("control-plane schema runtime validation", () => {
 async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", label: string) {
   const installId = packageAppKey === "site" ? "personal" : "tasks";
 
-  return authority.postMutationRequest({
-    mutationId: `mutation-control-plane-install-${installId}`,
+  return authority.postRecordOperationRequest({
+    idempotencyKey: `mutation-control-plane-install-${installId}`,
     entity: "app-install",
-    op: "create",
-    values: {
+    operationName: "create",
+    input: {
       installId,
       packageAppKey,
       packageRevision: 1,

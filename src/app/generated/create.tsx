@@ -147,13 +147,13 @@ export function GeneratedCreateForm({
 }
 
 export function GeneratedCreateDialog({
-  action,
+  operation,
   onOpenChange,
   onSuccess,
   open,
   queryContext,
 }: {
-  action: CreateHomeOperationConfig;
+  operation: CreateHomeOperationConfig;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (recordId: string) => void;
   open: boolean;
@@ -162,11 +162,11 @@ export function GeneratedCreateDialog({
   return (
     <ModalContent isOpen={open} onOpenChange={onOpenChange}>
       <ModalHeader>
-        <ModalTitle>{action.label}</ModalTitle>
+        <ModalTitle>{operation.label}</ModalTitle>
       </ModalHeader>
       <ModalBody>
         <GeneratedCreateDialogForm
-          action={action}
+          operation={operation}
           onSuccess={(recordId) => {
             onSuccess?.(recordId);
             onOpenChange(false);
@@ -179,13 +179,13 @@ export function GeneratedCreateDialog({
 }
 
 export function GeneratedCreateDialogForm({
-  action,
+  operation,
   onSuccess,
   queryContext,
   renderDialogCancel = true,
   submitValues,
 }: {
-  action: CreateHomeOperationConfig;
+  operation: CreateHomeOperationConfig;
   onSuccess?: (recordId: string) => void;
   queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
@@ -196,27 +196,27 @@ export function GeneratedCreateDialogForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({
-      defaults: action.defaults,
-      union: action.union,
+      defaults: operation.defaults,
+      union: operation.union,
     }),
   );
   const authoring = selectGeneratedCreateFieldAuthoring({
-    defaults: action.defaults,
-    enabled: action.enabled,
-    fields: action.fields,
+    defaults: operation.defaults,
+    enabled: operation.enabled,
+    fields: operation.fields,
     queryContext,
     state: authoringState,
-    union: action.union,
+    union: operation.union,
   });
 
   useEffect(() => {
     setAuthoringState(
       initialGeneratedCreateFieldAuthoringState({
-        defaults: action.defaults,
-        union: action.union,
+        defaults: operation.defaults,
+        union: operation.union,
       }),
     );
-  }, [action.defaults, action.union]);
+  }, [operation.defaults, operation.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -227,12 +227,12 @@ export function GeneratedCreateDialogForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = resolveCreateValues(formData, action, queryContext);
+    const values = resolveCreateValues(formData, operation, queryContext);
 
     setIsSubmitting(true);
     setSyncStatus({
       state: "syncing",
-      message: `Saving ${action.entity.label.toLowerCase()}...`,
+      message: `Saving ${operation.entity.label.toLowerCase()}...`,
     });
 
     try {
@@ -242,8 +242,8 @@ export function GeneratedCreateDialogForm({
               recordId: selectCreatedOperationRecordId(
                 await submitOperation(
                   appTarget,
-                  action.entityName,
-                  action.operationName,
+                  operation.entityName,
+                  operation.operationName,
                   {
                     input: values,
                   },
@@ -256,8 +256,8 @@ export function GeneratedCreateDialogForm({
       form.reset();
       setAuthoringState(
         initialGeneratedCreateFieldAuthoringState({
-          defaults: action.defaults,
-          union: action.union,
+          defaults: operation.defaults,
+          union: operation.union,
         }),
       );
       onSuccess?.(response.recordId);
@@ -274,8 +274,8 @@ export function GeneratedCreateDialogForm({
 
   return (
     <form className="space-y-4" onSubmit={submitForm}>
-      {!action.enabled ? (
-        <p className="text-sm text-slate-600">Create is disabled for {action.entity.label}.</p>
+      {!operation.enabled ? (
+        <p className="text-sm text-slate-600">Create is disabled for {operation.entity.label}.</p>
       ) : null}
 
       <Fieldset className="space-y-4" disabled={!authoring.canSubmit || isSubmitting}>
@@ -288,7 +288,7 @@ export function GeneratedCreateDialogForm({
                 nextGeneratedCreateFieldAuthoringState({
                   fieldName: fieldConfig.fieldName,
                   state,
-                  union: action.union,
+                  union: operation.union,
                   value,
                 }),
               );
@@ -308,7 +308,7 @@ export function GeneratedCreateDialogForm({
           </Button>
         )}
         <Button isDisabled={!authoring.canSubmit || isSubmitting} type="submit">
-          {isSubmitting ? "Saving..." : action.enabled ? action.label : "Create disabled"}
+          {isSubmitting ? "Saving..." : operation.enabled ? operation.label : "Create disabled"}
         </Button>
       </ModalFooter>
     </form>
@@ -317,14 +317,14 @@ export function GeneratedCreateDialogForm({
 
 export function resolveCreateValues(
   formData: FormData,
-  action: CreateHomeOperationConfig,
+  operation: CreateHomeOperationConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
   return resolveGeneratedCreateValues({
     formData,
-    fields: action.fields,
-    union: action.union,
-    defaults: action.defaults,
+    fields: operation.fields,
+    union: operation.union,
+    defaults: operation.defaults,
     queryContext,
   });
 }

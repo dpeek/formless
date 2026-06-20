@@ -22,13 +22,13 @@ describe("schema table views", () => {
     ]);
     expect(tableViews.blockPlacementTable).toMatchObject({
       entity: "block-placement",
-      actions: {
-        editChildBlock: {
-          type: "editRecord",
+      operations: [
+        {
+          operation: "block.update",
           target: { kind: "reference", field: "block" },
           editView: "blockEdit",
         },
-      },
+      ],
       ordering: {
         field: "order",
         scope: [
@@ -91,9 +91,17 @@ function tableParserSchema(): AppSchema {
       price: { type: "number", required: true, label: "Price" },
       active: { type: "boolean", required: true, label: "Active", default: true },
     }),
-    block: entity("Block", {
-      label: { type: "text", required: true, label: "Label" },
-    }),
+    block: entity(
+      "Block",
+      {
+        label: { type: "text", required: true, label: "Label" },
+      },
+      {
+        operations: {
+          update: updateOperation("Update Block"),
+        },
+      },
+    ),
     "block-placement": entity("Block placement", {
       parent: { type: "reference", required: true, to: "block", displayField: "label" },
       block: { type: "reference", required: true, to: "block", displayField: "label" },
@@ -158,14 +166,14 @@ function tableParserSchema(): AppSchema {
       },
       blockPlacementTable: {
         entity: "block-placement",
-        actions: {
-          editChildBlock: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "block.update",
             label: "Edit child",
             target: { kind: "reference", field: "block" },
             editView: "blockEdit",
           },
-        },
+        ],
         ordering: {
           field: "order",
           scope: [
@@ -178,7 +186,7 @@ function tableParserSchema(): AppSchema {
           { type: "orderingHandle" },
           { type: "field", field: "slot" },
           { type: "referenceField", referenceField: "block", field: "label" },
-          { type: "invokeAction", action: "editChildBlock", label: "Actions" },
+          { type: "operationControl", operation: "block.update", label: "Actions" },
         ],
       },
     },
@@ -224,7 +232,11 @@ function tableParserSchema(): AppSchema {
   };
 }
 
-function entity(label: string, fields: EntitySchema["fields"]): EntitySchema {
+function entity(
+  label: string,
+  fields: EntitySchema["fields"],
+  overrides: Partial<EntitySchema> = {},
+): EntitySchema {
   return {
     label,
     fields,
@@ -233,5 +245,18 @@ function entity(label: string, fields: EntitySchema["fields"]): EntitySchema {
       patch: { enabled: true },
       delete: { enabled: false },
     },
+    ...overrides,
+  };
+}
+
+function updateOperation(label: string): NonNullable<EntitySchema["operations"]>[string] {
+  return {
+    label,
+    kind: "update",
+    scope: "record",
+    effect: { type: "patchRecord" },
+    output: { type: "update" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
   };
 }

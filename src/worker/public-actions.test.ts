@@ -17,7 +17,7 @@ import type {
   SchemaUpdateResponse,
 } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
-import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
 
@@ -126,14 +126,12 @@ describe("public operation runtime", () => {
       output: {
         type: "command",
         cursor: after.cursor,
-        response: {
-          actionId: "operation:subscription.subscribe:schema-key-exec",
-          cursor: after.cursor,
-        },
       },
       status: "committed",
     });
     expect(body.output.affectedChangeIds).toHaveLength(4);
+    expect(body.output).not.toHaveProperty("response");
+    expect(JSON.stringify(body)).not.toContain("actionId");
     expect(JSON.stringify(body)).not.toContain(turnstileSecret);
     expect(JSON.stringify(body)).not.toContain("ada@example.com");
     expect(after.records.length).toBe(before.records.length + 4);
@@ -222,7 +220,89 @@ describe("public operation runtime", () => {
       error: "Public operation is not available.",
     });
     expect(contactSubscriptionRecords(rejectedAfter.records).subscriptions).toHaveLength(0);
+
+    await resetSchemaApp("site");
+    await installSiteSchema((schema) => {
+      const subscribe = schema.entities.subscription?.operations?.subscribe;
+
+      if (!subscribe) {
+        throw new Error("Expected subscribe operation.");
+      }
+
+      subscribe.effect = {
+        type: "runActionKind",
+        kind: "subscribe",
+        action: "subscribe",
+      };
+    });
+
+    const legacyEffect = await postPublicAction(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "legacy-effect" }),
+    );
+    const legacyEffectAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
+
+    expect(legacyEffect.status).toBe(404);
+    expect((await legacyEffect.json()) as { error: string }).toEqual({
+      error: "Public operation is not available.",
+    });
+    expect(contactSubscriptionRecords(legacyEffectAfter.records).subscriptions).toHaveLength(0);
     expect(turnstileRequests).toEqual([]);
+  });
+
+  it("does not synthesize public execution from legacy action-only metadata", async () => {
+    const rejected = await postPublicOperationHarness(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "legacy-action-only-no-audit" }),
+      {
+        "x-public-operation-harness-schema-variant": "legacy-subscribe-action-only",
+      },
+    );
+    const body = (await rejected.json()) as { error: string };
+    const state = await readPublicOperationHarnessState();
+
+    expect(rejected.status).toBe(404);
+    expect(body).toEqual({ error: "Public operation is not available." });
+    expect(body).not.toHaveProperty("invocationId");
+    expect(state.actionExecutionCount).toBe(0);
+    expect(state.invocations).toEqual([]);
+    expect(contactSubscriptionRecords(state.records).subscriptions).toHaveLength(0);
+    expect(JSON.stringify(state.records)).not.toContain("sourceOperationKey");
+    expect(turnstileRequests).toEqual([]);
+  });
+
+  it("executes subscribe through operation-native command materialization", async () => {
+    const accepted = await postPublicOperationHarness(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({ idempotencyKey: "operation-native-subscribe" }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const state = await readPublicOperationHarnessState();
+    const records = contactSubscriptionRecords(state.records);
+
+    expect(accepted.status).toBe(200);
+    expect(body.output.type).toBe("command");
+    expect(body.output).not.toHaveProperty("response");
+    expect(state.actionExecutionCount).toBe(0);
+    expect(state.invocations).toHaveLength(1);
+    expect(state.invocations[0]).toMatchObject({
+      affectedChangeIds: body.output.affectedChangeIds,
+      operationKey: "subscription.subscribe",
+      operationKind: "command",
+      status: "committed",
+    });
+    expect(state.invocations[0]?.output).toMatchObject({
+      type: "command",
+      affectedChangeIds: body.output.affectedChangeIds,
+      cursor: body.output.cursor,
+    });
+    expect(JSON.stringify(state.invocations[0]?.output)).not.toContain("actionId");
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.subscriptions[0]?.values).toMatchObject({
+      sourceKind: "publicOperation",
+      sourceOperationKey: "subscription.subscribe",
+      sourceSiteBlockId: "rec_site_subscribe_form",
+    });
   });
 
   it("supports installed app public operation routes with accepted replay idempotency", async () => {
@@ -331,16 +411,12 @@ describe("public operation runtime", () => {
       output: {
         type: "command",
         cursor: after.cursor,
-        response: {
-          actionId: "operation:task.submitPublicPlan:record-plan-schema-key",
-          cursor: after.cursor,
-          recordPlan: {
-            steps: [
-              { name: "createTask", kind: "create", entity: "task" },
-              { name: "createLog", kind: "create", entity: "task-log" },
-              { name: "touchTask", kind: "patch", entity: "task" },
-            ],
-          },
+        recordPlan: {
+          steps: [
+            { name: "createTask", kind: "create", entity: "task" },
+            { name: "createLog", kind: "create", entity: "task-log" },
+            { name: "touchTask", kind: "patch", entity: "task" },
+          ],
         },
       },
       status: "committed",
@@ -348,13 +424,14 @@ describe("public operation runtime", () => {
     if (body.output.type !== "command") {
       throw new Error("Expected command output.");
     }
-    const steps = body.output.response.recordPlan?.steps ?? [];
+    const steps = body.output.recordPlan?.steps ?? [];
     const records = taskRecordPlanRecords(after.records);
     const taskId = steps[0]?.recordId;
     const task = records.tasks.find((record) => record.id === taskId);
     const log = records.logs.find((record) => record.values.task === taskId);
 
     expect(body.output).not.toHaveProperty("changes");
+    expect(body.output).not.toHaveProperty("response");
     expect(body.output.affectedChangeIds).toHaveLength(3);
     expect(steps.map((step) => step.changeId)).toEqual(body.output.affectedChangeIds);
     expect(after.records.length).toBe(before.records.length + 2);
@@ -428,15 +505,12 @@ describe("public operation runtime", () => {
       },
       output: {
         type: "command",
-        response: {
-          actionId: "operation:task.submitPublicPlan:record-plan-installed",
-          recordPlan: {
-            steps: [
-              { name: "createTask", kind: "create", entity: "task" },
-              { name: "createLog", kind: "create", entity: "task-log" },
-              { name: "touchTask", kind: "patch", entity: "task" },
-            ],
-          },
+        recordPlan: {
+          steps: [
+            { name: "createTask", kind: "create", entity: "task" },
+            { name: "createLog", kind: "create", entity: "task-log" },
+            { name: "touchTask", kind: "patch", entity: "task" },
+          ],
         },
       },
       status: "committed",
@@ -444,11 +518,12 @@ describe("public operation runtime", () => {
     if (body.output.type !== "command") {
       throw new Error("Expected command output.");
     }
-    const steps = body.output.response.recordPlan?.steps ?? [];
+    const steps = body.output.recordPlan?.steps ?? [];
     const records = taskRecordPlanRecords(after.records);
     const taskId = steps[0]?.recordId;
 
     expect(body.output).not.toHaveProperty("changes");
+    expect(body.output).not.toHaveProperty("response");
     expect(body.output.affectedChangeIds).toHaveLength(3);
     expect(records.tasks.some((record) => record.id === taskId)).toBe(true);
     expect(records.logs).toEqual([
@@ -834,10 +909,10 @@ describe("public operation runtime", () => {
 
   it("projects configured Turnstile site key without exposing the secret", async () => {
     const block = await postAdminMutation({
-      mutationId: "mutation-create-configured-subscribe-form",
+      idempotencyKey: "mutation-create-configured-subscribe-form",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "subscribeForm",
         label: "Join the list",
         actionName: "subscribe",
@@ -845,10 +920,10 @@ describe("public operation runtime", () => {
       },
     });
     await postAdminMutation({
-      mutationId: "mutation-place-configured-subscribe-form",
+      idempotencyKey: "mutation-place-configured-subscribe-form",
       entity: "block-placement",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         parent: "rec_site_starter_page_home",
         block: block.record.id,
         order: 4500,
@@ -895,10 +970,10 @@ describe("public operation runtime", () => {
       await resetSchemaApp("site", deployedHarness);
       const block = await postAdminMutation(
         {
-          mutationId: "mutation-create-deployed-subscribe-form",
+          idempotencyKey: "mutation-create-deployed-subscribe-form",
           entity: "block",
-          op: "create",
-          values: {
+          operationName: "create",
+          input: {
             type: "subscribeForm",
             label: "Join the deployed list",
             actionName: "subscribe",
@@ -909,10 +984,10 @@ describe("public operation runtime", () => {
       );
       await postAdminMutation(
         {
-          mutationId: "mutation-place-deployed-subscribe-form",
+          idempotencyKey: "mutation-place-deployed-subscribe-form",
           entity: "block-placement",
-          op: "create",
-          values: {
+          operationName: "create",
+          input: {
             parent: "rec_site_starter_page_home",
             block: block.record.id,
             order: 4500,
@@ -1101,7 +1176,7 @@ async function createPublicOperationHarness(input: {
       import { parseAuthorityApiRoute } from "${process.cwd()}/src/shared/app-storage-identity.ts";
       import {
         executePublicOperationRequest,
-        PublicActionError,
+        PublicOperationError,
         selectPublicOperationRoute,
       } from "${process.cwd()}/src/worker/public-actions.ts";
       import { BadRequestError } from "${process.cwd()}/src/worker/errors.ts";
@@ -1165,7 +1240,7 @@ async function createPublicOperationHarness(input: {
 
             ensureStorageTables(this.ctx.storage);
             const { schema } = initializeStorageFromSource(this.ctx.storage, {
-              schema: app.sourceSchema,
+              schema: schemaForHarnessRequest(app.sourceSchema, request),
               records: app.seedRecords,
               changeMutationPrefix: app.seedChangeMutationPrefix,
             });
@@ -1189,7 +1264,7 @@ async function createPublicOperationHarness(input: {
               status: result.status,
             });
           } catch (error) {
-            if (error instanceof PublicActionError) {
+            if (error instanceof PublicOperationError) {
               return Response.json({ error: error.message }, { status: error.status });
             }
 
@@ -1214,6 +1289,20 @@ async function createPublicOperationHarness(input: {
           records: app.seedRecords,
           changeMutationPrefix: app.seedChangeMutationPrefix,
         });
+      }
+
+      function schemaForHarnessRequest(sourceSchema, request) {
+        if (
+          request.headers.get("x-public-operation-harness-schema-variant") !==
+          "legacy-subscribe-action-only"
+        ) {
+          return sourceSchema;
+        }
+
+        const schema = structuredClone(sourceSchema);
+        delete schema.entities.subscription?.operations?.subscribe;
+
+        return schema;
       }
 
       function readActionExecutionCount(storage) {
@@ -1474,11 +1563,11 @@ function taskRecordPlanRecords(records: StoredRecord[]) {
 
 async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {
   return postAdminMutation({
-    mutationId: `test-subscription-status-${status}`,
+    idempotencyKey: `test-subscription-status-${status}`,
     entity: "subscription",
-    op: "patch",
+    operationName: "update",
     recordId,
-    values: { status },
+    input: { status },
   });
 }
 
@@ -1507,10 +1596,10 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
 }
 
 async function postAdminMutation(
-  body: Parameters<typeof mutationOperationRequest>[0],
+  body: Parameters<typeof recordOperationRequest>[0],
   target: Harness = harness,
 ) {
-  const request = mutationOperationRequest(body);
+  const request = recordOperationRequest(body);
   const response = await target.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -1554,13 +1643,18 @@ function postPublicAction(path: string, body: unknown, target: Harness = harness
   });
 }
 
-function postPublicOperationHarness(path: string, body: unknown) {
+function postPublicOperationHarness(
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
   return publicOperationHarness.fetch(path, {
     body: JSON.stringify(body),
     headers: {
       "Content-Type": "application/json",
       Origin: "http://example.com",
       "x-public-operation-harness-name": publicOperationHarnessName,
+      ...headers,
     },
     method: "POST",
   });

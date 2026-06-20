@@ -11,7 +11,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
-import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -60,11 +60,11 @@ describe("installed Site custom-domain Worker routing", () => {
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
     await postInstalledAppMutation("site", installId, {
-      mutationId: "mutation-custom-domain-home-label",
+      idempotencyKey: "mutation-custom-domain-home-label",
       entity: "block",
-      op: "patch",
+      operationName: "update",
       recordId: "rec_site_starter_page_home",
-      values: {
+      input: {
         label: "Personal custom-domain home",
       },
     });
@@ -94,21 +94,21 @@ describe("installed Site custom-domain Worker routing", () => {
   it("serves mapped host indexing, icons, and core media from the instance", async () => {
     await setupMappedSite();
     await postInstalledAppMutation("site", installId, {
-      mutationId: "mutation-custom-domain-sitemap-page",
+      idempotencyKey: "mutation-custom-domain-sitemap-page",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "page",
         label: "Custom domain sitemap page",
         href: "/custom-domain-sitemap-page",
       },
     });
     await postInstalledAppMutation("site", installId, {
-      mutationId: "mutation-custom-domain-site-icon",
+      idempotencyKey: "mutation-custom-domain-site-icon",
       entity: "site",
-      op: "patch",
+      operationName: "update",
       recordId: "rec_site_settings_primary",
-      values: {
+      input: {
         icon: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#16a34a"/></svg>',
       },
     });
@@ -308,11 +308,11 @@ describe("installed Site custom-domain Worker routing", () => {
   it("resolves exact-host public Site route records before ordinary host behavior", async () => {
     await setupMappedSiteRouteRecord();
     await postInstalledAppMutation("site", installId, {
-      mutationId: "mutation-route-record-home-label",
+      idempotencyKey: "mutation-route-record-home-label",
       entity: "block",
-      op: "patch",
+      operationName: "update",
       recordId: "rec_site_starter_page_home",
-      values: {
+      input: {
         label: "Route record custom-domain home",
       },
     });
@@ -623,9 +623,9 @@ async function postAdminJson(path: string, body: unknown) {
 async function postInstalledAppMutation(
   packageAppKey: string,
   appInstallId: string,
-  body: Parameters<typeof mutationOperationRequest>[0],
+  body: Parameters<typeof recordOperationRequest>[0],
 ) {
-  const request = mutationOperationRequest(body);
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(
     `/api/app-installs/${packageAppKey}/${appInstallId}${request.path.slice("/api".length)}`,
     {

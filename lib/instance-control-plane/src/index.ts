@@ -42,7 +42,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:1475709ad954c32bf97351b5cee7c9f9b7ed83fe9f66422cc8a6905d005dde3a" satisfies SourceSchemaHash;
+  "sha256:7c8fc7e1cd19fca172c6d37223919ac60ffd188d3baed750d79346468b42a424" satisfies SourceSchemaHash;
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
   sourceSchemaHash: INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
@@ -468,15 +468,15 @@ export const instanceControlPlaneSchema = {
         { field: "statusCode", display: "readOnly" },
       ],
       {
-        actions: {
-          editRoute: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "route.update",
             label: "Edit route",
             target: { kind: "row" },
             editView: "routeEdit",
           },
-        },
-        actionLabel: "Route operations",
+        ],
+        operationLabel: "Route operations",
       },
     ),
     deploymentConfigTable: tableView(
@@ -498,15 +498,15 @@ export const instanceControlPlaneSchema = {
         "observedRunnerId",
       ],
       {
-        actions: {
-          editDeploymentConfig: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "deployment-config.update",
             label: "Edit deployment config",
             target: { kind: "row" },
             editView: "deploymentConfigEdit",
           },
-        },
-        actionLabel: "Deployment config operations",
+        ],
+        operationLabel: "Deployment config operations",
       },
     ),
   },
@@ -2345,22 +2345,22 @@ function tableView(
   entity: InstanceControlPlaneEntityName,
   fields: InstanceControlPlaneTableField[],
   options: {
-    actionLabel?: string;
-    actions?: NonNullable<AppSchema["tableViews"][string]["actions"]>;
+    operationLabel?: string;
+    operations?: NonNullable<AppSchema["tableViews"][string]["operations"]>;
   } = {},
 ) {
   return {
     entity,
-    ...(options.actions === undefined ? {} : { actions: options.actions }),
+    ...(options.operations === undefined ? {} : { operations: options.operations }),
     columns: [
       ...fields.map(tableFieldColumn),
-      ...(options.actions === undefined
+      ...(options.operations === undefined
         ? []
         : [
             {
-              type: "invokeAction",
-              label: options.actionLabel ?? "Actions",
-              actions: Object.keys(options.actions),
+              type: "operationControl",
+              label: options.operationLabel ?? "Actions",
+              operations: options.operations.map((operation) => operation.operation),
               align: "end",
               width: "xs",
               presentation: "dropdown",

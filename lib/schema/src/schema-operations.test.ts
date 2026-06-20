@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   classifyCollectionOperationBinding,
+  classifyTableOperationBinding,
   entityOperationBindingKinds,
   entityOperationCommandEffectKinds,
   entityOperationCommandEffectTypes,
@@ -67,9 +68,8 @@ describe("schema entity operations", () => {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "runActionKind",
+            type: "registeredCommand",
             kind: "clear-completed",
-            action: "clearCompletedTasks",
             query: "taskCompleted",
           },
         },
@@ -90,7 +90,7 @@ describe("schema entity operations", () => {
               },
             },
           },
-          effect: { type: "runActionKind", kind: "clear-completed", query: "taskCompleted" },
+          effect: { type: "registeredCommand", kind: "clear-completed", query: "taskCompleted" },
           policy: {
             actors: ["anonymous"],
             access: anonymousPublicAccess(),
@@ -135,9 +135,8 @@ describe("schema entity operations", () => {
       scope: "collection",
       target: { query: "taskCompleted" },
       effect: {
-        type: "runActionKind",
+        type: "registeredCommand",
         kind: "clear-completed",
-        action: "clearCompletedTasks",
       },
       output: { type: "command" },
     });
@@ -171,9 +170,8 @@ describe("schema entity operations", () => {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "runActionKind",
+            type: "registeredCommand",
             kind: "clear-completed",
-            action: "clearCompletedTasks",
             query: "taskCompleted",
           },
         },
@@ -187,23 +185,71 @@ describe("schema entity operations", () => {
       operation: "task.clearCompletedTasks",
       count: { type: "count" },
     });
+    const tableBinding = classifyTableOperationBinding({
+      operation: "task.update",
+      editView: "taskEdit",
+    });
 
     expect(isEntityOperationReadKind("list")).toBe(true);
     expect(isEntityOperationReadKind("command")).toBe(false);
     expect(isEntityOperationWriteKind("command")).toBe(true);
-    expect(entityOperationBindingKinds).toEqual(["collection"]);
+    expect(entityOperationBindingKinds).toEqual(["collection", "table"]);
     expect(isEntityOperationBindingKind(binding.kind)).toBe(true);
+    expect(isEntityOperationBindingKind(tableBinding.kind)).toBe(true);
     expect(binding).toEqual({
       kind: "collection",
       operationKey: { entityKey: "task", operationKey: "clearCompletedTasks" },
       canonicalOperationKey: "task.clearCompletedTasks",
     });
+    expect(tableBinding).toEqual({
+      kind: "table",
+      operationKey: { entityKey: "task", operationKey: "update" },
+      canonicalOperationKey: "task.update",
+    });
     expect(entityOperationCommandEffectKinds).toContain("create-tree-child");
-    expect(entityOperationCommandEffectTypes).toEqual(["runActionKind", "recordPlan"]);
+    expect(entityOperationCommandEffectTypes).toEqual(["registeredCommand", "recordPlan"]);
     expect(isEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
-    expect(isLegacyEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
+    expect(isLegacyEntityOperationCommandEffect(clearCompletedEffect)).toBe(false);
     expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
     expect(isLegacyEntityOperationCommandEffect(submitIntakeEffect)).toBe(false);
+  });
+
+  it("keeps legacy action-backed command effects parseable as migration input only", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskOperations({
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "command",
+          scope: "collection",
+          target: { query: "taskCompleted" },
+          effect: {
+            type: "runActionKind",
+            kind: "clear-completed",
+            action: "clearCompletedTasks",
+            query: "taskCompleted",
+          },
+          policy: {
+            actors: ["anonymous"],
+            access: anonymousPublicAccess(),
+          },
+          audit: { input: "summary" },
+        },
+      }),
+    );
+    const operation = schema.entities.task?.operations?.clearCompletedTasks;
+    const effect = operation?.effect;
+
+    expect(effect).toEqual({
+      type: "runActionKind",
+      kind: "clear-completed",
+      action: "clearCompletedTasks",
+      query: "taskCompleted",
+    });
+    expect(isEntityOperationCommandEffect(effect)).toBe(false);
+    expect(isLegacyEntityOperationCommandEffect(effect)).toBe(true);
+    expect(operation?.policy).toMatchObject({ actors: ["anonymous"] });
+    expect(operation?.output).toEqual({ type: "command" });
+    expect(operation?.audit).toEqual({ input: "summary" });
   });
 
   it("does not synthesize operations or operation bindings from mutation policies, entity actions, or public action metadata", () => {
@@ -266,9 +312,8 @@ describe("schema entity operations", () => {
                 kind: "command",
                 scope: "collection",
                 effect: {
-                  type: "runActionKind",
+                  type: "registeredCommand",
                   kind: "clear-completed",
-                  action: "clearCompletedTasks",
                   query: "taskCompleted",
                 },
                 policy: { actors: ["owner"], visible: false },
@@ -278,9 +323,8 @@ describe("schema entity operations", () => {
                 kind: "command",
                 scope: "collection",
                 effect: {
-                  type: "runActionKind",
+                  type: "registeredCommand",
                   kind: "clear-completed",
-                  action: "clearCompletedTasks",
                   query: "taskCompleted",
                 },
                 policy: { actors: ["runner"] },

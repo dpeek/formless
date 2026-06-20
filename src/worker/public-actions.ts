@@ -1,9 +1,9 @@
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { RecordValues } from "@dpeek/formless-storage";
 import type {
-  PublicActionChallengeVerification,
-  PublicActionProof,
-  PublicActionRequestSource,
+  PublicOperationChallengeVerification,
+  PublicOperationProof,
+  PublicOperationRequestSource,
   PublicOperationResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
@@ -29,7 +29,7 @@ import {
   type WriteOutcome,
 } from "./storage.ts";
 
-export type PublicActionEnv = TurnstileRuntimeEnv & {
+export type PublicOperationEnv = TurnstileRuntimeEnv & {
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 
@@ -39,25 +39,25 @@ export type PublicOperationRoute = {
   path: string;
 };
 
-export type PublicActionResult = {
+export type PublicOperationResult = {
   body: PublicOperationResponse | { error: string };
   headers?: HeadersInit;
   status?: number;
 };
 
-export type PublicActionWriteNotifier = {
+export type PublicOperationWriteNotifier = {
   apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T>;
 };
 
 type PublicOperationExecutionInput = {
   body: unknown;
-  env: PublicActionEnv;
+  env: PublicOperationEnv;
   identity: AppStorageIdentity;
   request: Request;
   route: PublicOperationRoute;
   schema: AppSchema;
   storage: DurableObjectStorage;
-  writes: PublicActionWriteNotifier;
+  writes: PublicOperationWriteNotifier;
 };
 
 type SelectedPublicOperation = {
@@ -70,14 +70,14 @@ type SelectedPublicOperation = {
 type ParsedPublicOperationRequest = {
   input: RecordValues;
   proof: { turnstileToken: string };
-  source?: PublicActionRequestSource;
+  source?: PublicOperationRequestSource;
   idempotencyKey?: string;
 };
 
 type PublicOperationRequestEnvelopeFields = {
   input: unknown;
   proof: unknown;
-  source?: PublicActionRequestSource;
+  source?: PublicOperationRequestSource;
   idempotencyKey?: string;
 };
 
@@ -92,12 +92,12 @@ const originalRequestHostHeader = "x-formless-original-request-host";
 const originalRequestOriginHeader = "x-formless-original-request-origin";
 const turnstileSiteverifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-export class PublicActionError extends Error {
+export class PublicOperationError extends Error {
   readonly status: number;
 
   constructor(message: string, status: number) {
     super(message);
-    this.name = "PublicActionError";
+    this.name = "PublicOperationError";
     this.status = status;
   }
 }
@@ -141,7 +141,7 @@ export function selectPublicOperationRoute(input: {
 
 export async function executePublicOperationRequest(
   input: PublicOperationExecutionInput,
-): Promise<PublicActionResult> {
+): Promise<PublicOperationResult> {
   const selected = selectPublicOperation(input.schema, input.route);
   const envelopeFields = parsePublicOperationRequestEnvelopeFields(input.body);
   const receivedAt = nowIsoString();
@@ -196,7 +196,7 @@ export async function executePublicOperationRequest(
     });
   }
 
-  let verification: PublicActionChallengeVerification;
+  let verification: PublicOperationChallengeVerification;
 
   try {
     verification = await verifyTurnstileChallenge({
@@ -240,13 +240,12 @@ function selectPublicOperation(
   const operation = entity?.operations?.[route.operationName];
 
   if (!entity || !operation) {
-    throw new PublicActionError("Public operation is not available.", 404);
+    throw new PublicOperationError("Public operation is not available.", 404);
   }
 
   const publicCommand =
     operation.kind === "command" &&
-    ((operation.effect?.type === "runActionKind" && Boolean(operation.effect.action)) ||
-      operation.effect?.type === "recordPlan");
+    (operation.effect?.type === "registeredCommand" || operation.effect?.type === "recordPlan");
   const publicCreate =
     operation.kind === "create" &&
     operation.scope === "collection" &&
@@ -254,7 +253,7 @@ function selectPublicOperation(
     operation.output.type === "create";
 
   if (!publicCommand && !publicCreate) {
-    throw new PublicActionError("Public operation is not available.", 404);
+    throw new PublicOperationError("Public operation is not available.", 404);
   }
 
   return {
@@ -280,11 +279,11 @@ function assertPublicOperationOrigin(request: Request, operation: EntityOperatio
   try {
     parsedOrigin = new URL(origin);
   } catch {
-    throw new PublicActionError("Public operation origin is not allowed.", 403);
+    throw new PublicOperationError("Public operation origin is not allowed.", 403);
   }
 
   if (parsedOrigin.origin !== publicRequestUrlFacts(request).origin) {
-    throw new PublicActionError("Public operation origin is not allowed.", 403);
+    throw new PublicOperationError("Public operation origin is not allowed.", 403);
   }
 }
 
@@ -299,7 +298,7 @@ function assertPublicOperationInvocationAllowed(
     access.challenge.kind === "turnstile";
 
   if (!allowed) {
-    const error = new PublicActionError("Public operation is not available.", 404);
+    const error = new PublicOperationError("Public operation is not available.", 404);
 
     recordOperationInvocationRejected(storage, envelope, error);
     throw error;
@@ -313,7 +312,7 @@ function parsePublicOperationRequest(
   storage: DurableObjectStorage,
 ): ParsedPublicOperationRequest {
   if (!selected.operation.input) {
-    throw new PublicActionError("Public operation is not available.", 404);
+    throw new PublicOperationError("Public operation is not available.", 404);
   }
 
   return {
@@ -379,7 +378,7 @@ function parsePublicOperationProof(value: unknown): ParsedPublicOperationRequest
   };
 }
 
-function parsePublicOperationSource(value: unknown): PublicActionRequestSource {
+function parsePublicOperationSource(value: unknown): PublicOperationRequestSource {
   if (!isRecord(value)) {
     throw new BadRequestError("Public operation source must be an object.");
   }
@@ -410,14 +409,14 @@ function parseIdempotencyKey(value: unknown, context: string): string {
 }
 
 async function verifyTurnstileChallenge(input: {
-  env: PublicActionEnv;
+  env: PublicOperationEnv;
   idempotencyKey: string;
   token: string;
-}): Promise<PublicActionChallengeVerification> {
+}): Promise<PublicOperationChallengeVerification> {
   const secret = turnstileSecretKeyFromEnv(input.env);
 
   if (!secret) {
-    throw new PublicActionError("Public operation challenge is unavailable.", 503);
+    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
   }
 
   let response: Response;
@@ -436,11 +435,11 @@ async function verifyTurnstileChallenge(input: {
       }),
     );
   } catch {
-    throw new PublicActionError("Public operation challenge is unavailable.", 503);
+    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
   }
 
   if (!response.ok) {
-    throw new PublicActionError("Public operation challenge is unavailable.", 503);
+    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
   }
 
   let body: TurnstileSiteverifyResponse;
@@ -448,11 +447,11 @@ async function verifyTurnstileChallenge(input: {
   try {
     body = (await response.json()) as TurnstileSiteverifyResponse;
   } catch {
-    throw new PublicActionError("Public operation challenge is unavailable.", 503);
+    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
   }
 
   if (body.success !== true) {
-    throw new PublicActionError("Public operation challenge failed.", 403);
+    throw new PublicOperationError("Public operation challenge failed.", 403);
   }
 
   return {
@@ -464,13 +463,13 @@ async function verifyTurnstileChallenge(input: {
   };
 }
 
-function turnstileFetch(env: PublicActionEnv, request: Request): Promise<Response> {
+function turnstileFetch(env: PublicOperationEnv, request: Request): Promise<Response> {
   return env.FORMLESS_TURNSTILE_SITEVERIFY
     ? env.FORMLESS_TURNSTILE_SITEVERIFY.fetch(request)
     : fetch(request);
 }
 
-function publicOperationResult(response: OperationInvocationResponse): PublicActionResult {
+function publicOperationResult(response: OperationInvocationResponse): PublicOperationResult {
   if (response.output.type === "create" && response.invocation.operation.kind === "create") {
     return {
       body: {
@@ -510,13 +509,9 @@ function publicOperationResult(response: OperationInvocationResponse): PublicAct
         type: "command",
         affectedChangeIds: response.output.affectedChangeIds,
         cursor: response.output.cursor,
-        response: {
-          actionId: response.output.response.actionId,
-          cursor: response.output.response.cursor,
-          ...(response.output.response.recordPlan === undefined
-            ? {}
-            : { recordPlan: response.output.response.recordPlan }),
-        },
+        ...(response.output.recordPlan === undefined
+          ? {}
+          : { recordPlan: response.output.recordPlan }),
       },
       status: response.status === "replayed" ? "replayed" : "committed",
     },
@@ -525,8 +520,8 @@ function publicOperationResult(response: OperationInvocationResponse): PublicAct
 
 function publicOperationProof(
   turnstileToken: string,
-  verification?: PublicActionChallengeVerification,
-): PublicActionProof {
+  verification?: PublicOperationChallengeVerification,
+): PublicOperationProof {
   return {
     kind: "turnstile",
     token: turnstileToken,
@@ -591,7 +586,7 @@ async function derivePublicOperationIdempotencyKey(input: {
   entityName: string;
   operationName: string;
   input: unknown;
-  source: PublicActionRequestSource | undefined;
+  source: PublicOperationRequestSource | undefined;
 }) {
   const digest = await sha256Hex(
     stableJson({

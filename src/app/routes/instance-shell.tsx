@@ -1272,7 +1272,7 @@ function GeneratedInstanceAppsSection({
       <div data-formless-control-plane-screen="apps">
         <HomeRoute
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-          sectionActions={{
+          sectionOperationControls={{
             "app-installs": (
               <Button
                 aria-haspopup="dialog"

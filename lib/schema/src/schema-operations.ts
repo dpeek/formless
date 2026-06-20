@@ -1,5 +1,7 @@
 import { assertSchemaLocalEntityKey } from "./entity-names.ts";
-import { isSystemFieldName } from "./fields.ts";
+import { fieldRefsEqual, isSystemFieldName } from "./fields.ts";
+import { fieldHasCreateDefault } from "./field-types.ts";
+import { collectQueryContextNames } from "./query.ts";
 import {
   assertExactKeys,
   isFiniteNumber,
@@ -16,7 +18,7 @@ import type {
   CreateRecordEntityOperationEffectSchema,
   DeleteRecordEntityOperationEffectSchema,
   EntityActionKind,
-  EntityOperationCommandEffectSchema,
+  EntityActionJoinSchema,
   EntityOperationCommandEffectType,
   EntityOperationActorKind,
   EntityOperationAuditInputPolicy,
@@ -36,7 +38,11 @@ import type {
   EnumValueSchema,
   FieldSchema,
   LegacyEntityOperationCommandEffectType,
+  NativeEntityOperationCommandEffectSchema,
+  NativeEntityOperationCommandEffectType,
   PatchRecordEntityOperationEffectSchema,
+  RegisteredCommandEntityOperationEffectSchema,
+  RelationshipSchema,
   RecordPlanActorContextField,
   RecordPlanEntityOperationEffectSchema,
   RecordPlanRecordIdExpressionSchema,
@@ -46,6 +52,7 @@ import type {
   RecordPlanStepSchema,
   RecordPlanValueExpressionSchema,
   RunActionKindEntityOperationEffectSchema,
+  TableOperationBindingSchema,
 } from "./types.ts";
 
 export const entityOperationKinds = [
@@ -70,7 +77,7 @@ const entityOperationActorKinds = [
   "anonymous",
 ] as const satisfies readonly EntityOperationActorKind[];
 
-export const entityOperationBindingKinds = ["collection"] as const;
+export const entityOperationBindingKinds = ["collection", "table"] as const;
 
 export type EntityOperationBindingKind = (typeof entityOperationBindingKinds)[number];
 
@@ -86,6 +93,12 @@ export const entityOperationCommandEffectKinds = [
 ] as const satisfies readonly EntityActionKind[];
 
 export const entityOperationCommandEffectTypes = [
+  "registeredCommand",
+  "recordPlan",
+] as const satisfies readonly NativeEntityOperationCommandEffectType[];
+
+export const parsedEntityOperationCommandEffectTypes = [
+  "registeredCommand",
   "runActionKind",
   "recordPlan",
 ] as const satisfies readonly EntityOperationCommandEffectType[];
@@ -192,19 +205,36 @@ export function classifyCollectionOperationBinding(
   };
 }
 
+export function classifyTableOperationBinding(
+  binding: TableOperationBindingSchema,
+): EntityOperationBindingClassification {
+  const operationKey = parseEntityOperationKey(
+    "Table operation binding operation",
+    binding.operation,
+  );
+
+  return {
+    kind: "table",
+    operationKey,
+    canonicalOperationKey: formatEntityOperationKey(operationKey),
+  };
+}
+
 export function isEntityOperationCommandEffectKind(value: unknown): value is EntityActionKind {
   return entityOperationCommandEffectKinds.includes(value as EntityActionKind);
 }
 
 export function isEntityOperationCommandEffectType(
   value: unknown,
-): value is EntityOperationCommandEffectType {
-  return entityOperationCommandEffectTypes.includes(value as EntityOperationCommandEffectType);
+): value is NativeEntityOperationCommandEffectType {
+  return entityOperationCommandEffectTypes.includes(
+    value as NativeEntityOperationCommandEffectType,
+  );
 }
 
 export function isEntityOperationCommandEffect(
   effect: EntityOperationEffectSchema | undefined,
-): effect is EntityOperationCommandEffectSchema {
+): effect is NativeEntityOperationCommandEffectSchema {
   return effect !== undefined && isEntityOperationCommandEffectType(effect.type);
 }
 
@@ -239,6 +269,7 @@ export function parseEntityOperationsForEntities(
   entities: Record<string, EntitySchema>,
   operationInputsByEntity: Record<string, unknown>,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, EntitySchema> {
   return Object.fromEntries(
     Object.entries(entities).map(([entityName, entity]) => {
@@ -249,6 +280,7 @@ export function parseEntityOperationsForEntities(
           entity,
           entities,
           queries,
+          relationships,
         ) ?? {};
 
       return [entityName, Object.keys(operations).length > 0 ? { ...entity, operations } : entity];
@@ -262,6 +294,7 @@ function parseEntityOperations(
   entity: EntitySchema,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, EntityOperationSchema> | undefined {
   if (value === undefined) {
     return undefined;
@@ -285,7 +318,15 @@ function parseEntityOperations(
 
       return [
         operationName,
-        parseEntityOperation(entityName, operationName, operation, entity, entities, queries),
+        parseEntityOperation(
+          entityName,
+          operationName,
+          operation,
+          entity,
+          entities,
+          queries,
+          relationships,
+        ),
       ];
     }),
   );
@@ -298,6 +339,7 @@ function parseEntityOperation(
   entity: EntitySchema,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): EntityOperationSchema {
   const context = `Entity operation "${formatEntityOperationKey({
     entityKey: entityName,
@@ -340,6 +382,7 @@ function parseEntityOperation(
     entity,
     entities,
     queries,
+    relationships,
   );
   const idempotency = parseOperationIdempotency(`${context} idempotency`, value.idempotency, kind);
   const audit = parseOperationAudit(`${context} audit`, value.audit);
@@ -706,6 +749,7 @@ function parseOperationEffect(
   entity: EntitySchema,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): EntityOperationEffectSchema | undefined {
   if (value === undefined) {
     return defaultOperationEffect(context, kind);
@@ -750,6 +794,19 @@ function parseOperationEffect(
     assertExactKeys(context, value, ["type", "kind"], ["action", "query"]);
     validateOperationEffectKind(context, kind, "command");
     return parseRunActionKindEffect(context, value, target, entityName, entity, queries);
+  }
+
+  if (value.type === "registeredCommand") {
+    validateOperationEffectKind(context, kind, "command");
+    return parseRegisteredCommandEffect(
+      context,
+      value,
+      target,
+      entityName,
+      entity,
+      queries,
+      relationships,
+    );
   }
 
   if (value.type === "recordPlan") {
@@ -856,6 +913,380 @@ function parseRunActionKindEffect(
     ...(actionName === undefined ? {} : { action: actionName }),
     ...(queryName === undefined ? {} : { query: queryName }),
   };
+}
+
+function parseRegisteredCommandEffect(
+  context: string,
+  value: Record<string, unknown>,
+  target: EntityOperationTargetSchema | undefined,
+  entityName: string,
+  entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): RegisteredCommandEntityOperationEffectSchema {
+  if (!isEntityOperationCommandEffectKind(value.kind)) {
+    throw new Error(`${context} kind must be a supported schema command effect kind.`);
+  }
+
+  if (value.kind === "clear-completed") {
+    assertExactKeys(context, value, ["type", "kind"], ["query"]);
+    return parseClearCompletedCommandEffect(context, value, target, entityName, entity, queries);
+  }
+
+  if (value.kind === "create-missing-join-records") {
+    assertExactKeys(context, value, ["type", "kind", "join"]);
+    const join = parseRegisteredCommandJoin(context, value.join, entityName, entity, queries);
+    validateCreateMissingJoinRecordDefaults(context, entity, join);
+    return { type: "registeredCommand", kind: "create-missing-join-records", join };
+  }
+
+  if (value.kind === "create-selected-join-record") {
+    assertExactKeys(context, value, ["type", "kind", "relationship"]);
+    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
+    const relationship = requireManyToManyCommandRelationship(
+      context,
+      relationshipName,
+      entityName,
+      relationships,
+    );
+    validateJoinRecordDefaults(context, entity, [
+      relationship.through.fromField,
+      relationship.through.toField,
+    ]);
+    return {
+      type: "registeredCommand",
+      kind: "create-selected-join-record",
+      relationship: relationshipName,
+    };
+  }
+
+  if (value.kind === "remove-selected-join-records") {
+    assertExactKeys(context, value, ["type", "kind", "relationship"]);
+    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
+    requireManyToManyCommandRelationship(context, relationshipName, entityName, relationships);
+    return {
+      type: "registeredCommand",
+      kind: "remove-selected-join-records",
+      relationship: relationshipName,
+    };
+  }
+
+  if (value.kind === "create-tree-child") {
+    assertExactKeys(context, value, ["type", "kind", "relationship", "childField"], ["orderField"]);
+    return parseCreateTreeChildCommandEffect(context, value, entityName, entity, relationships);
+  }
+
+  if (value.kind === "remove-tree-placement") {
+    assertExactKeys(context, value, ["type", "kind", "relationship"]);
+    const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
+    requireToManyCommandRelationship(context, relationshipName, entityName, relationships);
+    return {
+      type: "registeredCommand",
+      kind: "remove-tree-placement",
+      relationship: relationshipName,
+    };
+  }
+
+  if (value.kind === "subscribe") {
+    assertExactKeys(context, value, ["type", "kind"]);
+    return { type: "registeredCommand", kind: "subscribe" };
+  }
+
+  assertExactKeys(context, value, ["type", "kind", "machine", "transition"]);
+  return parseTransitionStateCommandEffect(context, value, entity);
+}
+
+function parseClearCompletedCommandEffect(
+  context: string,
+  value: Record<string, unknown>,
+  target: EntityOperationTargetSchema | undefined,
+  entityName: string,
+  entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
+): RegisteredCommandEntityOperationEffectSchema & { kind: "clear-completed" } {
+  if (entity.fields.done?.type !== "boolean") {
+    throw new Error(`${context} kind "clear-completed" requires a boolean "done" field.`);
+  }
+
+  const queryName = parseOptionalCommandQueryReference(
+    `${context} query`,
+    value.query,
+    target,
+    entityName,
+    queries,
+  );
+  const targetQuery = queries[queryName];
+
+  if (!targetQuery || !isClearCompletedTargetQuery(targetQuery.expression)) {
+    throw new Error(`${context} kind "clear-completed" target must be value.done eq true.`);
+  }
+
+  return { type: "registeredCommand", kind: "clear-completed", query: queryName };
+}
+
+function parseCreateTreeChildCommandEffect(
+  context: string,
+  value: Record<string, unknown>,
+  entityName: string,
+  entity: EntitySchema,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" } {
+  const relationshipName = parseRegisteredCommandRelationshipName(context, value.relationship);
+  const relationship = requireToManyCommandRelationship(
+    context,
+    relationshipName,
+    entityName,
+    relationships,
+  );
+  const childFieldName = parseRequiredNonEmptyString(`${context} childField`, value.childField);
+  const childField = entity.fields[childFieldName];
+
+  if (!childField) {
+    throw new Error(`${context} childField references unknown field "${childFieldName}".`);
+  }
+
+  if (childField.type !== "reference") {
+    throw new Error(`${context} childField must be a reference field.`);
+  }
+
+  if (childField.to !== relationship.from.entity) {
+    throw new Error(`${context} childField must reference entity "${relationship.from.entity}".`);
+  }
+
+  const orderFieldName = parseOptionalNonEmptyString(`${context} orderField`, value.orderField);
+  const orderField = orderFieldName === undefined ? undefined : entity.fields[orderFieldName];
+
+  if (orderFieldName !== undefined && !orderField) {
+    throw new Error(`${context} orderField references unknown field "${orderFieldName}".`);
+  }
+
+  if (orderFieldName !== undefined && orderField?.type !== "number") {
+    throw new Error(`${context} orderField must be a number field.`);
+  }
+
+  return {
+    type: "registeredCommand",
+    kind: "create-tree-child",
+    relationship: relationshipName,
+    childField: childFieldName,
+    ...(orderFieldName === undefined ? {} : { orderField: orderFieldName }),
+  };
+}
+
+function parseTransitionStateCommandEffect(
+  context: string,
+  value: Record<string, unknown>,
+  entity: EntitySchema,
+): RegisteredCommandEntityOperationEffectSchema & { kind: "transition-state" } {
+  const machineName = parseRequiredNonEmptyString(`${context} machine`, value.machine);
+  const transitionName = parseRequiredNonEmptyString(`${context} transition`, value.transition);
+  const stateMachine = entity.stateMachines?.[machineName];
+
+  if (!stateMachine) {
+    throw new Error(`${context} references unknown state machine "${machineName}".`);
+  }
+
+  if (!stateMachine.transitions[transitionName]) {
+    throw new Error(`${context} references unknown transition "${machineName}.${transitionName}".`);
+  }
+
+  return {
+    type: "registeredCommand",
+    kind: "transition-state",
+    machine: machineName,
+    transition: transitionName,
+  };
+}
+
+function parseOptionalCommandQueryReference(
+  context: string,
+  value: unknown,
+  target: EntityOperationTargetSchema | undefined,
+  entityName: string,
+  queries: Record<string, CollectionQuerySchema>,
+): string {
+  const queryName =
+    value === undefined
+      ? target?.query
+      : parseOperationQueryReference(context, value, entityName, queries);
+
+  if (queryName === undefined) {
+    throw new Error(`${context} is required when command target is omitted.`);
+  }
+
+  if (target !== undefined && target.query !== queryName) {
+    throw new Error(`${context} must match target query "${target.query}".`);
+  }
+
+  return queryName;
+}
+
+function parseRegisteredCommandJoin(
+  context: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
+): EntityActionJoinSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} join must be an object.`);
+  }
+
+  assertExactKeys(`${context} join`, value, ["left", "right"]);
+
+  const left = parseRegisteredCommandJoinSource(
+    `${context} join left`,
+    value.left,
+    entityName,
+    entity,
+    queries,
+  );
+  const right = parseRegisteredCommandJoinSource(
+    `${context} join right`,
+    value.right,
+    entityName,
+    entity,
+    queries,
+  );
+
+  if (left.field === right.field) {
+    throw new Error(`${context} join fields must be different.`);
+  }
+
+  return { left, right };
+}
+
+function parseRegisteredCommandJoinSource(
+  context: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
+): EntityActionJoinSchema["left"] {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["field", "query"]);
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
+  const field = entity.fields[fieldName];
+
+  if (!field) {
+    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  if (field.type !== "reference") {
+    throw new Error(`${context} field "${fieldName}" must be a reference field.`);
+  }
+
+  const query = queries[queryName];
+  if (!query) {
+    throw new Error(`${context} references unknown query "${queryName}".`);
+  }
+
+  if (query.entity !== field.to) {
+    throw new Error(`${context} query "${queryName}" must use entity "${field.to}".`);
+  }
+
+  if (collectQueryContextNames(query.expression).length > 0) {
+    throw new Error(`${context} query "${queryName}" must not require context.`);
+  }
+
+  return {
+    field: fieldName,
+    query: queryName,
+  };
+}
+
+function validateCreateMissingJoinRecordDefaults(
+  context: string,
+  entity: EntitySchema,
+  join: EntityActionJoinSchema,
+) {
+  validateJoinRecordDefaults(context, entity, [join.left.field, join.right.field]);
+}
+
+function validateJoinRecordDefaults(
+  context: string,
+  entity: EntitySchema,
+  joinFieldNames: string[],
+) {
+  const joinFields = new Set(joinFieldNames);
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    if (joinFields.has(fieldName) || !field.required || fieldHasCreateDefault(field)) {
+      continue;
+    }
+
+    throw new Error(
+      `${context} kind "create-selected-join-record" requires field "${fieldName}" to have a default.`,
+    );
+  }
+}
+
+function parseRegisteredCommandRelationshipName(context: string, value: unknown): string {
+  return parseRequiredNonEmptyString(`${context} relationship`, value);
+}
+
+function requireManyToManyCommandRelationship(
+  context: string,
+  relationshipName: string,
+  entityName: string,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): Extract<RelationshipSchema, { kind: "manyToMany" }> {
+  const relationship = relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(`${context} references unknown relationship "${relationshipName}".`);
+  }
+
+  if (relationship.kind !== "manyToMany") {
+    throw new Error(`${context} relationship "${relationshipName}" must be manyToMany.`);
+  }
+
+  if (relationship.through.entity !== entityName) {
+    throw new Error(
+      `${context} relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${entityName}".`,
+    );
+  }
+
+  return relationship;
+}
+
+function requireToManyCommandRelationship(
+  context: string,
+  relationshipName: string,
+  entityName: string,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): Extract<RelationshipSchema, { kind: "toMany" }> {
+  const relationship = relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(`${context} references unknown relationship "${relationshipName}".`);
+  }
+
+  if (relationship.kind !== "toMany") {
+    throw new Error(`${context} relationship "${relationshipName}" must be toMany.`);
+  }
+
+  if (relationship.to.entity !== entityName) {
+    throw new Error(
+      `${context} relationship "${relationshipName}" targets entity "${relationship.to.entity}", not "${entityName}".`,
+    );
+  }
+
+  return relationship;
+}
+
+function isClearCompletedTargetQuery(query: CollectionQuerySchema["expression"]) {
+  return (
+    query.kind === "where" &&
+    query.op === "eq" &&
+    query.value === true &&
+    fieldRefsEqual(query.ref, { kind: "value", name: "done" })
+  );
 }
 
 function parseRecordPlanEffect(

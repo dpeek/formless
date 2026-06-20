@@ -190,11 +190,6 @@ describe("generated state-machine UI", () => {
             affectedChangeIds: [submittedOperation.idempotencyKey],
             changes,
             cursor: 2,
-            response: {
-              actionId: submittedOperation.idempotencyKey,
-              changes,
-              cursor: 2,
-            },
           },
           status: "committed",
         } satisfies OperationInvocationResponse);
@@ -235,20 +230,6 @@ function lifecycleSchema(): AppSchema {
             },
           },
         },
-        actions: {
-          startTask: {
-            label: "Start",
-            kind: "transition-state",
-            machine: "statusFlow",
-            transition: "start",
-          },
-          completeTask: {
-            label: "Complete",
-            kind: "transition-state",
-            machine: "statusFlow",
-            transition: "complete",
-          },
-        },
         mutations: {
           create: { enabled: true },
           patch: { enabled: true },
@@ -279,7 +260,12 @@ function lifecycleSchema(): AppSchema {
             label: "Start",
             kind: "command",
             scope: "record",
-            effect: { type: "runActionKind", kind: "transition-state", action: "startTask" },
+            effect: {
+              type: "registeredCommand",
+              kind: "transition-state",
+              machine: "statusFlow",
+              transition: "start",
+            },
             output: { type: "command" },
             idempotency: { required: true },
             audit: { input: "summary" },
@@ -288,7 +274,12 @@ function lifecycleSchema(): AppSchema {
             label: "Complete",
             kind: "command",
             scope: "record",
-            effect: { type: "runActionKind", kind: "transition-state", action: "completeTask" },
+            effect: {
+              type: "registeredCommand",
+              kind: "transition-state",
+              machine: "statusFlow",
+              transition: "complete",
+            },
             output: { type: "command" },
             idempotency: { required: true },
             audit: { input: "summary" },

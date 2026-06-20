@@ -454,8 +454,11 @@ writing schema-owned control-plane records.
 
 - **WHEN** a browser owner or admin creates an app install or edits route
   configuration
-- **THEN** the write commits `app-install` and `route` records through
-  Authority validation
+- **THEN** the write invokes a control-plane operation and commits
+  `app-install` and `route` records through Authority validation
+- **AND** app-install creation returns operation-native command output and
+  replays through operation identity rather than through an action response
+  contract
 - **AND** saved workspace source is later generated from those records rather
   than from manifest declarations
 

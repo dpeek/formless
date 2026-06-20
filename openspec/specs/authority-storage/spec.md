@@ -276,8 +276,10 @@ materialization.
 - AND create operations return the created record plus affected change ids
 - AND update operations return the updated record plus affected change ids
 - AND delete operations return the tombstoned record id plus affected change ids
-- AND command operations return a typed command response plus affected change
-  ids
+- AND command operations return operation-native command output plus affected
+  change ids
+- AND operation responses do not expose action response types as the command
+  output contract
 - AND replayed write or command operations return the original stored output
 
 #### Scenario: Materialize record lifecycle timestamps
@@ -331,12 +333,12 @@ writes.
 - GIVEN a command record plan commits
 - WHEN Authority records the operation outcome
 - THEN one sync change row is appended for each committed app-record change
-- AND the command response includes affected change ids and declared
+- AND the operation command output includes affected change ids and declared
   display-safe record identifiers or metadata for created plan steps
 - AND operation invocation audit remains the semantic root for the multi-record
   write
 - AND replaying the same operation for the same app storage identity and
-  idempotency key returns the stored command response without duplicate app
+  idempotency key returns the stored operation output without duplicate app
   records, tombstones, command effect rows, operation invocation rows, or sync
   change rows
 
@@ -387,6 +389,18 @@ idempotency, change-row append, cursor calculation, and committed change
 readback. Mutation and action materializers may remain internal implementation
 helpers, but they are not Authority write interfaces for callers after the
 operation migration.
+
+#### Scenario: Materializers stay behind operation outputs
+
+- GIVEN Authority uses internal record or command materializers to commit
+  operation effects
+- WHEN an operation is invoked through generated UI, protocol, public, CLI,
+  runner, or automation surfaces
+- THEN the caller submits an operation envelope and receives operation output
+- AND internal mutation or action response types are not exported as the
+  operation response contract
+- AND replay storage is keyed by operation identity and returns the
+  operation-native output shape
 
 #### Scenario: Committed write facts
 

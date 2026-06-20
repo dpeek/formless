@@ -8,29 +8,29 @@ import type { createWorkerHarness } from "../worker/miniflare-test.ts";
 type AuthorityHarness = Pick<Awaited<ReturnType<typeof createWorkerHarness>>, "fetch">;
 
 export type AuthorityWriteHelpers = ReturnType<typeof createAuthorityWriteHelpers>;
-export type AuthorityTestMutationResult = {
+export type AuthorityTestRecordOperationResult = {
   changes: ChangeRow[];
   cursor: number;
-  mutationId: string;
   record: StoredRecord;
+  writeIdentity: string;
 };
-export type AuthorityTestActionResult = {
-  actionId: string;
+export type AuthorityTestCommandOperationResult = {
   changes: ChangeRow[];
   cursor: number;
+  writeIdentity: string;
 };
-export type AuthorityTestMutationRequest = {
+export type AuthorityTestRecordOperationRequest = {
   entity: string;
-  mutationId: string;
-  op: string;
-  recordId?: string;
-  values?: unknown;
-};
-export type AuthorityTestActionRequest = {
-  action: string;
-  actionId: string;
-  entity: string;
+  idempotencyKey: string;
   input?: unknown;
+  operationName: string;
+  recordId?: string;
+};
+export type AuthorityTestCommandOperationRequest = {
+  entity: string;
+  idempotencyKey: string;
+  input?: unknown;
+  operationName: string;
 };
 
 export function createAuthorityWriteHelpers(
@@ -81,18 +81,18 @@ export function createAuthorityWriteHelpers(
     return (await response.json()) as T;
   }
 
-  async function postMutation(mutationId: string, values: Record<string, unknown>) {
-    return postMutationForEntity(mutationId, "task", values);
+  async function postCreateOperation(idempotencyKey: string, values: Record<string, unknown>) {
+    return postCreateOperationForEntity(idempotencyKey, "task", values);
   }
 
-  async function postMutationForEntity(
-    mutationId: string,
+  async function postCreateOperationForEntity(
+    idempotencyKey: string,
     entity: string,
     values: Record<string, unknown>,
   ) {
     const response = await harness.fetch(apiPath(`/api/operations/${entity}/create`), {
       body: JSON.stringify({
-        idempotencyKey: mutationId,
+        idempotencyKey,
         input: values,
       }),
       headers: { "Content-Type": "application/json" },
@@ -101,36 +101,36 @@ export function createAuthorityWriteHelpers(
 
     expect(response.status).toBe(200);
 
-    return mutationResultFromOperation(await response.json(), mutationId);
+    return recordOperationResultFromOperation(await response.json(), idempotencyKey);
   }
 
-  async function postAction(actionId: string, action: string) {
-    return postActionForEntity(actionId, "task", action);
+  async function postCommandOperation(idempotencyKey: string, operationName: string) {
+    return postCommandOperationForEntity(idempotencyKey, "task", operationName);
   }
 
-  async function postActionForEntity(
-    actionId: string,
+  async function postCommandOperationForEntity(
+    idempotencyKey: string,
     entity: string,
-    action: string,
+    operationName: string,
     extra: Record<string, unknown> = {},
   ) {
     const operation = await postJson<OperationInvocationResponse>(
-      `/api/operations/${entity}/${action}`,
+      `/api/operations/${entity}/${operationName}`,
       {
-        idempotencyKey: actionId,
+        idempotencyKey,
         ...extra,
       },
     );
 
     if (operation.output.type !== "command") {
-      throw new Error(`Expected command output for operation "${entity}.${action}".`);
+      throw new Error(`Expected command output for operation "${entity}.${operationName}".`);
     }
 
-    return operation.output.response satisfies AuthorityTestActionResult;
+    return commandOperationResultFromResponse(operation);
   }
 
-  async function postMutationRequest(requestBody: AuthorityTestMutationRequest) {
-    const request = mutationOperationRequest(requestBody);
+  async function postRecordOperationRequest(requestBody: AuthorityTestRecordOperationRequest) {
+    const request = recordOperationRequest(requestBody);
     const response = await harness.fetch(apiPath(request.path), {
       body: JSON.stringify(request.body),
       headers: { "Content-Type": "application/json" },
@@ -142,8 +142,11 @@ export function createAuthorityWriteHelpers(
     return request.response(await response.json());
   }
 
-  async function expectMutationError(requestBody: AuthorityTestMutationRequest, message: string) {
-    const request = mutationOperationRequest(requestBody);
+  async function expectRecordOperationError(
+    requestBody: AuthorityTestRecordOperationRequest,
+    message: string,
+  ) {
+    const request = recordOperationRequest(requestBody);
     const response = await harness.fetch(apiPath(request.path), {
       body: JSON.stringify(request.body),
       headers: { "Content-Type": "application/json" },
@@ -156,8 +159,11 @@ export function createAuthorityWriteHelpers(
     });
   }
 
-  async function expectActionError(requestBody: AuthorityTestActionRequest, message: string) {
-    const request = actionOperationRequest(requestBody);
+  async function expectCommandOperationError(
+    requestBody: AuthorityTestCommandOperationRequest,
+    message: string,
+  ) {
+    const request = commandOperationRequest(requestBody);
     const response = await harness.fetch(apiPath(request.path), {
       body: JSON.stringify(request.body),
       headers: { "Content-Type": "application/json" },
@@ -191,17 +197,17 @@ export function createAuthorityWriteHelpers(
 
   return {
     apiPath,
-    expectActionError,
+    expectCommandOperationError,
     expectError,
-    expectMutationError,
+    expectRecordOperationError,
     expectNotFound,
     getJson,
-    postAction,
-    postActionForEntity,
+    postCommandOperation,
+    postCommandOperationForEntity,
+    postCreateOperation,
+    postCreateOperationForEntity,
     postJson,
-    postMutation,
-    postMutationForEntity,
-    postMutationRequest,
+    postRecordOperationRequest,
     resetSchemaApp,
     useSchemaApp,
   };
@@ -252,7 +258,7 @@ export function operationWriteRequest(
           input: request.values,
         },
         path: `${prefix}/operations/${entity}/create`,
-        response: (value) => mutationResultFromOperation(value, mutationId),
+        response: (value) => recordOperationResultFromOperation(value, mutationId),
       };
     }
 
@@ -264,7 +270,7 @@ export function operationWriteRequest(
           recordId: request.recordId,
         },
         path: `${prefix}/operations/${entity}/update`,
-        response: (value) => mutationResultFromOperation(value, mutationId),
+        response: (value) => recordOperationResultFromOperation(value, mutationId),
       };
     }
 
@@ -276,7 +282,7 @@ export function operationWriteRequest(
           recordId: request.recordId,
         },
         path: `${prefix}/operations/${entity}/delete`,
-        response: (value) => mutationResultFromOperation(value, mutationId),
+        response: (value) => recordOperationResultFromOperation(value, mutationId),
       };
     }
   }
@@ -292,76 +298,76 @@ export function operationWriteRequest(
         ...(request.input === undefined ? {} : { input: request.input }),
       },
       path: `${prefix}/operations/${entity}/${action}`,
-      response: actionResultFromOperation,
+      response: commandOperationResultFromOperation,
     };
   }
 
   return { body, path, response: (value) => value };
 }
 
-export function mutationOperationRequest(requestBody: AuthorityTestMutationRequest): {
+export function recordOperationRequest(requestBody: AuthorityTestRecordOperationRequest): {
   body: unknown;
   path: string;
-  response: (value: unknown) => AuthorityTestMutationResult;
+  response: (value: unknown) => AuthorityTestRecordOperationResult;
 } {
-  const mutationId = parseNonEmptyString("mutationId", requestBody.mutationId);
+  const idempotencyKey = parseNonEmptyString("idempotencyKey", requestBody.idempotencyKey);
   const entity = parseNonEmptyString("entity", requestBody.entity);
-  const op = parseNonEmptyString("op", requestBody.op);
+  const operationName = parseNonEmptyString("operationName", requestBody.operationName);
 
-  if (op === "create") {
+  if (operationName === "create") {
     return {
       body: {
-        idempotencyKey: mutationId,
-        input: requestBody.values,
+        idempotencyKey,
+        input: requestBody.input,
       },
       path: `/api/operations/${entity}/create`,
-      response: (value) => mutationResultFromOperation(value, mutationId),
+      response: (value) => recordOperationResultFromOperation(value, idempotencyKey),
     };
   }
 
-  if (op === "patch") {
+  if (operationName === "update") {
     return {
       body: {
-        idempotencyKey: mutationId,
-        input: requestBody.values,
+        idempotencyKey,
+        input: requestBody.input,
         recordId: requestBody.recordId,
       },
       path: `/api/operations/${entity}/update`,
-      response: (value) => mutationResultFromOperation(value, mutationId),
+      response: (value) => recordOperationResultFromOperation(value, idempotencyKey),
     };
   }
 
-  if (op === "delete") {
+  if (operationName === "delete") {
     return {
       body: {
-        idempotencyKey: mutationId,
-        ...(requestBody.values === undefined ? {} : { input: requestBody.values }),
+        idempotencyKey,
+        ...(requestBody.input === undefined ? {} : { input: requestBody.input }),
         recordId: requestBody.recordId,
       },
       path: `/api/operations/${entity}/delete`,
-      response: (value) => mutationResultFromOperation(value, mutationId),
+      response: (value) => recordOperationResultFromOperation(value, idempotencyKey),
     };
   }
 
-  throw new Error(`Unsupported mutation operation "${op}".`);
+  throw new Error(`Unsupported record operation "${operationName}".`);
 }
 
-export function actionOperationRequest(requestBody: AuthorityTestActionRequest): {
+export function commandOperationRequest(requestBody: AuthorityTestCommandOperationRequest): {
   body: unknown;
   path: string;
-  response: (value: unknown) => AuthorityTestActionResult;
+  response: (value: unknown) => AuthorityTestCommandOperationResult;
 } {
-  const actionId = parseNonEmptyString("actionId", requestBody.actionId);
+  const idempotencyKey = parseNonEmptyString("idempotencyKey", requestBody.idempotencyKey);
   const entity = parseNonEmptyString("entity", requestBody.entity);
-  const action = parseNonEmptyString("action", requestBody.action);
+  const operationName = parseNonEmptyString("operationName", requestBody.operationName);
 
   return {
     body: {
-      idempotencyKey: actionId,
+      idempotencyKey,
       ...(requestBody.input === undefined ? {} : { input: requestBody.input }),
     },
-    path: `/api/operations/${entity}/${action}`,
-    response: actionResultFromOperation,
+    path: `/api/operations/${entity}/${operationName}`,
+    response: commandOperationResultFromOperation,
   };
 }
 
@@ -385,10 +391,10 @@ function isControlPlaneLegacyWritePath(path: string) {
   return /^\/api\/formless\/control-plane\/(?:mutations|actions)(?:\/.*)?$/.test(path);
 }
 
-function mutationResultFromOperation(
+function recordOperationResultFromOperation(
   value: unknown,
-  fallbackMutationId: string,
-): AuthorityTestMutationResult {
+  fallbackWriteIdentity: string,
+): AuthorityTestRecordOperationResult {
   const operation = value as OperationInvocationResponse;
 
   if (
@@ -402,22 +408,40 @@ function mutationResultFromOperation(
   return {
     changes: operation.output.changes,
     cursor: operation.output.cursor,
-    mutationId: operation.output.changes[0]?.mutationId ?? fallbackMutationId,
     record:
       operation.output.type === "delete"
         ? operation.output.changes[0]?.payload
         : operation.output.record,
+    writeIdentity:
+      operation.invocation.idempotency.writeIdentity ??
+      operation.output.changes[0]?.mutationId ??
+      fallbackWriteIdentity,
   };
 }
 
-function actionResultFromOperation(value: unknown): AuthorityTestActionResult {
+function commandOperationResultFromOperation(value: unknown): AuthorityTestCommandOperationResult {
   const operation = value as OperationInvocationResponse;
 
   if (operation.output.type !== "command") {
     throw new Error("Expected command operation output.");
   }
 
-  return operation.output.response;
+  return commandOperationResultFromResponse(operation);
+}
+
+function commandOperationResultFromResponse(
+  operation: OperationInvocationResponse,
+): AuthorityTestCommandOperationResult {
+  if (operation.output.type !== "command") {
+    throw new Error("Expected command operation output.");
+  }
+
+  return {
+    changes: operation.output.changes,
+    cursor: operation.output.cursor,
+    writeIdentity:
+      operation.invocation.idempotency.writeIdentity ?? operation.invocation.invocationId,
+  };
 }
 
 function parseRecord(context: string, value: unknown): Record<string, unknown> {

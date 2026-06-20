@@ -16,7 +16,7 @@ import { RecordFieldEditor } from "./app/generated/record-field-editor.tsx";
 import { SchemaAppProvider, useSchemaKey } from "./app/generated/schema-app-context.tsx";
 import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
-import { EditViewFields } from "./app/generated/table-actions.tsx";
+import { EditViewFields } from "./app/generated/table-operation-controls.tsx";
 import { RecordTree } from "./app/generated/tree.tsx";
 import {
   SitePageRoute,
@@ -3410,7 +3410,7 @@ describe("generated collection home", () => {
     expect(backupSection).not.toContain('value="$475.00"');
   });
 
-  it("labels generated placement action rows from the active entity", () => {
+  it("labels generated placement operation rows from the active entity", () => {
     const collection = requiredSiteCollectionModel("pageCompositionHome");
 
     bootstrapSiteEditor();
@@ -3970,7 +3970,7 @@ describe("generated collection home", () => {
     expect(backupHtml).not.toContain('value="$475.00"');
   });
 
-  it("keeps list/detail query counts and scoped create actions tied to context", () => {
+  it("keeps list/detail query counts and scoped create operations tied to context", () => {
     const schema = rateCardSchemaWithListDetailQueryTabsAndScopedRateCreate();
     const rateModel = requiredCollectionModel(schema, "rateHome");
 
@@ -3995,12 +3995,12 @@ describe("generated collection home", () => {
     expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);
     expect(selectedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
 
-    const rateCreateAction = rateModel.operations.find(
-      (action) => action.type === "create" && action.entityName === "rate",
+    const rateCreateOperation = rateModel.operations.find(
+      (operation) => operation.type === "create" && operation.entityName === "rate",
     );
 
-    if (!rateCreateAction || rateCreateAction.type !== "create") {
-      throw new Error("Missing scoped rate create action.");
+    if (!rateCreateOperation || rateCreateOperation.type !== "create") {
+      throw new Error("Missing scoped rate create operation.");
     }
 
     const rateFormData = new FormData();
@@ -4010,7 +4010,7 @@ describe("generated collection home", () => {
     rateFormData.set("price", "475");
 
     expect(
-      resolveCreateValues(rateFormData, rateCreateAction, {
+      resolveCreateValues(rateFormData, rateCreateOperation, {
         today: "2026-05-01",
         values: { card: "card-1" },
       }),
@@ -4308,7 +4308,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="$1170.00"');
   });
 
-  it("keeps the resource create action enabled without a selected card", () => {
+  it("keeps the resource create operation enabled without a selected card", () => {
     const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")], rateCardSchema));
@@ -4326,9 +4326,9 @@ describe("generated collection home", () => {
 describe("generated forms and records", () => {
   it("renders the task create dialog with type-aware controls", () => {
     const task = appSchema.entities.task;
-    const action = createOperation(task, ["title", "done", "dueDate"]);
+    const operation = createOperation(task, ["title", "done", "dueDate"]);
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain("Create Task");
@@ -4343,9 +4343,9 @@ describe("generated forms and records", () => {
 
   it("renders enum create controls with option labels", () => {
     const task = taskEntityWithKindEnum();
-    const action = createOperation(task, ["kind"]);
+    const operation = createOperation(task, ["kind"]);
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain('name="kind"');
@@ -4357,16 +4357,16 @@ describe("generated forms and records", () => {
   });
 
   it("renders create fields for the active union discriminator", () => {
-    const roleAction = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
-    const streamAction = requiredCreateOperation(
+    const roleOperation = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
+    const streamOperation = requiredCreateOperation(
       generatedDiscriminatedTaskSchema({ defaultKind: "stream" }),
       "taskHome",
     );
     const roleHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={roleAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={roleOperation} renderDialogCancel={false} />,
     );
     const streamHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={streamAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={streamOperation} renderDialogCancel={false} />,
     );
 
     expect(roleHtml).toContain('name="kind"');
@@ -4378,12 +4378,12 @@ describe("generated forms and records", () => {
   });
 
   it("renders fixed-discriminator create fields from literal defaults", () => {
-    const action = requiredCreateOperation(
+    const operation = requiredCreateOperation(
       generatedDiscriminatedTaskSchema({ fixedCreateKind: "stream" }),
       "taskHome",
     );
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
     const formData = new FormData();
     formData.set("done", "on");
@@ -4391,24 +4391,24 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('name="kind"');
     expect(html).toContain('name="done"');
     expect(html).not.toContain('name="title"');
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       done: true,
       kind: "stream",
     });
   });
 
   it("renders source site page, post and project root creates with fixed block types", () => {
-    const pageAction = requiredRootNavigationCreateOperation("Pages");
-    const postAction = requiredRootNavigationCreateOperation("Posts");
-    const projectAction = requiredRootNavigationCreateOperation("Projects");
+    const pageOperation = requiredRootNavigationCreateOperation("Pages");
+    const postOperation = requiredRootNavigationCreateOperation("Posts");
+    const projectOperation = requiredRootNavigationCreateOperation("Projects");
     const pageHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={pageAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={pageOperation} renderDialogCancel={false} />,
     );
     const postHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={postAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={postOperation} renderDialogCancel={false} />,
     );
     const projectHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={projectAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={projectOperation} renderDialogCancel={false} />,
     );
     const pageFormData = new FormData();
     pageFormData.set("label", "Focused Page");
@@ -4441,20 +4441,20 @@ describe("generated forms and records", () => {
     expect(projectHtml).toContain('name="href"');
     expect(projectHtml).toContain('name="date"');
     expect(projectHtml).toContain('name="body"');
-    expect(resolveCreateValues(pageFormData, pageAction)).toEqual({
+    expect(resolveCreateValues(pageFormData, pageOperation)).toEqual({
       label: "Focused Page",
       href: "/focused-page",
       icon: "page",
       type: "page",
     });
-    expect(resolveCreateValues(postFormData, postAction)).toEqual({
+    expect(resolveCreateValues(postFormData, postOperation)).toEqual({
       label: "A focused post",
       href: "/blog/focused-post",
       date: "2026-05-14",
       body: "A short **summary**.",
       type: "post",
     });
-    expect(resolveCreateValues(projectFormData, projectAction)).toEqual({
+    expect(resolveCreateValues(projectFormData, projectOperation)).toEqual({
       label: "Focused Project",
       href: "/projects/focused-project",
       date: "2026-05-13",
@@ -4464,18 +4464,18 @@ describe("generated forms and records", () => {
   });
 
   it("renders source site link creates with mode-specific destination fields", () => {
-    const baseAction = requiredCreateOperation(siteSourceSchema, "blockHome");
+    const baseOperation = requiredCreateOperation(siteSourceSchema, "blockHome");
     const typeField = siteSourceSchema.entities.block.fields.type;
 
     if (typeField.type !== "enum") {
       throw new Error("Site block type must be an enum field.");
     }
 
-    const action = {
-      ...baseAction,
-      fields: baseAction.fields.filter((field) => field.fieldName !== "type"),
+    const operation = {
+      ...baseOperation,
+      fields: baseOperation.fields.filter((field) => field.fieldName !== "type"),
       defaults: [
-        ...baseAction.defaults,
+        ...baseOperation.defaults,
         {
           fieldName: "type",
           field: typeField,
@@ -4498,20 +4498,20 @@ describe("generated forms and records", () => {
 
     bootstrapSiteEditor();
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain('name="linkTargetMode"');
     expect(html).toContain('name="href"');
     expect(html).not.toContain('name="linkTargetBlock"');
-    expect(resolveCreateValues(internalFormData, action)).toEqual({
+    expect(resolveCreateValues(internalFormData, operation)).toEqual({
       label: "Internal docs",
       linkTargetMode: "internal",
       linkTargetBlock: "rec_site_content_blog",
       icon: "book",
       type: "link",
     });
-    expect(resolveCreateValues(externalFormData, action)).toEqual({
+    expect(resolveCreateValues(externalFormData, operation)).toEqual({
       label: "External docs",
       linkTargetMode: "external",
       href: "https://example.com/docs",
@@ -4788,14 +4788,14 @@ describe("generated forms and records", () => {
 
   it("renders markdown create controls as rich editors with hidden string inputs", () => {
     const task = taskEntityWithMarkdownBody();
-    const operation = testCreateOperation("task");
-    const action: Extract<HomeOperationConfig, { type: "create" }> = {
+    const entityOperation = testCreateOperation("task");
+    const createOperationConfig: Extract<HomeOperationConfig, { type: "create" }> = {
       type: "create",
       label: "Create Task",
       entityName: "task",
       entity: task,
-      operationName: operation.operationName,
-      operation,
+      operationName: entityOperation.operationName,
+      operation: entityOperation,
       fields: [
         {
           fieldName: "body",
@@ -4807,7 +4807,7 @@ describe("generated forms and records", () => {
       enabled: task.mutations.create.enabled,
     };
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={createOperationConfig} renderDialogCancel={false} />,
     );
 
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
@@ -5070,7 +5070,7 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Rate operations"');
   });
 
-  it("renders Site placement row action dropdowns", () => {
+  it("renders Site placement row operation dropdowns", () => {
     const placementTable = requiredSiteTableModel("pageCompositionHome");
     const html = renderRecordTableHtml({
       columns: placementTable.columns,
@@ -5311,9 +5311,9 @@ describe("generated forms and records", () => {
 
   it("renders number create controls and inline editors with numeric constraints", () => {
     const task = taskEntityWithEstimateNumber();
-    const action = createOperation(task, ["estimate"]);
+    const operation = createOperation(task, ["estimate"]);
     const createHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
     const recordFields: RecordFieldConfig[] = [
       {
@@ -5414,13 +5414,13 @@ describe("generated forms and records", () => {
 
   it("renders reference create controls with target display labels", () => {
     const rate = rateEntity();
-    const action = createOperation(rate, ["resource"], "rate");
+    const operation = createOperation(rate, ["resource"], "rate");
 
     applyBootstrapResponse(
       bootstrap([resourceRecord("resource-1", "Designer"), resourceRecord("resource-2", "Lead")]),
     );
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain('name="resource"');
@@ -5433,11 +5433,11 @@ describe("generated forms and records", () => {
 
   it("renders generated create controls for current editor hints", () => {
     const entity = fieldEditorCharacterizationEntity();
-    const action = fieldEditorCharacterizationCreateOperation(entity);
+    const operation = fieldEditorCharacterizationCreateOperation(entity);
 
     applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")]));
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toMatch(inputWithNameAndType("title", "text"));
@@ -5477,7 +5477,7 @@ describe("generated forms and records", () => {
     formData.set("status", "published");
     formData.set("resource", "resource-1");
 
-    expect(resolveCreateValues(formData, action)).toMatchObject({
+    expect(resolveCreateValues(formData, operation)).toMatchObject({
       icon: '<svg viewBox="0 0 24 24"></svg>',
       title: "Icon create",
     });
@@ -5656,10 +5656,10 @@ describe("generated forms and records", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const action = rateModel?.operations.find((candidate) => candidate.type === "create");
+    const operation = rateModel?.operations.find((candidate) => candidate.type === "create");
 
-    if (!action || action.type !== "create") {
-      throw new Error("Missing resource create action.");
+    if (!operation || operation.type !== "create") {
+      throw new Error("Missing resource create operation.");
     }
 
     applyBootstrapResponse(
@@ -5669,7 +5669,7 @@ describe("generated forms and records", () => {
       ),
     );
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain('name="name"');
@@ -5686,24 +5686,24 @@ describe("generated forms and records", () => {
     const models = selectCollectionModels(rateCardSchema);
     const resourceCreate = models
       .find((model) => model.viewName === "resourceHome")
-      ?.operations.find((action) => action.type === "create");
+      ?.operations.find((operation) => operation.type === "create");
     const cardCreate = models
       .find((model) => model.viewName === "cardHome")
-      ?.operations.find((action) => action.type === "create");
+      ?.operations.find((operation) => operation.type === "create");
 
     if (!resourceCreate || resourceCreate.type !== "create") {
-      throw new Error("Missing resource create action.");
+      throw new Error("Missing resource create operation.");
     }
 
     if (!cardCreate || cardCreate.type !== "create") {
-      throw new Error("Missing card create action.");
+      throw new Error("Missing card create operation.");
     }
 
     const resourceHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={resourceCreate} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={resourceCreate} renderDialogCancel={false} />,
     );
     const cardHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={cardCreate} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={cardCreate} renderDialogCancel={false} />,
     );
 
     expect(resourceHtml).toContain('name="name"');
@@ -5722,23 +5722,23 @@ describe("generated forms and records", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const action = rateModel?.operations.find((candidate) => candidate.type === "create");
+    const operation = rateModel?.operations.find((candidate) => candidate.type === "create");
 
-    if (!action || action.type !== "create") {
-      throw new Error("Missing resource create action.");
+    if (!operation || operation.type !== "create") {
+      throw new Error("Missing resource create operation.");
     }
 
     const formData = new FormData();
     formData.set("name", "Producer");
 
-    expect(resolveCreateValues(formData, action, { today: "2026-05-01" })).toEqual({
+    expect(resolveCreateValues(formData, operation, { today: "2026-05-01" })).toEqual({
       name: "Producer",
     });
   });
 
   it("resolves current visible create values by field type", () => {
     const entity = fieldBehaviorEntity();
-    const action = createOperation(entity, [
+    const operation = createOperation(entity, [
       "title",
       "done",
       "dueDate",
@@ -5754,7 +5754,7 @@ describe("generated forms and records", () => {
     formData.set("priority", "high");
     formData.set("resource", "rec_resource_1");
 
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       title: "Write field tests",
       done: false,
       dueDate: "2026-05-06",
@@ -5766,7 +5766,7 @@ describe("generated forms and records", () => {
     formData.set("done", "on");
     formData.set("estimate", "");
 
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       title: "Write field tests",
       done: true,
       dueDate: "2026-05-06",
@@ -5777,23 +5777,23 @@ describe("generated forms and records", () => {
   });
 
   it("resolves create values from active union fields only", () => {
-    const action = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
+    const operation = requiredCreateOperation(generatedDiscriminatedTaskSchema(), "taskHome");
     const formData = new FormData();
 
     formData.set("kind", "stream");
     formData.set("title", "Hidden title");
     formData.set("done", "on");
 
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       kind: "stream",
       done: true,
     });
   });
 
   it("keeps source task create and edit flows wired through field behavior", () => {
-    const action = requiredCreateOperation(appSchema, "taskHome");
+    const operation = requiredCreateOperation(appSchema, "taskHome");
     const createHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
     const formData = new FormData();
     formData.set("title", "Ship field behavior");
@@ -5810,7 +5810,7 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('name="priority"');
     expect(createHtml).toContain("High");
     expect(createHtml).not.toContain('name="done"');
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       title: "Ship field behavior",
       dueDate: "2026-05-06",
       priority: "high",
@@ -5856,9 +5856,9 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source rate-card create and edit flows wired through field behavior", () => {
-    const action = requiredCreateOperation(rateCardSchema, "rateHome");
+    const operation = requiredCreateOperation(rateCardSchema, "rateHome");
     const createHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
     const formData = new FormData();
     formData.set("name", "Producer");
@@ -5866,7 +5866,7 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('name="name"');
     expect(createHtml).not.toContain('name="kind"');
     expect(createHtml).not.toContain('name="unit"');
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       name: "Producer",
     });
 
@@ -5902,7 +5902,7 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source site create and edit flows wired through field behavior", () => {
-    const action = requiredCreateOperation(siteSourceSchema, "blockHome");
+    const operation = requiredCreateOperation(siteSourceSchema, "blockHome");
     const formData = new FormData();
     formData.set("type", "post");
     formData.set("label", "Field behavior note");
@@ -5928,7 +5928,7 @@ describe("generated forms and records", () => {
 
     bootstrapSiteEditor();
     const createHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
     const editHtml = renderToStaticMarkup(
       <RecordTable
@@ -5957,24 +5957,24 @@ describe("generated forms and records", () => {
     expect(createHtml).not.toContain('name="width"');
     expect(createHtml).not.toContain('name="height"');
     expect(createHtml).not.toContain('name="limit"');
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, operation)).toEqual({
       type: "post",
       label: "Field behavior note",
       date: "2026-05-14",
       body: "## Note\n\nCreate and edit stay wired.",
       href: "https://example.com/field-behavior",
     });
-    expect(resolveCreateValues(imageFormData, action)).toEqual({
+    expect(resolveCreateValues(imageFormData, operation)).toEqual({
       type: "image",
       label: "Cover image",
       href: "https://example.com/cover.png",
     });
-    expect(resolveCreateValues(imageWithoutHrefFormData, action)).toMatchObject({
+    expect(resolveCreateValues(imageWithoutHrefFormData, operation)).toMatchObject({
       type: "image",
       label: "Unuploaded image",
       href: "",
     });
-    expect(resolveCreateValues(linkFormData, action)).toEqual({
+    expect(resolveCreateValues(linkFormData, operation)).toEqual({
       type: "link",
       label: "Field behavior link",
       linkTargetMode: "external",
@@ -6173,14 +6173,14 @@ describe("generated forms and records", () => {
         delete: { enabled: false },
       },
     };
-    const operation = testCreateOperation("media");
-    const action: Extract<HomeOperationConfig, { type: "create" }> = {
+    const entityOperation = testCreateOperation("media");
+    const createOperationConfig: Extract<HomeOperationConfig, { type: "create" }> = {
       type: "create",
       label: "Create Media",
       entityName: "media",
       entity,
-      operationName: operation.operationName,
-      operation,
+      operationName: entityOperation.operationName,
+      operation: entityOperation,
       fields: [createFieldConfig(entity, "href", "media")],
       defaults: [],
       enabled: entity.mutations.create.enabled,
@@ -6197,7 +6197,7 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([record]));
     const createHtml = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={createOperationConfig} renderDialogCancel={false} />,
     );
     const editHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="tasks">
@@ -6214,7 +6214,7 @@ describe("generated forms and records", () => {
     expect(createHtml).toMatch(inputWithNameAndType("href", "text"));
     expect(createHtml).not.toContain('type="file"');
     expect(createHtml).not.toContain('data-web-image-field-upload="trigger"');
-    expect(resolveCreateValues(formData, action)).toEqual({
+    expect(resolveCreateValues(formData, createOperationConfig)).toEqual({
       href: "https://example.com/create.webp",
     });
     expect(editHtml).toContain('data-web-field-kind="media"');
@@ -6227,7 +6227,7 @@ describe("generated forms and records", () => {
   });
 
   it("still resolves scoped create defaults for views that use them", () => {
-    const action = scopedRateCreateOperation();
+    const operation = scopedRateCreateOperation();
     const formData = new FormData();
     formData.set("resource", "resource-1");
     formData.set("cost", "325");
@@ -6235,7 +6235,7 @@ describe("generated forms and records", () => {
     formData.set("price", "475");
 
     expect(
-      resolveCreateValues(formData, action, {
+      resolveCreateValues(formData, operation, {
         today: "2026-05-01",
         values: { card: "card-1" },
       }),
@@ -6250,10 +6250,12 @@ describe("generated forms and records", () => {
 
   it("resolves site scoped create defaults for block placements", () => {
     const collection = requiredSiteCollectionModel("pageCompositionHome");
-    const placementAction = collection.operations.find((action) => action.type === "create");
+    const placementOperation = collection.operations.find(
+      (operation) => operation.type === "create",
+    );
 
-    if (!placementAction || placementAction.type !== "create") {
-      throw new Error("Missing placement create action.");
+    if (!placementOperation || placementOperation.type !== "create") {
+      throw new Error("Missing placement create operation.");
     }
 
     bootstrapSiteEditor();
@@ -6262,7 +6264,7 @@ describe("generated forms and records", () => {
       today: "2026-05-05",
     });
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={placementAction} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={placementOperation} renderDialogCancel={false} />,
     );
     const placementFormData = new FormData();
     placementFormData.set("block", "rec_site_block_home_recent_posts");
@@ -6275,7 +6277,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('name="variant"');
     expect(html).not.toContain('name="visible"');
     expect(
-      resolveCreateValues(placementFormData, placementAction, {
+      resolveCreateValues(placementFormData, placementOperation, {
         today: "2026-05-05",
         values: { block: "rec_site_content_home" },
       }),
@@ -6287,7 +6289,7 @@ describe("generated forms and records", () => {
   });
 
   it("throws when create context defaults are unresolved", () => {
-    const action = scopedRateCreateOperation();
+    const operation = scopedRateCreateOperation();
 
     const formData = new FormData();
     formData.set("resource", "resource-1");
@@ -6295,7 +6297,7 @@ describe("generated forms and records", () => {
     formData.set("costUnit", "day");
     formData.set("price", "475");
 
-    expect(() => resolveCreateValues(formData, action, { today: "2026-05-01" })).toThrow(
+    expect(() => resolveCreateValues(formData, operation, { today: "2026-05-01" })).toThrow(
       'requires selected context "card"',
     );
   });
@@ -6334,9 +6336,9 @@ describe("generated forms and records", () => {
 
   it("renders only the fields declared by a create view in the dialog", () => {
     const task = appSchema.entities.task;
-    const action = createOperation(task, ["title", "dueDate"]);
+    const operation = createOperation(task, ["title", "dueDate"]);
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+      <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
     expect(html).toContain("Create Task");
@@ -6351,7 +6353,7 @@ describe("generated forms and records", () => {
     const task = withMutationPolicy(appSchema.entities.task, { create: false });
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm
-        action={createOperation(task, ["title", "done", "dueDate"])}
+        operation={createOperation(task, ["title", "done", "dueDate"])}
         renderDialogCancel={false}
       />,
     );
@@ -6547,15 +6549,15 @@ function requiredCreateOperation(
   schema: AppSchema,
   viewName: string,
 ): Extract<HomeOperationConfig, { type: "create" }> {
-  const action = requiredCollectionModel(schema, viewName).operations.find(
+  const operation = requiredCollectionModel(schema, viewName).operations.find(
     (candidate) => candidate.type === "create",
   );
 
-  if (!action || action.type !== "create") {
+  if (!operation || operation.type !== "create") {
     throw new Error(`Missing create operation for ${viewName}.`);
   }
 
-  return action;
+  return operation;
 }
 
 function requiredRootNavigationCreateOperation(
@@ -6763,17 +6765,17 @@ function generatedDiscriminatedTaskSchema(
     tableViews: {
       taskEditTable: {
         entity: "task",
-        actions: {
-          editTask: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "task.update",
             label: "Edit task",
             target: { kind: "row" },
             editView: "taskEdit",
           },
-        },
+        ],
         columns: [
           { type: "field", field: "title" },
-          { type: "invokeAction", action: "editTask" },
+          { type: "operationControl", operation: "task.update" },
         ],
       },
     },

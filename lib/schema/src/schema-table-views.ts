@@ -7,6 +7,7 @@ import {
 import { parseOptionalResultOrdering } from "./schema-ordering.ts";
 import { isSystemFieldName } from "./fields.ts";
 import { isFieldCommitPolicy, isFieldEditor } from "./field-types.ts";
+import { formatEntityOperationKey, parseEntityOperationKey } from "./schema-operations.ts";
 import type {
   ComputedValueSchema,
   EntitySchema,
@@ -23,6 +24,7 @@ import type {
   TableColumnSchema,
   TableColumnWidth,
   TableEditRecordTargetSchema,
+  TableOperationBindingSchema,
   TableOrderingSchema,
   TableViewSchema,
   ViewSchema,
@@ -74,7 +76,7 @@ function parseTableView(
     `Table view "${tableViewName}"`,
     value,
     ["entity", "columns"],
-    ["actions", "ordering"],
+    ["actions", "operations", "ordering"],
   );
 
   const entityName = parseRequiredNonEmptyString(
@@ -88,6 +90,13 @@ function parseTableView(
   }
 
   const actions = parseOptionalTableActions(tableViewName, value.actions, entityName, entity);
+  const operations = parseOptionalTableOperations(
+    tableViewName,
+    value.operations,
+    entityName,
+    entity,
+    entities,
+  );
   const ordering = parseOptionalResultOrdering(
     `Table view "${tableViewName}" ordering`,
     value.ordering,
@@ -103,12 +112,14 @@ function parseTableView(
     entities,
     readModels?.computedValues ?? {},
     actions,
+    operations,
     ordering,
   );
 
   return {
     entity: entityName,
     ...(actions === undefined ? {} : { actions }),
+    ...(operations === undefined ? {} : { operations }),
     ...(ordering === undefined ? {} : { ordering }),
     columns,
   };
@@ -198,6 +209,118 @@ function parseTableAction(
   };
 }
 
+function parseOptionalTableOperations(
+  tableViewName: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
+): TableOperationBindingSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Table view "${tableViewName}" operations must be an array.`);
+  }
+
+  const bindings = value.map((binding, index) =>
+    parseTableOperationBinding(tableViewName, index, binding, entityName, entity, entities),
+  );
+  const duplicate = bindings
+    .map((binding) => binding.operation)
+    .find((operation, index, operations) => operations.indexOf(operation) !== index);
+
+  if (duplicate) {
+    throw new Error(`Table view "${tableViewName}" operations reference duplicate "${duplicate}".`);
+  }
+
+  return bindings.length > 0 ? bindings : undefined;
+}
+
+function parseTableOperationBinding(
+  tableViewName: string,
+  index: number,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
+): TableOperationBindingSchema {
+  const context = `Table view "${tableViewName}" operation binding ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(
+    context,
+    value,
+    ["operation"],
+    ["label", "variant", "availability", "target", "editView"],
+  );
+
+  const parsedOperationKey = parseEntityOperationKey(`${context} operation`, value.operation);
+  const operationEntity = entities[parsedOperationKey.entityKey];
+  const operation = operationEntity?.operations?.[parsedOperationKey.operationKey];
+
+  if (!operationEntity || !operation) {
+    throw new Error(`${context} references unknown operation "${String(value.operation)}".`);
+  }
+
+  if (operation.scope !== "record") {
+    throw new Error(`${context} operation must use record scope.`);
+  }
+
+  const target =
+    value.target === undefined
+      ? undefined
+      : parseTableEditRecordTarget(`${context} target`, value.target, entityName, entity);
+  const targetEntityName = selectTableOperationTargetEntityName(entityName, entity, target);
+
+  if (parsedOperationKey.entityKey !== targetEntityName) {
+    throw new Error(`${context} operation must target entity "${targetEntityName}".`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const variant = parseOptionalTableActionVariant(`${context} variant`, value.variant);
+  const availability = parseOptionalTableActionAvailability(
+    `${context} availability`,
+    value.availability,
+  );
+  const editView = parseOptionalNonEmptyString(`${context} editView`, value.editView);
+
+  if (editView !== undefined && operation.kind !== "update") {
+    throw new Error(`${context} editView is only valid for update operations.`);
+  }
+
+  return {
+    operation: formatEntityOperationKey(parsedOperationKey),
+    ...(label === undefined ? {} : { label }),
+    ...(variant === undefined ? {} : { variant }),
+    ...(availability === undefined ? {} : { availability }),
+    ...(target === undefined ? {} : { target }),
+    ...(editView === undefined ? {} : { editView }),
+  };
+}
+
+function selectTableOperationTargetEntityName(
+  entityName: string,
+  entity: EntitySchema,
+  target: TableEditRecordTargetSchema | undefined,
+): string {
+  if (target === undefined || target.kind === "row") {
+    return entityName;
+  }
+
+  const field = entity.fields[target.field];
+
+  if (field?.type !== "reference") {
+    throw new Error(`Missing reference field "${entityName}.${target.field}".`);
+  }
+
+  return field.to;
+}
+
 function parseTableEditRecordTarget(
   context: string,
   value: unknown,
@@ -243,6 +366,7 @@ function parseTableColumns(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   actions: Record<string, TableActionSchema> | undefined,
+  operations: TableOperationBindingSchema[] | undefined,
   ordering: TableOrderingSchema | undefined,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -260,6 +384,7 @@ function parseTableColumns(
       entities,
       computedValues,
       actions,
+      operations,
       ordering,
     ),
   );
@@ -275,6 +400,7 @@ function parseTableColumn(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   actions: Record<string, TableActionSchema> | undefined,
+  operations: TableOperationBindingSchema[] | undefined,
   ordering: TableOrderingSchema | undefined,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
@@ -293,6 +419,10 @@ function parseTableColumn(
 
   if (value.type === "invokeAction") {
     return parseInvokeActionTableColumn(context, value, actions, ordering);
+  }
+
+  if (value.type === "operationControl") {
+    return parseOperationControlTableColumn(context, value, operations, ordering);
   }
 
   if (value.type === "orderingHandle") {
@@ -672,6 +802,91 @@ function parseInvokeActionTableColumn(
   };
 }
 
+function parseOperationControlTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  operations: TableOperationBindingSchema[] | undefined,
+  ordering: TableOrderingSchema | undefined,
+): TableColumnSchema {
+  assertExactKeys(
+    context,
+    value,
+    ["type"],
+    [
+      "operation",
+      "operations",
+      "includeOrdering",
+      "label",
+      "align",
+      "width",
+      "display",
+      "presentation",
+    ],
+  );
+
+  const parsedIncludeOrdering = parseOptionalBoolean(
+    `${context} includeOrdering`,
+    value.includeOrdering,
+  );
+  const includeOrdering =
+    parsedIncludeOrdering ??
+    (value.operation === undefined && value.operations === undefined && ordering !== undefined
+      ? true
+      : undefined);
+
+  if (includeOrdering && !ordering) {
+    throw new Error(`${context} includeOrdering requires table ordering.`);
+  }
+
+  const referencedOperations = parseOperationControlReferences(
+    context,
+    value.operation,
+    value.operations,
+    includeOrdering,
+  );
+
+  for (const operationKey of referencedOperations) {
+    if (!operations?.some((binding) => binding.operation === operationKey)) {
+      throw new Error(`${context} references unknown table operation "${operationKey}".`);
+    }
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+
+  if (display === "editor") {
+    throw new Error(`${context} operationControl columns must be read-only or hidden.`);
+  }
+
+  const presentation = parseOptionalTableActionPresentation(
+    `${context} presentation`,
+    value.presentation,
+  );
+
+  if (presentation === "button" && referencedOperations.length > 1) {
+    throw new Error(`${context} button presentation requires exactly one operation.`);
+  }
+
+  if (presentation === "button" && includeOrdering) {
+    throw new Error(`${context} button presentation cannot include ordering controls.`);
+  }
+
+  return {
+    type: "operationControl",
+    ...(value.operation === undefined
+      ? { operations: referencedOperations }
+      : { operation: referencedOperations[0] }),
+    ...(includeOrdering === undefined ? {} : { includeOrdering }),
+    ...(label === undefined ? {} : { label }),
+    ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
+    ...(presentation === undefined ? {} : { presentation }),
+  };
+}
+
 function parseOrderingHandleTableColumn(
   context: string,
   value: Record<string, unknown>,
@@ -741,6 +956,45 @@ function parseInvokeActionReferences(
   return actionNames;
 }
 
+function parseOperationControlReferences(
+  context: string,
+  operation: unknown,
+  operations: unknown,
+  allowEmpty: boolean | undefined,
+): string[] {
+  if (operation !== undefined && operations !== undefined) {
+    throw new Error(`${context} must use either operation or operations, not both.`);
+  }
+
+  if (operation !== undefined) {
+    return [formatEntityOperationKey(parseEntityOperationKey(`${context} operation`, operation))];
+  }
+
+  if (
+    (operations === undefined || (Array.isArray(operations) && operations.length === 0)) &&
+    allowEmpty
+  ) {
+    return [];
+  }
+
+  if (!Array.isArray(operations) || operations.length === 0) {
+    throw new Error(`${context} must reference at least one table operation.`);
+  }
+
+  const operationKeys = operations.map((candidate, index) =>
+    formatEntityOperationKey(parseEntityOperationKey(`${context} operations ${index}`, candidate)),
+  );
+  const duplicate = operationKeys.find(
+    (candidate, index) => operationKeys.indexOf(candidate) !== index,
+  );
+
+  if (duplicate) {
+    throw new Error(`${context} references duplicate table operation "${duplicate}".`);
+  }
+
+  return operationKeys;
+}
+
 export function assertTableActionEditViews(
   views: Record<string, ViewSchema>,
   tableViews: Record<string, TableViewSchema>,
@@ -785,6 +1039,35 @@ export function assertTableActionEditViews(
       if (editView.entity !== targetEntityName) {
         throw new Error(
           `${context} edit view "${action.editView}" must use entity "${targetEntityName}".`,
+        );
+      }
+    }
+
+    for (const [index, binding] of (tableView.operations ?? []).entries()) {
+      if (binding.editView === undefined) {
+        continue;
+      }
+
+      const context = `Table view "${tableViewName}" operation binding ${index}`;
+      const editView = views[binding.editView];
+
+      if (!editView) {
+        throw new Error(`${context} references unknown edit view "${binding.editView}".`);
+      }
+
+      if (editView.type !== "edit") {
+        throw new Error(`${context} must reference an edit view.`);
+      }
+
+      const targetEntityName = selectTableOperationTargetEntityName(
+        tableView.entity,
+        tableEntity,
+        binding.target,
+      );
+
+      if (editView.entity !== targetEntityName) {
+        throw new Error(
+          `${context} edit view "${binding.editView}" must use entity "${targetEntityName}".`,
         );
       }
     }
@@ -1005,7 +1288,11 @@ export function tableFooterColumnName(column: TableColumnSchema) {
     return column.computedValue;
   }
 
-  if (column.type === "invokeAction" || column.type === "orderingHandle") {
+  if (
+    column.type === "invokeAction" ||
+    column.type === "operationControl" ||
+    column.type === "orderingHandle"
+  ) {
     return undefined;
   }
 

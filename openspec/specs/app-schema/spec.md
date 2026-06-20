@@ -217,6 +217,11 @@ projections, operations, bindings, and adapters.
 - AND new schema behavior that affects invocation semantics is added to
   operations or operation bindings rather than to a separate peer interaction
   model
+- AND command operation effects do not require callers or generated UI models to
+  read entity action metadata after an equivalent operation-native effect has
+  been introduced
+- AND table row controls use operation bindings rather than table-local action
+  slots once operation-bound table control schema is available
 
 ### Requirement: Schema Package Boundary
 
@@ -572,8 +577,8 @@ public forms, automation, audit, and authorization.
 - AND `update` operations return the updated record plus affected change ids
 - AND `delete` operations return the tombstoned record id plus affected change
   ids
-- AND `command` operations return a typed command response plus affected change
-  ids
+- AND `command` operations return operation-native command output plus affected
+  change ids
 
 #### Scenario: Require source-declared operations
 
@@ -584,6 +589,31 @@ public forms, automation, audit, and authorization.
 - AND mutation policy or entity actions do not synthesize operation bindings
 - AND operation bindings use the same canonical operation key grammar as their
   source-declared operations
+
+#### Scenario: Parse operation-native command effects
+
+- GIVEN a source schema declares a command operation
+- WHEN the command effect is parsed
+- THEN the effect identifies operation-native command behavior and declared
+  input/output facts without requiring an entity action reference
+- AND existing legacy command effect declarations can be parsed only as
+  migration inputs behind source-declared operations
+- AND operation visibility, policy, audit, and idempotency come from the
+  operation declaration rather than from entity action metadata
+
+#### Scenario: Parse table operation bindings
+
+- GIVEN a table view needs row controls, edit dialogs, destructive controls, or
+  ordering controls
+- WHEN the table view is parsed
+- THEN table `operations` binding declarations bind canonical operation keys
+- AND `operationControl` columns reference those table operation bindings for
+  row-control placement
+- AND binding declarations may include placement, labels, ordering presentation,
+  target record selection, and disabled reasons
+- AND table-local action slots and `invokeAction` columns do not create new
+  operation semantics or browser controls after equivalent operation bindings
+  are available
 
 ### Requirement: State Machines
 

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "@dpeek/formless-site-app";
-import { mutationOperationRequest } from "../test/authority-write.ts";
+import { recordOperationRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
@@ -151,13 +151,13 @@ async function resetSiteSeed() {
   expect(response.status).toBe(200);
 }
 
-async function patchSiteIcon(mutationId: string, icon: string) {
-  const request = mutationOperationRequest({
-    mutationId,
+async function patchSiteIcon(idempotencyKey: string, icon: string) {
+  const request = recordOperationRequest({
+    idempotencyKey,
     entity: "site",
-    op: "patch",
+    operationName: "update",
     recordId: "rec_site_settings_primary",
-    values: { icon },
+    input: { icon },
   });
   const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),

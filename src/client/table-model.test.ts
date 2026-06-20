@@ -69,11 +69,11 @@ describe("table model", () => {
     });
     expect(operationColumn).toMatchObject({
       type: "operationControl",
-      key: "operationControl:editChildBlock,ordering",
+      key: "operationControl:block.update,ordering",
       controls: [
         {
           type: "editRecord",
-          bindingName: "editChildBlock",
+          bindingName: "block.update",
           operation: { canonicalKey: "block.update" },
           target: { kind: "reference", fieldName: "block", entityName: "block" },
           editView: { viewName: "blockEdit", entityName: "block" },

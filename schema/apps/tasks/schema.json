@@ -145,9 +145,8 @@
             "query": "taskCompleted"
           },
           "effect": {
-            "type": "runActionKind",
+            "type": "registeredCommand",
             "kind": "clear-completed",
-            "action": "clearCompletedTasks",
             "query": "taskCompleted"
           },
           "output": {

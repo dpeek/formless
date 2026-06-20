@@ -32,11 +32,7 @@ import type {
   InstanceDomainMappingProfile,
 } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
-import {
-  parseCreateAppInstallRequest,
-  type ActionResponse,
-  type CreateAppInstallRequest,
-} from "../shared/protocol.ts";
+import { parseCreateAppInstallRequest, type CreateAppInstallRequest } from "../shared/protocol.ts";
 import {
   parseAppSchema,
   type EntityOperationSchema,
@@ -67,21 +63,23 @@ import {
   createRecordSetForActionOutcome,
   ensureStorageTables,
   ActiveSchemaRefreshBlockedError,
-  getActionResponseById,
   getBootstrapRecords,
+  getOperationInvocationById,
   getStoredRecord,
   initializeStorageFromSource,
   patchStoredRecordOutcome,
   recordOperationInvocationAccepted,
   recordOperationInvocationFailed,
   recordOperationInvocationOutcome,
+  readOperationInvocations,
   type RecordConstraintValidator,
   type StorageSource,
   writeRecordSetForActionOutcome,
+  writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
 import type {
   OperationInvocationEnvelope,
-  OperationInvocationOutput,
+  OperationCommandOutput,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
 import {
@@ -115,6 +113,7 @@ const createAppInstallControlPlaneOperationSchema = {
 export const INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH =
   "/_internal/update-app-install-package-facts";
 export const INTERNAL_READ_RECORDS_PATH = "/_internal/read-records";
+export const INTERNAL_READ_OPERATION_INVOCATIONS_PATH = "/_internal/read-operation-invocations";
 export const INTERNAL_SYNC_DOMAIN_INTENT_PATH = "/_internal/sync-domain-intent";
 export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
 const instanceControlPlaneSourceSchema = parseAppSchema(instanceControlPlaneSchema);
@@ -156,9 +155,9 @@ type InstanceControlPlaneApiEnv = AuthorityAdminGuardEnv &
   } & LaunchFixtureStartupEnv;
 
 type ParsedCreateAppInstallOperationRequest = {
-  actionId: string;
   idempotencyKey: string;
   input: CreateAppInstallRequest;
+  operationId: string;
 };
 
 type RouteIntentSyncCandidate = {
@@ -205,6 +204,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 
     if (route.path === INTERNAL_READ_RECORDS_PATH) {
       return handleInternalReadRecords(request, storage, env);
+    }
+
+    if (route.path === INTERNAL_READ_OPERATION_INVOCATIONS_PATH) {
+      return handleInternalReadOperationInvocations(request, storage, env);
     }
 
     if (route.path === INTERNAL_SYNC_DOMAIN_INTENT_PATH) {
@@ -377,6 +380,22 @@ function handleInternalReadRecords(
   });
 }
 
+function handleInternalReadOperationInvocations(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceControlPlaneApiEnv,
+): Response {
+  if (request.method !== "GET") {
+    return methodNotAllowedResponse("GET");
+  }
+
+  ensureControlPlaneStorage(storage, env);
+
+  return jsonResponse({
+    invocations: readOperationInvocations(storage),
+  });
+}
+
 async function handleInternalSyncDeploymentProjection(
   request: Request,
   storage: DurableObjectStorage,
@@ -483,25 +502,23 @@ async function handleCreateAppInstallOperation(
     identity,
     input: parsed.input,
     receivedAt,
-    writeIdentity: parsed.actionId,
+    writeIdentity: parsed.operationId,
     idempotencyKey: parsed.idempotencyKey,
   });
 
   recordOperationInvocationAccepted(storage, envelope);
 
   try {
-    const replay = getActionResponseById(storage, parsed.actionId);
+    const replay = createAppInstallOperationReplayResponse(storage, envelope);
 
     if (replay) {
-      const response = createAppInstallOperationResponse(envelope, replay, "replayed");
-
       recordOperationInvocationOutcome(storage, {
         envelope,
-        output: response.output,
-        status: response.status,
+        output: replay.output,
+        status: replay.status,
       });
 
-      return jsonResponse(response);
+      return jsonResponse(replay);
     }
 
     const packageResolver = activeAppPackageResolver(env);
@@ -548,12 +565,11 @@ async function handleCreateAppInstallOperation(
     });
     preflightAppInstallRecordSet(storage, records, receivedAt, packageResolver);
 
-    const outcome = createRecordSetForActionOutcome(
+    const outcome = writeRecordSetForCommandOperationOutcome(
       storage,
-      parsed.actionId,
-      "app-install",
-      createAppInstallControlPlaneOperation,
+      parsed.operationId,
       records.map((record) => ({
+        kind: "create",
         entity: record.entity,
         id: record.id,
         values: record.values,
@@ -565,7 +581,7 @@ async function handleCreateAppInstallOperation(
     );
     const response = createAppInstallOperationResponse(
       envelope,
-      outcome.response,
+      createAppInstallCommandOutput(outcome.response.changes, outcome.response.cursor),
       outcome.kind === "replay" ? "replayed" : "committed",
     );
 
@@ -624,21 +640,44 @@ function createAppInstallOperationEnvelope(input: {
 
 function createAppInstallOperationResponse(
   envelope: OperationInvocationEnvelope,
-  response: ActionResponse,
+  output: OperationCommandOutput,
   status: OperationInvocationResponse["status"],
 ): OperationInvocationResponse {
-  const output: OperationInvocationOutput = {
-    type: "command",
-    affectedChangeIds: response.changes.map((change) => String(change.seq)),
-    changes: response.changes,
-    cursor: response.cursor,
-    response,
-  };
-
   return {
     invocation: envelope,
     output,
     status,
+  };
+}
+
+function createAppInstallOperationReplayResponse(
+  storage: DurableObjectStorage,
+  envelope: OperationInvocationEnvelope,
+): OperationInvocationResponse | undefined {
+  const replay = getOperationInvocationById(storage, envelope.invocationId);
+
+  if (!replay?.output) {
+    return undefined;
+  }
+
+  if (replay.output.type !== "command") {
+    throw new Error(
+      `Stored operation "${envelope.operation.canonicalKey}" output is not command output.`,
+    );
+  }
+
+  return createAppInstallOperationResponse(envelope, replay.output, "replayed");
+}
+
+function createAppInstallCommandOutput(
+  changes: OperationCommandOutput["changes"],
+  cursor: number,
+): OperationCommandOutput {
+  return {
+    type: "command",
+    affectedChangeIds: changes.map((change) => String(change.seq)),
+    changes,
+    cursor,
   };
 }
 
@@ -809,9 +848,9 @@ function parseCreateAppInstallOperationRequest(
   }
 
   return {
-    actionId: createAppInstallOperationWriteIdentity(idempotencyKey),
     idempotencyKey,
     input,
+    operationId: createAppInstallOperationWriteIdentity(idempotencyKey),
   };
 }
 

@@ -515,7 +515,7 @@ function TreeChildAddControls({
           </ModalHeader>
           <ModalBody>
             <GeneratedCreateDialogForm
-              action={createOperation}
+              operation={createOperation}
               onSuccess={() => setActiveVariant(null)}
               submitValues={(values) =>
                 submitTreeChildCreateOperation(

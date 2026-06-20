@@ -72,11 +72,11 @@ export type ActionRequest = {
   actorKind?: SchemaActionActorKind;
 };
 
-export type PublicActionProofInput = {
+export type PublicOperationProofInput = {
   turnstileToken: string;
 };
 
-export type PublicActionRequestSource = {
+export type PublicOperationRequestSource = {
   siteBlockId?: string;
 };
 
@@ -84,13 +84,13 @@ export type PublicActionActor = {
   mode: "anonymous";
 };
 
-export type PublicActionProof = {
+export type PublicOperationProof = {
   kind: "turnstile";
   token: string;
-  verification?: PublicActionChallengeVerification;
+  verification?: PublicOperationChallengeVerification;
 };
 
-export type PublicActionChallengeVerification = {
+export type PublicOperationChallengeVerification = {
   kind: "turnstile";
   success: boolean;
   verifiedAt: string;
@@ -124,7 +124,7 @@ export type PublicActionSource = {
 export type PublicActionExecutionEnvelope = {
   actionId: string;
   actor: PublicActionActor;
-  proof: PublicActionProof;
+  proof: PublicOperationProof;
   source: PublicActionSource;
   input: RecordValues;
   idempotencyKey: string;
@@ -151,8 +151,8 @@ export type PublicActionExecutionResult = {
 
 export type PublicOperationRequest = {
   input: RecordValues;
-  proof: PublicActionProofInput;
-  source?: PublicActionRequestSource;
+  proof: PublicOperationProofInput;
+  source?: PublicOperationRequestSource;
   idempotencyKey?: string;
 };
 
@@ -169,11 +169,7 @@ export type PublicOperationResponse = {
         type: "command";
         affectedChangeIds: string[];
         cursor: number;
-        response: {
-          actionId: string;
-          cursor: number;
-          recordPlan?: RecordPlanResponse;
-        };
+        recordPlan?: RecordPlanResponse;
       }
     | {
         type: "create";

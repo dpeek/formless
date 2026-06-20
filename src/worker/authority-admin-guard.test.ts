@@ -4,7 +4,7 @@ import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse, OwnerIdentity } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -77,10 +77,10 @@ describe("authority admin guard", () => {
 
   it("rejects invalid admin tokens without mutating storage", async () => {
     const created = await postAdminTaskMutation({
-      mutationId: "mutation-admin-guard-keep",
+      idempotencyKey: "mutation-admin-guard-keep",
       entity: "task",
-      op: "create",
-      values: { title: "Keep after unauthorized reset", done: false },
+      operationName: "create",
+      input: { title: "Keep after unauthorized reset", done: false },
     });
 
     const reset = await harness.fetch("/api/tasks/reset/seed", {
@@ -99,10 +99,10 @@ describe("authority admin guard", () => {
 
   it("accepts the configured admin bearer token for write endpoints", async () => {
     const created = await postAdminTaskMutation({
-      mutationId: "mutation-admin-guard-allowed",
+      idempotencyKey: "mutation-admin-guard-allowed",
       entity: "task",
-      op: "create",
-      values: { title: "Authorized write", done: false },
+      operationName: "create",
+      input: { title: "Authorized write", done: false },
     });
     const bootstrap = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
 
@@ -112,10 +112,10 @@ describe("authority admin guard", () => {
 
   it("accepts signed owner session cookies for write endpoints", async () => {
     const created = await postOwnerTaskMutation({
-      mutationId: "mutation-owner-session-allowed",
+      idempotencyKey: "mutation-owner-session-allowed",
       entity: "task",
-      op: "create",
-      values: { title: "Owner session write", done: false },
+      operationName: "create",
+      input: { title: "Owner session write", done: false },
     });
     const bootstrap = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
 
@@ -195,8 +195,8 @@ async function postAdminJson<T>(path: string, body: unknown) {
   return request.response(await response.json()) as T;
 }
 
-async function postAdminTaskMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
-  const request = mutationOperationRequest(body);
+async function postAdminTaskMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders(),
@@ -208,8 +208,8 @@ async function postAdminTaskMutation(body: Parameters<typeof mutationOperationRe
   return request.response(await response.json());
 }
 
-async function postOwnerTaskMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
-  const request = mutationOperationRequest(body);
+async function postOwnerTaskMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: {

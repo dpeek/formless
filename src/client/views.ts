@@ -7,7 +7,7 @@ import type {
   EntitySchema,
   EntityUnionSchema,
   EntityUnionVariantSchema,
-  RunActionKindEntityOperationEffectSchema,
+  RegisteredCommandEntityOperationEffectSchema,
   FieldCommitPolicy,
   FieldEditor,
   FieldRef,
@@ -131,6 +131,7 @@ export type ComputedTableColumnConfig = TableColumnBaseConfig & {
 
 export type TableOperationControlBaseConfig = {
   bindingName: string;
+  operation?: EntityOperationPresentationConfig;
   label: string;
   variant: TableActionVariant;
   disabled: boolean;
@@ -143,7 +144,6 @@ export type StaticTableOperationControlConfig = TableOperationControlBaseConfig 
 
 export type EditRecordTableOperationControlConfig = TableOperationControlBaseConfig & {
   type: "editRecord";
-  operation?: EntityOperationPresentationConfig;
   target: TableEditRecordTargetConfig;
   editView: EditViewConfig;
 };
@@ -311,12 +311,12 @@ export type TreeCompositionOperationConfig = {
   create?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RunActionKindEntityOperationEffectSchema & { kind: "create-tree-child" };
+    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" };
   };
   remove?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RunActionKindEntityOperationEffectSchema & { kind: "remove-tree-placement" };
+    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "remove-tree-placement" };
   };
 };
 

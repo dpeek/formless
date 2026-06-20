@@ -62,7 +62,7 @@ describe("home view model collections", () => {
     const schema = taskSchemaWithFieldPresentations();
     const model = selectPrimaryCollectionModels(schema)[0];
     const fields = model?.result.type === "list" ? model.result.recordFields : [];
-    const createOperation = model?.operations.find((action) => action.type === "create");
+    const createOperation = model?.operations.find((operation) => operation.type === "create");
     const createFields = createOperation?.type === "create" ? createOperation.fields : [];
     const priority = fields.find((field) => field.fieldName === "priority");
 
@@ -96,7 +96,7 @@ describe("home view model collections", () => {
     const schema = systemMetadataUiSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
     const tableModel = requiredCollectionModel(schema, "taskTableHome");
-    const createOperation = listModel.operations.find((action) => action.type === "create");
+    const createOperation = listModel.operations.find((operation) => operation.type === "create");
     const listFields = listModel.result.type === "list" ? listModel.result.recordFields : [];
     const tableColumns = tableModel.result.type === "table" ? tableModel.result.columns : [];
     const editControl = tableColumns
@@ -158,7 +158,7 @@ describe("home view model collections", () => {
     const listModel = requiredCollectionModel(schema, "taskHome");
     const recordModel = requiredCollectionModel(schema, "taskRecordHome");
     const tableModel = requiredCollectionModel(schema, "taskTableHome");
-    const createOperation = listModel.operations.find((action) => action.type === "create");
+    const createOperation = listModel.operations.find((operation) => operation.type === "create");
     const listStatus =
       listModel.result.type === "list"
         ? listModel.result.recordFields.find((field) => field.fieldName === "status")
@@ -229,7 +229,7 @@ describe("home view model collections", () => {
     const schema = discriminatedTaskSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
     const editModel = requiredCollectionModel(schema, "taskEditHome");
-    const createOperation = listModel.operations.find((action) => action.type === "create");
+    const createOperation = listModel.operations.find((operation) => operation.type === "create");
     const editColumn =
       editModel.result.type === "table"
         ? editModel.result.columns.find((column) => column.type === "operationControl")
@@ -314,12 +314,12 @@ describe("home view model collections", () => {
     });
   });
 
-  it("exposes literal create defaults for fixed discriminator create actions", () => {
+  it("exposes literal create defaults for fixed discriminator create operations", () => {
     const model = requiredCollectionModel(
       discriminatedTaskSchema({ fixedCreateKind: "stream" }),
       "taskHome",
     );
-    const createOperation = model.operations.find((action) => action.type === "create");
+    const createOperation = model.operations.find((operation) => operation.type === "create");
 
     expect(createOperation?.type === "create" ? createOperation.fields : []).toMatchObject([
       {
@@ -387,7 +387,7 @@ describe("home view model collections", () => {
         canonicalKey: "task.clearCompletedTasks",
         operation: {
           kind: "command",
-          effect: { type: "runActionKind", kind: "clear-completed" },
+          effect: { type: "registeredCommand", kind: "clear-completed" },
           target: { query: "taskCompleted" },
         },
       },
@@ -436,7 +436,7 @@ describe("home view model collections", () => {
         canonicalKey: "rate.regenerateMissingRates",
         operation: {
           kind: "command",
-          effect: { type: "runActionKind", kind: "create-missing-join-records" },
+          effect: { type: "registeredCommand", kind: "create-missing-join-records" },
         },
       },
       ui: {
@@ -498,7 +498,7 @@ describe("home view model collections", () => {
         canonicalKey: "task.clearCompletedTasks",
         operation: {
           kind: "command",
-          effect: { type: "runActionKind", kind: "clear-completed" },
+          effect: { type: "registeredCommand", kind: "clear-completed" },
         },
       },
       ui: {
@@ -568,9 +568,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "runnerApply",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -583,9 +582,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "cliDeploy",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -598,9 +596,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "hiddenReview",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -613,9 +610,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "ownerReview",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -628,9 +624,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "adminReview",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -643,9 +638,8 @@ describe("home view model collections", () => {
               kind: "command",
               scope: "collection",
               effect: {
-                type: "runActionKind",
+                type: "registeredCommand",
                 kind: "clear-completed",
-                action: "anonymousReview",
                 query: "taskCompleted",
               },
               output: { type: "command" },
@@ -674,7 +668,7 @@ describe("home view model collections", () => {
     });
     const model = requiredCollectionModel(schema, "taskHome");
 
-    expect(model.operations.map((action) => action.label)).toEqual([
+    expect(model.operations.map((operation) => operation.label)).toEqual([
       "Create Task",
       "Clear completed",
       "Owner review",
@@ -1056,30 +1050,44 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves table invokeAction columns to render-ready operation control facts", () => {
+  it("resolves table operation bindings to render-ready operation control facts", () => {
     const schema = parseAppSchema({
       ...rateCardSchema,
+      entities: {
+        ...rateCardSchema.entities,
+        rate: {
+          ...rateCardSchema.entities.rate,
+          operations: {
+            ...rateCardSchema.entities.rate.operations,
+            inspectRate: tableStaticUpdateOperation("Inspect rate"),
+            blockedRate: tableStaticUpdateOperation("Blocked rate"),
+            hiddenRate: tableStaticUpdateOperation("Hidden rate"),
+          },
+        },
+      },
       tableViews: {
         ...rateCardSchema.tableViews,
         rateTable: {
           ...rateCardSchema.tableViews.rateTable,
-          actions: {
-            inspectRate: { label: "Inspect rate" },
-            blockedRate: {
+          operations: [
+            { operation: "rate.inspectRate", label: "Inspect rate" },
+            {
+              operation: "rate.blockedRate",
               label: "Blocked rate",
               availability: { state: "disabled", reason: "No selected card" },
             },
-            hiddenRate: {
+            {
+              operation: "rate.hiddenRate",
               label: "Hidden rate",
               availability: { state: "hidden" },
             },
-          },
+          ],
           columns: [
             ...rateCardSchema.tableViews.rateTable.columns,
-            { type: "invokeAction", action: "inspectRate" },
+            { type: "operationControl", operation: "rate.inspectRate" },
             {
-              type: "invokeAction",
-              actions: ["inspectRate", "blockedRate", "hiddenRate"],
+              type: "operationControl",
+              operations: ["rate.inspectRate", "rate.blockedRate", "rate.hiddenRate"],
               label: "Rate operations",
             },
           ],
@@ -1093,7 +1101,7 @@ describe("home view model collections", () => {
 
     expect(singleOperationColumn).toMatchObject({
       type: "operationControl",
-      key: "operationControl:inspectRate",
+      key: "operationControl:rate.inspectRate",
       label: "",
       headerLabel: "Inspect rate",
       align: "end",
@@ -1102,7 +1110,8 @@ describe("home view model collections", () => {
       presentation: "button",
       controls: [
         {
-          bindingName: "inspectRate",
+          bindingName: "rate.inspectRate",
+          operation: { canonicalKey: "rate.inspectRate" },
           label: "Inspect rate",
           variant: "default",
           disabled: false,
@@ -1111,19 +1120,21 @@ describe("home view model collections", () => {
     });
     expect(multipleOperationColumn).toMatchObject({
       type: "operationControl",
-      key: "operationControl:inspectRate,blockedRate,hiddenRate",
+      key: "operationControl:rate.inspectRate,rate.blockedRate,rate.hiddenRate",
       label: "Rate operations",
       headerLabel: "Rate operations",
       presentation: "dropdown",
       controls: [
         {
-          bindingName: "inspectRate",
+          bindingName: "rate.inspectRate",
+          operation: { canonicalKey: "rate.inspectRate" },
           label: "Inspect rate",
           variant: "default",
           disabled: false,
         },
         {
-          bindingName: "blockedRate",
+          bindingName: "rate.blockedRate",
+          operation: { canonicalKey: "rate.blockedRate" },
           label: "Blocked rate",
           variant: "default",
           disabled: true,
@@ -1140,17 +1151,17 @@ describe("home view model collections", () => {
         ...rateCardSchema.tableViews,
         rateTable: {
           ...rateCardSchema.tableViews.rateTable,
-          actions: {
-            editResource: {
-              type: "editRecord",
+          operations: [
+            {
+              operation: "resource.update",
               label: "Edit resource",
               target: { kind: "reference", field: "resource" },
               editView: "resourceEdit",
             },
-          },
+          ],
           columns: [
             ...rateCardSchema.tableViews.rateTable.columns,
-            { type: "invokeAction", action: "editResource" },
+            { type: "operationControl", operation: "resource.update" },
           ],
         },
       },
@@ -1175,7 +1186,7 @@ describe("home view model collections", () => {
       controls: [
         {
           type: "editRecord",
-          bindingName: "editResource",
+          bindingName: "resource.update",
           label: "Edit resource",
           operation: { canonicalKey: "resource.update" },
           target: {
@@ -1500,16 +1511,20 @@ describe("home view model collections", () => {
             kind: "command",
             scope: "record",
             effect: {
-              type: "runActionKind",
+              type: "registeredCommand",
               kind: "create-tree-child",
-              action: "addTreeChild",
+              relationship: "blockPlacements",
+              childField: "block",
+              orderField: "order",
             },
           },
         },
         effect: {
-          type: "runActionKind",
+          type: "registeredCommand",
           kind: "create-tree-child",
-          action: "addTreeChild",
+          relationship: "blockPlacements",
+          childField: "block",
+          orderField: "order",
         },
       },
       remove: {
@@ -1520,16 +1535,16 @@ describe("home view model collections", () => {
             kind: "command",
             scope: "record",
             effect: {
-              type: "runActionKind",
+              type: "registeredCommand",
               kind: "remove-tree-placement",
-              action: "removeTreePlacement",
+              relationship: "blockPlacements",
             },
           },
         },
         effect: {
-          type: "runActionKind",
+          type: "registeredCommand",
           kind: "remove-tree-placement",
-          action: "removeTreePlacement",
+          relationship: "blockPlacements",
         },
       },
     });
@@ -1888,11 +1903,11 @@ describe("home view model collections", () => {
     expect(rateModel?.context?.relatedCollection).toBeUndefined();
   });
 
-  it("resolves the rate-home resource create action from the create view entity", () => {
+  it("resolves the rate-home resource create operation from the create view entity", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const create = rateModel?.operations.find((action) => action.type === "create");
+    const create = rateModel?.operations.find((operation) => operation.type === "create");
 
     expect(create).toMatchObject({
       type: "create",
@@ -1903,7 +1918,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("omits the source rate-card regenerate action from the primary view", () => {
+  it("omits the source rate-card regenerate operation from the primary view", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
@@ -2245,7 +2260,7 @@ describe("home view model collections", () => {
       },
       {
         type: "operationControl",
-        key: "operationControl:editChildBlock,ordering",
+        key: "operationControl:block.update,ordering",
         label: "",
         editor: null,
         commit: null,
@@ -2261,7 +2276,7 @@ describe("home view model collections", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
-    const create = contentModel?.operations.find((action) => action.type === "create");
+    const create = contentModel?.operations.find((operation) => operation.type === "create");
     const createVariantFields = Object.fromEntries(
       create?.type === "create"
         ? (create.union?.variants.map((variant) => [
@@ -2332,7 +2347,7 @@ describe("home view model collections", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
-    const create = contentModel?.operations.find((action) => action.type === "create");
+    const create = contentModel?.operations.find((operation) => operation.type === "create");
     const createEditors =
       create?.type === "create"
         ? Object.fromEntries(create.fields.map((field) => [field.fieldName, field.editor]))
@@ -3157,17 +3172,17 @@ function discriminatedTaskSchema(
     tableViews: {
       taskEditTable: {
         entity: "task",
-        actions: {
-          editTask: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "task.update",
             label: "Edit task",
             target: { kind: "row" },
             editView: "taskEdit",
           },
-        },
+        ],
         columns: [
           { type: "field", field: "title" },
-          { type: "invokeAction", action: "editTask" },
+          { type: "operationControl", operation: "task.update" },
         ],
       },
     },
@@ -3336,17 +3351,17 @@ function systemMetadataUiSchema(): AppSchema {
     tableViews: {
       taskTable: {
         entity: "task",
-        actions: {
-          editTask: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "task.update",
             label: "Edit task",
             target: { kind: "row" },
             editView: "taskEdit",
           },
-        },
+        ],
         columns: [
           { type: "field", field: "updatedAt", display: "editor" },
-          { type: "invokeAction", action: "editTask", label: "Actions" },
+          { type: "operationControl", operation: "task.update", label: "Actions" },
         ],
       },
     },
@@ -3517,20 +3532,6 @@ function lifecycleTaskSchema() {
             },
           },
         },
-        actions: {
-          startTask: {
-            label: "Start",
-            kind: "transition-state",
-            machine: "statusFlow",
-            transition: "start",
-          },
-          completeTask: {
-            label: "Complete",
-            kind: "transition-state",
-            machine: "statusFlow",
-            transition: "complete",
-          },
-        },
         mutations: {
           create: { enabled: true },
           patch: { enabled: true },
@@ -3542,7 +3543,12 @@ function lifecycleTaskSchema() {
             label: "Start",
             kind: "command",
             scope: "record",
-            effect: { type: "runActionKind", kind: "transition-state", action: "startTask" },
+            effect: {
+              type: "registeredCommand",
+              kind: "transition-state",
+              machine: "statusFlow",
+              transition: "start",
+            },
             output: { type: "command" },
             idempotency: { required: true },
             audit: { input: "summary" },
@@ -3551,7 +3557,12 @@ function lifecycleTaskSchema() {
             label: "Complete",
             kind: "command",
             scope: "record",
-            effect: { type: "runActionKind", kind: "transition-state", action: "completeTask" },
+            effect: {
+              type: "registeredCommand",
+              kind: "transition-state",
+              machine: "statusFlow",
+              transition: "complete",
+            },
             output: { type: "command" },
             idempotency: { required: true },
             audit: { input: "summary" },
@@ -3577,16 +3588,16 @@ function lifecycleTaskSchema() {
         columns: [
           { type: "field", field: "title" },
           { type: "field", field: "status" },
-          { type: "invokeAction", action: "editTask" },
+          { type: "operationControl", operation: "task.update" },
         ],
-        actions: {
-          editTask: {
-            type: "editRecord",
+        operations: [
+          {
+            operation: "task.update",
             label: "Edit task",
             target: { kind: "row" },
             editView: "taskEdit",
           },
-        },
+        ],
       },
     },
     views: {
@@ -3682,7 +3693,9 @@ function summarizeHomeOperation(operation: HomeOperationConfig) {
     operationName: operation.operationName,
     operationKey: operation.operation.canonicalKey,
     commandEffectKind:
-      commandEffect?.type === "runActionKind" ? commandEffect.kind : (commandEffect?.type ?? null),
+      commandEffect?.type === "registeredCommand"
+        ? commandEffect.kind
+        : (commandEffect?.type ?? null),
     showAffectedCountOnSuccess: operation.ui.showAffectedCountOnSuccess,
     targetCountQueryKind: operation.ui.targetCount?.query.kind ?? null,
     targetCountDisplay: operation.ui.targetCount?.display.type ?? null,
@@ -3716,4 +3729,18 @@ function testWriteOperations(label: string, fields: string[]) {
       audit: { input: "summary" },
     },
   } satisfies NonNullable<AppSchema["entities"][string]["operations"]>;
+}
+
+function tableStaticUpdateOperation(
+  label: string,
+): NonNullable<AppSchema["entities"][string]["operations"]>[string] {
+  return {
+    label,
+    kind: "update",
+    scope: "record",
+    effect: { type: "patchRecord" },
+    output: { type: "update" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
 }

@@ -57,6 +57,8 @@ through an explicit actor policy and public binding.
 - WHEN public execution models are selected
 - THEN public execution invokes the operation envelope and policy model
 - AND entity action metadata does not synthesize public operation bindings
+- AND public command execution returns operation-native public output rather
+  than public action response metadata
 
 #### Scenario: Execute public create operation
 
@@ -147,6 +149,8 @@ invocation envelope before validating input or committing effects.
 - THEN committed records or operation response metadata include enough source
   context to identify the operation, target app storage identity, host, path,
   and Site block that caused the write
+- AND source records identify the causing operation by canonical operation key,
+  not by legacy public action name
 
 #### Scenario: Rejected public attempt is auditable
 

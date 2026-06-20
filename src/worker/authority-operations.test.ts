@@ -1001,9 +1001,13 @@ describe("authority operation execution", () => {
     expect(replay.body.result.body.status).toBe("replayed");
     expect(replay.body.result.body.output).toEqual(output);
     expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
-    expect(output.response.actionId).toBe(
-      "operation:task.clearCompletedTasks:command-effect-clear-completed",
-    );
+    expect(output).not.toHaveProperty("actionId");
+    expect(output).not.toHaveProperty("response");
+    const committedWriteResponse = committed.body.writes[0]
+      ?.response as OperationInvocationResponse;
+
+    expect(committedWriteResponse.output).toEqual(output);
+    expect(committedWriteResponse.output).not.toHaveProperty("response");
     const createdRecordChange = output.changes.find(
       (change) => change.recordId === createdOutput.record.id,
     );
@@ -1030,6 +1034,8 @@ describe("authority operation execution", () => {
       output,
       status: "replayed",
     });
+    expect(commandRow?.output).not.toHaveProperty("actionId");
+    expect(commandRow?.output).not.toHaveProperty("response");
     expect(commandRow?.statusHistory.map((entry) => entry.status)).toEqual([
       "accepted",
       "committed",
@@ -1168,8 +1174,9 @@ describe("authority operation execution", () => {
     expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
     expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
     expect(output.changes.map((change) => change.entity)).toEqual(["task", "task-log", "task"]);
-    expect(output.response).toMatchObject({
-      actionId: "operation:task.submitPlan:record-plan-success",
+    expect(output).not.toHaveProperty("actionId");
+    expect(output).not.toHaveProperty("response");
+    expect(output).toMatchObject({
       recordPlan: {
         steps: [
           { name: "createTask", kind: "create", entity: "task" },
@@ -1179,7 +1186,7 @@ describe("authority operation execution", () => {
       },
     });
 
-    const taskId = output.response.recordPlan?.steps[0]?.recordId;
+    const taskId = output.recordPlan?.steps[0]?.recordId;
     const log = output.changes[1]?.payload;
     const receivedAt = committed.body.result.body.invocation.receivedAt;
 
@@ -1189,9 +1196,7 @@ describe("authority operation execution", () => {
       receivedAt,
       receivedAt,
     ]);
-    expect(output.response.recordPlan?.steps.map((step) => step.changeId)).toEqual(
-      output.affectedChangeIds,
-    );
+    expect(output.recordPlan?.steps.map((step) => step.changeId)).toEqual(output.affectedChangeIds);
     expect(output.changes[0]?.payload).toMatchObject({
       id: taskId,
       entity: "task",
@@ -1613,7 +1618,7 @@ function schemaWithScopedClearCompletedCommand(sourceSchema: AppSchema): AppSche
     !action ||
     action.kind !== "clear-completed" ||
     !operation ||
-    operation.effect?.type !== "runActionKind"
+    operation.effect?.type !== "registeredCommand"
   ) {
     throw new Error("Expected clearCompletedTasks action and operation.");
   }
@@ -1698,7 +1703,12 @@ function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchem
         label: "Start",
         kind: "command",
         scope: "record",
-        effect: { type: "runActionKind", kind: "transition-state", action: "startTask" },
+        effect: {
+          type: "registeredCommand",
+          kind: "transition-state",
+          machine: "statusFlow",
+          transition: "start",
+        },
         output: { type: "command" },
         idempotency: { required: true },
         audit: { input: "summary" },

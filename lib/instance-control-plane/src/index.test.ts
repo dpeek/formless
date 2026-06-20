@@ -453,11 +453,11 @@ describe("instance control-plane schema contracts", () => {
     expect(routesScreen?.layout.sections.map((section) => section.view)).toEqual(["routeList"]);
     expect(JSON.stringify(routesScreen)).not.toContain("deployEvidenceSummaryList");
     expect(JSON.stringify(routesScreen)).not.toContain("deployDriftReportList");
-    expect(
-      routeTable?.actions?.editRoute?.type === "editRecord"
-        ? routeTable.actions.editRoute.editView
-        : undefined,
-    ).toBe("routeEdit");
+    expect(routeTable?.operations?.[0]).toMatchObject({
+      operation: "route.update",
+      label: "Edit route",
+      editView: "routeEdit",
+    });
     expect(schema.tableViews.appInstallTable?.columns).toMatchObject([
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
@@ -480,7 +480,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
       { field: "statusCode", display: "readOnly" },
-      { type: "invokeAction", actions: ["editRoute"] },
+      { type: "operationControl", operations: ["route.update"] },
     ]);
     expect(routeCreateFields).toContain("deploymentConfig");
     expect(routeEditFields).toContain("deploymentConfig");
@@ -513,11 +513,11 @@ describe("instance control-plane schema contracts", () => {
         ? schema.views.deploymentConfigList.operations
         : undefined,
     ).toEqual([{ operation: "deployment-config.create", createView: "deploymentConfigCreate" }]);
-    expect(
-      deploymentConfigTable?.actions?.editDeploymentConfig?.type === "editRecord"
-        ? deploymentConfigTable.actions.editDeploymentConfig.editView
-        : undefined,
-    ).toBe("deploymentConfigEdit");
+    expect(deploymentConfigTable?.operations?.[0]).toMatchObject({
+      operation: "deployment-config.update",
+      label: "Edit deployment config",
+      editView: "deploymentConfigEdit",
+    });
     expect(deploymentConfigEditFields).toEqual([
       "label",
       "enabled",
@@ -551,7 +551,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "observedSummary", display: "readOnly" },
       { field: "observedError", display: "readOnly" },
       { field: "observedRunnerId", display: "readOnly" },
-      { type: "invokeAction", actions: ["editDeploymentConfig"] },
+      { type: "operationControl", operations: ["deployment-config.update"] },
     ]);
     expect(schema.tableViews.deployDesiredResourceTable).toBeUndefined();
     expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();

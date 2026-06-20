@@ -369,6 +369,28 @@ entity operations and view operation bindings.
 - AND operation response shape drives success, failure, replay, local
   auto-save, and compact status presentation
 
+#### Scenario: Table controls bind operations directly
+
+- GIVEN a generated table renders row edit, destructive, command, or ordering
+  controls
+- WHEN the table model is selected
+- THEN table controls are selected from table `operations` bindings referenced
+  by `operationControl` columns and available record-scoped operations
+- AND the model does not require `invokeAction` columns or table-local action
+  slots to discover row operation controls
+- AND edit dialogs, disabled reasons, destructive presentation, ordering menus,
+  and reference-target editing remain presentation facts on the operation
+  binding
+
+#### Scenario: State transitions do not read entity actions
+
+- GIVEN a state-machine field exposes transition controls
+- WHEN generated UI selects transition operation configs
+- THEN the machine, transition, availability, input, and response handling come
+  from operation-native transition effect facts
+- AND generated UI does not read entity action metadata to resolve the
+  transition target
+
 ### Requirement: Operations And Tree Composition
 
 The system SHALL render schema operations through generated operation UI and

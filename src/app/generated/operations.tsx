@@ -25,9 +25,8 @@ export function HomeOperationRow({
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
   const [pendingOperationName, setPendingOperationName] = useState<string | null>(null);
-  const [createDialogAction, setCreateDialogAction] = useState<CreateHomeOperationConfig | null>(
-    null,
-  );
+  const [createDialogOperation, setCreateDialogOperation] =
+    useState<CreateHomeOperationConfig | null>(null);
 
   async function runCommandOperation(operation: CommandHomeOperationConfig) {
     if (pendingOperationName) {
@@ -75,7 +74,7 @@ export function HomeOperationRow({
               key={`${operation.type}:${operation.entityName}`}
               onPress={() => {
                 if (canOpen) {
-                  setCreateDialogAction(operation);
+                  setCreateDialogOperation(operation);
                 }
               }}
               type="button"
@@ -96,12 +95,12 @@ export function HomeOperationRow({
           />
         );
       })}
-      {createDialogAction ? (
+      {createDialogOperation ? (
         <GeneratedCreateDialog
-          action={createDialogAction}
+          operation={createDialogOperation}
           onOpenChange={(open) => {
             if (!open) {
-              setCreateDialogAction(null);
+              setCreateDialogOperation(null);
             }
           }}
           open={true}

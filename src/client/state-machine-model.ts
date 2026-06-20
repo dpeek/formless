@@ -1,7 +1,7 @@
 import type {
   EntitySchema,
   FieldSchema,
-  RunActionKindEntityOperationEffectSchema,
+  RegisteredCommandEntityOperationEffectSchema,
   StateMachineSchema,
   StateMachineTransitionSchema,
 } from "@dpeek/formless-schema";
@@ -64,7 +64,7 @@ export function selectTransitionStateOperations(
   return selectAvailableEntityOperations(entityName, entity, "record").flatMap((operation) => {
     if (
       operation.operation.kind !== "command" ||
-      operation.operation.effect?.type !== "runActionKind" ||
+      operation.operation.effect?.type !== "registeredCommand" ||
       operation.operation.effect.kind !== "transition-state"
     ) {
       return [];
@@ -148,21 +148,11 @@ function transitionSourceStateLabels(
 }
 
 function selectTransitionOperationTarget(
-  entity: EntitySchema,
-  effect: RunActionKindEntityOperationEffectSchema,
+  _entity: EntitySchema,
+  effect: RegisteredCommandEntityOperationEffectSchema & { kind: "transition-state" },
 ): { machineName: string; transitionName: string } | undefined {
-  if (effect.action === undefined) {
-    return undefined;
-  }
-
-  const action = entity.actions?.[effect.action];
-
-  if (action?.kind !== "transition-state") {
-    return undefined;
-  }
-
   return {
-    machineName: action.machine,
-    transitionName: action.transition,
+    machineName: effect.machine,
+    transitionName: effect.transition,
   };
 }

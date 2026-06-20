@@ -11,6 +11,10 @@ import type {
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "@dpeek/formless-instance-control-plane";
+import {
   crmSeedRecords,
   crmSourceSchema,
   siteSourceSchema,
@@ -31,7 +35,9 @@ import {
   writeWorkspaceAppPackageFixture,
 } from "../test/workspace-app-package.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { INTERNAL_READ_OPERATION_INVOCATIONS_PATH } from "./instance-control-plane.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
+import type { StoredOperationInvocation } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -111,6 +117,8 @@ describe("instance app install API routes", () => {
       label: "Site",
     });
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const invocations = await readControlPlaneOperationInvocations();
+    const output = invocations[0]?.output;
 
     expect(before.body.packages).toEqual([
       expect.objectContaining({
@@ -156,6 +164,23 @@ describe("instance app install API routes", () => {
       status: "installed",
     });
     expect(after.body.installs).toEqual(created.body.installs);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toMatchObject({
+      operationKey: "app-install.createAppInstall",
+      status: "committed",
+      affectedChangeIds: ["1", "2", "3"],
+    });
+    expect(invocations[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+    ]);
+    expect(output).toMatchObject({
+      type: "command",
+      affectedChangeIds: ["1", "2", "3"],
+      cursor: 3,
+    });
+    expect(output).not.toHaveProperty("actionId");
+    expect(output).not.toHaveProperty("response");
   });
 
   it("lists and creates linked workspace app packages from the active resolver", async () => {
@@ -764,6 +789,21 @@ async function postReset(path: string) {
   });
 
   expect(response.status).toBe(200);
+}
+
+async function readControlPlaneOperationInvocations(): Promise<StoredOperationInvocation[]> {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_READ_OPERATION_INVOCATIONS_PATH}`,
+    { method: "GET" },
+  );
+  const body = (await response.json()) as { invocations?: StoredOperationInvocation[] };
+
+  expect(response.status).toBe(200);
+  expect(Array.isArray(body.invocations)).toBe(true);
+
+  return body.invocations ?? [];
 }
 
 function adminHeaders(headers: Record<string, string> = {}) {

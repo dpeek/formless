@@ -470,9 +470,8 @@ function selectPublicSubscribeOperation(
 
     return (
       operation.kind === "command" &&
-      operation.effect?.type === "runActionKind" &&
+      operation.effect?.type === "registeredCommand" &&
       operation.effect.kind === "subscribe" &&
-      operation.effect.action === operationName &&
       operation.policy?.actors.includes("anonymous") &&
       access?.actor === "anonymous" &&
       access.challenge.kind === "turnstile" &&

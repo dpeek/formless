@@ -40,7 +40,7 @@ import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
   executePublicOperationRequest,
-  PublicActionError,
+  PublicOperationError,
   selectPublicOperationRoute,
 } from "./public-actions.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
@@ -284,7 +284,7 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       return jsonResponse({ error: "Not found." }, 404);
     } catch (error) {
-      if (error instanceof PublicActionError) {
+      if (error instanceof PublicOperationError) {
         return jsonResponse({ error: error.message }, error.status);
       }
 

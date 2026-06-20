@@ -36,7 +36,7 @@ import type { ListResultModel, RecordResultModel } from "../../client/list-resul
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { EntitySchema } from "@dpeek/formless-schema";
-import { HomeOperationRow } from "./actions.tsx";
+import { HomeOperationRow } from "./operations.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
 import {
@@ -447,7 +447,7 @@ function ContextListDetailSelector({
 
       {context.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={context.createOperation}
+          operation={context.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={(recordId) => {
             onSelectContext?.(recordId);
@@ -547,7 +547,7 @@ function ContextSelector({
       />
       {context.createOperation && createDialogOpen ? (
         <GeneratedCreateDialog
-          action={context.createOperation}
+          operation={context.createOperation}
           onOpenChange={(open) => setCreateDialogOpen(open)}
           onSuccess={(recordId) => {
             onSelectContext?.(recordId);

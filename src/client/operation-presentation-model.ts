@@ -50,7 +50,7 @@ export function selectCommandOperationByActionKind(
   return selectAvailableEntityOperations(entityName, entity, scope).find(
     (operation) =>
       operation.operation.kind === "command" &&
-      operation.operation.effect?.type === "runActionKind" &&
+      operation.operation.effect?.type === "registeredCommand" &&
       operation.operation.effect.kind === actionKind,
   );
 }

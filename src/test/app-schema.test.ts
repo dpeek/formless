@@ -1949,31 +1949,33 @@ describe("schema table views", () => {
     });
   });
 
-  it("parses table-local actions and invokeAction columns", () => {
+  it("parses table operation bindings and operationControl columns", () => {
     const schema = parseAppSchema(
       scopedRateSchema({
         tableViews: {
           rateTable: {
             ...scopedRateTableViews().rateTable,
-            actions: {
-              inspectRate: { label: "Inspect rate" },
-              disableRate: {
+            operations: [
+              { operation: "rate.update", label: "Inspect rate" },
+              {
+                operation: "resource.update",
                 label: "Disable rate",
                 variant: "destructive",
                 availability: { state: "disabled", reason: "Unavailable in this slice" },
+                target: { kind: "reference", field: "resource" },
               },
-            },
+            ],
             columns: [
               ...scopedRateTableViews().rateTable.columns,
               {
-                type: "invokeAction",
-                action: "inspectRate",
+                type: "operationControl",
+                operation: "rate.update",
                 width: "xs",
                 align: "end",
               },
               {
-                type: "invokeAction",
-                actions: ["inspectRate", "disableRate"],
+                type: "operationControl",
+                operations: ["rate.update", "resource.update"],
                 presentation: "dropdown",
               },
             ],
@@ -1982,41 +1984,43 @@ describe("schema table views", () => {
       }),
     );
 
-    expect(schema.tableViews.rateTable?.actions).toEqual({
-      inspectRate: { label: "Inspect rate" },
-      disableRate: {
+    expect(schema.tableViews.rateTable?.operations).toEqual([
+      { operation: "rate.update", label: "Inspect rate" },
+      {
+        operation: "resource.update",
         label: "Disable rate",
         variant: "destructive",
         availability: { state: "disabled", reason: "Unavailable in this slice" },
+        target: { kind: "reference", field: "resource" },
       },
-    });
+    ]);
     expect(schema.tableViews.rateTable?.columns.at(-2)).toEqual({
-      type: "invokeAction",
-      action: "inspectRate",
+      type: "operationControl",
+      operation: "rate.update",
       width: "xs",
       align: "end",
     });
     expect(schema.tableViews.rateTable?.columns.at(-1)).toEqual({
-      type: "invokeAction",
-      actions: ["inspectRate", "disableRate"],
+      type: "operationControl",
+      operations: ["rate.update", "resource.update"],
       presentation: "dropdown",
     });
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });
 
-  it("validates table invokeAction references", () => {
+  it("validates table operationControl references", () => {
     expect(() =>
       parseAppSchema(
         scopedRateSchema({
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              columns: [{ type: "invokeAction", action: "inspectRate" }],
+              columns: [{ type: "operationControl", operation: "rate.update" }],
             },
           },
         }),
       ),
-    ).toThrow('references unknown table action "inspectRate"');
+    ).toThrow('references unknown table operation "rate.update"');
 
     expect(() =>
       parseAppSchema(
@@ -2024,13 +2028,13 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: { inspectRate: { label: "Inspect rate" } },
-              columns: [{ type: "invokeAction", actions: [] }],
+              operations: [{ operation: "rate.update", label: "Inspect rate" }],
+              columns: [{ type: "operationControl", operations: [] }],
             },
           },
         }),
       ),
-    ).toThrow("must reference at least one table action");
+    ).toThrow("must reference at least one table operation");
 
     expect(() =>
       parseAppSchema(
@@ -2038,44 +2042,44 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: { inspectRate: { label: "Inspect rate" } },
+              operations: [{ operation: "rate.update", label: "Inspect rate" }],
               columns: [
                 {
-                  type: "invokeAction",
-                  action: "inspectRate",
-                  actions: ["inspectRate"],
+                  type: "operationControl",
+                  operation: "rate.update",
+                  operations: ["rate.update"],
                 },
               ],
             },
           },
         }),
       ),
-    ).toThrow("must use either action or actions, not both");
+    ).toThrow("must use either operation or operations, not both");
   });
 
-  it("parses edit views and editRecord table actions", () => {
+  it("parses edit views and editRecord table operation bindings", () => {
     const schema = parseAppSchema(
       scopedRateSchema({
         tableViews: {
           rateTable: {
             ...scopedRateTableViews().rateTable,
-            actions: {
-              editRate: {
-                type: "editRecord",
+            operations: [
+              {
+                operation: "rate.update",
                 label: "Edit rate",
                 target: { kind: "row" },
                 editView: "rateEdit",
               },
-              editResource: {
-                type: "editRecord",
+              {
+                operation: "resource.update",
                 label: "Edit resource",
                 target: { kind: "reference", field: "resource" },
                 editView: "resourceEdit",
               },
-            },
+            ],
             columns: [
               ...scopedRateTableViews().rateTable.columns,
-              { type: "invokeAction", actions: ["editRate", "editResource"] },
+              { type: "operationControl", operations: ["rate.update", "resource.update"] },
             ],
           },
         },
@@ -2109,8 +2113,8 @@ describe("schema table views", () => {
         resource: { editor: "reference", commit: "immediate" },
       },
     });
-    expect(schema.tableViews.rateTable?.actions?.editResource).toEqual({
-      type: "editRecord",
+    expect(schema.tableViews.rateTable?.operations?.[1]).toEqual({
+      operation: "resource.update",
       label: "Edit resource",
       target: { kind: "reference", field: "resource" },
       editView: "resourceEdit",
@@ -2118,7 +2122,7 @@ describe("schema table views", () => {
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });
 
-  it("parses table ordering and ordering action columns", () => {
+  it("parses table ordering and ordering operation columns", () => {
     const schema = parseAppSchema(
       scopedRateSchema({
         entities: scopedRateEntitiesWithSortOrder(),
@@ -2133,7 +2137,7 @@ describe("schema table views", () => {
             columns: [
               { type: "orderingHandle", width: "xs" },
               ...scopedRateTableViews().rateTable.columns,
-              { type: "invokeAction", includeOrdering: true },
+              { type: "operationControl", includeOrdering: true },
             ],
           },
         },
@@ -2153,8 +2157,8 @@ describe("schema table views", () => {
       width: "xs",
     });
     expect(schema.tableViews.rateTable?.columns.at(-1)).toEqual({
-      type: "invokeAction",
-      actions: [],
+      type: "operationControl",
+      operations: [],
       includeOrdering: true,
     });
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
@@ -2372,15 +2376,15 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: {
-                editResource: {
-                  type: "editRecord",
+              operations: [
+                {
+                  operation: "resource.update",
                   label: "Edit resource",
                   target: { kind: "reference", field: "missing" },
                   editView: "resourceEdit",
                 },
-              },
-              columns: [{ type: "invokeAction", action: "editResource" }],
+              ],
+              columns: [{ type: "operationControl", operation: "resource.update" }],
             },
           },
         }),
@@ -2393,15 +2397,15 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: {
-                editResource: {
-                  type: "editRecord",
+              operations: [
+                {
+                  operation: "resource.update",
                   label: "Edit resource",
                   target: { kind: "reference", field: "cost" },
                   editView: "resourceEdit",
                 },
-              },
-              columns: [{ type: "invokeAction", action: "editResource" }],
+              ],
+              columns: [{ type: "operationControl", operation: "resource.update" }],
             },
           },
         }),
@@ -2414,15 +2418,15 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: {
-                editRate: {
-                  type: "editRecord",
+              operations: [
+                {
+                  operation: "rate.update",
                   label: "Edit rate",
                   target: { kind: "row" },
                   editView: "missingEdit",
                 },
-              },
-              columns: [{ type: "invokeAction", action: "editRate" }],
+              ],
+              columns: [{ type: "operationControl", operation: "rate.update" }],
             },
           },
         }),
@@ -2435,15 +2439,15 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              actions: {
-                editResource: {
-                  type: "editRecord",
+              operations: [
+                {
+                  operation: "resource.update",
                   label: "Edit resource",
                   target: { kind: "reference", field: "resource" },
                   editView: "rateEdit",
                 },
-              },
-              columns: [{ type: "invokeAction", action: "editResource" }],
+              ],
+              columns: [{ type: "operationControl", operation: "resource.update" }],
             },
           },
           views: {
@@ -2741,7 +2745,7 @@ describe("schema table views", () => {
           tableViews: {
             rateTable: {
               ...scopedRateTableViews().rateTable,
-              columns: [{ type: "invokeAction", includeOrdering: true }],
+              columns: [{ type: "operationControl", includeOrdering: true }],
             },
           },
         }),
@@ -4541,7 +4545,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
-        "invokeAction",
+        "operationControl",
         "field",
         "field",
         "field",
@@ -5319,8 +5323,8 @@ describe("personal site sample schema", () => {
         },
       },
     });
-    expect(schema.tableViews.blockPlacementTable?.actions?.editChildBlock).toMatchObject({
-      type: "editRecord",
+    expect(schema.tableViews.blockPlacementTable?.operations?.[0]).toMatchObject({
+      operation: "block.update",
       label: "Edit block",
       target: { kind: "reference", field: "block" },
       editView: "blockEdit",
@@ -7265,9 +7269,8 @@ function defaultEntities() {
           scope: "collection",
           target: { query: "taskCompleted" },
           effect: {
-            type: "runActionKind",
+            type: "registeredCommand",
             kind: "clear-completed",
-            action: "clearCompletedTasks",
             query: "taskCompleted",
           },
           output: { type: "command" },

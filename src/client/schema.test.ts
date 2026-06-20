@@ -100,9 +100,8 @@ describe("task source schema", () => {
       scope: "collection",
       target: { query: "taskCompleted" },
       effect: {
-        type: "runActionKind",
+        type: "registeredCommand",
         kind: "clear-completed",
-        action: "clearCompletedTasks",
         query: "taskCompleted",
       },
       output: { type: "command" },

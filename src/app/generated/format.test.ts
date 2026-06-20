@@ -64,7 +64,7 @@ describe("generated field format helpers", () => {
     expect(formatAggregateDisplayValue(summarySlot("percent"), 0.125)).toBe("12.5%");
   });
 
-  it("converts current inline editor values for patch mutations", () => {
+  it("converts current inline editor values for update operations", () => {
     expect(fieldValueToInputValue(fields.title, "Alpha")).toBe("Alpha");
     expect(fieldValueToInputValue(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
       '<svg viewBox="0 0 24 24"></svg>',

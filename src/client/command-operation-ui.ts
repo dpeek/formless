@@ -26,7 +26,7 @@ export function selectCommandOperationUi(
 
   if (
     operation.kind !== "command" ||
-    operation.effect?.type !== "runActionKind" ||
+    operation.effect?.type !== "registeredCommand" ||
     operation.effect.kind !== "clear-completed" ||
     count?.type !== "count"
   ) {

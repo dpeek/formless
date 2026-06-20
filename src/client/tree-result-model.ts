@@ -5,7 +5,7 @@ import type {
   EntityUnionVariantSchema,
   FieldSchema,
   FieldVisibilityValue,
-  RunActionKindEntityOperationEffectSchema,
+  RegisteredCommandEntityOperationEffectSchema,
   ToManyRelationshipSchema,
   TreeBranchChildVariantSchema,
   TreeBranchVariantPolicySchema,
@@ -43,12 +43,12 @@ export type TreeCompositionOperationConfig = {
   create?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RunActionKindEntityOperationEffectSchema & { kind: "create-tree-child" };
+    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "create-tree-child" };
   };
   remove?: {
     operationName: string;
     operation: EntityOperationPresentationConfig;
-    effect: RunActionKindEntityOperationEffectSchema & { kind: "remove-tree-placement" };
+    effect: RegisteredCommandEntityOperationEffectSchema & { kind: "remove-tree-placement" };
   };
 };
 
@@ -262,14 +262,14 @@ function selectTreeCompositionOperationConfig(
 function selectTreeCompositionEffect<Kind extends "create-tree-child" | "remove-tree-placement">(
   operation: EntityOperationPresentationConfig | undefined,
   kind: Kind,
-): (RunActionKindEntityOperationEffectSchema & { kind: Kind }) | undefined {
+): (RegisteredCommandEntityOperationEffectSchema & { kind: Kind }) | undefined {
   const effect = operation?.operation.effect;
 
-  if (effect?.type !== "runActionKind" || effect.kind !== kind) {
+  if (effect?.type !== "registeredCommand" || effect.kind !== kind) {
     return undefined;
   }
 
-  return effect as RunActionKindEntityOperationEffectSchema & { kind: Kind };
+  return effect as RegisteredCommandEntityOperationEffectSchema & { kind: Kind };
 }
 
 // Compatibility fallback for tree results that predate result-level ordering.

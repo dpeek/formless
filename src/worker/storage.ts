@@ -52,6 +52,7 @@ import {
   readCurrentWriteLogCursor,
   readMutationReplayResponse,
   readWriteLogChangesAfter,
+  readWriteLogChangesByMutationId,
 } from "./storage-write-log.ts";
 import {
   createSqlStorageMigrationRegistry,
@@ -2351,6 +2352,43 @@ export function writeRecordSetForActionOutcome(
   });
 }
 
+export function writeRecordSetForCommandOperationOutcome(
+  storage: DurableObjectStorage,
+  operationId: string,
+  plans: ActionRecordWritePlan[],
+  validateConstraints?: RecordConstraintValidator,
+  options: ActionMaterializationOptions = {},
+): WriteOutcome<ActionResponse> {
+  return storage.transactionSync(() => {
+    const existingChanges = readWriteLogChangesByMutationId(storage, operationId);
+
+    if (existingChanges.length > 0) {
+      return replayedWrite({
+        actionId: operationId,
+        changes: existingChanges,
+        cursor: existingChanges.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
+      });
+    }
+
+    const changedAt = options.now ?? nowIsoString();
+    const records = materializeActionRecordWrites(storage, plans, changedAt, validateConstraints);
+
+    appendOperationCommandRecordChanges(storage, {
+      operationId,
+      records,
+      createdAt: changedAt,
+    });
+
+    const changes = readWriteLogChangesByMutationId(storage, operationId);
+
+    return committedWrite({
+      actionId: operationId,
+      changes,
+      cursor: changes.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
+    });
+  });
+}
+
 function materializeActionTombstoneRecords(
   storage: DurableObjectStorage,
   recordsToTombstone: StoredRecord[],
@@ -2672,6 +2710,25 @@ function appendActionRecordChanges(
     appendActionWriteLogChange(storage, {
       actionId: input.actionId,
       entity: input.entity ?? record.entity,
+      record,
+      createdAt: input.createdAt,
+    });
+  }
+}
+
+function appendOperationCommandRecordChanges(
+  storage: DurableObjectStorage,
+  input: {
+    operationId: string;
+    records: StoredRecord[];
+    createdAt: string;
+  },
+) {
+  for (const record of input.records) {
+    appendWriteLogChange(storage, {
+      mutationId: input.operationId,
+      op: "action",
+      entity: record.entity,
       record,
       createdAt: input.createdAt,
     });

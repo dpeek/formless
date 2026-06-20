@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { mutationOperationRequest } from "../test/authority-write.ts";
+import { recordOperationRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
@@ -56,10 +56,10 @@ Sitemap: http://example.com/sitemap.xml
 
   it("serves sitemap.xml from public Site routes instead of the client shell", async () => {
     await postAdminMutation({
-      mutationId: "mutation-public-sitemap-page",
+      idempotencyKey: "mutation-public-sitemap-page",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "page",
         label: "Launch check",
         body: "Sitemap launch check.",
@@ -67,10 +67,10 @@ Sitemap: http://example.com/sitemap.xml
       },
     });
     await postAdminMutation({
-      mutationId: "mutation-public-sitemap-post",
+      idempotencyKey: "mutation-public-sitemap-post",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "post",
         label: "Sitemap post",
         body: "Sitemap post check.",
@@ -79,10 +79,10 @@ Sitemap: http://example.com/sitemap.xml
       },
     });
     await postAdminMutation({
-      mutationId: "mutation-public-sitemap-undated-post",
+      idempotencyKey: "mutation-public-sitemap-undated-post",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "post",
         label: "Undated draft",
         body: "Hidden until dated.",
@@ -90,10 +90,10 @@ Sitemap: http://example.com/sitemap.xml
       },
     });
     await postAdminMutation({
-      mutationId: "mutation-public-sitemap-blocked-app-route",
+      idempotencyKey: "mutation-public-sitemap-blocked-app-route",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "page",
         label: "Blocked app route",
         body: "Generated app route.",
@@ -124,11 +124,11 @@ Sitemap: http://example.com/sitemap.xml
     const beforeBody = await beforeResponse.text();
 
     await postAdminMutation({
-      mutationId: "mutation-public-sitemap-site-settings",
+      idempotencyKey: "mutation-public-sitemap-site-settings",
       entity: "site",
-      op: "patch",
+      operationName: "update",
       recordId: "rec_site_settings_primary",
-      values: {
+      input: {
         label: "Renamed Site",
         description: "Settings should not change sitemap routes.",
         icon: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#0f766e"/></svg>',
@@ -172,8 +172,8 @@ async function resetSchemaApp(schemaKey: SchemaKey) {
   expect(response.status).toBe(200);
 }
 
-async function postAdminMutation(body: Parameters<typeof mutationOperationRequest>[0]) {
-  const request = mutationOperationRequest(body);
+async function postAdminMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders(),

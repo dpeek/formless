@@ -25,7 +25,7 @@ import {
   siteSourceSchema,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
-import { actionOperationRequest } from "../test/authority-write.ts";
+import { commandOperationRequest } from "../test/authority-write.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -143,9 +143,9 @@ describe("instance archive restore API", () => {
     );
     const before = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
     const firstAction = await postInstalledAppAction("tasks", "work", {
-      actionId: "action-archive-clear",
+      idempotencyKey: "action-archive-clear",
       entity: "task",
-      action: "clearCompletedTasks",
+      operationName: "clearCompletedTasks",
     });
     const replacementRecord = taskRecord({
       done: true,
@@ -161,9 +161,9 @@ describe("instance archive restore API", () => {
     );
     const after = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
     const secondAction = await postInstalledAppAction("tasks", "work", {
-      actionId: "action-archive-clear",
+      idempotencyKey: "action-archive-clear",
       entity: "task",
-      action: "clearCompletedTasks",
+      operationName: "clearCompletedTasks",
     });
 
     expect(initial.response.status).toBe(200);
@@ -569,9 +569,9 @@ async function getJson<T>(path: string) {
 async function postInstalledAppAction(
   packageAppKey: string,
   installId: string,
-  body: Parameters<typeof actionOperationRequest>[0],
+  body: Parameters<typeof commandOperationRequest>[0],
 ) {
-  const request = actionOperationRequest(body);
+  const request = commandOperationRequest(body);
   const response = await harness.fetch(
     `/api/app-installs/${packageAppKey}/${installId}${request.path.slice("/api".length)}`,
     {

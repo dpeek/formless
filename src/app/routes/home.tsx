@@ -46,13 +46,13 @@ export function HomeRoute({
   activePackageResolver,
   target,
   schemaKey,
-  sectionActions,
+  sectionOperationControls,
   screenPath,
 }: {
   activePackageResolver?: AppPackageResolver | undefined;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
-  sectionActions?: Record<string, ReactNode>;
+  sectionOperationControls?: Record<string, ReactNode>;
   screenPath: string;
 }) {
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
@@ -189,7 +189,7 @@ export function HomeRoute({
             )
           }
           screen={homeScreen}
-          sectionActions={sectionActions}
+          sectionOperationControls={sectionOperationControls}
           today={today}
         />
       </SchemaAppProvider>

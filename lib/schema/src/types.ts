@@ -417,6 +417,18 @@ export type InvokeActionTableColumnSchema = {
   presentation?: TableActionPresentation;
 };
 
+export type OperationControlTableColumnSchema = {
+  type: "operationControl";
+  operation?: string;
+  operations?: string[];
+  includeOrdering?: boolean;
+  label?: string;
+  align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+  presentation?: TableActionPresentation;
+};
+
 export type OrderingHandleTableColumnSchema = {
   type: "orderingHandle";
   label?: string;
@@ -430,11 +442,22 @@ export type TableColumnSchema =
   | ReferenceFieldTableColumnSchema
   | ComputedTableColumnSchema
   | InvokeActionTableColumnSchema
+  | OperationControlTableColumnSchema
   | OrderingHandleTableColumnSchema;
+
+export type TableOperationBindingSchema = {
+  operation: string;
+  label?: string;
+  variant?: TableActionVariant;
+  availability?: TableActionAvailabilitySchema;
+  target?: TableEditRecordTargetSchema;
+  editView?: string;
+};
 
 export type TableViewSchema = {
   entity: string;
   actions?: Record<string, TableActionSchema>;
+  operations?: TableOperationBindingSchema[];
   ordering?: TableOrderingSchema;
   columns: TableColumnSchema[];
 };
@@ -992,6 +1015,66 @@ export type RunActionKindEntityOperationEffectSchema = {
   query?: string;
 };
 
+export type ClearCompletedEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "clear-completed";
+  query: string;
+};
+
+export type CreateMissingJoinRecordsEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "create-missing-join-records";
+  join: EntityActionJoinSchema;
+};
+
+export type CreateSelectedJoinRecordEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "create-selected-join-record";
+  relationship: string;
+};
+
+export type RemoveSelectedJoinRecordsEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "remove-selected-join-records";
+  relationship: string;
+};
+
+export type CreateTreeChildEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "create-tree-child";
+  relationship: string;
+  childField: string;
+  orderField?: string;
+};
+
+export type RemoveTreePlacementEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "remove-tree-placement";
+  relationship: string;
+};
+
+export type SubscribeEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "subscribe";
+};
+
+export type TransitionStateEntityOperationEffectSchema = {
+  type: "registeredCommand";
+  kind: "transition-state";
+  machine: string;
+  transition: string;
+};
+
+export type RegisteredCommandEntityOperationEffectSchema =
+  | ClearCompletedEntityOperationEffectSchema
+  | CreateMissingJoinRecordsEntityOperationEffectSchema
+  | CreateSelectedJoinRecordEntityOperationEffectSchema
+  | RemoveSelectedJoinRecordsEntityOperationEffectSchema
+  | CreateTreeChildEntityOperationEffectSchema
+  | RemoveTreePlacementEntityOperationEffectSchema
+  | SubscribeEntityOperationEffectSchema
+  | TransitionStateEntityOperationEffectSchema;
+
 export type RecordPlanStepKind = "create" | "patch" | "delete" | "tombstone";
 
 export type RecordPlanActorContextField = "mode";
@@ -1101,10 +1184,18 @@ export type RecordPlanEntityOperationEffectSchema = {
 };
 
 export type EntityOperationCommandEffectSchema =
+  | RegisteredCommandEntityOperationEffectSchema
   | RunActionKindEntityOperationEffectSchema
   | RecordPlanEntityOperationEffectSchema;
 
 export type EntityOperationCommandEffectType = EntityOperationCommandEffectSchema["type"];
+
+export type NativeEntityOperationCommandEffectSchema =
+  | RegisteredCommandEntityOperationEffectSchema
+  | RecordPlanEntityOperationEffectSchema;
+
+export type NativeEntityOperationCommandEffectType =
+  NativeEntityOperationCommandEffectSchema["type"];
 
 export type LegacyEntityOperationCommandEffectType =
   RunActionKindEntityOperationEffectSchema["type"];

@@ -560,9 +560,11 @@
           "kind": "command",
           "scope": "record",
           "effect": {
-            "type": "runActionKind",
+            "type": "registeredCommand",
             "kind": "create-tree-child",
-            "action": "addTreeChild"
+            "relationship": "blockPlacements",
+            "childField": "block",
+            "orderField": "order"
           },
           "output": {
             "type": "command"
@@ -579,9 +581,9 @@
           "kind": "command",
           "scope": "record",
           "effect": {
-            "type": "runActionKind",
+            "type": "registeredCommand",
             "kind": "remove-tree-placement",
-            "action": "removeTreePlacement"
+            "relationship": "blockPlacements"
           },
           "output": {
             "type": "command"
@@ -1073,9 +1075,8 @@
             }
           },
           "effect": {
-            "type": "runActionKind",
-            "kind": "subscribe",
-            "action": "subscribe"
+            "type": "registeredCommand",
+            "kind": "subscribe"
           },
           "output": {
             "type": "command"
@@ -1978,9 +1979,9 @@
     },
     "blockPlacementTable": {
       "entity": "block-placement",
-      "actions": {
-        "editChildBlock": {
-          "type": "editRecord",
+      "operations": [
+        {
+          "operation": "block.update",
           "label": "Edit block",
           "target": {
             "kind": "reference",
@@ -1988,7 +1989,7 @@
           },
           "editView": "blockEdit"
         }
-      },
+      ],
       "ordering": {
         "field": "order",
         "scope": [
@@ -2030,8 +2031,8 @@
           "width": "sm"
         },
         {
-          "type": "invokeAction",
-          "action": "editChildBlock",
+          "type": "operationControl",
+          "operation": "block.update",
           "includeOrdering": true,
           "width": "xs",
           "align": "end"

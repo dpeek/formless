@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
@@ -11,14 +12,16 @@ import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import { FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER } from "../shared/protocol.ts";
 import type {
-  ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
   OwnerIdentity,
   SchemaResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
+import type {
+  OperationCommandOutput,
+  OperationInvocationResponse,
+} from "../shared/operation-invocation.ts";
 import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
 import {
   bundledSourceSchemaHashFixtures,
@@ -35,9 +38,11 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
-import { mutationOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { INTERNAL_READ_OPERATION_INVOCATIONS_PATH } from "./instance-control-plane.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
+import type { StoredOperationInvocation } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -165,18 +170,47 @@ describe("instance control-plane API routes", () => {
     const installedSite = await getJson<BootstrapResponse>(
       "/api/app-installs/site/personal/bootstrap",
     );
+    const sync = await getJson<SyncResponse>(`${controlPlaneApi}/sync?after=0`);
+    const createdOutput = operationCommandResponse(created);
+    const replayOutput = operationCommandResponse(replay);
+    const invocations = await readControlPlaneOperationInvocations();
 
     expect(created.response.status).toBe(200);
     expect(created.body.status).toBe("committed");
-    expect(operationCommandResponse(created).cursor).toBe(3);
-    expect(operationCommandResponse(created).changes.map((change) => change.payload.id)).toEqual([
+    expect(createdOutput.cursor).toBe(3);
+    expect(createdOutput.affectedChangeIds).toEqual(["1", "2", "3"]);
+    expect(createdOutput.affectedChangeIds).toEqual(
+      createdOutput.changes.map((change) => String(change.seq)),
+    );
+    expect(createdOutput.changes.map((change) => change.payload.id)).toEqual([
       "personal",
       "route:personal:admin",
       "route:personal:public-site",
     ]);
+    expect(createdOutput.changes.map((change) => change.mutationId)).toEqual([
+      created.body.invocation.invocationId,
+      created.body.invocation.invocationId,
+      created.body.invocation.invocationId,
+    ]);
+    expect(created.body.output).not.toHaveProperty("actionId");
+    expect(created.body.output).not.toHaveProperty("response");
     expect(replay.response.status).toBe(200);
     expect(replay.body.status).toBe("replayed");
-    expect(replay.body.output).toEqual(created.body.output);
+    expect(replayOutput).toEqual(createdOutput);
+    expect(sync.body.changes).toHaveLength(3);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toMatchObject({
+      invocationId: created.body.invocation.invocationId,
+      operationKey: "app-install.createAppInstall",
+      status: "replayed",
+      affectedChangeIds: createdOutput.affectedChangeIds,
+      output: createdOutput,
+    });
+    expect(invocations[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+      "replayed",
+    ]);
     expect(installedSite.body.schema).toEqual(siteSourceSchema);
     expect(installedSite.body.records).toEqual(siteSeedRecords);
     expect(controlPlane.body.records).toHaveLength(3);
@@ -203,10 +237,10 @@ describe("instance control-plane API routes", () => {
       },
     });
     const appMutation = await postInstalledAppMutation("site", "work", {
-      mutationId: "mutation-installed-site-page",
+      idempotencyKey: "mutation-installed-site-page",
       entity: "block",
-      op: "create",
-      values: {
+      operationName: "create",
+      input: {
         type: "page",
         label: "Installed only",
         href: "/installed-only",
@@ -745,9 +779,9 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
 async function postInstalledAppMutation(
   packageAppKey: string,
   installId: string,
-  body: Parameters<typeof mutationOperationRequest>[0],
+  body: Parameters<typeof recordOperationRequest>[0],
 ) {
-  const request = mutationOperationRequest(body);
+  const request = recordOperationRequest(body);
   const response = await harness.fetch(
     `/api/app-installs/${packageAppKey}/${installId}${request.path.slice("/api".length)}`,
     {
@@ -813,6 +847,21 @@ async function postReset(path: string) {
   expect(response.status).toBe(200);
 }
 
+async function readControlPlaneOperationInvocations(): Promise<StoredOperationInvocation[]> {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_READ_OPERATION_INVOCATIONS_PATH}`,
+    { method: "GET" },
+  );
+  const body = (await response.json()) as { invocations?: StoredOperationInvocation[] };
+
+  expect(response.status).toBe(200);
+  expect(Array.isArray(body.invocations)).toBe(true);
+
+  return body.invocations ?? [];
+}
+
 function adminHeaders(headers: Record<string, string> = {}) {
   return {
     ...headers,
@@ -867,14 +916,16 @@ function operationRecord(response: { body: OperationInvocationResponse }) {
   return output.record;
 }
 
-function operationCommandResponse(response: { body: OperationInvocationResponse }): ActionResponse {
+function operationCommandResponse(response: {
+  body: OperationInvocationResponse;
+}): OperationCommandOutput {
   const output = response.body.output;
 
   if (output.type !== "command") {
     throw new Error(`Expected command operation output, received "${output.type}".`);
   }
 
-  return output.response;
+  return output;
 }
 
 function secretSnapshot(now: string): StorageSnapshot {

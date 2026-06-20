@@ -10,6 +10,7 @@ import {
   type EntityOperationSchema,
   type EntitySchema,
   type RecordPlanEntityOperationEffectSchema,
+  type RegisteredCommandEntityOperationEffectSchema,
   type RecordPlanRecordIdExpressionSchema,
   type RecordPlanStepSchema,
   type RecordPlanValueExpressionSchema,
@@ -29,10 +30,10 @@ import type {
   DeleteMutation,
   MutationResponse,
   PatchMutation,
-  PublicActionExecutionEnvelope,
-  PublicActionProof,
+  PublicOperationProof,
 } from "../shared/protocol.ts";
 import type {
+  OperationCommandOutput,
   OperationInvocationEnvelope,
   OperationInvocationIdempotency,
   OperationInvocationInput,
@@ -40,11 +41,7 @@ import type {
   OperationInvocationSource,
   OperationInvocationSourceProtocol,
 } from "../shared/operation-invocation.ts";
-import {
-  executeEntityCommandEffectOutcome,
-  executeCreateAfterCreateHooks,
-  executePublicEntityActionOutcome,
-} from "./actions.ts";
+import { executeEntityCommandEffectOutcome, executeCreateAfterCreateHooks } from "./actions.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import { validateMutationRequest, validateRecordValues } from "./authority-validation.ts";
@@ -65,6 +62,7 @@ import {
   type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForActionOutcome,
+  writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
 
 type OperationStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
@@ -190,7 +188,7 @@ export function buildPublicOperationInvocationEnvelope(
     idempotencyKey: string;
     operationName: string;
     path: string;
-    proof?: PublicActionProof;
+    proof?: PublicOperationProof;
     publicInput: unknown;
     siteBlockId?: string;
   },
@@ -229,7 +227,7 @@ export function buildPublicOperationInvocationEnvelope(
 function publicOperationInvocationInput(
   operation: EntityOperationSchema,
   publicInput: unknown,
-  proof: PublicActionProof | undefined,
+  proof: PublicOperationProof | undefined,
 ): OperationInvocationInput {
   if (operation.kind === "create") {
     return {
@@ -586,14 +584,16 @@ function executeCommandOperationInvocationOutcome(
     );
   }
 
-  if (envelope.operation.effect?.type !== "runActionKind" || !envelope.operation.effect.action) {
+  const commandEffect = registeredCommandEffect(envelope);
+
+  if (commandEffect === undefined) {
     throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" requires a schema action effect.`,
+      `Operation "${envelope.operation.canonicalKey}" requires a registered command effect.`,
     );
   }
 
   if (envelope.actor.kind === "anonymous") {
-    return executePublicCommandOperationInvocationOutcome(storage, envelope, schema);
+    return executePublicCommandOperationInvocationOutcome(storage, envelope, schema, commandEffect);
   }
 
   const actorKind = envelope.actor.kind as SchemaActionActorKind;
@@ -606,8 +606,9 @@ function executeCommandOperationInvocationOutcome(
         actionId: requiredWriteIdentity(envelope),
         actorKind,
         entity: envelope.operation.entityName,
-        action: envelope.operation.effect.action,
-        kind: envelope.operation.effect.kind,
+        action: envelope.operation.operationName,
+        kind: commandEffect.kind,
+        effect: commandEffect,
         ...(commandInput === undefined ? {} : { input: commandInput }),
         receivedAt: envelope.receivedAt,
         ...(validateConstraints === undefined ? {} : { validateConstraints }),
@@ -622,40 +623,25 @@ function executePublicCommandOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  effect: RegisteredCommandEntityOperationEffectSchema,
 ): WriteOutcome<ActionResponse> {
-  if (envelope.operation.effect?.type !== "runActionKind" || !envelope.operation.effect.action) {
+  const payload = publicCommandOperationPayload(envelope);
+
+  if (effect.kind !== "subscribe") {
     throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" requires a schema action effect.`,
+      `Operation "${envelope.operation.canonicalKey}" is not available for public execution.`,
     );
   }
 
-  const payload = publicCommandOperationPayload(envelope);
-  const actionId = requiredWriteIdentity(envelope);
-  const idempotencyKey = parseNonEmptyString(
-    "Public operation idempotency key",
-    envelope.idempotency.key,
-  );
-  const publicEnvelope: PublicActionExecutionEnvelope = {
-    actionId,
-    actor: { mode: "anonymous" },
-    proof: payload.proof,
-    source: publicOperationActionSource(envelope),
-    input: payload.input,
-    idempotencyKey,
-    receivedAt: envelope.receivedAt,
-  };
+  return executePublicSubscribeOperationInvocationOutcome(storage, envelope, schema, payload.input);
+}
 
-  return executePublicEntityActionOutcome(
-    storage,
-    {
-      actionId,
-      entity: envelope.operation.entityName,
-      action: envelope.operation.effect.action,
-      input: payload.input,
-      envelope: publicEnvelope,
-    },
-    schema,
-  );
+function registeredCommandEffect(
+  envelope: OperationInvocationEnvelope,
+): RegisteredCommandEntityOperationEffectSchema | undefined {
+  const effect = envelope.operation.effect;
+
+  return effect?.type === "registeredCommand" ? effect : undefined;
 }
 
 function executeRecordPlanOperationInvocationOutcome(
@@ -1226,7 +1212,7 @@ function commandInputWithRecordId(envelope: OperationInvocationEnvelope, input: 
 
 function publicCommandOperationPayload(envelope: OperationInvocationEnvelope): {
   input: RecordValues;
-  proof: PublicActionProof;
+  proof: PublicOperationProof;
 } {
   if (envelope.input.type !== "command") {
     throw new BadRequestError(
@@ -1241,7 +1227,7 @@ function publicCommandOperationPayload(envelope: OperationInvocationEnvelope): {
   return { input, proof };
 }
 
-function parsePublicOperationProof(value: unknown): PublicActionProof {
+function parsePublicOperationProof(value: unknown): PublicOperationProof {
   const proof = parseRecord("Public operation proof", value);
 
   if (proof.kind !== "turnstile" || typeof proof.token !== "string") {
@@ -1252,53 +1238,237 @@ function parsePublicOperationProof(value: unknown): PublicActionProof {
     kind: "turnstile",
     token: proof.token,
     ...(isRecord(proof.verification)
-      ? { verification: proof.verification as PublicActionProof["verification"] }
+      ? { verification: proof.verification as PublicOperationProof["verification"] }
       : {}),
   };
 }
 
-function publicOperationActionSource(
+function executePublicSubscribeOperationInvocationOutcome(
+  storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
-): PublicActionExecutionEnvelope["source"] {
+  schema: AppSchema,
+  input: RecordValues,
+): WriteOutcome<ActionResponse> {
+  const contactEntity = requireSubscribeEntity(schema, "contact");
+  const emailAddressEntity = requireSubscribeEntity(schema, "email-address");
+  const audienceEntity = requireSubscribeEntity(schema, "audience");
+  const subscriptionEntity = requireSubscribeEntity(schema, "subscription");
+  const email = parseSubscribeEmail(input.email);
+  const existingEmailAddress = findActiveRecordByField(
+    storage,
+    "email-address",
+    "normalizedAddress",
+    email.normalizedAddress,
+  );
+  const existingContact = findExistingEmailContact(storage, existingEmailAddress);
+  const existingAudience = findActiveRecordByField(storage, "audience", "key", defaultAudienceKey);
+  const existingSubscription =
+    existingEmailAddress && existingAudience
+      ? findActiveSubscription(storage, existingEmailAddress.id, existingAudience.id)
+      : undefined;
+  const sourceValues = subscribeSourceValues(envelope);
+  const plans: ActionRecordWritePlan[] = [];
+  const contactRecordIndex = existingContact
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "contact",
+        values: () =>
+          validateRecordValues({ label: email.normalizedAddress }, contactEntity, storage),
+      });
+  const emailAddressRecordIndex = existingEmailAddress
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "email-address",
+        values: (writtenRecords) =>
+          validateRecordValues(
+            {
+              contact:
+                existingContact?.id ?? requireWrittenRecord(writtenRecords, contactRecordIndex).id,
+              address: email.address,
+              normalizedAddress: email.normalizedAddress,
+            },
+            emailAddressEntity,
+            storage,
+          ),
+      });
+
+  if (existingEmailAddress && !existingContact) {
+    plans.push({
+      kind: "patch",
+      record: existingEmailAddress,
+      values: (writtenRecords) =>
+        validateRecordValues(
+          {
+            ...existingEmailAddress.values,
+            contact: requireWrittenRecord(writtenRecords, contactRecordIndex).id,
+          },
+          emailAddressEntity,
+          storage,
+        ),
+    });
+  }
+
+  const audienceRecordIndex = existingAudience
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "audience",
+        values: () =>
+          validateRecordValues(
+            { key: defaultAudienceKey, label: "Default audience" },
+            audienceEntity,
+            storage,
+          ),
+      });
+  const subscriptionValues = (writtenRecords: StoredRecord[]) =>
+    validateRecordValues(
+      {
+        ...existingSubscription?.values,
+        emailAddress:
+          existingEmailAddress?.id ??
+          requireWrittenRecord(writtenRecords, emailAddressRecordIndex).id,
+        audience:
+          existingAudience?.id ?? requireWrittenRecord(writtenRecords, audienceRecordIndex).id,
+        status: "subscribed",
+        consentedAt: envelope.receivedAt,
+        ...sourceValues,
+      },
+      subscriptionEntity,
+      storage,
+    );
+
+  if (existingSubscription) {
+    plans.push({
+      kind: "patch",
+      record: existingSubscription,
+      values: subscriptionValues,
+    });
+  } else {
+    plans.push({
+      kind: "create",
+      entity: "subscription",
+      values: subscriptionValues,
+    });
+  }
+
+  return writeRecordSetForCommandOperationOutcome(
+    storage,
+    requiredWriteIdentity(envelope),
+    plans,
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(storage, schema, entity, recordValues, options);
+    },
+    { now: envelope.receivedAt },
+  );
+}
+
+const defaultAudienceKey = "default";
+
+function requireSubscribeEntity(schema: AppSchema, entityName: string): EntitySchema {
+  const entity = schema.entities[entityName];
+
+  if (!entity) {
+    throw new Error(`Subscribe operation requires entity "${entityName}".`);
+  }
+
+  return entity;
+}
+
+function parseSubscribeEmail(value: RecordValues[string] | undefined) {
+  if (typeof value !== "string") {
+    throw new BadRequestError('Subscribe operation public input "email" must be text.');
+  }
+
+  const address = value.trim();
+  const normalizedAddress = address.toLowerCase();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedAddress)) {
+    throw new BadRequestError('Subscribe operation public input "email" must be an email address.');
+  }
+
+  return { address, normalizedAddress };
+}
+
+function findExistingEmailContact(
+  storage: DurableObjectStorage,
+  emailAddress: StoredRecord | undefined,
+) {
+  const contactId = emailAddress?.values.contact;
+
+  if (typeof contactId !== "string") {
+    return undefined;
+  }
+
+  const contact = getStoredRecord(storage, contactId);
+
+  return contact?.entity === "contact" && !contact.deletedAt ? contact : undefined;
+}
+
+function findActiveSubscription(
+  storage: DurableObjectStorage,
+  emailAddressId: string,
+  audienceId: string,
+) {
+  return getActiveRecordsByEntity(storage, "subscription").find(
+    (record) =>
+      record.values.emailAddress === emailAddressId && record.values.audience === audienceId,
+  );
+}
+
+function findActiveRecordByField(
+  storage: DurableObjectStorage,
+  entity: string,
+  field: string,
+  value: RecordValues[string],
+) {
+  return getActiveRecordsByEntity(storage, entity).find((record) => record.values[field] === value);
+}
+
+function subscribeSourceValues(envelope: OperationInvocationEnvelope): RecordValues {
   if (envelope.appStorageIdentity.kind === "instanceControlPlane") {
     throw new BadRequestError("Public operations are only available for app storage.");
   }
 
   const host = parseNonEmptyString("Public operation source host", envelope.source.host);
   const path = parseNonEmptyString("Public operation source path", envelope.source.path);
+  const values: RecordValues = {
+    sourceKind: "publicOperation",
+    sourceTargetKind: envelope.appStorageIdentity.kind,
+    sourcePackageAppKey: envelope.appStorageIdentity.packageAppKey,
+    sourceSchemaKey: envelope.appStorageIdentity.sourceSchemaKey,
+    sourceApiRoutePrefix: envelope.appStorageIdentity.apiRoutePrefix,
+    sourceOperationKey: envelope.operation.canonicalKey,
+    sourceHost: host,
+    sourcePath: path,
+  };
 
-  if (envelope.appStorageIdentity.kind === "schemaKey") {
-    return {
-      operationKey: envelope.operation.canonicalKey,
-      host,
-      path,
-      target: {
-        kind: "schemaKey",
-        packageAppKey: envelope.appStorageIdentity.packageAppKey,
-        sourceSchemaKey: envelope.appStorageIdentity.sourceSchemaKey,
-        apiRoutePrefix: envelope.appStorageIdentity.apiRoutePrefix,
-      },
-      ...(envelope.source.siteBlockId === undefined
-        ? {}
-        : { siteBlockId: envelope.source.siteBlockId }),
-    };
+  if (envelope.appStorageIdentity.kind === "appInstall") {
+    values.sourceInstallId = envelope.appStorageIdentity.installId;
   }
 
-  return {
-    operationKey: envelope.operation.canonicalKey,
-    host,
-    path,
-    target: {
-      kind: "appInstall",
-      installId: envelope.appStorageIdentity.installId,
-      packageAppKey: envelope.appStorageIdentity.packageAppKey,
-      sourceSchemaKey: envelope.appStorageIdentity.sourceSchemaKey,
-      apiRoutePrefix: envelope.appStorageIdentity.apiRoutePrefix,
-    },
-    ...(envelope.source.siteBlockId === undefined
-      ? {}
-      : { siteBlockId: envelope.source.siteBlockId }),
-  };
+  if (envelope.source.siteBlockId !== undefined) {
+    values.sourceSiteBlockId = envelope.source.siteBlockId;
+  }
+
+  return values;
+}
+
+function pushPlan(plans: ActionRecordWritePlan[], plan: ActionRecordWritePlan) {
+  plans.push(plan);
+
+  return plans.length - 1;
+}
+
+function requireWrittenRecord(records: StoredRecord[], index: number | undefined) {
+  const record = index === undefined ? undefined : records[index];
+
+  if (!record) {
+    throw new Error("Subscribe operation could not resolve a planned record.");
+  }
+
+  return record;
 }
 
 function operationInvocationResponseFromWriteOutcome(
@@ -1364,13 +1534,18 @@ function operationOutput(
     };
   }
 
-  return {
+  const output: OperationCommandOutput = {
     affectedChangeIds: affectedChangeIds(response.changes),
     changes: response.changes,
     cursor: response.cursor,
-    response,
     type: "command",
   };
+
+  if (response.recordPlan !== undefined) {
+    output.recordPlan = response.recordPlan;
+  }
+
+  return output;
 }
 
 function affectedChangeIds(changes: MutationResponse["changes"]) {

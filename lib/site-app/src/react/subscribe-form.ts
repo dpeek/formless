@@ -21,9 +21,7 @@ export type PublicOperationResponse = {
   output: {
     type: "command";
     cursor: number;
-    response: {
-      actionId: string;
-    };
+    affectedChangeIds: string[];
   };
   status: "committed" | "replayed";
 };
@@ -102,8 +100,8 @@ function isPublicOperationResponse(value: unknown): value is PublicOperationResp
     isRecord(value.output) &&
     value.output.type === "command" &&
     typeof value.output.cursor === "number" &&
-    isRecord(value.output.response) &&
-    typeof value.output.response.actionId === "string"
+    Array.isArray(value.output.affectedChangeIds) &&
+    value.output.affectedChangeIds.every((changeId) => typeof changeId === "string")
   );
 }
 
