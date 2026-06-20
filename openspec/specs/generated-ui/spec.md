@@ -210,7 +210,7 @@ summary slots, operation controls, and schema-declared result types.
 ### Requirement: Table Surfaces
 
 The system SHALL render generated table results with field, reference-field,
-computed, invoke-operation, and ordering-handle columns.
+computed, operation-control, and ordering-handle columns.
 
 #### Scenario: Table operation dialog
 
@@ -346,12 +346,12 @@ entity operations and view operation bindings.
 - AND the binding can provide placement and ordering hints without redefining
   the operation input, effect, policy, or audit behavior
 
-#### Scenario: Do not project legacy view actions
+#### Scenario: Project operation controls
 
-- GIVEN a collection view omits operation bindings
+- GIVEN a source schema or view declares operation bindings
 - WHEN generated UI selects presentation models
-- THEN the generated collection controls do not synthesize controls from
-  mutation policy or entity action slots
+- THEN generated controls are selected from source-declared operations and
+  operation bindings
 - AND generated controls invoke source-declared operations as the primary
   browser interaction model
 
@@ -363,9 +363,8 @@ entity operations and view operation bindings.
 - WHEN the user submits the control
 - THEN generated UI invokes a source-declared operation or a runtime-declared
   workspace operation
-- AND generated UI does not call mutation routes, action routes, public action
-  routes, provider routes, or workspace sidecar routes as independent
-  interaction contracts
+- AND generated UI submits operation invocation requests through operation
+  endpoints or runtime operation adapters
 - AND operation response shape drives success, failure, replay, local
   auto-save, and compact status presentation
 
@@ -376,20 +375,17 @@ entity operations and view operation bindings.
 - WHEN the table model is selected
 - THEN table controls are selected from table `operations` bindings referenced
   by `operationControl` columns and available record-scoped operations
-- AND the model does not require `invokeAction` columns or table-local action
-  slots to discover row operation controls
 - AND edit dialogs, disabled reasons, destructive presentation, ordering menus,
   and reference-target editing remain presentation facts on the operation
   binding
 
-#### Scenario: State transitions do not read entity actions
+#### Scenario: State transitions read operation effects
 
 - GIVEN a state-machine field exposes transition controls
 - WHEN generated UI selects transition operation configs
 - THEN the machine, transition, availability, input, and response handling come
   from operation-native transition effect facts
-- AND generated UI does not read entity action metadata to resolve the
-  transition target
+- AND operation command kind helpers expose operation-native selection contracts
 
 ### Requirement: Operations And Tree Composition
 

@@ -102,11 +102,7 @@ const workspaceFixtureTaskSourceSchema = {
         title: { type: "text", required: true, label: "Title" },
         done: { type: "boolean", required: true, label: "Done" },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: true },
-      },
+      operations: writeOperations("Task", ["title", "done"], { delete: true }),
     },
   },
   queries: {
@@ -142,6 +138,48 @@ const workspaceFixtureTaskSourceSchema = {
     },
   },
 };
+
+function writeOperations(label: string, fields: string[], options: { delete?: boolean } = {}) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(options.delete
+      ? {
+          delete: {
+            label: `Delete ${label}`,
+            kind: "delete",
+            scope: "record",
+            effect: { type: "tombstoneRecord" },
+            output: { type: "delete" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        }
+      : {}),
+  };
+}
 const workspaceFixtureTaskSeedRecords = [
   workspaceFixtureTaskRecord("rec_task_overdue", "Review overdue proposal", false),
   workspaceFixtureTaskRecord("rec_task_today", "Plan today's delivery", false),

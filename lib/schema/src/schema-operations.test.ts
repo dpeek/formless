@@ -11,7 +11,6 @@ import {
   isEntityOperationCommandEffect,
   isEntityOperationReadKind,
   isEntityOperationWriteKind,
-  isLegacyEntityOperationCommandEffect,
   parseAppSchema,
   parseEntityOperationKey,
   stringifySchema,
@@ -92,8 +91,7 @@ describe("schema entity operations", () => {
           },
           effect: { type: "registeredCommand", kind: "clear-completed", query: "taskCompleted" },
           policy: {
-            actors: ["anonymous"],
-            access: anonymousPublicAccess(),
+            actors: ["owner"],
           },
           audit: { input: "summary" },
         },
@@ -209,70 +207,78 @@ describe("schema entity operations", () => {
     expect(entityOperationCommandEffectKinds).toContain("create-tree-child");
     expect(entityOperationCommandEffectTypes).toEqual(["registeredCommand", "recordPlan"]);
     expect(isEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
-    expect(isLegacyEntityOperationCommandEffect(clearCompletedEffect)).toBe(false);
     expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
-    expect(isLegacyEntityOperationCommandEffect(submitIntakeEffect)).toBe(false);
   });
 
-  it("keeps legacy action-backed command effects parseable as migration input only", () => {
-    const schema = parseAppSchema(
-      schemaWithTaskOperations({
-        clearCompletedTasks: {
-          label: "Clear completed",
-          kind: "command",
-          scope: "collection",
-          target: { query: "taskCompleted" },
-          effect: {
-            type: "runActionKind",
-            kind: "clear-completed",
-            action: "clearCompletedTasks",
-            query: "taskCompleted",
+  it("rejects unsupported action-backed command effects", () => {
+    expect(() =>
+      parseAppSchema(
+        schemaWithTaskOperations({
+          clearCompletedTasks: {
+            label: "Clear completed",
+            kind: "command",
+            scope: "collection",
+            target: { query: "taskCompleted" },
+            effect: {
+              type: "runActionKind",
+              kind: "clear-completed",
+              action: "clearCompletedTasks",
+              query: "taskCompleted",
+            },
+            policy: {
+              actors: ["anonymous"],
+              access: anonymousPublicAccess(),
+            },
+            audit: { input: "summary" },
           },
-          policy: {
-            actors: ["anonymous"],
-            access: anonymousPublicAccess(),
-          },
-          audit: { input: "summary" },
-        },
-      }),
-    );
-    const operation = schema.entities.task?.operations?.clearCompletedTasks;
-    const effect = operation?.effect;
-
-    expect(effect).toEqual({
-      type: "runActionKind",
-      kind: "clear-completed",
-      action: "clearCompletedTasks",
-      query: "taskCompleted",
-    });
-    expect(isEntityOperationCommandEffect(effect)).toBe(false);
-    expect(isLegacyEntityOperationCommandEffect(effect)).toBe(true);
-    expect(operation?.policy).toMatchObject({ actors: ["anonymous"] });
-    expect(operation?.output).toEqual({ type: "command" });
-    expect(operation?.audit).toEqual({ input: "summary" });
+        }),
+      ),
+    ).toThrow('has unsupported type "runActionKind"');
   });
 
-  it("does not synthesize operations or operation bindings from mutation policies, entity actions, or public action metadata", () => {
-    const schema = parseAppSchema(
-      baseTaskSchema({
-        entities: {
-          task: taskEntity({
-            actions: {
-              subscribePublic: {
-                label: "Subscribe",
-                kind: "subscribe",
-                access: anonymousPublicAccess(),
-                publicInput: {
-                  fields: {
-                    email: { type: "text", required: true, label: "Email" },
+  it("rejects source entity actions and mutation policies", () => {
+    expect(() =>
+      parseAppSchema(
+        baseTaskSchema({
+          entities: {
+            task: taskEntity({
+              actions: {
+                subscribePublic: {
+                  label: "Subscribe",
+                  kind: "subscribe",
+                  access: anonymousPublicAccess(),
+                  publicInput: {
+                    fields: {
+                      email: { type: "text", required: true, label: "Email" },
+                    },
                   },
                 },
               },
-            },
-          }),
-        },
-      }),
-    );
+            }),
+          },
+        }),
+      ),
+    ).toThrow('Entity "task" has unsupported key "actions"');
+
+    expect(() =>
+      parseAppSchema(
+        baseTaskSchema({
+          entities: {
+            task: taskEntity({
+              mutations: {
+                create: { enabled: true },
+                patch: { enabled: true },
+                delete: { enabled: false },
+              },
+            }),
+          },
+        }),
+      ),
+    ).toThrow('Entity "task" has unsupported key "mutations"');
+  });
+
+  it("does not synthesize operation bindings without source-declared operations", () => {
+    const schema = parseAppSchema(baseTaskSchema());
     const view = schema.views.taskHome;
 
     if (view?.type !== "collection") {
@@ -280,10 +286,11 @@ describe("schema entity operations", () => {
     }
 
     expect(schema.entities.task?.operations).toBeUndefined();
-    expect(schema.entities.task?.actions?.subscribePublic).toMatchObject({
-      kind: "subscribe",
-      access: anonymousPublicAccess(),
-      publicInput: { fields: { email: { type: "text", required: true, label: "Email" } } },
+    expect(schema.entities.task?.actions).toBeUndefined();
+    expect(schema.entities.task?.mutations).toEqual({
+      create: { enabled: false },
+      patch: { enabled: false },
+      delete: { enabled: false },
     });
     expect(view.operations).toBeUndefined();
 
@@ -298,6 +305,45 @@ describe("schema entity operations", () => {
         }),
       ),
     ).toThrow('references unknown operation "task.clearCompletedTasks"');
+  });
+
+  it("projects runtime action and mutation state from source-declared operations", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskOperations({
+        create: {
+          kind: "create",
+          scope: "collection",
+          effect: { type: "createRecord" },
+        },
+        update: {
+          kind: "update",
+          scope: "record",
+          effect: { type: "patchRecord" },
+        },
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "command",
+          scope: "collection",
+          target: { query: "taskCompleted" },
+          effect: {
+            type: "registeredCommand",
+            kind: "clear-completed",
+            query: "taskCompleted",
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.mutations).toEqual({
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    });
+    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
+      label: "Clear completed",
+      kind: "clear-completed",
+      target: { query: "taskCompleted" },
+    });
   });
 
   it("keeps browser-hidden collection operation bindings parseable for client selection", () => {
@@ -739,11 +785,6 @@ function schemaWithTaskOperations(operations: Record<string, unknown>) {
     entities: {
       task: {
         ...taskEntity(),
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: true },
-        },
         operations,
       },
     },
@@ -755,11 +796,6 @@ function schemaWithTaskLogOperations(operations: Record<string, unknown>) {
     entities: {
       task: {
         ...taskEntity(),
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: true },
-        },
         operations,
       },
       "task-log": taskLogEntity(),
@@ -851,11 +887,6 @@ function taskLogEntity() {
       sourcePath: { type: "text", required: false, label: "Source path" },
       occurredAt: { type: "date", required: true, label: "Occurred at" },
     },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    },
   };
 }
 
@@ -936,18 +967,6 @@ function taskEntity(overrides: Record<string, unknown> = {}) {
       title: { type: "text", required: true, label: "Title" },
       done: { type: "boolean", required: true, label: "Done", default: false },
       dueDate: { type: "date", required: false, label: "Due date" },
-    },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
-    actions: {
-      clearCompletedTasks: {
-        label: "Clear completed",
-        kind: "clear-completed",
-        target: { query: "taskCompleted" },
-      },
     },
     ...overrides,
   };

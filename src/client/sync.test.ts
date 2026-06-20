@@ -47,7 +47,7 @@ import type {
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
-import type { AppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import type { InstallableAppPackage } from "@dpeek/formless-installed-apps";
 import {
   rateSourceSchema as rateCardSchema,
@@ -301,7 +301,7 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
-  it("sends browser replica compatibility facts with operation writes", async () => {
+  it("sends browser replica schema provenance facts with operation writes", async () => {
     const storedSourceSchemaHash =
       "sha256:9999999999999999999999999999999999999999999999999999999999999999" as const;
 
@@ -2332,14 +2332,12 @@ function schemaWithSummary() {
     notes: { type: "text", required: false },
   } satisfies AppSchema["entities"][string]["fields"];
 
-  return {
+  return parseAppSchema({
     version: 1,
     entities: {
       task: {
         label: "Planner task",
         fields,
-        mutations: defaultMutations(),
-        actions: appSchema.entities.task.actions,
         operations: taskOperations("Planner task", fields),
       },
     },
@@ -2347,7 +2345,8 @@ function schemaWithSummary() {
     itemViews: appSchema.itemViews,
     tableViews: appSchema.tableViews,
     views: appSchema.views,
-  } satisfies AppSchema;
+    screens: appSchema.screens,
+  });
 }
 
 function taskOperations(
@@ -2381,14 +2380,6 @@ function taskOperations(
       audit: { input: "summary" },
     },
     ...(clearCompletedTasks === undefined ? {} : { clearCompletedTasks }),
-  };
-}
-
-function defaultMutations(): AppSchema["entities"][string]["mutations"] {
-  return {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
   };
 }
 

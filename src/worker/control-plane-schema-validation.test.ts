@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { ActionResponse } from "../shared/protocol.ts";
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema } from "../test/schema-apps.ts";
@@ -11,6 +10,7 @@ import {
 } from "../test/authority-write.ts";
 import { filterEntityActionResponseForActor, validateEntityActionRequest } from "./actions.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import type { ActionResponse } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -568,7 +568,7 @@ async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", lab
 function instanceRouteRuntimeSchema(): AppSchema {
   const controlPlaneSchema: AppSchema = instanceControlPlaneSchema;
 
-  return {
+  const sourceSchema = {
     ...taskSourceSchema,
     entities: {
       ...taskSourceSchema.entities,
@@ -587,7 +587,9 @@ function instanceRouteRuntimeSchema(): AppSchema {
         },
       },
     },
-  };
+  } as unknown as AppSchema;
+
+  return sourceSchema;
 }
 
 function mountRouteValues(appInstall: string, overrides: Record<string, unknown> = {}) {
@@ -692,19 +694,28 @@ function controlPlaneRuntimeSchema(): AppSchema {
     enabled: { type: "boolean", required: true, default: true },
   } satisfies AppSchema["entities"][string]["fields"];
 
-  return {
+  const sourceSchema = {
     ...taskSourceSchema,
     entities: {
       ...taskSourceSchema.entities,
       task: {
         ...task,
-        actions: {
-          ...task.actions,
+        operations: {
+          ...task.operations,
           runnerClear: {
             label: "Runner clear",
-            kind: "clear-completed",
+            kind: "command",
+            scope: "collection",
             target: { query: "taskCompleted" },
-            exposure: {
+            effect: {
+              type: "registeredCommand",
+              kind: "clear-completed",
+              query: "taskCompleted",
+            },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+            policy: {
               actors: ["runner"],
               responseFields: { runner: ["done"] },
             },
@@ -714,32 +725,17 @@ function controlPlaneRuntimeSchema(): AppSchema {
       "app-install": {
         label: "App install",
         fields: appInstallFields,
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: writeOperations("App install", appInstallFields),
       },
       "app-route": {
         label: "App route",
         fields: appRouteFields,
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: writeOperations("App route", appRouteFields),
       },
       "deploy-attempt": {
         label: "Deploy attempt",
         fields: {
           label: { type: "text", required: true, label: "Label" },
-        },
-        mutations: {
-          create: { enabled: false },
-          patch: { enabled: false },
-          delete: { enabled: false },
         },
       },
     },
@@ -772,6 +768,8 @@ function controlPlaneRuntimeSchema(): AppSchema {
       },
     },
   };
+
+  return sourceSchema as unknown as AppSchema;
 }
 
 function routeValues(

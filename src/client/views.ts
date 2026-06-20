@@ -19,12 +19,12 @@ import type {
   ScreenNavigationSchema,
   ScreenSchema,
   ToManyRelationshipSchema,
-  TableActionPresentation,
-  TableActionVariant,
   TableColumnAlign,
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
+  TableOperationControlPresentation,
+  TableOperationControlVariant,
   ViewSchema,
 } from "@dpeek/formless-schema";
 import { selectHomeCollectionShell } from "./collection-shell-model.ts";
@@ -133,7 +133,7 @@ export type TableOperationControlBaseConfig = {
   bindingName: string;
   operation?: EntityOperationPresentationConfig;
   label: string;
-  variant: TableActionVariant;
+  variant: TableOperationControlVariant;
   disabled: boolean;
   disabledReason?: string;
 };
@@ -185,7 +185,7 @@ export type OperationControlTableColumnConfig = TableColumnBaseConfig & {
   type: "operationControl";
   headerLabel: string;
   controls: TableOperationControlConfig[];
-  presentation: TableActionPresentation;
+  presentation: TableOperationControlPresentation;
   includeOrdering: boolean;
   ordering?: TableOrderingConfig;
 };

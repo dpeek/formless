@@ -39,17 +39,6 @@
           "format": "color"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueSiteKey": {
           "kind": "unique",
@@ -173,7 +162,7 @@
           "label": "Body",
           "format": "markdown"
         },
-        "actionName": {
+        "operationName": {
           "type": "text",
           "required": false,
           "label": "Operation"
@@ -259,17 +248,6 @@
           "min": 0
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": true
-        }
-      },
       "operations": {
         "create": {
           "label": "Create Block",
@@ -286,8 +264,8 @@
               "body": {
                 "field": "body"
               },
-              "actionName": {
-                "field": "actionName"
+              "operationName": {
+                "field": "operationName"
               },
               "buttonLabel": {
                 "field": "buttonLabel"
@@ -352,8 +330,8 @@
               "body": {
                 "field": "body"
               },
-              "actionName": {
-                "field": "actionName"
+              "operationName": {
+                "field": "operationName"
               },
               "buttonLabel": {
                 "field": "buttonLabel"
@@ -455,31 +433,6 @@
           "type": "text",
           "required": false,
           "label": "Slot"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
-      "actions": {
-        "addTreeChild": {
-          "label": "Add child",
-          "kind": "create-tree-child",
-          "relationship": "blockPlacements",
-          "childField": "block",
-          "orderField": "order"
-        },
-        "removeTreePlacement": {
-          "label": "Remove child",
-          "kind": "remove-tree-placement",
-          "relationship": "blockPlacements"
         }
       },
       "operations": {
@@ -606,17 +559,6 @@
           "label": "Label"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "operations": {
         "update": {
           "label": "Update Contact",
@@ -662,17 +604,6 @@
           "required": true,
           "label": "Message",
           "format": "longText"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": false
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "operations": {
@@ -744,17 +675,6 @@
           "label": "Normalized address"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueNormalizedAddress": {
           "kind": "unique",
@@ -806,17 +726,6 @@
           "type": "text",
           "required": true,
           "label": "Label"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "constraints": {
@@ -956,45 +865,10 @@
           "label": "Site block"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueEmailAudience": {
           "kind": "unique",
           "fields": ["emailAddress", "audience"]
-        }
-      },
-      "actions": {
-        "subscribe": {
-          "label": "Subscribe",
-          "kind": "subscribe",
-          "access": {
-            "actor": "anonymous",
-            "challenge": {
-              "kind": "turnstile"
-            },
-            "origin": {
-              "kind": "same-origin"
-            }
-          },
-          "publicInput": {
-            "fields": {
-              "email": {
-                "type": "text",
-                "required": true,
-                "label": "Email"
-              }
-            }
-          }
         }
       },
       "operations": {
@@ -1255,7 +1129,7 @@
         },
         "subscribeForm": {
           "label": "Subscribe form",
-          "fields": ["label", "body", "actionName", "buttonLabel"]
+          "fields": ["label", "body", "operationName", "buttonLabel"]
         },
         "group": {
           "label": "Group",
@@ -1700,7 +1574,7 @@
               "editor": "markdown",
               "commit": "field-commit"
             },
-            "actionName": {
+            "operationName": {
               "editor": "text",
               "commit": "field-commit"
             },
@@ -1846,7 +1720,7 @@
               "editor": "markdown",
               "commit": "field-commit"
             },
-            "actionName": {
+            "operationName": {
               "editor": "text",
               "commit": "field-commit"
             },
@@ -2619,7 +2493,7 @@
             "body": {
               "editor": "markdown"
             },
-            "actionName": {
+            "operationName": {
               "editor": "text"
             },
             "buttonLabel": {
@@ -2839,7 +2713,7 @@
               "editor": "markdown",
               "commit": "field-commit"
             },
-            "actionName": {
+            "operationName": {
               "editor": "text",
               "commit": "field-commit"
             },

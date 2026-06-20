@@ -50,23 +50,6 @@
           }
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true,
-          "afterCreate": [
-            {
-              "entity": "rate",
-              "action": "regenerateMissingRates"
-            }
-          ]
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "operations": {
         "create": {
           "label": "Create Resource",
@@ -164,23 +147,6 @@
           "label": "Maximum margin",
           "default": 0.6,
           "min": 0
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true,
-          "afterCreate": [
-            {
-              "entity": "rate",
-              "action": "regenerateMissingRates"
-            }
-          ]
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "operations": {
@@ -333,37 +299,10 @@
           }
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueRatePair": {
           "kind": "unique",
           "fields": ["resource", "card"]
-        }
-      },
-      "actions": {
-        "regenerateMissingRates": {
-          "label": "Regenerate missing rates",
-          "kind": "create-missing-join-records",
-          "join": {
-            "left": {
-              "field": "resource",
-              "query": "resourceAll"
-            },
-            "right": {
-              "field": "card",
-              "query": "cardAll"
-            }
-          }
         }
       },
       "operations": {

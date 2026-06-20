@@ -16,18 +16,25 @@ import {
 } from "@dpeek/formless-schema";
 import type { AppSchema, EntityActionCapabilities, EntityActionKind } from "@dpeek/formless-schema";
 
-describe("schema mutation policies", () => {
-  it("preserves delete policy through stringify", () => {
+describe("schema operation-derived mutation projection", () => {
+  it("derives mutation policy from operations and omits it from source stringify", () => {
     const schema = parseAppSchema(baseSchema());
     const enabledSchema = parseAppSchema(
       baseSchema({
         entities: {
           task: {
             ...defaultEntities().task,
-            mutations: {
-              create: { enabled: true },
-              patch: { enabled: true },
-              delete: { enabled: true },
+            operations: {
+              ...defaultEntities().task.operations,
+              delete: {
+                label: "Delete Task",
+                kind: "delete",
+                scope: "record",
+                effect: { type: "deleteRecord" },
+                output: { type: "delete" },
+                idempotency: { required: true },
+                audit: { input: "summary" },
+              },
             },
           },
         },
@@ -37,10 +44,10 @@ describe("schema mutation policies", () => {
     const serializedEnabled = JSON.parse(stringifySchema(enabledSchema));
 
     expect(schema.entities.task?.mutations.delete).toEqual({ enabled: false });
-    expect(serialized.entities.task.mutations.delete).toEqual({ enabled: false });
+    expect(serialized.entities.task).not.toHaveProperty("mutations");
     expect(parseAppSchema(serialized)).toEqual(schema);
     expect(enabledSchema.entities.task?.mutations.delete).toEqual({ enabled: true });
-    expect(serializedEnabled.entities.task.mutations.delete).toEqual({ enabled: true });
+    expect(serializedEnabled.entities.task).not.toHaveProperty("mutations");
     expect(parseAppSchema(serializedEnabled)).toEqual(enabledSchema);
   });
 });
@@ -57,11 +64,7 @@ describe("schema entity names", () => {
               title: { type: "text", required: true, label: "Title" },
               task: { type: "reference", required: false, to: "task", displayField: "title" },
             },
-            mutations: {
-              create: { enabled: true },
-              patch: { enabled: true },
-              delete: { enabled: false },
-            },
+            operations: testWriteOperations("Project note", ["title", "task"]),
           },
         },
         queries: {
@@ -152,11 +155,7 @@ describe("schema entity names", () => {
               [entityKey]: {
                 label: "Invalid",
                 fields: { title: { type: "text", required: true } },
-                mutations: {
-                  create: { enabled: true },
-                  patch: { enabled: true },
-                  delete: { enabled: false },
-                },
+                operations: testWriteOperations("Invalid", ["title"]),
               },
             },
           }),
@@ -254,11 +253,7 @@ function minimalTextEntity(label: string) {
   return {
     label,
     fields: { title: { type: "text", required: true, label: "Title" } },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
+    operations: testWriteOperations(label, ["title"]),
   } as const;
 }
 
@@ -4098,7 +4093,7 @@ describe("schema collection views", () => {
     ).toThrow('query "ratesForSelectedCard" must filter relationship field "rate.card"');
   });
 
-  it("rejects context values in context selector and entity action target queries", () => {
+  it("rejects context values in context selectors and invalid operation command targets", () => {
     expect(() =>
       parseAppSchema(
         scopedRateSchema({
@@ -4145,18 +4140,30 @@ describe("schema collection views", () => {
                 ...scopedRateEntities().rate.fields,
                 done: { type: "boolean", required: true, default: false },
               },
-              actions: {
+              operations: {
+                ...scopedRateEntities().rate.operations,
                 clearCompletedRates: {
                   label: "Clear completed",
-                  kind: "clear-completed",
+                  kind: "command",
+                  scope: "collection",
                   target: { query: "ratesForSelectedCard" },
+                  effect: {
+                    type: "registeredCommand",
+                    kind: "clear-completed",
+                    query: "ratesForSelectedCard",
+                  },
+                  output: { type: "command" },
+                  idempotency: { required: true },
+                  audit: { input: "summary" },
                 },
               },
             },
           },
         }),
       ),
-    ).toThrow('target query "ratesForSelectedCard" must not require context');
+    ).toThrow(
+      'Entity operation "rate.clearCompletedRates" effect kind "clear-completed" target must be value.done eq true.',
+    );
   });
 
   it("rejects context-default create operations without a matching collection context", () => {
@@ -4590,13 +4597,21 @@ describe("source schemas", () => {
         },
       },
     };
-    task.actions = {
-      ...task.actions,
+    task.operations = {
+      ...task.operations,
       escalatePriority: {
         label: "Escalate priority",
-        kind: "transition-state",
-        machine: "priorityFlow",
-        transition: "escalate",
+        kind: "command",
+        scope: "record",
+        effect: {
+          type: "registeredCommand",
+          kind: "transition-state",
+          machine: "priorityFlow",
+          transition: "escalate",
+        },
+        output: { type: "command" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
       },
     };
 
@@ -4915,7 +4930,7 @@ describe("personal site sample schema", () => {
       label: "Body",
       format: "markdown",
     });
-    expect(schema.entities.block?.fields.actionName).toEqual({
+    expect(schema.entities.block?.fields.operationName).toEqual({
       type: "text",
       required: false,
       label: "Operation",
@@ -4952,7 +4967,7 @@ describe("personal site sample schema", () => {
       "type",
       "label",
       "body",
-      "actionName",
+      "operationName",
       "buttonLabel",
       "href",
       "mediaAssetId",
@@ -5064,7 +5079,7 @@ describe("personal site sample schema", () => {
         projectList: { label: "Project list", fields: ["label"] },
         subscribeForm: {
           label: "Subscribe form",
-          fields: ["label", "body", "actionName", "buttonLabel"],
+          fields: ["label", "body", "operationName", "buttonLabel"],
         },
         header: { label: "Header", fields: ["label"] },
         headerPrimary: { label: "Header primary", fields: ["label"] },
@@ -5708,7 +5723,7 @@ describe("personal site sample schema", () => {
       projectList: { label: "Project list", fields: ["label"] },
       subscribeForm: {
         label: "Subscribe form",
-        fields: ["label", "body", "actionName", "buttonLabel"],
+        fields: ["label", "body", "operationName", "buttonLabel"],
       },
     });
 
@@ -5768,7 +5783,7 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             body: { editor: "markdown", commit: "field-commit" },
-            actionName: { editor: "text", commit: "field-commit" },
+            operationName: { editor: "text", commit: "field-commit" },
             buttonLabel: { editor: "text", commit: "field-commit" },
           },
         },
@@ -5838,7 +5853,7 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         body: { editor: "markdown" },
-        actionName: { editor: "text" },
+        operationName: { editor: "text" },
         buttonLabel: { editor: "text" },
       },
     });
@@ -5878,7 +5893,7 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         body: { editor: "markdown", commit: "field-commit" },
-        actionName: { editor: "text", commit: "field-commit" },
+        operationName: { editor: "text", commit: "field-commit" },
         buttonLabel: { editor: "text", commit: "field-commit" },
       },
     });
@@ -6579,8 +6594,8 @@ describe("schema relationships", () => {
   });
 });
 
-describe("schema entity actions", () => {
-  it("exposes module-owned capabilities for every action kind", () => {
+describe("schema operation command projection", () => {
+  it("exposes module-owned capabilities for every command effect kind", () => {
     const capabilitiesByKind = {
       "clear-completed": { createAfterCreateHook: false, publicExecution: false },
       "create-missing-join-records": { createAfterCreateHook: true, publicExecution: false },
@@ -6597,7 +6612,7 @@ describe("schema entity actions", () => {
     }
   });
 
-  it("accepts valid clear-completed actions that target named queries", () => {
+  it("projects registered command operations as runtime action facts", () => {
     const schema = parseAppSchema(baseSchema());
 
     expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
@@ -6607,7 +6622,7 @@ describe("schema entity actions", () => {
     });
   });
 
-  it("accepts anonymous subscribe action access and public input", () => {
+  it("projects anonymous subscribe operation policy and input", () => {
     const schema = parseAppSchema(
       baseSchema({
         entities: {
@@ -6633,15 +6648,39 @@ describe("schema entity actions", () => {
     });
   });
 
-  it("rejects invalid public action policies and public input fields", () => {
+  it("rejects unsupported source action declarations", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "taskCompleted" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Entity "task" has unsupported key "actions"');
+  });
+
+  it("rejects invalid public operation policies and public input fields", () => {
     expect(() =>
       parseAppSchema(
         baseSchema({
           entities: {
             ...defaultEntities(),
             subscriber: subscribeEntity({
-              subscribe: subscribeAction({
-                access: { ...anonymousPublicAccess(), actor: "authenticated" },
+              subscribe: subscribeOperation({
+                policy: {
+                  actors: ["anonymous"],
+                  access: { ...anonymousPublicAccess(), actor: "authenticated" },
+                },
               }),
             }),
           },
@@ -6655,10 +6694,13 @@ describe("schema entity actions", () => {
           entities: {
             ...defaultEntities(),
             subscriber: subscribeEntity({
-              subscribe: subscribeAction({
-                access: {
-                  ...anonymousPublicAccess(),
-                  challenge: { kind: "none" },
+              subscribe: subscribeOperation({
+                policy: {
+                  actors: ["anonymous"],
+                  access: {
+                    ...anonymousPublicAccess(),
+                    challenge: { kind: "none" },
+                  },
                 },
               }),
             }),
@@ -6673,10 +6715,13 @@ describe("schema entity actions", () => {
           entities: {
             ...defaultEntities(),
             subscriber: subscribeEntity({
-              subscribe: subscribeAction({
-                access: {
-                  ...anonymousPublicAccess(),
-                  origin: { kind: "any" },
+              subscribe: subscribeOperation({
+                policy: {
+                  actors: ["anonymous"],
+                  access: {
+                    ...anonymousPublicAccess(),
+                    origin: { kind: "any" },
+                  },
                 },
               }),
             }),
@@ -6691,8 +6736,8 @@ describe("schema entity actions", () => {
           entities: {
             ...defaultEntities(),
             subscriber: subscribeEntity({
-              subscribe: subscribeAction({
-                publicInput: {
+              subscribe: subscribeOperation({
+                input: {
                   fields: {
                     email: { type: "reference", required: true, to: "subscriber" },
                   },
@@ -6702,205 +6747,50 @@ describe("schema entity actions", () => {
           },
         }),
       ),
-    ).toThrow('publicInput fields.email has unsupported type "reference"');
+    ).toThrow('has unsupported type "reference"');
   });
 
-  it("rejects anonymous actions without public input", () => {
+  it("rejects anonymous operation policy without input", () => {
     expect(() =>
       parseAppSchema(
         baseSchema({
           entities: {
             ...defaultEntities(),
             subscriber: subscribeEntity({
-              subscribe: subscribeAction({ publicInput: undefined }),
+              subscribe: subscribeOperation({ input: undefined }),
             }),
           },
         }),
       ),
-    ).toThrow("with anonymous access must declare publicInput");
+    ).toThrow("anonymous actor policy requires explicit input");
   });
 
-  it("rejects public access on action kinds without public execution", () => {
+  it("rejects public access on command effects without public execution", () => {
     expect(() =>
       parseAppSchema(
         baseSchema({
           entities: {
             task: {
               ...defaultEntities().task,
-              actions: {
+              operations: {
+                ...defaultEntities().task.operations,
                 clearCompletedTasks: {
-                  ...defaultEntities().task.actions.clearCompletedTasks,
-                  access: anonymousPublicAccess(),
-                  publicInput: publicEmailInput(),
+                  ...defaultEntities().task.operations.clearCompletedTasks,
+                  input: publicEmailInput(),
+                  policy: {
+                    actors: ["anonymous"],
+                    access: anonymousPublicAccess(),
+                  },
                 },
               },
             },
           },
         }),
       ),
-    ).toThrow('kind "clear-completed" is not eligible for public execution');
+    ).toThrow("command effect is not eligible for public execution");
   });
 
-  it("rejects invalid action names, labels, kinds, and unsupported keys", () => {
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                "": {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                  target: { query: "taskCompleted" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("action names must be non-empty");
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "",
-                  kind: "clear-completed",
-                  target: { query: "taskCompleted" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("label must be a non-empty string");
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "archive",
-                  target: { query: "taskCompleted" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('has unsupported kind "archive"');
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                  target: { query: "taskCompleted" },
-                  debug: true,
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('has unsupported key "debug"');
-  });
-
-  it("rejects missing, unknown, and cross-entity target queries", () => {
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("target must be an object");
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                  target: { query: "missing" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('target references unknown query "missing"');
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            ...defaultEntities(),
-            note: {
-              ...noteEntity(),
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                  target: { query: "taskCompleted" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('target query "taskCompleted" must use entity "note"');
-  });
-
-  it("rejects clear-completed targets that do not resolve to done eq true", () => {
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              actions: {
-                clearCompletedTasks: {
-                  label: "Clear completed",
-                  kind: "clear-completed",
-                  target: { query: "taskActive" },
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("target must be value.done eq true");
-  });
-
-  it("accepts create-missing-join-records actions over reference fields", () => {
+  it("accepts create-missing-join-records operations over reference fields", () => {
     const entities = scopedRateEntities();
     const schema = parseAppSchema(
       scopedRateSchema({
@@ -6908,8 +6798,9 @@ describe("schema entity actions", () => {
           ...entities,
           rate: {
             ...entities.rate,
-            actions: {
-              regenerateMissingRates: rateJoinAction(),
+            operations: {
+              ...entities.rate.operations,
+              regenerateMissingRates: rateJoinOperation(),
             },
           },
         },
@@ -6919,7 +6810,7 @@ describe("schema entity actions", () => {
     expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual(rateJoinAction());
   });
 
-  it("accepts selected join actions over many-to-many relationships", () => {
+  it("accepts selected join operations over many-to-many relationships", () => {
     const entities = scopedRateEntitiesWithUniqueRatePair();
     const schema = parseAppSchema(
       rateRelationshipSchema({
@@ -6927,7 +6818,10 @@ describe("schema entity actions", () => {
           ...entities,
           rate: {
             ...entities.rate,
-            actions: selectedJoinActions(),
+            operations: {
+              ...entities.rate.operations,
+              ...selectedJoinOperations(),
+            },
           },
         },
       }),
@@ -6945,7 +6839,7 @@ describe("schema entity actions", () => {
     });
   });
 
-  it("rejects selected join actions that do not match a many-to-many through entity", () => {
+  it("rejects selected join operations that do not match a many-to-many through entity", () => {
     const entities = scopedRateEntitiesWithUniqueRatePair();
 
     expect(() =>
@@ -6955,12 +6849,11 @@ describe("schema entity actions", () => {
             ...entities,
             rate: {
               ...entities.rate,
-              actions: {
-                addSelectedRate: {
-                  label: "Add selected rate",
-                  kind: "create-selected-join-record",
+              operations: {
+                ...entities.rate.operations,
+                addSelectedRate: selectedJoinOperation("create-selected-join-record", {
                   relationship: "missing",
-                },
+                }),
               },
             },
           },
@@ -6975,12 +6868,11 @@ describe("schema entity actions", () => {
             ...entities,
             rate: {
               ...entities.rate,
-              actions: {
-                addSelectedRate: {
-                  label: "Add selected rate",
-                  kind: "create-selected-join-record",
+              operations: {
+                ...entities.rate.operations,
+                addSelectedRate: selectedJoinOperation("create-selected-join-record", {
                   relationship: "cardRates",
-                },
+                }),
               },
             },
           },
@@ -6995,12 +6887,9 @@ describe("schema entity actions", () => {
             ...entities,
             card: {
               ...entities.card,
-              actions: {
-                addSelectedRate: {
-                  label: "Add selected rate",
-                  kind: "create-selected-join-record",
-                  relationship: "cardResources",
-                },
+              operations: {
+                ...entities.card.operations,
+                addSelectedRate: selectedJoinOperation("create-selected-join-record"),
               },
             },
           },
@@ -7009,64 +6898,17 @@ describe("schema entity actions", () => {
     ).toThrow('relationship "cardResources" uses through entity "rate", not "card"');
   });
 
-  it("rejects selected join creation without required defaults", () => {
-    const entities = scopedRateEntitiesWithUniqueRatePair();
-
-    expect(() =>
-      parseAppSchema(
-        rateRelationshipSchema({
-          entities: {
-            ...entities,
-            rate: {
-              ...entities.rate,
-              fields: {
-                ...entities.rate.fields,
-                cost: { type: "number", required: true, label: "Cost", min: 0 },
-              },
-              actions: {
-                addSelectedRate: {
-                  label: "Add selected rate",
-                  kind: "create-selected-join-record",
-                  relationship: "cardResources",
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('requires field "cost" to have a default');
-  });
-
-  it("accepts create afterCreate hooks that reference create-missing-join-records actions", () => {
+  it("derives create afterCreate hooks from create-missing-join-records operations", () => {
     const entities = scopedRateEntities();
     const schema = parseAppSchema(
       scopedRateSchema({
         entities: {
           ...entities,
-          resource: {
-            ...entities.resource,
-            mutations: {
-              ...entities.resource.mutations,
-              create: {
-                enabled: true,
-                afterCreate: [{ entity: "rate", action: "regenerateMissingRates" }],
-              },
-            },
-          },
-          card: {
-            ...entities.card,
-            mutations: {
-              ...entities.card.mutations,
-              create: {
-                enabled: true,
-                afterCreate: [{ entity: "rate", action: "regenerateMissingRates" }],
-              },
-            },
-          },
           rate: {
             ...entities.rate,
-            actions: {
-              regenerateMissingRates: rateJoinAction(),
+            operations: {
+              ...entities.rate.operations,
+              regenerateMissingRates: rateJoinOperation(),
             },
           },
         },
@@ -7081,70 +6923,7 @@ describe("schema entity actions", () => {
     ]);
   });
 
-  it("rejects invalid create afterCreate hooks", () => {
-    const entities = scopedRateEntities();
-
-    expect(() =>
-      parseAppSchema(
-        scopedRateSchema({
-          entities: {
-            ...entities,
-            resource: {
-              ...entities.resource,
-              mutations: {
-                ...entities.resource.mutations,
-                create: {
-                  enabled: true,
-                  afterCreate: [{ entity: "missing", action: "regenerateMissingRates" }],
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('create.afterCreate hook 0 references unknown entity "missing"');
-
-    expect(() =>
-      parseAppSchema(
-        scopedRateSchema({
-          entities: {
-            ...entities,
-            resource: {
-              ...entities.resource,
-              mutations: {
-                ...entities.resource.mutations,
-                create: {
-                  enabled: true,
-                  afterCreate: [{ entity: "rate", action: "missing" }],
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow('create.afterCreate hook 0 references unknown action "missing" for entity "rate"');
-
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              mutations: {
-                ...defaultEntities().task.mutations,
-                create: {
-                  enabled: true,
-                  afterCreate: [{ entity: "task", action: "clearCompletedTasks" }],
-                },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("create.afterCreate hook 0 action must create missing join records");
-  });
-
-  it("rejects create-missing-join-records actions without required defaults", () => {
+  it("rejects create-missing-join-records operations without required defaults", () => {
     const entities = scopedRateEntities();
 
     expect(() =>
@@ -7158,8 +6937,9 @@ describe("schema entity actions", () => {
                 ...entities.rate.fields,
                 cost: { type: "number", required: true, label: "Cost", min: 0 },
               },
-              actions: {
-                regenerateMissingRates: rateJoinAction(),
+              operations: {
+                ...entities.rate.operations,
+                regenerateMissingRates: rateJoinOperation(),
               },
             },
           },
@@ -7218,18 +6998,6 @@ function defaultEntities() {
         done: { type: "boolean", required: true, default: false },
         dueDate: { type: "date", required: false },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
-      actions: {
-        clearCompletedTasks: {
-          label: "Clear completed",
-          kind: "clear-completed",
-          target: { query: "taskCompleted" },
-        },
-      },
       operations: {
         create: {
           label: "Create Task",
@@ -7282,27 +7050,32 @@ function defaultEntities() {
   };
 }
 
-function subscribeEntity(actions: Record<string, unknown> = { subscribe: subscribeAction() }) {
+function subscribeEntity(
+  operations: Record<string, unknown> = { subscribe: subscribeOperation() },
+) {
   return {
     label: "Subscriber",
     fields: {
       email: { type: "text", required: true, label: "Email" },
     },
-    mutations: {
-      create: { enabled: false },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    },
-    actions,
+    operations,
   };
 }
 
-function subscribeAction(overrides: Record<string, unknown> = {}) {
+function subscribeOperation(overrides: Record<string, unknown> = {}) {
   return {
     label: "Subscribe",
-    kind: "subscribe",
-    access: anonymousPublicAccess(),
-    publicInput: publicEmailInput(),
+    kind: "command",
+    scope: "collection",
+    input: publicEmailInput(),
+    effect: { type: "registeredCommand", kind: "subscribe" },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+    policy: {
+      actors: ["anonymous"],
+      access: anonymousPublicAccess(),
+    },
     ...overrides,
   };
 }
@@ -7409,11 +7182,6 @@ function noteEntity() {
       title: { type: "text", required: true },
       done: { type: "boolean", required: true, default: false },
     },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
     operations: {
       create: {
         label: "Create Note",
@@ -7486,22 +7254,12 @@ function rateCardEntities(resourceField: Record<string, unknown> = resourceRefer
         },
         price: { type: "number", required: false, label: "Price", min: 0 },
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
       operations: testWriteOperations("Rate", ["resource", "optionalResource", "price"]),
     },
     resource: {
       label: "Resource",
       fields: {
         name: { type: "text", required: true, label: "Name" },
-      },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
       },
       operations: testWriteOperations("Resource", ["name"]),
     },
@@ -7583,11 +7341,6 @@ function scopedRateEntities() {
         },
         unit: unitField(),
       },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      },
       operations: testWriteOperations("Resource", ["name", "kind", "unit"]),
     },
     card: {
@@ -7621,11 +7374,6 @@ function scopedRateEntities() {
           default: 0.6,
           min: 0,
         },
-      },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
       },
       operations: testWriteOperations("Rate card", [
         "name",
@@ -7673,11 +7421,6 @@ function scopedRateEntities() {
             gbp: { label: "GBP" },
           },
         },
-      },
-      mutations: {
-        create: { enabled: true },
-        patch: { enabled: true },
-        delete: { enabled: false },
       },
       operations: testWriteOperations("Rate", [
         "resource",
@@ -8048,18 +7791,47 @@ function rateJoinAction() {
   };
 }
 
-function selectedJoinActions() {
+function rateJoinOperation(overrides: Record<string, unknown> = {}) {
   return {
-    addSelectedRate: {
-      label: "Add selected rate",
-      kind: "create-selected-join-record",
-      relationship: "cardResources",
+    label: "Regenerate missing rates",
+    kind: "command",
+    scope: "collection",
+    effect: {
+      type: "registeredCommand",
+      kind: "create-missing-join-records",
+      join: {
+        left: { field: "resource", query: "resourceAll" },
+        right: { field: "card", query: "cardAll" },
+      },
     },
-    removeSelectedRates: {
-      label: "Remove selected rates",
-      kind: "remove-selected-join-records",
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+    ...overrides,
+  };
+}
+
+function selectedJoinOperations() {
+  return {
+    addSelectedRate: selectedJoinOperation("create-selected-join-record"),
+    removeSelectedRates: selectedJoinOperation("remove-selected-join-records"),
+  };
+}
+
+function selectedJoinOperation(kind: string, overrides: Record<string, unknown> = {}) {
+  return {
+    label: kind === "create-selected-join-record" ? "Add selected rate" : "Remove selected rates",
+    kind: "command",
+    scope: "record",
+    effect: {
+      type: "registeredCommand",
+      kind,
       relationship: "cardResources",
+      ...overrides,
     },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
   };
 }
 

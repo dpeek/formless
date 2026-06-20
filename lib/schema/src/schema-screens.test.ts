@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseAppSchema, type AppSchema } from "./index.ts";
+import { parseAppSchema } from "./index.ts";
 
 describe("schema screens", () => {
   it("parses optional owner and anonymous screen access", () => {
@@ -26,7 +26,7 @@ describe("schema screens", () => {
   });
 });
 
-function screenAccessSchema(): AppSchema {
+function screenAccessSchema() {
   return {
     version: 1,
     entities: {
@@ -35,10 +35,12 @@ function screenAccessSchema(): AppSchema {
         fields: {
           title: { type: "text", required: true, label: "Title" },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
+        operations: {
+          create: {
+            kind: "create",
+            scope: "collection",
+            effect: { type: "createRecord" },
+          },
         },
       },
     },

@@ -6638,11 +6638,6 @@ function generatedDiscriminatedTaskSchema(
           title: { type: "text", required: false, label: "Title" },
           done: { type: "boolean", required: true, label: "Done", default: false },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: {
           create: {
             label: "Create Task",
@@ -6685,11 +6680,7 @@ function generatedDiscriminatedTaskSchema(
           task: { type: "reference", required: true, label: "Task", to: "task" },
           order: { type: "number", required: true, label: "Order" },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
+        operations: sourceWriteOperations("Task placement", ["parent", "task", "order"]),
       },
     },
     relationships: {
@@ -6885,6 +6876,35 @@ function generatedDiscriminatedTaskSchema(
       },
     },
   });
+}
+
+function sourceWriteOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
 }
 
 function discriminatedTaskRecord(

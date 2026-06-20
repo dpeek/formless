@@ -243,11 +243,6 @@ function systemMetadataTableSchema(): AppSchema {
         fields: {
           title: { type: "text", required: true },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: {
           update: {
             label: "Update Task",

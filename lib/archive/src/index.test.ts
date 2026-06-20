@@ -24,11 +24,6 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 const now = "2026-05-23T00:00:00.000Z";
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const editableMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: false },
-};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -38,10 +33,10 @@ const siteSourceSchema = parseAppSchema({
         key: { type: "text", required: true, label: "Key" },
         label: { type: "text", required: true, label: "Label" },
       },
-      mutations: editableMutations,
       constraints: {
         uniqueKey: { kind: "unique", fields: ["key"] },
       },
+      operations: writeOperations("Site", ["key", "label"]),
     },
   },
   queries: {
@@ -77,6 +72,35 @@ const siteSourceSchema = parseAppSchema({
     },
   },
 });
+
+function writeOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
 
 describe("portable archive protocol", () => {
   it("parses the supported version 2 app archive envelope", () => {

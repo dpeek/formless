@@ -18,24 +18,24 @@ The system SHALL isolate Authority storage by storage identity.
 
 - GIVEN a schema-key app such as `tasks`, `site`, or `crm`
 - WHEN the app uses its schema-key API prefix
-- THEN committed records, changes, schema, operation invocations, and action
-  executions belong to the Authority for that schema key
+- THEN committed records, changes, schema, and operation invocations belong to
+  the Authority for that schema key
 - AND writes for another schema key are not visible in this app storage identity
 
 #### Scenario: Installed app identity
 
 - GIVEN an installed app with an app install id
 - WHEN the app uses the installed app API prefix for its package app key and install id
-- THEN committed records, changes, schema, operation invocations, and action
-  executions belong to `app:<installId>` storage
+- THEN committed records, changes, schema, and operation invocations belong to
+  `app:<installId>` storage
 - AND the installed app storage is separate from package-level schema-key storage
 
 #### Scenario: Instance control-plane identity
 
 - GIVEN instance control-plane storage is initialized
 - WHEN instance management records are stored, snapshotted, restored, or synced
-- THEN committed records, changes, schema, operation invocations, and action
-  executions belong to `instance:control-plane` storage
+- THEN committed records, changes, schema, and operation invocations belong to
+  `instance:control-plane` storage
 - AND installed app records remain scoped to their app storage identities
 
 ### Requirement: App Storage API
@@ -221,8 +221,8 @@ The system MUST commit writes only when Authority validation succeeds.
   incompatible-state record
 - WHEN Authority validates the operation
 - THEN the operation is rejected before materialization
-- AND no partial record patch, event record, write-log change, or action
-  execution is stored
+- AND no partial record patch, event record, write-log change, or operation
+  invocation output is stored
 
 ### Requirement: Operation Invocation Boundary
 
@@ -239,8 +239,8 @@ materialization.
   identity, entity, record id or selection when relevant, actor, source
   protocol, source route or UI surface when relevant, input, idempotency key
   when required, and received timestamp
-- AND generic mutation and action protocol routes do not select Authority write
-  operations after the operation migration
+- AND unsupported generic write protocol routes do not select Authority write
+  operations
 - AND anonymous public callers can build an operation invocation envelope only
   through target-scoped public operation routes that resolve a declared entity
   operation on the target app storage identity
@@ -263,8 +263,8 @@ materialization.
 - THEN an idempotency key is required unless a trusted runtime actor supplies an
   explicit runtime-generated write identity
 - AND replaying the same operation for the same app storage identity and
-  idempotency key returns the stored outcome without duplicate change rows,
-  command effect rows, or operation invocation rows
+  idempotency key returns the stored operation output without duplicate change
+  rows, command effect rows, or operation invocation rows
 - AND list and get operations do not require idempotency keys
 
 #### Scenario: Return operation output
@@ -278,9 +278,9 @@ materialization.
 - AND delete operations return the tombstoned record id plus affected change ids
 - AND command operations return operation-native command output plus affected
   change ids
-- AND operation responses do not expose action response types as the command
-  output contract
-- AND replayed write or command operations return the original stored output
+- AND operation responses expose the declared operation output contract
+- AND replayed write or command operations return the original operation-native
+  output
 
 #### Scenario: Materialize record lifecycle timestamps
 
@@ -386,9 +386,9 @@ separate from stored app records and sync change rows.
 The system SHALL keep committed Authority write facts behind a storage
 write-log boundary that owns write outcome classification, operation
 idempotency, change-row append, cursor calculation, and committed change
-readback. Mutation and action materializers may remain internal implementation
-helpers, but they are not Authority write interfaces for callers after the
-operation migration.
+readback. Record and command materializers may remain internal implementation
+helpers, but caller-facing write and replay contracts are operation invocation
+outputs.
 
 #### Scenario: Materializers stay behind operation outputs
 
@@ -397,8 +397,8 @@ operation migration.
 - WHEN an operation is invoked through generated UI, protocol, public, CLI,
   runner, or automation surfaces
 - THEN the caller submits an operation envelope and receives operation output
-- AND internal mutation or action response types are not exported as the
-  operation response contract
+- AND internal materializer return values are adapted before crossing the
+  operation response, replay, or command output boundary
 - AND replay storage is keyed by operation identity and returns the
   operation-native output shape
 
@@ -475,9 +475,9 @@ Authority storage invariants.
 
 #### Scenario: Reset seed
 
-- GIVEN a storage identity has existing records, changes, action executions, and an active schema
+- GIVEN a storage identity has existing records, changes, operation invocations, and an active schema
 - WHEN reset seed runs
-- THEN records, changes, action executions, and the active schema are cleared
+- THEN records, changes, operation invocations, and the active schema are cleared
 - AND the source schema and source seed records are written back as the new durable state
 
 #### Scenario: Storage snapshot export
@@ -500,7 +500,7 @@ Authority storage invariants.
 - THEN the restore commits as an Authority write
 - AND the response has bootstrap shape
 - AND sync cursors remain monotonic
-- AND action executions are cleared
+- AND operation invocations are cleared
 
 ### Requirement: Authority Write Outcome Consumption
 
@@ -558,7 +558,7 @@ Authority-backed app storage identity separate from installed app data.
 #### Scenario: Control-plane identity
 
 - GIVEN instance control-plane storage is initialized
-- WHEN committed records, changes, active schema, or action executions are
+- WHEN committed records, changes, active schema, or operation invocations are
   stored
 - THEN they belong to storage identity `instance:control-plane`
 - AND installed app records remain scoped to their app storage identities
@@ -576,7 +576,7 @@ Authority-backed app storage identity separate from installed app data.
 #### Scenario: App install creation transaction
 
 - GIVEN a package app install is created through the control-plane API
-- WHEN the create action commits
+- WHEN the create operation commits
 - THEN the app install and default route records are committed in the
   control-plane storage identity
 - AND package source schema and source seed records initialize the
@@ -600,7 +600,7 @@ source of schema truth.
 - THEN Authority writes the resolved source schema as the active schema
 - AND Authority records a new schema timestamp for sync, browser reload, and
   workspace state provenance
-- AND committed records, source cursor, action executions, and change rows are
+- AND committed records, source cursor, operation invocations, and change rows are
   not reset or reseeded
 
 #### Scenario: Block incompatible schema refresh

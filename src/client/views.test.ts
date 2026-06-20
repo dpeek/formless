@@ -523,44 +523,6 @@ describe("home view model collections", () => {
         ...appSchema.entities,
         task: {
           ...task,
-          actions: {
-            ...task.actions,
-            runnerApply: {
-              label: "Runner apply",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-              exposure: { actors: ["runner"] },
-            },
-            cliDeploy: {
-              label: "CLI deploy",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-              exposure: { actors: ["cliDeployer"] },
-            },
-            hiddenReview: {
-              label: "Hidden review",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-              exposure: { actors: ["owner"] },
-            },
-            ownerReview: {
-              label: "Owner review",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-              exposure: { actors: ["owner"] },
-            },
-            adminReview: {
-              label: "Admin review",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-              exposure: { actors: ["admin"] },
-            },
-            anonymousReview: {
-              label: "Anonymous review",
-              kind: "clear-completed",
-              target: { query: "taskCompleted" },
-            },
-          },
           operations: {
             ...task.operations,
             runnerApply: {
@@ -633,20 +595,6 @@ describe("home view model collections", () => {
               audit: { input: "summary" },
               policy: { actors: ["admin"] },
             },
-            anonymousReview: {
-              label: "Anonymous review",
-              kind: "command",
-              scope: "collection",
-              effect: {
-                type: "registeredCommand",
-                kind: "clear-completed",
-                query: "taskCompleted",
-              },
-              output: { type: "command" },
-              idempotency: { required: true },
-              audit: { input: "summary" },
-              policy: { actors: ["anonymous"] },
-            },
           },
         },
       },
@@ -661,7 +609,6 @@ describe("home view model collections", () => {
             { operation: "task.hiddenReview" },
             { operation: "task.ownerReview" },
             { operation: "task.adminReview" },
-            { operation: "task.anonymousReview" },
           ],
         },
       },
@@ -673,7 +620,6 @@ describe("home view model collections", () => {
       "Clear completed",
       "Owner review",
       "Admin review",
-      "Anonymous review",
     ]);
   });
 
@@ -1587,7 +1533,7 @@ describe("home view model collections", () => {
       createOperation: "block-placement.addTreeChild",
       removeOperation: "block-placement.removeTreePlacement",
     });
-    expect(siteSourceSchema.entities.block.fields.actionName).toMatchObject({
+    expect(siteSourceSchema.entities.block.fields.operationName).toMatchObject({
       label: "Operation",
     });
   });
@@ -3106,11 +3052,6 @@ function discriminatedTaskSchema(
             },
           },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: testWriteOperations("Task", ["title", "done", "kind"]),
       },
     },
@@ -3328,11 +3269,6 @@ function systemMetadataUiSchema(): AppSchema {
         fields: {
           title: { type: "text", required: true, label: "Title" },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: testWriteOperations("Task", ["title"]),
       },
     },
@@ -3531,11 +3467,6 @@ function lifecycleTaskSchema() {
               complete: { label: "Complete", from: ["doing"], to: "done" },
             },
           },
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
         },
         operations: {
           ...testWriteOperations("Task", ["title", "status"]),

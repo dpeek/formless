@@ -230,11 +230,6 @@ function lifecycleSchema(): AppSchema {
             },
           },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         operations: {
           create: {
             label: "Create Task",

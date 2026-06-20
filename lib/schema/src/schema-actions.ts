@@ -27,9 +27,9 @@ import type {
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
-  PublicActionEnumInputFieldSchema,
-  PublicActionInputContractSchema,
-  PublicActionInputFieldSchema,
+  PublicOperationEnumInputFieldSchema,
+  PublicOperationInputContractSchema,
+  PublicOperationInputFieldSchema,
   RelationshipSchema,
   RemoveSelectedJoinRecordsEntityActionSchema,
   RemoveTreePlacementEntityActionSchema,
@@ -99,7 +99,7 @@ const entityActionKindModules = {
   },
 } satisfies EntityActionKindModuleMap;
 
-const publicActionPolicyKeys = ["access", "publicInput"];
+const publicOperationPolicyKeys = ["access", "publicInput"];
 
 const schemaActionActorKinds = [
   "admin",
@@ -230,7 +230,7 @@ function parseClearCompletedEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind"],
-    ["exposure", "target", ...publicActionPolicyKeys],
+    ["exposure", "target", ...publicOperationPolicyKeys],
   );
 
   if (entity.fields.done?.type !== "boolean") {
@@ -277,7 +277,7 @@ function parseCreateMissingJoinRecordsEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "join"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   const join = parseEntityActionJoin(entityName, actionName, value.join, entity, queries);
@@ -306,7 +306,7 @@ function parseCreateSelectedJoinRecordEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -344,7 +344,7 @@ function parseRemoveSelectedJoinRecordsEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -376,7 +376,7 @@ function parseCreateTreeChildEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship", "childField"],
-    ["exposure", "orderField", ...publicActionPolicyKeys],
+    ["exposure", "orderField", ...publicOperationPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -456,7 +456,7 @@ function parseRemoveTreePlacementEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -488,7 +488,7 @@ function parseSubscribeEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   return {
@@ -510,7 +510,7 @@ function parseTransitionStateEntityAction(
     actionContext,
     value,
     ["label", "kind", "machine", "transition"],
-    ["exposure", ...publicActionPolicyKeys],
+    ["exposure", ...publicOperationPolicyKeys],
   );
 
   const machineName = parseRequiredNonEmptyString(`${actionContext} machine`, value.machine);
@@ -551,7 +551,7 @@ function parseEntityActionPublicOptions(
 ): Pick<EntityActionSchema, "access" | "publicInput"> {
   const actionContext = `Entity action "${context.entityName}.${context.actionName}"`;
   const access = parseOptionalActionAccessPolicy(`${actionContext} access`, value.access);
-  const publicInput = parseOptionalPublicActionInputContract(
+  const publicInput = parseOptionalPublicOperationInputContract(
     `${actionContext} publicInput`,
     value.publicInput,
   );
@@ -631,10 +631,10 @@ function parseActionOriginPolicy(context: string, value: unknown): ActionOriginP
   return { kind: "same-origin" };
 }
 
-function parseOptionalPublicActionInputContract(
+function parseOptionalPublicOperationInputContract(
   context: string,
   value: unknown,
-): PublicActionInputContractSchema | undefined {
+): PublicOperationInputContractSchema | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -646,14 +646,14 @@ function parseOptionalPublicActionInputContract(
   assertExactKeys(context, value, ["fields"]);
 
   return {
-    fields: parsePublicActionInputFields(`${context} fields`, value.fields),
+    fields: parsePublicOperationInputFields(`${context} fields`, value.fields),
   };
 }
 
-function parsePublicActionInputFields(
+function parsePublicOperationInputFields(
   context: string,
   value: unknown,
-): Record<string, PublicActionInputFieldSchema> {
+): Record<string, PublicOperationInputFieldSchema> {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }
@@ -669,15 +669,15 @@ function parsePublicActionInputFields(
         throw new Error(`${context} names must be non-empty.`);
       }
 
-      return [fieldName, parsePublicActionInputField(`${context}.${fieldName}`, field)];
+      return [fieldName, parsePublicOperationInputField(`${context}.${fieldName}`, field)];
     }),
   );
 }
 
-function parsePublicActionInputField(
+function parsePublicOperationInputField(
   context: string,
   value: unknown,
-): PublicActionInputFieldSchema {
+): PublicOperationInputFieldSchema {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }
@@ -686,7 +686,7 @@ function parsePublicActionInputField(
     throw new Error(`${context} must declare whether it is required.`);
   }
 
-  const label = parsePublicActionInputFieldLabel(`${context} label`, value.label);
+  const label = parsePublicOperationInputFieldLabel(`${context} label`, value.label);
 
   if (value.type === "text") {
     assertExactKeys(context, value, ["type", "required"], ["label"]);
@@ -721,7 +721,7 @@ function parsePublicActionInputField(
     return {
       type: "enum",
       required: value.required,
-      values: parsePublicActionEnumInputValues(`${context} values`, value.values),
+      values: parsePublicOperationEnumInputValues(`${context} values`, value.values),
       ...(label === undefined ? {} : { label }),
     };
   }
@@ -729,7 +729,7 @@ function parsePublicActionInputField(
   throw new Error(`${context} has unsupported type "${String(value.type)}".`);
 }
 
-function parsePublicActionInputFieldLabel(context: string, value: unknown): string | undefined {
+function parsePublicOperationInputFieldLabel(context: string, value: unknown): string | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -741,10 +741,10 @@ function parsePublicActionInputFieldLabel(context: string, value: unknown): stri
   return value;
 }
 
-function parsePublicActionEnumInputValues(
+function parsePublicOperationEnumInputValues(
   context: string,
   value: unknown,
-): PublicActionEnumInputFieldSchema["values"] {
+): PublicOperationEnumInputFieldSchema["values"] {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }

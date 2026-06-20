@@ -1,9 +1,9 @@
-# Public Actions Specification
+# Public Operations Specification
 
 ## Purpose
 
 Public operation bindings execute schema-declared entity operations for public
-callers through narrow target-scoped routes while preserving protected generic
+callers through narrow target-scoped routes while preserving protected operation
 write APIs.
 
 ## Requirements
@@ -21,7 +21,7 @@ through an explicit actor policy and public binding.
   and response filtering are public bindings or operation policy facts
 - AND those facts do not redefine the operation input, output, effect,
   idempotency, audit, or app storage identity
-- AND public access does not create a separate public action interaction model
+- AND public access remains part of the operation interaction model
 
 #### Scenario: Reject operation without public policy
 
@@ -33,13 +33,13 @@ through an explicit actor policy and public binding.
 - AND the rejection is recorded as an operation invocation only after the
   target-scoped public operation route and declared operation are resolved
 
-#### Scenario: Reject legacy action-only public metadata
+#### Scenario: Resolve declared public operation
 
-- GIVEN an entity action or Site form still exposes legacy public action
-  metadata without a matching source-declared operation binding
-- WHEN public execution models are selected
-- THEN the metadata does not create a public execution route
-- AND anonymous callers cannot invoke the action through the public operation
+- GIVEN a public form targets an entity operation key
+- WHEN the schema or public Site tree is selected for public execution
+- THEN the operation key resolves to one source-declared public operation on the
+  target app storage identity
+- AND anonymous callers invoke that operation through the public operation
   executor
 
 #### Scenario: Anonymous operation is eligible
@@ -56,9 +56,8 @@ through an explicit actor policy and public binding.
 - GIVEN an entity operation declares anonymous public policy
 - WHEN public execution models are selected
 - THEN public execution invokes the operation envelope and policy model
-- AND entity action metadata does not synthesize public operation bindings
 - AND public command execution returns operation-native public output rather
-  than public action response metadata
+  than adapter-private materialization metadata
 
 #### Scenario: Execute public create operation
 
@@ -91,7 +90,7 @@ through an explicit actor policy and public binding.
 ### Requirement: Target-Scoped Public Operation API
 
 The system SHALL expose public operation execution through target-scoped public
-operation endpoints instead of generic mutation or action endpoints.
+operation endpoints.
 
 #### Scenario: Installed app public operation route
 
@@ -111,11 +110,10 @@ operation endpoints instead of generic mutation or action endpoints.
 
 - GIVEN a visitor lacks owner session or admin bearer authorization
 - WHEN the visitor posts outside a target-scoped public operation route
-- THEN the request does not evaluate public operation policy through retired
-  mutation or action routes
-- AND protected mutation, action, operation, schema reset, seed reset, snapshot
-  restore, and package migration write routes return the configured
-  unauthorized response before parsing JSON or initializing app storage
+- THEN protected operation, schema reset, seed reset, snapshot restore, and
+  package migration write routes return the configured unauthorized response
+  before evaluating public operation policy, parsing JSON, or initializing app
+  storage
 - AND no public operation invocation row is recorded for those protected generic
   write attempts
 
@@ -125,7 +123,7 @@ operation endpoints instead of generic mutation or action endpoints.
 - WHEN the route does not resolve a declared public operation on the target app
   storage identity
 - THEN the runtime returns a public-safe unavailable response
-- AND no mutation, action, or operation effect is committed
+- AND no operation effect is committed
 - AND the unavailable response does not expose whether a protected generic write
   route exists for the same entity
 
@@ -149,8 +147,15 @@ invocation envelope before validating input or committing effects.
 - THEN committed records or operation response metadata include enough source
   context to identify the operation, target app storage identity, host, path,
   and Site block that caused the write
-- AND source records identify the causing operation by canonical operation key,
-  not by legacy public action name
+- AND source records identify the causing operation by canonical operation key
+
+#### Scenario: Public operation contracts are operation-named
+
+- GIVEN app, client, Worker, Site runtime, or tests import public execution
+  protocol contracts
+- WHEN those contracts describe public operation execution, storage targets,
+  source facts, effects, audit facts, or responses
+- THEN the exported names use `PublicOperation` terminology
 
 #### Scenario: Rejected public attempt is auditable
 

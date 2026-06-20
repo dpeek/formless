@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { parseAppSchema, parseTableViews, type AppSchema, type EntitySchema } from "./index.ts";
 
 describe("schema table views", () => {
-  it("parses table columns, actions, and ordering through the table parser", () => {
+  it("parses table columns, operation bindings, and ordering through the table parser", () => {
     const schema = tableParserSchema();
     const tableViews = parseTableViews(
       schema.tableViews,
@@ -41,7 +41,7 @@ describe("schema table views", () => {
   });
 
   it("rejects invalid table parser cases without mutating fixed fixtures", () => {
-    const invalidSchema = tableParserSchema();
+    const invalidSchema = tableParserSourceSchema();
     invalidSchema.tableViews.rateTable.columns = [{ type: "field", field: "missing" }];
 
     expect(() => parseAppSchema(invalidSchema)).toThrow('references unknown field "rate.missing"');
@@ -52,6 +52,38 @@ describe("schema table views", () => {
       "field",
       "computed",
     ]);
+  });
+
+  it("rejects table-local actions and invokeAction columns", () => {
+    expect(() =>
+      parseAppSchema({
+        ...tableParserSourceSchema(),
+        tableViews: {
+          ...tableParserSourceSchema().tableViews,
+          rateTable: {
+            ...tableParserSourceSchema().tableViews.rateTable,
+            actions: {
+              inspect: { label: "Inspect" },
+            },
+          },
+        },
+      }),
+    ).toThrow('Table view "rateTable" has unsupported key "actions"');
+
+    expect(() =>
+      parseAppSchema({
+        ...tableParserSourceSchema(),
+        tableViews: {
+          ...tableParserSourceSchema().tableViews,
+          rateTable: {
+            ...tableParserSourceSchema().tableViews.rateTable,
+            columns: [{ type: "invokeAction", action: "inspect" }],
+          },
+        },
+      }),
+    ).toThrow(
+      'Table view "rateTable" column 0 type must be "field", "referenceField", "computed", "operationControl", or "orderingHandle".',
+    );
   });
 
   it("parses system field display columns without requiring value fields", () => {
@@ -77,6 +109,10 @@ describe("schema table views", () => {
 });
 
 function tableParserSchema(): AppSchema {
+  return parseAppSchema(tableParserSourceSchema());
+}
+
+function tableParserSourceSchema() {
   const entities = {
     resource: entity("Resource", {
       name: { type: "text", required: true, label: "Name" },
@@ -115,7 +151,7 @@ function tableParserSchema(): AppSchema {
       },
       order: { type: "number", required: true },
     }),
-  } satisfies AppSchema["entities"];
+  };
 
   return {
     version: 1,
@@ -235,16 +271,11 @@ function tableParserSchema(): AppSchema {
 function entity(
   label: string,
   fields: EntitySchema["fields"],
-  overrides: Partial<EntitySchema> = {},
-): EntitySchema {
+  overrides: Record<string, unknown> = {},
+) {
   return {
     label,
     fields,
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: true },
-      delete: { enabled: false },
-    },
     ...overrides,
   };
 }

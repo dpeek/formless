@@ -1,4 +1,3 @@
-import { parseEntityActionsForEntities } from "./schema-actions.ts";
 import { parseEntities } from "./schema-fields.ts";
 import { parseEntityOperationsForEntities } from "./schema-operations.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
@@ -35,14 +34,8 @@ export function parseAppSchema(value: unknown): AppSchema {
 
   const relationships = parseRelationships(value.relationships, parsedEntities.entities);
   const queries = parseCollectionQueries(value.queries, parsedEntities.entities);
-  const entities = parseEntityActionsForEntities(
-    parsedEntities.entities,
-    parsedEntities.actionInputsByEntity,
-    queries,
-    relationships,
-  );
   const entitiesWithOperations = parseEntityOperationsForEntities(
-    entities,
+    parsedEntities.entities,
     parsedEntities.operationInputsByEntity,
     queries,
     relationships,
@@ -85,5 +78,17 @@ export function parseAppSchema(value: unknown): AppSchema {
 }
 
 export function stringifySchema(schema: AppSchema) {
-  return JSON.stringify(schema, null, 2);
+  return JSON.stringify(sourceSchemaForStringify(schema), null, 2);
+}
+
+function sourceSchemaForStringify(schema: AppSchema): unknown {
+  return {
+    ...schema,
+    entities: Object.fromEntries(
+      Object.entries(schema.entities).map(([entityName, entity]) => {
+        const { actions: _actions, mutations: _mutations, ...sourceEntity } = entity;
+        return [entityName, sourceEntity];
+      }),
+    ),
+  };
 }

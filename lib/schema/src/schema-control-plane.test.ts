@@ -9,7 +9,6 @@ import {
   isRuntimeControlPlaneSecretReferenceField,
   legacyMigrationDeclarationKinds,
   parseAppSchema,
-  type AppSchema,
 } from "./index.ts";
 
 describe("control-plane schema runtime metadata", () => {
@@ -93,17 +92,6 @@ describe("control-plane schema runtime metadata", () => {
     const source = controlPlaneTaskSchema();
     const schema = parseAppSchema({
       ...source,
-      entities: {
-        ...source.entities,
-        task: {
-          ...source.entities.task,
-          mutations: {
-            create: { enabled: false },
-            patch: { enabled: false },
-            delete: { enabled: false },
-          },
-        },
-      },
       runtime: {
         owner: "runtime",
         controlPlane: {
@@ -124,7 +112,7 @@ describe("control-plane schema runtime metadata", () => {
   });
 });
 
-function controlPlaneTaskSchema(): AppSchema {
+function controlPlaneTaskSchema() {
   return {
     version: 1,
     entities: {
@@ -135,17 +123,18 @@ function controlPlaneTaskSchema(): AppSchema {
           done: { type: "boolean", required: true, label: "Done", default: false },
           secretRef: { type: "text", required: false, label: "Secret ref" },
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
-        actions: {
+        operations: {
           runnerApply: {
             label: "Runner apply",
-            kind: "clear-completed",
+            kind: "command",
+            scope: "collection",
             target: { query: "taskCompleted" },
-            exposure: {
+            effect: {
+              type: "registeredCommand",
+              kind: "clear-completed",
+              query: "taskCompleted",
+            },
+            policy: {
               actors: ["runner"],
               responseFields: { runner: ["done"] },
             },
@@ -175,11 +164,6 @@ function controlPlaneTaskSchema(): AppSchema {
               publicSite: { label: "Public Site" },
             },
           },
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
         },
       },
     },

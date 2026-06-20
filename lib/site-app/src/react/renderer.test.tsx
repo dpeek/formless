@@ -176,7 +176,7 @@ describe("public Site renderer characterization", () => {
         placement(
           "subscribe-placement",
           blockNode("subscribe-block", "subscribeForm", "Join the list", {
-            actionName: "missingSubscribeAction",
+            operationName: "missingSubscribeAction",
           }),
         ),
       ]),

@@ -17,11 +17,6 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const editableMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: true },
-};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -31,7 +26,7 @@ const siteSourceSchema = parseAppSchema({
         key: { type: "text", required: true, label: "Key" },
         label: { type: "text", required: true, label: "Label" },
       },
-      mutations: editableMutations,
+      operations: writeOperations("Site", ["key", "label"], { delete: true }),
     },
   },
   queries: {
@@ -67,6 +62,48 @@ const siteSourceSchema = parseAppSchema({
     },
   },
 });
+
+function writeOperations(label: string, fields: string[], options: { delete?: boolean } = {}) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(options.delete
+      ? {
+          delete: {
+            label: `Delete ${label}`,
+            kind: "delete",
+            scope: "record",
+            effect: { type: "tombstoneRecord" },
+            output: { type: "delete" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        }
+      : {}),
+  };
+}
 
 describe("archive node adapter", () => {
   it("writes and reads portable archive directories with media files", async () => {

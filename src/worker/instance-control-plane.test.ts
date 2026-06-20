@@ -5,6 +5,7 @@ import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
   instanceControlPlaneSchemaProvenance,
+  instanceControlPlaneSourceSchema,
   type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneRouteValues,
 } from "@dpeek/formless-instance-control-plane";
@@ -22,7 +23,7 @@ import type {
   OperationCommandOutput,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
-import { parseAppSchema, type AppSchema, type EntityMutationPolicy } from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
@@ -108,8 +109,8 @@ describe("instance control-plane API routes", () => {
       `${controlPlaneApi}/bootstrap?actorKind=runner`,
     );
     const ownerSchema = await getJson<SchemaResponse>(`${controlPlaneApi}/schema`);
-    const parsedInstanceControlPlaneSchema = parseAppSchema(instanceControlPlaneSchema);
-    const sourceSchemaHash = await computeSourceSchemaHash(instanceControlPlaneSchema);
+    const parsedInstanceControlPlaneSchema = instanceControlPlaneSchema;
+    const sourceSchemaHash = await computeSourceSchemaHash(instanceControlPlaneSourceSchema);
 
     expect(INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH).toBe(sourceSchemaHash);
     expect(runnerBootstrap.body.schema).toEqual(parsedInstanceControlPlaneSchema);
@@ -144,7 +145,7 @@ describe("instance control-plane API routes", () => {
       exportedAt: expect.any(String),
       schemaUpdatedAt: bootstrap.body.schemaUpdatedAt,
       sourceCursor: operationCommandResponse(created).cursor,
-      schema: parseAppSchema(instanceControlPlaneSchema),
+      schema: instanceControlPlaneSchema,
     });
     expect(snapshot.body.records).toEqual(bootstrap.body.records);
   });
@@ -971,72 +972,70 @@ function legacyRouteIntentSnapshot(now: string, records: StoredRecord[]): Storag
 }
 
 function legacyRouteIntentSchema(): AppSchema {
+  const appRouteFields = {
+    appInstall: referenceField("App install", "app-install", "label"),
+    routeKind: enumField("Route kind", {
+      admin: "Admin",
+      publicSite: "Public Site",
+    }),
+    path: textField("Path"),
+    prefix: optionalTextField("Prefix"),
+    enabled: booleanField("Enabled", true),
+    createdAt: textField("Created at"),
+    updatedAt: textField("Updated at"),
+  };
+  const domainMappingFields = {
+    host: textField("Host"),
+    profile: enumField("Profile", {
+      app: "App",
+      instance: "Instance",
+      publicSite: "Public Site",
+    }),
+    targetInstallId: optionalTextField("Target install id"),
+    enabled: booleanField("Enabled", true),
+    createdAt: textField("Created at"),
+    updatedAt: textField("Updated at"),
+  };
+  const redirectIntentFields = {
+    fromHost: textField("From host"),
+    toHost: optionalTextField("To host"),
+    toUrl: optionalTextField("To URL"),
+    statusCode: enumField("Status code", {
+      "301": "301",
+      "302": "302",
+      "303": "303",
+      "307": "307",
+      "308": "308",
+    }),
+    preservePath: booleanField("Preserve path", true),
+    preserveQueryString: booleanField("Preserve query string", true),
+    enabled: booleanField("Enabled", true),
+    createdAt: textField("Created at"),
+    updatedAt: textField("Updated at"),
+  };
+
   return {
     ...instanceControlPlaneSchema,
     entities: {
       ...instanceControlPlaneSchema.entities,
       "app-route": {
         label: "App route",
-        fields: {
-          appInstall: referenceField("App install", "app-install", "label"),
-          routeKind: enumField("Route kind", {
-            admin: "Admin",
-            publicSite: "Public Site",
-          }),
-          path: textField("Path"),
-          prefix: optionalTextField("Prefix"),
-          enabled: booleanField("Enabled", true),
-          createdAt: textField("Created at"),
-          updatedAt: textField("Updated at"),
-        },
-        mutations: legacyEditableMutations,
+        fields: appRouteFields,
+        operations: writeOperations("App route", Object.keys(appRouteFields)),
       },
       "domain-mapping": {
         label: "Domain mapping",
-        fields: {
-          host: textField("Host"),
-          profile: enumField("Profile", {
-            app: "App",
-            instance: "Instance",
-            publicSite: "Public Site",
-          }),
-          targetInstallId: optionalTextField("Target install id"),
-          enabled: booleanField("Enabled", true),
-          createdAt: textField("Created at"),
-          updatedAt: textField("Updated at"),
-        },
-        mutations: legacyEditableMutations,
+        fields: domainMappingFields,
+        operations: writeOperations("Domain mapping", Object.keys(domainMappingFields)),
       },
       "redirect-intent": {
         label: "Redirect intent",
-        fields: {
-          fromHost: textField("From host"),
-          toHost: optionalTextField("To host"),
-          toUrl: optionalTextField("To URL"),
-          statusCode: enumField("Status code", {
-            "301": "301",
-            "302": "302",
-            "303": "303",
-            "307": "307",
-            "308": "308",
-          }),
-          preservePath: booleanField("Preserve path", true),
-          preserveQueryString: booleanField("Preserve query string", true),
-          enabled: booleanField("Enabled", true),
-          createdAt: textField("Created at"),
-          updatedAt: textField("Updated at"),
-        },
-        mutations: legacyEditableMutations,
+        fields: redirectIntentFields,
+        operations: writeOperations("Redirect intent", Object.keys(redirectIntentFields)),
       },
     },
-  } as AppSchema;
+  } as unknown as AppSchema;
 }
-
-const legacyEditableMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: false },
-} satisfies EntityMutationPolicy;
 
 function privatePublicSitePackageManifest(sourceSchemaHash: SourceSchemaHash): AppPackageManifest {
   return {
@@ -1159,4 +1158,33 @@ function enumField(label: string, values: Record<string, string>) {
 
 function referenceField(label: string, to: string, displayField: string) {
   return { type: "reference", required: true, label, to, displayField };
+}
+
+function writeOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
 }

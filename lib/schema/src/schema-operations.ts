@@ -13,16 +13,18 @@ import type {
   ActionAccessPolicySchema,
   ActionChallengePolicySchema,
   ActionOriginPolicySchema,
+  AfterCreateHookSchema,
   CollectionOperationBindingSchema,
   CollectionQuerySchema,
   CreateRecordEntityOperationEffectSchema,
+  CreateMutationPolicy,
   DeleteRecordEntityOperationEffectSchema,
   EntityActionKind,
   EntityActionJoinSchema,
-  EntityOperationCommandEffectType,
   EntityOperationActorKind,
   EntityOperationAuditInputPolicy,
   EntityOperationAuditSchema,
+  EntityOperationCommandEffectType,
   EntityOperationEffectSchema,
   EntityOperationIdempotencySchema,
   EntityOperationInlineInputFieldSchema,
@@ -34,13 +36,13 @@ import type {
   EntityOperationSchema,
   EntityOperationScope,
   EntityOperationTargetSchema,
+  EntityActionSchema,
   EntitySchema,
+  EntityMutationPolicy,
   EnumValueSchema,
   FieldSchema,
-  LegacyEntityOperationCommandEffectType,
-  NativeEntityOperationCommandEffectSchema,
-  NativeEntityOperationCommandEffectType,
   PatchRecordEntityOperationEffectSchema,
+  PublicOperationInputContractSchema,
   RegisteredCommandEntityOperationEffectSchema,
   RelationshipSchema,
   RecordPlanActorContextField,
@@ -51,7 +53,7 @@ import type {
   RecordPlanStepOutputExpressionSchema,
   RecordPlanStepSchema,
   RecordPlanValueExpressionSchema,
-  RunActionKindEntityOperationEffectSchema,
+  SchemaActionActorKind,
   TableOperationBindingSchema,
 } from "./types.ts";
 
@@ -95,17 +97,7 @@ export const entityOperationCommandEffectKinds = [
 export const entityOperationCommandEffectTypes = [
   "registeredCommand",
   "recordPlan",
-] as const satisfies readonly NativeEntityOperationCommandEffectType[];
-
-export const parsedEntityOperationCommandEffectTypes = [
-  "registeredCommand",
-  "runActionKind",
-  "recordPlan",
 ] as const satisfies readonly EntityOperationCommandEffectType[];
-
-export const legacyEntityOperationCommandEffectTypes = [
-  "runActionKind",
-] as const satisfies readonly LegacyEntityOperationCommandEffectType[];
 
 const entityOperationAuditInputPolicies = [
   "none",
@@ -226,30 +218,14 @@ export function isEntityOperationCommandEffectKind(value: unknown): value is Ent
 
 export function isEntityOperationCommandEffectType(
   value: unknown,
-): value is NativeEntityOperationCommandEffectType {
-  return entityOperationCommandEffectTypes.includes(
-    value as NativeEntityOperationCommandEffectType,
-  );
+): value is EntityOperationCommandEffectType {
+  return entityOperationCommandEffectTypes.includes(value as EntityOperationCommandEffectType);
 }
 
 export function isEntityOperationCommandEffect(
   effect: EntityOperationEffectSchema | undefined,
-): effect is NativeEntityOperationCommandEffectSchema {
+): effect is RegisteredCommandEntityOperationEffectSchema | RecordPlanEntityOperationEffectSchema {
   return effect !== undefined && isEntityOperationCommandEffectType(effect.type);
-}
-
-export function isLegacyEntityOperationCommandEffectType(
-  value: unknown,
-): value is LegacyEntityOperationCommandEffectType {
-  return legacyEntityOperationCommandEffectTypes.includes(
-    value as LegacyEntityOperationCommandEffectType,
-  );
-}
-
-export function isLegacyEntityOperationCommandEffect(
-  effect: EntityOperationEffectSchema | undefined,
-): effect is RunActionKindEntityOperationEffectSchema {
-  return effect !== undefined && isLegacyEntityOperationCommandEffectType(effect.type);
 }
 
 export function isEntityOperationVisibleToBrowser(operation: EntityOperationSchema) {
@@ -271,7 +247,7 @@ export function parseEntityOperationsForEntities(
   queries: Record<string, CollectionQuerySchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, EntitySchema> {
-  return Object.fromEntries(
+  const entitiesWithOperations = Object.fromEntries(
     Object.entries(entities).map(([entityName, entity]) => {
       const operations =
         parseEntityOperations(
@@ -286,6 +262,8 @@ export function parseEntityOperationsForEntities(
       return [entityName, Object.keys(operations).length > 0 ? { ...entity, operations } : entity];
     }),
   );
+
+  return projectEntityInteractionState(entitiesWithOperations, queries);
 }
 
 function parseEntityOperations(
@@ -387,6 +365,7 @@ function parseEntityOperation(
   const idempotency = parseOperationIdempotency(`${context} idempotency`, value.idempotency, kind);
   const audit = parseOperationAudit(`${context} audit`, value.audit);
   const policy = parseOperationPolicy(`${context} policy`, value.policy, entity);
+  validateOperationPublicPolicy(context, kind, input, effect, policy);
 
   return {
     ...(label === undefined ? {} : { label }),
@@ -400,6 +379,32 @@ function parseEntityOperation(
     audit,
     ...(policy === undefined ? {} : { policy }),
   };
+}
+
+function validateOperationPublicPolicy(
+  context: string,
+  kind: EntityOperationKind,
+  input: EntityOperationInputContractSchema | undefined,
+  effect: EntityOperationEffectSchema | undefined,
+  policy: EntityOperationPolicySchema | undefined,
+) {
+  if (!policy?.actors.includes("anonymous")) {
+    return;
+  }
+
+  if (
+    kind === "command" &&
+    !(
+      effect?.type === "recordPlan" ||
+      (effect?.type === "registeredCommand" && effect.kind === "subscribe")
+    )
+  ) {
+    throw new Error(`${context} command effect is not eligible for public execution.`);
+  }
+
+  if (input === undefined) {
+    throw new Error(`${context} anonymous actor policy requires explicit input.`);
+  }
 }
 
 function assertEntityOperationKey(context: string, value: string) {
@@ -790,12 +795,6 @@ function parseOperationEffect(
     };
   }
 
-  if (value.type === "runActionKind") {
-    assertExactKeys(context, value, ["type", "kind"], ["action", "query"]);
-    validateOperationEffectKind(context, kind, "command");
-    return parseRunActionKindEffect(context, value, target, entityName, entity, queries);
-  }
-
   if (value.type === "registeredCommand") {
     validateOperationEffectKind(context, kind, "command");
     return parseRegisteredCommandEffect(
@@ -870,49 +869,6 @@ function validateOperationEffectKind(
   if (operationKind !== expectedKind) {
     throw new Error(`${context} type is only valid for ${expectedKind} operations.`);
   }
-}
-
-function parseRunActionKindEffect(
-  context: string,
-  value: Record<string, unknown>,
-  target: EntityOperationTargetSchema | undefined,
-  entityName: string,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
-): RunActionKindEntityOperationEffectSchema {
-  if (!isEntityOperationCommandEffectKind(value.kind)) {
-    throw new Error(`${context} kind must be a supported schema command effect kind.`);
-  }
-
-  const actionName = parseOptionalNonEmptyString(`${context} action`, value.action);
-  const queryName = parseOptionalNonEmptyString(`${context} query`, value.query);
-
-  if (actionName !== undefined) {
-    const action = entity.actions?.[actionName];
-
-    if (!action) {
-      throw new Error(`${context} action references unknown action "${actionName}".`);
-    }
-
-    if (action.kind !== value.kind) {
-      throw new Error(`${context} action "${actionName}" must use kind "${value.kind}".`);
-    }
-  }
-
-  if (queryName !== undefined) {
-    parseOperationQueryReference(`${context} query`, queryName, entityName, queries);
-  }
-
-  if (target !== undefined && queryName !== undefined && target.query !== queryName) {
-    throw new Error(`${context} query must match target query "${target.query}".`);
-  }
-
-  return {
-    type: "runActionKind",
-    kind: value.kind,
-    ...(actionName === undefined ? {} : { action: actionName }),
-    ...(queryName === undefined ? {} : { query: queryName }),
-  };
 }
 
 function parseRegisteredCommandEffect(
@@ -2028,6 +1984,257 @@ function parseOptionalBoolean(context: string, value: unknown): boolean | undefi
   }
 
   return value;
+}
+
+function projectEntityInteractionState(
+  entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+): Record<string, EntitySchema> {
+  const afterCreateHooks = deriveAfterCreateHooks(entities, queries);
+
+  return Object.fromEntries(
+    Object.entries(entities).map(([entityName, entity]) => {
+      const actions = projectEntityActions(entity);
+      const { actions: _actions, mutations: _mutations, ...sourceEntity } = entity;
+      const projectedEntity = { ...sourceEntity } as EntitySchema;
+
+      Object.defineProperty(projectedEntity, "mutations", {
+        configurable: true,
+        enumerable: false,
+        value: deriveEntityMutationPolicy(entity, afterCreateHooks[entityName]),
+        writable: true,
+      });
+
+      if (actions !== undefined) {
+        Object.defineProperty(projectedEntity, "actions", {
+          configurable: true,
+          enumerable: false,
+          value: actions,
+          writable: true,
+        });
+      }
+
+      return [entityName, projectedEntity];
+    }),
+  );
+}
+
+function deriveEntityMutationPolicy(
+  entity: EntitySchema,
+  afterCreate: AfterCreateHookSchema[] | undefined,
+): EntityMutationPolicy {
+  const operations = Object.values(entity.operations ?? {});
+  const create: CreateMutationPolicy = {
+    enabled: operations.some((operation) => operation.kind === "create"),
+  };
+
+  if (afterCreate !== undefined && afterCreate.length > 0) {
+    create.afterCreate = afterCreate;
+  }
+
+  return {
+    create,
+    patch: { enabled: operations.some((operation) => operation.kind === "update") },
+    delete: { enabled: operations.some((operation) => operation.kind === "delete") },
+  };
+}
+
+function deriveAfterCreateHooks(
+  entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+): Record<string, AfterCreateHookSchema[]> {
+  const hooks: Record<string, AfterCreateHookSchema[]> = {};
+
+  for (const [entityName, entity] of Object.entries(entities)) {
+    for (const [operationName, operation] of Object.entries(entity.operations ?? {})) {
+      if (
+        operation.kind !== "command" ||
+        operation.effect?.type !== "registeredCommand" ||
+        operation.effect.kind !== "create-missing-join-records"
+      ) {
+        continue;
+      }
+
+      for (const source of [operation.effect.join.left, operation.effect.join.right]) {
+        const sourceEntity = queries[source.query]?.entity;
+        if (sourceEntity === undefined) {
+          continue;
+        }
+
+        const hook = { entity: entityName, action: operationName };
+        const entityHooks = (hooks[sourceEntity] ??= []);
+        if (
+          !entityHooks.some(
+            (candidate) => candidate.entity === hook.entity && candidate.action === hook.action,
+          )
+        ) {
+          entityHooks.push(hook);
+        }
+      }
+    }
+  }
+
+  return hooks;
+}
+
+function projectEntityActions(
+  entity: EntitySchema,
+): Record<string, EntityActionSchema> | undefined {
+  const entries = Object.entries(entity.operations ?? {}).flatMap(([operationName, operation]) => {
+    if (operation.kind !== "command" || operation.effect?.type !== "registeredCommand") {
+      return [];
+    }
+
+    return [
+      [
+        operationName,
+        projectRegisteredCommandAction(operationName, {
+          ...operation,
+          effect: operation.effect,
+        }),
+      ],
+    ] as const;
+  });
+
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
+function projectRegisteredCommandAction(
+  operationName: string,
+  operation: EntityOperationSchema & { effect: RegisteredCommandEntityOperationEffectSchema },
+): EntityActionSchema {
+  const base = {
+    label: operation.label ?? humanizeOperationName(operationName),
+    ...projectOperationActionPolicy(operation),
+  };
+
+  if (operation.effect.kind === "clear-completed") {
+    return {
+      ...base,
+      kind: "clear-completed",
+      target: { query: operation.effect.query },
+    };
+  }
+
+  if (operation.effect.kind === "create-missing-join-records") {
+    return { ...base, kind: "create-missing-join-records", join: operation.effect.join };
+  }
+
+  if (operation.effect.kind === "create-selected-join-record") {
+    return {
+      ...base,
+      kind: "create-selected-join-record",
+      relationship: operation.effect.relationship,
+    };
+  }
+
+  if (operation.effect.kind === "remove-selected-join-records") {
+    return {
+      ...base,
+      kind: "remove-selected-join-records",
+      relationship: operation.effect.relationship,
+    };
+  }
+
+  if (operation.effect.kind === "create-tree-child") {
+    return {
+      ...base,
+      kind: "create-tree-child",
+      relationship: operation.effect.relationship,
+      childField: operation.effect.childField,
+      ...(operation.effect.orderField === undefined
+        ? {}
+        : { orderField: operation.effect.orderField }),
+    };
+  }
+
+  if (operation.effect.kind === "remove-tree-placement") {
+    return {
+      ...base,
+      kind: "remove-tree-placement",
+      relationship: operation.effect.relationship,
+    };
+  }
+
+  if (operation.effect.kind === "subscribe") {
+    return { ...base, kind: "subscribe" };
+  }
+
+  return {
+    ...base,
+    kind: "transition-state",
+    machine: operation.effect.machine,
+    transition: operation.effect.transition,
+  };
+}
+
+function projectOperationActionPolicy(
+  operation: EntityOperationSchema,
+): Pick<EntityActionSchema, "access" | "publicInput" | "exposure"> {
+  const policy = operation.policy;
+  if (policy === undefined) {
+    return {};
+  }
+
+  const actors = policy.actors.filter(isSchemaActionActorKind);
+  const exposure =
+    actors.length === 0
+      ? undefined
+      : {
+          actors,
+          ...(policy.responseFields === undefined
+            ? {}
+            : { responseFields: projectOperationResponseFields(policy.responseFields) }),
+        };
+  const publicInput =
+    policy.access === undefined ? undefined : projectPublicOperationInput(operation.input);
+
+  return {
+    ...(policy.access === undefined ? {} : { access: policy.access }),
+    ...(publicInput === undefined ? {} : { publicInput }),
+    ...(exposure === undefined ? {} : { exposure }),
+  };
+}
+
+function projectOperationResponseFields(
+  responseFields: Partial<Record<EntityOperationActorKind, string[]>>,
+): Partial<Record<SchemaActionActorKind, string[]>> {
+  return Object.fromEntries(
+    Object.entries(responseFields).filter(([actor]) => isSchemaActionActorKind(actor)),
+  );
+}
+
+function projectPublicOperationInput(
+  input: EntityOperationInputContractSchema | undefined,
+): PublicOperationInputContractSchema | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const fields = Object.fromEntries(
+    Object.entries(input.fields).flatMap(([fieldName, field]) => {
+      if ("field" in field) {
+        return [];
+      }
+
+      return [[fieldName, field]] as const;
+    }),
+  );
+
+  return Object.keys(fields).length === 0 ? undefined : { fields };
+}
+
+function isSchemaActionActorKind(actor: string): actor is SchemaActionActorKind {
+  return actor === "admin" || actor === "cliDeployer" || actor === "owner" || actor === "runner";
+}
+
+function humanizeOperationName(operationName: string) {
+  return operationName
+    .replace(/[-_]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (first) => first.toUpperCase());
 }
 
 function isEntityOperationActorKind(value: unknown): value is EntityOperationActorKind {

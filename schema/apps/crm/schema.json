@@ -42,17 +42,6 @@
           "format": "longText"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueCompanyName": {
           "kind": "unique",
@@ -195,17 +184,6 @@
           "format": "longText"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "operations": {
         "create": {
           "label": "Create Contact",
@@ -331,17 +309,6 @@
           "default": true
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueNormalizedAddress": {
           "kind": "unique",
@@ -455,17 +422,6 @@
               "label": "Archived"
             }
           }
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "constraints": {
@@ -608,17 +564,6 @@
           "label": "Source"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueEmailAudience": {
           "kind": "unique",
@@ -743,17 +688,6 @@
           "label": "Starts on"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "operations": {
         "create": {
           "label": "Create Campaign",
@@ -865,17 +799,6 @@
               "label": "Archived"
             }
           }
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "operations": {
@@ -1014,17 +937,6 @@
           "type": "text",
           "required": false,
           "label": "Sent at"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
         }
       },
       "operations": {
@@ -1171,17 +1083,6 @@
           "label": "Last event at"
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
       "constraints": {
         "uniqueBroadcastEmail": {
           "kind": "unique",
@@ -1318,17 +1219,6 @@
           "required": false,
           "label": "Detail",
           "format": "longText"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": false
-        },
-        "patch": {
-          "enabled": false
-        },
-        "delete": {
-          "enabled": false
         }
       }
     }

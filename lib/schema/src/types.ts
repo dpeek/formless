@@ -210,46 +210,46 @@ export type ActionAccessPolicySchema = {
   origin: ActionOriginPolicySchema;
 };
 
-export type PublicActionTextInputFieldSchema = {
+export type PublicOperationTextInputFieldSchema = {
   type: "text";
   required: boolean;
   label?: string;
 };
 
-export type PublicActionBooleanInputFieldSchema = {
+export type PublicOperationBooleanInputFieldSchema = {
   type: "boolean";
   required: boolean;
   label?: string;
 };
 
-export type PublicActionDateInputFieldSchema = {
+export type PublicOperationDateInputFieldSchema = {
   type: "date";
   required: boolean;
   label?: string;
 };
 
-export type PublicActionNumberInputFieldSchema = {
+export type PublicOperationNumberInputFieldSchema = {
   type: "number";
   required: boolean;
   label?: string;
 };
 
-export type PublicActionEnumInputFieldSchema = {
+export type PublicOperationEnumInputFieldSchema = {
   type: "enum";
   required: boolean;
   label?: string;
   values: Record<string, EnumValueSchema>;
 };
 
-export type PublicActionInputFieldSchema =
-  | PublicActionTextInputFieldSchema
-  | PublicActionBooleanInputFieldSchema
-  | PublicActionDateInputFieldSchema
-  | PublicActionNumberInputFieldSchema
-  | PublicActionEnumInputFieldSchema;
+export type PublicOperationInputFieldSchema =
+  | PublicOperationTextInputFieldSchema
+  | PublicOperationBooleanInputFieldSchema
+  | PublicOperationDateInputFieldSchema
+  | PublicOperationNumberInputFieldSchema
+  | PublicOperationEnumInputFieldSchema;
 
-export type PublicActionInputContractSchema = {
-  fields: Record<string, PublicActionInputFieldSchema>;
+export type PublicOperationInputContractSchema = {
+  fields: Record<string, PublicOperationInputFieldSchema>;
 };
 
 export type FieldCommitPolicy = "immediate" | "field-commit";
@@ -305,15 +305,15 @@ export type TableColumnAlign = "start" | "center" | "end";
 export type TableColumnWidth = "xs" | "sm" | "md" | "lg";
 export type TableColumnDisplay = "editor" | "readOnly" | "hidden";
 export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
-export type TableActionVariant = "default" | "destructive";
-export type TableActionAvailabilityState = "visible" | "hidden" | "disabled";
-export type TableActionPresentation = "button" | "dropdown";
+export type TableOperationControlVariant = "default" | "destructive";
+export type TableOperationControlAvailabilityState = "visible" | "hidden" | "disabled";
+export type TableOperationControlPresentation = "button" | "dropdown";
 export type ResultOrderingPresentation = "moveMenu" | "dragHandle";
 // Table ordering aliases stay for table view compatibility; new schemas should use result ordering.
 export type TableOrderingPresentation = ResultOrderingPresentation;
 
-export type TableActionAvailabilitySchema = {
-  state: TableActionAvailabilityState;
+export type TableOperationControlAvailabilitySchema = {
+  state: TableOperationControlAvailabilityState;
   reason?: string;
 };
 
@@ -325,24 +325,6 @@ export type TableEditRecordTargetSchema =
       kind: "reference";
       field: string;
     };
-
-export type TableActionBaseSchema = {
-  label: string;
-  variant?: TableActionVariant;
-  availability?: TableActionAvailabilitySchema;
-};
-
-export type StaticTableActionSchema = TableActionBaseSchema & {
-  type?: undefined;
-};
-
-export type EditRecordTableActionSchema = TableActionBaseSchema & {
-  type: "editRecord";
-  target: TableEditRecordTargetSchema;
-  editView: string;
-};
-
-export type TableActionSchema = StaticTableActionSchema | EditRecordTableActionSchema;
 
 export type ResultOrderingScopeSchema = {
   kind: "field";
@@ -405,18 +387,6 @@ export type ComputedTableColumnSchema = {
   format?: TableColumnFormat;
 };
 
-export type InvokeActionTableColumnSchema = {
-  type: "invokeAction";
-  action?: string;
-  actions?: string[];
-  includeOrdering?: boolean;
-  label?: string;
-  align?: TableColumnAlign;
-  width?: TableColumnWidth;
-  display?: TableColumnDisplay;
-  presentation?: TableActionPresentation;
-};
-
 export type OperationControlTableColumnSchema = {
   type: "operationControl";
   operation?: string;
@@ -426,7 +396,7 @@ export type OperationControlTableColumnSchema = {
   align?: TableColumnAlign;
   width?: TableColumnWidth;
   display?: TableColumnDisplay;
-  presentation?: TableActionPresentation;
+  presentation?: TableOperationControlPresentation;
 };
 
 export type OrderingHandleTableColumnSchema = {
@@ -441,22 +411,20 @@ export type TableColumnSchema =
   | FieldTableColumnSchema
   | ReferenceFieldTableColumnSchema
   | ComputedTableColumnSchema
-  | InvokeActionTableColumnSchema
   | OperationControlTableColumnSchema
   | OrderingHandleTableColumnSchema;
 
 export type TableOperationBindingSchema = {
   operation: string;
   label?: string;
-  variant?: TableActionVariant;
-  availability?: TableActionAvailabilitySchema;
+  variant?: TableOperationControlVariant;
+  availability?: TableOperationControlAvailabilitySchema;
   target?: TableEditRecordTargetSchema;
   editView?: string;
 };
 
 export type TableViewSchema = {
   entity: string;
-  actions?: Record<string, TableActionSchema>;
   operations?: TableOperationBindingSchema[];
   ordering?: TableOrderingSchema;
   columns: TableColumnSchema[];
@@ -904,7 +872,7 @@ export type EntityActionRuntimeMetadata = {
 export type EntityActionBaseSchema = EntityActionRuntimeMetadata & {
   label: string;
   access?: ActionAccessPolicySchema;
-  publicInput?: PublicActionInputContractSchema;
+  publicInput?: PublicOperationInputContractSchema;
 };
 
 export type ClearCompletedEntityActionSchema = EntityActionBaseSchema & {
@@ -979,7 +947,7 @@ export type EntityOperationFieldInputSchema = {
   label?: string;
 };
 
-export type EntityOperationInlineInputFieldSchema = PublicActionInputFieldSchema;
+export type EntityOperationInlineInputFieldSchema = PublicOperationInputFieldSchema;
 
 export type EntityOperationInputFieldSchema =
   | EntityOperationFieldInputSchema
@@ -1006,13 +974,6 @@ export type PatchRecordEntityOperationEffectSchema = {
 export type DeleteRecordEntityOperationEffectSchema = {
   type: "deleteRecord" | "tombstoneRecord";
   entity?: string;
-};
-
-export type RunActionKindEntityOperationEffectSchema = {
-  type: "runActionKind";
-  kind: EntityActionKind;
-  action?: string;
-  query?: string;
 };
 
 export type ClearCompletedEntityOperationEffectSchema = {
@@ -1185,20 +1146,9 @@ export type RecordPlanEntityOperationEffectSchema = {
 
 export type EntityOperationCommandEffectSchema =
   | RegisteredCommandEntityOperationEffectSchema
-  | RunActionKindEntityOperationEffectSchema
   | RecordPlanEntityOperationEffectSchema;
 
 export type EntityOperationCommandEffectType = EntityOperationCommandEffectSchema["type"];
-
-export type NativeEntityOperationCommandEffectSchema =
-  | RegisteredCommandEntityOperationEffectSchema
-  | RecordPlanEntityOperationEffectSchema;
-
-export type NativeEntityOperationCommandEffectType =
-  NativeEntityOperationCommandEffectSchema["type"];
-
-export type LegacyEntityOperationCommandEffectType =
-  RunActionKindEntityOperationEffectSchema["type"];
 
 export type EntityOperationEffectSchema =
   | CreateRecordEntityOperationEffectSchema

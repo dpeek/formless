@@ -362,7 +362,7 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
     ...(type === "subscribeForm"
-      ? optionalStringField("actionName", record.values.actionName)
+      ? optionalStringField("operationName", record.values.operationName)
       : {}),
     ...(type === "subscribeForm"
       ? optionalStringField("buttonLabel", record.values.buttonLabel)
@@ -395,7 +395,7 @@ function projectedPublicOperationFields(
     return undefined;
   }
 
-  const operationName = stringValue(record.values.actionName);
+  const operationName = stringValue(record.values.operationName);
 
   if (!operationName) {
     context.warnings.push({

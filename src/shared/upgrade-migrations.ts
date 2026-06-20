@@ -143,9 +143,9 @@ export type UpgradeMigrationRegistryValidationResult =
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
 
 export const bundledSourceSchemaHashFixtures = {
-  tasks: "sha256:4b6c4fa415185e317f4fcb99801d553d945bbb38a9ecb32766d83c177ef17765",
-  site: "sha256:bce1c83d77a88e7307df41a5b2d2d0bab02c06fffda98ad5cf9c8d9889404c27",
-  crm: "sha256:4e6fd52a8278a8f315beae8fd45b493e454bf3d2f553a78aeac7c651e0d8aebf",
+  tasks: "sha256:8d0044f5d5716401bfd64aab045242f0e1824807b57434c59f893c1db17cbf36",
+  site: "sha256:231d25123a2147e81c48918a92775988562574753cf0aafd0761911b036d3a28",
+  crm: "sha256:bc7a460e8d037f44dacc2af42c9bf49902232478bf9ab10ab6ec7c78b507e6f5",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 
 export function isUpgradeMigrationChecksum(value: unknown): value is UpgradeMigrationChecksum {

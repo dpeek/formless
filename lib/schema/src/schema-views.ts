@@ -21,7 +21,7 @@ import {
 } from "./schema-parse-helpers.ts";
 import { parseEntityOperationKey } from "./schema-operations.ts";
 import {
-  assertTableActionEditViews,
+  assertTableOperationEditViews,
   parseOptionalTableColumnFormat,
 } from "./schema-table-views.ts";
 import {
@@ -208,7 +208,7 @@ export function parseViews(
   }
 
   assertCollectionViews(views, entities, relationships);
-  assertTableActionEditViews(views, tableViews, entities);
+  assertTableOperationEditViews(views, tableViews, entities);
 
   return views;
 }

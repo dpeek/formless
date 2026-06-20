@@ -1,4 +1,3 @@
-import { parseEntityMutations } from "./schema-mutations.ts";
 import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./entity-names.ts";
 import { parseStateMachinesForEntities } from "./schema-state-machines.ts";
 import {
@@ -35,7 +34,6 @@ const textFieldFormats = [
 
 export type ParsedEntityCatalog = {
   entities: Record<string, EntitySchema>;
-  actionInputsByEntity: Record<string, unknown>;
   operationInputsByEntity: Record<string, unknown>;
 };
 
@@ -45,22 +43,17 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
   }
 
   const entities: Record<string, EntitySchema> = {};
-  const actionInputsByEntity: Record<string, unknown> = {};
   const operationInputsByEntity: Record<string, unknown> = {};
   const stateMachineInputsByEntity: Record<string, unknown> = {};
 
   for (const [entityName, entityValue] of Object.entries(value)) {
     assertSchemaLocalEntityKey(`Schema entity key "${entityName}"`, entityName);
 
-    const { actionsInput, entity, operationsInput, stateMachinesInput } = parseEntityBase(
+    const { entity, operationsInput, stateMachinesInput } = parseEntityBase(
       entityName,
       entityValue,
     );
     entities[entityName] = entity;
-
-    if (actionsInput !== undefined) {
-      actionInputsByEntity[entityName] = actionsInput;
-    }
 
     if (operationsInput !== undefined) {
       operationInputsByEntity[entityName] = operationsInput;
@@ -77,7 +70,7 @@ export function parseEntities(value: unknown): ParsedEntityCatalog {
     stateMachineInputsByEntity,
   );
 
-  return { entities: entitiesWithStateMachines, actionInputsByEntity, operationInputsByEntity };
+  return { entities: entitiesWithStateMachines, operationInputsByEntity };
 }
 
 function validateReferenceFields(entities: Record<string, EntitySchema>) {
@@ -143,7 +136,6 @@ function parseEntityBase(
   value: unknown,
 ): {
   entity: EntitySchema;
-  actionsInput: unknown;
   operationsInput: unknown;
   stateMachinesInput: unknown;
 } {
@@ -154,10 +146,8 @@ function parseEntityBase(
   assertSupportedKeys(`Entity "${entityName}"`, value, [
     "label",
     "fields",
-    "mutations",
     "constraints",
     "stateMachines",
-    "actions",
     "operations",
   ]);
 
@@ -171,17 +161,19 @@ function parseEntityBase(
     throw new Error(`Entity "${entityName}" must define at least one field.`);
   }
 
-  const mutations = parseEntityMutations(entityName, value.mutations);
   const constraints = parseEntityConstraints(entityName, value.constraints, fields);
 
   return {
     entity: {
       label,
       fields,
-      mutations,
+      mutations: {
+        create: { enabled: false },
+        patch: { enabled: false },
+        delete: { enabled: false },
+      },
       ...(constraints === undefined ? {} : { constraints }),
     },
-    actionsInput: value.actions,
     operationsInput: value.operations,
     stateMachinesInput: value.stateMachines,
   };

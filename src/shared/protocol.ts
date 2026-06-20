@@ -80,10 +80,6 @@ export type PublicOperationRequestSource = {
   siteBlockId?: string;
 };
 
-export type PublicActionActor = {
-  mode: "anonymous";
-};
-
 export type PublicOperationProof = {
   kind: "turnstile";
   token: string;
@@ -96,57 +92,6 @@ export type PublicOperationChallengeVerification = {
   verifiedAt: string;
   challengeTs?: string;
   hostname?: string;
-};
-
-export type PublicActionStorageTarget =
-  | {
-      kind: "schemaKey";
-      packageAppKey: string;
-      sourceSchemaKey: string;
-      apiRoutePrefix: string;
-    }
-  | {
-      kind: "appInstall";
-      installId: string;
-      packageAppKey: string;
-      sourceSchemaKey: string;
-      apiRoutePrefix: string;
-    };
-
-export type PublicActionSource = {
-  operationKey: string;
-  host: string;
-  path: string;
-  target: PublicActionStorageTarget;
-  siteBlockId?: string;
-};
-
-export type PublicActionExecutionEnvelope = {
-  actionId: string;
-  actor: PublicActionActor;
-  proof: PublicOperationProof;
-  source: PublicActionSource;
-  input: RecordValues;
-  idempotencyKey: string;
-  receivedAt: string;
-};
-
-export type PublicActionEffects = {
-  response: ActionResponse;
-};
-
-export type PublicActionAuditFacts = {
-  actionId: string;
-  accepted: boolean;
-  receivedAt: string;
-  rejectedAt?: string;
-  rejectionReason?: string;
-};
-
-export type PublicActionExecutionResult = {
-  envelope: PublicActionExecutionEnvelope;
-  effects?: PublicActionEffects;
-  audit: PublicActionAuditFacts;
 };
 
 export type PublicOperationRequest = {
@@ -169,7 +114,15 @@ export type PublicOperationResponse = {
         type: "command";
         affectedChangeIds: string[];
         cursor: number;
-        recordPlan?: RecordPlanResponse;
+        recordPlan?: {
+          steps: {
+            name: string;
+            kind: "create" | "patch" | "delete" | "tombstone";
+            entity: EntityName;
+            recordId: string;
+            changeId: string;
+          }[];
+        };
       }
     | {
         type: "create";
@@ -315,32 +268,6 @@ export type CreateAppInstallResponse = {
   initialization: AppInstallInitializationPlan;
   install: AppInstall;
   installs: AppInstall[];
-};
-
-export type MutationResponse = {
-  record: StoredRecord;
-  changes: ChangeRow[];
-  cursor: number;
-  mutationId: string;
-};
-
-export type RecordPlanStepResponse = {
-  name: string;
-  kind: "create" | "patch" | "delete" | "tombstone";
-  entity: EntityName;
-  recordId: string;
-  changeId: string;
-};
-
-export type RecordPlanResponse = {
-  steps: RecordPlanStepResponse[];
-};
-
-export type ActionResponse = {
-  actionId: string;
-  changes: ChangeRow[];
-  cursor: number;
-  recordPlan?: RecordPlanResponse;
 };
 
 export type SchemaResponse = {

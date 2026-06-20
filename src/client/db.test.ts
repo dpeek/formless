@@ -16,7 +16,7 @@ import {
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
-import type { AppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
@@ -243,14 +243,12 @@ describe("client db", () => {
       ...appSchema.entities.task.fields,
       notes: { type: "text", required: false },
     } satisfies AppSchema["entities"][string]["fields"];
-    const nextSchema = {
+    const nextSchema = parseAppSchema({
       version: 1,
       entities: {
         task: {
           label: "Planner task",
           fields,
-          mutations: defaultMutations(),
-          actions: appSchema.entities.task.actions,
           operations: taskOperations("Planner task", fields),
         },
       },
@@ -258,7 +256,8 @@ describe("client db", () => {
       itemViews: appSchema.itemViews,
       tableViews: appSchema.tableViews,
       views: appSchema.views,
-    } satisfies AppSchema;
+      screens: appSchema.screens,
+    });
 
     await saveBootstrapResponse("tasks", {
       schema: appSchema,
@@ -464,14 +463,6 @@ function taskOperations(
       audit: { input: "summary" },
     },
     ...(clearCompletedTasks === undefined ? {} : { clearCompletedTasks }),
-  };
-}
-
-function defaultMutations(): AppSchema["entities"][string]["mutations"] {
-  return {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
   };
 }
 

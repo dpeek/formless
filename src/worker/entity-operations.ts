@@ -25,10 +25,8 @@ import { nowIsoString } from "../shared/clock.ts";
 import { createRecordId } from "../shared/ids.ts";
 import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type {
-  ActionResponse,
   CreateMutation,
   DeleteMutation,
-  MutationResponse,
   PatchMutation,
   PublicOperationProof,
 } from "../shared/protocol.ts";
@@ -37,6 +35,7 @@ import type {
   OperationInvocationEnvelope,
   OperationInvocationIdempotency,
   OperationInvocationInput,
+  OperationInvocationOutput,
   OperationInvocationResponse,
   OperationInvocationSource,
   OperationInvocationSourceProtocol,
@@ -49,8 +48,8 @@ import {
   committedWrite,
   createStoredRecordOutcome,
   deleteStoredRecordOutcome,
-  getActionResponseById,
   getActiveRecordsByEntity,
+  getOperationInvocationById,
   getStoredRecord,
   mapWriteOutcome,
   patchStoredRecordOutcome,
@@ -61,7 +60,6 @@ import {
   type ActionRecordWritePlan,
   type RecordConstraintValidator,
   type WriteOutcome,
-  writeRecordSetForActionOutcome,
   writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
 
@@ -372,6 +370,18 @@ export function executeWriteOperationInvocation(input: {
     recordOperationInvocationAccepted(input.storage, input.envelope);
 
     try {
+      const replay = operationInvocationReplayResponse(input.storage, input.envelope);
+
+      if (replay) {
+        recordOperationInvocationOutcome(input.storage, {
+          envelope: input.envelope,
+          output: replay.output,
+          status: replay.status,
+        });
+
+        return replayedWrite(replay);
+      }
+
       const writeOutcome = executeWriteOperationInvocationOutcome(
         input.storage,
         input.envelope,
@@ -379,7 +389,12 @@ export function executeWriteOperationInvocation(input: {
         input.packageResolver,
         input.validateConstraints,
       );
-      const response = operationInvocationResponseFromWriteOutcome(input.envelope, writeOutcome);
+      const status = writeOutcome.kind === "replay" ? "replayed" : "committed";
+      const response = operationInvocationResponseFromWriteOutput(
+        input.envelope,
+        writeOutcome.response,
+        status,
+      );
 
       recordOperationInvocationOutcome(input.storage, {
         envelope: input.envelope,
@@ -403,7 +418,7 @@ function executeWriteOperationInvocationOutcome(
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<MutationResponse | ActionResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   if (!isEntityOperationWriteKind(envelope.operation.kind)) {
     throw new BadRequestError(
       `Operation "${envelope.operation.canonicalKey}" is not a write operation.`,
@@ -449,7 +464,7 @@ function executeCreateOperationInvocationOutcome(
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const validateRecordConstraints = operationRecordConstraintValidator(
     storage,
     schema,
@@ -463,7 +478,9 @@ function executeCreateOperationInvocationOutcome(
   );
 
   if ("outcome" in validatedMutation) {
-    return validatedMutation.outcome;
+    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+      recordWriteOperationOutput(envelope, response),
+    );
   }
 
   const mutation = validatedMutation.mutation;
@@ -472,19 +489,22 @@ function executeCreateOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a create.`);
   }
 
-  return createStoredRecordOutcome(
-    storage,
-    mutation,
-    (context) => {
-      executeCreateAfterCreateHooks(
-        context.storage,
-        context.mutation,
-        schema,
-        context.createRecords,
-      );
-    },
-    validateRecordConstraints,
-    { now: envelope.receivedAt },
+  return mapWriteOutcome(
+    createStoredRecordOutcome(
+      storage,
+      mutation,
+      (context) => {
+        executeCreateAfterCreateHooks(
+          context.storage,
+          context.mutation,
+          schema,
+          context.createRecords,
+        );
+      },
+      validateRecordConstraints,
+      { now: envelope.receivedAt },
+    ),
+    (response) => recordWriteOperationOutput(envelope, response),
   );
 }
 
@@ -494,7 +514,7 @@ function executeUpdateOperationInvocationOutcome(
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const validateRecordConstraints = operationRecordConstraintValidator(
     storage,
     schema,
@@ -508,7 +528,9 @@ function executeUpdateOperationInvocationOutcome(
   );
 
   if ("outcome" in validatedMutation) {
-    return validatedMutation.outcome;
+    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+      recordWriteOperationOutput(envelope, response),
+    );
   }
 
   const mutation = validatedMutation.mutation;
@@ -517,12 +539,11 @@ function executeUpdateOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce an update.`);
   }
 
-  return patchStoredRecordOutcome(
-    storage,
-    mutation,
-    mutation.recordValues,
-    validateRecordConstraints,
-    { now: envelope.receivedAt },
+  return mapWriteOutcome(
+    patchStoredRecordOutcome(storage, mutation, mutation.recordValues, validateRecordConstraints, {
+      now: envelope.receivedAt,
+    }),
+    (response) => recordWriteOperationOutput(envelope, response),
   );
 }
 
@@ -531,7 +552,7 @@ function executeDeleteOperationInvocationOutcome(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
-): WriteOutcome<MutationResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const validatedMutation = validateRecordOperationMutationRequest(
     operationDeleteMutationRequest(envelope),
     schema,
@@ -540,7 +561,9 @@ function executeDeleteOperationInvocationOutcome(
   );
 
   if ("outcome" in validatedMutation) {
-    return validatedMutation.outcome;
+    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+      recordWriteOperationOutput(envelope, response),
+    );
   }
 
   const mutation = validatedMutation.mutation;
@@ -549,7 +572,10 @@ function executeDeleteOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a delete.`);
   }
 
-  return deleteStoredRecordOutcome(storage, mutation, { now: envelope.receivedAt });
+  return mapWriteOutcome(
+    deleteStoredRecordOutcome(storage, mutation, { now: envelope.receivedAt }),
+    (response) => recordWriteOperationOutput(envelope, response),
+  );
 }
 
 function validateRecordOperationMutationRequest(
@@ -572,7 +598,7 @@ function executeCommandOperationInvocationOutcome(
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<ActionResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   if (envelope.operation.effect?.type === "recordPlan") {
     return executeRecordPlanOperationInvocationOutcome(
       storage,
@@ -615,7 +641,7 @@ function executeCommandOperationInvocationOutcome(
       },
       schema,
     ),
-    (response) => filterCommandOperationResponseForActor(response, envelope),
+    (response) => filterCommandOperationOutputForActor(commandOperationOutput(response), envelope),
   );
 }
 
@@ -624,7 +650,7 @@ function executePublicCommandOperationInvocationOutcome(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   effect: RegisteredCommandEntityOperationEffectSchema,
-): WriteOutcome<ActionResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const payload = publicCommandOperationPayload(envelope);
 
   if (effect.kind !== "subscribe") {
@@ -651,16 +677,8 @@ function executeRecordPlanOperationInvocationOutcome(
   effect: RecordPlanEntityOperationEffectSchema,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<ActionResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const actionId = requiredWriteIdentity(envelope);
-  const replay = getActionResponseById(storage, actionId);
-
-  if (replay) {
-    return replayedWrite(
-      filterCommandOperationResponseForActor(recordPlanActionResponse(replay, effect), envelope),
-    );
-  }
-
   const inputValues = recordPlanCommandInput(envelope, schema, storage);
   const plans = recordPlanWritePlans(
     storage,
@@ -673,17 +691,15 @@ function executeRecordPlanOperationInvocationOutcome(
   );
 
   return mapWriteOutcome(
-    writeRecordSetForActionOutcome(
+    writeRecordSetForCommandOperationOutcome(
       storage,
       actionId,
-      envelope.operation.entityName,
-      envelope.operation.operationName,
       plans,
       operationRecordConstraintValidator(storage, schema, validateConstraints),
       { now: envelope.receivedAt },
     ),
     (response) =>
-      filterCommandOperationResponseForActor(recordPlanActionResponse(response, effect), envelope),
+      filterCommandOperationOutputForActor(recordPlanOperationOutput(response, effect), envelope),
   );
 }
 
@@ -1144,19 +1160,19 @@ function recordPlanStepMutationId(actionId: string, stepName: string) {
   return `${actionId}:${stepName}`;
 }
 
-function recordPlanActionResponse(
-  response: ActionResponse,
+function recordPlanOperationOutput(
+  output: OperationCommandOutput,
   effect: RecordPlanEntityOperationEffectSchema,
-): ActionResponse {
-  if (response.changes.length !== effect.steps.length) {
-    throw new Error("Record plan response change count does not match step count.");
+): OperationCommandOutput {
+  if (output.changes.length !== effect.steps.length) {
+    throw new Error("Record plan output change count does not match step count.");
   }
 
   return {
-    ...response,
+    ...output,
     recordPlan: {
       steps: effect.steps.map((step, index) => {
-        const change = response.changes[index];
+        const change = output.changes[index];
 
         if (!change) {
           throw new Error(`Record plan step "${step.name}" has no committed change.`);
@@ -1248,7 +1264,7 @@ function executePublicSubscribeOperationInvocationOutcome(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   input: RecordValues,
-): WriteOutcome<ActionResponse> {
+): WriteOutcome<OperationInvocationOutput> {
   const contactEntity = requireSubscribeEntity(schema, "contact");
   const emailAddressEntity = requireSubscribeEntity(schema, "email-address");
   const audienceEntity = requireSubscribeEntity(schema, "audience");
@@ -1471,32 +1487,78 @@ function requireWrittenRecord(records: StoredRecord[], index: number | undefined
   return record;
 }
 
-function operationInvocationResponseFromWriteOutcome(
+type RecordWriteMaterializerOutput = {
+  record: StoredRecord;
+  changes: OperationCommandOutput["changes"];
+  cursor: number;
+};
+
+type CommandMaterializerOutput = {
+  changes: OperationCommandOutput["changes"];
+  cursor: number;
+  recordPlan?: OperationCommandOutput["recordPlan"];
+};
+
+function operationInvocationReplayResponse(
+  storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
-  outcome: WriteOutcome<MutationResponse | ActionResponse>,
-): OperationInvocationResponse {
+): OperationInvocationResponse | undefined {
+  const replay = getOperationInvocationById(storage, envelope.invocationId);
+
+  if (
+    replay?.output === undefined ||
+    (replay.status !== "committed" && replay.status !== "replayed")
+  ) {
+    return undefined;
+  }
+
+  assertStoredOperationOutputMatchesEnvelope(envelope, replay.output);
+
   return {
     invocation: envelope,
-    output: operationOutput(envelope, outcome.response),
-    status: outcome.kind === "replay" ? "replayed" : "committed",
+    output: replay.output,
+    status: "replayed",
   };
 }
 
-function filterCommandOperationResponseForActor(
-  response: ActionResponse,
+function assertStoredOperationOutputMatchesEnvelope(
   envelope: OperationInvocationEnvelope,
-): ActionResponse {
+  output: OperationInvocationOutput,
+) {
+  if (output.type !== envelope.operation.kind) {
+    throw new Error(
+      `Stored operation "${envelope.operation.canonicalKey}" output type "${output.type}" does not match operation kind "${envelope.operation.kind}".`,
+    );
+  }
+}
+
+function operationInvocationResponseFromWriteOutput(
+  envelope: OperationInvocationEnvelope,
+  output: OperationInvocationOutput,
+  status: OperationInvocationResponse["status"],
+): OperationInvocationResponse {
+  return {
+    invocation: envelope,
+    output,
+    status,
+  };
+}
+
+function filterCommandOperationOutputForActor(
+  output: OperationCommandOutput,
+  envelope: OperationInvocationEnvelope,
+): OperationCommandOutput {
   const allowedFields = envelope.operation.policy?.responseFields?.[envelope.actor.kind];
 
   if (allowedFields === undefined) {
-    return response;
+    return output;
   }
 
   const allowedFieldSet = new Set(allowedFields);
 
   return {
-    ...response,
-    changes: response.changes.map((change) => ({
+    ...output,
+    changes: output.changes.map((change) => ({
       ...change,
       payload: {
         ...change.payload,
@@ -1510,45 +1572,56 @@ function filterCommandOperationResponseForActor(
   };
 }
 
-function operationOutput(
+function recordWriteOperationOutput(
   envelope: OperationInvocationEnvelope,
-  response: MutationResponse | ActionResponse,
-): OperationInvocationResponse["output"] {
-  if ("record" in response) {
-    if (envelope.operation.kind === "delete") {
-      return {
-        affectedChangeIds: affectedChangeIds(response.changes),
-        changes: response.changes,
-        cursor: response.cursor,
-        recordId: response.record.id,
-        type: "delete",
-      };
-    }
-
+  output: RecordWriteMaterializerOutput,
+): OperationInvocationOutput {
+  if (envelope.operation.kind === "create") {
     return {
-      affectedChangeIds: affectedChangeIds(response.changes),
-      changes: response.changes,
-      cursor: response.cursor,
-      record: response.record,
-      type: envelope.operation.kind === "update" ? "update" : "create",
+      affectedChangeIds: affectedChangeIds(output.changes),
+      changes: output.changes,
+      cursor: output.cursor,
+      record: output.record,
+      type: "create",
     };
   }
 
-  const output: OperationCommandOutput = {
-    affectedChangeIds: affectedChangeIds(response.changes),
-    changes: response.changes,
-    cursor: response.cursor,
-    type: "command",
-  };
-
-  if (response.recordPlan !== undefined) {
-    output.recordPlan = response.recordPlan;
+  if (envelope.operation.kind === "update") {
+    return {
+      affectedChangeIds: affectedChangeIds(output.changes),
+      changes: output.changes,
+      cursor: output.cursor,
+      record: output.record,
+      type: "update",
+    };
   }
 
-  return output;
+  if (envelope.operation.kind === "delete") {
+    return {
+      affectedChangeIds: affectedChangeIds(output.changes),
+      changes: output.changes,
+      cursor: output.cursor,
+      recordId: output.record.id,
+      type: "delete",
+    };
+  }
+
+  throw new Error(
+    `Operation "${envelope.operation.canonicalKey}" is not a record write operation.`,
+  );
 }
 
-function affectedChangeIds(changes: MutationResponse["changes"]) {
+function commandOperationOutput(output: CommandMaterializerOutput): OperationCommandOutput {
+  return {
+    affectedChangeIds: affectedChangeIds(output.changes),
+    changes: output.changes,
+    cursor: output.cursor,
+    type: "command",
+    ...(output.recordPlan === undefined ? {} : { recordPlan: output.recordPlan }),
+  };
+}
+
+function affectedChangeIds(changes: OperationCommandOutput["changes"]) {
   return changes.map((change) => String(change.seq));
 }
 

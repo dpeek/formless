@@ -12,7 +12,7 @@ import {
 import { instanceControlPlaneClientTarget } from "./app-target.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "../shared/protocol.ts";
-import type { AppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(() => {
@@ -224,26 +224,55 @@ function record(id: string, title: string, done = false, entity = "task"): Store
 }
 
 function schemaWithSummary() {
-  return {
+  const fields = {
+    ...appSchema.entities.task.fields,
+    notes: { type: "text", required: false },
+  } satisfies AppSchema["entities"][string]["fields"];
+
+  return parseAppSchema({
     version: 1,
     entities: {
       task: {
         label: "Planner task",
-        fields: {
-          ...appSchema.entities.task.fields,
-          notes: { type: "text", required: false },
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
-        actions: appSchema.entities.task.actions,
+        fields,
+        operations: taskOperations("Planner task", fields),
       },
     },
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
     tableViews: appSchema.tableViews,
     views: appSchema.views,
-  } satisfies AppSchema;
+    screens: appSchema.screens,
+  });
+}
+
+function taskOperations(label: string, fields: AppSchema["entities"][string]["fields"]) {
+  const input = {
+    fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
+  };
+  const clearCompletedTasks = appSchema.entities.task.operations?.clearCompletedTasks;
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(clearCompletedTasks === undefined ? {} : { clearCompletedTasks }),
+  };
 }

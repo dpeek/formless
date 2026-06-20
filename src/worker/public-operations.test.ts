@@ -45,7 +45,7 @@ let turnstileRequests: unknown[];
 let turnstileResponse: Record<string, unknown>;
 
 beforeAll(async () => {
-  harness = await createPublicActionHarness({
+  harness = await createPublicOperationWorkerHarness({
     bindings: {
       FORMLESS_ADMIN_TOKEN: adminToken,
       FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
@@ -99,11 +99,11 @@ describe("public operation runtime", () => {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const unavailable = await postPublicAction(
+    const unavailable = await postPublicOperation(
       "/api/tasks/public/operations/task/clearCompletedTasks",
       publicSubscribeBody({ idempotencyKey: "not-public" }),
     );
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "schema-key-exec" }),
     );
@@ -177,19 +177,12 @@ describe("public operation runtime", () => {
     ]);
   });
 
-  it("uses operation policy instead of legacy public action metadata for subscribe availability", async () => {
+  it("uses operation policy for subscribe availability", async () => {
     await installSiteSchema((schema) => {
-      const subscribe = schema.entities.subscription?.actions?.subscribe;
-
-      if (!subscribe) {
-        throw new Error("Expected subscribe action.");
-      }
-
-      delete subscribe.access;
-      delete subscribe.publicInput;
+      expect(schema.entities.subscription).not.toHaveProperty("actions");
     });
 
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "operation-policy-only" }),
     );
@@ -209,9 +202,9 @@ describe("public operation runtime", () => {
     });
     turnstileRequests = [];
 
-    const rejected = await postPublicAction(
+    const rejected = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
-      publicSubscribeBody({ idempotencyKey: "legacy-action-only" }),
+      publicSubscribeBody({ idempotencyKey: "unsupported-action-only" }),
     );
     const rejectedAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
 
@@ -222,40 +215,44 @@ describe("public operation runtime", () => {
     expect(contactSubscriptionRecords(rejectedAfter.records).subscriptions).toHaveLength(0);
 
     await resetSchemaApp("site");
-    await installSiteSchema((schema) => {
-      const subscribe = schema.entities.subscription?.operations?.subscribe;
+    const current = await getJson<SchemaResponse>("/api/site/schema");
+    const schema = structuredClone(current.schema);
+    const subscribe = schema.entities.subscription?.operations?.subscribe;
 
-      if (!subscribe) {
-        throw new Error("Expected subscribe operation.");
-      }
+    if (!subscribe) {
+      throw new Error("Expected subscribe operation.");
+    }
 
-      subscribe.effect = {
-        type: "runActionKind",
-        kind: "subscribe",
-        action: "subscribe",
-      };
+    subscribe.effect = {
+      type: "runActionKind",
+      kind: "subscribe",
+      action: "subscribe",
+    } as never;
+    const unsupportedEffect = await harness.fetch("/api/site/schema", {
+      body: JSON.stringify(operationWriteRequest("/api/site/schema", { schema }).body),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
     });
 
-    const legacyEffect = await postPublicAction(
-      "/api/site/public/operations/subscription/subscribe",
-      publicSubscribeBody({ idempotencyKey: "legacy-effect" }),
+    const unsupportedEffectAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
+
+    expect(unsupportedEffect.status).toBe(400);
+    expect((await unsupportedEffect.json()) as { error: string }).toEqual({
+      error:
+        'Entity operation "subscription.subscribe" effect has unsupported type "runActionKind".',
+    });
+    expect(contactSubscriptionRecords(unsupportedEffectAfter.records).subscriptions).toHaveLength(
+      0,
     );
-    const legacyEffectAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
-
-    expect(legacyEffect.status).toBe(404);
-    expect((await legacyEffect.json()) as { error: string }).toEqual({
-      error: "Public operation is not available.",
-    });
-    expect(contactSubscriptionRecords(legacyEffectAfter.records).subscriptions).toHaveLength(0);
     expect(turnstileRequests).toEqual([]);
   });
 
-  it("does not synthesize public execution from legacy action-only metadata", async () => {
+  it("does not synthesize public execution from action-only metadata", async () => {
     const rejected = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
-      publicSubscribeBody({ idempotencyKey: "legacy-action-only-no-audit" }),
+      publicSubscribeBody({ idempotencyKey: "unsupported-action-only-no-audit" }),
       {
-        "x-public-operation-harness-schema-variant": "legacy-subscribe-action-only",
+        "x-public-operation-harness-schema-variant": "unsupported-subscribe-action-only",
       },
     );
     const body = (await rejected.json()) as { error: string };
@@ -306,11 +303,11 @@ describe("public operation runtime", () => {
   });
 
   it("supports installed app public operation routes with accepted replay idempotency", async () => {
-    const first = await postPublicAction(
+    const first = await postPublicOperation(
       `/api/app-installs/site/${installId}/public/operations/subscription/subscribe`,
       publicSubscribeBody({ idempotencyKey: "installed-replay" }),
     );
-    const replay = await postPublicAction(
+    const replay = await postPublicOperation(
       `/api/app-installs/site/${installId}/public/operations/subscription/subscribe`,
       publicSubscribeBody({ idempotencyKey: "installed-replay", token: "token-replay" }),
     );
@@ -341,7 +338,7 @@ describe("public operation runtime", () => {
 
   it("executes schema-key public create operations with create-shaped output", async () => {
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-exec" }),
     );
@@ -392,7 +389,7 @@ describe("public operation runtime", () => {
     await installPublicRecordPlanSchema("/api/tasks");
 
     const before = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/tasks/public/operations/task/submitPublicPlan",
       publicRecordPlanBody({ idempotencyKey: "record-plan-schema-key" }),
     );
@@ -452,7 +449,7 @@ describe("public operation runtime", () => {
     expect(JSON.stringify(body)).not.toContain("Created from public plan");
 
     const beforeRejected = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
-    const rejected = await postPublicAction(
+    const rejected = await postPublicOperation(
       "/api/tasks/public/operations/task/submitPublicPlan",
       publicRecordPlanBody({
         idempotencyKey: "record-plan-schema-key-rejected",
@@ -485,7 +482,7 @@ describe("public operation runtime", () => {
     await installPublicRecordPlanSchema(`/api/app-installs/tasks/${recordPlanInstallId}`);
 
     const route = `/api/app-installs/tasks/${recordPlanInstallId}/public/operations/task/submitPublicPlan`;
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       route,
       publicRecordPlanBody({ idempotencyKey: "record-plan-installed" }),
     );
@@ -539,7 +536,7 @@ describe("public operation runtime", () => {
     const beforeRejected = await getJson<BootstrapResponse>(
       `/api/app-installs/tasks/${recordPlanInstallId}/bootstrap`,
     );
-    const rejected = await postPublicAction(
+    const rejected = await postPublicOperation(
       route,
       publicRecordPlanBody({
         idempotencyKey: "record-plan-installed-rejected",
@@ -585,7 +582,7 @@ describe("public operation runtime", () => {
       }),
     );
     const rejectedAfter = await readPublicOperationHarnessState();
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-input-retry" }),
     );
@@ -644,7 +641,7 @@ describe("public operation runtime", () => {
   });
 
   it("rejects invalid declared public create input before challenge verification or idempotency reservation", async () => {
-    const rejected = await postPublicAction(
+    const rejected = await postPublicOperation(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({
         idempotencyKey: "contact-create-invalid-retry",
@@ -656,7 +653,7 @@ describe("public operation runtime", () => {
       }),
     );
     const rejectedAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-invalid-retry" }),
     );
@@ -721,7 +718,7 @@ describe("public operation runtime", () => {
     expect(JSON.stringify(afterState.invocations[0])).not.toContain(turnstileSecret);
 
     const missingConfigRequests: unknown[] = [];
-    const missingConfigHarness = await createPublicActionHarness({
+    const missingConfigHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
@@ -733,7 +730,7 @@ describe("public operation runtime", () => {
     });
 
     try {
-      const missingConfig = await postPublicAction(
+      const missingConfig = await postPublicOperation(
         "/api/site/public/operations/contact-message/submit",
         publicContactMessageBody({ idempotencyKey: "contact-create-missing-config" }),
         missingConfigHarness,
@@ -810,14 +807,14 @@ describe("public operation runtime", () => {
   });
 
   it("rejects undeclared public input before challenge verification or idempotency reservation", async () => {
-    const rejected = await postPublicAction(
+    const rejected = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({
         idempotencyKey: "input-retry",
         input: { email: "ada@example.com", admin: true },
       }),
     );
-    const accepted = await postPublicAction(
+    const accepted = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "input-retry" }),
     );
@@ -834,7 +831,7 @@ describe("public operation runtime", () => {
     turnstileResponse = { success: false, "error-codes": ["invalid-input-response"] };
 
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
-    const response = await postPublicAction(
+    const response = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "failed-turnstile" }),
     );
@@ -849,7 +846,7 @@ describe("public operation runtime", () => {
 
   it("fails closed when Turnstile secret configuration is missing or blank", async () => {
     const missingConfigRequests: unknown[] = [];
-    const missingConfigHarness = await createPublicActionHarness({
+    const missingConfigHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
@@ -861,7 +858,7 @@ describe("public operation runtime", () => {
     });
 
     try {
-      const response = await postPublicAction(
+      const response = await postPublicOperation(
         "/api/site/public/operations/subscription/subscribe",
         publicSubscribeBody({ idempotencyKey: "missing-config" }),
         missingConfigHarness,
@@ -877,7 +874,7 @@ describe("public operation runtime", () => {
     }
 
     const blankConfigRequests: unknown[] = [];
-    const blankConfigHarness = await createPublicActionHarness({
+    const blankConfigHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
@@ -891,7 +888,7 @@ describe("public operation runtime", () => {
     });
 
     try {
-      const response = await postPublicAction(
+      const response = await postPublicOperation(
         "/api/site/public/operations/subscription/subscribe",
         publicSubscribeBody({ idempotencyKey: "blank-config" }),
         blankConfigHarness,
@@ -915,7 +912,7 @@ describe("public operation runtime", () => {
       input: {
         type: "subscribeForm",
         label: "Join the list",
-        actionName: "subscribe",
+        operationName: "subscribe",
         buttonLabel: "Join",
       },
     });
@@ -953,7 +950,7 @@ describe("public operation runtime", () => {
     const deployedSiteKey = "deployed-turnstile-site-key";
     const deployedSecret = "deployed-turnstile-secret";
     const deployedRequests: unknown[] = [];
-    const deployedHarness = await createPublicActionHarness({
+    const deployedHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_TURNSTILE_SITE_KEY: deployedSiteKey,
@@ -976,7 +973,7 @@ describe("public operation runtime", () => {
           input: {
             type: "subscribeForm",
             label: "Join the deployed list",
-            actionName: "subscribe",
+            operationName: "subscribe",
             buttonLabel: "Join",
           },
         },
@@ -1001,7 +998,7 @@ describe("public operation runtime", () => {
       const subscribePlacement = tree.page.placements.find(
         (placement) => placement.block.id === block.record.id,
       );
-      const accepted = await postPublicAction(
+      const accepted = await postPublicOperation(
         "/api/site/public/operations/subscription/subscribe",
         publicSubscribeBody({ idempotencyKey: "deployed-bindings" }),
         deployedHarness,
@@ -1026,14 +1023,14 @@ describe("public operation runtime", () => {
   });
 
   it("keeps one email address and one subscription for duplicate subscribes", async () => {
-    const first = await postPublicAction(
+    const first = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({
         idempotencyKey: "duplicate-first",
         input: { email: "Ada@Example.com" },
       }),
     );
-    const duplicate = await postPublicAction(
+    const duplicate = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({
         idempotencyKey: "duplicate-second",
@@ -1052,7 +1049,7 @@ describe("public operation runtime", () => {
   });
 
   it("resubscribes an existing unsubscribed membership", async () => {
-    const first = await postPublicAction(
+    const first = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "resubscribe-first" }),
     );
@@ -1067,7 +1064,7 @@ describe("public operation runtime", () => {
 
     await patchSubscriptionStatus(subscription.id, "unsubscribed");
 
-    const resubscribe = await postPublicAction(
+    const resubscribe = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
       publicSubscribeBody({ idempotencyKey: "resubscribe-second" }),
     );
@@ -1082,7 +1079,7 @@ describe("public operation runtime", () => {
   });
 
   it("routes mapped public Site host public operations without exposing admin shell or schema-key APIs", async () => {
-    const mappedHarness = await createPublicActionHarness({
+    const mappedHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_RUNTIME_PROFILE: "instance",
@@ -1142,7 +1139,7 @@ describe("public operation runtime", () => {
   });
 });
 
-async function createPublicActionHarness(input: {
+async function createPublicOperationWorkerHarness(input: {
   bindings: Record<string, string>;
   turnstileVerify: (request: Request) => Promise<Response> | Response;
 }) {
@@ -1178,7 +1175,7 @@ async function createPublicOperationHarness(input: {
         executePublicOperationRequest,
         PublicOperationError,
         selectPublicOperationRoute,
-      } from "${process.cwd()}/src/worker/public-actions.ts";
+      } from "${process.cwd()}/src/worker/public-operations.ts";
       import { BadRequestError } from "${process.cwd()}/src/worker/errors.ts";
       import { workerSchemaAppDefinitions } from "${process.cwd()}/src/worker/schema-apps.ts";
       import {
@@ -1294,7 +1291,7 @@ async function createPublicOperationHarness(input: {
       function schemaForHarnessRequest(sourceSchema, request) {
         if (
           request.headers.get("x-public-operation-harness-schema-variant") !==
-          "legacy-subscribe-action-only"
+          "unsupported-subscribe-action-only"
         ) {
           return sourceSchema;
         }
@@ -1533,12 +1530,7 @@ function taskLogEntity(): AppSchema["entities"][string] {
       sourcePath: { type: "text", required: false, label: "Source path" },
       occurredAt: { type: "text", required: true, label: "Occurred at" },
     },
-    mutations: {
-      create: { enabled: true },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    },
-  };
+  } as unknown as AppSchema["entities"][string];
 }
 
 function contactSubscriptionRecords(records: StoredRecord[]) {
@@ -1632,7 +1624,7 @@ async function createMappedPublicSiteRoute(target: Harness, host: string, appIns
   );
 }
 
-function postPublicAction(path: string, body: unknown, target: Harness = harness) {
+function postPublicOperation(path: string, body: unknown, target: Harness = harness) {
   return target.fetch(path, {
     body: JSON.stringify(body),
     headers: {

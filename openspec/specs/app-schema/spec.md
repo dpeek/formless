@@ -70,8 +70,8 @@ archive, or deploy workflows.
 #### Scenario: Hash complete schema source
 
 - GIVEN an app package source schema changes entities, fields, relationships,
-  queries, read models, views, table views, item views, screens, actions,
-  operations, state machines, labels, or runtime metadata
+  queries, read models, views, table views, item views, screens, operations,
+  state machines, labels, or runtime metadata
 - WHEN the deterministic source schema hash is computed
 - THEN the hash input is the complete canonical App schema object
 - AND generated UI-only changes such as view, table view, item view, or screen
@@ -204,24 +204,18 @@ projections, operations, bindings, and adapters.
 - AND the binding does not redefine the operation input, output, effect, actor
   policy, idempotency policy, audit policy, or storage target
 
-#### Scenario: Retire peer interaction models
+#### Scenario: Operation schema is the interaction model
 
-- GIVEN source schema declares mutation policy, entity actions, public action
-  metadata, or generated action slots
-- WHEN operation-centered runtime models are selected
-- THEN those declarations are treated only as legacy migration inputs or
-  implementation details behind source-declared operations
-- AND they do not create browser controls, protocol write routes, public write
-  routes, audit roots, or authorization decisions without a source-declared
-  operation
+- GIVEN source schema describes writes, commands, public execution, table
+  controls, state transitions, generated controls, or workflow triggers
+- WHEN the schema is parsed
+- THEN those semantics are represented by source-declared operations and
+  operation bindings
+- AND bundled source schemas and fixtures express interaction behavior through
+  operations and operation bindings
 - AND new schema behavior that affects invocation semantics is added to
   operations or operation bindings rather than to a separate peer interaction
   model
-- AND command operation effects do not require callers or generated UI models to
-  read entity action metadata after an equivalent operation-native effect has
-  been introduced
-- AND table row controls use operation bindings rather than table-local action
-  slots once operation-bound table control schema is available
 
 ### Requirement: Schema Package Boundary
 
@@ -235,14 +229,15 @@ pure helpers through the Schema package slice.
   slices need App schema types, parse behavior, stringify behavior,
   schema-local entity key helpers, qualified entity name helpers, field
   behavior, query helpers, read model helpers, create-default helpers, runtime
-  metadata helpers, operation capability facts, or action capability facts
+  metadata helpers, operation capability facts, or derived command capability
+  facts
 - **THEN** they import those contracts and helpers from
   `@dpeek/formless-schema`
 - **AND** they do not import package-owned schema behavior from old
   `src/shared/schema*`, `src/shared/field-types`, `src/shared/fields`,
   `src/shared/query`, `src/shared/read-model`, or unexported package internals
-- **AND** old package-owned shared schema modules are not retained as
-  compatibility re-export shims
+- **AND** old package-owned shared schema modules are not retained as alternate
+  export shims
 
 #### Scenario: Package does not own runtime app records
 
@@ -586,7 +581,7 @@ public forms, automation, audit, and authorization.
   execution
 - WHEN runtime models are selected
 - THEN the runtime consumes source-declared entity operations
-- AND mutation policy or entity actions do not synthesize operation bindings
+- AND operation bindings are selected only from source-declared operation keys
 - AND operation bindings use the same canonical operation key grammar as their
   source-declared operations
 
@@ -595,11 +590,12 @@ public forms, automation, audit, and authorization.
 - GIVEN a source schema declares a command operation
 - WHEN the command effect is parsed
 - THEN the effect identifies operation-native command behavior and declared
-  input/output facts without requiring an entity action reference
-- AND existing legacy command effect declarations can be parsed only as
-  migration inputs behind source-declared operations
+  input/output facts from the operation declaration
+- AND the only supported command effect types are `registeredCommand` and
+  `recordPlan`
+- AND command effect parsing selects one of those operation-native shapes
 - AND operation visibility, policy, audit, and idempotency come from the
-  operation declaration rather than from entity action metadata
+  operation declaration
 
 #### Scenario: Parse table operation bindings
 
@@ -611,9 +607,7 @@ public forms, automation, audit, and authorization.
   row-control placement
 - AND binding declarations may include placement, labels, ordering presentation,
   target record selection, and disabled reasons
-- AND table-local action slots and `invokeAction` columns do not create new
-  operation semantics or browser controls after equivalent operation bindings
-  are available
+- AND operation control presentation contracts use operation terminology
 
 ### Requirement: State Machines
 
@@ -649,25 +643,35 @@ fields without adding nested stored workflow state.
 - THEN the current state is represented by the normal enum field value
 - AND state machine metadata does not create nested record values
 
-### Requirement: Legacy Public Action Metadata
+### Requirement: Public Operation Policy
 
-The system SHALL keep legacy public action metadata from creating public
-execution behavior outside operation policy and public operation bindings.
+The system SHALL define public operation execution through operation policy,
+operation input contracts, and public operation bindings only.
 
-#### Scenario: Reject anonymous action-only access
+#### Scenario: Parse public operation policy
 
-- GIVEN an app schema declares anonymous public access on an entity action
-  without a matching source-declared public operation binding
-- WHEN public execution models are selected
-- THEN the declaration does not create a public execution route
-- AND anonymous callers cannot invoke the action through public operation routes
+- GIVEN an app schema declares anonymous public access, public input, or response
+  filtering for an operation
+- WHEN the schema is parsed
+- THEN those facts are parsed from the operation policy and operation input
+  contract
+- AND anonymous callers invoke the behavior through public operation routes
 
-#### Scenario: Reject unsupported public action policy
+#### Scenario: Reject unsupported public operation policy
 
-- GIVEN an app schema declares a public action policy with an unsupported actor mode, challenge, or origin rule
+- GIVEN an app schema declares a public operation policy with an unsupported
+  actor mode, challenge, or origin rule
 - WHEN the schema is parsed
 - THEN parsing fails
 - AND the invalid app schema is not used for generated UI or writes
+
+#### Scenario: Export operation-named public contracts
+
+- GIVEN app, client, Worker, Site runtime, or tests need public execution
+  protocol types, operation access policy types, or inline public input field
+  types
+- WHEN those contracts are imported from the schema or shared protocol packages
+- THEN they are named for public operation execution
 
 ### Requirement: Public Operation Input Contract
 

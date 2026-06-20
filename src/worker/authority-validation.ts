@@ -20,7 +20,6 @@ import type {
   CreateMutation,
   DeleteMutation,
   Mutation,
-  MutationResponse,
   PatchMutation,
 } from "../shared/protocol.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
@@ -30,6 +29,7 @@ import {
   getMutationResponseById,
   getStoredRecord,
   replayedWrite,
+  type MutationResponse,
   type WriteOutcome,
 } from "./storage.ts";
 

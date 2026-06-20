@@ -6,17 +6,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import type {
-  ActionResponse,
-  BootstrapResponse,
-  ChangeRow,
-  MutationResponse,
-  SyncResponse,
-} from "../shared/protocol.ts";
-import type { AppSchema } from "@dpeek/formless-schema";
+import type { BootstrapResponse, ChangeRow, SyncResponse } from "../shared/protocol.ts";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import type {
   AppliedPackageAppMigration,
   ApplyPackageAppMigrationsResponse,
+  ActionResponse,
+  MutationResponse,
   PackageAppMigrationState,
   StoredSchema,
   WriteOutcome,
@@ -62,13 +58,12 @@ describe("storage", () => {
       dueDate: { type: "date", required: false },
       notes: { type: "text", required: false },
     } satisfies AppSchema["entities"][string]["fields"];
-    const nextSchema = {
+    const nextSchema = parseAppSchema({
       version: 1,
       entities: {
         task: {
           label: "Planner task",
           fields,
-          mutations: defaultMutations(),
           operations: taskOperations("Planner task", fields),
         },
       },
@@ -77,7 +72,7 @@ describe("storage", () => {
       tableViews: {},
       views: defaultViews(),
       screens: defaultScreens(),
-    } satisfies AppSchema;
+    });
 
     await postJson("/schema", nextSchema);
 
@@ -93,13 +88,12 @@ describe("storage", () => {
       dueDate: { type: "date", required: false },
       notes: { type: "text", required: false },
     } satisfies AppSchema["entities"][string]["fields"];
-    const nextSchema = {
+    const nextSchema = parseAppSchema({
       version: 1,
       entities: {
         task: {
           label: "Planner task",
           fields,
-          mutations: defaultMutations(),
           operations: taskOperations("Planner task", fields),
         },
       },
@@ -108,7 +102,7 @@ describe("storage", () => {
       tableViews: {},
       views: defaultViews(),
       screens: defaultScreens(),
-    } satisfies AppSchema;
+    });
 
     await postJson("/schema", nextSchema);
     await createRecord("mutation-1", "First");
@@ -122,7 +116,7 @@ describe("storage", () => {
     expect(await getJson<number>("/cursor")).toBe(0);
   });
 
-  it("clears record, change, and action execution tables before writing source seed rows", async () => {
+  it("clears records, changes, and command replay rows before writing source seed rows", async () => {
     const completed = await createRecord("mutation-before-reset", "Done", true);
     const action = await postJson<ActionResponse>("/tombstone-records", {
       actionId: "action-before-reset",
@@ -1127,13 +1121,12 @@ function taskSchema(): AppSchema {
     },
   } satisfies AppSchema["entities"][string]["fields"];
 
-  return {
+  return parseAppSchema({
     version: 1,
     entities: {
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
         operations: taskOperations("Task", fields),
       },
     },
@@ -1142,7 +1135,7 @@ function taskSchema(): AppSchema {
     tableViews: {},
     views: defaultViews(),
     screens: defaultScreens(),
-  };
+  });
 }
 
 function taskOperations(
@@ -1185,14 +1178,6 @@ function record(id: string, title: string, overrides: Partial<StoredRecord> = {}
     createdAt: "2026-04-28T00:00:00.000Z",
     updatedAt: "2026-04-28T00:00:00.000Z",
     ...overrides,
-  };
-}
-
-function defaultMutations(): AppSchema["entities"][string]["mutations"] {
-  return {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
   };
 }
 

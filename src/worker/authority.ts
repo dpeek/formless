@@ -42,7 +42,7 @@ import {
   executePublicOperationRequest,
   PublicOperationError,
   selectPublicOperationRoute,
-} from "./public-actions.ts";
+} from "./public-operations.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 import {
   handleAppStorageUpgradeStatusDurableObjectRequest,

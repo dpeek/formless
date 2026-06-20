@@ -50,26 +50,6 @@
           }
         }
       },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      },
-      "actions": {
-        "clearCompletedTasks": {
-          "label": "Clear completed",
-          "kind": "clear-completed",
-          "target": {
-            "query": "taskCompleted"
-          }
-        }
-      },
       "operations": {
         "create": {
           "label": "Create Task",

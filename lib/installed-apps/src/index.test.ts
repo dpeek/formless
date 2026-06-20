@@ -546,9 +546,9 @@ describe("source schema hash contracts", () => {
         },
       ],
       [
-        "action",
+        "operation label",
         (schema) => {
-          schema.entities.task.actions.clearCompletedTasks.label = "Remove completed";
+          schema.entities.task.operations.create.label = "Add task";
         },
       ],
       [
@@ -719,18 +719,6 @@ function sourceSchemaHashFixture() {
           title: { type: "text", required: true, label: "Title" },
           done: { type: "boolean", required: true, label: "Done", default: false },
           effort: { type: "number", required: true, label: "Effort", default: 1 },
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
-        actions: {
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
-            target: { query: "taskDone" },
-          },
         },
         operations: {
           create: {

@@ -284,7 +284,7 @@ describe("authority operation execution", () => {
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
   });
 
-  it("commits operation-only CRUD writes without legacy mutation policy", async () => {
+  it("commits operation-only CRUD writes without source mutation policy", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
       path: "/bootstrap",
@@ -375,7 +375,7 @@ describe("authority operation execution", () => {
       throw new Error("Expected delete operation output.");
     }
 
-    expect(schema.entities.task?.mutations).toEqual(disabledMutations());
+    expect(schema.entities.task).not.toHaveProperty("mutations");
     expect(created.body.writes.map((write) => write.kind)).toEqual(["committed"]);
     expect(createOutput.record.createdAt).toBe(created.body.result.body.invocation.receivedAt);
     expect(createOutput.record.updatedAt).toBe(created.body.result.body.invocation.receivedAt);
@@ -1611,27 +1611,14 @@ function cloneSchema(schema: AppSchema): AppSchema {
 function schemaWithScopedClearCompletedCommand(sourceSchema: AppSchema): AppSchema {
   const schema = cloneSchema(sourceSchema);
   const taskEntity = requireEntity(schema, "task");
-  const action = taskEntity.actions?.clearCompletedTasks;
   const operation = taskEntity.operations?.clearCompletedTasks;
 
-  if (
-    !action ||
-    action.kind !== "clear-completed" ||
-    !operation ||
-    operation.effect?.type !== "registeredCommand"
-  ) {
-    throw new Error("Expected clearCompletedTasks action and operation.");
+  if (!operation || operation.effect?.type !== "registeredCommand") {
+    throw new Error("Expected clearCompletedTasks operation.");
   }
 
   schema.entities.task = {
     ...taskEntity,
-    actions: {
-      ...taskEntity.actions,
-      clearCompletedTasks: {
-        ...action,
-        exposure: { actors: ["runner"] },
-      },
-    },
     operations: {
       ...taskEntity.operations,
       clearCompletedTasks: {
@@ -1670,7 +1657,6 @@ function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchem
   schema.entities.task = {
     ...taskEntity,
     fields: taskFields,
-    mutations: disabledMutations(),
     stateMachines: {
       statusFlow: {
         field: "status",
@@ -1684,16 +1670,6 @@ function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchem
           entity: "task-event",
           fields: transitionEventFieldMappings(),
         },
-      },
-    },
-    actions: {
-      ...taskEntity.actions,
-      startTask: {
-        label: "Start",
-        kind: "transition-state",
-        machine: "statusFlow",
-        transition: "start",
-        exposure: { actors: ["runner"] },
       },
     },
     operations: {
@@ -1736,7 +1712,6 @@ function schemaWithRecordPlanOperation(
   schema.entities["task-log"] = taskLogEntity();
   schema.entities.task = {
     ...taskEntity,
-    mutations: disabledMutations(),
     operations: {
       ...taskEntity.operations,
       [operationName]: recordPlanOperation(steps),
@@ -1762,12 +1737,7 @@ function taskLogEntity(): AppSchema["entities"][string] {
       sourcePath: { type: "text", required: false, label: "Source path" },
       occurredAt: { type: "text", required: true, label: "Occurred at" },
     },
-    mutations: {
-      create: { enabled: false },
-      patch: { enabled: false },
-      delete: { enabled: false },
-    },
-  };
+  } as unknown as AppSchema["entities"][string];
 }
 
 function transitionEventEntity(): AppSchema["entities"][string] {
@@ -1782,8 +1752,7 @@ function transitionEventEntity(): AppSchema["entities"][string] {
       actorMode: { type: "text", required: true, label: "Actor mode" },
       occurredAt: { type: "date", required: true, label: "Occurred at" },
     },
-    mutations: disabledMutations(),
-  };
+  } as unknown as AppSchema["entities"][string];
 }
 
 function transitionEventFieldMappings() {
@@ -1890,7 +1859,6 @@ function schemaWithOperationOnlyTaskCrud(sourceSchema: AppSchema): AppSchema {
 
   schema.entities.task = {
     ...taskEntity,
-    mutations: disabledMutations(),
     operations: {
       ...taskEntity.operations,
       ...recordCrudOperations("Task", taskEntity.fields),
@@ -1934,9 +1902,8 @@ function schemaWithOperationOnlyTaskProjectReference(sourceSchema: AppSchema): A
   schema.entities.project = {
     label: "Project",
     fields: projectFields,
-    mutations: disabledMutations(),
     operations: recordCrudOperations("Project", projectFields),
-  };
+  } as unknown as EntitySchema;
 
   return schema;
 }
@@ -1949,14 +1916,6 @@ function requireEntity(schema: AppSchema, entityName: string): EntitySchema {
   }
 
   return entity;
-}
-
-function disabledMutations(): EntitySchema["mutations"] {
-  return {
-    create: { enabled: false },
-    patch: { enabled: false },
-    delete: { enabled: false },
-  };
 }
 
 function recordCrudOperations(

@@ -33,11 +33,7 @@ import type {
 } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import { parseCreateAppInstallRequest, type CreateAppInstallRequest } from "../shared/protocol.ts";
-import {
-  parseAppSchema,
-  type EntityOperationSchema,
-  type SchemaActionActorKind,
-} from "@dpeek/formless-schema";
+import { type EntityOperationSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -116,7 +112,7 @@ export const INTERNAL_READ_RECORDS_PATH = "/_internal/read-records";
 export const INTERNAL_READ_OPERATION_INVOCATIONS_PATH = "/_internal/read-operation-invocations";
 export const INTERNAL_SYNC_DOMAIN_INTENT_PATH = "/_internal/sync-domain-intent";
 export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
-const instanceControlPlaneSourceSchema = parseAppSchema(instanceControlPlaneSchema);
+const instanceControlPlaneSourceSchema = instanceControlPlaneSchema;
 const instanceControlPlaneApp = {
   key: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   label: "Instance control plane",
@@ -581,7 +577,7 @@ async function handleCreateAppInstallOperation(
     );
     const response = createAppInstallOperationResponse(
       envelope,
-      createAppInstallCommandOutput(outcome.response.changes, outcome.response.cursor),
+      outcome.response,
       outcome.kind === "replay" ? "replayed" : "committed",
     );
 
@@ -667,18 +663,6 @@ function createAppInstallOperationReplayResponse(
   }
 
   return createAppInstallOperationResponse(envelope, replay.output, "replayed");
-}
-
-function createAppInstallCommandOutput(
-  changes: OperationCommandOutput["changes"],
-  cursor: number,
-): OperationCommandOutput {
-  return {
-    type: "command",
-    affectedChangeIds: changes.map((change) => String(change.seq)),
-    changes,
-    cursor,
-  };
 }
 
 function createAppInstallOperationWriteIdentity(idempotencyKey: string) {

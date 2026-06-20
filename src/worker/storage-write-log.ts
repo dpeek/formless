@@ -1,5 +1,31 @@
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
-import type { ActionResponse, ChangeRow, MutationResponse } from "../shared/protocol.ts";
+import type { ChangeRow } from "../shared/protocol.ts";
+
+export type MutationResponse = {
+  record: StoredRecord;
+  changes: ChangeRow[];
+  cursor: number;
+  mutationId: string;
+};
+
+export type RecordPlanStepResponse = {
+  name: string;
+  kind: "create" | "patch" | "delete" | "tombstone";
+  entity: string;
+  recordId: string;
+  changeId: string;
+};
+
+export type RecordPlanResponse = {
+  steps: RecordPlanStepResponse[];
+};
+
+export type ActionResponse = {
+  actionId: string;
+  changes: ChangeRow[];
+  cursor: number;
+  recordPlan?: RecordPlanResponse;
+};
 
 type ChangeSqlRow = {
   seq: number;

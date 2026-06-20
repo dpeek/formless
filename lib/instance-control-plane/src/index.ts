@@ -21,14 +21,10 @@ import {
   isRuntimeControlPlaneObservedField,
   isRuntimeControlPlaneSecretReferenceField,
   isValidStoredFieldValue,
+  parseAppSchema,
   parseQualifiedEntityName,
 } from "@dpeek/formless-schema";
-import type {
-  AppSchema,
-  EntityMutationPolicy,
-  FieldEditor,
-  FieldSchema,
-} from "@dpeek/formless-schema";
+import type { AppSchema, FieldEditor, FieldSchema } from "@dpeek/formless-schema";
 import {
   parseStorageSnapshot,
   type RecordValues,
@@ -42,7 +38,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:7c8fc7e1cd19fca172c6d37223919ac60ffd188d3baed750d79346468b42a424" satisfies SourceSchemaHash;
+  "sha256:c965ec00f55af7db6a03d8082ebf94eb3a662f0a4e392e8a9214dfe12418fea9" satisfies SourceSchemaHash;
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
   sourceSchemaHash: INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
@@ -225,13 +221,7 @@ export const instanceControlPlaneReservedRoutePaths = [
   "/static",
 ] as const;
 
-const editableMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: false },
-} satisfies EntityMutationPolicy;
-
-export const instanceControlPlaneSchema = {
+export const instanceControlPlaneSourceSchema = {
   version: 1,
   entities: {
     "app-install": {
@@ -249,7 +239,6 @@ export const instanceControlPlaneSchema = {
         }),
         storageIdentity: textField("Storage identity"),
       },
-      mutations: editableMutations,
       operations: writeOperations("App install", [
         "installId",
         "packageAppKey",
@@ -302,7 +291,6 @@ export const instanceControlPlaneSchema = {
         preservePath: optionalBooleanField("Preserve path", true),
         preserveQueryString: optionalBooleanField("Preserve query string", true),
       },
-      mutations: editableMutations,
       operations: writeOperations("Route", [
         "enabled",
         "matchHost",
@@ -346,7 +334,6 @@ export const instanceControlPlaneSchema = {
         observedError: optionalTextField("Observed error", "longText"),
         observedRunnerId: optionalTextField("Observed runner"),
       },
-      mutations: editableMutations,
       operations: writeOperations(
         "Deployment config",
         [
@@ -658,7 +645,9 @@ export const instanceControlPlaneSchema = {
       },
     },
   },
-} satisfies AppSchema;
+};
+
+export const instanceControlPlaneSchema = parseAppSchema(instanceControlPlaneSourceSchema);
 
 export function instanceControlPlaneStorageIdentityForInstall(
   installId: AppInstallId,

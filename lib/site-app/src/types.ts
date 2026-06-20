@@ -85,7 +85,7 @@ export type SiteBlockNode = {
   type: string;
   label: string;
   body?: string;
-  actionName?: string;
+  operationName?: string;
   buttonLabel?: string;
   href?: string;
   date?: string;

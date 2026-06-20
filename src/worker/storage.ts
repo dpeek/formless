@@ -3,15 +3,14 @@ import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
-  ActionResponse,
   BootstrapResponse,
   ChangeRow,
   CreateMutation,
   DeleteMutation,
   PatchMutation,
-  MutationResponse,
 } from "../shared/protocol.ts";
 import type {
+  OperationCommandOutput,
   OperationInvocationEnvelope,
   OperationInvocationInput,
   OperationInvocationOutput,
@@ -53,7 +52,11 @@ import {
   readMutationReplayResponse,
   readWriteLogChangesAfter,
   readWriteLogChangesByMutationId,
+  type ActionResponse,
+  type MutationResponse,
 } from "./storage-write-log.ts";
+
+export type { ActionResponse, MutationResponse } from "./storage-write-log.ts";
 import {
   createSqlStorageMigrationRegistry,
   runSqlStorageMigrations,
@@ -926,6 +929,7 @@ export function restoreStorageSnapshotOutcome(
     materializeSnapshotRestoreRecords(storage, plan);
     appendSnapshotRestoreChanges(storage, plan);
     storage.sql.exec("DELETE FROM action_executions");
+    storage.sql.exec(`DELETE FROM ${operationInvocationsTableName}`);
 
     return committedWrite({
       schema: storedSchema.schema,
@@ -2358,16 +2362,12 @@ export function writeRecordSetForCommandOperationOutcome(
   plans: ActionRecordWritePlan[],
   validateConstraints?: RecordConstraintValidator,
   options: ActionMaterializationOptions = {},
-): WriteOutcome<ActionResponse> {
+): WriteOutcome<OperationCommandOutput> {
   return storage.transactionSync(() => {
     const existingChanges = readWriteLogChangesByMutationId(storage, operationId);
 
     if (existingChanges.length > 0) {
-      return replayedWrite({
-        actionId: operationId,
-        changes: existingChanges,
-        cursor: existingChanges.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
-      });
+      return replayedWrite(operationCommandOutputFromChanges(storage, existingChanges));
     }
 
     const changedAt = options.now ?? nowIsoString();
@@ -2381,12 +2381,20 @@ export function writeRecordSetForCommandOperationOutcome(
 
     const changes = readWriteLogChangesByMutationId(storage, operationId);
 
-    return committedWrite({
-      actionId: operationId,
-      changes,
-      cursor: changes.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
-    });
+    return committedWrite(operationCommandOutputFromChanges(storage, changes));
   });
+}
+
+function operationCommandOutputFromChanges(
+  storage: DurableObjectStorage,
+  changes: ChangeRow[],
+): OperationCommandOutput {
+  return {
+    type: "command",
+    affectedChangeIds: changes.map((change) => String(change.seq)),
+    changes,
+    cursor: changes.at(-1)?.seq ?? readCurrentWriteLogCursor(storage),
+  };
 }
 
 function materializeActionTombstoneRecords(

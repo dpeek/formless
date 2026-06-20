@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { getEntityActionKindCapabilities, parseAppSchema, stringifySchema } from "./index.ts";
 
 describe("schema state machines", () => {
-  it("parses enum-backed state machines, transition actions, events, and stringify output", () => {
+  it("parses enum-backed state machines, transition operations, events, and stringify output", () => {
     const schema = parseAppSchema(stateMachineSchema());
 
     expect(schema.entities.task?.stateMachines?.statusFlow).toEqual({
@@ -169,11 +169,11 @@ describe("schema state machines", () => {
     ).toThrow('target entity requires field "label" to have a default or event mapping');
   });
 
-  it("rejects invalid transition-state actions and anonymous public access", () => {
+  it("rejects invalid transition-state operations and anonymous public access", () => {
     expect(() =>
       parseAppSchema(
         stateMachineSchema({
-          action: { machine: "missing" },
+          operation: { effect: { ...transitionEffect(), machine: "missing" } },
         }),
       ),
     ).toThrow('references unknown state machine "missing"');
@@ -181,7 +181,7 @@ describe("schema state machines", () => {
     expect(() =>
       parseAppSchema(
         stateMachineSchema({
-          action: { transition: "missing" },
+          operation: { effect: { ...transitionEffect(), transition: "missing" } },
         }),
       ),
     ).toThrow('references unknown transition "statusFlow.missing"');
@@ -189,13 +189,16 @@ describe("schema state machines", () => {
     expect(() =>
       parseAppSchema(
         stateMachineSchema({
-          action: {
-            access: {
-              actor: "anonymous",
-              challenge: { kind: "turnstile" },
-              origin: { kind: "same-origin" },
+          operation: {
+            policy: {
+              actors: ["anonymous"],
+              access: {
+                actor: "anonymous",
+                challenge: { kind: "turnstile" },
+                origin: { kind: "same-origin" },
+              },
             },
-            publicInput: {
+            input: {
               fields: {
                 reason: { type: "text", required: true },
               },
@@ -203,17 +206,17 @@ describe("schema state machines", () => {
           },
         }),
       ),
-    ).toThrow('kind "transition-state" is not eligible for public execution');
+    ).toThrow("command effect is not eligible for public execution");
   });
 });
 
 function stateMachineSchema(
   overrides: {
-    action?: Record<string, unknown>;
     eventFields?: Record<string, unknown>;
     extraStateMachines?: Record<string, unknown>;
     fields?: Record<string, unknown>;
     machine?: Record<string, unknown>;
+    operation?: Record<string, unknown>;
   } = {},
 ) {
   return {
@@ -225,11 +228,6 @@ function stateMachineSchema(
           ...taskFields(),
           ...overrides.fields,
         },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
         stateMachines: {
           statusFlow: {
             ...statusFlowMachine(),
@@ -237,14 +235,14 @@ function stateMachineSchema(
           },
           ...overrides.extraStateMachines,
         },
-        actions: {
+        operations: {
           startWork: {
             label: "Start work",
-            kind: "transition-state",
-            machine: "statusFlow",
-            transition: "start",
-            exposure: { actors: ["owner"] },
-            ...overrides.action,
+            kind: "command",
+            scope: "record",
+            effect: transitionEffect(),
+            policy: { actors: ["owner"] },
+            ...overrides.operation,
           },
         },
       },
@@ -259,11 +257,6 @@ function stateMachineSchema(
           actorMode: { type: "text", required: true },
           occurredAt: { type: "date", required: true },
           ...overrides.eventFields,
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: false },
-          delete: { enabled: false },
         },
       },
     },
@@ -301,6 +294,15 @@ function stateMachineSchema(
         },
       },
     },
+  };
+}
+
+function transitionEffect() {
+  return {
+    type: "registeredCommand",
+    kind: "transition-state",
+    machine: "statusFlow",
+    transition: "start",
   };
 }
 

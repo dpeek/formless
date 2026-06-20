@@ -92,16 +92,16 @@ package-owned runtime adapter for the resolved Site app package.
 
 The system SHALL project subscribe form blocks into public Site trees without exposing private challenge or runtime secrets.
 
-#### Scenario: Project subscribe form action facts
+#### Scenario: Project subscribe form operation facts
 
 - GIVEN the public Site tree includes a `subscribeForm` block
-- WHEN the block references a publicly executable action
-- THEN the projected block includes the public action name and target public action route
+- WHEN the block references a publicly executable operation
+- THEN the projected block includes the operation key and target public operation route
 - AND the projected block does not include Turnstile secrets or subscriber data
 
-#### Scenario: Warn for missing public action
+#### Scenario: Warn for missing public operation
 
-- GIVEN a `subscribeForm` block references an action that is missing or not publicly executable
+- GIVEN a `subscribeForm` block references an operation that is missing or not publicly executable
 - WHEN the public tree is projected
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
@@ -134,13 +134,13 @@ The system SHALL expose Site authoring through generated admin screens that edit
 
 ### Requirement: Subscribe Form Block
 
-The system SHALL support a Site `subscribeForm` block that binds public page content to a schema-declared public subscribe action.
+The system SHALL support a Site `subscribeForm` block that binds public page content to a schema-declared public subscribe operation.
 
 #### Scenario: Author subscribe form block
 
 - GIVEN a Site author creates a `subscribeForm` block
 - WHEN the block is stored
-- THEN the block stores normal flat block fields for label, body, action name, and button label
+- THEN the block stores normal flat block fields for label, body, operation name, and button label
 - AND the block can be placed under public page and group composition branches
 
 #### Scenario: Subscribe form variant is parsed
@@ -181,10 +181,10 @@ The system SHALL render subscribe form blocks as public forms on preview, instal
 
 #### Scenario: Render Turnstile-protected subscribe form
 
-- GIVEN a public Site page renders a valid `subscribeForm` block whose action requires Turnstile
+- GIVEN a public Site page renders a valid `subscribeForm` block whose operation requires Turnstile
 - WHEN the public renderer renders the block
 - THEN the page renders an email input, submit control, and Turnstile widget using the public site key
-- AND form submission posts to the target public action route with the email input, source block id, idempotency key, and Turnstile token
+- AND form submission posts to the target public operation route with the email input, source block id, idempotency key, and Turnstile token
 
 #### Scenario: Render successful subscribe outcome
 

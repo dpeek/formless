@@ -36,11 +36,6 @@ const tasksSourceSchemaHash =
   "sha256:2222222222222222222222222222222222222222222222222222222222222222";
 const crmSourceSchemaHash =
   "sha256:3333333333333333333333333333333333333333333333333333333333333333";
-const editableMutations = {
-  create: { enabled: true },
-  patch: { enabled: true },
-  delete: { enabled: true },
-};
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -53,7 +48,7 @@ const siteSourceSchema = parseAppSchema({
       constraints: {
         uniqueKey: { kind: "unique", fields: ["key"] },
       },
-      mutations: editableMutations,
+      operations: writeOperations("Site", ["key", "label"], { delete: true }),
     },
     block: {
       label: "Block",
@@ -65,7 +60,11 @@ const siteSourceSchema = parseAppSchema({
         width: { type: "number", required: false, label: "Width", integer: true },
         height: { type: "number", required: false, label: "Height", integer: true },
       },
-      mutations: editableMutations,
+      operations: writeOperations(
+        "Block",
+        ["type", "label", "href", "mediaAssetId", "width", "height"],
+        { delete: true },
+      ),
     },
     "block-placement": {
       label: "Block Placement",
@@ -86,7 +85,9 @@ const siteSourceSchema = parseAppSchema({
         },
         order: { type: "number", required: true, label: "Order", integer: true },
       },
-      mutations: editableMutations,
+      operations: writeOperations("Block placement", ["parent", "block", "order"], {
+        delete: true,
+      }),
     },
   },
   queries: {
@@ -131,7 +132,7 @@ const taskSourceSchema = parseAppSchema({
         title: { type: "text", required: true, label: "Title" },
         done: { type: "boolean", required: true, label: "Done" },
       },
-      mutations: editableMutations,
+      operations: writeOperations("Task", ["title", "done"], { delete: true }),
     },
   },
   queries: {
@@ -175,7 +176,7 @@ const crmSourceSchema = parseAppSchema({
       fields: {
         name: { type: "text", required: true, label: "Name" },
       },
-      mutations: editableMutations,
+      operations: writeOperations("Company", ["name"], { delete: true }),
     },
   },
   queries: {
@@ -241,6 +242,48 @@ const archiveTestPackageResolver = createAppPackageResolver([
   }),
 ]);
 const archiveTestInstallablePackages = listInstallableAppPackages(archiveTestPackageResolver);
+
+function writeOperations(label: string, fields: string[], options: { delete?: boolean } = {}) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    ...(options.delete
+      ? {
+          delete: {
+            label: `Delete ${label}`,
+            kind: "delete",
+            scope: "record",
+            effect: { type: "tombstoneRecord" },
+            output: { type: "delete" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        }
+      : {}),
+  };
+}
 
 describe("archive restore planner", () => {
   it("rejects old app-scoped Site media archive input", () => {

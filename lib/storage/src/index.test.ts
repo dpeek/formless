@@ -30,17 +30,7 @@ const appSchema = parseAppSchema({
           default: false,
         },
       },
-      mutations: {
-        create: {
-          enabled: true,
-        },
-        patch: {
-          enabled: true,
-        },
-        delete: {
-          enabled: false,
-        },
-      },
+      operations: writeOperations("Task", ["title", "done"]),
     },
   },
   queries: {
@@ -76,6 +66,35 @@ const appSchema = parseAppSchema({
     },
   },
 });
+
+function writeOperations(label: string, fields: string[]) {
+  const input = {
+    fields: Object.fromEntries(fields.map((field) => [field, { field }])),
+  };
+
+  return {
+    create: {
+      label: `Create ${label}`,
+      kind: "create",
+      scope: "collection",
+      input,
+      effect: { type: "createRecord" },
+      output: { type: "create" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+    update: {
+      label: `Update ${label}`,
+      kind: "update",
+      scope: "record",
+      input,
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
 
 describe("storage snapshot package", () => {
   it("parses the supported version 1 envelope", () => {

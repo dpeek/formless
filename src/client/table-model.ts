@@ -173,10 +173,6 @@ function selectTableColumns(
       ];
     }
 
-    if (column.type === "invokeAction") {
-      return [];
-    }
-
     if (column.type === "operationControl") {
       const bindingNames = operationControlBindingNames(column);
       const controls = selectTableOperationControlConfigs(schema, view, bindingNames);

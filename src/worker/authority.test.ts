@@ -617,7 +617,7 @@ describe("authority", () => {
           },
         },
       },
-    } satisfies AppSchema;
+    } as unknown as AppSchema;
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
@@ -1248,13 +1248,9 @@ describe("authority", () => {
     });
   });
 
-  it("uses declared operations instead of legacy mutation policy when writing", async () => {
+  it("uses declared create operations when writing", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations({
-        create: { enabled: false },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      }),
+      schema: schemaWithViews(),
     });
 
     const created = await postRecordOperationRequest({
@@ -1330,7 +1326,9 @@ describe("authority", () => {
           fields: {
             done: { type: "boolean", required: true, default: false },
           },
-          mutations: defaultMutations(),
+          operations: taskOperations("Task", {
+            done: { type: "boolean", required: true, default: false },
+          }),
         },
       },
       queries: {
@@ -1367,7 +1365,7 @@ describe("authority", () => {
         },
       },
       screens: defaultScreens(),
-    } satisfies AppSchema;
+    } as unknown as AppSchema;
 
     await expectError(
       "/api/schema",
@@ -1459,7 +1457,7 @@ describe("authority", () => {
 
   it("returns delete catch-up rows over HTTP and WebSocket while omitting current schema", async () => {
     const schemaUpdate = await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations(deleteEnabledMutations()),
+      schema: schemaWithTaskDeleteOperation(),
     });
     const created = await postCreateOperation("mutation-sync-delete-catchup-source", {
       title: "Delete catch-up source",
@@ -2501,7 +2499,7 @@ describe("authority", () => {
   it("commits enabled generic delete mutations as tombstone changes", async () => {
     const created = await postCreateOperation("mutation-1", { title: "First", done: false });
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations(deleteEnabledMutations()),
+      schema: schemaWithTaskDeleteOperation(),
     });
 
     const deleted = await postRecordOperationRequest({
@@ -2622,7 +2620,7 @@ describe("authority", () => {
     });
     await postCommandOperation("action-tombstone-completed", "clearCompletedTasks");
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations(deleteEnabledMutations()),
+      schema: schemaWithTaskDeleteOperation(),
     });
 
     await expectRecordOperationError(
@@ -2674,7 +2672,7 @@ describe("authority", () => {
       done: false,
     });
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations(deleteEnabledMutations()),
+      schema: schemaWithTaskDeleteOperation(),
     });
 
     const first = await postRecordOperationRequest({
@@ -2707,7 +2705,6 @@ describe("authority", () => {
           fields: {
             name: { type: "text", required: true },
           },
-          mutations: defaultMutations(),
           operations: taskOperations("Project", {
             name: { type: "text", required: true },
           }),
@@ -2718,7 +2715,7 @@ describe("authority", () => {
       tableViews: {},
       views: defaultViews(),
       screens: defaultScreens(),
-    } satisfies AppSchema;
+    } as unknown as AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
 
@@ -2862,7 +2859,7 @@ describe("authority", () => {
     expect(bootstrap.records).toContainEqual(secondCompleted.record);
   });
 
-  it("records no-op action executions for idempotent replay", async () => {
+  it("records no-op command executions for idempotent replay", async () => {
     await postCommandOperation("setup-clear-completed", "clearCompletedTasks");
     await postCreateOperation("mutation-1", { title: "Open", done: false });
     const beforeNoOp = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -3038,7 +3035,7 @@ describe("authority", () => {
     );
   });
 
-  it("rejects action schemas with invalid target queries through the schema route", async () => {
+  it("rejects unsupported action schemas through the schema route", async () => {
     await expectError(
       "/api/schema",
       {
@@ -3049,7 +3046,7 @@ describe("authority", () => {
           },
         }),
       },
-      "target must be an object",
+      'Entity "task" has unsupported key "actions"',
     );
 
     await expectError(
@@ -3065,7 +3062,7 @@ describe("authority", () => {
           },
         }),
       },
-      "target must be value.done eq true",
+      'Entity "task" has unsupported key "actions"',
     );
   });
 
@@ -3078,7 +3075,9 @@ describe("authority", () => {
           fields: {
             title: { type: "text", required: true, label: "Task title" },
           },
-          mutations: defaultMutations(),
+          operations: taskOperations("Task", {
+            title: { type: "text", required: true, label: "Task title" },
+          }),
         },
       },
       queries: {
@@ -3162,7 +3161,7 @@ describe("authority", () => {
     });
   });
 
-  it("rejects schemas without explicit mutation policy or views", async () => {
+  it("rejects schemas without views", async () => {
     await expectError(
       "/api/schema",
       {
@@ -3174,41 +3173,9 @@ describe("authority", () => {
               fields: {
                 title: { type: "text", required: true },
               },
-            },
-          },
-          queries: {
-            taskAll: {
-              label: "All",
-              entity: "task",
-              expression: { kind: "all" },
-            },
-          },
-          itemViews: {
-            taskListItem: {
-              entity: "task",
-              fields: {
-                title: { editor: "text", commit: "field-commit" },
-              },
-            },
-          },
-          tableViews: {},
-          views: {},
-        },
-      },
-      'Entity "task" mutations must be an object.',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: {
-          version: 1,
-          entities: {
-            task: {
-              label: "Task",
-              fields: {
+              operations: taskOperations("Task", {
                 title: { type: "text", required: true },
-              },
-              mutations: defaultMutations(),
+              }),
             },
           },
           queries: {
@@ -3374,13 +3341,13 @@ describe("authority", () => {
     );
   });
 
-  it("rejects malformed mutation policy in schema updates", async () => {
+  it("rejects unsupported mutation policy in schema updates", async () => {
     await expectError(
       "/api/schema",
       {
         schema: schemaWithMutations({ create: { enabled: true }, delete: { enabled: false } }),
       },
-      'mutations must include "patch"',
+      'Entity "task" has unsupported key "mutations"',
     );
     await expectError(
       "/api/schema",
@@ -3392,7 +3359,7 @@ describe("authority", () => {
           archive: { enabled: true },
         }),
       },
-      'mutations has unsupported key "archive"',
+      'Entity "task" has unsupported key "mutations"',
     );
     await expectError(
       "/api/schema",
@@ -3403,7 +3370,7 @@ describe("authority", () => {
           delete: { enabled: false },
         }),
       },
-      'patch mutation policy has unsupported key "handler"',
+      'Entity "task" has unsupported key "mutations"',
     );
     await expectError(
       "/api/schema",
@@ -3414,17 +3381,13 @@ describe("authority", () => {
           delete: { enabled: "yes" },
         }),
       },
-      "delete.enabled must be a boolean.",
+      'Entity "task" has unsupported key "mutations"',
     );
   });
 
-  it("keeps operation create and update independent of legacy mutation policy", async () => {
+  it("keeps create and update behavior on declared operations", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations({
-        create: { enabled: false },
-        patch: { enabled: true },
-        delete: { enabled: false },
-      }),
+      schema: schemaWithViews(),
     });
     const created = await postRecordOperationRequest({
       idempotencyKey: "mutation-1",
@@ -3433,13 +3396,6 @@ describe("authority", () => {
       input: { title: "First", done: false },
     });
 
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations({
-        create: { enabled: true },
-        patch: { enabled: false },
-        delete: { enabled: false },
-      }),
-    });
     const patched = await postRecordOperationRequest({
       idempotencyKey: "mutation-2",
       entity: "task",
@@ -3452,7 +3408,7 @@ describe("authority", () => {
     expect(patched.record.values.title).toBe("Second");
   });
 
-  it("replays accepted mutations after policy is disabled", async () => {
+  it("replays accepted operations after a compatible schema update", async () => {
     const created = await postCreateOperation("mutation-1", { title: "First", done: false });
     const patched = await postRecordOperationRequest({
       idempotencyKey: "mutation-2",
@@ -3463,11 +3419,7 @@ describe("authority", () => {
     });
 
     await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithMutations({
-        create: { enabled: false },
-        patch: { enabled: false },
-        delete: { enabled: false },
-      }),
+      schema: schemaWithTaskLabel("Task backlog"),
     });
 
     await expect(
@@ -3501,13 +3453,6 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     create: { enabled: true },
     patch: { enabled: true },
     delete: { enabled: false },
-  };
-}
-
-function deleteEnabledMutations(): AppSchema["entities"][string]["mutations"] {
-  return {
-    ...defaultMutations(),
-    delete: { enabled: true },
   };
 }
 
@@ -3617,7 +3562,6 @@ function schemaWithPriorityEnum(
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
         operations: taskOperations("Task", fields),
       },
     },
@@ -3653,13 +3597,12 @@ function schemaWithPriorityStateMachine({
         values: priorityField.values,
       }
     : priorityField;
-  const taskEntity: EntitySchema = {
+  const taskEntity = {
     ...task,
     fields: {
       ...task.fields,
       priority: priorityFieldForMachine,
     },
-    mutations: deleteEnabled ? deleteEnabledMutations() : defaultMutations(),
     stateMachines: {
       priorityFlow: {
         field: "priority",
@@ -3690,15 +3633,6 @@ function schemaWithPriorityStateMachine({
           : {}),
       },
     },
-    actions: {
-      ...task.actions,
-      raisePriority: {
-        label: "Raise priority",
-        kind: "transition-state",
-        machine: "priorityFlow",
-        transition: "raise",
-      },
-    },
     operations: taskOperations(
       "Task",
       {
@@ -3714,6 +3648,7 @@ function schemaWithPriorityStateMachine({
           transition: "raise",
         },
       },
+      { delete: deleteEnabled },
     ),
   };
 
@@ -3734,7 +3669,6 @@ function schemaWithPriorityStateMachine({
                 actorMode: { type: "text", required: true, label: "Actor mode" },
                 occurredAt: { type: "date", required: true, label: "Occurred" },
               },
-              mutations: defaultMutations(),
             },
           }
         : {}),
@@ -3744,7 +3678,7 @@ function schemaWithPriorityStateMachine({
     tableViews: {},
     views: defaultViews(),
     screens: defaultScreens(),
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function schemaWithTaskLabel(label: string) {
@@ -3757,7 +3691,7 @@ function schemaWithTaskLabel(label: string) {
         label,
       },
     },
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function schemaWithTaskNotesField(): AppSchema {
@@ -3809,6 +3743,7 @@ function taskOperations(
   label: string,
   fields: Record<string, unknown>,
   actions?: EntitySchema["actions"],
+  options: { delete?: boolean } = {},
 ): NonNullable<AppSchema["entities"][string]["operations"]> {
   const input = {
     fields: Object.fromEntries(Object.keys(fields).map((field) => [field, { field }])),
@@ -3849,15 +3784,19 @@ function taskOperations(
       idempotency: { required: true },
       audit: { input: "summary" },
     },
-    delete: {
-      label: `Delete ${label}`,
-      kind: "delete",
-      scope: "record",
-      effect: { type: "tombstoneRecord" },
-      output: { type: "delete" },
-      idempotency: { required: true },
-      audit: { input: "summary" },
-    },
+    ...(options.delete
+      ? {
+          delete: {
+            label: `Delete ${label}`,
+            kind: "delete",
+            scope: "record",
+            effect: { type: "tombstoneRecord" },
+            output: { type: "delete" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        }
+      : {}),
     ...commandOperations,
   };
 }
@@ -3909,11 +3848,11 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
     entities: {
       task: {
         ...appSchema.entities.task,
-        mutations: deleteEnabledMutations(),
         operations: taskOperations(
           "Task",
           appSchema.entities.task.fields,
           appSchema.entities.task.actions,
+          { delete: true },
         ),
       },
       project: {
@@ -3921,13 +3860,35 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
         fields: {
           name: { type: "text", required: true },
         },
-        mutations: deleteEnabledMutations(),
-        operations: taskOperations("Project", {
-          name: { type: "text", required: true },
-        }),
+        operations: taskOperations(
+          "Project",
+          {
+            name: { type: "text", required: true },
+          },
+          undefined,
+          { delete: true },
+        ),
       },
     },
-  };
+  } as unknown as AppSchema;
+}
+
+function schemaWithTaskDeleteOperation(): AppSchema {
+  return {
+    ...appSchema,
+    entities: {
+      ...appSchema.entities,
+      task: {
+        ...appSchema.entities.task,
+        operations: taskOperations(
+          "Task",
+          appSchema.entities.task.fields,
+          appSchema.entities.task.actions,
+          { delete: true },
+        ),
+      },
+    },
+  } as unknown as AppSchema;
 }
 
 function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
@@ -3944,8 +3905,7 @@ function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
       ...schema.entities,
       project: {
         ...project,
-        mutations: deleteEnabledMutations(),
-        operations: taskOperations("Project", project.fields),
+        operations: taskOperations("Project", project.fields, undefined, { delete: true }),
       },
     },
   };
@@ -3970,8 +3930,6 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
-        actions: appSchema.entities.task.actions,
         operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
@@ -4006,8 +3964,6 @@ function schemaWithRequiredScore() {
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
-        actions: appSchema.entities.task.actions,
         operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
@@ -4042,7 +3998,6 @@ function schemaWithRateReferences({
         fields: {
           name: { type: "text", required: true, label: "Name" },
         },
-        mutations: defaultMutations(),
         operations: taskOperations("Resource", {
           name: { type: "text", required: true, label: "Name" },
         }),
@@ -4052,7 +4007,6 @@ function schemaWithRateReferences({
         fields: {
           name: { type: "text", required: true, label: "Name" },
         },
-        mutations: defaultMutations(),
         operations: taskOperations("Rate card", {
           name: { type: "text", required: true, label: "Name" },
         }),
@@ -4083,7 +4037,6 @@ function schemaWithRateReferences({
           },
           price: { type: "number", required: false, label: "Price", min: 0 },
         },
-        mutations: defaultMutations(),
         operations: taskOperations("Rate", {
           resource: {
             type: "reference",
@@ -4116,7 +4069,7 @@ function schemaWithRateReferences({
     tableViews: appSchema.tableViews,
     views: appSchema.views,
     screens: appSchema.screens,
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
@@ -4128,9 +4081,7 @@ function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
         constraints,
-        actions: appSchema.entities.task.actions,
         operations: taskOperations("Task", fields, appSchema.entities.task.actions),
       },
     },
@@ -4139,7 +4090,7 @@ function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
     tableViews: {},
     views: defaultViews(),
     screens: defaultScreens(),
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function uniqueRatePairConstraints(): NonNullable<EntitySchema["constraints"]> {
@@ -4167,7 +4118,6 @@ function schemaWithAssignmentReference() {
             displayField: "title",
           },
         },
-        mutations: defaultMutations(),
         operations: taskOperations("Assignment", {
           task: {
             type: "reference",
@@ -4184,7 +4134,7 @@ function schemaWithAssignmentReference() {
     tableViews: appSchema.tableViews,
     views: appSchema.views,
     screens: appSchema.screens,
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function schemaWithTaskProjectReference({
@@ -4214,12 +4164,10 @@ function schemaWithTaskProjectReference({
     },
   };
 
-  const entities: Record<string, EntitySchema> = {
+  const entities: Record<string, unknown> = {
     task: {
       label: "Task",
       fields: taskFields,
-      mutations: defaultMutations(),
-      actions: appSchema.entities.task.actions,
       operations: taskOperations("Task", taskFields, appSchema.entities.task.actions),
     },
     project: {
@@ -4228,7 +4176,6 @@ function schemaWithTaskProjectReference({
         name: { type: "text", required: true, label: "Name" },
         code: { type: "text", required: true, label: "Code" },
       },
-      mutations: defaultMutations(),
       operations: taskOperations("Project", {
         name: { type: "text", required: true, label: "Name" },
         code: { type: "text", required: true, label: "Code" },
@@ -4242,7 +4189,6 @@ function schemaWithTaskProjectReference({
       fields: {
         name: { type: "text", required: true, label: "Name" },
       },
-      mutations: defaultMutations(),
       operations: taskOperations("Milestone", {
         name: { type: "text", required: true, label: "Name" },
       }),
@@ -4266,7 +4212,7 @@ function schemaWithTaskProjectReference({
       },
     },
     screens: appSchema.screens,
-  } satisfies AppSchema;
+  } as unknown as AppSchema;
 }
 
 function schemaWithViews(views: unknown = defaultViews()) {
@@ -4278,7 +4224,6 @@ function schemaWithViews(views: unknown = defaultViews()) {
       task: {
         label: "Task",
         fields,
-        mutations: defaultMutations(),
         operations: taskOperations("Task", fields),
       },
     },
@@ -4311,7 +4256,6 @@ function schemaWithActions(actions: unknown) {
       task: {
         label: "Task",
         fields: appSchema.entities.task.fields,
-        mutations: defaultMutations(),
         actions,
       },
     },

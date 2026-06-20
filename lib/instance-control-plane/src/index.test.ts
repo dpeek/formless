@@ -13,6 +13,7 @@ import {
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
   instanceControlPlaneSchemaProvenance,
+  instanceControlPlaneSourceSchema,
   isInstanceControlPlaneEntityName,
   isInstanceControlPlaneRouteSafePath,
   parseInstanceControlPlaneBoundaryEntityName,
@@ -29,7 +30,7 @@ import {
 } from "@dpeek/formless-installed-apps";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import {
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneObservedField,
@@ -59,7 +60,7 @@ const controlPlanePackageResolver = createAppPackageResolver(controlPlanePackage
 
 describe("instance control-plane schema contracts", () => {
   it("publishes deterministic source provenance for the full control-plane schema", async () => {
-    const baseHash = await computeSourceSchemaHash(instanceControlPlaneSchema);
+    const baseHash = await computeSourceSchemaHash(instanceControlPlaneSourceSchema);
     const mutationCases: Array<[string, (schema: AppSchema) => void]> = [
       [
         "view",
@@ -94,7 +95,9 @@ describe("instance control-plane schema contracts", () => {
     });
 
     for (const [label, mutate] of mutationCases) {
-      const changedSchema = structuredClone(instanceControlPlaneSchema) as AppSchema;
+      const changedSchema = structuredClone(
+        instanceControlPlaneSourceSchema,
+      ) as unknown as AppSchema;
       mutate(changedSchema);
 
       expect(await computeSourceSchemaHash(changedSchema), label).not.toBe(baseHash);
@@ -102,7 +105,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("defines the runtime-owned flat record schema", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     const referenceTargets = Object.values(schema.entities).flatMap((entity) =>
       Object.values(entity.fields).flatMap((field) =>
         field.type === "reference" ? [field.to] : [],
@@ -136,7 +139,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("defines deployment config intent and observation cache fields", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     const deploymentFields = schema.entities["deployment-config"]?.fields;
 
     expect(deploymentFields).toMatchObject({
@@ -189,7 +192,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("declares operation contracts for generated instance management records", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
 
     expect(
       Object.fromEntries(
@@ -283,7 +286,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("defines flat unified route fields for mount and redirect intent", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     const routeFields = schema.entities.route?.fields;
 
     expect(routeFields).toMatchObject({
@@ -404,7 +407,7 @@ describe("instance control-plane schema contracts", () => {
     expect(isInstanceControlPlaneEntityName("deploy-target")).toBe(false);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
 
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "installId")).toBe(true);
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "label")).toBe(false);
     expect(
@@ -424,7 +427,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("marks generated install and route editor fields by ownership", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     const routeTable = schema.tableViews.routeTable;
     const routesScreen = schema.screens?.routes;
     const routeCreateFields =
@@ -496,7 +499,7 @@ describe("instance control-plane schema contracts", () => {
   });
 
   it("renders deployment intent as generated sections without execution history", () => {
-    const schema = parseAppSchema(instanceControlPlaneSchema);
+    const schema = instanceControlPlaneSchema;
     const deployments = schema.screens?.deployments;
     const deploymentConfigTable = schema.tableViews.deploymentConfigTable;
     const deploymentConfigEditFields =

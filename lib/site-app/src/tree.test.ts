@@ -963,7 +963,7 @@ describe("site page tree projection", () => {
         type: "subscribeForm",
         label: "Join the list",
         body: "Get product notes.",
-        actionName: "subscribe",
+        operationName: "subscribe",
         buttonLabel: "Join",
       }),
       placementRecord(
@@ -1016,7 +1016,7 @@ describe("site page tree projection", () => {
       type: "subscribeForm",
       label: "Join the list",
       body: "Get product notes.",
-      actionName: "subscribe",
+      operationName: "subscribe",
       buttonLabel: "Join",
       publicOperation: {
         entityName: "subscription",
@@ -1040,7 +1040,7 @@ describe("site page tree projection", () => {
         type: "subscribeForm",
         label: "Join the list",
         body: "Get product notes.",
-        actionName: "subscribe",
+        operationName: "subscribe",
         buttonLabel: "Join",
       }),
       placementRecord(
@@ -1072,13 +1072,13 @@ describe("site page tree projection", () => {
       ...baseTreeRecords(),
       blockRecord("rec_site_block_missing_subscribe", {
         type: "subscribeForm",
-        label: "Missing subscribe action",
-        actionName: "missingSubscribeAction",
+        label: "Missing subscribe operation",
+        operationName: "missingSubscribeAction",
       }),
       blockRecord("rec_site_block_private_subscribe", {
         type: "subscribeForm",
-        label: "Private subscribe action",
-        actionName: "addTreeChild",
+        label: "Private subscribe operation",
+        operationName: "addTreeChild",
       }),
       placementRecord(
         "rec_site_place_home_missing_subscribe",
