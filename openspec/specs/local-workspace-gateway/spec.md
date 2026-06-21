@@ -32,9 +32,12 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 
 - **WHEN** a browser calls the workspace gateway through the local runtime
 - **THEN** it can request semantic operations for workspace status, save, check,
-  pull, push, credential setup, deploy plan, and deploy apply
+  pull, push, and credential setup
 - **AND** it cannot request arbitrary filesystem reads, arbitrary filesystem
   writes, shell commands, or path traversal
+- **AND** deployment and provider execution remains internal work behind the
+  workspace source push operation unless a later workspace operation definition
+  explicitly promotes a deployment-facing operation
 
 ### Requirement: Local Workspace Auto-Save
 
@@ -144,8 +147,8 @@ through the Gateway package slice.
 
 - **WHEN** a gateway adapter needs owner session validation, runtime topology
   eligibility, owner setup status, workspace save, workspace check, workspace
-  pull, workspace push, deploy plan, deploy apply, credential setup, operation
-  persistence, filesystem access, or provider mutation
+  pull, workspace push, credential setup, operation persistence, filesystem
+  access, or provider mutation behind a workspace operation
 - **THEN** those behaviors are supplied through Formless runtime adapters or
   Workspace package local state adapters
 - **AND** the Gateway package does not own app records, Authority storage,
@@ -169,9 +172,9 @@ bootstrap boundary.
 - **AND** that capability can authorize gateway status reads only for the
   resolved workspace root
 - **AND** that capability cannot authorize save, pull, push, credential setup,
-  deploy plan, deploy apply, cleanup, workspace initialization, arbitrary
-  control-plane writes, arbitrary filesystem access, Cloudflare mutation,
-  Alchemy mutation, or provider mutation
+  cleanup, workspace initialization, arbitrary control-plane writes, arbitrary
+  filesystem access, Cloudflare mutation, Alchemy mutation, provider mutation,
+  or deployment-facing provider work behind a workspace operation
 - **AND** proxied bootstrap requests sent to the sidecar include only
   display-safe actor and operation intent facts plus internal proxy
   authorization
@@ -210,16 +213,16 @@ bootstrap boundary.
   session bootstrap redirect state, and same-origin client state for the local
   runtime
 - **AND** resetting browser-owned local state cannot authorize save, pull, push,
-  credential setup, deploy plan, deploy apply, cleanup, arbitrary filesystem
-  access, Cloudflare mutation, Alchemy mutation, provider mutation, or admin
-  bearer disclosure
+  credential setup, cleanup, arbitrary filesystem access, Cloudflare mutation,
+  Alchemy mutation, provider mutation, deployment-facing provider work behind a
+  workspace operation, or admin bearer disclosure
 - **AND** server-owned local Authority, media, operation, and Wrangler state
   reset remains a CLI-owned local workspace state operation
 
 #### Scenario: Browser starts mutating operation
 
-- **WHEN** a browser starts save, pull, push, credential setup, deploy plan,
-  deploy apply, cleanup, or another post-bootstrap mutating gateway operation
+- **WHEN** a browser starts save, pull, push, credential setup, cleanup, or
+  another post-bootstrap mutating gateway operation
 - **THEN** the request must be served by a local workspace runtime profile with
   a configured local gateway sidecar target
 - **AND** the request must have a same-origin `Origin` header for the local
@@ -292,12 +295,12 @@ The system SHALL track local workspace operations with display-safe progress.
 - **AND** provider credentials, local secret values, raw filesystem paths outside
   the workspace root, and provider state payloads are omitted
 
-#### Scenario: Read deployment operation summaries
+#### Scenario: Read deployment-facing push summaries
 
-- **WHEN** a browser reads progress for deploy plan, deploy apply, cleanup, or
-  drift operations
+- **WHEN** a browser reads progress for a workspace source push operation that
+  performs deployment or provider work internally
 - **THEN** the gateway may return display-safe operation ids, desired-state
-  hashes, plan counts, evidence counts, affected logical ids, cleanup results,
+  hashes, plan counts, evidence counts, affected logical ids, cleanup summaries,
   drift counts, runner ids, timestamps, and user-facing errors
 - **AND** those summaries are operation/runtime data, not workspace record
   source
@@ -306,7 +309,8 @@ The system SHALL track local workspace operations with display-safe progress.
 
 #### Scenario: Read deployment step progress
 
-- **WHEN** a browser reads progress for a deploy plan or deploy apply operation
+- **WHEN** a browser reads progress for a workspace source push operation that
+  performs deployment or provider work internally
 - **THEN** the gateway can return ordered display-safe steps for credential
   resolution, account selection, desired-state planning, Worker deployment,
   health check, owner setup, workspace push or writeback, and deployment
@@ -442,9 +446,10 @@ workspace bootstrap.
 The system MUST keep workspace secrets and provider credentials outside browser
 responses and reviewable source.
 
-#### Scenario: Deploy through gateway
+#### Scenario: Push deploys through gateway
 
-- **WHEN** a browser starts a deploy plan or deploy apply operation
+- **WHEN** a browser starts a workspace source push operation that performs
+  deployment or provider work internally
 - **THEN** the gateway resolves Formless-owned Cloudflare OAuth credentials from
   ignored workspace secret state and refreshes the access token just in time for
   provider mutation
@@ -452,8 +457,8 @@ responses and reviewable source.
   `deployment-config.targetUrl` workspace storage state
 - **AND** the browser receives only display-safe plan, operation, health check,
   restore, and observation summaries
-- **AND** deploy apply patches the target deployment config's latest
-  display-safe observation cache after deploy or failure
+- **AND** push may patch the target deployment config's latest display-safe
+  observation cache after deploy or failure
 - **AND** deployment operation evidence summaries, drift reports, cleanup audit
   summaries, and deployment observation cache fields are returned through
   gateway operation status/results rather than reviewable workspace source

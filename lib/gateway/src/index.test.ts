@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
+import {
+  workspaceOperationDefinitionForGatewayRequestKind,
+  workspaceOperationDefinitionForKind,
+  workspaceOperationGatewayAllowedRequestFields,
+} from "@dpeek/formless-workspace";
 import {
   WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS,
@@ -36,11 +40,23 @@ describe("Gateway runtime-neutral contracts", () => {
     expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("init")).toBe(false);
     expect(isWorkspaceGatewayOperationKind("cleanup")).toBe(false);
+    expect(workspaceOperationDefinitionForGatewayRequestKind("save").handlerKey).toBe(
+      "workspace.source.save",
+    );
+    expect(workspaceOperationGatewayAllowedRequestFields("save")).toEqual([
+      "kind",
+      "operation",
+      "check",
+    ]);
   });
 
   it("parses operation start input without accepting filesystem, shell, or secret fields", () => {
     expect(parseWorkspaceGatewayStartInput({ kind: "save" })).toEqual({
       input: { check: false, kind: "save" },
+      ok: true,
+    });
+    expect(parseWorkspaceGatewayStartInput({ check: true, operation: "save" })).toEqual({
+      input: { check: true, kind: "save" },
       ok: true,
     });
     expect(parseWorkspaceGatewayStartInput({ kind: "push" })).toEqual({

@@ -9,23 +9,27 @@ manage selected instance access.
 
 ### Requirement: CLI Command Families
 
-The package SHALL expose one top-level `formless` command spelling for each
-normal workspace operation.
+The package SHALL expose top-level `formless` command spellings only for
+workspace operations that are promoted to public CLI bindings.
 
 #### Scenario: Local workspace commands
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs `formless dev`, `formless save`, `formless pull`,
-  `formless push`, or `formless destroy`
+- **WHEN** a user runs `formless dev`, `formless pull`, `formless push`, or
+  `formless destroy`
 - **THEN** the command operates on the local Formless workspace selected by
   `formless.json`
-- **AND** `formless dev`, `formless save`, and `formless pull` do not mutate
-  remote instance data or Cloudflare resources unless `formless pull` is run
-  without `--dry-run`, in which case it rewrites reviewable workspace source
+- **AND** `formless dev` and `formless pull` do not mutate remote instance data
+  or Cloudflare resources unless `formless pull` is run without `--dry-run`, in
+  which case it rewrites reviewable workspace source
 - **AND** `formless push` is the only normal command that reconciles a deployed
   instance from local workspace source, including runtime code, provider
   resources, control-plane records, app records, schema, and media
 - **AND** `formless destroy` remains the explicit Cloudflare teardown boundary
+- **AND** `formless pull` and `formless push` are the first public CLI bindings
+  derived from workspace operation definitions
+- **AND** the workspace source save operation remains part of the workspace
+  operation contract but has no public CLI command binding in this phase
 
 #### Scenario: Sync dry-runs
 
@@ -110,15 +114,20 @@ local execution binding handles it.
 - **WHEN** the CLI exposes a workspace command for a defined operation
 - **THEN** command arguments and defaults are selected from the operation input
   contract and CLI binding
-- **AND** each public workspace operation has one CLI binding name
+- **AND** each workspace operation promoted to the public CLI has one CLI
+  binding name
 - **AND** the command invokes the operation through the local workspace
   operation runner with actor `cli`
 - **AND** execution may continue to dispatch to existing local workspace
   functions while the operation definition remains the source of command shape,
   actor policy, and display-safe input facts
+- **AND** the first public CLI operation bindings are `formless pull` and
+  `formless push`
 - **AND** public push and pull bindings expose only `--workspace`, `--target`,
   and `--dry-run` inputs
-- **AND** public workspace operation definitions do not expose apply, replace,
+- **AND** the workspace source save operation may be invoked by local runtime,
+  auto-save, or gateway flows without exposing `formless save`
+- **AND** public CLI operation definitions do not expose save, apply, replace,
   stale acknowledgement, install-set replacement, deploy plan/apply, or
   migration policy inputs
 
@@ -253,12 +262,14 @@ optional first app install, credential setup, and push operations.
 
 ### Requirement: Workspace Save From Local Authority
 
-The CLI SHALL save local workspace runtime state from Authority-backed instance
-state back to reviewable workspace storage snapshots and media payloads.
+The local workspace operation layer SHALL save local workspace runtime state
+from Authority-backed instance state back to reviewable workspace storage
+snapshots and media payloads.
 
 #### Scenario: Save local workspace state
 
-- **WHEN** `formless save` runs for a local Formless workspace
+- **WHEN** the workspace source save operation runs for a local Formless
+  workspace
 - **THEN** active installed app records, media payloads, and schema-owned
   control-plane intent are written to deterministic workspace storage snapshots
 - **AND** browser IndexedDB state is not used as the source of truth
@@ -270,12 +281,12 @@ state back to reviewable workspace storage snapshots and media payloads.
 - **WHEN** a local workspace runtime with a gateway sidecar receives a
   committed browser-originated local write
 - **THEN** workspace auto-save writes the same deterministic storage snapshots
-  and referenced media payloads as `formless save`
+  and referenced media payloads as the workspace source save operation
 - **AND** browser IndexedDB state is not used as the source of truth
-- **AND** `formless save` remains available as an explicit flush or retry
-  action
+- **AND** the workspace source save operation remains available as an explicit
+  local runtime or gateway flush or retry action
 - **AND** remote pull, push, and destroy remain explicit CLI or gateway
-  operations
+  operations according to their public bindings
 
 #### Scenario: Workspace operation state vocabulary
 
@@ -289,9 +300,9 @@ state back to reviewable workspace storage snapshots and media payloads.
 
 #### Scenario: Check workspace source
 
-- **WHEN** a user runs `formless save --check` and local Authority state differs
-  from the reviewable workspace source
-- **THEN** the command fails and reports that workspace source must be refreshed
+- **WHEN** the workspace source save operation runs in check mode and local
+  Authority state differs from the reviewable workspace source
+- **THEN** the operation fails and reports that workspace source must be refreshed
 - **AND** it does not rewrite storage snapshot or media files
 
 ### Requirement: Sync Omits Upgrade Planning
@@ -312,12 +323,12 @@ workspace and target state rather than running upgrade or migration policy.
 
 ### Requirement: Site CLI Media Package Boundary
 
-The system SHALL keep Site CLI save, pull, and push behavior stable
-while consuming Media contracts from public package subpaths.
+The system SHALL keep workspace save behavior and Site CLI pull and push
+behavior stable while consuming Media contracts from public package subpaths.
 
 #### Scenario: Archive workflows use Media contract
 
-- GIVEN Site CLI save, pull, or push workflows validate or
+- GIVEN workspace save, Site CLI pull, or Site CLI push workflows validate or
   move core media payloads
 - WHEN they need media asset, storage key, delivery, or restore result shapes
 - THEN they use public Media package contracts

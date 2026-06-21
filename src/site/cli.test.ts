@@ -79,7 +79,6 @@ import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cl
 import {
   instanceWorkspaceInstanceStatePath,
   instanceWorkspaceMediaFilePath,
-  listWorkspaceOperationStates,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceAppStorageSnapshot,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
@@ -135,11 +134,10 @@ describe("Formless Site CLI", () => {
       "Commands:",
       "  dev [--workspace <path>] [--open] [--reset]",
       "                                      Run local workspace and print browser session URL",
-      "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
       "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
-      "                                      Sync selected target into workspace source",
+      "                                      Workspace source pull",
       "  push [--workspace <path>] [--target <alias>] [--dry-run]",
-      "                                      Sync workspace source to the selected target",
+      "                                      Workspace source push",
       "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
       "  owner setup [--workspace <path>] [--target <alias>]",
       "       [--open] [--admin-token <token>]",
@@ -182,11 +180,6 @@ describe("Formless Site CLI", () => {
       kind: "workspaceDev",
       open: false,
       reset: true,
-      workspacePath: "../personal",
-    });
-    expect(parseFormlessCliArgs(["save", "--workspace", "../personal", "--check"])).toEqual({
-      check: true,
-      kind: "workspaceSave",
       workspacePath: "../personal",
     });
     expect(parseFormlessCliArgs(["pull", "--workspace", "../personal"])).toEqual({
@@ -308,11 +301,9 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["dev", "--verbose"])).toThrow(
       "Unknown option for formless dev: --verbose",
     );
-    expect(() => parseFormlessCliArgs(["save", "--workspace"])).toThrow(
-      "Missing value for --workspace.",
-    );
-    expect(() => parseFormlessCliArgs(["save", "--force"])).toThrow(
-      "Unknown option for formless save: --force",
+    expect(() => parseFormlessCliArgs(["save"])).toThrow("Unknown command: save");
+    expect(() => parseFormlessCliArgs(["save", "--workspace", "../personal"])).toThrow(
+      "Unknown command: save",
     );
     expect(() => parseFormlessCliArgs(["pull", "--target", "Remote"])).toThrow(
       "Formless instance workspace target alias must start with a lowercase letter",
@@ -342,11 +333,6 @@ describe("Formless Site CLI", () => {
   });
 
   it("parses local-first command defaults", () => {
-    expect(parseFormlessCliArgs(["save"])).toEqual({
-      check: false,
-      kind: "workspaceSave",
-      workspacePath: null,
-    });
     expect(parseFormlessCliArgs(["pull"])).toEqual({
       dryRun: false,
       kind: "workspacePull",
@@ -3356,207 +3342,34 @@ describe("Formless Site CLI", () => {
     expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
   });
 
-  it("saves browser-created local Authority installed apps into deterministic workspace state", async () => {
+  it("rejects public save before workspace, Authority, provider, or state work", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
-    const requests: CapturedFetchRequest[] = [];
+    const commands: CapturedCommand[] = [];
     const logs: string[] = [];
-    const fetcher = archiveFetch(
-      requests,
-      [installedSite("david", "David Peek")],
-      {
-        david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
-      },
-      [],
-      controlPlaneRecords(),
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await mkdir(path.join(workspaceRoot, ".formless/local"), { recursive: true });
-    await writeFile(
-      path.join(workspaceRoot, ".formless/local/dev.env"),
-      "FORMLESS_ADMIN_TOKEN=local-save-token\nFORMLESS_OWNER_SESSION_SECRET=local-owner-secret\n",
-    );
-    await writeFile(
-      path.join(workspaceRoot, ".formless/instance.env"),
-      "FORMLESS_ADMIN_TOKEN=stored-instance-token\n",
-    );
-
-    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
-
-    const manifest = parseFormlessInstanceWorkspaceManifestJson(
-      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
-    );
-    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
-      manifest,
-      workspaceRoot,
-    });
-    const operationStates = await listWorkspaceOperationStates(workspaceRoot);
-    const appStateValue = JSON.parse(
-      await readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8"),
-    ) as {
-      kind: string;
-      schema?: unknown;
-      schemaProvenance?: { kind: string };
-      storageIdentity: string;
-    };
-
-    expect(manifest).toEqual(layoutWorkspaceManifest("personal-sites"));
-    expect(operationStates).toHaveLength(1);
-    expect(operationStates[0]).toMatchObject({
-      actor: "cli",
-      input: { check: false },
-      operation: "save",
-      status: "succeeded",
-    });
-    expect(controlPlane?.records.map((record) => record.entity)).toContain("route");
-    expect(controlPlane?.records.map((record) => record.entity)).toContain("app-install");
-    expect(controlPlane?.records.map((record) => record.entity)).not.toContain(
-      "deploy-drift-report",
-    );
-    expect(JSON.stringify(controlPlane)).not.toContain("CF_API_TOKEN");
-    expect(JSON.stringify(controlPlane)).not.toContain("media/images/cover.png");
-    expect(appStateValue.kind).toBe(WORKSPACE_RECORD_STATE_FILE_KIND);
-    expect(appStateValue.storageIdentity).toBe("app:david");
-    expect(appStateValue.schema).toBeUndefined();
-    expect(appStateValue.schemaProvenance).toMatchObject({ kind: "package-app" });
-    await expect(
-      readFile(path.join(workspaceRoot, "state/media/media/david/media/images/cover.png")),
-    ).resolves.toEqual(Buffer.from([4, 5, 6]));
-    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET http://localhost:5173/api/formless/app-installs",
-      "GET http://localhost:5173/api/formless/control-plane/snapshot?actorKind=cliDeployer",
-      "GET http://localhost:5173/api/app-installs/site/david/snapshot",
-      "GET http://localhost:5173/api/formless/media/media/images/cover.png",
-    ]);
-    expect(requests.map((request) => request.headers.authorization)).toEqual([
-      "Bearer local-save-token",
-      "Bearer local-save-token",
-      "Bearer local-save-token",
-      "Bearer local-save-token",
-    ]);
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: save (succeeded).");
-    expect(logs[0]).toContain(
-      "Workspace source: layout-only manifest, storage snapshots, media payloads.",
-    );
-    expect(logs[0]).toContain("Summary: Workspace saved.");
-    expect(logs[0]).toContain("source: http://localhost:5173.");
-    expect(logs[0]).toContain("appCount: 1.");
-    expect(logs[0]).toContain("mediaCount: 1.");
-    expect(logs[0]).toContain("recordCount: 5.");
-    expect(logs[0]).toContain(
-      `appState: {"installId":"david","mediaCount":1,"recordCount":${mediaRecords().length}}.`,
-    );
-  });
-
-  it("preserves source-only deploy records during local Authority save", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const localControlPlaneRecords = controlPlaneRecords().filter(
-      (record) => record.entity !== "deployment-config",
-    );
-    const fetcher = archiveFetch(
-      [],
-      [installedSite("david", "David Peek")],
-      {
-        david: { records: [] },
-      },
-      [],
-      localControlPlaneRecords,
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot, controlPlaneRecords());
-
-    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
-
-    const manifest = parseFormlessInstanceWorkspaceManifestJson(
-      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
-    );
-    const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
-      manifest,
-      workspaceRoot,
-    });
-
-    expect(controlPlane?.records.map((record) => `${record.entity}:${record.id}`)).toContain(
-      "deployment-config:instance.primary",
-    );
-  });
-
-  it("checks local workspace source staleness without rewriting reviewable files", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const requests: CapturedFetchRequest[] = [];
-    const fetcher = archiveFetch(
-      requests,
-      [installedSite("david", "David Peek")],
-      {
-        david: { records: [] },
-      },
-      [],
-      controlPlaneRecords(),
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-    const manifestBefore = await readFile(
-      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
-      "utf8",
-    );
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
 
     await expect(
-      runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher })),
-    ).rejects.toThrow(
-      'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
-    );
-    await expect(
-      readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
-    ).resolves.toBe(manifestBefore);
-    await expect(stat(path.join(workspaceRoot, "state/instance.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+      runFormlessCli(
+        ["save", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          commands,
+          deploy: async () => {
+            throw new Error("deploy should not run");
+          },
+          fetch: async () => {
+            throw new Error("fetch should not run");
+          },
+          logs,
+          stateWrites,
+        }),
+      ),
+    ).rejects.toThrow("Unknown command: save");
 
-    const logs: string[] = [];
-
-    await runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher }));
-    await runFormlessCli(["save", "--check"], cliDeps(workspaceRoot, { fetch: fetcher, logs }));
-
-    expect(logs.at(-1)).toContain("Workspace operation: save (succeeded).");
-    expect(logs.at(-1)).toContain("Summary: Workspace source current.");
-    expect(logs.at(-1)).toContain("mode: check.");
-  });
-
-  it("rejects secret-looking local Authority control-plane fields during workspace save", async () => {
-    const tempDir = await makeTempDir();
-    const workspaceRoot = path.join(tempDir, "personal-sites");
-    const secretControlPlane = controlPlaneRecords().map((record) =>
-      record.entity === "deployment-config"
-        ? {
-            ...record,
-            values: {
-              ...record.values,
-              credentialRef: "CF_API_TOKEN_secret",
-            },
-          }
-        : record,
-    );
-    const fetcher = archiveFetch(
-      [],
-      [installedSite("david", "David Peek")],
-      {
-        david: { records: [] },
-      },
-      [],
-      secretControlPlane,
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-
-    await expect(
-      runFormlessCli(["save"], cliDeps(workspaceRoot, { fetch: fetcher })),
-    ).rejects.toThrow(
-      'Instance archive controlPlane records record "instance.primary" field "instance:deployment-config.credentialRef" cannot store control-plane secret values.',
-    );
+    await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(commands).toEqual([]);
+    expect(logs).toEqual([]);
+    expect(stateWrites).toEqual([]);
   });
 
   it("resets only instance workspace local state through dev --reset", async () => {

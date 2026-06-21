@@ -31,7 +31,10 @@ import type {
   WorkspaceGatewayAutoSaveState,
   WorkspaceGatewayOperation,
 } from "@dpeek/formless-gateway/client";
-import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
+import {
+  workspaceBrowserOperationControlMetadata,
+  workspaceOperationDefinitionForKind,
+} from "@dpeek/formless-workspace";
 
 beforeEach(() => {
   resetClientStore();
@@ -147,6 +150,8 @@ describe("instance shell route view", () => {
     expect(html).toContain('data-formless-workspace-gateway="local"');
     expect(html).toContain('data-formless-workspace-operation-controls="true"');
     expect(html).toContain('data-formless-workspace-operation-control="push"');
+    expect(html).toContain('data-formless-workspace-operation-bootstrap-allowed="false"');
+    expect(html).toContain('data-formless-workspace-operation-mode="write"');
     expect(html).toContain(
       'data-formless-workspace-operation-required-capability="workspace-source-sync"',
     );
@@ -285,7 +290,21 @@ describe("instance shell route view", () => {
       "credentialSetup",
       "pull",
       "push",
+      "save",
+      "status",
     ]);
+    expect(
+      selectWorkspaceGatewayOperationControls().map(
+        ({ bootstrapAllowed, inputFields, kind, label, mode, requiredCapability }) => ({
+          bootstrapAllowed,
+          inputFields,
+          kind,
+          label,
+          mode,
+          requiredCapability,
+        }),
+      ),
+    ).toEqual(workspaceBrowserOperationControlMetadata());
     expect(
       selectWorkspaceGatewayOperationControls({ operationGroup: "workspace" }).map(
         (control) => control.kind,
@@ -309,6 +328,8 @@ describe("instance shell route view", () => {
         dryRun: false,
         kind: "push",
       },
+      save: { check: false, kind: "save" },
+      status: { includeDeploymentStatus: false, kind: "status" },
     });
 
     for (const control of controls) {
@@ -320,13 +341,17 @@ describe("instance shell route view", () => {
 
       const allowedFields = new Set(["kind", ...definition.bindings.gateway.inputFields]);
 
+      expect(control.bootstrapAllowed).toBe(definition.bindings.gateway.bootstrap);
       expect(Object.keys(control.input).every((key) => allowedFields.has(key))).toBe(true);
       expect(control.inputFields).toEqual(definition.bindings.gateway.inputFields);
+      expect(control.label).toBe(definition.label);
+      expect(control.mode).toBe(definition.mode);
+      expect(control.requiredCapability).toBe(definition.requiredCapability);
       expect(Object.keys(control.input)).not.toContain("workspacePath");
       expect(Object.keys(control.input)).not.toContain("source");
     }
 
-    expect(controls.map((control) => control.kind)).not.toContain("save");
+    expect(controls.map((control) => control.kind)).not.toContain("deploymentRefresh");
   });
 
   it("keeps workspace gateway controls unavailable without proxy status", () => {

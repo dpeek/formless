@@ -11,10 +11,14 @@ import {
   WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_PACKAGE_LINKS_KIND,
   WORKSPACE_PACKAGE_LINKS_VERSION,
+  WORKSPACE_BROWSER_OPERATION_DEFINITIONS,
   WORKSPACE_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_BROWSER_OPERATION_KINDS,
+  WORKSPACE_CLI_OPERATION_DEFINITIONS,
   WORKSPACE_CLI_OPERATION_COMMANDS,
   WORKSPACE_CLI_OPERATION_KINDS,
+  WORKSPACE_GATEWAY_OPERATION_DEFINITIONS,
+  WORKSPACE_GATEWAY_OPERATION_KINDS,
   WORKSPACE_OPERATION_CAPABILITIES,
   WORKSPACE_OPERATION_DEFINITIONS,
   WORKSPACE_OPERATION_KINDS,
@@ -38,11 +42,24 @@ import {
   isWorkspaceAutoSaveSuppressionReason,
   isWorkspaceAutoSaveWriteSource,
   workspaceOperationActorAllowed,
+  workspaceOperationActorPolicy,
+  workspaceBrowserOperationControlMetadata,
+  workspaceBrowserOperationDefinitions,
   workspaceOperationCapabilityAllowed,
+  workspaceOperationCliCommands,
+  workspaceCliOperationDefinitionForKind,
+  workspaceCliOperationDefinitions,
   workspaceOperationExecutionDecision,
+  workspaceOperationDefinitionForGatewayRequestKind,
+  workspaceGatewayOperationDefinitionForKind,
+  workspaceGatewayOperationDefinitions,
+  workspaceOperationGatewayAllowedRequestFields,
+  workspaceOperationGatewayInputFields,
+  workspaceOperationGatewayRequestKind,
   isWorkspaceBrowserOperationKind,
   isWorkspaceCliCommandName,
   isWorkspaceCliOperationKind,
+  isWorkspaceGatewayOperationKind,
   isWorkspaceOperationKind,
   nextWorkspaceOperationState,
   normalizeInstanceWorkspaceTargetUrl,
@@ -70,6 +87,7 @@ import {
   workspaceOperationInputDefaults,
   workspaceOperationInputFieldDefaultValue,
   workspaceOperationInputDisplay,
+  workspaceOperationLabel,
   workspaceOperationMode,
   workspaceOperationRequiredCapability,
   type WorkspaceControlPlaneRecordStateFile,
@@ -636,19 +654,78 @@ describe("workspace operation contracts", () => {
         (definition) => definition.kind,
       ),
     );
-    expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual(["pull", "push", "save"]);
-    expect(WORKSPACE_CLI_OPERATION_COMMANDS).toEqual([
-      "formless pull",
-      "formless push",
-      "formless save",
+    expect(WORKSPACE_GATEWAY_OPERATION_KINDS).toEqual(WORKSPACE_BROWSER_OPERATION_KINDS);
+    expect(WORKSPACE_BROWSER_OPERATION_DEFINITIONS).toEqual(
+      WORKSPACE_GATEWAY_OPERATION_DEFINITIONS,
+    );
+    expect(workspaceBrowserOperationDefinitions()).toEqual(WORKSPACE_BROWSER_OPERATION_DEFINITIONS);
+    expect(WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.map((definition) => definition.kind)).toEqual([
+      "check",
+      "credentialSetup",
+      "pull",
+      "push",
+      "save",
+      "status",
+    ]);
+    expect(workspaceGatewayOperationDefinitions().map((definition) => definition.kind)).toEqual([
+      "check",
+      "credentialSetup",
+      "pull",
+      "push",
+      "save",
+      "status",
+    ]);
+    expect(workspaceBrowserOperationControlMetadata()).toEqual(
+      WORKSPACE_BROWSER_OPERATION_DEFINITIONS.map((definition) => ({
+        bootstrapAllowed: definition.bindings.gateway.bootstrap,
+        inputFields: definition.bindings.gateway.inputFields,
+        kind: definition.kind,
+        label: definition.label,
+        mode: definition.mode,
+        requiredCapability: definition.requiredCapability,
+      })),
+    );
+    expect(
+      Object.fromEntries(
+        workspaceBrowserOperationControlMetadata().map((metadata) => [metadata.kind, metadata]),
+      ),
+    ).toMatchObject({
+      save: {
+        bootstrapAllowed: false,
+        inputFields: ["check"],
+        label: "Workspace source save",
+        mode: "write",
+        requiredCapability: "workspace-source-write",
+      },
+      status: {
+        bootstrapAllowed: true,
+        inputFields: ["includeDeploymentStatus", "targetAlias"],
+        label: "Workspace status",
+        mode: "read",
+        requiredCapability: "workspace-read",
+      },
+    });
+    expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual(["pull", "push"]);
+    expect(WORKSPACE_CLI_OPERATION_COMMANDS).toEqual(["formless pull", "formless push"]);
+    expect(WORKSPACE_CLI_OPERATION_DEFINITIONS.map((definition) => definition.kind)).toEqual([
+      "pull",
+      "push",
+    ]);
+    expect(workspaceCliOperationDefinitions().map((definition) => definition.kind)).toEqual([
+      "pull",
+      "push",
     ]);
     expect(WORKSPACE_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceOperationKind("init")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("init")).toBe(false);
     expect(isWorkspaceBrowserOperationKind("deploymentRefresh")).toBe(false);
     expect(isWorkspaceBrowserOperationKind("credentialSetup")).toBe(true);
+    expect(isWorkspaceGatewayOperationKind("credentialSetup")).toBe(true);
+    expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(false);
     expect(isWorkspaceCliOperationKind("push")).toBe(true);
+    expect(isWorkspaceCliOperationKind("save")).toBe(false);
     expect(isWorkspaceCliCommandName("formless push")).toBe(true);
+    expect(isWorkspaceCliCommandName("formless save")).toBe(false);
     expect(isWorkspaceCliCommandName("formless deploy")).toBe(false);
     expect(isWorkspaceCliCommandName("formless instance push")).toBe(false);
     expect(isWorkspaceCliCommandName("formless instance owner setup")).toBe(false);
@@ -659,11 +736,15 @@ describe("workspace operation contracts", () => {
       mode: "read",
       requiredCapability: "workspace-read",
     });
-    expect(workspaceOperationDefinitionForKind("save").bindings.cli?.commands).toEqual([
-      "formless save",
+    expect(workspaceCliOperationDefinitionForKind("pull").bindings.cli.commands).toEqual([
+      "formless pull",
     ]);
+    expect(workspaceOperationCliCommands("push")).toEqual(["formless push"]);
     expect(() => workspaceOperationDefinitionForCliCommand("formless deploy")).toThrow(
       'Workspace CLI command "formless deploy" is not bound to an operation definition.',
+    );
+    expect(() => workspaceOperationDefinitionForCliCommand("formless save")).toThrow(
+      'Workspace CLI command "formless save" is not bound to an operation definition.',
     );
     expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
     expect("gateway" in workspaceOperationDefinitionForKind("deploymentRefresh").bindings).toBe(
@@ -674,7 +755,31 @@ describe("workspace operation contracts", () => {
       inputFields: ["includeDeploymentStatus", "targetAlias"],
       requestKind: "status",
     });
+    expect("cli" in workspaceOperationDefinitionForKind("save").bindings).toBe(false);
+    expect(workspaceOperationDefinitionForKey("workspace.source.save")).toMatchObject({
+      handlerKey: "workspace.source.save",
+      input: {
+        fields: [
+          { defaultValue: false, display: "always", key: "check", valueType: "boolean" },
+          { display: "when-present", key: "source", valueType: "string" },
+          { display: "never", key: "workspacePath", valueType: "string" },
+        ],
+      },
+      kind: "save",
+      label: "Workspace source save",
+      mode: "write",
+      requiredCapability: "workspace-source-write",
+    });
     expect(workspaceOperationDefinitionForKind("save").bindings.gateway?.inputFields).toEqual([
+      "check",
+    ]);
+    expect(workspaceGatewayOperationDefinitionForKind("save").key).toBe("workspace.source.save");
+    expect(workspaceOperationDefinitionForGatewayRequestKind("save").kind).toBe("save");
+    expect(workspaceOperationGatewayRequestKind("save")).toBe("save");
+    expect(workspaceOperationGatewayInputFields("save")).toEqual(["check"]);
+    expect(workspaceOperationGatewayAllowedRequestFields("save")).toEqual([
+      "kind",
+      "operation",
       "check",
     ]);
     expect(workspaceOperationDefinitionForKind("pull").bindings.gateway?.inputFields).toEqual([
@@ -688,6 +793,20 @@ describe("workspace operation contracts", () => {
     expect(workspaceOperationInputDefaults("pull")).toEqual({ dryRun: false });
     expect(workspaceOperationInputDefaults("push")).toEqual({ dryRun: false });
     expect(workspaceOperationInputFieldDefaultValue("save", "check")).toBe(false);
+    expect(workspaceOperationLabel("save")).toBe("Workspace source save");
+    expect(workspaceOperationActorPolicy("save").allowedActors).toEqual([
+      "automation",
+      "browser",
+      "cli",
+      "system",
+    ]);
+    expect(
+      workspaceOperationExecutionDecision({
+        actor: "system",
+        capabilities: ["workspace-source-write"],
+        kind: "save",
+      }),
+    ).toEqual({ ok: true });
   });
 
   it("matches operations against actor policy and required execution capability", () => {

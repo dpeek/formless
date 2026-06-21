@@ -3,20 +3,22 @@ import {
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
 } from "./types.ts";
 import {
-  WORKSPACE_OPERATION_DEFINITIONS,
   isWorkspaceAutoSaveWriteSource,
-  isWorkspaceBrowserOperationKind,
+  isWorkspaceGatewayOperationKind as isWorkspaceDefinitionGatewayOperationKind,
   parseWorkspaceOperationId,
   workspaceOperationExecutionDecision,
   workspaceOperationBootstrapAllowed,
+  workspaceOperationDefinitionForGatewayRequestKind,
+  workspaceOperationGatewayAllowedRequestFields,
+  workspaceOperationGatewayInputFields,
+  workspaceOperationInputFieldDefinition,
   workspaceOperationMode,
   workspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
 import type {
   WorkspaceOperationActor,
-  WorkspaceBrowserOperationDefinition,
-  WorkspaceOperationDefinition,
   WorkspaceOperationExecutionDecision,
+  WorkspaceGatewayOperationDefinition,
   WorkspaceOperationInputFieldDefinition,
   WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
@@ -89,16 +91,6 @@ export type {
   WorkspaceGatewayStatusStartInput,
 } from "./types.ts";
 
-const workspaceGatewayOperationDefinitionsByRequestKind = new Map<
-  string,
-  WorkspaceBrowserOperationDefinition
->(
-  WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceGatewayBinding).map((definition) => [
-    definition.bindings.gateway.requestKind,
-    definition,
-  ]),
-);
-
 export function isWorkspaceGatewayPath(pathname: string): boolean {
   return (
     pathname === WORKSPACE_GATEWAY_API_ROUTE_PREFIX ||
@@ -162,7 +154,7 @@ export function parseWorkspaceGatewayOperationId(
 export function isWorkspaceGatewayOperationKind(
   value: unknown,
 ): value is WorkspaceGatewayOperationKind {
-  return isWorkspaceBrowserOperationKind(value);
+  return isWorkspaceDefinitionGatewayOperationKind(value);
 }
 
 export function isWorkspaceGatewayBootstrapOperationKind(
@@ -289,7 +281,7 @@ export function parseWorkspaceGatewayStartInput(
     return { error: 'Workspace gateway operation request must include "kind".', ok: false };
   }
 
-  const definition = workspaceGatewayOperationDefinitionsByRequestKind.get(kind);
+  const definition = workspaceGatewayOperationDefinitionForRequestKind(kind);
 
   if (!definition) {
     return { error: `Workspace gateway operation "${kind}" is not supported.`, ok: false };
@@ -305,18 +297,10 @@ export function parseWorkspaceGatewayStartInput(
   }
 
   try {
-    const fieldsByKey = new Map(definition.input.fields.map((field) => [field.key, field]));
     const input: Record<string, unknown> = { kind: definition.kind };
 
-    for (const fieldKey of definition.bindings.gateway.inputFields) {
-      const field = fieldsByKey.get(fieldKey);
-
-      if (!field) {
-        throw new Error(
-          `Workspace gateway operation "${kind}" declares unknown input field "${fieldKey}".`,
-        );
-      }
-
+    for (const fieldKey of workspaceOperationGatewayInputFields(definition.kind)) {
+      const field = workspaceOperationInputFieldDefinition(definition.kind, fieldKey);
       input[field.key] = parseWorkspaceGatewayInputField(field, body[field.key]);
     }
 
@@ -373,21 +357,23 @@ export function forbiddenWorkspaceGatewayInput(
   return undefined;
 }
 
-function hasWorkspaceGatewayBinding(
-  definition: WorkspaceOperationDefinition,
-): definition is WorkspaceBrowserOperationDefinition {
-  return "gateway" in definition.bindings;
+function workspaceGatewayOperationDefinitionForRequestKind(
+  requestKind: string,
+): WorkspaceGatewayOperationDefinition | undefined {
+  try {
+    return workspaceOperationDefinitionForGatewayRequestKind(requestKind);
+  } catch {
+    return undefined;
+  }
 }
 
 function unsupportedWorkspaceGatewayRequestField(
   body: Record<string, unknown>,
-  definition: WorkspaceBrowserOperationDefinition,
+  definition: WorkspaceGatewayOperationDefinition,
 ): string | undefined {
-  const allowedFields = new Set<string>([
-    "kind",
-    "operation",
-    ...definition.bindings.gateway.inputFields,
-  ]);
+  const allowedFields = new Set<string>(
+    workspaceOperationGatewayAllowedRequestFields(definition.kind),
+  );
 
   return Object.keys(body).find((field) => !allowedFields.has(field));
 }

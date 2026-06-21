@@ -7,13 +7,13 @@
  */
 import {
   WORKSPACE_BOOTSTRAP_OPERATION_KINDS,
-  WORKSPACE_BROWSER_OPERATION_KINDS,
+  WORKSPACE_GATEWAY_OPERATION_KINDS as WORKSPACE_DEFINITION_GATEWAY_OPERATION_KINDS,
 } from "@dpeek/formless-workspace";
 import type {
   WorkspaceAutoSaveEnqueueInput,
   WorkspaceAutoSaveState,
   WorkspaceAutoSaveWriteSource,
-  WorkspaceBrowserOperationKind,
+  WorkspaceGatewayOperationKind as WorkspaceDefinitionGatewayOperationKind,
   WorkspaceOperationCheckOrPullStartInput,
   WorkspaceOperationCredentialSetupStartInput,
   WorkspaceOperationDisplayObject,
@@ -62,14 +62,14 @@ export const WORKSPACE_GATEWAY_OPERATION_KIND_HEADER = "x-formless-workspace-ope
  * Browser-safe operation allowlist from the Workspace package. Gateway uses
  * these wire strings for transport intent classification only.
  */
-export const WORKSPACE_GATEWAY_OPERATION_KINDS = WORKSPACE_BROWSER_OPERATION_KINDS;
+export const WORKSPACE_GATEWAY_OPERATION_KINDS = WORKSPACE_DEFINITION_GATEWAY_OPERATION_KINDS;
 
 /**
  * Operations allowed before owner setup through the local bootstrap capability.
  */
 export const WORKSPACE_GATEWAY_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_BOOTSTRAP_OPERATION_KINDS;
 
-export type WorkspaceGatewayOperationKind = WorkspaceBrowserOperationKind;
+export type WorkspaceGatewayOperationKind = WorkspaceDefinitionGatewayOperationKind;
 
 export type WorkspaceGatewayOperationStatus = WorkspaceOperationStatus;
 

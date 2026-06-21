@@ -1,7 +1,10 @@
 import {
-  WORKSPACE_BROWSER_OPERATION_KINDS,
+  WORKSPACE_BROWSER_OPERATION_DEFINITIONS,
+  WORKSPACE_CLI_OPERATION_DEFINITIONS,
   WORKSPACE_CLI_OPERATION_COMMANDS,
   WORKSPACE_CLI_OPERATION_KINDS,
+  WORKSPACE_GATEWAY_OPERATION_DEFINITIONS,
+  WORKSPACE_GATEWAY_OPERATION_KINDS,
   WORKSPACE_OPERATION_DEFINITIONS,
   WORKSPACE_OPERATION_KINDS,
   WORKSPACE_OPERATION_STATE_FILE_KIND,
@@ -18,10 +21,15 @@ import type {
   WorkspaceAutoSaveWriteSource,
   InitialWorkspaceOperationStateInput,
   UpdateWorkspaceOperationStateInput,
+  WorkspaceBrowserOperationControlMetadata,
+  WorkspaceBrowserOperationDefinition,
   WorkspaceBrowserOperationKind,
   WorkspaceCliCommandName,
   WorkspaceCliOperationDefinition,
   WorkspaceCliOperationKind,
+  WorkspaceGatewayOperationDefinition,
+  WorkspaceGatewayOperationKind,
+  WorkspaceOperationActorPolicy,
   WorkspaceOperationDefinition,
   WorkspaceOperationDefinitionKey,
   WorkspaceOperationDisplayObject,
@@ -45,7 +53,7 @@ import type {
 
 const operationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
 const workspaceOperationKindSet = new Set<string>(WORKSPACE_OPERATION_KINDS);
-const workspaceBrowserOperationKindSet = new Set<string>(WORKSPACE_BROWSER_OPERATION_KINDS);
+const workspaceGatewayOperationKindSet = new Set<string>(WORKSPACE_GATEWAY_OPERATION_KINDS);
 const workspaceCliOperationKindSet = new Set<string>(WORKSPACE_CLI_OPERATION_KINDS);
 const workspaceCliCommandSet = new Set<string>(WORKSPACE_CLI_OPERATION_COMMANDS);
 const workspaceAutoSaveWriteSourceSet = new Set<string>(WORKSPACE_AUTO_SAVE_WRITE_SOURCES);
@@ -60,16 +68,27 @@ const workspaceOperationDefinitionsByKey = new Map<
   WorkspaceOperationDefinitionKey,
   WorkspaceOperationDefinition
 >(WORKSPACE_OPERATION_DEFINITIONS.map((definition) => [definition.key, definition]));
+const workspaceCliOperationDefinitionsByKind = new Map<
+  WorkspaceCliOperationKind,
+  WorkspaceCliOperationDefinition
+>(WORKSPACE_CLI_OPERATION_DEFINITIONS.map((definition) => [definition.kind, definition]));
 const workspaceCliOperationDefinitionsByCommand = new Map<string, WorkspaceCliOperationDefinition>(
-  WORKSPACE_OPERATION_DEFINITIONS.flatMap((definition) => {
-    if (!("cli" in definition.bindings)) {
-      return [];
-    }
-
-    const cliDefinition = definition as WorkspaceCliOperationDefinition;
-
-    return cliDefinition.bindings.cli.commands.map((command) => [command, cliDefinition] as const);
-  }),
+  WORKSPACE_CLI_OPERATION_DEFINITIONS.flatMap((definition) =>
+    definition.bindings.cli.commands.map((command) => [command, definition] as const),
+  ),
+);
+const workspaceGatewayOperationDefinitionsByKind = new Map<
+  WorkspaceGatewayOperationKind,
+  WorkspaceGatewayOperationDefinition
+>(WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.map((definition) => [definition.kind, definition]));
+const workspaceGatewayOperationDefinitionsByRequestKind = new Map<
+  string,
+  WorkspaceGatewayOperationDefinition
+>(
+  WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.map((definition) => [
+    definition.bindings.gateway.requestKind,
+    definition,
+  ]),
 );
 
 export function isWorkspaceOperationKind(value: unknown): value is WorkspaceOperationKind {
@@ -79,7 +98,13 @@ export function isWorkspaceOperationKind(value: unknown): value is WorkspaceOper
 export function isWorkspaceBrowserOperationKind(
   value: unknown,
 ): value is WorkspaceBrowserOperationKind {
-  return typeof value === "string" && workspaceBrowserOperationKindSet.has(value);
+  return isWorkspaceGatewayOperationKind(value);
+}
+
+export function isWorkspaceGatewayOperationKind(
+  value: unknown,
+): value is WorkspaceGatewayOperationKind {
+  return typeof value === "string" && workspaceGatewayOperationKindSet.has(value);
 }
 
 export function isWorkspaceCliOperationKind(value: unknown): value is WorkspaceCliOperationKind {
@@ -126,6 +151,36 @@ export function workspaceOperationDefinitionForKey<TKey extends WorkspaceOperati
   return definition as Extract<WorkspaceOperationDefinition, { readonly key: TKey }>;
 }
 
+export function workspaceCliOperationDefinitions(): readonly WorkspaceCliOperationDefinition[] {
+  return WORKSPACE_CLI_OPERATION_DEFINITIONS;
+}
+
+export function workspaceGatewayOperationDefinitions(): readonly WorkspaceGatewayOperationDefinition[] {
+  return WORKSPACE_GATEWAY_OPERATION_DEFINITIONS;
+}
+
+export function workspaceBrowserOperationDefinitions(): readonly WorkspaceBrowserOperationDefinition[] {
+  return WORKSPACE_BROWSER_OPERATION_DEFINITIONS;
+}
+
+export function workspaceBrowserOperationControlMetadata(): readonly WorkspaceBrowserOperationControlMetadata[] {
+  return WORKSPACE_BROWSER_OPERATION_DEFINITIONS.map(
+    workspaceBrowserOperationControlMetadataFromDefinition,
+  );
+}
+
+export function workspaceCliOperationDefinitionForKind<TKind extends WorkspaceCliOperationKind>(
+  kind: TKind,
+): Extract<WorkspaceCliOperationDefinition, { readonly kind: TKind }> {
+  const definition = workspaceCliOperationDefinitionsByKind.get(kind);
+
+  if (!definition) {
+    throw new Error(`Workspace operation "${kind}" is not bound to a CLI command.`);
+  }
+
+  return definition as Extract<WorkspaceCliOperationDefinition, { readonly kind: TKind }>;
+}
+
 export function workspaceOperationDefinitionForCliCommand(
   command: string,
 ): WorkspaceCliOperationDefinition {
@@ -133,6 +188,32 @@ export function workspaceOperationDefinitionForCliCommand(
 
   if (!definition) {
     throw new Error(`Workspace CLI command "${command}" is not bound to an operation definition.`);
+  }
+
+  return definition;
+}
+
+export function workspaceGatewayOperationDefinitionForKind<
+  TKind extends WorkspaceGatewayOperationKind,
+>(kind: TKind): Extract<WorkspaceGatewayOperationDefinition, { readonly kind: TKind }> {
+  const definition = workspaceGatewayOperationDefinitionsByKind.get(kind);
+
+  if (!definition) {
+    throw new Error(`Workspace operation "${kind}" is not bound to a gateway request.`);
+  }
+
+  return definition as Extract<WorkspaceGatewayOperationDefinition, { readonly kind: TKind }>;
+}
+
+export function workspaceOperationDefinitionForGatewayRequestKind(
+  requestKind: string,
+): WorkspaceGatewayOperationDefinition {
+  const definition = workspaceGatewayOperationDefinitionsByRequestKind.get(requestKind);
+
+  if (!definition) {
+    throw new Error(
+      `Workspace gateway request "${requestKind}" is not bound to an operation definition.`,
+    );
   }
 
   return definition;
@@ -151,6 +232,10 @@ export function workspaceOperationInputFieldDefinition(
   }
 
   return field;
+}
+
+export function workspaceOperationLabel(kind: WorkspaceOperationKind): string {
+  return workspaceOperationDefinitionForKind(kind).label;
 }
 
 export function workspaceOperationInputFieldDefaultValue(
@@ -172,14 +257,55 @@ export function workspaceOperationInputDefaults(
   );
 }
 
+export function workspaceOperationCliCommands(
+  kind: WorkspaceCliOperationKind,
+): readonly WorkspaceCliCommandName[] {
+  return workspaceCliOperationDefinitionForKind(kind).bindings.cli.commands;
+}
+
+export function workspaceOperationGatewayRequestKind(kind: WorkspaceGatewayOperationKind): string {
+  return workspaceGatewayOperationDefinitionForKind(kind).bindings.gateway.requestKind;
+}
+
+export function workspaceOperationGatewayInputFields(
+  kind: WorkspaceGatewayOperationKind,
+): readonly string[] {
+  return workspaceGatewayOperationDefinitionForKind(kind).bindings.gateway.inputFields;
+}
+
+export function workspaceOperationGatewayAllowedRequestFields(
+  kind: WorkspaceGatewayOperationKind,
+): readonly string[] {
+  return ["kind", "operation", ...workspaceOperationGatewayInputFields(kind)];
+}
+
 export function workspaceOperationMode(kind: WorkspaceOperationKind): WorkspaceOperationMode {
   return workspaceOperationDefinitionForKind(kind).mode;
+}
+
+export function workspaceOperationActorPolicy(
+  kind: WorkspaceOperationKind,
+): WorkspaceOperationActorPolicy {
+  return workspaceOperationDefinitionForKind(kind).actorPolicy;
 }
 
 export function workspaceOperationRequiredCapability(
   kind: WorkspaceOperationKind,
 ): WorkspaceOperationRequiredCapability {
   return workspaceOperationDefinitionForKind(kind).requiredCapability;
+}
+
+function workspaceBrowserOperationControlMetadataFromDefinition(
+  definition: WorkspaceBrowserOperationDefinition,
+): WorkspaceBrowserOperationControlMetadata {
+  return {
+    bootstrapAllowed: definition.bindings.gateway.bootstrap,
+    inputFields: definition.bindings.gateway.inputFields,
+    kind: definition.kind,
+    label: definition.label,
+    mode: definition.mode,
+    requiredCapability: definition.requiredCapability,
+  };
 }
 
 export function workspaceOperationActorAllowed(

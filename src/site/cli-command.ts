@@ -1,7 +1,10 @@
 import {
   parseInstanceWorkspaceTargetAlias,
-  workspaceOperationDefinitionForCliCommand,
-  type WorkspaceOperationKind,
+  workspaceCliOperationDefinitions,
+  workspaceOperationInputDefaults,
+  type WorkspaceCliCommandName,
+  type WorkspaceCliOperationDefinition,
+  type WorkspaceCliOperationKind,
 } from "@dpeek/formless-workspace";
 
 export type FormlessCliCommand =
@@ -37,7 +40,6 @@ export type FormlessCliCommand =
       targetAlias: string | null;
       workspacePath: string | null;
     }
-  | { check: boolean; kind: "workspaceSave"; workspacePath: string | null }
   | {
       adminToken: string | null;
       kind: "workspaceTokenAdopt";
@@ -58,11 +60,7 @@ export function formlessCliUsage(): string {
     "Commands:",
     "  dev [--workspace <path>] [--open] [--reset]",
     "                                      Run local workspace and print browser session URL",
-    "  save [--workspace <path>] [--check] Save Authority state to storage snapshots",
-    "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
-    "                                      Sync selected target into workspace source",
-    "  push [--workspace <path>] [--target <alias>] [--dry-run]",
-    "                                      Sync workspace source to the selected target",
+    ...workspaceCliOperationUsageLines(),
     "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
     "  owner setup [--workspace <path>] [--target <alias>]",
     "       [--open] [--admin-token <token>]",
@@ -78,15 +76,14 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
     return { kind: "help" };
   }
 
+  const workspaceOperation = workspaceCliOperationDefinitionForTopLevelCommand(command);
+  if (workspaceOperation) {
+    return parseWorkspaceCliOperationArgs(workspaceOperation, rest);
+  }
+
   switch (command) {
     case "dev":
       return parseWorkspaceDevArgs(rest);
-    case "save":
-      return parseWorkspaceSaveArgs(rest);
-    case "pull":
-      return parseWorkspacePullArgs(rest);
-    case "push":
-      return parseWorkspacePushArgs(rest);
     case "destroy":
       return parseWorkspaceDestroyArgs(rest);
     case "owner":
@@ -110,14 +107,180 @@ export function normalizeSourceUrl(value: string): string {
   }
 }
 
-function requireWorkspaceCliOperation(commandName: string, operationKind: WorkspaceOperationKind) {
-  const definition = workspaceOperationDefinitionForCliCommand(commandName);
+function workspaceCliOperationUsageLines(): string[] {
+  return workspaceCliOperationDefinitions().flatMap((definition) => [
+    `  ${workspaceCliOperationUsage(definition)}`,
+    `                                      ${definition.label}`,
+  ]);
+}
 
-  if (definition.kind !== operationKind) {
+function workspaceCliOperationUsage(definition: WorkspaceCliOperationDefinition): string {
+  return [
+    workspaceCliTopLevelCommand(singleWorkspaceCliCommand(definition)),
+    ...workspaceCliOperationOptionSyntax(definition),
+  ].join(" ");
+}
+
+function workspaceCliOperationOptionSyntax(definition: WorkspaceCliOperationDefinition): string[] {
+  const allowed = workspaceCliOperationInputFieldSet(definition);
+  const orderedFieldKeys = ["workspacePath", "targetAlias", "dryRun"];
+
+  return orderedFieldKeys.flatMap((fieldKey) => {
+    if (!allowed.has(fieldKey)) {
+      return [];
+    }
+
+    switch (fieldKey) {
+      case "workspacePath":
+        return ["[--workspace <path>]"];
+      case "targetAlias":
+        return ["[--target <alias>]"];
+      case "dryRun":
+        return ["[--dry-run]"];
+      default:
+        return [];
+    }
+  });
+}
+
+function workspaceCliOperationDefinitionForTopLevelCommand(
+  command: string,
+): WorkspaceCliOperationDefinition | undefined {
+  return workspaceCliOperationDefinitions().find((definition) =>
+    definition.bindings.cli.commands.some(
+      (cliCommand) => workspaceCliTopLevelCommand(cliCommand) === command,
+    ),
+  );
+}
+
+function parseWorkspaceCliOperationArgs(
+  definition: WorkspaceCliOperationDefinition,
+  args: string[],
+): FormlessCliCommand {
+  const operationKind: string = definition.kind;
+
+  switch (definition.kind) {
+    case "pull":
+      return parseWorkspaceSourceSyncCliOperationArgs(definition, args, "workspacePull");
+    case "push":
+      return parseWorkspaceSourceSyncCliOperationArgs(definition, args, "workspacePush");
+    default:
+      throw new Error(`Workspace CLI operation "${operationKind}" is not supported.`);
+  }
+}
+
+function parseWorkspaceSourceSyncCliOperationArgs<TKind extends "workspacePull" | "workspacePush">(
+  definition: Extract<WorkspaceCliOperationDefinition, { readonly kind: "pull" | "push" }>,
+  args: string[],
+  kind: TKind,
+): Extract<FormlessCliCommand, { kind: TKind }> {
+  const commandName = singleWorkspaceCliCommand(definition);
+  const usage = workspaceCliOperationUsage(definition);
+  const allowed = workspaceCliOperationInputFieldSet(definition);
+  let dryRun = workspaceCliOperationBooleanDefault(definition.kind, "dryRun");
+  let targetAlias: string | null = null;
+  let workspacePath: string | null = null;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "-h" || arg === "--help") {
+      throw new Error(`Usage: ${usage}`);
+    }
+
+    if (arg === "--workspace" && allowed.has("workspacePath")) {
+      workspacePath = readOptionValue(args, index, "--workspace");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--target" && allowed.has("targetAlias")) {
+      targetAlias = parseCliTargetAlias(readOptionValue(args, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--dry-run" && allowed.has("dryRun")) {
+      dryRun = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for ${commandName}: ${arg}`);
+  }
+
+  return {
+    dryRun,
+    kind,
+    targetAlias,
+    workspacePath,
+  } as Extract<FormlessCliCommand, { kind: TKind }>;
+}
+
+function workspaceCliOperationBooleanDefault(
+  kind: WorkspaceCliOperationKind,
+  fieldKey: string,
+): boolean {
+  const value = workspaceOperationInputDefaults(kind)[fieldKey];
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return false;
+}
+
+function workspaceCliOperationInputFieldSet(
+  definition: WorkspaceCliOperationDefinition,
+): Set<string> {
+  const allowed = new Set<string>();
+
+  for (const field of definition.input.fields) {
+    const fieldKey: string = field.key;
+
+    switch (fieldKey) {
+      case "dryRun":
+      case "targetAlias":
+      case "workspacePath":
+        allowed.add(fieldKey);
+        break;
+      default:
+        throw new Error(
+          `Workspace CLI operation "${definition.kind}" exposes unsupported public input field "${fieldKey}".`,
+        );
+    }
+  }
+
+  return allowed;
+}
+
+function singleWorkspaceCliCommand(
+  definition: WorkspaceCliOperationDefinition,
+): WorkspaceCliCommandName {
+  const [command] = definition.bindings.cli.commands;
+
+  if (definition.bindings.cli.commands.length !== 1 || !command) {
     throw new Error(
-      `Workspace CLI command "${commandName}" is bound to operation "${definition.kind}", expected "${operationKind}".`,
+      `Workspace CLI operation "${definition.kind}" must expose exactly one public command binding.`,
     );
   }
+
+  return command;
+}
+
+function workspaceCliTopLevelCommand(command: WorkspaceCliCommandName): string {
+  const prefix = "formless ";
+
+  if (!command.startsWith(prefix)) {
+    throw new Error(`Workspace CLI command "${command}" must start with "formless ".`);
+  }
+
+  const topLevelCommand = command.slice(prefix.length);
+
+  if (!topLevelCommand || topLevelCommand.includes(" ")) {
+    throw new Error(`Workspace CLI command "${command}" must be a top-level command.`);
+  }
+
+  return topLevelCommand;
 }
 
 function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
@@ -143,28 +306,6 @@ function parseWorkspaceDevArgs(args: string[]): FormlessCliCommand {
   return { kind: "workspaceDev", open, reset, workspacePath: options.workspacePath };
 }
 
-function parseWorkspaceSaveArgs(args: string[]): FormlessCliCommand {
-  requireWorkspaceCliOperation("formless save", "save");
-  const options = parseTopLevelWorkspaceOptions(
-    args,
-    "formless save [--workspace <path>] [--check]",
-  );
-  let check = false;
-
-  for (let index = 0; index < options.rest.length; index += 1) {
-    const arg = options.rest[index];
-
-    if (arg === "--check") {
-      check = true;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless save: ${arg}`);
-  }
-
-  return { check, kind: "workspaceSave", workspacePath: options.workspacePath };
-}
-
 function parseWorkspaceDestroyArgs(args: string[]): FormlessCliCommand {
   const options = parseTopLevelTargetOptions(
     args,
@@ -175,56 +316,6 @@ function parseWorkspaceDestroyArgs(args: string[]): FormlessCliCommand {
   return {
     confirm,
     kind: "workspaceDestroy",
-    targetAlias: options.targetAlias,
-    workspacePath: options.workspacePath,
-  };
-}
-
-function parseWorkspacePullArgs(args: string[]): FormlessCliCommand {
-  requireWorkspaceCliOperation("formless pull", "pull");
-  const options = parseTopLevelTargetOptions(
-    args,
-    "formless pull [--workspace <path>] [--target <alias>] [--dry-run]",
-  );
-  let dryRun = false;
-
-  for (const arg of options.rest) {
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless pull: ${arg}`);
-  }
-
-  return {
-    dryRun,
-    kind: "workspacePull",
-    targetAlias: options.targetAlias,
-    workspacePath: options.workspacePath,
-  };
-}
-
-function parseWorkspacePushArgs(args: string[]): FormlessCliCommand {
-  requireWorkspaceCliOperation("formless push", "push");
-  const options = parseTopLevelTargetOptions(
-    args,
-    "formless push [--workspace <path>] [--target <alias>] [--dry-run]",
-  );
-  let dryRun = false;
-
-  for (const arg of options.rest) {
-    if (arg === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-
-    throw new Error(`Unknown option for formless push: ${arg}`);
-  }
-
-  return {
-    dryRun,
-    kind: "workspacePush",
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };

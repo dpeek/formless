@@ -44,11 +44,13 @@ import {
   type WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway/client";
 import {
-  WORKSPACE_OPERATION_DEFINITIONS,
+  workspaceBrowserOperationControlMetadata,
+  workspaceOperationActorAllowed,
   workspaceOperationDefinitionForKind,
-  type WorkspaceBrowserOperationDefinition,
+  workspaceOperationInputFieldDefinition,
+  type WorkspaceBrowserOperationControlMetadata,
   type WorkspaceOperationActor,
-  type WorkspaceOperationInputFieldDefinition,
+  type WorkspaceOperationMode,
   type WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
@@ -98,11 +100,13 @@ export type WorkspaceGatewayRuntimeCapabilityFacts = {
 };
 
 export type WorkspaceGatewayOperationControl = {
+  bootstrapAllowed: boolean;
   group: Exclude<WorkspaceGatewayOperationControlGroup, "all">;
   input: WorkspaceGatewayStartInput;
   inputFields: readonly string[];
   kind: WorkspaceGatewayOperationKind;
   label: string;
+  mode: WorkspaceOperationMode;
   requiredCapability: WorkspaceOperationRequiredCapability;
   style: "primary" | "secondary";
 };
@@ -126,27 +130,27 @@ export function selectWorkspaceGatewayOperationControls({
 } = {}): WorkspaceGatewayOperationControl[] {
   const capabilities = new Set(runtime.capabilities);
 
-  return WORKSPACE_OPERATION_DEFINITIONS.filter(hasWorkspaceBrowserGatewayBinding)
-    .filter((definition) => definition.mode === "write")
-    .filter((definition) => definition.kind !== "save")
-    .filter((definition) => operationGroup !== "workspace" || definition.kind === "push")
-    .filter((definition) => definition.actorPolicy.allowedActors.includes(runtime.actor))
-    .filter((definition) => capabilities.has(definition.requiredCapability))
-    .map(workspaceGatewayOperationControlFromDefinition)
+  return workspaceBrowserOperationControlMetadata()
+    .filter((metadata) => operationGroup !== "workspace" || metadata.kind === "push")
+    .filter((metadata) => workspaceOperationActorAllowed(metadata.kind, runtime.actor))
+    .filter((metadata) => capabilities.has(metadata.requiredCapability))
+    .map(workspaceGatewayOperationControlFromMetadata)
     .filter((control) => operationGroup === "all" || control.group === operationGroup);
 }
 
-function workspaceGatewayOperationControlFromDefinition(
-  definition: WorkspaceBrowserOperationDefinition,
+function workspaceGatewayOperationControlFromMetadata(
+  metadata: WorkspaceBrowserOperationControlMetadata,
 ): WorkspaceGatewayOperationControl {
   return {
+    bootstrapAllowed: metadata.bootstrapAllowed,
     group: workspaceGatewayOperationControlGroup(),
-    input: workspaceGatewayStartInputFromDefinition(definition),
-    inputFields: definition.bindings.gateway.inputFields,
-    kind: definition.kind,
-    label: definition.label,
-    requiredCapability: definition.requiredCapability,
-    style: definition.kind === "push" ? "primary" : "secondary",
+    input: workspaceGatewayStartInputFromControlMetadata(metadata),
+    inputFields: metadata.inputFields,
+    kind: metadata.kind,
+    label: metadata.label,
+    mode: metadata.mode,
+    requiredCapability: metadata.requiredCapability,
+    style: metadata.kind === "push" ? "primary" : "secondary",
   };
 }
 
@@ -154,19 +158,13 @@ function workspaceGatewayOperationControlGroup(): WorkspaceGatewayOperationContr
   return "workspace";
 }
 
-export function workspaceGatewayStartInputFromDefinition(
-  definition: WorkspaceBrowserOperationDefinition,
+export function workspaceGatewayStartInputFromControlMetadata(
+  metadata: WorkspaceBrowserOperationControlMetadata,
 ): WorkspaceGatewayStartInput {
-  const fieldsByKey = new Map(definition.input.fields.map((field) => [field.key, field]));
-  const input: Record<string, boolean | null | string | undefined> = { kind: definition.kind };
+  const input: Record<string, boolean | null | string | undefined> = { kind: metadata.kind };
 
-  for (const fieldKey of definition.bindings.gateway.inputFields) {
-    const field = fieldsByKey.get(fieldKey);
-
-    if (!field) {
-      continue;
-    }
-
+  for (const fieldKey of metadata.inputFields) {
+    const field = workspaceOperationInputFieldDefinition(metadata.kind, fieldKey);
     const value = workspaceGatewayControlDefaultValue(field);
 
     if (value !== undefined) {
@@ -178,7 +176,7 @@ export function workspaceGatewayStartInputFromDefinition(
 }
 
 function workspaceGatewayControlDefaultValue(
-  field: WorkspaceOperationInputFieldDefinition,
+  field: ReturnType<typeof workspaceOperationInputFieldDefinition>,
 ): boolean | null | string | undefined {
   if ("defaultValue" in field) {
     return field.defaultValue;
@@ -189,12 +187,6 @@ function workspaceGatewayControlDefaultValue(
   }
 
   return undefined;
-}
-
-function hasWorkspaceBrowserGatewayBinding(
-  definition: (typeof WORKSPACE_OPERATION_DEFINITIONS)[number],
-): definition is WorkspaceBrowserOperationDefinition {
-  return "gateway" in definition.bindings;
 }
 
 export function InstanceShellRoute({
@@ -804,7 +796,6 @@ function WorkspaceGatewayOperationControls({
       state.currentOperation !== undefined &&
       operationPollsAutomatically(state.currentOperation));
   const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
-  const canRunPostBootstrapOperation = canStart && Boolean(state.csrfToken);
   const controls = selectWorkspaceGatewayOperationControls({ operationGroup });
 
   return (
@@ -812,21 +803,29 @@ function WorkspaceGatewayOperationControls({
       className="flex flex-wrap items-center gap-2"
       data-formless-workspace-operation-controls="true"
     >
-      {controls.map((control) => (
-        <Button
-          data-formless-workspace-operation-control={control.kind}
-          data-formless-workspace-operation-input-fields={control.inputFields.join(" ")}
-          data-formless-workspace-operation-required-capability={control.requiredCapability}
-          intent={control.style === "secondary" ? "outline" : undefined}
-          isDisabled={!canRunPostBootstrapOperation}
-          key={control.kind}
-          onPress={() => onStartOperation?.(control.input)}
-          size="sm"
-          type="button"
-        >
-          {control.label}
-        </Button>
-      ))}
+      {controls.map((control) => {
+        const canRunControl =
+          canStart &&
+          (control.mode === "read" || Boolean(state.status === "ready" && state.csrfToken));
+
+        return (
+          <Button
+            data-formless-workspace-operation-bootstrap-allowed={String(control.bootstrapAllowed)}
+            data-formless-workspace-operation-control={control.kind}
+            data-formless-workspace-operation-input-fields={control.inputFields.join(" ")}
+            data-formless-workspace-operation-mode={control.mode}
+            data-formless-workspace-operation-required-capability={control.requiredCapability}
+            intent={control.style === "secondary" ? "outline" : undefined}
+            isDisabled={!canRunControl}
+            key={control.kind}
+            onPress={() => onStartOperation?.(control.input)}
+            size="sm"
+            type="button"
+          >
+            {control.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }

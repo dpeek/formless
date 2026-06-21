@@ -272,7 +272,6 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless save"] },
       gateway: { bootstrap: false, inputFields: ["check"], requestKind: "save" },
     },
     handlerKey: "workspace.source.save",
@@ -337,12 +336,25 @@ export type WorkspaceCliOperationKind = WorkspaceCliOperationDefinition["kind"];
 export type WorkspaceCliCommandName =
   WorkspaceCliOperationDefinition["bindings"]["cli"]["commands"][number];
 
-export type WorkspaceBrowserOperationDefinition = Extract<
+export type WorkspaceGatewayOperationDefinition = Extract<
   WorkspaceOperationDefinition,
   { readonly bindings: { readonly gateway: unknown } }
 >;
 
-export type WorkspaceBrowserOperationKind = WorkspaceBrowserOperationDefinition["kind"];
+export type WorkspaceGatewayOperationKind = WorkspaceGatewayOperationDefinition["kind"];
+
+export type WorkspaceBrowserOperationDefinition = WorkspaceGatewayOperationDefinition;
+
+export type WorkspaceBrowserOperationKind = WorkspaceGatewayOperationKind;
+
+export type WorkspaceBrowserOperationControlMetadata = {
+  bootstrapAllowed: boolean;
+  inputFields: readonly string[];
+  kind: WorkspaceBrowserOperationKind;
+  label: string;
+  mode: WorkspaceOperationMode;
+  requiredCapability: WorkspaceOperationRequiredCapability;
+};
 
 export const WORKSPACE_OPERATION_KEYS = WORKSPACE_OPERATION_DEFINITIONS.map(
   (definition) => definition.key,
@@ -352,22 +364,34 @@ export const WORKSPACE_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.map(
   (definition) => definition.kind,
 ) as WorkspaceOperationKind[];
 
-export const WORKSPACE_CLI_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+export const WORKSPACE_CLI_OPERATION_DEFINITIONS = WORKSPACE_OPERATION_DEFINITIONS.filter(
   hasWorkspaceCliBinding,
-).map((definition) => definition.kind) as WorkspaceCliOperationKind[];
+) as readonly WorkspaceCliOperationDefinition[];
 
-export const WORKSPACE_CLI_OPERATION_COMMANDS = WORKSPACE_OPERATION_DEFINITIONS.flatMap(
+export const WORKSPACE_CLI_OPERATION_KINDS = WORKSPACE_CLI_OPERATION_DEFINITIONS.map(
+  (definition) => definition.kind,
+) as WorkspaceCliOperationKind[];
+
+export const WORKSPACE_CLI_OPERATION_COMMANDS = WORKSPACE_CLI_OPERATION_DEFINITIONS.flatMap(
   (definition) =>
     hasWorkspaceCliBinding(definition) ? Array.from(definition.bindings.cli.commands) : [],
 ) as WorkspaceCliCommandName[];
 
-export const WORKSPACE_BROWSER_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+export const WORKSPACE_GATEWAY_OPERATION_DEFINITIONS = WORKSPACE_OPERATION_DEFINITIONS.filter(
   hasWorkspaceGatewayBinding,
-).map((definition) => definition.kind) as WorkspaceBrowserOperationKind[];
+) as readonly WorkspaceGatewayOperationDefinition[];
 
-export const WORKSPACE_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.filter(
+export const WORKSPACE_GATEWAY_OPERATION_KINDS = WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.map(
+  (definition) => definition.kind,
+) as WorkspaceGatewayOperationKind[];
+
+export const WORKSPACE_BROWSER_OPERATION_DEFINITIONS = WORKSPACE_GATEWAY_OPERATION_DEFINITIONS;
+
+export const WORKSPACE_BROWSER_OPERATION_KINDS = WORKSPACE_GATEWAY_OPERATION_KINDS;
+
+export const WORKSPACE_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.filter(
   (definition) => hasWorkspaceGatewayBinding(definition) && definition.bindings.gateway.bootstrap,
-).map((definition) => definition.kind) as WorkspaceBrowserOperationKind[];
+).map((definition) => definition.kind) as WorkspaceGatewayOperationKind[];
 
 function hasWorkspaceCliBinding(
   definition: WorkspaceOperationDefinition,
