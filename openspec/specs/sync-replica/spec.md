@@ -135,8 +135,7 @@ the matching app storage identity.
 - THEN the Authority returns committed write-log changes after that cursor
 - AND the response cursor advances to the latest committed cursor for that app
   storage identity
-- AND write-log change fields use `writeId` and `operationKind` instead of
-  action or mutation contract names
+- AND write-log change fields use `writeId` and `operationKind`
 
 #### Scenario: Push catch-up reads write-log changes
 
@@ -182,7 +181,7 @@ The system SHALL use push sync messages to catch up clients and deliver committe
 - THEN the Authority broadcasts a sync message for the committed write
 - AND one stale socket does not prevent later sockets from receiving the broadcast
 - AND the broadcast tells clients to catch up from the write-log cursor rather
-  than exposing action or mutation response contracts
+  than from inline write responses
 
 ### Requirement: Write Outcome Push Notifications
 
@@ -208,7 +207,7 @@ sync notification policy.
 ### Requirement: Local Workspace Dirty Signals
 
 The system SHALL derive local workspace dirty signals from committed write
-outcomes, not browser replica cache mutation.
+outcomes, not browser replica cache writes.
 
 #### Scenario: Successful browser write marks workspace dirty
 

@@ -197,7 +197,7 @@ function workerSchemaAppDefinitionFromPackageSource(
     key: appPackage.sourceSchemaKey,
     label: appPackage.label,
     route,
-    seedChangeMutationPrefix: `seed-${appPackage.sourceSchemaKey}`,
+    seedChangeWritePrefix: `seed-${appPackage.sourceSchemaKey}`,
     sourceSchema: source.sourceSchema,
     seedRecords: source.seedRecords,
   };

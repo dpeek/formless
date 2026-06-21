@@ -93,7 +93,6 @@ describe("crm source schema", () => {
       type: "reference",
       to: "subscription",
     });
-    expect(crmSchema.entities["delivery-event"]).not.toHaveProperty("mutations");
   });
 
   it("defines CRM relationship metadata and membership constraints", () => {
@@ -156,7 +155,6 @@ describe("crm source schema", () => {
       "broadcast-recipient": ["create", "update"],
       "delivery-event": [],
     });
-    expect(Object.values(crmSchema.entities).some((entity) => "actions" in entity)).toBe(false);
     expect(collectionOperationBindings).toEqual(
       Object.fromEntries(
         crmCollectionOperationCoverage.map((coverage) => [

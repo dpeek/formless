@@ -194,20 +194,20 @@ export type FieldSchema =
   | EnumFieldSchema
   | ReferenceFieldSchema;
 
-export type ActionAccessActorMode = "anonymous";
+export type OperationAccessActorMode = "anonymous";
 
-export type ActionChallengePolicySchema = {
+export type OperationChallengePolicySchema = {
   kind: "turnstile";
 };
 
-export type ActionOriginPolicySchema = {
+export type OperationOriginPolicySchema = {
   kind: "same-origin";
 };
 
-export type ActionAccessPolicySchema = {
-  actor: ActionAccessActorMode;
-  challenge: ActionChallengePolicySchema;
-  origin: ActionOriginPolicySchema;
+export type OperationAccessPolicySchema = {
+  actor: OperationAccessActorMode;
+  challenge: OperationChallengePolicySchema;
+  origin: OperationOriginPolicySchema;
 };
 
 export type PublicOperationTextInputFieldSchema = {
@@ -812,13 +812,13 @@ export type StateMachineSchema = {
   event?: StateMachineTransitionEventSchema;
 };
 
-export type SchemaActionActorKind = "admin" | "cliDeployer" | "owner" | "runner";
+export type SchemaOperationActorKind = "admin" | "cliDeployer" | "owner" | "runner";
 
 export type EntityOperationKind = "list" | "get" | "create" | "update" | "delete" | "command";
 
 export type EntityOperationScope = "collection" | "record";
 
-export type EntityOperationActorKind = SchemaActionActorKind | "anonymous";
+export type EntityOperationActorKind = SchemaOperationActorKind | "anonymous";
 
 export type EntityOperationFieldInputSchema = {
   field: string;
@@ -1109,7 +1109,7 @@ export type EntityOperationAuditSchema = {
 
 export type EntityOperationPolicySchema = {
   actors: EntityOperationActorKind[];
-  access?: ActionAccessPolicySchema;
+  access?: OperationAccessPolicySchema;
   responseFields?: Partial<Record<EntityOperationActorKind, string[]>>;
   visible?: boolean;
 };
@@ -1154,7 +1154,7 @@ export type RuntimeSchemaRouteValidationSchema = {
 };
 
 export type RuntimeSchemaHistorySchema = {
-  kind: "actionCreated" | "appendOnly";
+  kind: "operationCreated" | "appendOnly";
 };
 
 export type RuntimeSchemaControlPlaneEntitySchema = {

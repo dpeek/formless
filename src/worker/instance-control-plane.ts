@@ -33,7 +33,7 @@ import type {
 } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import { parseCreateAppInstallRequest, type CreateAppInstallRequest } from "../shared/protocol.ts";
-import { type EntityOperationSchema, type SchemaActionActorKind } from "@dpeek/formless-schema";
+import { type EntityOperationSchema, type SchemaOperationActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -117,7 +117,7 @@ const instanceControlPlaneApp = {
   key: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   label: "Instance control plane",
   route: "/instance-control-plane",
-  seedChangeMutationPrefix: "seed-instance-control-plane",
+  seedChangeWritePrefix: "seed-instance-control-plane",
   sourceSchema: instanceControlPlaneSourceSchema,
   seedRecords: [],
 } satisfies WorkerSchemaAppDefinition;
@@ -126,7 +126,7 @@ function instanceControlPlaneSourceForEnv(env: LaunchFixtureStartupEnv): Storage
   return {
     schema: instanceControlPlaneSourceSchema,
     records: launchFixtureControlPlaneRecordsForEnv(env),
-    changeMutationPrefix: "seed-instance-control-plane",
+    changeWritePrefix: "seed-instance-control-plane",
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
     schemaProvenance: instanceControlPlaneSchemaProvenance,
     storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -332,8 +332,8 @@ async function handleInternalUpdateAppInstallPackageFacts(
       storage,
       {
         entity: "app-install",
-        mutationId: `updateAppInstallPackageFacts:${parsed.installId}:${parsed.packageRevision}:${parsed.sourceSchemaHash}`,
-        op: "patch",
+        writeId: `updateAppInstallPackageFacts:${parsed.installId}:${parsed.packageRevision}:${parsed.sourceSchemaHash}`,
+        kind: "patch",
         recordId: parsed.installId,
         values: {
           packageRevision: parsed.packageRevision,
@@ -595,7 +595,7 @@ async function handleCreateAppInstallOperation(
 }
 
 function createAppInstallOperationEnvelope(input: {
-  actorKind: SchemaActionActorKind;
+  actorKind: SchemaOperationActorKind;
   identity: InstanceControlPlaneStorageIdentity;
   input: CreateAppInstallRequest;
   idempotencyKey: string;
@@ -670,7 +670,7 @@ function createAppInstallOperationWriteIdentity(idempotencyKey: string) {
 }
 
 function controlPlaneOperationSourceProtocol(
-  actorKind: SchemaActionActorKind,
+  actorKind: SchemaOperationActorKind,
 ): OperationInvocationEnvelope["source"]["protocol"] {
   if (actorKind === "cliDeployer") {
     return "cli";
@@ -983,11 +983,9 @@ function upsertControlPlaneRecord(
   patchStoredRecordOutcome(
     storage,
     {
-      mutationId: `controlPlane:${input.action}:patch:${input.id}:${recordValuesHash(
-        input.values,
-      )}`,
+      writeId: `controlPlane:${input.action}:patch:${input.id}:${recordValuesHash(input.values)}`,
       entity: input.entity,
-      op: "patch",
+      kind: "patch",
       recordId: input.id,
       values: input.values,
     },
@@ -1534,22 +1532,22 @@ function isInternalControlPlanePath(path: string) {
   return path.startsWith("/_internal/");
 }
 
-function controlPlaneActorKindFromRequest(request: Request, url: URL): SchemaActionActorKind {
+function controlPlaneActorKindFromRequest(request: Request, url: URL): SchemaOperationActorKind {
   const value =
     request.headers.get("X-Formless-Control-Plane-Actor") ??
     request.headers.get("X-Formless-Actor-Kind") ??
     url.searchParams.get("actorKind") ??
     "owner";
 
-  if (actorKinds.includes(value as SchemaActionActorKind)) {
-    return value as SchemaActionActorKind;
+  if (actorKinds.includes(value as SchemaOperationActorKind)) {
+    return value as SchemaOperationActorKind;
   }
 
   throw new BadRequestError(`Unsupported control-plane actor "${value}".`);
 }
 
 function assertBrowserControlPlaneWriteActor(
-  actorKind: SchemaActionActorKind,
+  actorKind: SchemaOperationActorKind,
   operation: AuthorityOperation,
 ) {
   if (actorKind === "owner" || actorKind === "admin") {
@@ -1562,7 +1560,7 @@ function assertBrowserControlPlaneWriteActor(
 }
 
 function assertBrowserControlPlaneOperationActor(
-  actorKind: SchemaActionActorKind,
+  actorKind: SchemaOperationActorKind,
   operationKey: string,
 ) {
   if (actorKind === "owner" || actorKind === "admin") {

@@ -2,13 +2,12 @@ import { createRecordId } from "../shared/ids.ts";
 import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
+import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
 import type {
-  BootstrapResponse,
-  ChangeRow,
-  CreateMutation,
-  DeleteMutation,
-  PatchMutation,
-} from "../shared/protocol.ts";
+  CreateRecordWriteRequest,
+  DeleteRecordWriteRequest,
+  PatchRecordWriteRequest,
+} from "./record-write-requests.ts";
 import type {
   OperationCommandOutput,
   OperationInvocationEnvelope,
@@ -255,13 +254,13 @@ export type StoredOperationInvocation = {
 export type StorageResetSeed = {
   schema: AppSchema;
   records?: StoredRecord[];
-  changeMutationPrefix?: string;
+  changeWritePrefix?: string;
 };
 
 export type StorageSource = {
   schema: AppSchema;
   records: StoredRecord[];
-  changeMutationPrefix: string;
+  changeWritePrefix: string;
   schemaKey?: string;
   schemaProvenance?: StorageSchemaProvenance;
   storageIdentity?: string;
@@ -273,7 +272,7 @@ export type StorageSchemaResetValidator = (
   records: StoredRecord[],
 ) => void;
 
-export type CreateMutationCausedRecordWriter = (
+export type CreateRecordWriteSideEffectRecordCreator = (
   entity: string,
   recordValuesToCreate: RecordValues[],
 ) => void;
@@ -357,7 +356,7 @@ type SourceDataPlan = {
   schema: AppSchema;
   schemaProvenance?: StorageSchemaProvenance;
   records: StoredRecord[];
-  changeMutationPrefix: string;
+  changeWritePrefix: string;
 };
 
 type SourceSchemaResetPlan = {
@@ -387,14 +386,14 @@ type PackageAppMigrationMaterializationPlan = {
   tombstones: PackageAppMigrationRecordTombstone[];
 };
 
-type ApplyCreateMutationSideEffects = (context: {
+type ApplyCreateRecordWriteSideEffects = (context: {
   storage: DurableObjectStorage;
-  mutation: CreateMutation;
+  request: CreateRecordWriteRequest;
   record: StoredRecord;
-  createRecords: CreateMutationCausedRecordWriter;
+  createRecords: CreateRecordWriteSideEffectRecordCreator;
 }) => void;
 
-type RecordMutationMaterializationOptions = {
+type RecordWriteMaterializationOptions = {
   allowStoredReplay?: boolean;
   now?: string;
 };
@@ -441,8 +440,8 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
 
     CREATE TABLE IF NOT EXISTS changes (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,
-      mutation_id TEXT NOT NULL,
-      op TEXT NOT NULL,
+      write_id TEXT NOT NULL,
+      operation_kind TEXT NOT NULL,
       entity TEXT NOT NULL,
       record_id TEXT NOT NULL,
       payload_json TEXT NOT NULL,
@@ -456,10 +455,10 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS action_executions (
-      action_id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS command_executions (
+      write_id TEXT PRIMARY KEY,
       entity TEXT NOT NULL,
-      action TEXT NOT NULL,
+      operation TEXT NOT NULL,
       cursor INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -865,7 +864,7 @@ export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSe
   return resetStorageToSourceSeed(storage, {
     schema: seed.schema,
     records: seed.records ?? [],
-    changeMutationPrefix: seed.changeMutationPrefix ?? "seed",
+    changeWritePrefix: seed.changeWritePrefix ?? "seed",
   });
 }
 
@@ -935,7 +934,7 @@ export function restoreStorageSnapshotOutcome(
 
     materializeSnapshotRestoreRecords(storage, plan);
     appendSnapshotRestoreChanges(storage, plan);
-    storage.sql.exec("DELETE FROM action_executions");
+    storage.sql.exec("DELETE FROM command_executions");
     storage.sql.exec(`DELETE FROM ${operationInvocationsTableName}`);
 
     return committedWrite({
@@ -1108,7 +1107,7 @@ export function applyPackageAppMigrationsOutcome(
 function clearStorageForSourceSeedReset(storage: DurableObjectStorage) {
   storage.sql.exec("DELETE FROM changes");
   storage.sql.exec("DELETE FROM records");
-  storage.sql.exec("DELETE FROM action_executions");
+  storage.sql.exec("DELETE FROM command_executions");
   storage.sql.exec(`DELETE FROM ${operationInvocationsTableName}`);
   storage.sql.exec("DELETE FROM app_schema");
   storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
@@ -1128,7 +1127,7 @@ function planSourceDataWrite(source: StorageSource): SourceDataPlan {
     schema: source.schema,
     ...(source.schemaProvenance === undefined ? {} : { schemaProvenance: source.schemaProvenance }),
     records: source.records,
-    changeMutationPrefix: source.changeMutationPrefix,
+    changeWritePrefix: source.changeWritePrefix,
   };
 }
 
@@ -1242,7 +1241,7 @@ function materializeSourceRecord(storage: DurableObjectStorage, record: StoredRe
 function appendSourceRecordChanges(storage: DurableObjectStorage, plan: SourceDataPlan) {
   for (const record of plan.records) {
     appendWriteLogChange(storage, {
-      writeId: `${plan.changeMutationPrefix}:${record.id}`,
+      writeId: `${plan.changeWritePrefix}:${record.id}`,
       operationKind: "create",
       entity: record.entity,
       record,
@@ -1984,58 +1983,58 @@ export function recordOperationInvocationOutcome(
 
 export function createStoredRecord(
   storage: DurableObjectStorage,
-  mutation: CreateMutation,
-  applySideEffects?: ApplyCreateMutationSideEffects,
+  request: CreateRecordWriteRequest,
+  applySideEffects?: ApplyCreateRecordWriteSideEffects,
   validateConstraints?: RecordConstraintValidator,
 ): RecordWriteResponse {
   return writeOutcomeResponse(
-    createStoredRecordOutcome(storage, mutation, applySideEffects, validateConstraints),
+    createStoredRecordOutcome(storage, request, applySideEffects, validateConstraints),
   );
 }
 
 export function createStoredRecordOutcome(
   storage: DurableObjectStorage,
-  mutation: CreateMutation,
-  applySideEffects?: ApplyCreateMutationSideEffects,
+  request: CreateRecordWriteRequest,
+  applySideEffects?: ApplyCreateRecordWriteSideEffects,
   validateConstraints?: RecordConstraintValidator,
-  options: RecordMutationMaterializationOptions = {},
+  options: RecordWriteMaterializationOptions = {},
 ): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
     const existingResponse =
       options.allowStoredReplay === false
         ? undefined
-        : readRecordWriteReplayResponse(storage, mutation.mutationId);
+        : readRecordWriteReplayResponse(storage, request.writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const createdAt = options.now ?? nowIsoString();
-    const record = materializeCreatedMutationRecord(
+    const record = materializeCreatedRecordWriteRecord(
       storage,
       {
-        entity: mutation.entity,
-        values: mutation.values,
+        entity: request.entity,
+        values: request.values,
         createdAt,
       },
       validateConstraints,
     );
 
     appendRecordWriteLogChange(storage, {
-      writeId: mutation.mutationId,
+      writeId: request.writeId,
       operationKind: "create",
-      entity: mutation.entity,
+      entity: request.entity,
       record,
       createdAt,
     });
 
     applySideEffects?.({
       storage,
-      mutation,
+      request,
       record,
       createRecords: (entity, recordValuesToCreate) => {
         const sideEffectCreatedAt = options.now ?? nowIsoString();
-        const records = materializeCreatedMutationRecords(
+        const records = materializeCreatedRecordWriteRecords(
           storage,
           entity,
           recordValuesToCreate,
@@ -2044,7 +2043,7 @@ export function createStoredRecordOutcome(
         );
 
         appendRecordWriteChanges(storage, {
-          writeId: mutation.mutationId,
+          writeId: request.writeId,
           operationKind: "command",
           entity,
           records,
@@ -2055,7 +2054,7 @@ export function createStoredRecordOutcome(
 
     return committedWrite(
       readCommittedRecordWriteResponse(storage, {
-        writeId: mutation.mutationId,
+        writeId: request.writeId,
         record,
       }),
     );
@@ -2064,61 +2063,61 @@ export function createStoredRecordOutcome(
 
 export function patchStoredRecord(
   storage: DurableObjectStorage,
-  mutation: PatchMutation,
+  request: PatchRecordWriteRequest,
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
 ): RecordWriteResponse {
   return writeOutcomeResponse(
-    patchStoredRecordOutcome(storage, mutation, values, validateConstraints),
+    patchStoredRecordOutcome(storage, request, values, validateConstraints),
   );
 }
 
 export function patchStoredRecordOutcome(
   storage: DurableObjectStorage,
-  mutation: PatchMutation,
+  request: PatchRecordWriteRequest,
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
-  options: RecordMutationMaterializationOptions = {},
+  options: RecordWriteMaterializationOptions = {},
 ): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
     const existingResponse =
       options.allowStoredReplay === false
         ? undefined
-        : readRecordWriteReplayResponse(storage, mutation.mutationId);
+        : readRecordWriteReplayResponse(storage, request.writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
-    const existingRecord = getStoredRecord(storage, mutation.recordId);
+    const existingRecord = getStoredRecord(storage, request.recordId);
 
     if (!existingRecord) {
-      throw new Error(`Record "${mutation.recordId}" does not exist.`);
+      throw new Error(`Record "${request.recordId}" does not exist.`);
     }
 
     const changedAt = options.now ?? nowIsoString();
-    const record = materializePatchedMutationRecord(
+    const record = materializePatchedRecordWriteRecord(
       storage,
       {
         changedAt,
-        entity: mutation.entity,
+        entity: request.entity,
         existingRecord,
-        values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
+        values: values ?? mergeRecordValues(existingRecord.values, request.values),
       },
       validateConstraints,
     );
 
     appendRecordWriteLogChange(storage, {
-      writeId: mutation.mutationId,
+      writeId: request.writeId,
       operationKind: "update",
-      entity: mutation.entity,
+      entity: request.entity,
       record,
       createdAt: changedAt,
     });
 
     return committedWrite(
       readCommittedRecordWriteResponse(storage, {
-        writeId: mutation.mutationId,
+        writeId: request.writeId,
         record,
       }),
     );
@@ -2127,47 +2126,47 @@ export function patchStoredRecordOutcome(
 
 export function deleteStoredRecord(
   storage: DurableObjectStorage,
-  mutation: DeleteMutation,
+  request: DeleteRecordWriteRequest,
 ): RecordWriteResponse {
-  return writeOutcomeResponse(deleteStoredRecordOutcome(storage, mutation));
+  return writeOutcomeResponse(deleteStoredRecordOutcome(storage, request));
 }
 
 export function deleteStoredRecordOutcome(
   storage: DurableObjectStorage,
-  mutation: DeleteMutation,
-  options: RecordMutationMaterializationOptions = {},
+  request: DeleteRecordWriteRequest,
+  options: RecordWriteMaterializationOptions = {},
 ): WriteOutcome<RecordWriteResponse> {
   return storage.transactionSync(() => {
     const existingResponse =
       options.allowStoredReplay === false
         ? undefined
-        : readRecordWriteReplayResponse(storage, mutation.mutationId);
+        : readRecordWriteReplayResponse(storage, request.writeId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
-    const existingRecord = getStoredRecord(storage, mutation.recordId);
+    const existingRecord = getStoredRecord(storage, request.recordId);
 
     if (!existingRecord) {
-      throw new Error(`Record "${mutation.recordId}" does not exist.`);
+      throw new Error(`Record "${request.recordId}" does not exist.`);
     }
 
     const deletedAt = options.now ?? nowIsoString();
-    assertDeleteMutationCanMaterialize(mutation, existingRecord);
-    const record = materializeDeletedMutationRecord(storage, existingRecord, deletedAt);
+    assertDeleteRecordWriteRequestCanMaterialize(request, existingRecord);
+    const record = materializeDeletedRecordWriteRecord(storage, existingRecord, deletedAt);
 
     appendRecordWriteLogChange(storage, {
-      writeId: mutation.mutationId,
+      writeId: request.writeId,
       operationKind: "delete",
-      entity: mutation.entity,
+      entity: request.entity,
       record,
       createdAt: deletedAt,
     });
 
     return committedWrite(
       readCommittedRecordWriteResponse(storage, {
-        writeId: mutation.mutationId,
+        writeId: request.writeId,
         record,
       }),
     );
@@ -2605,7 +2604,7 @@ function materializeCreatedOperationRecord(
   return insertCreatedRecord(storage, input.entity, input.values, input.createdAt, input.id);
 }
 
-function materializeCreatedMutationRecords(
+function materializeCreatedRecordWriteRecords(
   storage: DurableObjectStorage,
   entity: string,
   recordValuesToCreate: RecordValues[],
@@ -2613,7 +2612,7 @@ function materializeCreatedMutationRecords(
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
   return recordValuesToCreate.map((values) =>
-    materializeCreatedMutationRecord(
+    materializeCreatedRecordWriteRecord(
       storage,
       {
         entity,
@@ -2625,7 +2624,7 @@ function materializeCreatedMutationRecords(
   );
 }
 
-function materializeCreatedMutationRecord(
+function materializeCreatedRecordWriteRecord(
   storage: DurableObjectStorage,
   input: {
     entity: string;
@@ -2639,7 +2638,7 @@ function materializeCreatedMutationRecord(
   return insertCreatedRecord(storage, input.entity, input.values, input.createdAt);
 }
 
-function materializePatchedMutationRecord(
+function materializePatchedRecordWriteRecord(
   storage: DurableObjectStorage,
   input: {
     changedAt: string;
@@ -2672,20 +2671,20 @@ function materializePatchedMutationRecord(
   return record;
 }
 
-function assertDeleteMutationCanMaterialize(
-  mutation: DeleteMutation,
+function assertDeleteRecordWriteRequestCanMaterialize(
+  request: DeleteRecordWriteRequest,
   existingRecord: StoredRecord,
 ) {
-  if (existingRecord.entity !== mutation.entity) {
+  if (existingRecord.entity !== request.entity) {
     throw new Error("Delete entity must match the stored record entity.");
   }
 
   if (existingRecord.deletedAt) {
-    throw new Error(`Record "${mutation.recordId}" is already tombstoned.`);
+    throw new Error(`Record "${request.recordId}" is already tombstoned.`);
   }
 }
 
-function materializeDeletedMutationRecord(
+function materializeDeletedRecordWriteRecord(
   storage: DurableObjectStorage,
   existingRecord: StoredRecord,
   deletedAt: string,

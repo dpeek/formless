@@ -24,7 +24,7 @@ import type { StoredOperationInvocation } from "./storage.ts";
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 type PublicOperationHarnessState = {
-  actionExecutionCount: number;
+  commandExecutionCount: number;
   changes: ChangeRow[];
   invocations: StoredOperationInvocation[];
   records: StoredRecord[];
@@ -89,12 +89,12 @@ afterAll(async () => {
 describe("public operation runtime", () => {
   it("executes schema-key public subscribe operations without opening generic writes", async () => {
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
-    const mutation = await harness.fetch("/api/site/mutations", {
+    const retiredRecordWriteRoute = await harness.fetch("/api/site/mutations", {
       body: "{}",
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const action = await harness.fetch("/api/site/actions", {
+    const retiredCommandRoute = await harness.fetch("/api/site/actions", {
       body: "{}",
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -111,8 +111,8 @@ describe("public operation runtime", () => {
     const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const records = contactSubscriptionRecords(after.records);
 
-    expect(mutation.status).toBe(401);
-    expect(action.status).toBe(401);
+    expect(retiredRecordWriteRoute.status).toBe(401);
+    expect(retiredCommandRoute.status).toBe(401);
     expect(unavailable.status).toBe(404);
     expect(accepted.status).toBe(200);
     expect(body).toMatchObject({
@@ -178,9 +178,7 @@ describe("public operation runtime", () => {
   });
 
   it("uses operation policy for subscribe availability", async () => {
-    await installSiteSchema((schema) => {
-      expect(schema.entities.subscription).not.toHaveProperty("actions");
-    });
+    await installSiteSchema(() => {});
 
     const accepted = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
@@ -204,7 +202,7 @@ describe("public operation runtime", () => {
 
     const rejected = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",
-      publicSubscribeBody({ idempotencyKey: "unsupported-action-only" }),
+      publicSubscribeBody({ idempotencyKey: "unsupported-command-only" }),
     );
     const rejectedAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
 
@@ -224,9 +222,8 @@ describe("public operation runtime", () => {
     }
 
     subscribe.effect = {
-      type: "runActionKind",
-      kind: "subscribe",
-      action: "subscribe",
+      type: "unsupportedPublicEffect",
+      handler: "subscribe",
     } as never;
     const unsupportedEffect = await harness.fetch("/api/site/schema", {
       body: JSON.stringify(operationWriteRequest("/api/site/schema", { schema }).body),
@@ -239,33 +236,11 @@ describe("public operation runtime", () => {
     expect(unsupportedEffect.status).toBe(400);
     expect((await unsupportedEffect.json()) as { error: string }).toEqual({
       error:
-        'Entity operation "subscription.subscribe" effect has unsupported type "runActionKind".',
+        'Entity operation "subscription.subscribe" effect has unsupported type "unsupportedPublicEffect".',
     });
     expect(contactSubscriptionRecords(unsupportedEffectAfter.records).subscriptions).toHaveLength(
       0,
     );
-    expect(turnstileRequests).toEqual([]);
-  });
-
-  it("does not synthesize public execution from legacy action-only metadata", async () => {
-    const rejected = await postPublicOperationHarness(
-      "/api/site/public/operations/subscription/subscribe",
-      publicSubscribeBody({ idempotencyKey: "unsupported-action-only-no-audit" }),
-      {
-        "x-public-operation-harness-schema-variant": "unsupported-subscribe-action-only",
-      },
-    );
-    const body = (await rejected.json()) as { error: string };
-    const state = await readPublicOperationHarnessState();
-
-    expect(rejected.status).toBe(404);
-    expect(body).toEqual({ error: "Public operation is not available." });
-    expect(body).not.toHaveProperty("invocationId");
-    expect(state.actionExecutionCount).toBe(0);
-    expect(state.invocations).toEqual([]);
-    expect(contactSubscriptionRecords(state.records).subscriptions).toHaveLength(0);
-    expect(JSON.stringify(state.records)).not.toContain("sourceOperationKey");
-    expect(JSON.stringify(state.records)).not.toContain("legacySubscribeAction");
     expect(turnstileRequests).toEqual([]);
   });
 
@@ -281,7 +256,7 @@ describe("public operation runtime", () => {
     expect(accepted.status).toBe(200);
     expect(body.output.type).toBe("command");
     expect(body.output).not.toHaveProperty("response");
-    expect(state.actionExecutionCount).toBe(0);
+    expect(state.commandExecutionCount).toBe(0);
     expect(state.invocations).toHaveLength(1);
     expect(state.invocations[0]).toMatchObject({
       affectedChangeIds: body.output.affectedChangeIds,
@@ -595,7 +570,7 @@ describe("public operation runtime", () => {
     });
     expect(rejectedAfter.records).toEqual(beforeState.records);
     expect(rejectedAfter.changes).toEqual(beforeState.changes);
-    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
     expect(rejectedAfter.invocations).toHaveLength(1);
     expect(rejectedAfter.invocations[0]).toMatchObject({
       actorKind: "anonymous",
@@ -686,7 +661,7 @@ describe("public operation runtime", () => {
     });
     expect(afterState.records).toEqual(beforeState.records);
     expect(afterState.changes).toEqual(beforeState.changes);
-    expect(afterState.actionExecutionCount).toBe(0);
+    expect(afterState.commandExecutionCount).toBe(0);
     expect(afterState.invocations).toHaveLength(1);
     expect(afterState.invocations[0]).toMatchObject({
       actorKind: "anonymous",
@@ -829,7 +804,7 @@ describe("public operation runtime", () => {
     });
     expect(rejectedAfter.records).toEqual(beforeState.records);
     expect(rejectedAfter.changes).toEqual(beforeState.changes);
-    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
     expect(rejectedAfter.invocations).toHaveLength(1);
     expect(rejectedAfter.invocations[0]).toMatchObject({
       actorKind: "anonymous",
@@ -892,7 +867,7 @@ describe("public operation runtime", () => {
     });
     expect(rejectedAfter.records).toEqual(beforeState.records);
     expect(rejectedAfter.changes).toEqual(beforeState.changes);
-    expect(rejectedAfter.actionExecutionCount).toBe(0);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
     expect(rejectedAfter.invocations).toHaveLength(1);
     expect(rejectedAfter.invocations[0]).toMatchObject({
       actorKind: "anonymous",
@@ -1001,8 +976,8 @@ describe("public operation runtime", () => {
   });
 
   it("projects configured Turnstile site key without exposing the secret", async () => {
-    const block = await postAdminMutation({
-      idempotencyKey: "mutation-create-configured-subscribe-form",
+    const block = await postAdminRecordOperation({
+      idempotencyKey: "write-create-configured-subscribe-form",
       entity: "block",
       operationName: "create",
       input: {
@@ -1012,8 +987,8 @@ describe("public operation runtime", () => {
         buttonLabel: "Join",
       },
     });
-    await postAdminMutation({
-      idempotencyKey: "mutation-place-configured-subscribe-form",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-place-configured-subscribe-form",
       entity: "block-placement",
       operationName: "create",
       input: {
@@ -1061,9 +1036,9 @@ describe("public operation runtime", () => {
 
     try {
       await resetSchemaApp("site", deployedHarness);
-      const block = await postAdminMutation(
+      const block = await postAdminRecordOperation(
         {
-          idempotencyKey: "mutation-create-deployed-subscribe-form",
+          idempotencyKey: "write-create-deployed-subscribe-form",
           entity: "block",
           operationName: "create",
           input: {
@@ -1075,9 +1050,9 @@ describe("public operation runtime", () => {
         },
         deployedHarness,
       );
-      await postAdminMutation(
+      await postAdminRecordOperation(
         {
-          idempotencyKey: "mutation-place-deployed-subscribe-form",
+          idempotencyKey: "write-place-deployed-subscribe-form",
           entity: "block-placement",
           operationName: "create",
           input: {
@@ -1296,7 +1271,7 @@ async function createPublicOperationHarness(input: {
             initializeHarnessStorage(this.ctx.storage);
 
             return Response.json({
-              actionExecutionCount: readActionExecutionCount(this.ctx.storage),
+              commandExecutionCount: readCommandExecutionCount(this.ctx.storage),
               changes: getChangesAfter(this.ctx.storage, 0),
               invocations: readOperationInvocations(this.ctx.storage),
               records: getBootstrapRecords(this.ctx.storage),
@@ -1335,16 +1310,15 @@ async function createPublicOperationHarness(input: {
             const stored = initializeStorageFromSource(this.ctx.storage, {
               schema: app.sourceSchema,
               records: app.seedRecords,
-              changeMutationPrefix: app.seedChangeMutationPrefix,
+              changeWritePrefix: app.seedChangeWritePrefix,
             });
-            const schema = schemaForHarnessRequest(stored.schema, request);
             const result = await executePublicOperationRequest({
               body: await request.json(),
               env: this.env,
               identity: authorityRoute.identity,
               request,
               route,
-              schema,
+              schema: stored.schema,
               storage: this.ctx.storage,
               writes: {
                 apply(write) {
@@ -1381,40 +1355,12 @@ async function createPublicOperationHarness(input: {
         initializeStorageFromSource(storage, {
           schema: app.sourceSchema,
           records: app.seedRecords,
-          changeMutationPrefix: app.seedChangeMutationPrefix,
+          changeWritePrefix: app.seedChangeWritePrefix,
         });
       }
 
-      function schemaForHarnessRequest(sourceSchema, request) {
-        if (
-          request.headers.get("x-public-operation-harness-schema-variant") !==
-          "unsupported-subscribe-action-only"
-        ) {
-          return sourceSchema;
-        }
-
-        const schema = structuredClone(sourceSchema);
-        delete schema.entities.subscription?.operations?.subscribe;
-        if (schema.entities.subscription) {
-          schema.entities.subscription.actions = {
-            subscribe: {
-              label: "Legacy subscribe",
-              kind: "subscribe",
-              exposure: {
-                actors: ["anonymous"],
-                responseFields: {
-                  anonymous: ["legacySubscribeAction"],
-                },
-              },
-            },
-          };
-        }
-
-        return schema;
-      }
-
-      function readActionExecutionCount(storage) {
-        const row = storage.sql.exec("SELECT COUNT(*) AS count FROM action_executions").one();
+      function readCommandExecutionCount(storage) {
+        const row = storage.sql.exec("SELECT COUNT(*) AS count FROM command_executions").one();
 
         return Number(row.count);
       }
@@ -1665,7 +1611,7 @@ function taskRecordPlanRecords(records: StoredRecord[]) {
 }
 
 async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {
-  return postAdminMutation({
+  return postAdminRecordOperation({
     idempotencyKey: `test-subscription-status-${status}`,
     entity: "subscription",
     operationName: "update",
@@ -1698,7 +1644,7 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
   return request.response(JSON.parse(text)) as T;
 }
 
-async function postAdminMutation(
+async function postAdminRecordOperation(
   body: Parameters<typeof recordOperationRequest>[0],
   target: Harness = harness,
 ) {

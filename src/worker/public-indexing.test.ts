@@ -55,8 +55,8 @@ Sitemap: http://example.com/sitemap.xml
   });
 
   it("serves sitemap.xml from public Site routes instead of the client shell", async () => {
-    await postAdminMutation({
-      idempotencyKey: "mutation-public-sitemap-page",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-public-sitemap-page",
       entity: "block",
       operationName: "create",
       input: {
@@ -66,8 +66,8 @@ Sitemap: http://example.com/sitemap.xml
         href: "/launch-check",
       },
     });
-    await postAdminMutation({
-      idempotencyKey: "mutation-public-sitemap-post",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-public-sitemap-post",
       entity: "block",
       operationName: "create",
       input: {
@@ -78,8 +78,8 @@ Sitemap: http://example.com/sitemap.xml
         date: "2026-05-15",
       },
     });
-    await postAdminMutation({
-      idempotencyKey: "mutation-public-sitemap-undated-post",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-public-sitemap-undated-post",
       entity: "block",
       operationName: "create",
       input: {
@@ -89,8 +89,8 @@ Sitemap: http://example.com/sitemap.xml
         href: "/blog/undated-draft",
       },
     });
-    await postAdminMutation({
-      idempotencyKey: "mutation-public-sitemap-blocked-app-route",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-public-sitemap-blocked-app-route",
       entity: "block",
       operationName: "create",
       input: {
@@ -123,8 +123,8 @@ Sitemap: http://example.com/sitemap.xml
     const beforeResponse = await harness.fetch("/sitemap.xml");
     const beforeBody = await beforeResponse.text();
 
-    await postAdminMutation({
-      idempotencyKey: "mutation-public-sitemap-site-settings",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-public-sitemap-site-settings",
       entity: "site",
       operationName: "update",
       recordId: "rec_site_settings_primary",
@@ -172,7 +172,7 @@ async function resetSchemaApp(schemaKey: SchemaKey) {
   expect(response.status).toBe(200);
 }
 
-async function postAdminMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+async function postAdminRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),

@@ -310,8 +310,8 @@ describe("published Site Worker SSR", () => {
   });
 
   it("uses the current public tree from the Site authority", async () => {
-    await postAdminMutation({
-      idempotencyKey: "mutation-site-ssr-extra-page",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-site-ssr-extra-page",
       entity: "block",
       operationName: "create",
       input: {
@@ -332,8 +332,8 @@ describe("published Site Worker SSR", () => {
   it("escapes embedded initial tree data for hostile Site content", async () => {
     const hostileLabel = 'Hostile </script><script type="module">alert(1)</script> & text';
 
-    await postAdminMutation({
-      idempotencyKey: "mutation-site-ssr-hostile-home-label",
+    await postAdminRecordOperation({
+      idempotencyKey: "write-site-ssr-hostile-home-label",
       entity: "block",
       operationName: "update",
       recordId: "rec_site_starter_page_home",
@@ -478,7 +478,7 @@ async function headDocumentWithoutFollowingRedirect(path: string) {
   });
 }
 
-async function postAdminMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+async function postAdminRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),

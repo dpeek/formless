@@ -467,8 +467,7 @@ separate from entity value fields.
 ### Requirement: Operation Command Execution
 
 The system SHALL represent command behavior through declarative record plans or
-operation-native handler effects. Entity actions and mutation policies are not
-schema interaction models.
+operation-native handler effects.
 
 #### Scenario: Compose tree child through a handler
 
@@ -486,7 +485,8 @@ schema interaction models.
   facts, public eligibility, and response filtering
 - AND the operation remains the invocation, authorization, idempotency, and
   audit root for the command write
-- AND handler dispatch does not synthesize, project, or invoke entity actions
+- AND handler dispatch uses the operation invocation envelope and typed handler
+  configuration
 
 ### Requirement: Entity Operations
 
@@ -596,20 +596,16 @@ public forms, automation, audit, and authorization.
   `recordPlan`
 - AND command effect parsing selects one of those operation-native shapes
 - AND operation handler effects declare a handler kind plus typed handler
-  configuration, not an entity action kind
+  configuration
 - AND operation visibility, policy, audit, and idempotency come from the
   operation declaration
 
-#### Scenario: Reject legacy peer interaction contracts
+#### Scenario: Expose operation-native parser surface
 
-- GIVEN a source schema or runtime schema shape includes legacy entity action
-  metadata, mutation policy metadata, registered command bridge effects, or
-  action/mutation request or response contracts
+- GIVEN a source schema or runtime schema declares entity interaction contracts
 - WHEN the schema is parsed, stringified, exported from the schema package, or
   used for generated UI selection
-- THEN those contracts are rejected or absent
-- AND no hidden runtime projection recreates actions or mutation policies from
-  operations
+- THEN operations are the parser-visible interaction model
 - AND parser modules, exported helpers, and public types are operation-named
 
 #### Scenario: Parse table operation bindings
@@ -830,3 +826,11 @@ append-only or operation-created.
 - THEN it is created through an allowed operation or runtime write path
 - AND ordinary generated patch or delete controls are not exposed for that
   history record
+
+#### Scenario: Operation-created evidence
+
+- GIVEN runtime control-plane metadata restricts an entity to operation-created
+  history records
+- WHEN the schema is parsed, stringified, or exported through the schema package
+- THEN the history kind is `operationCreated`
+- AND validation errors identify operation-created history as operation-owned

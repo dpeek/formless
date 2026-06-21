@@ -59,8 +59,14 @@ describe("owner setup browser writes", () => {
       browser.fetch,
     );
     const patchedRecord = expectOperationOutput(patched, "update").record;
-    const action = await submitOperation("tasks", "task", "clearCompletedTasks", {}, browser.fetch);
-    const commandOutput = expectOperationOutput(action, "command");
+    const command = await submitOperation(
+      "tasks",
+      "task",
+      "clearCompletedTasks",
+      {},
+      browser.fetch,
+    );
+    const commandOutput = expectOperationOutput(command, "command");
     const localSnapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
     const remoteSnapshot = await getJson<BootstrapResponse>("/api/tasks/bootstrap");

@@ -87,14 +87,14 @@ describe("control-plane schema runtime metadata", () => {
 
   it("parses runtime control-plane history declarations", () => {
     const source = controlPlaneTaskSchema();
-    const actionCreatedSchema = parseAppSchema({
+    const operationCreatedSchema = parseAppSchema({
       ...source,
       runtime: {
         owner: "runtime",
         controlPlane: {
           entities: {
             task: {
-              history: { kind: "actionCreated" },
+              history: { kind: "operationCreated" },
             },
           },
         },
@@ -121,8 +121,8 @@ describe("control-plane schema runtime metadata", () => {
       },
     });
 
-    expect(actionCreatedSchema.runtime?.controlPlane?.entities.task?.history?.kind).toBe(
-      "actionCreated",
+    expect(operationCreatedSchema.runtime?.controlPlane?.entities.task?.history?.kind).toBe(
+      "operationCreated",
     );
     expect(appendOnlySchema.runtime?.controlPlane?.entities.task?.history?.kind).toBe("appendOnly");
   });

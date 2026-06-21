@@ -76,8 +76,8 @@ describe("authority admin guard", () => {
   });
 
   it("rejects invalid admin tokens without mutating storage", async () => {
-    const created = await postAdminTaskMutation({
-      idempotencyKey: "mutation-admin-guard-keep",
+    const created = await postAdminTaskRecordOperation({
+      idempotencyKey: "write-admin-guard-keep",
       entity: "task",
       operationName: "create",
       input: { title: "Keep after unauthorized reset", done: false },
@@ -98,8 +98,8 @@ describe("authority admin guard", () => {
   });
 
   it("accepts the configured admin bearer token for write endpoints", async () => {
-    const created = await postAdminTaskMutation({
-      idempotencyKey: "mutation-admin-guard-allowed",
+    const created = await postAdminTaskRecordOperation({
+      idempotencyKey: "write-admin-guard-allowed",
       entity: "task",
       operationName: "create",
       input: { title: "Authorized write", done: false },
@@ -111,8 +111,8 @@ describe("authority admin guard", () => {
   });
 
   it("accepts signed owner session cookies for write endpoints", async () => {
-    const created = await postOwnerTaskMutation({
-      idempotencyKey: "mutation-owner-session-allowed",
+    const created = await postOwnerTaskRecordOperation({
+      idempotencyKey: "write-owner-session-allowed",
       entity: "task",
       operationName: "create",
       input: { title: "Owner session write", done: false },
@@ -129,16 +129,7 @@ describe("authority admin guard", () => {
     const tree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const write = await harness.fetch("/api/site/mutations", {
-      body: JSON.stringify({
-        mutationId: "mutation-site-public-only",
-        entity: "block",
-        op: "create",
-        values: {
-          type: "page",
-          label: "Unauthorized page",
-          href: "/unauthorized-page",
-        },
-      }),
+      body: "{}",
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
@@ -195,7 +186,7 @@ async function postAdminJson<T>(path: string, body: unknown) {
   return request.response(await response.json()) as T;
 }
 
-async function postAdminTaskMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+async function postAdminTaskRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
@@ -208,7 +199,7 @@ async function postAdminTaskMutation(body: Parameters<typeof recordOperationRequ
   return request.response(await response.json());
 }
 
-async function postOwnerTaskMutation(body: Parameters<typeof recordOperationRequest>[0]) {
+async function postOwnerTaskRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
   const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),

@@ -70,7 +70,7 @@ export function launchFixtureControlPlaneStorageSource(
   plan: LaunchFixtureInitializationPlan,
 ): StorageSource {
   return {
-    changeMutationPrefix: "seed-instance-control-plane",
+    changeWritePrefix: "seed-instance-control-plane",
     records: launchFixtureControlPlaneRecords(plan),
     schemaKey: "instance-control-plane",
     schemaProvenance: instanceControlPlaneSchemaProvenance,
@@ -122,7 +122,7 @@ export function launchFixtureStorageSourceForApp(
   }
 
   return {
-    changeMutationPrefix: seed.seedChangeMutationPrefix,
+    changeWritePrefix: seed.seedChangeWritePrefix,
     records: seed.seedRecords,
     schemaKey: source.key,
     schemaProvenance: {

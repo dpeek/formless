@@ -284,7 +284,7 @@ describe("authority operation execution", () => {
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
   });
 
-  it("commits operation-only CRUD writes without source mutation policy", async () => {
+  it("commits operation-only CRUD writes without source write policy", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
       path: "/bootstrap",
@@ -375,7 +375,6 @@ describe("authority operation execution", () => {
       throw new Error("Expected delete operation output.");
     }
 
-    expect(schema.entities.task).not.toHaveProperty("mutations");
     expect(created.body.writes.map((write) => write.kind)).toEqual(["committed"]);
     expect(createOutput.record.createdAt).toBe(created.body.result.body.invocation.receivedAt);
     expect(createOutput.record.updatedAt).toBe(created.body.result.body.invocation.receivedAt);
@@ -946,7 +945,7 @@ describe("authority operation execution", () => {
     expect(JSON.stringify(commandRow?.auditInput)).not.toContain("secret-challenge");
   });
 
-  it("executes registered command effects through operation policy and replays command outcomes", async () => {
+  it("executes declared command operation effects through operation policy and replays command outcomes", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
       path: "/bootstrap",
@@ -2086,7 +2085,7 @@ async function writeAuthorityOperationHarness() {
               source: {
                 schema: app.sourceSchema,
                 records: app.seedRecords,
-                changeMutationPrefix: app.seedChangeMutationPrefix,
+                changeWritePrefix: app.seedChangeWritePrefix,
               },
               storage: this.ctx.storage,
               writes: writeNotifier,

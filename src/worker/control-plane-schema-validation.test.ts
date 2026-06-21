@@ -32,16 +32,16 @@ afterAll(async () => {
 });
 
 describe("control-plane schema runtime validation", () => {
-  it("enforces immutable fields, route validation, enabled uniqueness, and action-created history", async () => {
+  it("enforces immutable fields, route validation, enabled uniqueness, and operation-created history", async () => {
     await authority.postJson("/api/schema", { schema: controlPlaneRuntimeSchema() });
 
-    const task = await authority.postCreateOperation("mutation-control-plane-task", {
+    const task = await authority.postCreateOperation("write-control-plane-task", {
       title: "Immutable title",
     });
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-task-patch-immutable",
+        idempotencyKey: "write-control-plane-task-patch-immutable",
         entity: "task",
         operationName: "update",
         recordId: task.record.id,
@@ -52,7 +52,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-history-create",
+        idempotencyKey: "write-control-plane-history-create",
         entity: "deploy-attempt",
         operationName: "create",
         input: {
@@ -63,7 +63,7 @@ describe("control-plane schema runtime validation", () => {
     );
 
     const install = await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-control-plane-install",
+      idempotencyKey: "write-control-plane-install",
       entity: "app-install",
       operationName: "create",
       input: {
@@ -73,7 +73,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-route-missing-target",
+        idempotencyKey: "write-control-plane-route-missing-target",
         entity: "app-route",
         operationName: "create",
         input: routeValues("missing-install", {
@@ -85,7 +85,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-route-reserved",
+        idempotencyKey: "write-control-plane-route-reserved",
         entity: "app-route",
         operationName: "create",
         input: routeValues(install.record.id, {
@@ -97,7 +97,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-route-capability",
+        idempotencyKey: "write-control-plane-route-capability",
         entity: "app-route",
         operationName: "create",
         input: routeValues(install.record.id, {
@@ -110,7 +110,7 @@ describe("control-plane schema runtime validation", () => {
     );
 
     await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-control-plane-route",
+      idempotencyKey: "write-control-plane-route",
       entity: "app-route",
       operationName: "create",
       input: routeValues(install.record.id, {
@@ -120,7 +120,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-control-plane-route-duplicate",
+        idempotencyKey: "write-control-plane-route-duplicate",
         entity: "app-route",
         operationName: "create",
         input: routeValues(install.record.id, {
@@ -137,7 +137,7 @@ describe("control-plane schema runtime validation", () => {
     const siteInstall = await createControlPlaneAppInstall("site", "Personal Site");
     const tasksInstall = await createControlPlaneAppInstall("tasks", "Team Tasks");
     const deploymentConfig = await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-control-plane-deployment-config",
+      idempotencyKey: "write-control-plane-deployment-config",
       entity: "deployment-config",
       operationName: "create",
       input: {
@@ -151,7 +151,7 @@ describe("control-plane schema runtime validation", () => {
     });
 
     const hostedMount = await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-route-exact-host-provider-config",
+      idempotencyKey: "write-route-exact-host-provider-config",
       entity: "route",
       operationName: "create",
       input: mountRouteValues(siteInstall.record.id, {
@@ -169,7 +169,7 @@ describe("control-plane schema runtime validation", () => {
     });
 
     const redirect = await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-route-redirect-to-url",
+      idempotencyKey: "write-route-redirect-to-url",
       entity: "route",
       operationName: "create",
       input: redirectRouteValues({
@@ -195,7 +195,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-host-normalized",
+        idempotencyKey: "write-route-host-normalized",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -207,7 +207,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-path-normalized",
+        idempotencyKey: "write-route-path-normalized",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -219,7 +219,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-path-case-normalized",
+        idempotencyKey: "write-route-path-case-normalized",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -231,7 +231,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-prefix-normalized",
+        idempotencyKey: "write-route-prefix-normalized",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -246,7 +246,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-prefix-below-path",
+        idempotencyKey: "write-route-prefix-below-path",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -261,7 +261,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-hostless-deployment-config",
+        idempotencyKey: "write-route-hostless-deployment-config",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -273,7 +273,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-deployment-config-reference",
+        idempotencyKey: "write-route-deployment-config-reference",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -286,7 +286,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-access",
+        idempotencyKey: "write-route-access",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -298,7 +298,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-public-site-capability",
+        idempotencyKey: "write-route-public-site-capability",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(tasksInstall.record.id, {
@@ -313,7 +313,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-host-required",
+        idempotencyKey: "write-route-redirect-host-required",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -325,7 +325,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-target",
+        idempotencyKey: "write-route-redirect-target",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -337,7 +337,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-app-target",
+        idempotencyKey: "write-route-redirect-app-target",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -349,7 +349,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-host-normalized",
+        idempotencyKey: "write-route-redirect-host-normalized",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -361,7 +361,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-url-normalized",
+        idempotencyKey: "write-route-redirect-url-normalized",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -374,7 +374,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-status-required",
+        idempotencyKey: "write-route-redirect-status-required",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -386,7 +386,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-redirect-preserve-path-boolean",
+        idempotencyKey: "write-route-redirect-preserve-path-boolean",
         entity: "route",
         operationName: "create",
         input: redirectRouteValues({
@@ -398,7 +398,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-host-public-site-root",
+        idempotencyKey: "write-route-host-public-site-root",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -413,7 +413,7 @@ describe("control-plane schema runtime validation", () => {
     );
 
     await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-route-host-public-site",
+      idempotencyKey: "write-route-host-public-site",
       entity: "route",
       operationName: "create",
       input: mountRouteValues(siteInstall.record.id, {
@@ -427,7 +427,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-host-public-site-conflict",
+        idempotencyKey: "write-route-host-public-site-conflict",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -439,7 +439,7 @@ describe("control-plane schema runtime validation", () => {
     );
 
     await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-route-hostless-admin",
+      idempotencyKey: "write-route-hostless-admin",
       entity: "route",
       operationName: "create",
       input: mountRouteValues(siteInstall.record.id, {
@@ -449,7 +449,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-hostless-admin-conflict",
+        idempotencyKey: "write-route-hostless-admin-conflict",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -460,7 +460,7 @@ describe("control-plane schema runtime validation", () => {
     );
 
     await authority.postRecordOperationRequest({
-      idempotencyKey: "mutation-route-hostless-public-site",
+      idempotencyKey: "write-route-hostless-public-site",
       entity: "route",
       operationName: "create",
       input: mountRouteValues(siteInstall.record.id, {
@@ -473,7 +473,7 @@ describe("control-plane schema runtime validation", () => {
 
     await authority.expectRecordOperationError(
       {
-        idempotencyKey: "mutation-route-hostless-public-site-prefix-conflict",
+        idempotencyKey: "write-route-hostless-public-site-prefix-conflict",
         entity: "route",
         operationName: "create",
         input: mountRouteValues(siteInstall.record.id, {
@@ -491,7 +491,7 @@ async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", lab
   const installId = packageAppKey === "site" ? "personal" : "tasks";
 
   return authority.postRecordOperationRequest({
-    idempotencyKey: `mutation-control-plane-install-${installId}`,
+    idempotencyKey: `write-control-plane-install-${installId}`,
     entity: "app-install",
     operationName: "create",
     input: {
@@ -703,7 +703,7 @@ function controlPlaneRuntimeSchema(): AppSchema {
             },
           },
           "deploy-attempt": {
-            history: { kind: "actionCreated" },
+            history: { kind: "operationCreated" },
           },
         },
       },

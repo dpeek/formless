@@ -10,30 +10,6 @@ import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.
 
 export type EntityName = string;
 
-export type CreateMutation = {
-  mutationId: string;
-  entity: EntityName;
-  op: "create";
-  values: RecordValues;
-};
-
-export type PatchMutation = {
-  mutationId: string;
-  entity: EntityName;
-  op: "patch";
-  recordId: string;
-  values: Partial<RecordValues>;
-};
-
-export type DeleteMutation = {
-  mutationId: string;
-  entity: EntityName;
-  op: "delete";
-  recordId: string;
-};
-
-export type Mutation = CreateMutation | PatchMutation | DeleteMutation;
-
 export type PublicOperationProofInput = {
   turnstileToken: string;
 };

@@ -76,7 +76,7 @@ Storage package while keeping Authority storage execution in runtime modules.
 
 - GIVEN storage snapshot contracts are provided by the Storage package
 - WHEN Authority bootstrap, schema storage, change rows, operation invocations,
-  sync protocol, mutation routes, reset, restore, or Durable Object storage is
+  sync protocol, write routes, reset, restore, or Durable Object storage is
   implemented
 - THEN those behaviors remain owned by Authority storage runtime modules
 - AND the Storage package does not own runtime protocol routes, app records,
@@ -344,8 +344,7 @@ writes.
 
 ### Requirement: Operation Handler Materialization
 
-The system SHALL materialize registered command behavior through operation
-handler modules, not entity action execution.
+The system SHALL materialize command behavior through operation handler modules.
 
 #### Scenario: Execute operation handler
 
@@ -357,9 +356,8 @@ handler modules, not entity action execution.
   idempotency, and received timestamp
 - AND the handler returns operation-native command output or planned record
   writes through operation-named storage materializers
-- AND handler execution does not construct legacy action requests, read legacy
-  entity action metadata, project mutation policies, or return action or
-  mutation response shapes
+- AND handler execution uses operation input, effect configuration, and
+  operation invocation output
 
 #### Scenario: Handler-owned dynamic behavior
 
@@ -410,8 +408,6 @@ separate from stored app records and sync change rows.
 - AND the operation invocation row remains the semantic audit and replay root
   for that operation
 - AND shared change-row fields use `writeId` and `operationKind`
-- AND shared change-row fields do not expose action or mutation identifiers as
-  public sync contract terms
 
 ### Requirement: Storage Write Log Boundary
 
@@ -435,8 +431,17 @@ outputs.
   operation-native output shape
 - AND storage modules may expose `RecordWriteResponse` and
   `CommandWriteResponse` as internal materializer response types
-- AND storage modules do not export legacy action response, mutation response,
-  or action/mutation request contracts
+- AND shared protocol modules expose operation invocation and change-row
+  contracts using operation terminology
+
+#### Scenario: Storage implementation names are operation-native
+
+- GIVEN Authority creates or reads durable SQL tables, write-log columns,
+  replay rows, or storage helper requests for operation materialization
+- WHEN new storage state is initialized or storage tests inspect replay and
+  change-log behavior
+- THEN the active table, column, helper, fixture, and test names use
+  operation, command, record-write, write-id, or operation-kind terminology
 
 #### Scenario: Committed write facts
 
@@ -479,7 +484,7 @@ write-log append behavior.
 
 - WHEN source schema reset, seed reset, snapshot restore, or archive app data
   restore runs
-- THEN the reset or restore plan remains explicit before durable mutation
+- THEN the reset or restore plan remains explicit before durable writes
 - AND operation handler executions are cleared only by operations whose storage
   semantics require clearing them
 - AND sync cursors remain monotonic after the operation

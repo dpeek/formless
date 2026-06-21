@@ -59,8 +59,8 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
-    await postInstalledAppMutation("site", installId, {
-      idempotencyKey: "mutation-custom-domain-home-label",
+    await postInstalledAppRecordOperation("site", installId, {
+      idempotencyKey: "write-custom-domain-home-label",
       entity: "block",
       operationName: "update",
       recordId: "rec_site_starter_page_home",
@@ -93,8 +93,8 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("serves mapped host indexing, icons, and core media from the instance", async () => {
     await setupMappedSite();
-    await postInstalledAppMutation("site", installId, {
-      idempotencyKey: "mutation-custom-domain-sitemap-page",
+    await postInstalledAppRecordOperation("site", installId, {
+      idempotencyKey: "write-custom-domain-sitemap-page",
       entity: "block",
       operationName: "create",
       input: {
@@ -103,8 +103,8 @@ describe("installed Site custom-domain Worker routing", () => {
         href: "/custom-domain-sitemap-page",
       },
     });
-    await postInstalledAppMutation("site", installId, {
-      idempotencyKey: "mutation-custom-domain-site-icon",
+    await postInstalledAppRecordOperation("site", installId, {
+      idempotencyKey: "write-custom-domain-site-icon",
       entity: "site",
       operationName: "update",
       recordId: "rec_site_settings_primary",
@@ -307,8 +307,8 @@ describe("installed Site custom-domain Worker routing", () => {
 
   it("resolves exact-host public Site route records before ordinary host behavior", async () => {
     await setupMappedSiteRouteRecord();
-    await postInstalledAppMutation("site", installId, {
-      idempotencyKey: "mutation-route-record-home-label",
+    await postInstalledAppRecordOperation("site", installId, {
+      idempotencyKey: "write-route-record-home-label",
       entity: "block",
       operationName: "update",
       recordId: "rec_site_starter_page_home",
@@ -620,7 +620,7 @@ async function postAdminJson(path: string, body: unknown) {
   return response;
 }
 
-async function postInstalledAppMutation(
+async function postInstalledAppRecordOperation(
   packageAppKey: string,
   appInstallId: string,
   body: Parameters<typeof recordOperationRequest>[0],

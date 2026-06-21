@@ -46,19 +46,16 @@ describe("operation presentation model", () => {
     });
   });
 
-  it("ignores legacy action metadata when selecting command operation capabilities", () => {
-    const legacyActionOnlyEntity = {
+  it("returns no command capabilities without source operations", () => {
+    const entityWithoutOperations = {
       ...taskSourceSchema.entities.task,
       operations: undefined,
-      actions: {
-        clearCompletedTasks: { kind: "clear-completed" },
-      },
     } as unknown as EntitySchema;
 
     expect(
       selectCommandOperationsByHandlerCapability(
         "task",
-        legacyActionOnlyEntity,
+        entityWithoutOperations,
         "clearCompletedTargetCount",
         "collection",
       ),

@@ -105,7 +105,7 @@ describe("storage", () => {
     });
 
     await postJson("/schema", nextSchema);
-    await createRecord("mutation-1", "First");
+    await createRecord("write-1", "First");
 
     const reset = await postJson<{ schema: AppSchema; updatedAt: string }>("/reset", {});
 
@@ -117,9 +117,9 @@ describe("storage", () => {
   });
 
   it("clears records, changes, and command replay rows before writing source seed rows", async () => {
-    const completed = await createRecord("mutation-before-reset", "Done", true);
-    const action = await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-before-reset",
+    const completed = await createRecord("write-before-reset", "Done", true);
+    const command = await postJson<CommandWriteResponse>("/tombstone-records", {
+      writeId: "command-before-reset",
       recordIds: [completed.record.id],
     });
     const sourceRecord = record("seed-reset-task", "Seed reset", {
@@ -128,15 +128,15 @@ describe("storage", () => {
     });
 
     await postJson("/source-seed", {
-      changeMutationPrefix: "reset-seed",
+      changeWritePrefix: "reset-seed",
       records: [sourceRecord],
     });
     const changes = await getJson<ChangeRow[]>("/changes?after=0");
 
-    expect(action.cursor).toBe(2);
+    expect(command.cursor).toBe(2);
     expect(
       await getJson<CommandWriteResponse | null>(
-        "/command-write-response?writeId=action-before-reset",
+        "/command-write-response?writeId=command-before-reset",
       ),
     ).toBeNull();
     expect(await getJson<StoredRecord[]>("/records")).toEqual([sourceRecord]);
@@ -156,7 +156,7 @@ describe("storage", () => {
   it("creates records, records changes, and advances the cursor", async () => {
     expect(await getJson<number>("/cursor")).toBe(0);
 
-    const response = await createRecord("mutation-1", "First");
+    const response = await createRecord("write-1", "First");
 
     expect(response.cursor).toBe(1);
     expect(response.record).toMatchObject({
@@ -171,7 +171,7 @@ describe("storage", () => {
     expect(records).toHaveLength(1);
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
-      writeId: "mutation-1",
+      writeId: "write-1",
       operationKind: "create",
       recordId: response.record.id,
     });
@@ -184,7 +184,7 @@ describe("storage", () => {
     ];
 
     await postJson("/source-seed", {
-      changeMutationPrefix: "seed-task",
+      changeWritePrefix: "seed-task",
       records: sourceSnapshotRecords,
     });
     const initialSync = await getJson<SyncResponse>("/sync?after=0");
@@ -218,7 +218,7 @@ describe("storage", () => {
     const initial = await postJson<StoredSchema>("/source-bootstrap", {
       sourceSchemaHash: initialHash,
     });
-    const created = await createRecord("mutation-before-refresh", "Keep me");
+    const created = await createRecord("write-before-refresh", "Keep me");
     const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
     const beforeCursor = await getJson<number>("/cursor");
 
@@ -305,7 +305,7 @@ describe("storage", () => {
     await postJson<StoredSchema>("/source-bootstrap", {
       sourceSchemaHash: initialHash,
     });
-    await createRecord("mutation-before-blocked-refresh", "Missing new required field");
+    await createRecord("write-before-blocked-refresh", "Missing new required field");
 
     const beforeSchema = await getJson<StoredSchema>("/current-schema");
     const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
@@ -374,11 +374,11 @@ describe("storage", () => {
     });
   });
 
-  it("classifies committed and replayed mutation outcomes without duplicate changes", async () => {
+  it("classifies committed and replayed record write outcomes without duplicate changes", async () => {
     const body = {
-      mutationId: "mutation-outcome",
+      writeId: "write-outcome",
       entity: "task",
-      op: "create",
+      kind: "create",
       values: { title: "Outcome", done: false },
     };
 
@@ -394,9 +394,9 @@ describe("storage", () => {
 
   it("preserves number values through records and change rows", async () => {
     const response = await postJson<RecordWriteResponse>("/create", {
-      mutationId: "mutation-1",
+      writeId: "write-1",
       entity: "task",
-      op: "create",
+      kind: "create",
       values: { title: "Estimated", done: false, estimate: 5 },
     });
     const records = await getJson<RecordWriteResponse["record"][]>("/records");
@@ -413,9 +413,9 @@ describe("storage", () => {
     });
   });
 
-  it("replays the same mutationId without inserting a duplicate record", async () => {
-    const first = await createRecord("mutation-1", "First");
-    const replay = await createRecord("mutation-1", "First");
+  it("replays the same writeId without inserting a duplicate record", async () => {
+    const first = await createRecord("write-1", "First");
+    const replay = await createRecord("write-1", "First");
 
     expect(replay.record.id).toBe(first.record.id);
     expect(replay.cursor).toBe(1);
@@ -423,12 +423,12 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(1);
   });
 
-  it("commits create side effects in the same mutation response", async () => {
+  it("commits create side effects in the same record write response", async () => {
     const body = {
-      mutation: {
-        mutationId: "mutation-1",
+      recordWrite: {
+        writeId: "write-1",
         entity: "task",
-        op: "create",
+        kind: "create",
         values: { title: "First", done: false },
       },
       caused: [
@@ -458,10 +458,10 @@ describe("storage", () => {
   it("rolls back the primary create when a side effect fails", async () => {
     const response = await fetchStorage("/create-with-side-effects", {
       body: JSON.stringify({
-        mutation: {
-          mutationId: "mutation-1",
+        recordWrite: {
+          writeId: "write-1",
           entity: "task",
-          op: "create",
+          kind: "create",
           values: { title: "First", done: false },
         },
         fail: true,
@@ -477,29 +477,29 @@ describe("storage", () => {
   });
 
   it("returns only changes after the requested cursor", async () => {
-    await createRecord("mutation-1", "First");
-    const second = await createRecord("mutation-2", "Second");
+    await createRecord("write-1", "First");
+    const second = await createRecord("write-2", "Second");
 
     const changes = await getJson<unknown[]>("/changes?after=1");
 
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
-      writeId: "mutation-2",
+      writeId: "write-2",
       recordId: second.record.id,
     });
   });
 
   it("patches records, writes a patch change, and preserves typed values", async () => {
     const created = await postJson<RecordWriteResponse>("/create", {
-      mutationId: "mutation-1",
+      writeId: "write-1",
       entity: "task",
-      op: "create",
+      kind: "create",
       values: { title: "First", done: false, estimate: 5, priority: "high" },
     });
     const patched = await postJson<RecordWriteResponse>("/patch", {
-      mutationId: "mutation-2",
+      writeId: "write-2",
       entity: "task",
-      op: "patch",
+      kind: "patch",
       recordId: created.record.id,
       values: { title: "Second", done: true },
     });
@@ -514,7 +514,7 @@ describe("storage", () => {
     expect(records).toEqual([patched.record]);
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
-      writeId: "mutation-2",
+      writeId: "write-2",
       operationKind: "update",
       payload: patched.record,
     });
@@ -538,9 +538,9 @@ describe("storage", () => {
       },
     } satisfies AppSchema);
     const created = await postJson<RecordWriteResponse>("/create", {
-      mutationId: "mutation-retired-values",
+      writeId: "write-retired-values",
       entity: "task",
-      op: "create",
+      kind: "create",
       values: {
         title: "Retired values",
         done: false,
@@ -581,12 +581,12 @@ describe("storage", () => {
     expect(await getJson<number>("/cursor")).toBe(created.cursor + 1);
   });
 
-  it("replays patch mutationIds without inserting duplicate changes", async () => {
-    const created = await createRecord("mutation-1", "First");
+  it("replays patch writeIds without inserting duplicate changes", async () => {
+    const created = await createRecord("write-1", "First");
     const body = {
-      mutationId: "mutation-2",
+      writeId: "write-2",
       entity: "task",
-      op: "patch",
+      kind: "patch",
       recordId: created.record.id,
       values: { done: true },
     };
@@ -598,13 +598,13 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
 
-  it("soft-deletes records through mutation writes without removing record rows", async () => {
-    const created = await createRecord("mutation-1", "First");
+  it("soft-deletes records through record writes without removing record rows", async () => {
+    const created = await createRecord("write-1", "First");
 
     const deleted = await postJson<RecordWriteResponse>("/delete", {
-      mutationId: "mutation-2",
+      writeId: "write-2",
       entity: "task",
-      op: "delete",
+      kind: "delete",
       recordId: created.record.id,
     });
     const records = await getJson<StoredRecord[]>("/records");
@@ -619,7 +619,7 @@ describe("storage", () => {
     expect(records).toEqual([deleted.record]);
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
-      writeId: "mutation-2",
+      writeId: "write-2",
       operationKind: "delete",
       entity: "task",
       recordId: created.record.id,
@@ -628,12 +628,12 @@ describe("storage", () => {
     });
   });
 
-  it("replays delete mutationIds without inserting duplicate changes", async () => {
-    const created = await createRecord("mutation-1", "First");
+  it("replays delete writeIds without inserting duplicate changes", async () => {
+    const created = await createRecord("write-1", "First");
     const body = {
-      mutationId: "mutation-2",
+      writeId: "write-2",
       entity: "task",
-      op: "delete",
+      kind: "delete",
       recordId: created.record.id,
     };
 
@@ -645,17 +645,17 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
 
-  it("classifies committed and replayed action outcomes without duplicate action rows", async () => {
-    const completed = await createRecord("mutation-1", "Done", true);
+  it("classifies committed and replayed command outcomes without duplicate command rows", async () => {
+    const completed = await createRecord("write-1", "Done", true);
 
     const first = await postJson<WriteOutcome<CommandWriteResponse>>("/tombstone-records-outcome", {
-      writeId: "action-outcome",
+      writeId: "command-outcome",
       recordIds: [completed.record.id],
     });
     const replay = await postJson<WriteOutcome<CommandWriteResponse>>(
       "/tombstone-records-outcome",
       {
-        writeId: "action-outcome",
+        writeId: "command-outcome",
         recordIds: [],
       },
     );
@@ -666,24 +666,24 @@ describe("storage", () => {
     expect(first.response.cursor).toBe(2);
     expect(first.response.changes.map((change) => change.seq)).toEqual([2]);
     expect(
-      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=action-outcome"),
+      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=command-outcome"),
     ).toEqual(first.response);
     expect(await getJson<ChangeRow[]>("/changes?after=0")).toHaveLength(2);
   });
 
-  it("tombstones requested records for action replay", async () => {
-    const completed = await createRecord("mutation-1", "Done", true);
-    const active = await createRecord("mutation-2", "Open");
+  it("tombstones requested records for command replay", async () => {
+    const completed = await createRecord("write-1", "Done", true);
+    const active = await createRecord("write-2", "Open");
 
-    const action = await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-1",
+    const command = await postJson<CommandWriteResponse>("/tombstone-records", {
+      writeId: "command-1",
       recordIds: [completed.record.id],
     });
     const records = await getJson<unknown[]>("/records");
 
-    expect(action.changes).toHaveLength(1);
-    expect(action.changes[0]).toMatchObject({
-      writeId: "action-1",
+    expect(command.changes).toHaveLength(1);
+    expect(command.changes[0]).toMatchObject({
+      writeId: "command-1",
       operationKind: "command",
       recordId: completed.record.id,
       payload: {
@@ -700,15 +700,15 @@ describe("storage", () => {
     ]);
   });
 
-  it("replays tombstone actions by writeId", async () => {
-    const completed = await createRecord("mutation-1", "Done", true);
+  it("replays tombstone commands by writeId", async () => {
+    const completed = await createRecord("write-1", "Done", true);
 
     const first = await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-1",
+      writeId: "command-1",
       recordIds: [completed.record.id],
     });
     const replay = await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-1",
+      writeId: "command-1",
       recordIds: [],
     });
 
@@ -718,13 +718,13 @@ describe("storage", () => {
 
   it("materializes command-created records before persisting command replay state", async () => {
     const first = await postJson<CommandWriteResponse>("/create-records-for-operation", {
-      writeId: "action-create-followup",
+      writeId: "command-create-followup",
       entity: "task",
       operationName: "createFollowupTask",
       values: [{ title: "Follow up", done: false, priority: "normal" }],
     });
     const replay = await postJson<CommandWriteResponse>("/create-records-for-operation", {
-      writeId: "action-create-followup",
+      writeId: "command-create-followup",
       entity: "task",
       operationName: "createFollowupTask",
       values: [{ title: "Ignored replay", done: true, priority: "high" }],
@@ -732,12 +732,12 @@ describe("storage", () => {
     const records = await getJson<StoredRecord[]>("/records");
 
     expect(first).toMatchObject({
-      writeId: "action-create-followup",
+      writeId: "command-create-followup",
       cursor: 1,
       changes: [
         {
           seq: 1,
-          writeId: "action-create-followup",
+          writeId: "command-create-followup",
           operationKind: "command",
           entity: "task",
           recordId: first.changes[0]?.payload.id,
@@ -754,7 +754,7 @@ describe("storage", () => {
     expect(records).toEqual([first.changes[0]?.payload]);
     expect(
       await getJson<CommandWriteResponse | null>(
-        "/command-write-response?writeId=action-create-followup",
+        "/command-write-response?writeId=command-create-followup",
       ),
     ).toEqual(first);
     expect(replay).toEqual(first);
@@ -763,9 +763,9 @@ describe("storage", () => {
 
   it("exports the active store as a storage snapshot", async () => {
     const schema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
-    const completed = await createRecord("mutation-1", "Done", true);
+    const completed = await createRecord("write-1", "Done", true);
     await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-1",
+      writeId: "command-1",
       recordIds: [completed.record.id],
     });
 
@@ -789,7 +789,7 @@ describe("storage", () => {
 
   it("restores snapshot records and tombstones active records absent from the snapshot", async () => {
     await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
-    const existing = await createRecord("mutation-1", "Existing");
+    const existing = await createRecord("write-1", "Existing");
     const beforeCursor = await getJson<number>("/cursor");
     const restoredRecord = record("snapshot-record-1", "Restored", {
       createdAt: "2026-04-28T00:00:00.000Z",
@@ -841,7 +841,7 @@ describe("storage", () => {
 
   it("restores snapshots atomically on invalid storage input", async () => {
     const beforeSchema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
-    const existing = await createRecord("mutation-1", "Existing");
+    const existing = await createRecord("write-1", "Existing");
     const beforeRecords = await getJson<StoredRecord[]>("/records");
     const beforeCursor = await getJson<number>("/cursor");
 
@@ -875,22 +875,22 @@ describe("storage", () => {
     expect(await getJson<number>("/cursor")).toBe(beforeCursor);
   });
 
-  it("clears action replay history during restore", async () => {
+  it("clears command replay history during restore", async () => {
     await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
-    const completed = await createRecord("mutation-1", "Done", true);
-    const action = await postJson<CommandWriteResponse>("/tombstone-records", {
-      writeId: "action-1",
+    const completed = await createRecord("write-1", "Done", true);
+    const command = await postJson<CommandWriteResponse>("/tombstone-records", {
+      writeId: "command-1",
       recordIds: [completed.record.id],
     });
 
     expect(
-      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=action-1"),
-    ).toEqual(action);
+      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=command-1"),
+    ).toEqual(command);
 
     await postJson<BootstrapResponse>("/snapshot/restore", snapshot({ records: [] }));
 
     expect(
-      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=action-1"),
+      await getJson<CommandWriteResponse | null>("/command-write-response?writeId=command-1"),
     ).toBeNull();
   });
 
@@ -1010,18 +1010,18 @@ describe("storage", () => {
   });
 });
 
-async function createRecord(mutationId: string, text: string, done = false) {
+async function createRecord(writeId: string, text: string, done = false) {
   return postJson<RecordWriteResponse>("/create", {
-    mutationId,
+    writeId,
     entity: "task",
-    op: "create",
+    kind: "create",
     values: { title: text, done },
   });
 }
 
 async function seedPackageMigrationRecords() {
   await postJson("/source-seed", {
-    changeMutationPrefix: "migration-seed",
+    changeWritePrefix: "migration-seed",
     records: packageMigrationRecords(),
   });
 }
@@ -1529,7 +1529,7 @@ async function writeStorageHarness() {
         const nextSourceSchemaHash = body.sourceSchemaHash ?? sourceSchemaHash;
 
         return {
-          changeMutationPrefix: "seed-task",
+          changeWritePrefix: "seed-task",
           records: body.records ?? [],
           schema: schemaForSourceRefresh(body.schemaKind),
           schemaKey: "tasks",
@@ -1545,7 +1545,7 @@ async function writeStorageHarness() {
 
       function controlPlaneSourceForBootstrap(body) {
         return {
-          changeMutationPrefix: "seed-instance-control-plane",
+          changeWritePrefix: "seed-instance-control-plane",
           records: body.records ?? [],
           schema: schemaForControlPlaneSourceRefresh(body.schemaKind),
           schemaKey: "instance-control-plane",
@@ -1669,7 +1669,7 @@ async function writeStorageHarness() {
 
             try {
               return Response.json(
-                createStoredRecord(this.ctx.storage, body.mutation, ({ createRecords }) => {
+                createStoredRecord(this.ctx.storage, body.recordWrite, ({ createRecords }) => {
                   if (body.fail) {
                     throw new Error("side effect failed");
                   }
@@ -1757,7 +1757,7 @@ async function writeStorageHarness() {
           if (request.method === "POST" && url.pathname === "/reset-schema-to-source") {
             return Response.json(resetStorageSchemaToSource(
               this.ctx.storage,
-              { schema: seedSchema, records: [], changeMutationPrefix: "seed-task" },
+              { schema: seedSchema, records: [], changeWritePrefix: "seed-task" },
               () => undefined,
             ));
           }
@@ -1768,7 +1768,7 @@ async function writeStorageHarness() {
             return Response.json(resetStorage(this.ctx.storage, {
               schema: seedSchema,
               records: body.records,
-              changeMutationPrefix: body.changeMutationPrefix,
+              changeWritePrefix: body.changeWritePrefix,
             }));
           }
 

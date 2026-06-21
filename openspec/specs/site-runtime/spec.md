@@ -98,7 +98,7 @@ The system SHALL project subscribe form blocks into public Site trees without ex
 - WHEN the block references a publicly executable operation
 - THEN the projected block includes the operation key and target public operation route
 - AND the referenced operation is a public-eligible create, record-plan, or
-  subscribe operation handler, not legacy public action metadata
+  subscribe operation handler
 - AND the projected block does not include Turnstile secrets or subscriber data
 
 #### Scenario: Warn for missing public operation

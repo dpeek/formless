@@ -13,9 +13,6 @@ import {
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
 import type {
-  ActionAccessPolicySchema,
-  ActionChallengePolicySchema,
-  ActionOriginPolicySchema,
   CollectionOperationBindingSchema,
   CollectionQuerySchema,
   CreateRecordEntityOperationEffectSchema,
@@ -38,6 +35,9 @@ import type {
   EnumValueSchema,
   FieldSchema,
   OperationHandlerEntityOperationEffectSchema,
+  OperationAccessPolicySchema,
+  OperationChallengePolicySchema,
+  OperationOriginPolicySchema,
   PatchRecordEntityOperationEffectSchema,
   RelationshipSchema,
   RecordPlanActorContextField,
@@ -1392,7 +1392,7 @@ function parseOperationPolicy(
   assertExactKeys(context, value, ["actors"], ["access", "responseFields", "visible"]);
 
   const actors = parseOperationActorKinds(`${context} actors`, value.actors);
-  const access = parseOptionalActionAccessPolicy(`${context} access`, value.access);
+  const access = parseOptionalOperationAccessPolicy(`${context} access`, value.access);
   const responseFields = parseOperationResponseFields(
     `${context} responseFields`,
     value.responseFields,
@@ -1435,10 +1435,10 @@ function parseOperationActorKinds(context: string, value: unknown): EntityOperat
   return actors;
 }
 
-function parseOptionalActionAccessPolicy(
+function parseOptionalOperationAccessPolicy(
   context: string,
   value: unknown,
-): ActionAccessPolicySchema | undefined {
+): OperationAccessPolicySchema | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -1455,12 +1455,15 @@ function parseOptionalActionAccessPolicy(
 
   return {
     actor: "anonymous",
-    challenge: parseActionChallengePolicy(`${context} challenge`, value.challenge),
-    origin: parseActionOriginPolicy(`${context} origin`, value.origin),
+    challenge: parseOperationChallengePolicy(`${context} challenge`, value.challenge),
+    origin: parseOperationOriginPolicy(`${context} origin`, value.origin),
   };
 }
 
-function parseActionChallengePolicy(context: string, value: unknown): ActionChallengePolicySchema {
+function parseOperationChallengePolicy(
+  context: string,
+  value: unknown,
+): OperationChallengePolicySchema {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }
@@ -1474,7 +1477,7 @@ function parseActionChallengePolicy(context: string, value: unknown): ActionChal
   return { kind: "turnstile" };
 }
 
-function parseActionOriginPolicy(context: string, value: unknown): ActionOriginPolicySchema {
+function parseOperationOriginPolicy(context: string, value: unknown): OperationOriginPolicySchema {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }

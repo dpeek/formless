@@ -143,7 +143,7 @@ describe("instance archive restore API", () => {
     );
     const before = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
     const firstAction = await postInstalledAppAction("tasks", "work", {
-      idempotencyKey: "action-archive-clear",
+      idempotencyKey: "command-archive-clear",
       entity: "task",
       operationName: "clearCompletedTasks",
     });
@@ -161,7 +161,7 @@ describe("instance archive restore API", () => {
     );
     const after = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
     const secondAction = await postInstalledAppAction("tasks", "work", {
-      idempotencyKey: "action-archive-clear",
+      idempotencyKey: "command-archive-clear",
       entity: "task",
       operationName: "clearCompletedTasks",
     });
@@ -193,7 +193,7 @@ describe("instance archive restore API", () => {
     expect(secondAction.changes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          writeId: "operation:task.clearCompletedTasks:action-archive-clear",
+          writeId: "operation:task.clearCompletedTasks:command-archive-clear",
           operationKind: "command",
           recordId: replacementRecord.id,
           payload: expect.objectContaining({

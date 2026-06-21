@@ -14,7 +14,7 @@ import {
   type RecordPlanRecordIdExpressionSchema,
   type RecordPlanStepSchema,
   type RecordPlanValueExpressionSchema,
-  type SchemaActionActorKind,
+  type SchemaOperationActorKind,
 } from "@dpeek/formless-schema";
 import type {
   AppStorageIdentity,
@@ -24,12 +24,7 @@ import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { createRecordId } from "../shared/ids.ts";
 import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
-import type {
-  CreateMutation,
-  DeleteMutation,
-  PatchMutation,
-  PublicOperationProof,
-} from "../shared/protocol.ts";
+import type { PublicOperationProof } from "../shared/protocol.ts";
 import type {
   OperationCommandOutput,
   OperationInvocationEnvelope,
@@ -46,7 +41,7 @@ import {
   executeOperationHandlerCreateTriggers,
   executeOperationHandlerOutcome,
 } from "./operation-handlers.ts";
-import { validateMutationRequest, validateRecordValues } from "./authority-validation.ts";
+import { validateRecordWriteRequest, validateRecordValues } from "./authority-validation.ts";
 import {
   committedWrite,
   createStoredRecordOutcome,
@@ -65,6 +60,11 @@ import {
   type WriteOutcome,
   writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
+import type {
+  CreateRecordWriteRequest,
+  DeleteRecordWriteRequest,
+  PatchRecordWriteRequest,
+} from "./record-write-requests.ts";
 
 type OperationStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
 
@@ -79,7 +79,7 @@ type EntityOperationRoute = {
 };
 
 type OperationInvocationBuildBase = {
-  actorKind?: SchemaActionActorKind;
+  actorKind?: SchemaOperationActorKind;
   identity: OperationStorageIdentity;
   receivedAt?: string;
   schema: AppSchema;
@@ -473,33 +473,33 @@ function executeCreateOperationInvocationOutcome(
     schema,
     validateConstraints,
   );
-  const validatedMutation = validateRecordOperationMutationRequest(
-    operationCreateMutationRequest(envelope, schema, storage),
+  const validatedRecordWrite = validateOperationRecordWriteRequest(
+    operationCreateRecordWriteRequest(envelope, schema, storage),
     schema,
     storage,
     { packageResolver },
   );
 
-  if ("outcome" in validatedMutation) {
-    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+  if ("outcome" in validatedRecordWrite) {
+    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
       recordWriteOperationOutput(envelope, response),
     );
   }
 
-  const mutation = validatedMutation.mutation;
+  const recordWrite = validatedRecordWrite.recordWrite;
 
-  if (mutation.op !== "create") {
+  if (recordWrite.kind !== "create") {
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a create.`);
   }
 
   return mapWriteOutcome(
     createStoredRecordOutcome(
       storage,
-      mutation,
+      recordWrite,
       (context) => {
         executeOperationHandlerCreateTriggers(
           context.storage,
-          context.mutation,
+          context.request,
           schema,
           context.createRecords,
         );
@@ -523,30 +523,36 @@ function executeUpdateOperationInvocationOutcome(
     schema,
     validateConstraints,
   );
-  const validatedMutation = validateRecordOperationMutationRequest(
-    operationPatchMutationRequest(envelope, schema, storage),
+  const validatedRecordWrite = validateOperationRecordWriteRequest(
+    operationPatchRecordWriteRequest(envelope, schema, storage),
     schema,
     storage,
     { packageResolver },
   );
 
-  if ("outcome" in validatedMutation) {
-    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+  if ("outcome" in validatedRecordWrite) {
+    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
       recordWriteOperationOutput(envelope, response),
     );
   }
 
-  const mutation = validatedMutation.mutation;
+  const recordWrite = validatedRecordWrite.recordWrite;
 
-  if (!("recordValues" in mutation)) {
+  if (!("recordValues" in recordWrite)) {
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce an update.`);
   }
 
   return mapWriteOutcome(
-    patchStoredRecordOutcome(storage, mutation, mutation.recordValues, validateRecordConstraints, {
-      allowStoredReplay: false,
-      now: envelope.receivedAt,
-    }),
+    patchStoredRecordOutcome(
+      storage,
+      recordWrite,
+      recordWrite.recordValues,
+      validateRecordConstraints,
+      {
+        allowStoredReplay: false,
+        now: envelope.receivedAt,
+      },
+    ),
     (response) => recordWriteOperationOutput(envelope, response),
   );
 }
@@ -557,27 +563,27 @@ function executeDeleteOperationInvocationOutcome(
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
 ): WriteOutcome<OperationInvocationOutput> {
-  const validatedMutation = validateRecordOperationMutationRequest(
-    operationDeleteMutationRequest(envelope),
+  const validatedRecordWrite = validateOperationRecordWriteRequest(
+    operationDeleteRecordWriteRequest(envelope),
     schema,
     storage,
     { packageResolver },
   );
 
-  if ("outcome" in validatedMutation) {
-    return mapWriteOutcome(validatedMutation.outcome, (response) =>
+  if ("outcome" in validatedRecordWrite) {
+    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
       recordWriteOperationOutput(envelope, response),
     );
   }
 
-  const mutation = validatedMutation.mutation;
+  const recordWrite = validatedRecordWrite.recordWrite;
 
-  if (mutation.op !== "delete") {
+  if (recordWrite.kind !== "delete") {
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a delete.`);
   }
 
   return mapWriteOutcome(
-    deleteStoredRecordOutcome(storage, mutation, {
+    deleteStoredRecordOutcome(storage, recordWrite, {
       allowStoredReplay: false,
       now: envelope.receivedAt,
     }),
@@ -585,17 +591,17 @@ function executeDeleteOperationInvocationOutcome(
   );
 }
 
-function validateRecordOperationMutationRequest(
-  mutation: unknown,
+function validateOperationRecordWriteRequest(
+  recordWrite: unknown,
   schema: AppSchema,
   storage: DurableObjectStorage,
   options: {
     packageResolver?: AppPackageResolver;
   } = {},
 ) {
-  return validateMutationRequest(mutation, schema, storage, {
+  return validateRecordWriteRequest(recordWrite, schema, storage, {
     allowStoredReplay: false,
-    enforceGenericMutationPolicy: false,
+    enforceGenericRecordWritePolicy: false,
     packageResolver: options.packageResolver,
   });
 }
@@ -660,7 +666,7 @@ function executeRecordPlanOperationInvocationOutcome(
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<OperationInvocationOutput> {
-  const actionId = requiredWriteIdentity(envelope);
+  const operationId = requiredWriteIdentity(envelope);
   const inputValues = recordPlanCommandInput(envelope, schema, storage);
   const plans = recordPlanWritePlans(
     storage,
@@ -668,14 +674,14 @@ function executeRecordPlanOperationInvocationOutcome(
     schema,
     effect,
     inputValues,
-    actionId,
+    operationId,
     packageResolver,
   );
 
   return mapWriteOutcome(
     writeRecordSetForCommandOperationOutcome(
       storage,
-      actionId,
+      operationId,
       plans,
       operationRecordConstraintValidator(storage, schema, validateConstraints),
       { allowStoredReplay: false, now: envelope.receivedAt },
@@ -699,7 +705,7 @@ function operationRecordConstraintValidator(
 type RecordPlanInputValues = Partial<Record<string, FieldValue>>;
 
 type RecordPlanPlanningState = {
-  actionId: string;
+  operationId: string;
   envelope: OperationInvocationEnvelope;
   inputValues: RecordPlanInputValues;
   packageResolver?: AppPackageResolver;
@@ -734,11 +740,11 @@ function recordPlanWritePlans(
   schema: AppSchema,
   effect: RecordPlanEntityOperationEffectSchema,
   inputValues: RecordPlanInputValues,
-  actionId: string,
+  operationId: string,
   packageResolver?: AppPackageResolver,
 ): OperationRecordWritePlan[] {
   const state: RecordPlanPlanningState = {
-    actionId,
+    operationId,
     envelope,
     inputValues,
     packageResolver,
@@ -763,18 +769,18 @@ function recordPlanWritePlanForStep(
 
     assertRecordPlanCreateIdAvailable(step, recordId, state);
 
-    const mutation = validateRecordPlanStepMutation(step, state, {
-      mutationId: recordPlanStepMutationId(state.actionId, step.name),
+    const recordWrite = validateRecordPlanStepWrite(step, state, {
+      writeId: recordPlanStepWriteId(state.operationId, step.name),
       entity: step.entity,
-      op: "create",
+      kind: "create",
       values: evaluateRecordPlanValues(step.values, state),
     });
 
-    if (mutation.op !== "create") {
+    if (recordWrite.kind !== "create") {
       throw new Error(`Record plan create step "${step.name}" did not produce create values.`);
     }
 
-    const values = mutation.values;
+    const values = recordWrite.values;
     const record = {
       id: recordId,
       entity: step.entity,
@@ -796,21 +802,21 @@ function recordPlanWritePlanForStep(
   if (step.kind === "patch") {
     const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
     const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-    const mutation = validateRecordPlanStepMutation(step, state, {
-      mutationId: recordPlanStepMutationId(state.actionId, step.name),
+    const recordWrite = validateRecordPlanStepWrite(step, state, {
+      writeId: recordPlanStepWriteId(state.operationId, step.name),
       entity: step.entity,
-      op: "patch",
+      kind: "patch",
       recordId,
       values: evaluateRecordPlanValues(step.values, state),
     });
 
-    if (!("recordValues" in mutation)) {
+    if (!("recordValues" in recordWrite)) {
       throw new Error(`Record plan patch step "${step.name}" did not produce record values.`);
     }
 
     const record = {
       ...existingRecord,
-      values: mutation.recordValues,
+      values: recordWrite.recordValues,
       updatedAt: state.envelope.receivedAt,
     } satisfies StoredRecord;
 
@@ -820,16 +826,16 @@ function recordPlanWritePlanForStep(
       kind: "patch",
       record: (writtenRecords) =>
         requireRecordPlanMaterializedTargetRecord(recordId, writtenRecords, state.storage),
-      values: mutation.recordValues,
+      values: recordWrite.recordValues,
     };
   }
 
   const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
   const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-  validateRecordPlanStepMutation(step, state, {
-    mutationId: recordPlanStepMutationId(state.actionId, step.name),
+  validateRecordPlanStepWrite(step, state, {
+    writeId: recordPlanStepWriteId(state.operationId, step.name),
     entity: step.entity,
-    op: "delete",
+    kind: "delete",
     recordId,
   });
 
@@ -848,14 +854,14 @@ function recordPlanWritePlanForStep(
   };
 }
 
-function validateRecordPlanStepMutation(
+function validateRecordPlanStepWrite(
   step: RecordPlanStepSchema,
   state: RecordPlanPlanningState,
-  mutation: CreateMutation | PatchMutation | DeleteMutation,
+  recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
 ) {
-  const result = validateMutationRequest(mutation, state.schema, state.storage, {
+  const result = validateRecordWriteRequest(recordWrite, state.schema, state.storage, {
     additionalRecords: [...state.plannedRecordsById.values()],
-    enforceGenericMutationPolicy: false,
+    enforceGenericRecordWritePolicy: false,
     packageResolver: state.packageResolver,
   });
 
@@ -865,7 +871,7 @@ function validateRecordPlanStepMutation(
     );
   }
 
-  return result.mutation;
+  return result.recordWrite;
 }
 
 function validateOperationInputContractByInputName(
@@ -1138,8 +1144,8 @@ function recordPlanRecordWritten(
   state.stepOutputs.set(step.name, record);
 }
 
-function recordPlanStepMutationId(actionId: string, stepName: string) {
-  return `${actionId}:${stepName}`;
+function recordPlanStepWriteId(operationId: string, stepName: string) {
+  return `${operationId}:${stepName}`;
 }
 
 function recordPlanOperationOutput(
@@ -1363,20 +1369,20 @@ function affectedChangeIds(changes: OperationCommandOutput["changes"]) {
   return changes.map((change) => String(change.seq));
 }
 
-function operationCreateMutationRequest(
+function operationCreateRecordWriteRequest(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   storage: DurableObjectStorage,
 ) {
-  const mutationId = requiredWriteIdentity(envelope);
+  const writeId = requiredWriteIdentity(envelope);
 
   if (envelope.operation.kind === "create" && envelope.input.type === "create") {
     return {
-      mutationId,
+      writeId,
       entity: envelope.operation.entityName,
-      op: "create",
+      kind: "create",
       values: validateOperationInputContract(envelope, envelope.input.values, schema, storage),
-    } satisfies Omit<CreateMutation, "values"> & { values: unknown };
+    } satisfies Omit<CreateRecordWriteRequest, "values"> & { values: unknown };
   }
 
   throw new BadRequestError(
@@ -1384,21 +1390,21 @@ function operationCreateMutationRequest(
   );
 }
 
-function operationPatchMutationRequest(
+function operationPatchRecordWriteRequest(
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   storage: DurableObjectStorage,
 ) {
-  const mutationId = requiredWriteIdentity(envelope);
+  const writeId = requiredWriteIdentity(envelope);
 
   if (envelope.operation.kind === "update" && envelope.input.type === "update") {
     return {
-      mutationId,
+      writeId,
       entity: envelope.operation.entityName,
-      op: "patch",
+      kind: "patch",
       recordId: envelope.input.recordId,
       values: operationPatchValues(envelope, schema, storage),
-    } satisfies Omit<PatchMutation, "values"> & { values: unknown };
+    } satisfies Omit<PatchRecordWriteRequest, "values"> & { values: unknown };
   }
 
   throw new BadRequestError(
@@ -1406,16 +1412,16 @@ function operationPatchMutationRequest(
   );
 }
 
-function operationDeleteMutationRequest(envelope: OperationInvocationEnvelope) {
-  const mutationId = requiredWriteIdentity(envelope);
+function operationDeleteRecordWriteRequest(envelope: OperationInvocationEnvelope) {
+  const writeId = requiredWriteIdentity(envelope);
 
   if (envelope.operation.kind === "delete" && envelope.input.type === "delete") {
     return {
-      mutationId,
+      writeId,
       entity: envelope.operation.entityName,
-      op: "delete",
+      kind: "delete",
       recordId: envelope.input.recordId,
-    } satisfies DeleteMutation;
+    } satisfies DeleteRecordWriteRequest;
   }
 
   throw new BadRequestError(

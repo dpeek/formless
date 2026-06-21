@@ -27,12 +27,10 @@ export type CommandWriteResponse = {
   recordPlan?: OperationRecordPlanResponse;
 };
 
-type StoredWriteOperationKind = "create" | "patch" | "delete" | "action";
-
 type ChangeSqlRow = {
   seq: number;
-  mutation_id: string;
-  op: StoredWriteOperationKind;
+  write_id: string;
+  operation_kind: ChangeRow["operationKind"];
   entity: string;
   record_id: string;
   payload_json: string;
@@ -44,7 +42,7 @@ type CursorRow = {
 };
 
 type CommandExecutionRow = {
-  action_id: string;
+  write_id: string;
   cursor: number;
 };
 
@@ -89,7 +87,7 @@ export function readWriteLogChangesAfter(
   const rows = storage.sql
     .exec<ChangeSqlRow>(
       `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
+        SELECT seq, write_id, operation_kind, entity, record_id, payload_json, created_at
         FROM changes
         WHERE seq > ?
         ORDER BY seq ASC
@@ -179,11 +177,11 @@ export function appendWriteLogChange(
 ) {
   storage.sql.exec(
     `
-      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+      INSERT INTO changes (write_id, operation_kind, entity, record_id, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `,
     input.writeId,
-    storedOperationKind(input.operationKind),
+    input.operationKind,
     input.entity,
     input.record.id,
     JSON.stringify(input.record),
@@ -235,7 +233,7 @@ export function persistCommandExecution(
 ) {
   storage.sql.exec(
     `
-      INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
+      INSERT INTO command_executions (write_id, entity, operation, cursor, created_at)
       VALUES (?, ?, ?, ?, ?)
     `,
     input.writeId,
@@ -253,9 +251,9 @@ export function readWriteLogChangesByWriteId(
   const rows = storage.sql
     .exec<ChangeSqlRow>(
       `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
+        SELECT seq, write_id, operation_kind, entity, record_id, payload_json, created_at
         FROM changes
-        WHERE mutation_id = ?
+        WHERE write_id = ?
         ORDER BY seq ASC
       `,
       writeId,
@@ -273,9 +271,9 @@ export function readLatestWriteLogChangeForRecord(
   const row = storage.sql
     .exec<ChangeSqlRow>(
       `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
+        SELECT seq, write_id, operation_kind, entity, record_id, payload_json, created_at
         FROM changes
-        WHERE mutation_id = ? AND record_id = ?
+        WHERE write_id = ? AND record_id = ?
         ORDER BY seq DESC
         LIMIT 1
       `,
@@ -293,7 +291,7 @@ function readCommandExecution(
 ): CommandExecutionRow | undefined {
   const row = storage.sql
     .exec<CommandExecutionRow>(
-      "SELECT action_id, cursor FROM action_executions WHERE action_id = ?",
+      "SELECT write_id, cursor FROM command_executions WHERE write_id = ?",
       writeId,
     )
     .next();
@@ -304,39 +302,13 @@ function readCommandExecution(
 function changeFromRow(row: ChangeSqlRow): ChangeRow {
   return {
     seq: row.seq,
-    writeId: row.mutation_id,
-    operationKind: operationKindFromStoredOperation(row.op),
+    writeId: row.write_id,
+    operationKind: row.operation_kind,
     entity: row.entity,
     recordId: row.record_id,
     payload: parseStoredRecord(row.payload_json),
     createdAt: row.created_at,
   };
-}
-
-function storedOperationKind(operationKind: ChangeRow["operationKind"]): StoredWriteOperationKind {
-  if (operationKind === "update") {
-    return "patch";
-  }
-
-  if (operationKind === "command") {
-    return "action";
-  }
-
-  return operationKind;
-}
-
-function operationKindFromStoredOperation(
-  operationKind: StoredWriteOperationKind,
-): ChangeRow["operationKind"] {
-  if (operationKind === "patch") {
-    return "update";
-  }
-
-  if (operationKind === "action") {
-    return "command";
-  }
-
-  return operationKind;
 }
 
 function parseStoredRecord(value: string): StoredRecord {

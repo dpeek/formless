@@ -413,7 +413,7 @@ function storageSourceFromApp(
   return {
     schema: app.sourceSchema,
     records: app.seedRecords,
-    changeMutationPrefix: app.seedChangeMutationPrefix,
+    changeWritePrefix: app.seedChangeWritePrefix,
     ...(options.schemaKey === undefined ? {} : { schemaKey: options.schemaKey }),
     ...(options.schemaProvenance === undefined
       ? {}

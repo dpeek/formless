@@ -101,17 +101,17 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **GIVEN** app settings are opened for the active app
 - **WHEN** settings render
 - **THEN** sync status and source seed reset are available where supported
-- **AND** frontend Schema links and schema editor actions are not shown
+- **AND** frontend Schema links and schema editor controls are not shown
 - **AND** portable archive backup, restore, or import controls are not shown
 
-#### Scenario: Instance management provider actions
+#### Scenario: Instance management provider controls
 
 - **GIVEN** the product instance shell renders domain, route, deployment,
   provider observation, or provider evidence state
 - **WHEN** the user reviews provider resources
 - **THEN** supported explicit provider delete, manual cleanup, or evidence repair
   controls may remain available for selected recorded evidence
-- **AND** provider mutation guidance points to workspace push
+- **AND** provider change guidance points to workspace push
 
 ### Requirement: Screen Workspaces
 
@@ -385,8 +385,7 @@ entity operations and view operation bindings.
 - THEN the machine, transition, availability, input, and response handling come
   from operation-native transition handler facts
 - AND operation handler helpers expose operation-native selection contracts
-- AND generated UI does not inspect legacy entity action metadata or legacy
-  action kinds to discover transition controls
+- AND generated UI selects transition controls from operation handler facts
 
 ### Requirement: Operations And Tree Composition
 
@@ -408,8 +407,7 @@ SHALL use relationship context and readiness facts to shape command inputs.
 - THEN one child record and one placement edge are created
 - AND leaf policy renders leaf children without descendants
 - AND remove-placement controls tombstone placement edges without showing child delete controls on placement cards
-- AND tree controls are selected from operation handler capability facts rather
-  than registered action effect kinds
+- AND tree controls are selected from operation handler capability facts
 
 ### Requirement: State Machine Controls
 
@@ -474,8 +472,8 @@ cache, provider evidence, view, screen, read model, and operation models.
 - **AND** the overview renders app install management and route management as
   table-backed sections
 - **AND** route management uses the default route collection title, table, and
-  `Create Route` action without route-category query tabs
-- **AND** the overview renders one local workspace action, `Push`, only when
+  `Create Route` control without route-category query tabs
+- **AND** the overview renders one local workspace control, `Push`, only when
   the local workspace gateway proxy is available
 - **AND** push completion or failure is shown as compact display-safe status or
   alert feedback instead of a workspace status panel
@@ -566,7 +564,7 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **THEN** routes show match host, match path, match prefix, kind, target
   profile, app install target, surface, redirect target, and enabled state
 - **AND** routes render as a single all-routes collection with the default
-  `Create Route` action
+  `Create Route` control
 - **AND** route management does not render route-category query tabs for
   enabled routes, mounts, host mappings, redirects, instance paths, app install
   routes, or public Site routes
@@ -602,7 +600,7 @@ that covers instance paths, host mappings, public Site routes, and redirects.
 - **WHEN** the route editor renders
 - **THEN** desired route fields remain visually separate from provider evidence
   and cleanup state
-- **AND** route edits do not imply provider mutation
+- **AND** route edits do not imply provider changes
 - **AND** deployment config observation cache fields may be displayed for status
   but are not editable route intent
 - **AND** route lifecycle timestamps are system-owned metadata, not editable
@@ -672,7 +670,7 @@ workspace gateway proxy is available through the local runtime.
   family
 - **AND** the UI does not expose workspace check, pull, credential setup, or
   save controls on the instance overview
-- **AND** the browser UI does not expose a user-triggered workspace save action
+- **AND** the browser UI does not expose a user-triggered workspace save control
   because browser writes enqueue workspace auto-save
 - **AND** CLI save remains available outside the browser as an explicit flush or
   retry fallback
@@ -706,7 +704,7 @@ workspace gateway proxy is available through the local runtime.
 
 - **WHEN** a workspace credential setup operation reports a display-safe
   external authorization URL through the local runtime gateway proxy
-- **THEN** the UI can render an action to open that URL and continue polling the
+- **THEN** the UI can render a control to open that URL and continue polling the
   operation
 - **AND** raw adapter or tool output, provider tokens, refresh tokens, Alchemy
   passwords, and local secret values are not rendered
@@ -740,7 +738,7 @@ local workspace from the browser.
   Authority-backed write commits
 - **AND** the saved workspace source is generated from Authority-backed records,
   not from manifest app, route, domain, or deploy fields
-- **AND** the UI does not expose a separate user-triggered save action for the
+- **AND** the UI does not expose a separate user-triggered save control for the
   same committed browser edit
 
 ### Requirement: Onboarding Form Reuse
@@ -770,7 +768,7 @@ behavior for onboarding steps that write schema records.
 - **AND** schema field controls are used only for schema-record inputs, not for
   arbitrary filesystem paths, credentials, raw provider state, or shell output
 - **AND** local dev browser onboarding does not present a workspace
-  initialization action because fresh workspace bootstrap is completed by the
+  initialization control because fresh workspace bootstrap is completed by the
   CLI before the runtime starts
 
 #### Scenario: Future schema-defined setup flows

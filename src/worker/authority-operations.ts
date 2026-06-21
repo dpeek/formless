@@ -22,7 +22,7 @@ import type {
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import type { SchemaActionActorKind } from "@dpeek/formless-schema";
+import type { SchemaOperationActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -172,7 +172,7 @@ type EntityOperationRoute = {
 };
 
 type AuthorityOperationExecutionInput = {
-  actorKind?: SchemaActionActorKind;
+  actorKind?: SchemaOperationActorKind;
   app: WorkerSchemaAppDefinition;
   body?: unknown;
   identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;

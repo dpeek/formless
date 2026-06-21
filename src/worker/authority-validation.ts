@@ -18,11 +18,12 @@ import type {
 import { parseStorageSnapshot } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type {
-  CreateMutation,
-  DeleteMutation,
-  Mutation,
-  PatchMutation,
-} from "../shared/protocol.ts";
+  CreateRecordWriteRequest,
+  DeleteRecordWriteRequest,
+  PatchRecordWriteRequest,
+  RecordWriteKind,
+  RecordWriteRequest,
+} from "./record-write-requests.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
@@ -34,41 +35,41 @@ import {
   type WriteOutcome,
 } from "./storage.ts";
 
-export type ValidatedMutation =
+export type ValidatedRecordWrite =
   | {
-      mutation: Mutation | (PatchMutation & { recordValues: RecordValues });
+      recordWrite: RecordWriteRequest | (PatchRecordWriteRequest & { recordValues: RecordValues });
     }
   | {
       outcome: WriteOutcome<RecordWriteResponse>;
     };
 
-type MutationValidationOptions = {
+type RecordWriteValidationOptions = {
   additionalRecords?: StoredRecord[];
   allowStoredReplay?: boolean;
-  enforceGenericMutationPolicy?: boolean;
+  enforceGenericRecordWritePolicy?: boolean;
   packageResolver?: AppPackageResolver;
 };
 
-export function validateMutationRequest(
+export function validateRecordWriteRequest(
   value: unknown,
   schema: AppSchema,
   storage: DurableObjectStorage,
-  options: MutationValidationOptions = {},
-): ValidatedMutation {
+  options: RecordWriteValidationOptions = {},
+): ValidatedRecordWrite {
   if (!isRecord(value)) {
-    throw new BadRequestError("Mutation must be an object.");
+    throw new BadRequestError("Record write request must be an object.");
   }
 
-  if (typeof value.mutationId !== "string" || value.mutationId.trim() === "") {
-    throw new BadRequestError("Mutation must include a non-empty mutationId.");
+  if (typeof value.writeId !== "string" || value.writeId.trim() === "") {
+    throw new BadRequestError("Record write request must include a non-empty writeId.");
   }
 
-  if (value.op !== "create" && value.op !== "patch" && value.op !== "delete") {
-    throw new BadRequestError('Only "create", "patch", and "delete" mutations are supported.');
+  if (value.kind !== "create" && value.kind !== "patch" && value.kind !== "delete") {
+    throw new BadRequestError('Only "create", "patch", and "delete" record writes are supported.');
   }
 
   if (typeof value.entity !== "string") {
-    throw new BadRequestError("Mutation must include an entity.");
+    throw new BadRequestError("Record write request must include an entity.");
   }
 
   const entity = schema.entities[value.entity];
@@ -77,35 +78,35 @@ export function validateMutationRequest(
   }
 
   if (options.allowStoredReplay !== false) {
-    const replay = getRecordWriteResponseById(storage, value.mutationId);
+    const replay = getRecordWriteResponseById(storage, value.writeId);
     if (replay) {
       return { outcome: replayedWrite(replay) };
     }
   }
 
-  if (options.enforceGenericMutationPolicy !== false) {
-    assertRuntimeHistoryAllowsGenericMutation(schema, value.entity, value.op);
+  if (options.enforceGenericRecordWritePolicy !== false) {
+    assertRuntimeHistoryAllowsGenericRecordWrite(schema, value.entity, value.kind);
 
-    if (value.op === "create" && !entityHasOperationKind(entity, "create")) {
-      throw new BadRequestError(`Create mutations are disabled for entity "${value.entity}".`);
+    if (value.kind === "create" && !entityHasOperationKind(entity, "create")) {
+      throw new BadRequestError(`Create record writes are disabled for entity "${value.entity}".`);
     }
 
-    if (value.op === "patch" && !entityHasOperationKind(entity, "update")) {
-      throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
+    if (value.kind === "patch" && !entityHasOperationKind(entity, "update")) {
+      throw new BadRequestError(`Patch record writes are disabled for entity "${value.entity}".`);
     }
 
-    if (value.op === "delete" && !entityHasOperationKind(entity, "delete")) {
-      throw new BadRequestError(`Delete mutations are disabled for entity "${value.entity}".`);
+    if (value.kind === "delete" && !entityHasOperationKind(entity, "delete")) {
+      throw new BadRequestError(`Delete record writes are disabled for entity "${value.entity}".`);
     }
   }
 
-  if (value.op === "delete") {
+  if (value.kind === "delete") {
     if ("values" in value) {
-      throw new BadRequestError("Delete mutation must not include values.");
+      throw new BadRequestError("Delete record write must not include values.");
     }
 
     if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
-      throw new BadRequestError("Delete mutation must include a recordId.");
+      throw new BadRequestError("Delete record write must include a recordId.");
     }
 
     const existingRecord = getStoredRecordForValidation(
@@ -128,22 +129,22 @@ export function validateMutationRequest(
     assertNoActiveInboundReferences(existingRecord, schema, storage, options.additionalRecords);
 
     return {
-      mutation: {
-        mutationId: value.mutationId,
+      recordWrite: {
+        writeId: value.writeId,
         entity: value.entity,
-        op: "delete",
+        kind: "delete",
         recordId: value.recordId,
-      } satisfies DeleteMutation,
+      } satisfies DeleteRecordWriteRequest,
     };
   }
 
   if (!isRecord(value.values)) {
-    throw new BadRequestError("Mutation values must be an object.");
+    throw new BadRequestError("Record write request values must be an object.");
   }
 
-  if (value.op === "patch") {
+  if (value.kind === "patch") {
     if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
-      throw new BadRequestError("Patch mutation must include a recordId.");
+      throw new BadRequestError("Patch record write must include a recordId.");
     }
 
     const existingRecord = getStoredRecordForValidation(
@@ -180,10 +181,10 @@ export function validateMutationRequest(
     );
 
     return {
-      mutation: {
-        mutationId: value.mutationId,
+      recordWrite: {
+        writeId: value.writeId,
         entity: value.entity,
-        op: "patch",
+        kind: "patch",
         recordId: value.recordId,
         values: patchValues,
         recordValues,
@@ -192,10 +193,10 @@ export function validateMutationRequest(
   }
 
   return {
-    mutation: {
-      mutationId: value.mutationId,
+    recordWrite: {
+      writeId: value.writeId,
       entity: value.entity,
-      op: "create",
+      kind: "create",
       values: validateRecordValues(
         normalizeStateMachineCreateValues(value.entity, entity, value.values),
         entity,
@@ -207,7 +208,7 @@ export function validateMutationRequest(
           schema,
         },
       ),
-    } satisfies CreateMutation,
+    } satisfies CreateRecordWriteRequest,
   };
 }
 
@@ -410,7 +411,7 @@ export function validateCompatibleSchemaChange(
 }
 
 function validatePatchValues(values: Record<string, unknown>, entity: EntitySchema) {
-  assertNoSystemRecordValues("Mutation values", values, entity);
+  assertNoSystemRecordValues("Record write request values", values, entity);
 
   const patchValues: Partial<RecordValues> = {};
 
@@ -546,10 +547,10 @@ function getBootstrapRecordsForValidation(
   return [...recordsById.values()];
 }
 
-function assertRuntimeHistoryAllowsGenericMutation(
+function assertRuntimeHistoryAllowsGenericRecordWrite(
   schema: AppSchema,
   entityName: string,
-  op: Mutation["op"],
+  kind: RecordWriteKind,
 ) {
   const history = runtimeControlPlaneEntityMetadata(schema, entityName)?.history;
 
@@ -557,13 +558,13 @@ function assertRuntimeHistoryAllowsGenericMutation(
     return;
   }
 
-  if (history.kind === "actionCreated") {
+  if (history.kind === "operationCreated") {
     throw new BadRequestError(
-      `Entity "${entityName}" history records must be created through schema actions.`,
+      `Entity "${entityName}" operation-created history records must be created through schema operations.`,
     );
   }
 
-  if (op !== "create") {
+  if (kind !== "create") {
     throw new BadRequestError(`Entity "${entityName}" history records are append-only.`);
   }
 }
@@ -627,7 +628,7 @@ function assertStateMachineFieldsNotPatched(
     }
 
     throw new BadRequestError(
-      `Field "${entityName}.${machine.field}" is owned by state machine "${machineName}" and must change through transition actions.`,
+      `Field "${entityName}.${machine.field}" is owned by state machine "${machineName}" and must change through transition operations.`,
     );
   }
 }

@@ -54,7 +54,7 @@ describe("schema table views", () => {
     ]);
   });
 
-  it("rejects table-local actions and invokeAction columns", () => {
+  it("rejects table-local control declarations and unknown command columns", () => {
     expect(() =>
       parseAppSchema({
         ...tableParserSourceSchema(),
@@ -62,13 +62,13 @@ describe("schema table views", () => {
           ...tableParserSourceSchema().tableViews,
           rateTable: {
             ...tableParserSourceSchema().tableViews.rateTable,
-            actions: {
+            controls: {
               inspect: { label: "Inspect" },
             },
           },
         },
       }),
-    ).toThrow('Table view "rateTable" has unsupported key "actions"');
+    ).toThrow('Table view "rateTable" has unsupported key "controls"');
 
     expect(() =>
       parseAppSchema({
@@ -77,7 +77,7 @@ describe("schema table views", () => {
           ...tableParserSourceSchema().tableViews,
           rateTable: {
             ...tableParserSourceSchema().tableViews.rateTable,
-            columns: [{ type: "invokeAction", action: "inspect" }],
+            columns: [{ type: "invokeCommand", command: "inspect" }],
           },
         },
       }),

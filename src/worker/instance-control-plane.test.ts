@@ -232,8 +232,8 @@ describe("instance control-plane API routes", () => {
         label: "Work Site",
       },
     });
-    const appMutation = await postInstalledAppMutation("site", "work", {
-      idempotencyKey: "mutation-installed-site-page",
+    const appRecordWrite = await postInstalledAppRecordOperation("site", "work", {
+      idempotencyKey: "write-installed-site-page",
       entity: "block",
       operationName: "create",
       input: {
@@ -246,9 +246,9 @@ describe("instance control-plane API routes", () => {
     const installedSite = await getJson<BootstrapResponse>("/api/app-installs/site/work/bootstrap");
     const sync = await getJson<SyncResponse>(`${controlPlaneApi}/sync?after=0`);
 
-    expect(appMutation.body.record.entity).toBe("block");
+    expect(appRecordWrite.body.record.entity).toBe("block");
     expect(
-      installedSite.body.records.some((record) => record.id === appMutation.body.record.id),
+      installedSite.body.records.some((record) => record.id === appRecordWrite.body.record.id),
     ).toBe(true);
     expect(controlPlane.body.records.map((record) => record.entity)).toEqual([
       "app-install",
@@ -256,7 +256,7 @@ describe("instance control-plane API routes", () => {
       "route",
     ]);
     expect(JSON.stringify(controlPlane.body.records)).not.toContain("Installed only");
-    expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
+    expect(JSON.stringify(sync.body)).not.toContain(appRecordWrite.body.record.id);
   });
 
   it("derives installed app API summaries from real control-plane route records", async () => {
@@ -658,7 +658,7 @@ async function postJson<T>(path: string, body: unknown, headers: Record<string, 
   };
 }
 
-async function postInstalledAppMutation(
+async function postInstalledAppRecordOperation(
   packageAppKey: string,
   installId: string,
   body: Parameters<typeof recordOperationRequest>[0],

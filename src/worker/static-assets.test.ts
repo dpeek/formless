@@ -82,7 +82,7 @@ describe("published Site launch assets", () => {
     const authored =
       '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="28" fill="#ef4444"/></svg>';
 
-    await patchSiteIcon("mutation-site-icon-authored", authored);
+    await patchSiteIcon("write-site-icon-authored", authored);
 
     const after = await assetBytes("/favicon.svg");
 
@@ -92,7 +92,7 @@ describe("published Site launch assets", () => {
 
   it("falls back to the default icon when the authored Site icon is unsafe", async () => {
     await patchSiteIcon(
-      "mutation-site-icon-unsafe",
+      "write-site-icon-unsafe",
       '<svg viewBox="0 0 64 64"><script>alert(1)</script></svg>',
     );
 

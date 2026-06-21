@@ -60,7 +60,7 @@ records.
 #### Scenario: Installed app data boundary
 
 - GIVEN an `app-install` record exists
-- WHEN installed app records, active schema, changes, action executions,
+- WHEN installed app records, active schema, changes, operation invocations,
   snapshots, or sync state are read or written
 - THEN those facts remain in that install's app storage identity
 - AND the `app-install` record does not contain the installed app's data records
@@ -95,7 +95,7 @@ through the Instance Control Plane package slice.
 
 #### Scenario: Runtime owns control-plane execution
 
-- GIVEN app install mutation, route mutation, deployment-config mutation,
+- GIVEN app install operations, route operations, deployment-config operations,
   Authority writes, owner authorization, deployment projection execution,
   provider execution, or runtime observation persistence is needed
 - WHEN those behaviors are implemented
@@ -115,7 +115,7 @@ runtime-owned App schema source with deterministic provenance.
 - WHEN the schema is parsed for Authority, generated UI, workspace, archive,
   sync, or deploy workflows
 - THEN it uses the normal App schema parser and App schema source hash rules
-- AND entity, field, relationship, query, read model, view, screen, action,
+- AND entity, field, relationship, query, read model, view, screen,
   operation, and runtime metadata changes all affect control-plane schema
   provenance
 - AND the schema authoring format is not observable through records, workspace
@@ -440,8 +440,7 @@ writing schema-owned control-plane records.
 - **THEN** the write invokes a control-plane operation and commits
   `app-install` and `route` records through Authority validation
 - **AND** app-install creation returns operation-native command output and
-  replays through operation identity rather than through an action response
-  contract
+  replays through operation identity
 - **AND** saved workspace source is later generated from those records rather
   than from manifest declarations
 

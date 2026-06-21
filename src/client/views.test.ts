@@ -460,7 +460,7 @@ describe("home view model collections", () => {
     expect(operation?.type === "command" ? operation.ui.targetCount : undefined).toBeUndefined();
   });
 
-  it("does not synthesize collection toolbar controls from handler capabilities or legacy action metadata", () => {
+  it("does not synthesize collection toolbar controls from handler capabilities", () => {
     const taskHome = appSchema.views.taskHome;
 
     if (taskHome?.type !== "collection") {
@@ -480,9 +480,7 @@ describe("home view model collections", () => {
         ...appSchema.entities,
         task: {
           ...appSchema.entities.task,
-          actions: {
-            clearCompletedTasks: { kind: "clear-completed" },
-          },
+          operations: undefined,
         } as unknown as EntitySchema,
       },
     };
@@ -491,7 +489,7 @@ describe("home view model collections", () => {
     expect(model.operations).toEqual([]);
   });
 
-  it("selects command toolbar controls from operation bindings without legacy action metadata", () => {
+  it("selects command toolbar controls from operation bindings", () => {
     const model = requiredCollectionModel(appSchema, "taskHome");
     const clearCompleted = model.operations.find(
       (operation) =>

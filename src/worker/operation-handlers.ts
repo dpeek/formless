@@ -12,11 +12,11 @@ import type {
 } from "@dpeek/formless-schema";
 import { fieldCreateDefaultValue, matchesQuery } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
-import type { CreateMutation } from "../shared/protocol.ts";
 import type {
   OperationCommandOutput,
   OperationInvocationEnvelope,
 } from "../shared/operation-invocation.ts";
+import type { CreateRecordWriteRequest } from "./record-write-requests.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
@@ -24,7 +24,7 @@ import {
   getActiveRecordsByEntity,
   getStoredRecord,
   type OperationRecordWritePlan,
-  type CreateMutationCausedRecordWriter,
+  type CreateRecordWriteSideEffectRecordCreator,
   type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForCommandOperationOutcome,
@@ -41,12 +41,12 @@ export type OperationHandlerExecutionContext = {
 
 type OperationHandlerCreateTriggerContext = {
   storage: DurableObjectStorage;
-  mutation: CreateMutation;
+  recordWrite: CreateRecordWriteRequest;
   schema: AppSchema;
   entityName: string;
   operationName: string;
   effect: OperationHandlerEntityOperationEffectSchema;
-  createRecords: CreateMutationCausedRecordWriter;
+  createRecords: CreateRecordWriteSideEffectRecordCreator;
 };
 
 type OperationHandlerModule = {
@@ -106,14 +106,14 @@ export function executeOperationHandlerOutcome(
 
 export function executeOperationHandlerCreateTriggers(
   storage: DurableObjectStorage,
-  mutation: CreateMutation,
+  recordWrite: CreateRecordWriteRequest,
   schema: AppSchema,
-  createRecords: CreateMutationCausedRecordWriter,
+  createRecords: CreateRecordWriteSideEffectRecordCreator,
 ) {
-  for (const trigger of createTriggersForEntity(schema, mutation.entity)) {
+  for (const trigger of createTriggersForEntity(schema, recordWrite.entity)) {
     operationHandlerModules[trigger.effect.handler].executeCreateTrigger({
       storage,
-      mutation,
+      recordWrite,
       schema,
       entityName: trigger.entityName,
       operationName: trigger.operationName,
@@ -396,7 +396,7 @@ function createTriggersForEntity(schema: AppSchema, sourceEntity: string) {
 
 function rejectCreateTrigger(context: OperationHandlerCreateTriggerContext): never {
   throw new Error(
-    `Create trigger "${context.mutation.entity}.${context.mutation.mutationId}" references unsupported operation "${context.entityName}.${context.operationName}".`,
+    `Create trigger "${context.recordWrite.entity}.${context.recordWrite.writeId}" references unsupported operation "${context.entityName}.${context.operationName}".`,
   );
 }
 
@@ -1195,7 +1195,7 @@ function requireCreateTriggerEffect<Kind extends OperationHandlerKind>(
 ): OperationHandlerEffectSchemaForKind<Kind> {
   if (context.effect.handler !== kind) {
     throw new Error(
-      `Create trigger "${context.mutation.entity}.${context.mutation.mutationId}" expected "${kind}" effect.`,
+      `Create trigger "${context.recordWrite.entity}.${context.recordWrite.writeId}" expected "${kind}" effect.`,
     );
   }
 

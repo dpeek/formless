@@ -220,7 +220,7 @@ describe("authority", () => {
     await resetInstalledApp("site", "docs");
 
     const created = await postInstalledAppRecordOperation("site", "personal", {
-      idempotencyKey: "mutation-installed-site-page",
+      idempotencyKey: "write-installed-site-page",
       entity: "block",
       operationName: "create",
       input: {
@@ -242,13 +242,13 @@ describe("authority", () => {
     expect(legacySite.schema).toEqual(siteSourceSchema);
   });
 
-  it("isolates installed Tasks storage, sync, reset, snapshot, and actions by install id", async () => {
+  it("isolates installed Tasks storage, sync, reset, snapshot, and command operations by install id", async () => {
     await resetInstalledApp("tasks", "work");
     await resetInstalledApp("tasks", "team");
 
     const initialSync = await getInstalledAppJson<SyncResponse>("tasks", "work", "/sync?after=0");
     const created = await postInstalledAppRecordOperation("tasks", "work", {
-      idempotencyKey: "mutation-installed-tasks-work",
+      idempotencyKey: "write-installed-tasks-work",
       entity: "task",
       operationName: "create",
       input: {
@@ -270,7 +270,7 @@ describe("authority", () => {
       }),
     );
     const cleared = await postInstalledAppRecordOperation("tasks", "work", {
-      idempotencyKey: "mutation-installed-tasks-completed",
+      idempotencyKey: "write-installed-tasks-completed",
       entity: "task",
       operationName: "create",
       input: {
@@ -278,8 +278,8 @@ describe("authority", () => {
         done: true,
       },
     });
-    const action = await postInstalledAppCommandOperation("tasks", "work", {
-      idempotencyKey: "action-installed-tasks-clear-completed",
+    const command = await postInstalledAppCommandOperation("tasks", "work", {
+      idempotencyKey: "command-installed-tasks-clear-completed",
       entity: "task",
       operationName: "clearCompletedTasks",
     });
@@ -299,7 +299,7 @@ describe("authority", () => {
     });
     expect(workSnapshot.records).toEqual([...taskSeedRecords, created.record]);
     expect(restored.records).toContainEqual(restoredRecord);
-    expect(action.changes.map((change) => change.payload)).toContainEqual(
+    expect(command.changes.map((change) => change.payload)).toContainEqual(
       expect.objectContaining({
         id: cleared.record.id,
         deletedAt: expect.any(String),
@@ -424,7 +424,7 @@ describe("authority", () => {
 
   it("returns a public page tree for any live site page href", async () => {
     useSchemaApp("site");
-    await postCreateOperationForEntity("mutation-site-extra-page", "block", {
+    await postCreateOperationForEntity("write-site-extra-page", "block", {
       type: "page",
       label: "Extra page",
       href: "/extra-page",
@@ -554,11 +554,11 @@ describe("authority", () => {
     await expectNotFound("/api/dev/reset");
   });
 
-  it("isolates records and mutation replay by schema key", async () => {
-    const task = await postCreateOperation("mutation-shared", { title: "First", done: false });
+  it("isolates records and write replay by schema key", async () => {
+    const task = await postCreateOperation("write-shared", { title: "First", done: false });
 
     useSchemaApp("crm");
-    const contact = await postCreateOperationForEntity("mutation-shared", "contact", {
+    const contact = await postCreateOperationForEntity("write-shared", "contact", {
       label: "Designer",
     });
     const crmBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -566,8 +566,8 @@ describe("authority", () => {
     useSchemaApp("tasks");
     const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    expect(task.writeIdentity).toBe(operationWriteId("task", "create", "mutation-shared"));
-    expect(contact.writeIdentity).toBe(operationWriteId("contact", "create", "mutation-shared"));
+    expect(task.writeIdentity).toBe(operationWriteId("task", "create", "write-shared"));
+    expect(contact.writeIdentity).toBe(operationWriteId("contact", "create", "write-shared"));
     expect(tasksBootstrap.schema).toEqual(appSchema);
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
     expect(crmBootstrap.schema).toEqual(crmSourceSchema);
@@ -629,7 +629,7 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithQueries(defaultQueries()),
     });
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     const nextSchema = schemaWithQueries({
       ...defaultQueries(),
       taskActive: {
@@ -776,7 +776,7 @@ describe("authority", () => {
   });
 
   it("resets only the schema to the source schema while preserving records and cursor", async () => {
-    const created = await postCreateOperation("mutation-reset-schema-record", {
+    const created = await postCreateOperation("write-reset-schema-record", {
       title: "Keep me",
       done: false,
     });
@@ -798,7 +798,7 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskNotesField(),
     });
-    const created = await postCreateOperation("mutation-task-with-retired-field", {
+    const created = await postCreateOperation("write-task-with-retired-field", {
       title: "Has retired field",
       notes: "Remove this when the source schema resets.",
     });
@@ -831,7 +831,7 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithEstimateNumber({ min: -10 }),
     });
-    const created = await postCreateOperation("mutation-negative-estimate", {
+    const created = await postCreateOperation("write-negative-estimate", {
       title: "Negative",
       estimate: -1,
     });
@@ -849,7 +849,7 @@ describe("authority", () => {
   });
 
   it("resets seed data to source schema, records, and seeded changes", async () => {
-    await postCreateOperation("mutation-before-seed-reset", { title: "Temporary", done: false });
+    await postCreateOperation("write-before-seed-reset", { title: "Temporary", done: false });
 
     const reset = await postJson<BootstrapResponse>("/api/reset/seed", {});
     const sync = await getJson<SyncResponse>("/api/sync?after=0");
@@ -874,13 +874,13 @@ describe("authority", () => {
   });
 
   it("resets seed data for one schema key without touching another", async () => {
-    const task = await postCreateOperation("mutation-task-before-rate-reset", {
+    const task = await postCreateOperation("write-task-before-rate-reset", {
       title: "Route local",
       done: false,
     });
 
     useSchemaApp("crm");
-    await postCreateOperationForEntity("mutation-crm-local-contact", "contact", {
+    await postCreateOperationForEntity("write-crm-local-contact", "contact", {
       label: "Temporary contact",
     });
     const crmReset = await postJson<BootstrapResponse>("/api/reset/seed", {});
@@ -895,7 +895,7 @@ describe("authority", () => {
 
   it("exports authority storage snapshots by storage identity and schema key", async () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
-    const created = await postCreateOperation("mutation-snapshot-export-task", {
+    const created = await postCreateOperation("write-snapshot-export-task", {
       title: "Snapshot export",
       done: false,
     });
@@ -926,7 +926,7 @@ describe("authority", () => {
 
   it("keeps manual Site snapshots separate from source seed reset", async () => {
     useSchemaApp("site");
-    const created = await postCreateOperationForEntity("mutation-site-manual-snapshot", "block", {
+    const created = await postCreateOperationForEntity("write-site-manual-snapshot", "block", {
       type: "page",
       label: "Temporary preview page",
       href: "/temporary-preview-page",
@@ -1075,34 +1075,34 @@ describe("authority", () => {
     );
   });
 
-  it("rejects create and patch mutations that violate unique constraints", async () => {
+  it("rejects create and patch writes that violate unique constraints", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithRateReferences({
         constraints: uniqueRatePairConstraints(),
       }),
     });
 
-    const resource = await postCreateOperationForEntity("mutation-resource", "resource", {
+    const resource = await postCreateOperationForEntity("write-resource", "resource", {
       name: "Designer",
     });
-    const card = await postCreateOperationForEntity("mutation-card-default", "card", {
+    const card = await postCreateOperationForEntity("write-card-default", "card", {
       name: "Default",
     });
-    const premiumCard = await postCreateOperationForEntity("mutation-card-premium", "card", {
+    const premiumCard = await postCreateOperationForEntity("write-card-premium", "card", {
       name: "Premium",
     });
-    const defaultRate = await postCreateOperationForEntity("mutation-rate-default", "rate", {
+    const defaultRate = await postCreateOperationForEntity("write-rate-default", "rate", {
       resource: resource.record.id,
       card: card.record.id,
       price: 125,
     });
-    const premiumRate = await postCreateOperationForEntity("mutation-rate-premium", "rate", {
+    const premiumRate = await postCreateOperationForEntity("write-rate-premium", "rate", {
       resource: resource.record.id,
       card: premiumCard.record.id,
       price: 150,
     });
     const pricePatch = await postRecordOperationRequest({
-      idempotencyKey: "mutation-rate-price",
+      idempotencyKey: "write-rate-price",
       entity: "rate",
       operationName: "update",
       recordId: defaultRate.record.id,
@@ -1113,7 +1113,7 @@ describe("authority", () => {
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-rate-duplicate",
+        idempotencyKey: "write-rate-duplicate",
         entity: "rate",
         operationName: "create",
         input: {
@@ -1126,7 +1126,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-rate-move",
+        idempotencyKey: "write-rate-move",
         entity: "rate",
         operationName: "update",
         recordId: premiumRate.record.id,
@@ -1143,13 +1143,13 @@ describe("authority", () => {
       }),
     });
 
-    const completed = await postCreateOperation("mutation-completed", {
+    const completed = await postCreateOperation("write-completed", {
       title: "Reusable",
       done: true,
     });
 
-    await postCommandOperation("action-clear", "clearCompletedTasks");
-    const recreated = await postCreateOperation("mutation-recreated", {
+    await postCommandOperation("command-clear", "clearCompletedTasks");
+    const recreated = await postCreateOperation("write-recreated", {
       title: "Reusable",
       done: false,
     });
@@ -1159,7 +1159,7 @@ describe("authority", () => {
 
   it("creates Site tree child blocks with placement edges and removes only the placement", async () => {
     useSchemaApp("site");
-    const parent = await postCreateOperationForEntity("mutation-site-tree-test-parent", "block", {
+    const parent = await postCreateOperationForEntity("write-site-tree-test-parent", "block", {
       type: "page",
       label: "Tree test parent",
       href: "/tree-test-parent",
@@ -1179,13 +1179,13 @@ describe("authority", () => {
       },
     };
     const added = await postCommandOperationForEntity(
-      "action-site-tree-add-child",
+      "command-site-tree-add-child",
       "block-placement",
       "addTreeChild",
       input,
     );
     const replay = await postCommandOperationForEntity(
-      "action-site-tree-add-child",
+      "command-site-tree-add-child",
       "block-placement",
       "addTreeChild",
       input,
@@ -1196,7 +1196,7 @@ describe("authority", () => {
     )?.payload;
 
     if (!child || !placement) {
-      throw new Error("Site tree child action did not create both records.");
+      throw new Error("Site tree child command did not create both records.");
     }
 
     expect(added.changes).toHaveLength(2);
@@ -1215,7 +1215,7 @@ describe("authority", () => {
     expect(replay).toEqual(added);
 
     const removed = await postCommandOperationForEntity(
-      "action-site-tree-remove-placement",
+      "command-site-tree-remove-placement",
       "block-placement",
       "removeTreePlacement",
       { input: { placementId: placement.id } },
@@ -1249,7 +1249,7 @@ describe("authority", () => {
     });
 
     const created = await postRecordOperationRequest({
-      idempotencyKey: "mutation-1",
+      idempotencyKey: "write-1",
       entity: "task",
       operationName: "create",
       input: { title: "First" },
@@ -1258,10 +1258,10 @@ describe("authority", () => {
     expect(created.record.values.title).toBe("First");
   });
 
-  it("rejects caller-provided system fields in generic mutation values", async () => {
+  it("rejects caller-provided system fields in generic write values", async () => {
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-system-created",
+        idempotencyKey: "write-system-created",
         entity: "task",
         operationName: "create",
         input: { title: "System field", updatedAt: "2026-05-28T00:00:00.000Z" },
@@ -1269,14 +1269,14 @@ describe("authority", () => {
       'Operation input must not include system field "updatedAt".',
     );
 
-    const created = await postCreateOperation("mutation-system-patch-source", {
+    const created = await postCreateOperation("write-system-patch-source", {
       title: "Patch source",
       done: false,
     });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-system-patch",
+        idempotencyKey: "write-system-patch",
         entity: "task",
         operationName: "update",
         recordId: created.record.id,
@@ -1311,7 +1311,7 @@ describe("authority", () => {
   });
 
   it("rejects incompatible schema changes", async () => {
-    await postCreateOperation("mutation-1", { title: "First", done: false });
+    await postCreateOperation("write-1", { title: "First", done: false });
 
     const nextSchema = {
       version: 1,
@@ -1370,8 +1370,8 @@ describe("authority", () => {
   });
 
   it("returns changes after a known sync cursor", async () => {
-    await postCreateOperation("mutation-1", { title: "First", done: false });
-    const second = await postCreateOperation("mutation-2", { title: "Second", done: true });
+    await postCreateOperation("write-1", { title: "First", done: false });
+    const second = await postCreateOperation("write-2", { title: "Second", done: true });
 
     const body = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
 
@@ -1427,8 +1427,8 @@ describe("authority", () => {
   });
 
   it("sends the same stale cursor changes over the sync WebSocket as HTTP sync", async () => {
-    await postCreateOperation("mutation-1", { title: "First", done: false });
-    await postCreateOperation("mutation-2", { title: "Second", done: true });
+    await postCreateOperation("write-1", { title: "First", done: false });
+    await postCreateOperation("write-2", { title: "Second", done: true });
     const cursor = taskSeedRecords.length + 1;
     const httpSync = await getJson<SyncResponse>(`/api/sync?after=${cursor}`);
     const socket = await openSyncSocket();
@@ -1454,12 +1454,12 @@ describe("authority", () => {
     const schemaUpdate = await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskDeleteOperation(),
     });
-    const created = await postCreateOperation("mutation-sync-delete-catchup-source", {
+    const created = await postCreateOperation("write-sync-delete-catchup-source", {
       title: "Delete catch-up source",
       done: false,
     });
     const deleted = await postRecordOperationRequest({
-      idempotencyKey: "mutation-sync-delete-catchup",
+      idempotencyKey: "write-sync-delete-catchup",
       entity: "task",
       operationName: "delete",
       recordId: created.record.id,
@@ -1597,8 +1597,8 @@ describe("authority", () => {
     try {
       await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
 
-      const mutation = {
-        idempotencyKey: "mutation-authority-outcome-policy",
+      const write = {
+        idempotencyKey: "write-authority-outcome-policy",
         entity: "task",
         operationName: "create",
         input: {
@@ -1607,7 +1607,7 @@ describe("authority", () => {
         },
       };
       const committedMessage = readSyncSocketMessage(socket);
-      const committedRequest = recordOperationRequest(mutation);
+      const committedRequest = recordOperationRequest(write);
       const committedResponse = await harness.fetch(apiPath(committedRequest.path), {
         body: JSON.stringify(committedRequest.body),
         headers: { "Content-Type": "application/json" },
@@ -1628,7 +1628,7 @@ describe("authority", () => {
       });
 
       const replayCapture = captureSyncSocketMessages(socket);
-      const replayRequest = recordOperationRequest(mutation);
+      const replayRequest = recordOperationRequest(write);
       const replayResponse = await harness.fetch(apiPath(replayRequest.path), {
         body: JSON.stringify(replayRequest.body),
         headers: { "Content-Type": "application/json" },
@@ -1643,7 +1643,7 @@ describe("authority", () => {
 
       const invalidCapture = captureSyncSocketMessages(socket);
       const invalidRequest = recordOperationRequest({
-        idempotencyKey: "mutation-authority-invalid-no-broadcast",
+        idempotencyKey: "write-authority-invalid-no-broadcast",
         entity: "missing",
         operationName: "create",
         input: {},
@@ -1685,7 +1685,7 @@ describe("authority", () => {
       useSchemaApp("tasks");
       const messageA = readSyncSocketMessage(taskSocketA);
       const messageB = readSyncSocketMessage(taskSocketB);
-      const created = await postCreateOperation("mutation-broadcast-create", {
+      const created = await postCreateOperation("write-broadcast-create", {
         title: "Broadcast create",
         done: false,
       });
@@ -1713,8 +1713,8 @@ describe("authority", () => {
     }
   });
 
-  it("broadcasts committed patch mutations, delete mutations, and actions", async () => {
-    const created = await postCreateOperation("mutation-broadcast-patch-source", {
+  it("broadcasts committed patch writes, delete writes, and commands", async () => {
+    const created = await postCreateOperation("write-broadcast-patch-source", {
       title: "Broadcast patch",
       done: false,
     });
@@ -1729,7 +1729,7 @@ describe("authority", () => {
 
       const patchMessage = readSyncSocketMessage(socket);
       const patched = await postRecordOperationRequest({
-        idempotencyKey: "mutation-broadcast-patch",
+        idempotencyKey: "write-broadcast-patch",
         entity: "task",
         operationName: "update",
         recordId: created.record.id,
@@ -1746,7 +1746,7 @@ describe("authority", () => {
 
       const deleteMessage = readSyncSocketMessage(socket);
       const deleted = await postRecordOperationRequest({
-        idempotencyKey: "mutation-broadcast-delete",
+        idempotencyKey: "write-broadcast-delete",
         entity: "task",
         operationName: "delete",
         recordId: created.record.id,
@@ -1760,28 +1760,28 @@ describe("authority", () => {
         },
       });
 
-      const actionMessage = readSyncSocketMessage(socket);
-      const action = await postCommandOperation("action-broadcast-clear", "clearCompletedTasks");
+      const commandMessage = readSyncSocketMessage(socket);
+      const command = await postCommandOperation("command-broadcast-clear", "clearCompletedTasks");
 
-      await expect(actionMessage).resolves.toEqual({
+      await expect(commandMessage).resolves.toEqual({
         type: "sync",
         payload: {
-          changes: action.changes,
-          cursor: action.cursor,
+          changes: command.changes,
+          cursor: command.cursor,
         },
       });
 
-      const noOpActionMessage = readSyncSocketMessage(socket);
-      const noOpAction = await postCommandOperation(
-        "action-broadcast-no-op-clear",
+      const noOpCommandMessage = readSyncSocketMessage(socket);
+      const noOpCommand = await postCommandOperation(
+        "command-broadcast-no-op-clear",
         "clearCompletedTasks",
       );
 
-      await expect(noOpActionMessage).resolves.toEqual({
+      await expect(noOpCommandMessage).resolves.toEqual({
         type: "sync",
         payload: {
-          changes: noOpAction.changes,
-          cursor: noOpAction.cursor,
+          changes: noOpCommand.changes,
+          cursor: noOpCommand.cursor,
         },
       });
     } finally {
@@ -1841,7 +1841,7 @@ describe("authority", () => {
       schemaSocket.close();
     }
 
-    const created = await postCreateOperation("mutation-before-broadcast-seed-reset", {
+    const created = await postCreateOperation("write-before-broadcast-seed-reset", {
       title: "Temporary",
       done: false,
     });
@@ -1869,13 +1869,13 @@ describe("authority", () => {
     }
   });
 
-  it("does not broadcast failed mutation validation, constraint failures, or mutation replay", async () => {
+  it("does not broadcast failed write validation, constraint failures, or write replay", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskConstraints({
         uniqueTitle: { kind: "unique", fields: ["title"] },
       }),
     });
-    const existing = await postCreateOperation("mutation-constraint-source", {
+    const existing = await postCreateOperation("write-constraint-source", {
       title: "Constraint source",
       done: false,
     });
@@ -1887,7 +1887,7 @@ describe("authority", () => {
 
       const invalidCapture = captureSyncSocketMessages(socket);
       const invalidRequest = recordOperationRequest({
-        idempotencyKey: "mutation-invalid-no-broadcast",
+        idempotencyKey: "write-invalid-no-broadcast",
         entity: "task",
         operationName: "create",
         input: { title: "   " },
@@ -1904,7 +1904,7 @@ describe("authority", () => {
 
       const constraintCapture = captureSyncSocketMessages(socket);
       const constraintRequest = recordOperationRequest({
-        idempotencyKey: "mutation-constraint-no-broadcast",
+        idempotencyKey: "write-constraint-no-broadcast",
         entity: "task",
         operationName: "create",
         input: { title: "Constraint source", done: false },
@@ -1923,13 +1923,13 @@ describe("authority", () => {
       constraintCapture.stop();
 
       const createMessage = readSyncSocketMessage(socket);
-      const mutation = {
-        idempotencyKey: "mutation-replay-no-broadcast",
+      const write = {
+        idempotencyKey: "write-replay-no-broadcast",
         entity: "task",
         operationName: "create",
         input: { title: "Replay check", done: false },
       };
-      const created = await postRecordOperationRequest(mutation);
+      const created = await postRecordOperationRequest(write);
 
       await expect(createMessage).resolves.toEqual({
         type: "sync",
@@ -1940,7 +1940,7 @@ describe("authority", () => {
       });
 
       const replayCapture = captureSyncSocketMessages(socket);
-      const replay = await postRecordOperationRequest(mutation);
+      const replay = await postRecordOperationRequest(write);
       const sync = await getJson<SyncResponse>(`/api/sync?after=${existing.cursor}`);
 
       expect(replay).toEqual(created);
@@ -1954,9 +1954,9 @@ describe("authority", () => {
     }
   });
 
-  it("does not broadcast action replay", async () => {
-    const completed = await postCreateOperation("mutation-action-replay-source", {
-      title: "Action replay source",
+  it("does not broadcast command replay", async () => {
+    const completed = await postCreateOperation("write-command-replay-source", {
+      title: "Command replay source",
       done: true,
     });
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
@@ -1965,30 +1965,30 @@ describe("authority", () => {
     try {
       await primeSyncSocket(socket, completed.cursor, schemaResponse.updatedAt);
 
-      const actionMessage = readSyncSocketMessage(socket);
-      const action = await postCommandOperation(
-        "action-replay-no-broadcast",
+      const commandMessage = readSyncSocketMessage(socket);
+      const command = await postCommandOperation(
+        "command-replay-no-broadcast",
         "clearCompletedTasks",
       );
 
-      await expect(actionMessage).resolves.toEqual({
+      await expect(commandMessage).resolves.toEqual({
         type: "sync",
         payload: {
-          changes: action.changes,
-          cursor: action.cursor,
+          changes: command.changes,
+          cursor: command.cursor,
         },
       });
 
       const replayCapture = captureSyncSocketMessages(socket);
       const replay = await postCommandOperation(
-        "action-replay-no-broadcast",
+        "command-replay-no-broadcast",
         "clearCompletedTasks",
       );
       const sync = await getJson<SyncResponse>(`/api/sync?after=${completed.cursor}`);
 
-      expect(replay).toEqual(action);
-      expect(sync.changes.filter((change) => change.writeId === action.writeIdentity)).toEqual(
-        action.changes,
+      expect(replay).toEqual(command);
+      expect(sync.changes.filter((change) => change.writeId === command.writeIdentity)).toEqual(
+        command.changes,
       );
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
@@ -2058,7 +2058,7 @@ describe("authority", () => {
   it("rejects unknown entity names", async () => {
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-1",
+        idempotencyKey: "write-1",
         entity: "missing",
         operationName: "create",
         input: { title: "First" },
@@ -2070,7 +2070,7 @@ describe("authority", () => {
   it("rejects empty required text", async () => {
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-1",
+        idempotencyKey: "write-1",
         entity: "task",
         operationName: "create",
         input: { title: "   ", done: false },
@@ -2080,7 +2080,7 @@ describe("authority", () => {
   });
 
   it("accepts task values and applies the boolean default", async () => {
-    const response = await postCreateOperation("mutation-1", {
+    const response = await postCreateOperation("write-1", {
       title: "Plan week",
       dueDate: "2026-05-01",
     });
@@ -2098,7 +2098,7 @@ describe("authority", () => {
   it("rejects invalid boolean and date values", async () => {
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-1",
+        idempotencyKey: "write-1",
         entity: "task",
         operationName: "create",
         input: { title: "First", done: "false" },
@@ -2107,7 +2107,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-2",
+        idempotencyKey: "write-2",
         entity: "task",
         operationName: "create",
         input: { title: "First", done: false, dueDate: "05/01/2026" },
@@ -2117,8 +2117,8 @@ describe("authority", () => {
   });
 
   it("accepts enum values, applies enum defaults, and rejects unknown options", async () => {
-    const withDefault = await postCreateOperation("mutation-1", { title: "First" });
-    const explicit = await postCreateOperation("mutation-2", { title: "Second", priority: "high" });
+    const withDefault = await postCreateOperation("write-1", { title: "First" });
+    const explicit = await postCreateOperation("write-2", { title: "Second", priority: "high" });
 
     expect(withDefault.record.values).toMatchObject({
       title: "First",
@@ -2133,7 +2133,7 @@ describe("authority", () => {
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-3",
+        idempotencyKey: "write-3",
         entity: "task",
         operationName: "create",
         input: { title: "Third", priority: "missing" },
@@ -2147,15 +2147,15 @@ describe("authority", () => {
       schema: schemaWithEstimateNumber(),
     });
 
-    const zero = await postCreateOperation("mutation-1", { title: "Zero", estimate: 0 });
-    const estimated = await postCreateOperation("mutation-2", { title: "Estimated", estimate: 3 });
+    const zero = await postCreateOperation("write-1", { title: "Zero", estimate: 0 });
+    const estimated = await postCreateOperation("write-2", { title: "Estimated", estimate: 3 });
 
     expect(zero.record.values.estimate).toBe(0);
     expect(estimated.record.values.estimate).toBe(3);
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-3",
+        idempotencyKey: "write-3",
         entity: "task",
         operationName: "create",
         input: { title: "String estimate", estimate: "3" },
@@ -2164,7 +2164,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-4",
+        idempotencyKey: "write-4",
         entity: "task",
         operationName: "create",
         input: { title: "Decimal estimate", estimate: 1.5 },
@@ -2173,7 +2173,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-5",
+        idempotencyKey: "write-5",
         entity: "task",
         operationName: "create",
         input: { title: "Negative estimate", estimate: -1 },
@@ -2187,16 +2187,16 @@ describe("authority", () => {
       schema: schemaWithEstimateNumber(),
     });
 
-    const created = await postCreateOperation("mutation-1", { title: "First", estimate: 4 });
+    const created = await postCreateOperation("write-1", { title: "First", estimate: 4 });
     const cleared = await postRecordOperationRequest({
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
       input: { estimate: "" },
     });
     const zero = await postRecordOperationRequest({
-      idempotencyKey: "mutation-3",
+      idempotencyKey: "write-3",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -2212,7 +2212,7 @@ describe("authority", () => {
       schema: schemaWithEstimateNumber(),
     });
 
-    const created = await postCreateOperation("mutation-1", { title: "Estimated", estimate: 3 });
+    const created = await postCreateOperation("write-1", { title: "Estimated", estimate: 3 });
 
     const relaxed = await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithEstimateNumber({ max: 5 }),
@@ -2247,9 +2247,9 @@ describe("authority", () => {
       schema: schemaWithPriorityEnum({ required: false }),
     });
 
-    const created = await postCreateOperation("mutation-1", { title: "First", priority: "high" });
+    const created = await postCreateOperation("write-1", { title: "First", priority: "high" });
     const patched = await postRecordOperationRequest({
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -2262,18 +2262,18 @@ describe("authority", () => {
   it("validates reference create and patch values against active target records", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithRateReferences() });
 
-    const resource = await postCreateOperationForEntity("mutation-resource", "resource", {
+    const resource = await postCreateOperationForEntity("write-resource", "resource", {
       name: "Designer",
     });
-    const card = await postCreateOperationForEntity("mutation-card", "card", { name: "Default" });
-    const rate = await postCreateOperationForEntity("mutation-rate", "rate", {
+    const card = await postCreateOperationForEntity("write-card", "card", { name: "Default" });
+    const rate = await postCreateOperationForEntity("write-rate", "rate", {
       resource: resource.record.id,
       card: card.record.id,
       backupResource: resource.record.id,
       price: 125,
     });
     const cleared = await postRecordOperationRequest({
-      idempotencyKey: "mutation-clear-reference",
+      idempotencyKey: "write-clear-reference",
       entity: "rate",
       operationName: "update",
       recordId: rate.record.id,
@@ -2290,7 +2290,7 @@ describe("authority", () => {
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-missing-reference",
+        idempotencyKey: "write-missing-reference",
         entity: "rate",
         operationName: "create",
         input: { resource: "missing", card: card.record.id },
@@ -2299,7 +2299,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-wrong-entity-reference",
+        idempotencyKey: "write-wrong-entity-reference",
         entity: "rate",
         operationName: "create",
         input: { resource: card.record.id, card: card.record.id },
@@ -2308,7 +2308,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-empty-reference",
+        idempotencyKey: "write-empty-reference",
         entity: "rate",
         operationName: "create",
         input: { resource: "", card: card.record.id },
@@ -2317,7 +2317,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-non-string-reference",
+        idempotencyKey: "write-non-string-reference",
         entity: "rate",
         operationName: "create",
         input: { resource: 1, card: card.record.id },
@@ -2327,16 +2327,16 @@ describe("authority", () => {
   });
 
   it("rejects tombstoned reference targets", async () => {
-    const completed = await postCreateOperation("mutation-task", { title: "Done", done: true });
+    const completed = await postCreateOperation("write-task", { title: "Done", done: true });
 
-    await postCommandOperation("action-clear", "clearCompletedTasks");
+    await postCommandOperation("command-clear", "clearCompletedTasks");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithAssignmentReference(),
     });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-assignment",
+        idempotencyKey: "write-assignment",
         entity: "assignment",
         operationName: "create",
         input: { task: completed.record.id },
@@ -2349,11 +2349,11 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskProjectReference({ required: false }),
     });
-    const project = await postCreateOperationForEntity("mutation-project", "project", {
+    const project = await postCreateOperationForEntity("write-project", "project", {
       name: "Buildout",
       code: "BLD",
     });
-    await postCreateOperation("mutation-task", { title: "Scoped", project: project.record.id });
+    await postCreateOperation("write-task", { title: "Scoped", project: project.record.id });
 
     const displayChange = await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskProjectReference({ required: false, displayField: "code" }),
@@ -2378,7 +2378,7 @@ describe("authority", () => {
   });
 
   it("rejects required reference additions when existing records are missing targets", async () => {
-    await postCreateOperation("mutation-task", { title: "Unscoped" });
+    await postCreateOperation("write-task", { title: "Unscoped" });
 
     await expectError(
       "/api/schema",
@@ -2394,19 +2394,19 @@ describe("authority", () => {
       schema: schemaWithRateReferences(),
     });
 
-    const resource = await postCreateOperationForEntity("mutation-resource", "resource", {
+    const resource = await postCreateOperationForEntity("write-resource", "resource", {
       name: "Designer",
     });
-    const card = await postCreateOperationForEntity("mutation-card", "card", {
+    const card = await postCreateOperationForEntity("write-card", "card", {
       name: "Default",
     });
 
-    await postCreateOperationForEntity("mutation-rate-1", "rate", {
+    await postCreateOperationForEntity("write-rate-1", "rate", {
       resource: resource.record.id,
       card: card.record.id,
       price: 125,
     });
-    await postCreateOperationForEntity("mutation-rate-2", "rate", {
+    await postCreateOperationForEntity("write-rate-2", "rate", {
       resource: resource.record.id,
       card: card.record.id,
       price: 150,
@@ -2424,7 +2424,7 @@ describe("authority", () => {
   });
 
   it("accepts enum option catalog changes without scanning existing records", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", priority: "high" });
+    const created = await postCreateOperation("write-1", { title: "First", priority: "high" });
 
     const nextSchema = schemaWithPriorityEnum({
       default: "normal",
@@ -2443,9 +2443,9 @@ describe("authority", () => {
   });
 
   it("patches an existing record and returns patch changes from sync", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     const patched = await postRecordOperationRequest({
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -2468,12 +2468,12 @@ describe("authority", () => {
     });
   });
 
-  it("rejects generic delete mutation requests when policy is disabled", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+  it("rejects generic delete write requests when policy is disabled", async () => {
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-disabled",
+        idempotencyKey: "write-delete-disabled",
         entity: "task",
         operationName: "delete",
         recordId: created.record.id,
@@ -2491,14 +2491,14 @@ describe("authority", () => {
     expect(sync.changes).toEqual([]);
   });
 
-  it("commits enabled generic delete mutations as tombstone changes", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+  it("commits enabled generic delete writes as tombstone changes", async () => {
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskDeleteOperation(),
     });
 
     const deleted = await postRecordOperationRequest({
-      idempotencyKey: "mutation-delete-ready",
+      idempotencyKey: "write-delete-ready",
       entity: "task",
       operationName: "delete",
       recordId: created.record.id,
@@ -2539,18 +2539,18 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskProjectReferenceDeleteEnabled(),
     });
-    const project = await postCreateOperationForEntity("mutation-referenced-project", "project", {
+    const project = await postCreateOperationForEntity("write-referenced-project", "project", {
       name: "Buildout",
       code: "BLD",
     });
-    const task = await postCreateOperation("mutation-referencing-task", {
+    const task = await postCreateOperation("write-referencing-task", {
       title: "Scoped",
       project: project.record.id,
     });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-referenced-project",
+        idempotencyKey: "write-delete-referenced-project",
         entity: "project",
         operationName: "delete",
         recordId: project.record.id,
@@ -2572,22 +2572,22 @@ describe("authority", () => {
       schema: schemaWithTaskProjectReferenceDeleteEnabled(),
     });
     const project = await postCreateOperationForEntity(
-      "mutation-tombstone-reference-project",
+      "write-tombstone-reference-project",
       "project",
       {
         name: "Archive",
         code: "ARC",
       },
     );
-    const task = await postCreateOperation("mutation-tombstoned-referencing-task", {
+    const task = await postCreateOperation("write-tombstoned-referencing-task", {
       title: "Done",
       done: true,
       project: project.record.id,
     });
-    await postCommandOperation("action-tombstone-referencing-task", "clearCompletedTasks");
+    await postCommandOperation("command-tombstone-referencing-task", "clearCompletedTasks");
 
     const deleted = await postRecordOperationRequest({
-      idempotencyKey: "mutation-delete-tombstone-referenced-project",
+      idempotencyKey: "write-delete-tombstone-referenced-project",
       entity: "project",
       operationName: "delete",
       recordId: project.record.id,
@@ -2607,20 +2607,20 @@ describe("authority", () => {
     );
   });
 
-  it("rejects invalid generic delete mutations after policy enables delete", async () => {
-    const active = await postCreateOperation("mutation-active", { title: "First", done: false });
-    const completed = await postCreateOperation("mutation-completed", {
+  it("rejects invalid generic delete writes after policy enables delete", async () => {
+    const active = await postCreateOperation("write-active", { title: "First", done: false });
+    const completed = await postCreateOperation("write-completed", {
       title: "Done",
       done: true,
     });
-    await postCommandOperation("action-tombstone-completed", "clearCompletedTasks");
+    await postCommandOperation("command-tombstone-completed", "clearCompletedTasks");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskDeleteOperation(),
     });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-values",
+        idempotencyKey: "write-delete-values",
         entity: "task",
         operationName: "delete",
         recordId: active.record.id,
@@ -2630,7 +2630,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-missing",
+        idempotencyKey: "write-delete-missing",
         entity: "task",
         operationName: "delete",
         recordId: "missing",
@@ -2639,7 +2639,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-tombstoned",
+        idempotencyKey: "write-delete-tombstoned",
         entity: "task",
         operationName: "delete",
         recordId: completed.record.id,
@@ -2652,7 +2652,7 @@ describe("authority", () => {
     });
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-delete-wrong-entity",
+        idempotencyKey: "write-delete-wrong-entity",
         entity: "project",
         operationName: "delete",
         recordId: active.record.id,
@@ -2661,8 +2661,8 @@ describe("authority", () => {
     );
   });
 
-  it("replays delete mutation IDs without duplicating changes", async () => {
-    const created = await postCreateOperation("mutation-delete-replay-source", {
+  it("replays delete write IDs without duplicating changes", async () => {
+    const created = await postCreateOperation("write-delete-replay-source", {
       title: "First",
       done: false,
     });
@@ -2671,13 +2671,13 @@ describe("authority", () => {
     });
 
     const first = await postRecordOperationRequest({
-      idempotencyKey: "mutation-replay-delete",
+      idempotencyKey: "write-replay-delete",
       entity: "task",
       operationName: "delete",
       recordId: created.record.id,
     });
     const replay = await postRecordOperationRequest({
-      idempotencyKey: "mutation-replay-delete",
+      idempotencyKey: "write-replay-delete",
       entity: "task",
       operationName: "delete",
       recordId: "missing",
@@ -2689,8 +2689,8 @@ describe("authority", () => {
     expect(sync.changes).toEqual(first.changes);
   });
 
-  it("rejects invalid patch mutations", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+  it("rejects invalid patch writes", async () => {
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     const schemaWithProject = {
       version: 1,
       entities: {
@@ -2716,7 +2716,7 @@ describe("authority", () => {
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-2",
+        idempotencyKey: "write-2",
         entity: "task",
         operationName: "update",
         recordId: "missing",
@@ -2726,7 +2726,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-3",
+        idempotencyKey: "write-3",
         entity: "task",
         operationName: "update",
         recordId: created.record.id,
@@ -2736,7 +2736,7 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-4",
+        idempotencyKey: "write-4",
         entity: "project",
         operationName: "update",
         recordId: created.record.id,
@@ -2746,10 +2746,10 @@ describe("authority", () => {
     );
   });
 
-  it("replays patch mutation IDs without duplicating changes", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+  it("replays patch write IDs without duplicating changes", async () => {
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     const body = {
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -2764,12 +2764,12 @@ describe("authority", () => {
     expect(sync.changes).toHaveLength(2);
   });
 
-  it("rejects undeclared or unknown actions", async () => {
+  it("rejects undeclared or unknown command operations", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithViews() });
 
     await expectCommandOperationError(
       {
-        idempotencyKey: "action-1",
+        idempotencyKey: "command-1",
         entity: "task",
         operationName: "clearCompletedTasks",
       },
@@ -2779,7 +2779,7 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: appSchema });
     await expectCommandOperationError(
       {
-        idempotencyKey: "action-2",
+        idempotencyKey: "command-2",
         entity: "task",
         operationName: "missing",
       },
@@ -2789,21 +2789,23 @@ describe("authority", () => {
 
   it("tombstones completed records through clearCompletedTasks", async () => {
     const seedCompleted = getSeedCompletedTask();
-    const completed = await postCreateOperation("mutation-1", { title: "Done", done: true });
-    const active = await postCreateOperation("mutation-2", { title: "Open", done: false });
+    const completed = await postCreateOperation("write-1", { title: "Done", done: true });
+    const active = await postCreateOperation("write-2", { title: "Open", done: false });
 
-    const action = await postCommandOperation("action-1", "clearCompletedTasks");
+    const command = await postCommandOperation("command-1", "clearCompletedTasks");
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
     const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 2}`);
 
-    expect(action.writeIdentity).toBe(operationWriteId("task", "clearCompletedTasks", "action-1"));
-    expect(action.cursor).toBe(taskSeedRecords.length + 4);
-    expect(action.changes).toHaveLength(2);
-    expect(action.changes.map((change) => change.recordId).sort()).toEqual(
+    expect(command.writeIdentity).toBe(
+      operationWriteId("task", "clearCompletedTasks", "command-1"),
+    );
+    expect(command.cursor).toBe(taskSeedRecords.length + 4);
+    expect(command.changes).toHaveLength(2);
+    expect(command.changes.map((change) => change.recordId).sort()).toEqual(
       [seedCompleted.id, completed.record.id].sort(),
     );
-    expect(action.changes.every((change) => change.writeId === action.writeIdentity)).toBe(true);
-    expect(action.changes.every((change) => change.operationKind === "command")).toBe(true);
+    expect(command.changes.every((change) => change.writeId === command.writeIdentity)).toBe(true);
+    expect(command.changes.every((change) => change.operationKind === "command")).toBe(true);
     expect(bootstrap.records).toContainEqual(
       expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
     );
@@ -2811,15 +2813,15 @@ describe("authority", () => {
       expect.objectContaining({ id: completed.record.id, deletedAt: expect.any(String) }),
     );
     expect(bootstrap.records).toContainEqual(active.record);
-    expect(sync.changes).toEqual(action.changes);
+    expect(sync.changes).toEqual(command.changes);
   });
 
-  it("replays clearCompletedTasks action IDs without duplicating changes", async () => {
+  it("replays clearCompletedTasks command IDs without duplicating changes", async () => {
     const seedCompleted = getSeedCompletedTask();
-    const completed = await postCreateOperation("mutation-1", { title: "Done", done: true });
+    const completed = await postCreateOperation("write-1", { title: "Done", done: true });
 
-    const first = await postCommandOperation("action-1", "clearCompletedTasks");
-    const replay = await postCommandOperation("action-1", "clearCompletedTasks");
+    const first = await postCommandOperation("command-1", "clearCompletedTasks");
+    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
     const sync = await getJson<SyncResponse>("/api/sync?after=0");
 
     expect(replay).toEqual(first);
@@ -2829,16 +2831,16 @@ describe("authority", () => {
     expect(sync.changes.filter((change) => change.operationKind === "command")).toHaveLength(2);
   });
 
-  it("replays action IDs without selecting newly matching records", async () => {
+  it("replays command IDs without selecting newly matching records", async () => {
     const seedCompleted = getSeedCompletedTask();
-    const firstCompleted = await postCreateOperation("mutation-1", { title: "Done", done: true });
+    const firstCompleted = await postCreateOperation("write-1", { title: "Done", done: true });
 
-    const first = await postCommandOperation("action-1", "clearCompletedTasks");
-    const secondCompleted = await postCreateOperation("mutation-2", {
+    const first = await postCommandOperation("command-1", "clearCompletedTasks");
+    const secondCompleted = await postCreateOperation("write-2", {
       title: "Done later",
       done: true,
     });
-    const replay = await postCommandOperation("action-1", "clearCompletedTasks");
+    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
     expect(replay).toEqual(first);
@@ -2856,16 +2858,16 @@ describe("authority", () => {
 
   it("records no-op command executions for idempotent replay", async () => {
     await postCommandOperation("setup-clear-completed", "clearCompletedTasks");
-    await postCreateOperation("mutation-1", { title: "Open", done: false });
+    await postCreateOperation("write-1", { title: "Open", done: false });
     const beforeNoOp = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    const first = await postCommandOperation("action-1", "clearCompletedTasks");
-    const replay = await postCommandOperation("action-1", "clearCompletedTasks");
+    const first = await postCommandOperation("command-1", "clearCompletedTasks");
+    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
 
     expect(first).toEqual({
       changes: [],
       cursor: beforeNoOp.cursor,
-      writeIdentity: operationWriteId("task", "clearCompletedTasks", "action-1"),
+      writeIdentity: operationWriteId("task", "clearCompletedTasks", "command-1"),
     });
     expect(replay).toEqual(first);
   });
@@ -2874,13 +2876,13 @@ describe("authority", () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithPriorityStateMachine({ emitEvent: true, removePriorityDefault: true }),
     });
-    const created = await postCreateOperation("mutation-transition-source", {
+    const created = await postCreateOperation("write-transition-source", {
       title: "Transition me",
       done: false,
     });
 
     const first = await postCommandOperationForEntity(
-      "action-transition-priority",
+      "command-transition-priority",
       "task",
       "raisePriority",
       {
@@ -2888,7 +2890,7 @@ describe("authority", () => {
       },
     );
     const replay = await postCommandOperationForEntity(
-      "action-transition-priority",
+      "command-transition-priority",
       "task",
       "raisePriority",
       {
@@ -2930,7 +2932,7 @@ describe("authority", () => {
     expect(sync.changes.filter((change) => change.writeId === first.writeIdentity)).toHaveLength(2);
   });
 
-  it("rejects transition actions for incompatible and tombstoned target records", async () => {
+  it("rejects transition operations for incompatible and tombstoned target records", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithPriorityStateMachine({ deleteEnabled: true }),
     });
@@ -2938,7 +2940,7 @@ describe("authority", () => {
 
     await expectCommandOperationError(
       {
-        idempotencyKey: "action-invalid-transition",
+        idempotencyKey: "command-invalid-transition",
         entity: "task",
         operationName: "raisePriority",
         input: { recordId: lowPriority.id },
@@ -2946,13 +2948,13 @@ describe("authority", () => {
       `cannot transition record "${lowPriority.id}" from state "low"`,
     );
 
-    const normalPriority = await postCreateOperation("mutation-normal-priority", {
+    const normalPriority = await postCreateOperation("write-normal-priority", {
       title: "Normal priority",
       done: false,
       priority: "normal",
     });
-    const reusedActionId = await postCommandOperationForEntity(
-      "action-invalid-transition",
+    const reusedCommandId = await postCommandOperationForEntity(
+      "command-invalid-transition",
       "task",
       "raisePriority",
       {
@@ -2960,16 +2962,16 @@ describe("authority", () => {
       },
     );
     await postRecordOperationRequest({
-      idempotencyKey: "mutation-delete-transition-target",
+      idempotencyKey: "write-delete-transition-target",
       entity: "task",
       operationName: "delete",
       recordId: normalPriority.record.id,
     });
-    const beforeTombstonedAction = await getJson<BootstrapResponse>("/api/bootstrap");
+    const beforeTombstonedCommand = await getJson<BootstrapResponse>("/api/bootstrap");
 
     await expectCommandOperationError(
       {
-        idempotencyKey: "action-tombstoned-transition",
+        idempotencyKey: "command-tombstoned-transition",
         entity: "task",
         operationName: "raisePriority",
         input: { recordId: normalPriority.record.id },
@@ -2977,25 +2979,25 @@ describe("authority", () => {
       `cannot transition tombstoned task record "${normalPriority.record.id}"`,
     );
 
-    expect(reusedActionId.changes).toHaveLength(1);
-    expect(reusedActionId.changes[0]?.payload.values.priority).toBe("high");
+    expect(reusedCommandId.changes).toHaveLength(1);
+    expect(reusedCommandId.changes[0]?.payload.values.priority).toBe("high");
     await expect(getJson<BootstrapResponse>("/api/bootstrap")).resolves.toEqual(
-      beforeTombstonedAction,
+      beforeTombstonedCommand,
     );
   });
 
-  it("rejects generic mutations that bypass machine-owned fields", async () => {
+  it("rejects generic writes that bypass machine-owned fields", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithPriorityStateMachine(),
     });
-    const created = await postCreateOperation("mutation-machine-initial", {
+    const created = await postCreateOperation("write-machine-initial", {
       title: "Initial",
       done: false,
     });
 
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-create-progressed-state",
+        idempotencyKey: "write-create-progressed-state",
         entity: "task",
         operationName: "create",
         input: {
@@ -3008,13 +3010,13 @@ describe("authority", () => {
     );
     await expectRecordOperationError(
       {
-        idempotencyKey: "mutation-direct-state-patch",
+        idempotencyKey: "write-direct-state-patch",
         entity: "task",
         operationName: "update",
         recordId: created.record.id,
         input: { priority: "high" },
       },
-      "must change through transition actions",
+      "must change through transition operations",
     );
 
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -3028,38 +3030,7 @@ describe("authority", () => {
     );
   });
 
-  it("rejects unsupported action schemas through the schema route", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
-          },
-        }),
-      },
-      'Entity "task" has unsupported key "actions"',
-    );
-
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
-            target: {
-              query: "taskActive",
-            },
-          },
-        }),
-      },
-      'Entity "task" has unsupported key "actions"',
-    );
-  });
-
-  it("parses field labels and explicit mutation policy", () => {
+  it("parses field labels and declared operation policy", () => {
     const explicit = parseAppSchema({
       version: 1,
       entities: {
@@ -3120,7 +3091,6 @@ describe("authority", () => {
     });
 
     expect(explicit.entities.task?.fields.title?.label).toBe("Task title");
-    expect(explicit.entities.task).not.toHaveProperty("mutations");
   });
 
   it("parses collection, item, and create views", () => {
@@ -3195,7 +3165,7 @@ describe("authority", () => {
   });
 
   it("allows compatible schema updates that only change views", async () => {
-    await postCreateOperation("mutation-1", { title: "First", done: false });
+    await postCreateOperation("write-1", { title: "First", done: false });
 
     const nextSchema = schemaWithViews({
       taskHome: {
@@ -3334,63 +3304,19 @@ describe("authority", () => {
     );
   });
 
-  it("rejects unsupported mutation policy in schema updates", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithMutations({ create: { enabled: true }, delete: { enabled: false } }),
-      },
-      'Entity "task" has unsupported key "mutations"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithMutations({
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-          archive: { enabled: true },
-        }),
-      },
-      'Entity "task" has unsupported key "mutations"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithMutations({
-          create: { enabled: true },
-          patch: { enabled: true, handler: "taskPatch" },
-          delete: { enabled: false },
-        }),
-      },
-      'Entity "task" has unsupported key "mutations"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithMutations({
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: "yes" },
-        }),
-      },
-      'Entity "task" has unsupported key "mutations"',
-    );
-  });
-
   it("keeps create and update behavior on declared operations", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithViews(),
     });
     const created = await postRecordOperationRequest({
-      idempotencyKey: "mutation-1",
+      idempotencyKey: "write-1",
       entity: "task",
       operationName: "create",
       input: { title: "First", done: false },
     });
 
     const patched = await postRecordOperationRequest({
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -3402,9 +3328,9 @@ describe("authority", () => {
   });
 
   it("replays accepted operations after a compatible schema update", async () => {
-    const created = await postCreateOperation("mutation-1", { title: "First", done: false });
+    const created = await postCreateOperation("write-1", { title: "First", done: false });
     const patched = await postRecordOperationRequest({
-      idempotencyKey: "mutation-2",
+      idempotencyKey: "write-2",
       entity: "task",
       operationName: "update",
       recordId: created.record.id,
@@ -3415,12 +3341,12 @@ describe("authority", () => {
       schema: schemaWithTaskLabel("Task backlog"),
     });
 
-    await expect(
-      postCreateOperation("mutation-1", { title: "First", done: false }),
-    ).resolves.toEqual(created);
+    await expect(postCreateOperation("write-1", { title: "First", done: false })).resolves.toEqual(
+      created,
+    );
     await expect(
       postRecordOperationRequest({
-        idempotencyKey: "mutation-2",
+        idempotencyKey: "write-2",
         entity: "task",
         operationName: "update",
         recordId: created.record.id,
@@ -3710,27 +3636,6 @@ function schemaWithTaskNotesField(): AppSchema {
         ),
       },
     },
-  };
-}
-
-function schemaWithMutations(mutations: unknown) {
-  const fields = appSchema.entities.task.fields;
-
-  return {
-    version: 1,
-    entities: {
-      task: {
-        label: "Task",
-        fields,
-        mutations,
-        operations: taskOperations("Task", fields),
-      },
-    },
-    queries: defaultQueries(),
-    itemViews: defaultItemViews(),
-    tableViews: {},
-    views: defaultViews(),
-    screens: defaultScreens(),
   };
 }
 
@@ -4210,24 +4115,6 @@ function schemaWithItemViews(itemViews: unknown) {
   return {
     ...schemaWithViews(),
     itemViews,
-  };
-}
-
-function schemaWithActions(actions: unknown) {
-  return {
-    version: 1,
-    entities: {
-      task: {
-        label: "Task",
-        fields: appSchema.entities.task.fields,
-        actions,
-      },
-    },
-    queries: defaultQueries(),
-    itemViews: defaultItemViews(),
-    tableViews: {},
-    views: defaultViews(),
-    screens: defaultScreens(),
   };
 }
 

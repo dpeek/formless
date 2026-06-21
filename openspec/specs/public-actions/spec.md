@@ -99,8 +99,8 @@ through an explicit actor policy and public binding.
   operation handler for the target app storage identity
 - AND handler execution receives operation source facts such as host, path,
   canonical operation key, and Site block id through the operation envelope
-- AND public execution does not construct action requests, inspect entity action
-  metadata, or return action response metadata
+- AND public execution tests, fixtures, and response helpers use operation names
+  consistently
 
 ### Requirement: Target-Scoped Public Operation API
 
@@ -164,7 +164,7 @@ invocation envelope before validating input or committing effects.
   and Site block that caused the write
 - AND source records identify the causing operation by canonical operation key
 - AND source records are produced by operation-native create, record-plan, or
-  operation handler execution, not by legacy public action metadata
+  operation handler execution
 
 #### Scenario: Public operation contracts are operation-named
 
@@ -173,6 +173,8 @@ invocation envelope before validating input or committing effects.
 - WHEN those contracts describe public operation execution, storage targets,
   source facts, effects, audit facts, or responses
 - THEN the exported names use `PublicOperation` terminology
+- AND source records identify public writes by canonical operation key rather
+  than display label
 
 #### Scenario: Rejected public attempt is auditable
 

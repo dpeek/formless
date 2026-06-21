@@ -233,7 +233,7 @@ function change(
 ): ChangeRow {
   return {
     seq,
-    writeId: `mutation-${seq}`,
+    writeId: `write-${seq}`,
     operationKind,
     entity: payload.entity,
     recordId: payload.id,

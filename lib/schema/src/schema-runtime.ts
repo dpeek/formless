@@ -13,7 +13,7 @@ import type {
 
 const runtimeSchemaHistoryKinds = [
   "appendOnly",
-  "actionCreated",
+  "operationCreated",
 ] as const satisfies readonly RuntimeSchemaHistorySchema["kind"][];
 
 function isRuntimeSchemaHistoryKind(value: unknown): value is RuntimeSchemaHistorySchema["kind"] {
@@ -331,7 +331,7 @@ function parseHistory(
   assertExactKeys(context, value, ["kind"]);
 
   if (!isRuntimeSchemaHistoryKind(value.kind)) {
-    throw new Error(`${context} kind must be "appendOnly" or "actionCreated".`);
+    throw new Error(`${context} kind must be "appendOnly" or "operationCreated".`);
   }
 
   if (value.kind === "appendOnly") {
@@ -342,7 +342,7 @@ function parseHistory(
     }
   } else if (entityHasOperationKind(entity, "create", "update", "delete")) {
     throw new Error(
-      `${context} actionCreated entities must not declare create, update, or delete operations.`,
+      `${context} operationCreated entities must not declare create, update, or delete operations.`,
     );
   }
 

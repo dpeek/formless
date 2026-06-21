@@ -85,8 +85,8 @@ CRM SHALL remain a standalone app package in this change and SHALL NOT take over
 #### Scenario: No public CRM write route
 
 - **WHEN** the CRM source schema and package app are installed
-- **THEN** the change does not add an anonymous public CRM subscribe action binding
-- **AND** generic CRM mutation and action writes remain protected by existing owner or admin authorization
+- **THEN** CRM does not expose an anonymous public subscribe operation binding
+- **AND** CRM write operations require existing owner or admin authorization
 
 #### Scenario: No email queue execution
 

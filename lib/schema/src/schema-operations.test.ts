@@ -215,7 +215,7 @@ describe("schema entity operations", () => {
     expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
   });
 
-  it("rejects unsupported action-backed command effects", () => {
+  it("rejects unsupported command effect types", () => {
     expect(() =>
       parseAppSchema(
         schemaWithTaskOperations({
@@ -225,9 +225,8 @@ describe("schema entity operations", () => {
             scope: "collection",
             target: { query: "taskCompleted" },
             effect: {
-              type: "runActionKind",
-              kind: "clear-completed",
-              action: "clearCompletedTasks",
+              type: "unsupportedCommandEffect",
+              handler: "clear-completed",
               query: "taskCompleted",
             },
             policy: {
@@ -238,48 +237,25 @@ describe("schema entity operations", () => {
           },
         }),
       ),
-    ).toThrow('has unsupported type "runActionKind"');
+    ).toThrow('has unsupported type "unsupportedCommandEffect"');
   });
 
-  it("rejects source entity actions and mutation policies", () => {
+  it("rejects unsupported source entity interaction keys", () => {
     expect(() =>
       parseAppSchema(
         baseTaskSchema({
           entities: {
             task: taskEntity({
-              actions: {
-                subscribePublic: {
-                  label: "Subscribe",
-                  kind: "subscribe",
+              operationPolicies: {
+                create: {
                   access: anonymousPublicAccess(),
-                  publicInput: {
-                    fields: {
-                      email: { type: "text", required: true, label: "Email" },
-                    },
-                  },
                 },
               },
             }),
           },
         }),
       ),
-    ).toThrow('Entity "task" has unsupported key "actions"');
-
-    expect(() =>
-      parseAppSchema(
-        baseTaskSchema({
-          entities: {
-            task: taskEntity({
-              mutations: {
-                create: { enabled: true },
-                patch: { enabled: true },
-                delete: { enabled: false },
-              },
-            }),
-          },
-        }),
-      ),
-    ).toThrow('Entity "task" has unsupported key "mutations"');
+    ).toThrow('Entity "task" has unsupported key "operationPolicies"');
   });
 
   it("does not synthesize operation bindings without source-declared operations", () => {
@@ -291,8 +267,6 @@ describe("schema entity operations", () => {
     }
 
     expect(schema.entities.task?.operations).toBeUndefined();
-    expect(schema.entities.task).not.toHaveProperty("actions");
-    expect(schema.entities.task).not.toHaveProperty("mutations");
     expect(view.operations).toBeUndefined();
 
     expect(() =>
@@ -308,7 +282,7 @@ describe("schema entity operations", () => {
     ).toThrow('references unknown operation "task.clearCompletedTasks"');
   });
 
-  it("does not project runtime action or mutation state from source-declared operations", () => {
+  it("does not project extra runtime state from source-declared operations", () => {
     const schema = parseAppSchema(
       schemaWithTaskOperations({
         create: {
@@ -335,8 +309,6 @@ describe("schema entity operations", () => {
       }),
     );
 
-    expect(schema.entities.task).not.toHaveProperty("mutations");
-    expect(schema.entities.task).not.toHaveProperty("actions");
     expect(schema.entities.task?.operations?.clearCompletedTasks.effect).toEqual({
       type: "operationHandler",
       handler: "clear-completed",

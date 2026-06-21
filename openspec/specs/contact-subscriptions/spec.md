@@ -35,19 +35,19 @@ The system SHALL provide a default audience for Site subscribe forms before topi
 
 #### Scenario: Subscribe without explicit audience
 
-- GIVEN a subscribe action is submitted without an explicit audience
-- WHEN the action commits subscription records
-- THEN the action writes or reuses the default audience for the target storage identity
+- GIVEN a subscribe operation is submitted without an explicit audience
+- WHEN the operation commits subscription records
+- THEN the operation writes or reuses the default audience for the target storage identity
 - AND the subscription references that audience
 
-### Requirement: Subscribe Action
+### Requirement: Subscribe Operation
 
-The system SHALL provide a public subscribe action that upserts reusable contact subscription records from a visitor email address.
+The system SHALL provide a public subscribe operation that upserts reusable contact subscription records from a visitor email address.
 
 #### Scenario: New email subscribes
 
-- GIVEN a visitor submits a valid email address through the subscribe action
-- WHEN the action commits records
+- GIVEN a visitor submits a valid email address through the subscribe operation
+- WHEN the operation commits records
 - THEN the runtime creates or reuses a contact record
 - AND creates or reuses an email address record with a normalized address
 - AND creates or updates a subscription record with status `subscribed`
@@ -55,14 +55,14 @@ The system SHALL provide a public subscribe action that upserts reusable contact
 #### Scenario: Duplicate email subscribes again
 
 - GIVEN a visitor submits an email address that already has a subscription for the target audience
-- WHEN the subscribe action commits records
+- WHEN the subscribe operation commits records
 - THEN the runtime keeps one email address record and one subscription record for that email-address audience pair
-- AND the action returns a successful subscribed outcome
+- AND the operation returns a successful subscribed outcome
 
 #### Scenario: Resubscribe after unsubscribe state
 
 - GIVEN a visitor submits an email address whose subscription status is `unsubscribed`
-- WHEN the subscribe action commits records
+- WHEN the subscribe operation commits records
 - THEN the runtime updates the subscription status to `subscribed`
 - AND records the new consent timestamp
 
@@ -72,13 +72,13 @@ The system SHALL preserve source context for public subscription consent.
 
 #### Scenario: Source fields are written
 
-- GIVEN a public subscribe action commits a subscription
+- GIVEN a public subscribe operation commits a subscription
 - WHEN the subscription is stored
-- THEN the subscription records the source kind, target app storage identity, action name, request host, request path, and Site block id when available
+- THEN the subscription records the source kind, target app storage identity, canonical operation key, request host, request path, and Site block id when available
 
 #### Scenario: Raw visitor network data is not required
 
-- GIVEN a public subscribe action commits a subscription
+- GIVEN a public subscribe operation commits a subscription
 - WHEN the subscription is stored
 - THEN raw IP address and user-agent values are not required subscription fields
 
