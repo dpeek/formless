@@ -435,7 +435,7 @@ async function parseAndPlanArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = parsePortableArchive(value);
+    archive = parsePortableArchive(value, { packageResolver: target.packageResolver });
   } catch (error) {
     return {
       errors: [
@@ -451,6 +451,7 @@ async function parseAndPlanArchiveRestore(
   const planResult = planPortableArchiveRestore(archive, {
     installedApps: await target.listInstalledApps(),
     mediaFiles: target.media ? await target.media.listFiles() : undefined,
+    packageResolver: target.packageResolver,
     packages: target.packages ?? listResolvedAppPackages(target.packageResolver),
     sourceSchemas: target.sourceSchemas ?? workerSourceSchemas(),
   });

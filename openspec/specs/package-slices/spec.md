@@ -72,6 +72,19 @@ adapters.
 - AND core runtime owns app install identity, route records, Authority storage,
   browser replicas, sync, media storage, and generic archive execution
 - AND code outside the package does not deep-import package internals
+- AND core runtime may register the package adapter for the current environment,
+  but missing adapter registrations are unsupported capability errors rather
+  than package-name fallbacks
+
+#### Scenario: App package source replaces root app files
+
+- GIVEN an app package such as Site owns `formless.app.json`, `schema.json`, and
+  `seed-records.json`
+- WHEN runtime code composes bundled package metadata, source schemas, or seed
+  records
+- THEN it imports the package root or documented source JSON subpaths
+- AND root runtime does not keep duplicate source schema or seed-record files
+  for that app package
 
 ### Requirement: Minimal Package Documentation
 

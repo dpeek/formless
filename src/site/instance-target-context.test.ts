@@ -24,7 +24,7 @@ import {
   siteCliTargetAcceptHeaders,
 } from "./instance-target-context.ts";
 
-describe("Site CLI target context", () => {
+describe("Formless CLI target context", () => {
   it("prefers explicit admin tokens and redacts display labels", async () => {
     const workspaceRoot = await writeTargetWorkspace({ storedAdminToken: "stored-secret" });
     const context = await resolveSiteCliTargetContext(

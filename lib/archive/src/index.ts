@@ -8,15 +8,19 @@ import {
   INSTANCE_ARCHIVE_KIND,
   formatAppArchive,
   formatInstanceArchive,
+  type ArchiveControlPlaneValidationOptions,
   type AppArchive,
   type PortableArchive,
 } from "./types.ts";
 
 export const PORTABLE_ARCHIVE_MANIFEST_FILE = "archive.json";
 
-export function formatPortableArchive(archive: PortableArchive): string {
+export function formatPortableArchive(
+  archive: PortableArchive,
+  options: ArchiveControlPlaneValidationOptions = {},
+): string {
   return archive.kind === INSTANCE_ARCHIVE_KIND
-    ? formatInstanceArchive(archive)
+    ? formatInstanceArchive(archive, options)
     : formatAppArchive(archive);
 }
 

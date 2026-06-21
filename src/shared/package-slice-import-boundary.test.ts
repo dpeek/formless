@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,11 +44,43 @@ describe("package slice import boundaries", () => {
 
     expect(failures).toEqual([]);
   });
+
+  it("keeps Site source consumers on package public exports", async () => {
+    const failures: string[] = [];
+
+    for (const filePath of await boundarySourceFiles()) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenSitePackageImport(specifier)) {
+          failures.push(`${path}: deep-imports Site app package ${specifier}`);
+        }
+
+        if (forbiddenRootSiteSourceImport(specifier)) {
+          failures.push(`${path}: imports removed root Site source path ${specifier}`);
+        }
+      }
+    }
+
+    expect(await pathExists(resolve(repoRoot, "schema/apps/site"))).toBe(false);
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedArchivePackageImports = new Set([
   "@dpeek/formless-archive",
   "@dpeek/formless-archive/node",
+]);
+
+const allowedSitePackageImports = new Set([
+  "@dpeek/formless-site-app",
+  "@dpeek/formless-site-app/formless.app.json",
+  "@dpeek/formless-site-app/node",
+  "@dpeek/formless-site-app/react",
+  "@dpeek/formless-site-app/schema.json",
+  "@dpeek/formless-site-app/seed-records.json",
+  "@dpeek/formless-site-app/worker",
 ]);
 
 async function boundarySourceFiles(): Promise<string[]> {
@@ -134,6 +166,31 @@ function forbiddenArchivePackageInternalImport(importerPath: string, specifier: 
   const resolvedRelativePath = relative(repoRoot, resolvedSpecifier);
 
   return resolvedRelativePath.startsWith("lib/archive/src/");
+}
+
+function forbiddenSitePackageImport(specifier: string): boolean {
+  return (
+    (specifier === "@dpeek/formless-site-app" ||
+      specifier.startsWith("@dpeek/formless-site-app/")) &&
+    !allowedSitePackageImports.has(specifier)
+  );
+}
+
+function forbiddenRootSiteSourceImport(specifier: string): boolean {
+  return specifier.includes("schema/apps/site/");
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 const sourceFileExtensions = new Set([".ts", ".tsx"]);

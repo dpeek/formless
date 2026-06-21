@@ -472,6 +472,7 @@ async function writeDeployStorageSnapshot(
 
   await writeInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
+    packageResolver: bundledAppPackageResolver,
     snapshot: controlPlaneSnapshot(deployControlPlaneRecords(options)),
     workspaceRoot,
   });

@@ -98,8 +98,9 @@ export async function handleInstanceArchiveDurableObjectRequest(
       );
     }
 
+    const packageResolver = activeAppPackageResolver(env);
     const body = parseArchiveRestoreRequest(await readJson(request));
-    const archive = parsePortableArchive(body.archive);
+    const archive = parsePortableArchive(body.archive, { packageResolver });
     const mediaFilesByPath = new Map(body.mediaFiles.map((file) => [file.archivePath, file]));
     const existingInstalls = await readControlPlaneAppInstallsForRequest(env, request.url);
     const target = archiveRestoreApiTarget(request, env, mediaFilesByPath);

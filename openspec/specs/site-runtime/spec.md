@@ -64,6 +64,9 @@ package-owned runtime adapter for the resolved Site app package.
   edges in the selected app storage identity
 - AND the core Authority route does not branch on a hard-coded package app key
   to call Site tree projection behavior
+- AND a package app key other than `site` can use public Site tree behavior when
+  its resolved package declares public Site support and a matching adapter is
+  registered
 
 #### Scenario: Adapter owns public document behavior
 
@@ -77,6 +80,8 @@ package-owned runtime adapter for the resolved Site app package.
   icon, PNG icon, and ICO icon behavior
 - AND request routing, route access, app storage identity, and core media
   delivery remain owned by Formless core runtime boundaries
+- AND mapped public Site hosts select the adapter from the resolved route target
+  package app key rather than assuming package app key `site`
 
 #### Scenario: Adapter absence is unsupported
 
@@ -87,6 +92,16 @@ package-owned runtime adapter for the resolved Site app package.
   or generated public surface requires that adapter
 - THEN the runtime rejects the request as an unsupported package capability
 - AND it does not fall back to the built-in Site implementation by package name
+
+#### Scenario: Source Site fallback is limited to source preview
+
+- GIVEN the dev workbench exposes the bundled source Site app through schema-key
+  routes such as `/site` and `/api/site`
+- WHEN preview public Site rendering has no install-scoped target
+- THEN the runtime may read the schema-key Site storage identity for source
+  preview only
+- AND installed, mapped-host, and published Site rendering do not silently fall
+  back to `/api/site` when their install-scoped target or adapter is missing
 
 ### Requirement: Subscribe Form Public Tree Projection
 
@@ -290,6 +305,17 @@ The system SHALL generate public document metadata, robots output, and sitemap o
 ### Requirement: Published And Installed Sites
 
 The system SHALL support schema-key preview routes, installed Site routes, mapped public Site hosts, and published Site profile redirects with consistent public rendering.
+
+#### Scenario: Public Site capability remains the route contract
+
+- GIVEN a package app declares public Site route support in its package manifest
+- WHEN the core runtime creates or resolves public routes for that package
+- THEN the route contract remains the public Site contract
+- AND the package adapter supplies Site-compatible tree, document, metadata,
+  indexing, and icon behavior
+- AND core runtime does not introduce a separate generic public-renderer
+  contract until another shipped capability requires different public rendering
+  semantics
 
 #### Scenario: Installed Site fallback route
 

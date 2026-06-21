@@ -3,13 +3,18 @@ import {
   type AppArchive,
   type AppArchiveData,
   type AppArchiveMediaObject,
+  type ArchiveControlPlaneValidationOptions,
   type ArchiveRestorePolicy,
   type ArchivedAppInstall,
   type InstanceArchive,
   type PortableArchive,
 } from "./types.ts";
 import { parseAppArchive, parseInstanceArchive, parsePortableArchive } from "./types.ts";
-import { type AppInstall, type InstallableAppPackage } from "@dpeek/formless-installed-apps";
+import {
+  type AppInstall,
+  type AppPackageResolver,
+  type InstallableAppPackage,
+} from "@dpeek/formless-installed-apps";
 import { isValidStoredFieldValue } from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
@@ -32,6 +37,7 @@ export type ArchiveRestoreMediaFile = {
 export type ArchiveRestoreTargetState = {
   installedApps?: readonly AppInstall[];
   mediaFiles?: readonly ArchiveRestoreMediaFile[];
+  packageResolver?: AppPackageResolver;
   packages?: readonly InstallableAppPackage[];
   sourceSchemas?: Partial<Record<string, AppSchema>>;
 };
@@ -148,7 +154,7 @@ export function planPortableArchiveRestore(
   let archive: PortableArchive;
 
   try {
-    archive = parsePortableArchive(value);
+    archive = parsePortableArchive(value, archiveControlPlaneValidationOptions(target));
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -163,7 +169,7 @@ export function planInstanceArchiveRestore(
   let archive: InstanceArchive;
 
   try {
-    archive = parseInstanceArchive(value);
+    archive = parseInstanceArchive(value, archiveControlPlaneValidationOptions(target));
   } catch (error) {
     return invalidArchiveResult(error);
   }
@@ -184,6 +190,12 @@ export function planAppArchiveRestore(
   }
 
   return planParsedAppArchiveRestore(archive, target);
+}
+
+function archiveControlPlaneValidationOptions(
+  target: ArchiveRestoreTargetState,
+): ArchiveControlPlaneValidationOptions {
+  return { packageResolver: target.packageResolver };
 }
 
 function planParsedPortableArchiveRestore(

@@ -1,7 +1,13 @@
 /**
  * Versioned public archive contract declarations, parsers, and formatters.
  */
-import { validateAppInstallId } from "@dpeek/formless-installed-apps";
+import {
+  isSourceSchemaHash,
+  validateAppInstallId,
+  type AppPackageResolver,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "@dpeek/formless-installed-apps";
 import {
   canonicalizeInstanceControlPlaneStorageSnapshot,
   parseInstanceControlPlaneStorageSnapshot,
@@ -9,11 +15,6 @@ import {
 import { STORAGE_SNAPSHOT_KIND, parseStorageSnapshot } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type { AppSchema } from "@dpeek/formless-schema";
-import {
-  isSourceSchemaHash,
-  type PackageAppRevision,
-  type SourceSchemaHash,
-} from "@dpeek/formless-installed-apps";
 import type { MediaAsset } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";
@@ -90,9 +91,16 @@ export type InstanceArchive = {
 
 export type PortableArchive = InstanceArchive | AppArchive;
 
+export type ArchiveControlPlaneValidationOptions = {
+  packageResolver?: AppPackageResolver;
+};
+
 const archiveCapabilitySet = new Set<string>(archiveCapabilities);
 
-export function parsePortableArchive(value: unknown): PortableArchive {
+export function parsePortableArchive(
+  value: unknown,
+  options: ArchiveControlPlaneValidationOptions = {},
+): PortableArchive {
   const object = parseObject("Archive", value);
 
   if (typeof object.kind !== "string" || object.kind.trim() === "") {
@@ -100,7 +108,7 @@ export function parsePortableArchive(value: unknown): PortableArchive {
   }
 
   if (object.kind === INSTANCE_ARCHIVE_KIND) {
-    return parseInstanceArchive(object);
+    return parseInstanceArchive(object, options);
   }
 
   if (object.kind === APP_ARCHIVE_KIND) {
@@ -110,7 +118,10 @@ export function parsePortableArchive(value: unknown): PortableArchive {
   throw new Error(`Archive kind "${object.kind}" is unsupported.`);
 }
 
-export function parseInstanceArchive(value: unknown): InstanceArchive {
+export function parseInstanceArchive(
+  value: unknown,
+  options: ArchiveControlPlaneValidationOptions = {},
+): InstanceArchive {
   const object = parseObject("Instance archive", value);
 
   assertExactKeys("Instance archive", object, [
@@ -147,6 +158,7 @@ export function parseInstanceArchive(value: unknown): InstanceArchive {
           controlPlane: parseInstanceArchiveControlPlane(
             "Instance archive controlPlane",
             object.controlPlane,
+            options,
           ),
         }),
     apps: object.apps.map((app, index) =>
@@ -159,10 +171,17 @@ export function parseAppArchive(value: unknown): AppArchive {
   return parseAppArchiveAt("App archive", value);
 }
 
-export function formatInstanceArchive(archive: InstanceArchive): string {
-  const strippedArchive = canonicalInstanceArchive(archive);
+export function formatInstanceArchive(
+  archive: InstanceArchive,
+  options: ArchiveControlPlaneValidationOptions = {},
+): string {
+  const strippedArchive = canonicalInstanceArchive(archive, options);
 
-  return `${JSON.stringify(canonicalInstanceArchive(parseInstanceArchive(strippedArchive)), null, 2)}\n`;
+  return `${JSON.stringify(
+    canonicalInstanceArchive(parseInstanceArchive(strippedArchive, options), options),
+    null,
+    2,
+  )}\n`;
 }
 
 export function formatAppArchive(archive: AppArchive): string {
@@ -299,8 +318,11 @@ function parseMediaObject(context: string, value: unknown): AppArchiveMediaObjec
 function parseInstanceArchiveControlPlane(
   context: string,
   value: unknown,
+  options: ArchiveControlPlaneValidationOptions,
 ): InstanceArchiveControlPlane {
-  return parseInstanceControlPlaneStorageSnapshot(context, value);
+  return parseInstanceControlPlaneStorageSnapshot(context, value, {
+    packageResolver: options.packageResolver,
+  });
 }
 
 function parseMediaAsset(context: string, value: unknown): MediaAsset {
@@ -504,7 +526,10 @@ function parseRelativeKey(context: string, value: unknown): string {
   return key;
 }
 
-function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
+function canonicalInstanceArchive(
+  archive: InstanceArchive,
+  options: ArchiveControlPlaneValidationOptions = {},
+): InstanceArchive {
   return {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
@@ -513,7 +538,7 @@ function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
     restorePolicy: canonicalRestorePolicy(archive.restorePolicy),
     ...(archive.controlPlane === undefined
       ? {}
-      : { controlPlane: canonicalInstanceArchiveControlPlane(archive.controlPlane) }),
+      : { controlPlane: canonicalInstanceArchiveControlPlane(archive.controlPlane, options) }),
     apps: archive.apps
       .map(canonicalAppArchive)
       .sort((left, right) => left.app.installId.localeCompare(right.app.installId)),
@@ -522,8 +547,11 @@ function canonicalInstanceArchive(archive: InstanceArchive): InstanceArchive {
 
 function canonicalInstanceArchiveControlPlane(
   controlPlane: InstanceArchiveControlPlane,
+  options: ArchiveControlPlaneValidationOptions,
 ): InstanceArchiveControlPlane {
-  return canonicalizeInstanceControlPlaneStorageSnapshot(controlPlane);
+  return canonicalizeInstanceControlPlaneStorageSnapshot(controlPlane, {
+    packageResolver: options.packageResolver,
+  });
 }
 
 function canonicalAppArchive(archive: AppArchive): AppArchive {

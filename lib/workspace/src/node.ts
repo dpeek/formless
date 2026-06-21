@@ -257,6 +257,7 @@ export async function readWorkspacePackageLinks(
 
 export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
   manifest: InstanceWorkspaceManifest;
+  packageResolver?: AppPackageResolver;
   workspaceRoot: string;
 }): Promise<StorageSnapshot | undefined> {
   const filePath = instanceWorkspaceInstanceStatePath(input.workspaceRoot, input.manifest);
@@ -265,6 +266,7 @@ export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
     return await parseInstanceWorkspaceControlPlaneStorageSnapshot(
       await readFile(filePath, "utf8"),
       `Workspace instance state ${instanceWorkspaceInstanceStateRelativePath(input.manifest)}`,
+      { packageResolver: input.packageResolver },
     );
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
@@ -277,6 +279,7 @@ export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
 
 export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
   manifest: InstanceWorkspaceManifest;
+  packageResolver?: AppPackageResolver;
   snapshot: StorageSnapshot | undefined;
   sourceLabel?: string;
   validationContext?: string;
@@ -292,6 +295,7 @@ export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
 
   const snapshot = reviewableControlPlaneStorageSnapshot(input.snapshot, {
     context: input.validationContext,
+    packageResolver: input.packageResolver,
     sourceLabel: input.sourceLabel,
   });
   const state = await workspaceRecordStateFileFromStorageSnapshot(snapshot, {
@@ -781,6 +785,7 @@ export async function writeWorkspaceOperationState(
 async function parseInstanceWorkspaceControlPlaneStorageSnapshot(
   contents: string,
   context: string,
+  options: { packageResolver?: AppPackageResolver } = {},
 ): Promise<StorageSnapshot> {
   const parsed = parseWorkspaceStateJson(contents, context);
 
@@ -803,6 +808,7 @@ async function parseInstanceWorkspaceControlPlaneStorageSnapshot(
 
     return reviewableControlPlaneStorageSnapshot(
       storageSnapshotFromWorkspaceRecordState(state, instanceControlPlaneSchema),
+      { packageResolver: options.packageResolver },
     );
   }
 
@@ -811,6 +817,7 @@ async function parseInstanceWorkspaceControlPlaneStorageSnapshot(
       schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
       storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     }),
+    { packageResolver: options.packageResolver },
   );
 }
 
@@ -877,7 +884,7 @@ function parseInstanceWorkspaceStorageSnapshotValue(
 
 function reviewableControlPlaneStorageSnapshot(
   snapshot: StorageSnapshot,
-  options: { context?: string; sourceLabel?: string } = {},
+  options: { context?: string; packageResolver?: AppPackageResolver; sourceLabel?: string } = {},
 ): StorageSnapshot {
   const parsed = parseStorageSnapshot(snapshot, {
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -886,7 +893,7 @@ function reviewableControlPlaneStorageSnapshot(
 
   return reviewableInstanceControlPlaneStorageSnapshot(parsed, {
     context: options.context ?? "Workspace control-plane storage snapshot records",
-    publicSitePackageFallback: "site",
+    packageResolver: options.packageResolver,
     sourceLabel: options.sourceLabel ?? "Workspace control-plane storage snapshot",
   });
 }

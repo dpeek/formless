@@ -33,7 +33,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `openspec/specs/sync-replica/spec.md`: browser replica, cursors, push sync, local projections.
 - `openspec/specs/generated-ui/spec.md`: React generated surfaces, fields, screens, actions.
 - `openspec/specs/site-runtime/spec.md`: Site records, public tree, SSR, metadata, icons.
-- `openspec/specs/site-cli-publish/spec.md`: standalone Site CLI, save, publish, deploy commands.
+- `openspec/specs/formless-cli/spec.md`: Formless CLI workspace, save, publish, deploy commands.
 - `openspec/specs/installed-apps/spec.md`: product app installs, routes, install storage.
 - `openspec/specs/instance-control-plane/spec.md`: schema-owned instance management records.
 - `openspec/specs/instance-auth/spec.md`: owner passkeys, sessions, admin bearer boundary.
@@ -55,10 +55,11 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `src/client/`: browser replica, projections, generated view models.
 - `src/app/`: React routes, generated UI, Site renderer.
 - `src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
-- `src/site/`: standalone Site CLI, project files, publish, archives, domains.
+- `src/site/`: Formless CLI implementation, project files, publish, archives, domains.
 - `src/media/`: core media model and providers.
 - `src/test/`: shared test fixtures.
-- `schema/apps/`: bundled app schemas and seed records.
+- `schema/apps/`: bundled Tasks and CRM app schemas and seed records.
+- `lib/site-app/`: bundled Site app manifest, schema, seed records, and adapters.
 - `lib/ui/`: shared browser UI package.
 - `lib/media/`: reusable media contracts and adapters package.
 - `lib/deploy/`: reusable deployment contracts and adapters package.
@@ -171,7 +172,7 @@ For `bun agents watch <worker-name>`:
 - Keep data model flat.
 - Compose in view/query/projection/action layer.
 - Backwards compat is not yet a concern: no shims, re-exports, migrations and new schema versions.
-- Tests must not depend on exact `schema/apps/site/seed-records.json` content.
+- Tests must not depend on exact `lib/site-app/seed-records.json` content.
 - Use `src/test/site-records.ts` fixtures for Site record shape.
 - Claims in docs must point to code, schema, tests, specs, or shipped behavior.
 - Shipped facts belong in `openspec/specs/`.

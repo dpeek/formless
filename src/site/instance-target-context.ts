@@ -10,11 +10,13 @@ import {
 } from "@dpeek/formless-workspace";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
+  createWorkspaceAppPackageResolver,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   readInstanceWorkspaceSecretState,
   type InstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
 import type { StoredRecord } from "@dpeek/formless-storage";
+import { bundledAppPackageManifests } from "../shared/app-packages.ts";
 
 export type SiteCliAdminTokenSource = "env" | "explicit" | "missing" | "stored";
 
@@ -247,8 +249,13 @@ async function resolveSiteCliWorkspaceTarget(input: {
   targetAlias: string | null | undefined;
   workspaceRoot: string;
 }): Promise<InstanceWorkspaceTarget | undefined> {
+  const activePackages = await createWorkspaceAppPackageResolver({
+    bundledManifests: bundledAppPackageManifests,
+    workspaceRoot: input.workspaceRoot,
+  });
   const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest: input.manifest,
+    packageResolver: activePackages.resolver,
     workspaceRoot: input.workspaceRoot,
   });
   const deploymentConfig = selectSiteCliDeploymentConfig(

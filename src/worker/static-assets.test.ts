@@ -8,6 +8,8 @@ import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "@dpeek/formless-site-app/worker"
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 const adminToken = "test-admin-token";
+const publishedPackageAppKey = "site";
+const publishedInstallId = "site";
 const iconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 
 let harness: Harness;
@@ -23,6 +25,8 @@ beforeAll(async () => {
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_RUNTIME_PROFILE: "publishedSite",
+        FORMLESS_RUNTIME_APP_INSTALL_ID: publishedInstallId,
+        FORMLESS_RUNTIME_PACKAGE_APP_KEY: publishedPackageAppKey,
       },
       compatibilityDate: "2026-04-28",
       serviceBindings: {
@@ -142,11 +146,14 @@ async function assetBytes(path: string) {
 }
 
 async function resetSiteSeed() {
-  const response = await harness.fetch("/api/site/reset/seed", {
-    body: "{}",
-    headers: adminHeaders(),
-    method: "POST",
-  });
+  const response = await harness.fetch(
+    `/api/app-installs/${publishedPackageAppKey}/${publishedInstallId}/reset/seed`,
+    {
+      body: "{}",
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 }
@@ -159,11 +166,16 @@ async function patchSiteIcon(idempotencyKey: string, icon: string) {
     recordId: "rec_site_settings_primary",
     input: { icon },
   });
-  const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
-    body: JSON.stringify(request.body),
-    headers: adminHeaders(),
-    method: "POST",
-  });
+  const response = await harness.fetch(
+    `/api/app-installs/${publishedPackageAppKey}/${publishedInstallId}${request.path.slice(
+      "/api".length,
+    )}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 }

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { SchemaKey } from "../shared/schema-apps.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
@@ -8,6 +7,8 @@ import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/wor
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 const adminToken = "test-admin-token";
+const publishedPackageAppKey = "site";
+const publishedInstallId = "site";
 
 let harness: Harness;
 
@@ -20,6 +21,8 @@ beforeAll(async () => {
     {
       bindings: {
         FORMLESS_RUNTIME_PROFILE: "publishedSite",
+        FORMLESS_RUNTIME_APP_INSTALL_ID: publishedInstallId,
+        FORMLESS_RUNTIME_PACKAGE_APP_KEY: publishedPackageAppKey,
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
       compatibilityDate: "2026-04-28",
@@ -28,7 +31,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetSchemaApp("site");
+  await resetInstalledApp(publishedPackageAppKey, publishedInstallId);
 });
 
 afterAll(async () => {
@@ -162,23 +165,31 @@ Sitemap: http://example.com/sitemap.xml
   });
 });
 
-async function resetSchemaApp(schemaKey: SchemaKey) {
-  const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {
-    body: "{}",
-    headers: adminHeaders(),
-    method: "POST",
-  });
+async function resetInstalledApp(packageAppKey: string, installId: string) {
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${installId}/reset/seed`,
+    {
+      body: "{}",
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 }
 
 async function postAdminRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
-  const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
-    body: JSON.stringify(request.body),
-    headers: adminHeaders(),
-    method: "POST",
-  });
+  const response = await harness.fetch(
+    `/api/app-installs/${publishedPackageAppKey}/${publishedInstallId}${request.path.slice(
+      "/api".length,
+    )}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 

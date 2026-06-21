@@ -1,11 +1,36 @@
-# Site CLI Publish Specification
+# Formless CLI Specification
 
 ## Purpose
 
-Site CLI publish behavior lets a local Formless workspace run, save, sync, and
+Formless CLI behavior lets a local Formless workspace run, save, sync, and
 manage selected instance access.
 
 ## Requirements
+
+### Requirement: Formless CLI Capability Naming
+
+The system SHALL describe the public CLI capability as the Formless CLI rather
+than as a Site-specific publish CLI.
+
+#### Scenario: Capability path and title
+
+- GIVEN canonical capability specs describe the public `formless` command
+- WHEN the CLI capability is referenced by agents, docs, change metadata, or
+  validation output
+- THEN the capability name is `formless-cli`
+- AND the spec title is Formless CLI
+- AND legacy Site-specific publish capability names are not used for new change
+  metadata or shipped spec references
+
+#### Scenario: Source module names are not the CLI contract
+
+- GIVEN the current implementation may still live under a historical source
+  directory name
+- WHEN users run the package CLI or specs describe command behavior
+- THEN the externally supported command remains `formless`
+- AND the implementation directory name is not part of the public CLI contract
+- AND moving source modules is a mechanical cleanup that can happen separately
+  from the capability rename
 
 ### Requirement: CLI Command Families
 
@@ -307,7 +332,7 @@ snapshots and media payloads.
 
 ### Requirement: Sync Omits Upgrade Planning
 
-The Site CLI SHALL keep push and pull focused on synchronizing current
+The Formless CLI SHALL keep push and pull focused on synchronizing current
 workspace and target state rather than running upgrade or migration policy.
 
 #### Scenario: Push does not run upgrade planning
@@ -321,21 +346,21 @@ workspace and target state rather than running upgrade or migration policy.
 - AND migration and upgrade policy can be reintroduced later as a new explicit
   capability without preserving the removed push/deploy flags
 
-### Requirement: Site CLI Media Package Boundary
+### Requirement: Formless CLI Media Package Boundary
 
-The system SHALL keep workspace save behavior and Site CLI pull and push
+The system SHALL keep workspace save behavior and Formless CLI pull and push
 behavior stable while consuming Media contracts from public package subpaths.
 
 #### Scenario: Archive workflows use Media contract
 
-- GIVEN workspace save, Site CLI pull, or Site CLI push workflows validate or
+- GIVEN workspace save, Formless CLI pull, or Formless CLI push workflows validate or
   move core media payloads
 - WHEN they need media asset, storage key, delivery, or restore result shapes
 - THEN they use public Media package contracts
 
 #### Scenario: Existing archive behavior remains stable
 
-- GIVEN Site CLI workflows move referenced owned image media
+- GIVEN Formless CLI workflows move referenced owned image media
 - WHEN media is represented in workspace source or sync payloads
 - THEN media is represented with core media objects and the `core-media-assets`
   capability
@@ -517,7 +542,7 @@ workspace-controlled deployment intent.
 
 ### Requirement: Schema Control-Plane Protocol
 
-The Site CLI SHALL use the instance protocol and local workspace operation layer
+The Formless CLI SHALL use the instance protocol and local workspace operation layer
 to query, write, save, and compare schema-owned `app-install`, `route`, and
 deployment intent records.
 

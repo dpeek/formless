@@ -15,6 +15,11 @@ import {
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
+  appPackageManifestKind,
+  appPackageManifestVersion,
+  createAppPackageResolver,
+} from "@dpeek/formless-installed-apps";
+import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
@@ -24,6 +29,14 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 const now = "2026-05-23T00:00:00.000Z";
 const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const archivePackageResolver = createAppPackageResolver([
+  packageManifest({
+    label: "Site",
+    packageAppKey: "site",
+    publicSite: true,
+    sourceSchemaHash: siteSourceSchemaHash,
+  }),
+]);
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -102,6 +115,49 @@ function writeOperations(label: string, fields: string[]) {
   };
 }
 
+function packageManifest(input: {
+  label: string;
+  packageAppKey: string;
+  publicSite?: boolean;
+  sourceSchemaHash: string;
+}): Record<string, unknown> {
+  return {
+    kind: appPackageManifestKind,
+    version: appPackageManifestVersion,
+    packageAppKey: input.packageAppKey,
+    label: input.label,
+    description: `${input.label} package fixture.`,
+    defaultInstallId: input.packageAppKey,
+    supportsMultipleInstalls: true,
+    packageRevision: 1,
+    sourceSchema: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: "schema.json",
+    },
+    seedRecords: {
+      kind: "bundled",
+      key: input.packageAppKey,
+      path: "seed-records.json",
+    },
+    sourceSchemaHash: input.sourceSchemaHash,
+    capabilities: [
+      {
+        kind: "generatedAdmin",
+        routeBase: "/apps",
+      },
+      ...(input.publicSite
+        ? [
+            {
+              kind: "publicSite",
+              routeBase: "/sites",
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
 describe("portable archive protocol", () => {
   it("parses the supported version 2 app archive envelope", () => {
     const archive = appArchive({
@@ -143,8 +199,11 @@ describe("portable archive protocol", () => {
       ],
       controlPlane: controlPlaneSnapshot(),
     });
-    const parsed = parseInstanceArchive(archive);
-    const formatted = formatInstanceArchive(parsed);
+    expect(() => parseInstanceArchive(archive)).toThrow(
+      'Instance archive controlPlane records route "route:site:public-site" requires an active package resolver',
+    );
+    const parsed = parseInstanceArchive(archive, { packageResolver: archivePackageResolver });
+    const formatted = formatInstanceArchive(parsed, { packageResolver: archivePackageResolver });
     const formattedArchive = JSON.parse(formatted) as InstanceArchive;
 
     expect(parsed.controlPlane?.records.map((record) => record.entity)).toContain(
@@ -153,11 +212,22 @@ describe("portable archive protocol", () => {
     expect(formattedArchive.controlPlane?.records.map((record) => record.entity)).toContain(
       "deployment-config",
     );
-    expect(
-      parseInstanceArchive(formattedArchive).controlPlane?.records.map((record) => record.entity),
-    ).toContain("deployment-config");
     expect(JSON.stringify(parsed.controlPlane)).not.toContain("rec_site");
-    expect(formatInstanceArchive(parseInstanceArchive(JSON.parse(formatted)))).toBe(formatted);
+    expect(
+      parseInstanceArchive(formattedArchive, {
+        packageResolver: archivePackageResolver,
+      }).controlPlane?.records.map((record) => record.entity),
+    ).toContain("deployment-config");
+    expect(
+      formatInstanceArchive(
+        parseInstanceArchive(JSON.parse(formatted), {
+          packageResolver: archivePackageResolver,
+        }),
+        {
+          packageResolver: archivePackageResolver,
+        },
+      ),
+    ).toBe(formatted);
     const controlPlane = archive.controlPlane;
 
     if (!controlPlane) {
@@ -165,13 +235,18 @@ describe("portable archive protocol", () => {
     }
 
     const formattedObservedArchive = JSON.parse(
-      formatInstanceArchive({
-        ...archive,
-        controlPlane: {
-          ...controlPlane,
-          records: controlPlaneRecords({ observedCache: true }),
+      formatInstanceArchive(
+        {
+          ...archive,
+          controlPlane: {
+            ...controlPlane,
+            records: controlPlaneRecords({ observedCache: true }),
+          },
         },
-      }),
+        {
+          packageResolver: archivePackageResolver,
+        },
+      ),
     ) as InstanceArchive;
 
     expect(JSON.stringify(formattedObservedArchive.controlPlane?.records)).not.toContain(
@@ -179,66 +254,78 @@ describe("portable archive protocol", () => {
     );
 
     expect(() =>
-      parseInstanceArchive({
-        ...archive,
-        controlPlane: {
-          ...controlPlane,
-          records: controlPlaneRecords({
-            accountId: "CF_API_TOKEN",
-          }),
+      parseInstanceArchive(
+        {
+          ...archive,
+          controlPlane: {
+            ...controlPlane,
+            records: controlPlaneRecords({
+              accountId: "CF_API_TOKEN",
+            }),
+          },
         },
-      }),
+        { packageResolver: archivePackageResolver },
+      ),
     ).toThrow("cannot store control-plane secret");
     expect(() =>
-      parseInstanceArchive({
-        ...archive,
-        controlPlane: {
-          ...controlPlane,
-          records: controlPlaneRecords().map((record) =>
-            record.entity === "route" && record.id === "route:host:publicSite:www.example.com"
-              ? {
-                  ...record,
-                  values: {
-                    ...record.values,
-                    toUrl: "https://example.com/CF_API_TOKEN",
-                  },
-                }
-              : record,
-          ),
+      parseInstanceArchive(
+        {
+          ...archive,
+          controlPlane: {
+            ...controlPlane,
+            records: controlPlaneRecords().map((record) =>
+              record.entity === "route" && record.id === "route:host:publicSite:www.example.com"
+                ? {
+                    ...record,
+                    values: {
+                      ...record.values,
+                      toUrl: "https://example.com/CF_API_TOKEN",
+                    },
+                  }
+                : record,
+            ),
+          },
         },
-      }),
+        { packageResolver: archivePackageResolver },
+      ),
     ).toThrow(
       'Instance archive controlPlane records record "route:host:publicSite:www.example.com" field "instance:route.toUrl" cannot store control-plane secret values.',
     );
     expect(() =>
-      parseInstanceArchive({
-        ...archive,
-        controlPlane: {
-          ...controlPlane,
-          records: controlPlaneRecords().map((record) =>
-            record.entity === "route" && record.id === "route:site:public-site"
-              ? {
-                  ...record,
-                  values: {
-                    ...record.values,
-                    appInstall: "missing",
-                  },
-                }
-              : record,
-          ),
+      parseInstanceArchive(
+        {
+          ...archive,
+          controlPlane: {
+            ...controlPlane,
+            records: controlPlaneRecords().map((record) =>
+              record.entity === "route" && record.id === "route:site:public-site"
+                ? {
+                    ...record,
+                    values: {
+                      ...record.values,
+                      appInstall: "missing",
+                    },
+                  }
+                : record,
+            ),
+          },
         },
-      }),
+        { packageResolver: archivePackageResolver },
+      ),
     ).toThrow(
       'Instance archive controlPlane records record "route:site:public-site" field "instance:route.appInstall" references unknown instance:app-install record "missing".',
     );
     expect(() =>
-      parseInstanceArchive({
-        ...archive,
-        controlPlane: {
-          ...controlPlane,
-          records: controlPlaneRecords({ observedCache: true }),
+      parseInstanceArchive(
+        {
+          ...archive,
+          controlPlane: {
+            ...controlPlane,
+            records: controlPlaneRecords({ observedCache: true }),
+          },
         },
-      }),
+        { packageResolver: archivePackageResolver },
+      ),
     ).toThrow("cannot store runtime-observed deployment cache fields");
   });
 

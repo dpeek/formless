@@ -15,6 +15,7 @@ import {
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND,
   INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_VERSION,
 } from "./types.ts";
+import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 import type {
   InstanceWorkspaceControlPlaneRecordSourceControlPlane,
   InstanceWorkspaceControlPlaneRecordSourceEntity,
@@ -132,6 +133,7 @@ export function parseInstanceWorkspaceControlPlaneRecordSourceControlPlane(
   context: string,
   schemaUpdatedAt: unknown,
   records: unknown,
+  options: { packageResolver?: AppPackageResolver } = {},
 ): InstanceWorkspaceControlPlaneRecordSourceControlPlane {
   const controlPlane: InstanceWorkspaceControlPlaneRecordSourceControlPlane = {
     schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -142,28 +144,30 @@ export function parseInstanceWorkspaceControlPlaneRecordSourceControlPlane(
     ) as InstanceWorkspaceStoredRecord[],
   };
 
-  validateInstanceWorkspaceControlPlaneRecordSource(controlPlane);
+  validateInstanceWorkspaceControlPlaneRecordSource(controlPlane, options);
 
   return controlPlane;
 }
 
 export function instanceWorkspaceControlPlaneRecordSourceRecords(
   records: readonly InstanceWorkspaceStoredRecord[],
+  options: { packageResolver?: AppPackageResolver } = {},
 ): InstanceWorkspaceStoredRecord[] {
   return reviewableInstanceControlPlaneRecords(records as readonly StoredRecord[], {
     context: "Workspace control-plane record source records",
-    publicSitePackageFallback: "site",
+    packageResolver: options.packageResolver,
     sourceLabel: "Workspace control-plane record source",
   }) as InstanceWorkspaceStoredRecord[];
 }
 
 export function validateInstanceWorkspaceControlPlaneRecordSource(
   controlPlane: InstanceWorkspaceControlPlaneRecordSourceControlPlane,
+  options: { packageResolver?: AppPackageResolver } = {},
 ) {
   validateInstanceControlPlaneRecords(
     "Workspace control-plane record source records",
     controlPlane.records as readonly StoredRecord[],
-    { publicSitePackageFallback: "site" },
+    { packageResolver: options.packageResolver },
   );
 }
 

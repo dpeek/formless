@@ -22,6 +22,8 @@ import {
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 const adminToken = "test-admin-token";
+const publishedPackageAppKey = "site";
+const publishedInstallId = "site";
 
 let harness: Harness;
 
@@ -34,6 +36,8 @@ beforeAll(async () => {
     {
       bindings: {
         FORMLESS_RUNTIME_PROFILE: "publishedSite",
+        FORMLESS_RUNTIME_APP_INSTALL_ID: publishedInstallId,
+        FORMLESS_RUNTIME_PACKAGE_APP_KEY: publishedPackageAppKey,
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
       compatibilityDate: "2026-04-28",
@@ -43,6 +47,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetSchemaApp("site");
+  await resetInstalledApp(publishedPackageAppKey, publishedInstallId);
 });
 
 afterAll(async () => {
@@ -110,6 +115,27 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("window.__vite_plugin_react_preamble_installed__ = true;");
     expect(html).toContain('<script type="module" src="/src/main.tsx"></script>');
     expect(html).not.toContain("Loading site page...");
+  });
+
+  it("reads published Site documents from the configured installed target", async () => {
+    const authorityRequests: string[] = [];
+    const response = await handlePublicSiteDocumentRequest(
+      new Request("https://example.com/", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(Response.json(testSitePageTree("home")), undefined, "publishedSite", {
+        authorityRequests,
+        installId: "personal",
+        packageAppKey: "site",
+      }),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    expect(response.status).toBe(200);
+    expect(authorityRequests).toEqual(["/api/app-installs/site/personal/tree/home"]);
   });
 
   it("returns HEAD headers for public documents without a response body", async () => {
@@ -442,6 +468,19 @@ async function resetSchemaApp(schemaKey: SchemaKey) {
   expect(response.status).toBe(200);
 }
 
+async function resetInstalledApp(packageAppKey: string, installId: string) {
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${installId}/reset/seed`,
+    {
+      body: "{}",
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+}
+
 async function getDocument(path: string) {
   return harness.fetch(path, {
     headers: {
@@ -480,11 +519,16 @@ async function headDocumentWithoutFollowingRedirect(path: string) {
 
 async function postAdminRecordOperation(body: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(body);
-  const response = await harness.fetch(`/api/site${request.path.slice("/api".length)}`, {
-    body: JSON.stringify(request.body),
-    headers: adminHeaders(),
-    method: "POST",
-  });
+  const response = await harness.fetch(
+    `/api/app-installs/${publishedPackageAppKey}/${publishedInstallId}${request.path.slice(
+      "/api".length,
+    )}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders(),
+      method: "POST",
+    },
+  );
 
   expect(response.status).toBe(200);
 
@@ -527,7 +571,15 @@ function envWithTreeResponse(
   response: Response,
   clientShellHtml?: string,
   runtimeProfile = "publishedSite",
+  options: {
+    authorityRequests?: string[];
+    installId?: string;
+    packageAppKey?: string;
+  } = {},
 ): Env {
+  const installId = options.installId ?? publishedInstallId;
+  const packageAppKey = options.packageAppKey ?? publishedPackageAppKey;
+
   return {
     ASSETS: clientShellHtml
       ? {
@@ -539,11 +591,21 @@ function envWithTreeResponse(
       : undefined,
     FORMLESS_AUTHORITY: {
       get: () => ({
-        fetch: async () => response,
+        fetch: async (request: Request) => {
+          options.authorityRequests?.push(new URL(request.url).pathname);
+
+          return response;
+        },
       }),
       idFromName: () => "site-id",
     },
     FORMLESS_RUNTIME_PROFILE: runtimeProfile,
+    ...(runtimeProfile === "publishedSite"
+      ? {
+          FORMLESS_RUNTIME_APP_INSTALL_ID: installId,
+          FORMLESS_RUNTIME_PACKAGE_APP_KEY: packageAppKey,
+        }
+      : {}),
   } as unknown as Env;
 }
 

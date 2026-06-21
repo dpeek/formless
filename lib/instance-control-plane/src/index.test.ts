@@ -693,6 +693,16 @@ describe("instance control-plane schema contracts", () => {
     );
     expect(JSON.stringify(records[0].values)).not.toContain("packages/private-labs");
     expect(JSON.stringify(records[0].values)).not.toContain("workspace");
+    expect(
+      reviewableInstanceControlPlaneStorageSnapshot(controlPlaneSnapshot({ records }), {
+        packageResolver: resolver,
+      }).records[0]?.values.packageAppKey,
+    ).toBe("private-labs");
+    expect(() =>
+      reviewableInstanceControlPlaneStorageSnapshot(controlPlaneSnapshot({ records })),
+    ).toThrow(
+      'Instance control-plane record source records route "route:labs:public-site" requires an active package resolver',
+    );
   });
 
   it("keeps route paths static, app-relative, lowercase, and away from reserved roots", () => {
@@ -709,26 +719,39 @@ describe("instance control-plane schema contracts", () => {
     const snapshot = controlPlaneSnapshot();
 
     expect(
-      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", snapshot),
+      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", snapshot, {
+        packageResolver: controlPlanePackageResolver,
+      }),
     ).toEqual(snapshot);
     expect(
-      reviewableInstanceControlPlaneStorageSnapshot({
-        ...snapshot,
-        records: controlPlaneRecords({ observedCache: true }),
-      }).records.find((record) => record.entity === "deployment-config")?.values,
+      reviewableInstanceControlPlaneStorageSnapshot(
+        {
+          ...snapshot,
+          records: controlPlaneRecords({ observedCache: true }),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ).records.find((record) => record.entity === "deployment-config")?.values,
     ).not.toHaveProperty("observedStatus");
 
     expect(() =>
-      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", {
-        ...snapshot,
-        records: controlPlaneRecords({ observedCache: true }),
-      }),
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords({ observedCache: true }),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
     ).toThrow("cannot store runtime-observed deployment cache fields");
     expect(() =>
-      parseInstanceControlPlaneStorageSnapshot("Instance archive controlPlane", {
-        ...snapshot,
-        records: controlPlaneRecords({ accountId: "CF_API_TOKEN" }),
-      }),
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords({ accountId: "CF_API_TOKEN" }),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
     ).toThrow("cannot store control-plane secret values");
   });
 });

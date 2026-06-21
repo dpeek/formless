@@ -10,6 +10,7 @@ import {
   archiveRecordCount,
   formatPortableArchive,
   parsePortableArchive,
+  type ArchiveControlPlaneValidationOptions,
   type PortableArchive,
 } from "./index.ts";
 
@@ -40,14 +41,17 @@ export async function writePortableArchiveDirectory(
     archive: PortableArchive;
     mediaFiles: readonly ArchiveDiskMediaFile[];
     outDir: string;
-  },
+  } & ArchiveControlPlaneValidationOptions,
   dependencies: { cwd: string },
 ): Promise<ArchiveDiskWriteResult> {
   const archiveDir = path.resolve(dependencies.cwd, input.outDir);
   const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
 
   await mkdir(archiveDir, { recursive: true });
-  await writeFile(archivePath, formatPortableArchive(input.archive));
+  await writeFile(
+    archivePath,
+    formatPortableArchive(input.archive, { packageResolver: input.packageResolver }),
+  );
 
   for (const file of input.mediaFiles) {
     const filePath = path.join(archiveDir, assertArchiveRelativePath(file.archivePath));
@@ -66,11 +70,13 @@ export async function writePortableArchiveDirectory(
 
 export async function readPortableArchiveDirectory(
   archiveDirInput: string,
-  dependencies: { cwd: string },
+  dependencies: { cwd: string } & ArchiveControlPlaneValidationOptions,
 ): Promise<ReadPortableArchiveDirectoryResult> {
   const archiveDir = path.resolve(dependencies.cwd, archiveDirInput);
   const archivePath = path.join(archiveDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
-  const archive = parsePortableArchive(JSON.parse(await readFile(archivePath, "utf8")) as unknown);
+  const archive = parsePortableArchive(JSON.parse(await readFile(archivePath, "utf8")) as unknown, {
+    packageResolver: dependencies.packageResolver,
+  });
   const mediaFiles = await Promise.all(
     archiveApps(archive).flatMap((app) =>
       app.media.objects.map(async (object) => {

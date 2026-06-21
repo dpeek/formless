@@ -265,6 +265,8 @@ records.
   Site route capability
 - **AND** the validator does not fall back to bundled-only package lookups or
   package key special cases
+- **AND** validation reports missing package resolver context before accepting a
+  public Site mount whose package capability cannot be proven
 
 #### Scenario: Mount route access
 
@@ -415,6 +417,9 @@ canonical source for workspace-authored instance intent.
   `deploy-drift-report` records are not written as workspace source
 - **AND** runtime-observed deployment cache fields on `deployment-config`
   records are omitted from reviewable workspace storage state
+- **AND** reviewable route records that target public Site mounts are validated
+  with the workspace active package resolver before they are written or checked
+  as source
 
 #### Scenario: Restore control-plane records from workspace state
 
@@ -427,6 +432,9 @@ canonical source for workspace-authored instance intent.
   entities before behavior changes
 - **AND** workspace state containing runtime-observed deployment cache fields is
   rejected or stripped before restore
+- **AND** restore rejects public Site route records when the referenced package
+  app key is missing from the active package resolver or lacks public Site route
+  capability
 
 ### Requirement: Browser-Owned Instance Intent
 

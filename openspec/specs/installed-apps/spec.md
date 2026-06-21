@@ -56,6 +56,9 @@ app install can be created.
   workspace, request, or deployment target
 - **AND** globally bundled package metadata is used only as input to the default
   resolver when no workspace-linked packages are present
+- **AND** public Site route validation fails when no active resolver is
+  available rather than treating package app key `site` as an implicit
+  capability fallback
 
 #### Scenario: Runtime adapter availability
 
@@ -71,6 +74,9 @@ app install can be created.
   before calling Site-specific fallback code
 - **AND** install records, route records, and app records do not store adapter
   module paths or executable handler identities
+- **AND** the bundled Site package may be the default registered public Site
+  adapter, but adapter selection is still keyed by resolved package app metadata
+  rather than by source schema key or install id
 
 #### Scenario: Private package availability
 
@@ -140,6 +146,18 @@ instance `route` records.
   public route `/sites/personal`, and public route prefix `/sites/personal/`
 - **AND** app install API metadata can include route summaries derived from route
   records
+
+#### Scenario: Private public Site install routes
+
+- **GIVEN** a private package app declares public Site route capability in the
+  active package resolver
+- **WHEN** an install is created from that package
+- **THEN** route records target the install for an admin route under
+  `/apps/<installId>`
+- **AND** public Site route records use `/sites/<installId>` and
+  `/sites/<installId>/`
+- **AND** the install metadata keeps the private package app key rather than
+  rewriting it to `site`
 
 #### Scenario: Non-Site install routes
 
@@ -409,6 +427,8 @@ The system SHALL derive workspace app install intent from schema-owned
   resources, or remote instances
 - **AND** package source paths, repository URLs, local links, and resolver
   configuration are not copied into the `app-install` record
+- **AND** workspace source that contains public Site route records is validated
+  against that same active resolver before those routes are accepted
 
 #### Scenario: Missing app storage snapshot
 

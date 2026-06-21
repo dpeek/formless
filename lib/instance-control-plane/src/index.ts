@@ -1016,7 +1016,6 @@ export type InstanceControlPlaneRecordSourceExcludedEntityName =
 export type InstanceControlPlaneRecordValidationOptions = {
   context?: string;
   packageResolver?: AppPackageResolver;
-  publicSitePackageFallback?: "allow" | "site";
   sourceLabel?: string;
 };
 
@@ -1585,11 +1584,7 @@ function validateSourceMountRoute(
     );
   }
 
-  if (!installSupportsPublicSiteRoute(install, options)) {
-    throw new Error(
-      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references app-install record "${appInstall}" without public Site capability.`,
-    );
-  }
+  assertInstallSupportsPublicSiteRoute(context, route, install, appInstall, options);
 
   if (matchHost !== undefined && (matchPath !== "/" || matchPrefix !== "/")) {
     throw new Error(
@@ -1652,20 +1647,35 @@ function validateSourceRedirectRoute(
   }
 }
 
-function installSupportsPublicSiteRoute(
+function assertInstallSupportsPublicSiteRoute(
+  context: string,
+  route: StoredRecord,
   install: StoredRecord,
+  appInstall: string,
   options: InstanceControlPlaneRecordValidationOptions,
-): boolean {
+) {
   const packageAppKey =
     typeof install.values.packageAppKey === "string" ? install.values.packageAppKey : "";
 
   if (options.packageResolver === undefined) {
-    return options.publicSitePackageFallback === "site" ? packageAppKey === "site" : true;
+    throw new Error(
+      `${context} route "${route.id}" requires an active package resolver to validate public Site capability for app-install record "${appInstall}".`,
+    );
   }
 
-  return (
-    findResolvedAppPackage(packageAppKey, options.packageResolver)?.publicRouteBase !== undefined
-  );
+  const packageApp = findResolvedAppPackage(packageAppKey, options.packageResolver);
+
+  if (packageApp === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references app-install record "${appInstall}" with unresolved package app "${packageAppKey}".`,
+    );
+  }
+
+  if (packageApp.publicRouteBase === undefined) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "appInstall")}" references app-install record "${appInstall}" without public Site capability.`,
+    );
+  }
 }
 
 function assertEnabledSourceRouteIsUnique(

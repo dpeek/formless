@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
 
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -13,6 +14,12 @@ import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
+import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import { workspaceAppPackageManifestFixture } from "../test/workspace-app-package.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -22,6 +29,8 @@ const controlPlaneApi = "/api/formless/control-plane";
 const mappedHost = "www.example.com";
 const mappedAppHost = "tasks.example.com";
 const installId = "personal";
+const privateSitePackageAppKey = "private-site";
+const privateSiteInstallId = "private-site";
 const taskInstallId = "task-workspace";
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
@@ -327,6 +336,35 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(homeHtml).toContain(`<meta name="formless-runtime-profile" content="publishedSite" />`);
   });
 
+  it("rejects mapped public Site targets without a Worker adapter instead of using source Site", async () => {
+    await withHarness(
+      await createCustomDomainHarness("instance", {
+        [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: await privatePublicSiteRuntimePackages(),
+      }),
+      async () => {
+        await setupMappedPrivateSiteRouteRecord();
+
+        const document = await fetchMappedHost("/", {
+          headers: { Accept: "text/html" },
+        });
+        const robots = await fetchMappedHost("/robots.txt");
+        const favicon = await fetchMappedHost("/favicon.svg");
+        const documentBody = (await document.json()) as { error: string };
+        const robotsBody = (await robots.json()) as { error: string };
+        const faviconBody = (await favicon.json()) as { error: string };
+        const expectedError =
+          'Package app "private-site" declares public Site runtime support, but no public Site Worker adapter is registered.';
+
+        expect(document.status).toBe(400);
+        expect(robots.status).toBe(400);
+        expect(favicon.status).toBe(400);
+        expect(documentBody.error).toBe(expectedError);
+        expect(robotsBody.error).toBe(expectedError);
+        expect(faviconBody.error).toBe(expectedError);
+      },
+    );
+  });
+
   it("resolves exact-host app route records with installed app document hints", async () => {
     await setupMappedAppRouteRecord();
     assetRequests = [];
@@ -549,6 +587,24 @@ async function setupMappedAppRouteRecord() {
   });
 }
 
+async function setupMappedPrivateSiteRouteRecord() {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: privateSitePackageAppKey,
+    installId: privateSiteInstallId,
+    label: "Private Site",
+  });
+  await createRouteRecord(`route:host:publicSite:${mappedHost}`, {
+    enabled: true,
+    matchHost: mappedHost,
+    matchPath: "/",
+    matchPrefix: "/",
+    kind: "mount",
+    targetProfile: "public-site",
+    appInstall: privateSiteInstallId,
+    surface: "public-site",
+  });
+}
+
 async function createRouteRecord(recordId: string, values: Record<string, unknown>) {
   const response = await harness.fetch(`${controlPlaneApi}/operations/route/create`, {
     body: JSON.stringify({
@@ -731,7 +787,10 @@ async function withHarness(target: Harness, run: () => Promise<void>) {
   }
 }
 
-function createCustomDomainHarness(runtimeProfile?: "instance" | "publishedSite") {
+function createCustomDomainHarness(
+  runtimeProfile?: "instance" | "publishedSite",
+  bindings: Record<string, string> = {},
+) {
   return createWorkerHarness(
     "src/worker/index.ts",
     {
@@ -740,6 +799,7 @@ function createCustomDomainHarness(runtimeProfile?: "instance" | "publishedSite"
     {
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
+        ...bindings,
         ...(runtimeProfile === undefined ? {} : { FORMLESS_RUNTIME_PROFILE: runtimeProfile }),
       },
       compatibilityDate: "2026-04-28",
@@ -749,4 +809,25 @@ function createCustomDomainHarness(runtimeProfile?: "instance" | "publishedSite"
       },
     },
   );
+}
+
+async function privatePublicSiteRuntimePackages(): Promise<string> {
+  const sourceSchemaHash = await computeSourceSchemaHash(siteSourceSchema);
+
+  return formatRuntimeWorkspaceAppPackages([
+    {
+      manifest: workspaceAppPackageManifestFixture({
+        packageAppKey: privateSitePackageAppKey,
+        defaultInstallId: privateSiteInstallId,
+        label: "Private Site",
+        sourceSchemaHash,
+        capabilities: [
+          { kind: "generatedAdmin", routeBase: "/apps" },
+          { kind: "publicSite", routeBase: "/sites" },
+        ],
+      }),
+      sourceSchema: siteSourceSchema,
+      seedRecords: siteSeedRecords,
+    },
+  ]);
 }

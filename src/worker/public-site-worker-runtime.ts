@@ -1,6 +1,10 @@
 import type { AppSchema } from "@dpeek/formless-schema";
 
-import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  type AppStorageIdentity,
+  type InstalledAppStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -21,7 +25,6 @@ import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-
 import { BadRequestError } from "./errors.ts";
 import type { Env } from "./index.ts";
 import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
-import type { MappedSiteHost } from "./mapped-site-host.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "../shared/protocol.ts";
@@ -32,6 +35,7 @@ import {
   shouldHandleMappedSiteHostIndexingResource,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
+  resolveWorkerRuntimeRequestTopology,
   type WorkerRuntimeProfileInput,
   type WorkerRuntimeRequestTopology,
   workerRuntimeProfileInput,
@@ -47,8 +51,15 @@ export type PublicSiteWorkerTreeInput = {
 
 export type PublicSiteWorkerRequestOptions = {
   mappedSiteHost?: MappedSiteHost;
+  publishedSiteTarget?: InstalledAppStorageIdentity;
   runtimeProfile?: WorkerRuntimeProfileInput;
   runtimeTopology?: WorkerRuntimeRequestTopology;
+};
+
+export type MappedSiteHost = {
+  host: string;
+  installId: string;
+  target: InstalledAppStorageIdentity;
 };
 
 export type PublicSiteWorkerAdapter = {
@@ -134,7 +145,13 @@ export async function handlePublicSiteIconRequest(
     return undefined;
   }
 
-  const adapter = publicSiteWorkerAdapterForRequestResponse(options);
+  const requestTarget = publicSiteRequestTarget(env, options);
+
+  if (requestTarget instanceof Response) {
+    return requestTarget;
+  }
+
+  const adapter = publicSiteWorkerAdapterForRequestResponse(requestTarget, options);
 
   if (adapter instanceof Response) {
     return adapter;
@@ -152,7 +169,7 @@ export async function handlePublicSiteIconRequest(
   const response = await adapter.renderIcon({
     request: getRequest,
     route,
-    svg: await fetchAuthoredSiteIconSource(getRequest, env, options.mappedSiteHost?.target),
+    svg: await fetchAuthoredSiteIconSource(getRequest, env, requestTarget.target),
   });
 
   return responseWithoutBodyForHead(request, response);
@@ -167,7 +184,13 @@ export async function handlePublicSiteIndexingRequest(
     return undefined;
   }
 
-  const adapter = publicSiteWorkerAdapterForRequestResponse(options);
+  const requestTarget = publicSiteRequestTarget(env, options);
+
+  if (requestTarget instanceof Response) {
+    return requestTarget;
+  }
+
+  const adapter = publicSiteWorkerAdapterForRequestResponse(requestTarget, options);
 
   if (adapter instanceof Response) {
     return adapter;
@@ -196,7 +219,7 @@ export async function handlePublicSiteIndexingRequest(
             ...schemaApps.map((app) => app.route),
           ],
           origin: url.origin,
-          records: await fetchSiteBootstrapRecords(getRequest, env, options.mappedSiteHost?.target),
+          records: await fetchSiteBootstrapRecords(getRequest, env, requestTarget.target),
           resource,
         },
   );
@@ -228,7 +251,13 @@ export async function handlePublicSiteDocumentRequest(
     return undefined;
   }
 
-  const adapter = publicSiteWorkerAdapterForRequestResponse(options);
+  const requestTarget = publicSiteRequestTarget(env, options);
+
+  if (requestTarget instanceof Response) {
+    return requestTarget;
+  }
+
+  const adapter = publicSiteWorkerAdapterForRequestResponse(requestTarget, options);
 
   if (adapter instanceof Response) {
     return adapter;
@@ -240,14 +269,9 @@ export async function handlePublicSiteDocumentRequest(
   const response = await adapter.renderDocument({
     clientAssets: await loadClientDocumentAssets(getRequest, env),
     requestUrl,
-    runtimeHints: publicSiteRuntimeHints(options.mappedSiteHost?.target),
+    runtimeHints: publicSiteRuntimeHints(requestTarget.target),
     slug,
-    treeResult: await fetchSitePageTreeResult(
-      getRequest,
-      env,
-      slug,
-      options.mappedSiteHost?.target,
-    ),
+    treeResult: await fetchSitePageTreeResult(getRequest, env, slug, requestTarget.target),
   });
 
   return responseWithoutBodyForHead(request, response);
@@ -255,7 +279,6 @@ export async function handlePublicSiteDocumentRequest(
 
 export function mappedPublicSiteHostFromRuntimeRoute(
   route: InstanceRuntimeRouteResolution | undefined,
-  resolver?: AppPackageResolver,
 ): MappedSiteHost | undefined {
   if (
     !route ||
@@ -265,12 +288,6 @@ export function mappedPublicSiteHostFromRuntimeRoute(
     !route.matchHost ||
     !route.target
   ) {
-    return undefined;
-  }
-
-  const appPackage = findResolvedAppPackage(route.target.packageAppKey, resolver);
-
-  if (!appPackage?.publicRouteBase) {
     return undefined;
   }
 
@@ -288,20 +305,38 @@ export class UnsupportedPackageCapabilityError extends BadRequestError {
   }
 }
 
-function publicSiteWorkerAdapterForRequest(
-  options: PublicSiteWorkerRequestOptions & { packageResolver?: AppPackageResolver },
-): PublicSiteWorkerAdapter {
-  return publicSiteWorkerAdapterForPackageAppKey(
-    options.mappedSiteHost?.target.packageAppKey ?? runtimeTopologyRoutes.publicSitePackageAppKey,
-    options.packageResolver,
-  );
-}
+type PublicSiteRequestTarget =
+  | {
+      source: "installed";
+      target: InstalledAppStorageIdentity;
+    }
+  | {
+      packageAppKey: string;
+      source: "source";
+      target?: undefined;
+    };
 
-function publicSiteWorkerAdapterForRequestResponse(
+function publicSiteRequestTarget(
+  env: Env,
   options: PublicSiteWorkerRequestOptions & { packageResolver?: AppPackageResolver },
-): PublicSiteWorkerAdapter | Response {
+): PublicSiteRequestTarget | Response {
   try {
-    return publicSiteWorkerAdapterForRequest(options);
+    const target =
+      options.mappedSiteHost?.target ??
+      options.publishedSiteTarget ??
+      publishedSiteTargetFromRuntimeEnv(env, options.packageResolver);
+
+    if (target) {
+      return { source: "installed", target };
+    }
+
+    if (publicSiteRequestRequiresInstalledTarget(env, options)) {
+      throw new UnsupportedPackageCapabilityError(
+        "Published Site runtime target is not configured.",
+      );
+    }
+
+    return { packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey, source: "source" };
   } catch (error) {
     if (error instanceof UnsupportedPackageCapabilityError) {
       return Response.json({ error: error.message }, { status: 400 });
@@ -309,6 +344,78 @@ function publicSiteWorkerAdapterForRequestResponse(
 
     throw error;
   }
+}
+
+function publicSiteWorkerAdapterForRequest(
+  target: PublicSiteRequestTarget,
+  options: PublicSiteWorkerRequestOptions & { packageResolver?: AppPackageResolver },
+): PublicSiteWorkerAdapter {
+  const packageAppKey =
+    target.source === "installed" ? target.target.packageAppKey : target.packageAppKey;
+
+  return publicSiteWorkerAdapterForPackageAppKey(packageAppKey, options.packageResolver);
+}
+
+function publicSiteWorkerAdapterForRequestResponse(
+  target: PublicSiteRequestTarget,
+  options: PublicSiteWorkerRequestOptions & { packageResolver?: AppPackageResolver },
+): PublicSiteWorkerAdapter | Response {
+  try {
+    return publicSiteWorkerAdapterForRequest(target, options);
+  } catch (error) {
+    if (error instanceof UnsupportedPackageCapabilityError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+
+    throw error;
+  }
+}
+
+function publishedSiteTargetFromRuntimeEnv(
+  env: Env,
+  resolver?: AppPackageResolver,
+): InstalledAppStorageIdentity | undefined {
+  const installId = stringConfigValue(env.FORMLESS_RUNTIME_APP_INSTALL_ID);
+  const packageAppKey = stringConfigValue(env.FORMLESS_RUNTIME_PACKAGE_APP_KEY);
+
+  if (!installId && !packageAppKey) {
+    return undefined;
+  }
+
+  if (!installId || !packageAppKey) {
+    throw new UnsupportedPackageCapabilityError(
+      "Published Site runtime target requires both FORMLESS_RUNTIME_APP_INSTALL_ID and FORMLESS_RUNTIME_PACKAGE_APP_KEY.",
+    );
+  }
+
+  const target = installedAppStorageIdentity({ installId, packageAppKey }, resolver);
+
+  if (!target) {
+    throw new UnsupportedPackageCapabilityError(
+      `Published Site runtime target "${packageAppKey}/${installId}" is not resolved.`,
+    );
+  }
+
+  return target;
+}
+
+function publicSiteRequestRequiresInstalledTarget(
+  env: Env,
+  options: PublicSiteWorkerRequestOptions,
+): boolean {
+  const topology =
+    options.runtimeTopology ??
+    options.runtimeProfile ??
+    workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE);
+
+  return (
+    resolveWorkerRuntimeRequestTopology(new Request("https://formless.local/"), topology)
+      .profileKind === "publishedSite"
+  );
+}
+
+function stringConfigValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function publicSiteIconRequest(runtimeTopology?: WorkerRuntimeRequestTopology): boolean {

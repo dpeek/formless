@@ -608,6 +608,92 @@ describe("workspace record state node files", () => {
     );
   });
 
+  it("validates private public Site route record state through the active package resolver", async () => {
+    const workspaceRoot = await makeTempDir();
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
+    const packageResolver = createAppPackageResolver([
+      ...workspaceTestBundledManifests,
+      workspaceTestPackageManifest({
+        label: "Private Labs",
+        packageAppKey: "private-labs",
+        publicSite: true,
+        sourceSchemaHash: "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      }),
+    ]);
+    const records: StoredRecord[] = [
+      {
+        id: "labs",
+        entity: "app-install",
+        values: {
+          installId: "labs",
+          packageAppKey: "private-labs",
+          label: "Private Labs",
+          status: "installed",
+          storageIdentity: "app:labs",
+        },
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+      {
+        id: "route:labs:public-site",
+        entity: "route",
+        values: {
+          enabled: true,
+          matchPath: "/sites/labs",
+          matchPrefix: "/sites/labs/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "labs",
+          surface: "public-site",
+        },
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+    ];
+    const snapshot: StorageSnapshot = {
+      kind: STORAGE_SNAPSHOT_KIND,
+      version: STORAGE_SNAPSHOT_VERSION,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      exportedAt: "2026-06-18T00:00:00.000Z",
+      schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
+      sourceCursor: records.length,
+      schema: instanceControlPlaneSchema,
+      records,
+    };
+
+    await writeInstanceWorkspaceControlPlaneStorageSnapshot({
+      manifest,
+      packageResolver,
+      snapshot,
+      workspaceRoot,
+    });
+
+    await expect(
+      readInstanceWorkspaceControlPlaneStorageSnapshot({
+        manifest,
+        packageResolver,
+        workspaceRoot,
+      }),
+    ).resolves.toMatchObject({
+      records: [
+        {
+          id: "labs",
+          values: { packageAppKey: "private-labs" },
+        },
+        {
+          id: "route:labs:public-site",
+          values: { matchPath: "/sites/labs", matchPrefix: "/sites/labs/" },
+        },
+      ],
+    });
+    await expect(
+      readInstanceWorkspaceControlPlaneStorageSnapshot({ manifest, workspaceRoot }),
+    ).rejects.toThrow(
+      'Workspace control-plane storage snapshot records route "route:labs:public-site" requires an active package resolver',
+    );
+  });
+
   it("writes and reads app record state with package schema provenance", async () => {
     const workspaceRoot = await makeTempDir();
     const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });

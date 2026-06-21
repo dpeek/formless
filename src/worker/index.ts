@@ -71,6 +71,8 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN?: string;
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
+  FORMLESS_RUNTIME_APP_INSTALL_ID?: string;
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
   FORMLESS_WORKSPACE_APP_PACKAGES?: string;
@@ -105,7 +107,7 @@ export default {
 
     const packageResolver = activeAppPackageResolver(env);
     const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
-    const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute, packageResolver);
+    const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute);
     const mappedRouteTargetProfile =
       runtimeRoute?.kind === "mount" ? runtimeRoute.targetProfile : undefined;
     const isMappedAppProfileHost = mappedRouteTargetProfile === "app";

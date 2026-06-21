@@ -36,6 +36,7 @@ import {
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
+  bundledAppPackageManifests,
   bundledAppPackageResolver,
 } from "../shared/app-packages.ts";
 import {
@@ -79,6 +80,7 @@ import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cl
 import {
   instanceWorkspaceInstanceStatePath,
   instanceWorkspaceMediaFilePath,
+  createWorkspaceAppPackageResolver,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceAppStorageSnapshot,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
@@ -126,7 +128,7 @@ afterEach(async () => {
   );
 });
 
-describe("Formless Site CLI", () => {
+describe("Formless CLI", () => {
   it("keeps top-level help aliases and usage output stable", async () => {
     const usage = [
       "Usage: formless <command>",
@@ -679,6 +681,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
 
@@ -868,6 +871,11 @@ describe("Formless Site CLI", () => {
     };
     const deploymentStateRoot = "/workspace/.formless/deploy/personal";
     const context: FormlessInstanceWorkspaceProviderContext = {
+      activePackages: {
+        linkedPackages: [],
+        packageLinks: defaultWorkspacePackageLinks(),
+        resolver: bundledAppPackageResolver,
+      },
       credential: {
         credentialProfile: "personal-profile",
         kind: "alchemy-profile",
@@ -1238,6 +1246,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
     const deploymentConfig = snapshot?.records.find(
@@ -1409,6 +1418,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
     const production = snapshot?.records.find((record) => record.id === "instance.primary");
@@ -1525,6 +1535,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
     const deploymentConfig = snapshot?.records.find(
@@ -1647,6 +1658,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
     const deploymentConfig = snapshot?.records.find(
@@ -1919,6 +1931,7 @@ describe("Formless Site CLI", () => {
       manifest: parseFormlessInstanceWorkspaceManifestJson(
         await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
       ),
+      packageResolver: bundledAppPackageResolver,
       workspaceRoot,
     });
     const reviewableControlPlaneSource = JSON.stringify(controlPlane ?? {});
@@ -3834,6 +3847,7 @@ describe("Formless Site CLI", () => {
     const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
     const archive = parsePortableArchive(
       JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+      { packageResolver: bundledAppPackageResolver },
     );
 
     if (archive.kind !== APP_ARCHIVE_KIND) {
@@ -3950,6 +3964,7 @@ describe("Formless Site CLI", () => {
     const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
     const archive = parsePortableArchive(
       JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+      { packageResolver: bundledAppPackageResolver },
     );
 
     if (archive.kind !== APP_ARCHIVE_KIND) {
@@ -4035,6 +4050,7 @@ describe("Formless Site CLI", () => {
     const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
     const archive = parsePortableArchive(
       JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+      { packageResolver: bundledAppPackageResolver },
     );
 
     if (archive.kind !== INSTANCE_ARCHIVE_KIND) {
@@ -4247,7 +4263,7 @@ describe("Formless Site CLI", () => {
 });
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-site-cli-test-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "formless-cli-test-"));
 
   tempDirs.push(tempDir);
   return tempDir;
@@ -4465,9 +4481,14 @@ async function writeWorkspaceControlPlaneStorageSnapshot(
   const manifest = parseFormlessInstanceWorkspaceManifestJson(
     await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
   );
+  const activePackages = await createWorkspaceAppPackageResolver({
+    bundledManifests: bundledAppPackageManifests,
+    workspaceRoot,
+  });
 
   await writeInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
+    packageResolver: activePackages.resolver,
     snapshot: controlPlaneSnapshot(records),
     workspaceRoot,
   });
@@ -4783,6 +4804,7 @@ async function writeArchiveDirectory(
       archive,
       mediaFiles,
       outDir: archiveRoot,
+      packageResolver: bundledAppPackageResolver,
     },
     { cwd: "/" },
   );

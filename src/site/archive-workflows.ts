@@ -23,7 +23,11 @@ import {
   type AppInstall,
   type InstallableAppPackage,
 } from "@dpeek/formless-installed-apps";
-import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
+import {
+  bundledAppPackageResolver,
+  findResolvedAppPackage,
+  type AppPackageResolver,
+} from "../shared/app-packages.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -101,9 +105,15 @@ export async function exportInstanceArchive(
   const target = normalizeTargetUrl(input.target);
   const exportedAt = dependencies.now();
   const auth = { adminToken: input.adminToken, env: dependencies.env };
+  const packageResolver = input.packageResolver ?? bundledAppPackageResolver;
   const registry = await fetchRemoteAppRegistry(target, { ...dependencies, ...auth });
   const [controlPlane, entries] = await Promise.all([
-    fetchRemoteControlPlaneArchive({ auth, fetcher: dependencies.fetch, target }),
+    fetchRemoteControlPlaneArchive({
+      auth,
+      fetcher: dependencies.fetch,
+      packageResolver,
+      target,
+    }),
     Promise.all(
       registry.installs.map((install) =>
         buildRemoteAppArchiveEntry({
@@ -111,7 +121,7 @@ export async function exportInstanceArchive(
           exportedAt,
           fetcher: dependencies.fetch,
           install,
-          packageResolver: input.packageResolver,
+          packageResolver,
           packages: registry.packages,
           target,
         }),
@@ -129,7 +139,12 @@ export async function exportInstanceArchive(
   };
 
   return writePortableArchiveDirectory(
-    { archive, mediaFiles: entries.flatMap((entry) => entry.mediaFiles), outDir: input.outDir },
+    {
+      archive,
+      mediaFiles: entries.flatMap((entry) => entry.mediaFiles),
+      outDir: input.outDir,
+      packageResolver,
+    },
     dependencies,
   );
 }
@@ -137,6 +152,7 @@ export async function exportInstanceArchive(
 async function fetchRemoteControlPlaneArchive(input: {
   auth?: ArchiveExportAuth;
   fetcher: typeof fetch;
+  packageResolver?: AppPackageResolver;
   target: string;
 }): Promise<InstanceArchiveControlPlane | undefined> {
   const snapshot = await fetchJson<StorageSnapshot>(
@@ -152,8 +168,10 @@ async function fetchRemoteControlPlaneArchive(input: {
     "Instance archive controlPlane",
     reviewableInstanceControlPlaneStorageSnapshot(snapshot, {
       context: "Instance archive controlPlane records",
+      packageResolver: input.packageResolver,
       sourceLabel: "Instance archive controlPlane",
     }),
+    { packageResolver: input.packageResolver },
   );
 }
 
@@ -180,6 +198,7 @@ export async function exportAppArchive(
 ): Promise<ArchiveDiskWriteResult> {
   const target = normalizeTargetUrl(input.target);
   const auth = { adminToken: input.adminToken, env: dependencies.env };
+  const packageResolver = input.packageResolver ?? bundledAppPackageResolver;
   const registry = await fetchRemoteAppRegistry(target, { ...dependencies, ...auth });
   const install = findAppInstall(registry.installs, input.installId);
 
@@ -192,13 +211,18 @@ export async function exportAppArchive(
     exportedAt: dependencies.now(),
     fetcher: dependencies.fetch,
     install,
-    packageResolver: input.packageResolver,
+    packageResolver,
     packages: registry.packages,
     target,
   });
 
   return writePortableArchiveDirectory(
-    { archive: entry.archive, mediaFiles: entry.mediaFiles, outDir: input.outDir },
+    {
+      archive: entry.archive,
+      mediaFiles: entry.mediaFiles,
+      outDir: input.outDir,
+      packageResolver,
+    },
     dependencies,
   );
 }
@@ -208,6 +232,7 @@ export async function restorePortableArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
+    packageResolver?: AppPackageResolver;
     replace: boolean;
     target: string;
   },
@@ -217,13 +242,20 @@ export async function restorePortableArchive(
     archiveDir: input.archiveDir,
     cwd: dependencies.cwd,
   });
-  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
-  const archive = withRestorePolicy(diskArchive.archive, restorePolicy(input));
+  const packageResolver = input.packageResolver ?? bundledAppPackageResolver;
+  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, {
+    ...dependencies,
+    packageResolver,
+  });
+  const archive = withRestorePolicy(diskArchive.archive, restorePolicy(input), {
+    packageResolver,
+  });
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
       archive,
       mediaFiles: diskArchive.mediaFiles,
+      packageResolver,
       target: input.target,
     },
     dependencies,
@@ -241,6 +273,7 @@ export async function restoreWorkspacePushArchive(
     adminToken?: string | null;
     apply: boolean;
     archiveDir: string;
+    packageResolver?: AppPackageResolver;
     target: string;
   },
   dependencies: ArchiveWorkflowDependencies,
@@ -249,22 +282,33 @@ export async function restoreWorkspacePushArchive(
     archiveDir: input.archiveDir,
     cwd: dependencies.cwd,
   });
-  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
+  const packageResolver = input.packageResolver ?? bundledAppPackageResolver;
+  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, {
+    ...dependencies,
+    packageResolver,
+  });
 
   if (diskArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
     throw new Error("Workspace push restore requires a formless.instanceArchive archive.");
   }
 
-  const archive = withRestorePolicy(diskArchive.archive, {
-    dryRun: !input.apply,
-    installCollisions: "replace",
-  });
+  const archive = withRestorePolicy(
+    diskArchive.archive,
+    {
+      dryRun: !input.apply,
+      installCollisions: "replace",
+    },
+    {
+      packageResolver,
+    },
+  );
   const remote = await postRemoteArchiveRestore(
     {
       adminToken: input.adminToken,
       archive,
       exactInstanceReplacement: true,
       mediaFiles: diskArchive.mediaFiles,
+      packageResolver,
       target: input.target,
     },
     dependencies,
@@ -292,7 +336,10 @@ export async function restoreAppArchive(
     archiveDir: input.archiveDir,
     cwd: dependencies.cwd,
   });
-  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
+  const diskArchive = await readPortableArchiveDirectory(input.archiveDir, {
+    ...dependencies,
+    packageResolver: bundledAppPackageResolver,
+  });
 
   if (diskArchive.archive.kind !== APP_ARCHIVE_KIND) {
     throw new Error("App archive restore requires a formless.appArchive archive.");
@@ -576,6 +623,7 @@ async function postRemoteArchiveRestore(
     archive: PortableArchive;
     exactInstanceReplacement?: boolean;
     mediaFiles: readonly ArchiveDiskMediaFile[];
+    packageResolver?: AppPackageResolver;
     target: string;
   },
   dependencies: ArchiveWorkflowDependencies,
@@ -587,7 +635,9 @@ async function postRemoteArchiveRestore(
     apiUrl(target, INSTANCE_ARCHIVE_RESTORE_API_PATH),
     {
       body: JSON.stringify({
-        archive: JSON.parse(formatPortableArchive(input.archive)) as unknown,
+        archive: JSON.parse(
+          formatPortableArchive(input.archive, { packageResolver: input.packageResolver }),
+        ) as unknown,
         ...(input.exactInstanceReplacement === undefined
           ? {}
           : { exactInstanceReplacement: input.exactInstanceReplacement }),
@@ -645,8 +695,11 @@ function retargetAppArchive(archive: AppArchive, installId: string): AppArchive 
 function withRestorePolicy(
   archive: PortableArchive,
   policy: ArchiveRestorePolicy,
+  options: { packageResolver?: AppPackageResolver } = {},
 ): PortableArchive {
-  const nextArchive = parsePortableArchive(jsonClone(archive));
+  const nextArchive = parsePortableArchive(jsonClone(archive), {
+    packageResolver: options.packageResolver,
+  });
 
   nextArchive.restorePolicy = policy;
 
