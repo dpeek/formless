@@ -189,15 +189,16 @@ package slice.
 
 ### Requirement: Workspace Source Of Truth
 
-The system SHALL treat layout-only `formless.json`, optional workspace package
-links, workspace record state files, schema provenance, and media payloads as
-the reviewable local source of truth for local-first Formless workspaces.
+The system SHALL treat the `formless.json` workspace manifest, optional
+workspace package links, workspace record state files, schema provenance, and
+media payloads as the reviewable local source of truth for local-first
+Formless workspaces.
 
 #### Scenario: Fresh local workspace bootstrap
 
 - **WHEN** `formless dev` starts for a selected workspace root without
   `formless.json`
-- **THEN** the CLI writes a layout-only manifest with the workspace name
+- **THEN** the CLI writes a base manifest with the workspace name
   defaulted from the selected directory or confirmed interactive input
 - **AND** the CLI prepares ignored local state and `.gitignore` coverage for
   `.formless/`
@@ -229,8 +230,8 @@ the reviewable local source of truth for local-first Formless workspaces.
 
 #### Scenario: Empty workspace runtime state
 
-- **WHEN** workspace-local dev starts after fresh CLI bootstrap with a
-  layout-only manifest and no record state files
+- **WHEN** workspace-local dev starts after fresh CLI bootstrap with a base
+  manifest and no record state files
 - **THEN** the local product instance starts with no installed apps
 - **AND** the user can install the first app through local Authority-backed
   browser actions
@@ -346,8 +347,43 @@ storing package links in instance control-plane records.
 - **AND** package links are not app install intent, route intent, app data,
   media payloads, provider config, deployment observation, or runtime secret
   state
-- **AND** `formless.json` remains layout-only and does not duplicate package
-  links
+- **AND** `formless.json` remains the workspace manifest and does not duplicate
+  package links
+
+### Requirement: Workspace Runtime Extension Archive Boundary
+
+The system SHALL keep trusted workspace runtime extension code and renderer
+module configuration outside portable app and instance archive envelopes.
+
+#### Scenario: Runtime extension config is not archive data
+
+- **WHEN** an app or instance archive is exported from a Formless instance or
+  composed from workspace source
+- **THEN** the archive includes app data, control-plane data, schemas, package
+  facts, and media payloads selected by the archive capabilities
+- **AND** the archive does not include workspace renderer source files,
+  renderer module paths, `formless.json` `runtime.extensions` entries, build
+  aliases, local dependency paths, or runtime extension digests
+- **AND** archive package facts do not imply that a restored target has the
+  same workspace renderer code available
+
+#### Scenario: Restore without renderer code
+
+- **GIVEN** Site app records are restored or imported into a workspace or
+  runtime that does not configure `site.publicRenderer`
+- **WHEN** public Site preview, installed, mapped-host, or published rendering
+  runs for those restored records
+- **THEN** the bundled Site renderer is used
+- **AND** restore does not fail only because the source workspace used a custom
+  renderer outside the archive
+
+#### Scenario: Runtime extension config remains workspace source
+
+- **WHEN** a workspace push needs runtime code in addition to archive data
+- **THEN** the workflow resolves runtime extension config from the reviewable
+  workspace manifest outside the portable archive envelope
+- **AND** archive restore planning, import validation, and archive metadata do
+  not read renderer modules or execute workspace renderer code
 
 ### Requirement: Workspace Package Boundary
 
@@ -405,9 +441,10 @@ manifest.
 #### Scenario: Workspace manifest
 
 - **WHEN** a Formless workspace manifest is written
-- **THEN** `formless.json` remains manifest version `1` and stores only layout
-  and local configuration such as kind, name, workspace state root, media root,
-  ignored local state root, and ignored secret state root
+- **THEN** `formless.json` remains manifest version `1` and stores
+  workspace-local configuration such as kind, name, workspace state root, media
+  root, ignored local state root, ignored secret state root, and optional
+  runtime extension declarations
 - **AND** `app-install`, unified `route`, `deployment-config` intent, remote
   target facts, deployment observation cache, deployment execution history, and
   default app policy are not stored in `formless.json`

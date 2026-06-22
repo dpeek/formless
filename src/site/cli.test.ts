@@ -53,6 +53,11 @@ import {
 import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
+  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
+  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
+  SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY,
+} from "../shared/workspace-runtime-extensions.ts";
+import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
@@ -68,6 +73,7 @@ import {
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
   formatWorkspacePackageLinks,
+  type InstanceWorkspaceManifest,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
   workspaceOperationDefinitionForKind,
 } from "@dpeek/formless-workspace";
@@ -1173,7 +1179,16 @@ describe("Formless CLI", () => {
       return readFetch(url, init);
     };
 
-    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceManifest(workspaceRoot, {
+      runtime: {
+        extensions: {
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
     await writeWorkspaceControlPlaneStorageSnapshot(
       workspaceRoot,
       controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
@@ -1208,6 +1223,14 @@ describe("Formless CLI", () => {
     expect(deployInputs).toHaveLength(1);
     expect(deployInputs[0]?.plan.adoptExistingDeployment).toBe(false);
     expect(deployInputs[0]?.secrets.FORMLESS_ADMIN_TOKEN).toBe("generated-token");
+    expect(deployInputs[0]?.workspaceRoot).toBe(workspaceRoot);
+    expect(JSON.parse(deployInputs[0]?.workspaceRuntimeExtensions ?? "")).toEqual({
+      [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+        browser: "src/site/public-renderer.browser.tsx",
+        worker: "src/site/public-renderer.worker.tsx",
+      },
+    });
+    expect(deployInputs[0]?.workspaceAppPackages ?? "").not.toContain("public-renderer");
     expect(setupInputs).toEqual([
       {
         adminToken: "generated-token",
@@ -1241,6 +1264,17 @@ describe("Formless CLI", () => {
           }>(request).exactInstanceReplacement,
       ),
     ).toEqual([true, true]);
+    for (const request of restoreRequests) {
+      const body = capturedRequestJson<{
+        archive: InstanceArchive;
+        exactInstanceReplacement: boolean;
+      }>(request);
+
+      expectPortableArchiveExcludesRuntimeExtensions(body.archive);
+      for (const app of body.archive.apps) {
+        expectPortableArchiveExcludesRuntimeExtensions(app);
+      }
+    }
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
@@ -2058,6 +2092,151 @@ describe("Formless CLI", () => {
     expect(logs.join("\n")).not.toContain("drift");
     expect(logs.join("\n")).not.toContain("deploy");
     expect(requests.some((request) => request.method === "POST")).toBe(false);
+  });
+
+  it("rebuilds runtime extensions on repeat push apply without restoring archive data", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      runtime: {
+        extensions: {
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toHaveLength(1);
+    expect(JSON.parse(deployInputs[0]?.workspaceRuntimeExtensions ?? "")).toEqual({
+      [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+        browser: "src/site/public-renderer.browser.tsx",
+        worker: "src/site/public-renderer.worker.tsx",
+      },
+    });
+    expect(
+      requests.filter(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname === "/api/formless/archive/restore",
+      ),
+    ).toEqual([]);
+    expect(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname ===
+            "/api/formless/control-plane/operations/deployment-config/update",
+      ),
+    ).toBe(true);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: apply.");
+    expect(logs[0]).toContain("runtimeRebuild: applied.");
+    expect(logs[0]).toContain("sync: up-to-date.");
+    expect(logs[0]).not.toContain("public-renderer.browser.tsx");
+    expect(logs[0]).not.toContain("public-renderer.worker.tsx");
+  });
+
+  it("reports runtime extension rebuild availability on repeat push dry-run without mutation", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      runtime: {
+        extensions: {
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: dry-run.");
+    expect(logs[0]).toContain("noop: true.");
+    expect(logs[0]).toContain("runtimeRebuild: available.");
+    expect(logs[0]).toContain("sync: up-to-date.");
+    expect(logs[0]).not.toContain("public-renderer.browser.tsx");
+    expect(logs[0]).not.toContain("public-renderer.worker.tsx");
   });
 
   it("treats matching app records and schema provenance as repeat push no-op when remote schema bodies differ", async () => {
@@ -3087,7 +3266,17 @@ describe("Formless CLI", () => {
     const spawnCalls: CapturedSpawn[] = [];
     const sourceSchemaHash = await computeSourceSchemaHash(taskSourceSchema);
 
-    await writeWorkspaceManifest(workspaceRoot, { apps: [] });
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [],
+      runtime: {
+        extensions: {
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
     await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writePrivatePackageFixture(packageRoot, sourceSchemaHash);
     await writeWorkspaceControlPlaneStorageSnapshot(
@@ -3122,11 +3311,20 @@ describe("Formless CLI", () => {
     await run;
 
     const runtimePackages = spawnCalls[0]?.env?.[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME];
+    const runtimeExtensions = spawnCalls[0]?.env?.[FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME];
 
+    expect(spawnCalls[0]?.env?.[FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]).toBe(workspaceRoot);
     expect(runtimePackages).toContain('"packageAppKey": "private-labs"');
     expect(runtimePackages).toContain('"sourceSchema"');
     expect(runtimePackages).not.toContain("../app/formless.app.json");
     expect(runtimePackages).not.toContain(packageRoot);
+    expect(runtimePackages).not.toContain("public-renderer");
+    expect(JSON.parse(runtimeExtensions ?? "")).toEqual({
+      [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+        browser: "src/site/public-renderer.browser.tsx",
+        worker: "src/site/public-renderer.worker.tsx",
+      },
+    });
 
     const restoreBody = capturedRequestJson<{
       archive: InstanceArchive;
@@ -3931,6 +4129,7 @@ describe("Formless CLI", () => {
 
     expect(archive.app.installId).toBe("personal");
     expect(archive.capabilities).toEqual(["app-store-snapshots", "core-media-assets"]);
+    expectPortableArchiveExcludesRuntimeExtensions(archive);
     expect(archive.media.objects).toEqual([
       expect.objectContaining({
         archivePath: "media/personal/media/images/cover.png",
@@ -4169,6 +4368,10 @@ describe("Formless CLI", () => {
       "app-store-snapshots",
       "core-media-assets",
     ]);
+    expectPortableArchiveExcludesRuntimeExtensions(archive);
+    for (const app of archive.apps) {
+      expectPortableArchiveExcludesRuntimeExtensions(app);
+    }
     expect(personal?.media.objects).toEqual([
       expect.objectContaining({
         archivePath: "media/personal/media/images/cover.png",
@@ -4385,6 +4588,20 @@ function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
   return JSON.parse(request.body) as T;
 }
 
+function expectPortableArchiveExcludesRuntimeExtensions(archive: AppArchive | InstanceArchive) {
+  const serialized = JSON.stringify(archive);
+
+  expect(serialized).not.toContain("site.publicRenderer");
+  expect(serialized).not.toContain("runtime.extensions");
+  expect(serialized).not.toContain("FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS");
+  expect(serialized).not.toContain("virtual:formless/site-public-renderer");
+  expect(serialized).not.toContain("site-public-renderer");
+  expect(serialized).not.toContain("public-renderer.browser.tsx");
+  expect(serialized).not.toContain("public-renderer.worker.tsx");
+  expect(serialized).not.toContain("extensionDigest");
+  expect(serialized).not.toContain("runtimeExtensionDigest");
+}
+
 function expectNoOwnerSetupProtectedBootstrapReads(requests: CapturedFetchRequest[]) {
   const forbiddenPrefixes = [
     "/api/formless/app-installs",
@@ -4477,6 +4694,7 @@ async function writeWorkspaceManifest(
       profile: "app" | "instance" | "publicSite";
       targetInstallId?: string;
     }>;
+    runtime?: InstanceWorkspaceManifest["runtime"];
   } = {},
 ) {
   await mkdir(workspaceRoot, { recursive: true });
@@ -4492,6 +4710,7 @@ async function writeWorkspaceManifest(
       defaultAppPolicy: "declared-installs",
       apps: options.apps ?? [workspaceApp("david", "David Peek")],
       ...(options.domains === undefined ? {} : { domains: options.domains }),
+      ...(options.runtime === undefined ? {} : { runtime: options.runtime }),
     }),
   );
 }

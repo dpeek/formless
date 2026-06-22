@@ -2,12 +2,16 @@ import type { ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
 
 import { renderInitialSitePageTreeScript } from "../react/initial-tree.ts";
-import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "../react/renderer.tsx";
+import {
+  PUBLIC_SITE_THEME_STORAGE_KEY,
+  resolveSitePublicRendererComponent,
+} from "../react/renderer.tsx";
 import { normalizeSitePageSlug } from "../react/slug.ts";
 import {
   buildPublicDocumentMetadata,
   type PublicDocumentMetadata,
 } from "../public-document-metadata.ts";
+import type { SitePublicRendererComponent } from "../public-renderer.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../types.ts";
 import {
   publishedSiteDocumentCacheControl,
@@ -87,6 +91,8 @@ export type PublicSiteDocumentTreeResult =
 export type PublicSiteDocumentRenderInput = {
   clientAssets: PublicSiteDocumentClientAssets;
   requestUrl: URL;
+  renderer?: SitePublicRendererComponent;
+  routeBase?: `/${string}`;
   runtimeHints?: readonly PublicSiteDocumentRuntimeHint[];
   slug?: string;
   treeResult: PublicSiteDocumentTreeResult;
@@ -116,9 +122,10 @@ export async function renderPublishedSiteDocumentResponse(
     }
 
     const tree = input.treeResult.tree;
+    const Renderer = resolveSitePublicRendererComponent(input.renderer);
     const appHtml = await renderReactToString(
       <PublishedSiteDocumentShell>
-        <SitePageRenderer linkMode="published" tree={tree} />
+        <Renderer linkMode="published" routeBase={input.routeBase} tree={tree} />
       </PublishedSiteDocumentShell>,
     );
 

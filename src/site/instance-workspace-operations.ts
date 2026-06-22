@@ -40,6 +40,7 @@ import {
   type SaveLocalFormlessWorkspaceResult,
 } from "./instance-workspace.ts";
 import type { RestorePortableArchiveResult } from "./archive-workflows.ts";
+import { workspaceRuntimeExtensionKeys } from "../shared/workspace-runtime-extensions.ts";
 
 export type RunFormlessWorkspaceOperationDependencies = Pick<
   DeployLocalFormlessWorkspaceDependencies,
@@ -330,8 +331,11 @@ function summarizeStatusResult(
     };
   }
 
+  const runtimeExtensions = workspaceRuntimeExtensionKeys(result.manifest);
+
   return {
     details: {
+      runtimeExtensions,
       selectedTarget: result.selectedTarget?.alias ?? null,
       targetUrl: result.selectedTarget?.url ?? null,
     },
@@ -439,24 +443,32 @@ function summarizePullResult(
 function summarizePushResult(
   result: PushFormlessInstanceWorkspaceResult,
 ): WorkspaceOperationResult {
+  const details: WorkspaceOperationDisplayObject = {
+    applyRestore: result.applyResult ? summarizeRestore(result.applyResult) : null,
+    dryRunRestore: result.dryRun ? summarizeRestore(result.dryRun) : null,
+    syncPlan: summarizeSyncPlan(result.syncPlan),
+    target: result.selectedTarget.alias,
+  };
+  const fields: WorkspaceOperationDisplayObject = {
+    applyRestoreOk: result.applyResult?.remote.ok ?? null,
+    dryRunRestoreOk: result.dryRun?.remote.ok ?? null,
+    mode: result.mode,
+    noop: result.noop,
+    sourceApps: result.source.appCount,
+    sourceMedia: result.source.mediaCount,
+    sourceRecords: result.source.recordCount,
+    sync: result.syncPlan.status,
+  };
+
+  if (result.runtimeRebuild !== undefined) {
+    details.runtimeRebuild = result.runtimeRebuild;
+    fields.runtimeRebuild = result.runtimeRebuild.status;
+  }
+
   return {
-    details: {
-      applyRestore: result.applyResult ? summarizeRestore(result.applyResult) : null,
-      dryRunRestore: result.dryRun ? summarizeRestore(result.dryRun) : null,
-      syncPlan: summarizeSyncPlan(result.syncPlan),
-      target: result.selectedTarget.alias,
-    },
+    details,
     summary: {
-      fields: {
-        applyRestoreOk: result.applyResult?.remote.ok ?? null,
-        dryRunRestoreOk: result.dryRun?.remote.ok ?? null,
-        mode: result.mode,
-        noop: result.noop,
-        sourceApps: result.source.appCount,
-        sourceMedia: result.source.mediaCount,
-        sourceRecords: result.source.recordCount,
-        sync: result.syncPlan.status,
-      },
+      fields,
       title: result.mode === "apply" ? "Workspace push applied" : "Workspace push planned",
     },
   };

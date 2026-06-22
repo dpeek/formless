@@ -1,4 +1,5 @@
-export { sitePublicWorkerAdapter } from "./worker/adapter.ts";
+export { createSitePublicWorkerAdapter, sitePublicWorkerAdapter } from "./worker/adapter.ts";
+export type { SitePublicWorkerAdapter, SitePublicWorkerAdapterOptions } from "./worker/adapter.ts";
 export {
   PUBLISHED_SITE_ERROR_CACHE_CONTROL,
   PUBLISHED_SITE_HTML_CACHE_CONTROL,
@@ -26,6 +27,11 @@ export type {
   PublicSiteIndexingResource,
 } from "./worker/public-indexing.ts";
 export { renderPublishedSiteDocumentResponse } from "./worker/site-ssr.tsx";
+export type {
+  SitePublicRendererComponent,
+  SitePublicRendererProps,
+  SitePublicRendererRouteFacts,
+} from "./public-renderer.ts";
 export type {
   PublicSiteDocumentClientAssets,
   PublicSiteDocumentRenderInput,

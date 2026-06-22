@@ -12,6 +12,11 @@ export {
   type PublicDocumentMetadataInput,
   type PublicDocumentMetadataKind,
 } from "./public-document-metadata.ts";
+export type {
+  SitePublicRendererComponent,
+  SitePublicRendererProps,
+  SitePublicRendererRouteFacts,
+} from "./public-renderer.ts";
 export {
   buildPublicSitemapXml,
   buildPublicSiteRouteEntries,

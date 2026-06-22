@@ -1669,7 +1669,8 @@ function isNoopCliWorkspaceOperation(state: WorkspaceOperationState): boolean {
   return (
     state.status === "succeeded" &&
     (state.operation === "pull" || state.operation === "push") &&
-    state.summary.fields.noop === true
+    state.summary.fields.noop === true &&
+    state.summary.fields.runtimeRebuild === undefined
   );
 }
 

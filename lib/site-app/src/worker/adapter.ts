@@ -1,5 +1,6 @@
 import type { AppSchema } from "@dpeek/formless-schema";
 
+import type { SitePublicRendererComponent } from "../public-renderer.ts";
 import { buildSitePageTree } from "../tree.ts";
 import type { SitePageTree, StoredRecord } from "../types.ts";
 import type {
@@ -20,31 +21,44 @@ type PublicSiteWorkerTreeInput = {
   turnstileSiteKey?: string;
 };
 
-type SitePublicWorkerAdapter = {
+export type SitePublicWorkerAdapter = {
   buildPublicTree(input: PublicSiteWorkerTreeInput): { tree: SitePageTree | null };
   renderDocument(input: PublicSiteDocumentRenderInput): Promise<PublicSiteDocumentRenderResponse>;
   renderIcon(input: PublicSiteIconRenderInput): Promise<Response>;
   renderIndexing(input: PublicSiteIndexingRenderInput): Response;
 };
 
-export const sitePublicWorkerAdapter = {
-  buildPublicTree(input) {
-    return buildSitePageTree(input.schema, input.records, input.slug, {
-      target: input.target,
-      turnstileSiteKey: input.turnstileSiteKey,
-    });
-  },
-  async renderDocument(input) {
-    const { renderPublishedSiteDocumentResponse } = await import("./site-ssr.tsx");
+export type SitePublicWorkerAdapterOptions = {
+  renderer?: SitePublicRendererComponent;
+};
 
-    return renderPublishedSiteDocumentResponse(input);
-  },
-  async renderIcon(input) {
-    const { renderSiteIconResponse } = await import("./site-icons.ts");
+export function createSitePublicWorkerAdapter(
+  options: SitePublicWorkerAdapterOptions = {},
+): SitePublicWorkerAdapter {
+  return {
+    buildPublicTree(input) {
+      return buildSitePageTree(input.schema, input.records, input.slug, {
+        target: input.target,
+        turnstileSiteKey: input.turnstileSiteKey,
+      });
+    },
+    async renderDocument(input) {
+      const { renderPublishedSiteDocumentResponse } = await import("./site-ssr.tsx");
 
-    return renderSiteIconResponse(input);
-  },
-  renderIndexing(input) {
-    return renderPublishedSiteIndexingResponse(input);
-  },
-} satisfies SitePublicWorkerAdapter;
+      return renderPublishedSiteDocumentResponse({
+        ...input,
+        renderer: input.renderer ?? options.renderer,
+      });
+    },
+    async renderIcon(input) {
+      const { renderSiteIconResponse } = await import("./site-icons.ts");
+
+      return renderSiteIconResponse(input);
+    },
+    renderIndexing(input) {
+      return renderPublishedSiteIndexingResponse(input);
+    },
+  };
+}
+
+export const sitePublicWorkerAdapter = createSitePublicWorkerAdapter();

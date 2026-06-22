@@ -16,6 +16,7 @@ export const DEFAULT_INSTANCE_WORKSPACE_APP_STATE_ROOT = "state/apps";
 export const DEFAULT_INSTANCE_WORKSPACE_MEDIA_ROOT = "state/media";
 export const DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT = ".formless/local";
 export const DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT = ".formless";
+export const INSTANCE_WORKSPACE_SITE_PUBLIC_RENDERER_EXTENSION = "site.publicRenderer";
 
 export const WORKSPACE_RECORD_STATE_FILE_KIND = "formless.workspaceRecordState";
 export const WORKSPACE_RECORD_STATE_FILE_VERSION = 1;
@@ -809,6 +810,7 @@ export type InstanceWorkspaceManifest = {
   defaultAppPolicy: InstanceWorkspaceDefaultAppPolicy;
   apps: InstanceWorkspaceApp[];
   domains?: InstanceWorkspaceDomainIntent[];
+  runtime?: InstanceWorkspaceRuntime;
 };
 
 export type FormatInstanceWorkspaceManifestInput = Pick<
@@ -836,6 +838,19 @@ export type InstanceWorkspaceMedia = {
 export type InstanceWorkspaceLocalState = {
   stateRoot: string;
   secretStateRoot: string;
+};
+
+export type InstanceWorkspaceRuntime = {
+  extensions?: InstanceWorkspaceRuntimeExtensions;
+};
+
+export type InstanceWorkspaceRuntimeExtensions = {
+  [INSTANCE_WORKSPACE_SITE_PUBLIC_RENDERER_EXTENSION]?: InstanceWorkspaceSitePublicRendererExtension;
+};
+
+export type InstanceWorkspaceSitePublicRendererExtension = {
+  browser: string;
+  worker: string;
 };
 
 export type InstanceWorkspaceApp = {

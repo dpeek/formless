@@ -1,11 +1,14 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   fetchSitePageTree,
   normalizeSitePageSlug,
+  SitePageRouteView,
   startSitePageRouteSession,
   type SitePageRouteState,
 } from "./route.tsx";
+import type { SitePublicRendererProps } from "./renderer.tsx";
 import {
   INITIAL_SITE_PAGE_TREE_SCRIPT_ID,
   readInitialSitePageTree,
@@ -157,6 +160,45 @@ describe("public Site page route data loading", () => {
     expect(fetched).toBe(false);
     expect(startedPreviewSync).toBe(false);
     expect(listenedForPreviewChanges).toBe(false);
+  });
+});
+
+describe("public Site page route rendering", () => {
+  it("renders ready route state with a configured public renderer", () => {
+    const CustomRenderer = ({ linkMode, routeBase, tree }: SitePublicRendererProps) => (
+      <article
+        data-custom-public-site-renderer={tree.meta.slug}
+        data-link-mode={linkMode}
+        data-route-base={routeBase}
+      >
+        Custom page {tree.page.label}
+      </article>
+    );
+    const html = renderToStaticMarkup(
+      <SitePageRouteView
+        linkMode="installed"
+        renderer={CustomRenderer}
+        routeBase="/sites/personal"
+        state={{ status: "ready", tree: sitePageTree("home") }}
+      />,
+    );
+
+    expect(html).toContain('data-custom-public-site-renderer="home"');
+    expect(html).toContain('data-link-mode="installed"');
+    expect(html).toContain('data-route-base="/sites/personal"');
+    expect(html).toContain("Custom page home");
+    expect(html).not.toContain("data-site-theme");
+  });
+
+  it("falls back to the bundled public renderer when no renderer is configured", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRouteView state={{ status: "ready", tree: sitePageTree("home") }} />,
+    );
+
+    expect(html).toContain('data-site-theme="light"');
+    expect(html).toContain("flex min-h-dvh flex-col");
+    expect(html).toContain("<main");
+    expect(html).not.toContain("data-custom-public-site-renderer");
   });
 });
 

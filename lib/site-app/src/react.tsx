@@ -10,7 +10,18 @@ export {
   sitePagePathForSlug,
 } from "./react/links.ts";
 export type { SitePageLinkMode } from "./react/links.ts";
-export { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "./react/renderer.tsx";
+export {
+  PUBLIC_SITE_THEME_STORAGE_KEY,
+  SitePageRenderer,
+  SitePublicRenderer,
+  resolveSitePublicRendererComponent,
+} from "./react/renderer.tsx";
+export type {
+  SitePublicRendererComponent,
+  SitePublicRendererHostProps,
+  SitePublicRendererProps,
+  SitePublicRendererRouteFacts,
+} from "./react/renderer.tsx";
 export {
   fetchSitePageTree,
   normalizeSitePageSlug,

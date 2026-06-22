@@ -11,6 +11,11 @@ import {
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
+  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
+  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
+  SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY,
+} from "../shared/workspace-runtime-extensions.ts";
+import {
   checkFormlessInstanceDeployMetadata,
   createFormlessInstanceOwnerSetupCapability,
   deployFormlessInstanceWithAlchemy,
@@ -905,6 +910,12 @@ describe("Alchemy Formless instance deployment", () => {
       instanceName: "Brother Instance",
       packageVersion: "0.1.8",
     });
+    const workspaceRuntimeExtensions = JSON.stringify({
+      [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+        browser: "src/site/public-renderer.browser.tsx",
+        worker: "src/site/public-renderer.worker.tsx",
+      },
+    });
 
     const result = await deployFormlessInstanceWithAlchemy(
       {
@@ -917,6 +928,8 @@ describe("Alchemy Formless instance deployment", () => {
         },
         stateRoot: "/state",
         workspaceAppPackages: "runtime-package-payload",
+        workspaceRoot: "/workspace",
+        workspaceRuntimeExtensions,
       },
       dependencies,
     );
@@ -1004,7 +1017,9 @@ describe("Alchemy Formless instance deployment", () => {
               FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
               FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
               FORMLESS_RUNTIME_PROFILE: "instance",
+              [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: "/workspace",
               [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: "runtime-package-payload",
+              [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: workspaceRuntimeExtensions,
               VITE_FORMLESS_RUNTIME_PROFILE: "instance",
             },
           },

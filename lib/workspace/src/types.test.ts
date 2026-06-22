@@ -91,6 +91,8 @@ import {
   type WorkspacePackageAppRecordStateFile,
 } from "./index.ts";
 
+const sitePublicRendererExtensionKey = "site.publicRenderer";
+
 describe("instance workspace manifest", () => {
   it("creates a layout-only reviewable workspace manifest", () => {
     expect(INSTANCE_WORKSPACE_MANIFEST_FILE).toBe("formless.json");
@@ -174,6 +176,41 @@ describe("instance workspace manifest", () => {
     expect(parseInstanceWorkspaceManifestJson(formatted)).toEqual(manifest);
   });
 
+  it("parses and formats optional workspace runtime extensions", () => {
+    const manifest = parseInstanceWorkspaceManifest({
+      ...layoutManifestSource(),
+      runtime: {
+        extensions: {
+          [sitePublicRendererExtensionKey]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
+    const formatted = formatInstanceWorkspaceManifest(manifest);
+
+    expect(manifest.runtime).toEqual({
+      extensions: {
+        [sitePublicRendererExtensionKey]: {
+          browser: "src/site/public-renderer.browser.tsx",
+          worker: "src/site/public-renderer.worker.tsx",
+        },
+      },
+    });
+    expect(JSON.parse(formatted)).toMatchObject({
+      runtime: {
+        extensions: {
+          [sitePublicRendererExtensionKey]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
+    expect(parseInstanceWorkspaceManifestJson(formatted)).toEqual(manifest);
+  });
+
   it("rejects secrets and unsupported keys in reviewable workspace manifests", () => {
     expect(() =>
       parseInstanceWorkspaceManifest({
@@ -225,6 +262,92 @@ describe("instance workspace manifest", () => {
         extra: true,
       }),
     ).toThrow('formless.json has unsupported key "extra".');
+  });
+
+  it("rejects invalid workspace runtime extension config", () => {
+    const invalidEntryPaths = [
+      ["absolute", "/src/renderer.tsx"],
+      ["URL-like", "https://example.com/renderer.tsx"],
+      ["home-relative", "~/renderer.tsx"],
+      ["parent traversal", "src/../renderer.tsx"],
+      ["empty", ""],
+    ] as const;
+
+    for (const [label, browser] of invalidEntryPaths) {
+      expect(
+        () =>
+          parseInstanceWorkspaceManifest({
+            ...layoutManifestSource(),
+            runtime: {
+              extensions: {
+                [sitePublicRendererExtensionKey]: {
+                  browser,
+                  worker: "src/site/public-renderer.worker.tsx",
+                },
+              },
+            },
+          }),
+        label,
+      ).toThrow(
+        label === "empty"
+          ? `formless.json runtime.extensions["${sitePublicRendererExtensionKey}"].browser must be a non-empty string.`
+          : `formless.json runtime.extensions["${sitePublicRendererExtensionKey}"].browser must be a local workspace-relative path.`,
+      );
+    }
+
+    expect(() =>
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        runtime: {
+          extensions: {
+            "site.adminRenderer": {
+              browser: "src/admin.tsx",
+              worker: "src/admin.worker.tsx",
+            },
+          },
+        },
+      }),
+    ).toThrow('formless.json runtime.extensions has unsupported key "site.adminRenderer".');
+
+    expect(() =>
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        runtime: {
+          extensions: {
+            [sitePublicRendererExtensionKey]: {
+              browser: "src/site/public-renderer.browser.tsx",
+              worker: "src/site/public-renderer.worker.tsx",
+              apiToken: "secret",
+            },
+          },
+        },
+      }),
+    ).toThrow(
+      `formless.json must not store secret field "formless.json.runtime.extensions.${sitePublicRendererExtensionKey}.apiToken".`,
+    );
+
+    expect(() =>
+      parseInstanceWorkspaceManifestJson(`{
+  "version": 1,
+  "kind": "formless-instance-workspace",
+  "name": "personal-sites",
+  "state": { "root": "state" },
+  "media": { "root": "state/media" },
+  "local": { "stateRoot": ".formless/local", "secretStateRoot": ".formless" },
+  "runtime": {
+    "extensions": {
+      "site.publicRenderer": {
+        "browser": "src/site/first.browser.tsx",
+        "worker": "src/site/first.worker.tsx"
+      },
+      "site.publicRenderer": {
+        "browser": "src/site/second.browser.tsx",
+        "worker": "src/site/second.worker.tsx"
+      }
+    }
+  }
+}`),
+    ).toThrow('formless.json runtime.extensions has duplicate extension "site.publicRenderer".');
   });
 
   it("validates resource slugs and layout paths", () => {

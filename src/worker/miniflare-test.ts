@@ -2,8 +2,9 @@ import { rmSync } from "node:fs";
 import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { build } from "esbuild";
+import { build, type Plugin } from "esbuild";
 import { Miniflare } from "miniflare";
+import { SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID } from "../shared/workspace-runtime-extensions.ts";
 
 type DispatchFetchInit = Parameters<Miniflare["dispatchFetch"]>[1];
 type DurableObjectNamespaceForHarness = Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>;
@@ -128,6 +129,7 @@ async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
       nodePaths: [resolve("node_modules")],
       outfile: scriptPath,
       platform: "browser",
+      plugins: [workerRuntimeExtensionVirtualModulesPlugin()],
     });
 
     return {
@@ -150,6 +152,21 @@ async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
     rmSync(modulesRoot, { force: true, recursive: true });
     throw error;
   }
+}
+
+function workerRuntimeExtensionVirtualModulesPlugin(): Plugin {
+  const defaultRendererPath = resolve("src/worker/default-site-public-renderer.ts");
+
+  return {
+    name: "formless-worker-runtime-extension-virtual-modules",
+    setup(build) {
+      build.onResolve({ filter: /^virtual:formless\/site-public-renderer\/worker$/ }, (args) =>
+        args.path === SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID
+          ? { path: defaultRendererPath }
+          : undefined,
+      );
+    },
+  };
 }
 
 async function workerBundleIsFresh(bundle: WorkerBundle): Promise<boolean> {

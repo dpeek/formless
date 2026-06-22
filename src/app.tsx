@@ -22,6 +22,7 @@ import {
   type PublicSiteReactAdapterRegistry,
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
+import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
@@ -89,11 +90,17 @@ export type AppRouteComponents = {
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
 
+const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
+  undefined,
+  workspaceSitePublicRenderer,
+);
+
 const defaultRouteComponents: AppRouteComponents = {
   HomeRoute: lazy(() =>
     import("./app/routes/home.tsx").then((module) => ({ default: module.HomeRoute })),
   ),
-  SitePageRoute: createPublicSiteReactAdapterRegistry().get("site")!.Route,
+  SitePageRoute: defaultPublicSiteReactAdapters.get("site")!.Route,
+  publicSiteReactAdapters: defaultPublicSiteReactAdapters,
 };
 
 export function App({
@@ -835,8 +842,9 @@ function PublicSiteRoute({
   }
 
   const RouteComponent = adapter.Route;
+  const renderer = routeProps.renderer ?? adapter.renderer;
 
-  return <RouteComponent {...routeProps} />;
+  return <RouteComponent {...routeProps} renderer={renderer} />;
 }
 
 function RouteLoading() {

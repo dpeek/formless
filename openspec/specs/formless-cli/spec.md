@@ -230,10 +230,10 @@ optional first app install, credential setup, and push operations.
 #### Scenario: Start local workspace runtime
 
 - **WHEN** `formless dev` runs for an empty workspace root
-- **THEN** the CLI writes a layout-only `formless.json`, prepares ignored
-  `.formless/local` state, persists local dev secrets, and mints process-scoped
-  local session, gateway proxy, gateway CSRF, and sidecar tokens before the
-  product instance runtime starts
+- **THEN** the CLI writes a base `formless.json` workspace manifest, prepares
+  ignored `.formless/local` state, persists local dev secrets, and mints
+  process-scoped local session, gateway proxy, gateway CSRF, and sidecar tokens
+  before the product instance runtime starts
 - **AND** the CLI does not create empty storage snapshot or media directories
 - **AND** no app install, route, deployment config, Cloudflare resource,
   Alchemy resource, provider credential, or remote instance is created
@@ -242,8 +242,8 @@ optional first app install, credential setup, and push operations.
 
 #### Scenario: Start existing local workspace runtime
 
-- **WHEN** `formless dev` runs for a layout-only workspace or workspace source
-  with storage snapshots and media payloads
+- **WHEN** `formless dev` runs for a manifest-only workspace or workspace
+  source with storage snapshots and media payloads
 - **THEN** the product instance runtime starts with workspace-local persistence
 - **AND** the CLI builds the active package resolver from bundled packages plus
   linked packages declared in `formless.packages.json` when present
@@ -418,6 +418,78 @@ behavior stable while consuming Media contracts from public package subpaths.
 - THEN media is represented with core media objects and the `core-media-assets`
   capability
 - AND records do not receive provider-specific URLs
+
+### Requirement: Workspace Runtime Extension Config
+
+The system SHALL allow a local Formless workspace to declare trusted
+owner-authored runtime extension entrypoints through reviewable workspace source
+without storing executable code configuration in app data.
+
+#### Scenario: Runtime config in workspace manifest
+
+- **GIVEN** a workspace `formless.json` may contain optional runtime extension
+  config
+- **WHEN** the runtime extension config is read
+- **THEN** the existing workspace manifest kind and version remain the outer
+  file contract
+- **AND** runtime extension config lives under optional `runtime.extensions`
+- **AND** the first supported extension point is
+  `runtime.extensions["site.publicRenderer"]`
+- **AND** `runtime.extensions["site.publicRenderer"]` declares explicit
+  `browser` and `worker` module paths
+- **AND** each module path is a local workspace-relative path
+- **AND** unsupported runtime extension keys, absolute paths, URL-like paths,
+  home-relative paths, parent traversal, empty paths, duplicate extension
+  declarations, and secret-looking fields are rejected before local dev startup,
+  deploy planning, sync planning, or provider mutation continues
+
+#### Scenario: Runtime config is deploy-code config
+
+- **WHEN** workspace source is saved, checked, pushed, pulled, exported, or
+  restored
+- **THEN** the `formless.json` `runtime.extensions` section is treated as
+  reviewable deploy-code configuration for resolving trusted workspace runtime
+  extension modules
+- **AND** runtime extension config is not app install intent, route intent, app
+  data, Site record data, media payload, package app source data, provider
+  credential state, deployment observation state, or runtime secret state
+- **AND** `formless.json` stores runtime extension module paths only inside the
+  manifest-owned `runtime.extensions` section
+- **AND** `formless.packages.json` remains dependency configuration for package
+  app source and does not duplicate runtime extension config
+- **AND** app-install, route, deployment-config, app records, package manifests,
+  and runtime package payloads do not store local renderer module paths
+
+#### Scenario: Local dev uses runtime extensions
+
+- **WHEN** `formless dev` starts for a workspace with `site.publicRenderer`
+- **THEN** the local browser preview bundle resolves the configured browser
+  renderer entrypoint
+- **AND** the local Worker runtime resolves the configured Worker renderer
+  entrypoint
+- **AND** workspace-relative renderer paths are resolved from the workspace root
+  during build setup rather than exposed as Worker runtime bindings
+- **AND** Site authoring remains the bundled generated Site admin experience
+  backed by flat Site records, schema, media, public actions, and routes
+- **AND** omitting `runtime.extensions["site.publicRenderer"]` from
+  `formless.json` uses the bundled Site renderer
+
+#### Scenario: Push deploys runtime extensions
+
+- **WHEN** `formless push` applies a workspace with runtime extensions
+- **THEN** the deployed Worker bundle includes the configured trusted
+  owner-authored Worker renderer entrypoint
+- **AND** the deployed browser assets include the configured browser renderer
+  entrypoint needed for preview or hydration
+- **AND** workspace-relative renderer paths are resolved from the workspace root
+  during deploy build setup rather than exposed as Worker runtime bindings
+- **AND** provider credentials, ignored local secret state, Worker secrets, and
+  server-only imports remain outside public browser assets
+- **AND** when runtime extensions are configured, push apply does not skip
+  Worker deployment solely because app records, control-plane records, media,
+  and provider resource intent are otherwise unchanged
+- **AND** `formless push --dry-run` remains read-only and may report that a
+  configured runtime extension means push apply can rebuild the Worker
 
 ### Requirement: Instance Workspace
 

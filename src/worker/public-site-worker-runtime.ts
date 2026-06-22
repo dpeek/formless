@@ -13,14 +13,15 @@ import {
   runtimeTopologyRoutes,
 } from "../shared/runtime-topology.ts";
 import {
+  createSitePublicWorkerAdapter,
   siteIconRouteForPathname,
-  sitePublicWorkerAdapter,
   type PublicSiteDocumentClientAssets,
   type PublicSiteDocumentRuntimeHint,
   type PublicSiteDocumentTreeResult,
   type PublicSiteIndexingResource,
   type SiteIconRoute,
 } from "@dpeek/formless-site-app/worker";
+import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/worker";
 import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-app";
 import { BadRequestError } from "./errors.ts";
 import type { Env } from "./index.ts";
@@ -103,6 +104,9 @@ const developmentClientAssets: PublicSiteDocumentClientAssets = {
 };
 const emptyClientAssets: PublicSiteDocumentClientAssets = { body: "", head: "" };
 
+const sitePublicWorkerAdapter = createSitePublicWorkerAdapter({
+  renderer: workspaceSitePublicRenderer,
+});
 const publicSiteWorkerAdapters = new Map<string, PublicSiteWorkerAdapter>([
   [runtimeTopologyRoutes.publicSitePackageAppKey, sitePublicWorkerAdapter],
 ]);

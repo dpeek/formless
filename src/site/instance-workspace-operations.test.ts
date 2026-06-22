@@ -7,7 +7,9 @@ import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  type InstanceWorkspaceManifest,
 } from "@dpeek/formless-workspace";
+import { SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY } from "../shared/workspace-runtime-extensions.ts";
 
 import packageJson from "../../package.json";
 import {
@@ -116,6 +118,49 @@ describe("Formless workspace operations", () => {
     expect(persisted.status).toBe("succeeded");
     expect(persistedText).not.toContain(workspaceRoot);
     expect(persistedText).not.toContain(tempDir);
+  });
+
+  it("reports configured runtime extension keys in status without module paths", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      runtime: {
+        extensions: {
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: "src/site/public-renderer.browser.tsx",
+            worker: "src/site/public-renderer.worker.tsx",
+          },
+        },
+      },
+    });
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "status",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        operationIds: ["op_status_00000002"],
+        timestamps: [
+          "2026-06-02T00:00:03.000Z",
+          "2026-06-02T00:00:04.000Z",
+          "2026-06-02T00:00:05.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+    const persistedText = await readFile(
+      workspaceOperationStatePath(workspaceRoot, "op_status_00000002"),
+      "utf8",
+    );
+
+    expect(state.result?.details).toMatchObject({
+      runtimeExtensions: [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY],
+    });
+    expect(persistedText).toContain(SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY);
+    expect(persistedText).not.toContain("public-renderer.browser.tsx");
+    expect(persistedText).not.toContain("public-renderer.worker.tsx");
   });
 
   it("rejects unsupported standalone deploy operations before workspace access", async () => {
@@ -446,7 +491,10 @@ function timestampSequence(...timestamps: string[]): () => string {
     timestamps[index++ % timestamps.length] ?? timestamps.at(-1) ?? new Date(0).toISOString();
 }
 
-async function writeWorkspaceManifest(workspaceRoot: string) {
+async function writeWorkspaceManifest(
+  workspaceRoot: string,
+  options: { runtime?: InstanceWorkspaceManifest["runtime"] } = {},
+) {
   await mkdir(workspaceRoot, { recursive: true });
   await writeFile(
     path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
@@ -455,6 +503,7 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
       kind: "formless-instance-workspace",
       name: "personal-sites",
       local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
+      ...(options.runtime === undefined ? {} : { runtime: options.runtime }),
     }),
   );
 }

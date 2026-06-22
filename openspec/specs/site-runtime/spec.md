@@ -103,6 +103,58 @@ package-owned runtime adapter for the resolved Site app package.
 - AND installed, mapped-host, and published Site rendering do not silently fall
   back to `/api/site` when their install-scoped target or adapter is missing
 
+### Requirement: Workspace Site Renderer Extension
+
+The system SHALL allow trusted workspace deploy code to replace the bundled
+Site public page renderer without changing Site records, public tree
+projection, routes, media delivery, or public action storage contracts.
+
+#### Scenario: Renderer input stays projection based
+
+- GIVEN a workspace declares a `site.publicRenderer` extension
+- WHEN preview, installed, mapped-host, or published Site rendering needs a
+  public page body
+- THEN the extension renderer receives a stable Site public projection such as
+  `SitePageTree`
+- AND the renderer receives route rendering facts such as link mode and route
+  base needed to produce public links
+- AND the renderer does not receive raw Authority storage internals, browser
+  replica internals, private Turnstile secrets, provider credentials, or app
+  install records as renderer input
+
+#### Scenario: Renderer output stays page scoped
+
+- GIVEN a workspace renderer is active
+- WHEN Worker SSR renders a successful public Site document
+- THEN the workspace renderer returns a React page element or component output
+  for the public page body
+- AND Formless remains responsible for the HTTP `Response`, document shell,
+  cache headers, runtime metadata hints, initial tree hydration script, client
+  asset injection, default metadata, not-found documents, and error documents
+- AND the first renderer extension contract does not allow workspace code to
+  return a complete HTML document or `Response`
+
+#### Scenario: Browser and Worker entrypoints are explicit
+
+- GIVEN a workspace configures `site.publicRenderer`
+- WHEN the runtime builds browser preview assets and the deployed Worker bundle
+- THEN the config supplies explicit browser and Worker renderer entrypoints
+- AND both entrypoints may re-export the same shared renderer component
+- AND each entrypoint exports the renderer component as a default export or
+  named `SitePublicRenderer` export
+- AND the browser entrypoint is treated as public client asset code
+- AND the Worker entrypoint is treated as trusted owner-authored deploy code
+- AND server-only imports, Worker bindings, runtime secrets, and provider
+  credentials do not enter the browser renderer bundle
+
+#### Scenario: Default renderer fallback
+
+- GIVEN no workspace `site.publicRenderer` extension is configured
+- WHEN Site preview, installed, mapped-host, or published rendering runs
+- THEN the bundled Site renderer remains the default renderer
+- AND the default renderer continues to consume the same public Site projection
+  contract used by workspace renderers
+
 ### Requirement: Subscribe Form Public Tree Projection
 
 The system SHALL project subscribe form blocks into public Site trees without exposing private challenge or runtime secrets.

@@ -18,6 +18,10 @@ import {
 } from "../shared/turnstile-config.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
+  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
+  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
+} from "../shared/workspace-runtime-extensions.ts";
+import {
   applyAlchemyDeployResourceGraph,
   type AlchemyDeployResourceZoneResolver,
   type AlchemyDomainProviderFactories,
@@ -163,6 +167,8 @@ export type DeployFormlessInstanceInput = {
   secrets: FormlessInstanceDeploymentSecrets;
   stateRoot: string;
   workspaceAppPackages?: string;
+  workspaceRoot?: string;
+  workspaceRuntimeExtensions?: string;
 };
 
 export type DeployFormlessInstanceResult = {
@@ -293,7 +299,9 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
   build: {
     command: typeof FORMLESS_INSTANCE_WORKER_BUILD_COMMAND;
     env: FormlessInstanceDeploymentPlan["runtimeVars"] & {
+      [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]?: string;
       [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?: string;
+      [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]?: string;
     };
   };
   bundle: {
@@ -366,6 +374,8 @@ type DeclareFormlessInstanceAlchemyResourceTreeInput = {
   plan: FormlessInstanceDeploymentPlan;
   resourceGraph?: DeployResourceGraph;
   workspaceAppPackages?: string;
+  workspaceRoot?: string;
+  workspaceRuntimeExtensions?: string;
 };
 
 type DeclareFormlessInstanceAlchemyResourceTreeResult = {
@@ -879,9 +889,17 @@ async function declareFormlessInstanceAlchemyResourceTree(
       command: FORMLESS_INSTANCE_WORKER_BUILD_COMMAND,
       env: {
         ...input.plan.runtimeVars,
+        ...(input.workspaceRoot === undefined
+          ? {}
+          : { [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: input.workspaceRoot }),
         ...(input.workspaceAppPackages === undefined
           ? {}
           : { [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: input.workspaceAppPackages }),
+        ...(input.workspaceRuntimeExtensions === undefined
+          ? {}
+          : {
+              [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: input.workspaceRuntimeExtensions,
+            }),
       },
     },
     bundle: {
@@ -926,6 +944,7 @@ export async function deployFormlessInstanceWithAlchemy(
   const plan = input.plan;
   const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
   const packageRoot = parseRequiredString("Formless package root", input.packageRoot);
+  const workspaceRoot = parseOptionalString("Formless workspace root", input.workspaceRoot);
   const stateRoot = parseRequiredString("Formless instance Alchemy state root", input.stateRoot);
   const adminToken = parseRequiredString(
     "Formless admin token",
@@ -941,6 +960,11 @@ export async function deployFormlessInstanceWithAlchemy(
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.adoptExistingDeployment;
+
+  if (input.workspaceRuntimeExtensions !== undefined && workspaceRoot === undefined) {
+    throw new Error("Formless runtime extension deploy requires a workspace root.");
+  }
+
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     adopt: adoptExistingDeployment,
     phase: "up",
@@ -964,6 +988,10 @@ export async function deployFormlessInstanceWithAlchemy(
     ...(input.workspaceAppPackages === undefined
       ? {}
       : { workspaceAppPackages: input.workspaceAppPackages }),
+    ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
+    ...(input.workspaceRuntimeExtensions === undefined
+      ? {}
+      : { workspaceRuntimeExtensions: input.workspaceRuntimeExtensions }),
   });
 
   await app.finalize();

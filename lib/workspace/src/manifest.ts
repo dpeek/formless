@@ -16,17 +16,24 @@ import type {
   InstanceWorkspaceLocalState,
   InstanceWorkspaceManifest,
   InstanceWorkspaceMedia,
+  InstanceWorkspaceRuntime,
+  InstanceWorkspaceRuntimeExtensions,
+  InstanceWorkspaceSitePublicRendererExtension,
   InstanceWorkspaceState,
   WorkspacePackageLink,
   WorkspacePackageLinks,
 } from "./types.ts";
 
-const rootKeys = new Set(["kind", "local", "media", "name", "state", "version"]);
+const rootKeys = new Set(["kind", "local", "media", "name", "runtime", "state", "version"]);
 const workspacePackageLinksRootKeys = new Set(["kind", "links", "version"]);
 const workspacePackageLinkKeys = new Set(["manifest"]);
 const stateKeys = new Set(["root"]);
 const mediaKeys = new Set(["root"]);
 const localKeys = new Set(["secretStateRoot", "stateRoot"]);
+const runtimeKeys = new Set(["extensions"]);
+const sitePublicRendererExtensionKey = "site.publicRenderer";
+const runtimeExtensionKeys = new Set([sitePublicRendererExtensionKey]);
+const sitePublicRendererKeys = new Set(["browser", "worker"]);
 const urlLikePathPattern = /^[a-z][a-z0-9+.-]*:/i;
 const resourceSlugPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const targetAliasPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
@@ -89,8 +96,10 @@ export function defaultWorkspacePackageLinks(): WorkspacePackageLinks {
 }
 
 export function parseInstanceWorkspaceManifestJson(contents: string): InstanceWorkspaceManifest {
+  let parsed: unknown;
+
   try {
-    return parseInstanceWorkspaceManifest(JSON.parse(contents) as unknown);
+    parsed = JSON.parse(contents) as unknown;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} must be valid JSON.`);
@@ -98,6 +107,10 @@ export function parseInstanceWorkspaceManifestJson(contents: string): InstanceWo
 
     throw error;
   }
+
+  assertNoDuplicateRuntimeExtensionDeclarations(contents);
+
+  return parseInstanceWorkspaceManifest(parsed);
 }
 
 export function parseWorkspacePackageLinksJson(contents: string): WorkspacePackageLinks {
@@ -142,6 +155,7 @@ export function parseInstanceWorkspaceManifest(value: unknown): InstanceWorkspac
     local: parseLocalState(value.local),
     defaultAppPolicy: "none",
     apps: [],
+    ...(value.runtime === undefined ? {} : { runtime: parseRuntime(value.runtime) }),
   };
 }
 
@@ -190,6 +204,7 @@ export function formatInstanceWorkspaceManifest(
       stateRoot: manifest.local?.stateRoot ?? fallback.local.stateRoot,
       secretStateRoot: manifest.local?.secretStateRoot ?? fallback.local.secretStateRoot,
     },
+    ...(manifest.runtime === undefined ? {} : { runtime: manifest.runtime }),
   });
   const formatted: Record<string, unknown> = {
     version: parsed.version,
@@ -206,6 +221,10 @@ export function formatInstanceWorkspaceManifest(
       secretStateRoot: parsed.local.secretStateRoot,
     },
   };
+
+  if (parsed.runtime !== undefined) {
+    formatted.runtime = formatRuntime(parsed.runtime);
+  }
 
   return `${JSON.stringify(formatted, null, 2)}\n`;
 }
@@ -350,6 +369,102 @@ function parseLocalState(value: unknown): InstanceWorkspaceLocalState {
   };
 }
 
+function parseRuntime(value: unknown): InstanceWorkspaceRuntime {
+  if (!isRecord(value)) {
+    throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime must be an object.`);
+  }
+
+  assertOnlyKeys(value, runtimeKeys, `${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime`);
+
+  if (value.extensions === undefined) {
+    return {};
+  }
+
+  return {
+    extensions: parseRuntimeExtensions(value.extensions),
+  };
+}
+
+function parseRuntimeExtensions(value: unknown): InstanceWorkspaceRuntimeExtensions {
+  if (!isRecord(value)) {
+    throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime.extensions must be an object.`);
+  }
+
+  assertOnlyKeys(
+    value,
+    runtimeExtensionKeys,
+    `${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime.extensions`,
+  );
+
+  const sitePublicRenderer = value[sitePublicRendererExtensionKey];
+
+  return sitePublicRenderer === undefined
+    ? {}
+    : {
+        [sitePublicRendererExtensionKey]: parseSitePublicRendererExtension(sitePublicRenderer),
+      };
+}
+
+function parseSitePublicRendererExtension(
+  value: unknown,
+): InstanceWorkspaceSitePublicRendererExtension {
+  const context = `${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime.extensions["${sitePublicRendererExtensionKey}"]`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertOnlyKeys(value, sitePublicRendererKeys, context);
+
+  return {
+    browser: parseRuntimeExtensionEntrypointPath(`${context}.browser`, value.browser),
+    worker: parseRuntimeExtensionEntrypointPath(`${context}.worker`, value.worker),
+  };
+}
+
+function parseRuntimeExtensionEntrypointPath(context: string, value: unknown): string {
+  const filePath = parseRequiredString(context, value);
+  const parts = filePath.split("/");
+
+  if (
+    filePath.startsWith("/") ||
+    filePath.startsWith("~") ||
+    filePath.includes("\\") ||
+    urlLikePathPattern.test(filePath) ||
+    parts.some((part) => part === "" || part === "." || part === "..")
+  ) {
+    throw new Error(`${context} must be a local workspace-relative path.`);
+  }
+
+  return filePath;
+}
+
+function formatRuntime(runtime: InstanceWorkspaceRuntime): Record<string, unknown> {
+  const formatted: Record<string, unknown> = {};
+
+  if (runtime.extensions !== undefined) {
+    formatted.extensions = formatRuntimeExtensions(runtime.extensions);
+  }
+
+  return formatted;
+}
+
+function formatRuntimeExtensions(
+  extensions: InstanceWorkspaceRuntimeExtensions,
+): Record<string, unknown> {
+  const formatted: Record<string, unknown> = {};
+  const sitePublicRenderer = extensions[sitePublicRendererExtensionKey];
+
+  if (sitePublicRenderer !== undefined) {
+    formatted[sitePublicRendererExtensionKey] = {
+      browser: sitePublicRenderer.browser,
+      worker: sitePublicRenderer.worker,
+    };
+  }
+
+  return formatted;
+}
+
 function parseWorkspacePackageLinkList(value: unknown): WorkspacePackageLink[] {
   if (value === undefined) {
     return [];
@@ -456,4 +571,146 @@ function normalizeSecretKey(key: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertNoDuplicateRuntimeExtensionDeclarations(contents: string): void {
+  let index = 0;
+
+  function skipWhitespace() {
+    while (/\s/.test(contents[index] ?? "")) {
+      index += 1;
+    }
+  }
+
+  function readString(): string {
+    let value = "";
+
+    index += 1;
+
+    while (index < contents.length) {
+      const char = contents[index];
+
+      if (char === '"') {
+        index += 1;
+        return value;
+      }
+
+      if (char === "\\") {
+        const escaped = contents[index + 1];
+
+        if (escaped === "u") {
+          value += JSON.parse(`"${contents.slice(index, index + 6)}"`) as string;
+          index += 6;
+          continue;
+        }
+
+        value += JSON.parse(`"\\${escaped}"`) as string;
+        index += 2;
+        continue;
+      }
+
+      value += char;
+      index += 1;
+    }
+
+    return value;
+  }
+
+  function consumeLiteral() {
+    while (index < contents.length && !/[\s,\]}]/.test(contents[index] ?? "")) {
+      index += 1;
+    }
+  }
+
+  function consume(char: string) {
+    skipWhitespace();
+
+    if (contents[index] === char) {
+      index += 1;
+    }
+  }
+
+  function parseValue(path: readonly string[]) {
+    skipWhitespace();
+
+    if (contents[index] === "{") {
+      parseObject(path);
+      return;
+    }
+
+    if (contents[index] === "[") {
+      parseArray(path);
+      return;
+    }
+
+    if (contents[index] === '"') {
+      readString();
+      return;
+    }
+
+    consumeLiteral();
+  }
+
+  function parseObject(path: readonly string[]) {
+    const seenKeys = new Set<string>();
+
+    consume("{");
+    skipWhitespace();
+
+    if (contents[index] === "}") {
+      index += 1;
+      return;
+    }
+
+    while (index < contents.length) {
+      skipWhitespace();
+      const key = readString();
+
+      if (
+        path.join(".") === "runtime.extensions" &&
+        key === sitePublicRendererExtensionKey &&
+        seenKeys.has(key)
+      ) {
+        throw new Error(
+          `${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime.extensions has duplicate extension "${sitePublicRendererExtensionKey}".`,
+        );
+      }
+
+      seenKeys.add(key);
+      consume(":");
+      parseValue([...path, key]);
+      skipWhitespace();
+
+      if (contents[index] === "}") {
+        index += 1;
+        return;
+      }
+
+      consume(",");
+    }
+  }
+
+  function parseArray(path: readonly string[]) {
+    consume("[");
+    skipWhitespace();
+
+    if (contents[index] === "]") {
+      index += 1;
+      return;
+    }
+
+    while (index < contents.length) {
+      parseValue(path);
+      skipWhitespace();
+
+      if (contents[index] === "]") {
+        index += 1;
+        return;
+      }
+
+      consume(",");
+    }
+  }
+
+  parseValue([]);
 }

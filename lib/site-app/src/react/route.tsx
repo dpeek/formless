@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SitePageRenderer } from "./renderer.tsx";
+import { SitePublicRenderer, type SitePublicRendererComponent } from "./renderer.tsx";
 import { sitePagePathForSlug, type SitePageLinkMode } from "./links.ts";
 import { readInitialSitePageTree } from "./initial-tree.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../types.ts";
@@ -43,6 +43,7 @@ export function SitePageRoute({
   apiRoutePrefix = DEFAULT_SITE_API_ROUTE_PREFIX,
   linkMode = "preview",
   listenForPreviewChanges,
+  renderer,
   routeBase,
   slug,
   startPreviewSync,
@@ -50,6 +51,7 @@ export function SitePageRoute({
   apiRoutePrefix?: `/${string}`;
   linkMode?: SitePageLinkMode;
   listenForPreviewChanges?: (onChanged: () => void) => () => void;
+  renderer?: SitePublicRendererComponent;
   routeBase?: `/${string}`;
   slug: string;
   startPreviewSync?: (onSynced: () => void) => () => void;
@@ -82,7 +84,14 @@ export function SitePageRoute({
     startPreviewSync,
   ]);
 
-  return <SitePageRouteView linkMode={linkMode} routeBase={routeBase} state={state} />;
+  return (
+    <SitePageRouteView
+      linkMode={linkMode}
+      renderer={renderer}
+      routeBase={routeBase}
+      state={state}
+    />
+  );
 }
 
 export function startSitePageRouteSession({
@@ -190,16 +199,25 @@ function initialTreeMatchesSlug(
 
 export function SitePageRouteView({
   linkMode = "preview",
+  renderer,
   routeBase,
   state,
 }: {
   linkMode?: SitePageLinkMode;
+  renderer?: SitePublicRendererComponent;
   routeBase?: `/${string}`;
   state: SitePageRouteState;
 }) {
   switch (state.status) {
     case "ready":
-      return <SitePageRenderer linkMode={linkMode} routeBase={routeBase} tree={state.tree} />;
+      return (
+        <SitePublicRenderer
+          linkMode={linkMode}
+          renderer={renderer}
+          routeBase={routeBase}
+          tree={state.tree}
+        />
+      );
     case "not-found":
       return <SitePageNotFound linkMode={linkMode} routeBase={routeBase} slug={state.slug} />;
     case "error":

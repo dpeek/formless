@@ -80,6 +80,11 @@ import {
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
 import {
+  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
+  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
+  runtimeWorkspaceExtensionsEnvValue,
+} from "../shared/workspace-runtime-extensions.ts";
+import {
   CF_API_TOKEN_ENV_NAME,
   CLOUDFLARE_API_TOKEN_ENV_NAME,
   planCloudflareWorkerDomainPreflight,
@@ -453,6 +458,11 @@ export type PushFormlessInstanceWorkspaceSource = {
   recordCount: number;
 };
 
+export type PushFormlessInstanceWorkspaceRuntimeRebuild = {
+  reason: "runtime-extensions-configured";
+  status: "applied" | "available";
+};
+
 export type PushFormlessInstanceWorkspaceResult = {
   applyResult?: RestorePortableArchiveResult;
   backup?: ArchiveDiskWriteResult;
@@ -467,6 +477,7 @@ export type PushFormlessInstanceWorkspaceResult = {
   noop: boolean;
   ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
   plan?: FormlessInstanceDeploymentPlan;
+  runtimeRebuild?: PushFormlessInstanceWorkspaceRuntimeRebuild;
   secretPath?: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   source: PushFormlessInstanceWorkspaceSource;
@@ -643,6 +654,7 @@ export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPla
   manifestPath: string;
   preflight?: CheckFormlessInstanceWorkspaceResult;
   workspaceAppPackages?: string;
+  workspaceRuntimeExtensions?: string;
   workspaceRoot: string;
 };
 
@@ -657,6 +669,7 @@ export type PlanDeployFormlessInstanceWorkspaceResult = {
   plan: FormlessInstanceDeploymentPlan;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceAppPackages?: string;
+  workspaceRuntimeExtensions?: string;
   workspaceRoot: string;
 };
 
@@ -1563,8 +1576,16 @@ export async function pushFormlessInstanceWorkspace(
       sourceSide: "local",
       targetLabel: selectedTarget.alias,
     });
+    const runtimeRebuild =
+      planned.workspaceRuntimeExtensions === undefined
+        ? undefined
+        : {
+            reason: "runtime-extensions-configured" as const,
+            status: (input.apply ? "applied" : "available") as "applied" | "available",
+          };
+    const hasDataChanges = syncPlan.status !== "up-to-date";
 
-    if (syncPlan.status === "up-to-date") {
+    if (!hasDataChanges && runtimeRebuild === undefined) {
       return {
         mode: input.apply ? "apply" : "dry-run",
         noop: true,
@@ -1575,22 +1596,35 @@ export async function pushFormlessInstanceWorkspace(
       };
     }
 
-    const backup = input.apply
-      ? planned.existingSelectedTarget === undefined
-        ? undefined
-        : await exportInstanceArchive(
-            {
-              adminToken: providerApply?.adminToken ?? adminToken,
-              outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
-              packageResolver: activePackages.resolver,
-              target: selectedTarget.url,
-            },
-            dependencies,
-          )
-      : undefined;
-    const dryRunBeforeProvider = planned.existingSelectedTarget !== undefined;
+    if (!hasDataChanges && !input.apply) {
+      return {
+        mode: "dry-run",
+        noop: true,
+        ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
+        selectedTarget,
+        source,
+        syncPlan,
+        workspaceRoot,
+      };
+    }
+
+    const backup =
+      input.apply && hasDataChanges
+        ? planned.existingSelectedTarget === undefined
+          ? undefined
+          : await exportInstanceArchive(
+              {
+                adminToken: providerApply?.adminToken ?? adminToken,
+                outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
+                packageResolver: activePackages.resolver,
+                target: selectedTarget.url,
+              },
+              dependencies,
+            )
+        : undefined;
+    const dryRunBeforeProvider = hasDataChanges && planned.existingSelectedTarget !== undefined;
     const dryRun =
-      !input.apply || dryRunBeforeProvider
+      hasDataChanges && (!input.apply || dryRunBeforeProvider)
         ? await restoreWorkspacePushArchive(
             {
               adminToken: providerApply?.adminToken ?? adminToken,
@@ -1612,7 +1646,7 @@ export async function pushFormlessInstanceWorkspace(
         ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
         : providerApply;
     const firstApplyDryRun =
-      input.apply && dryRun === undefined
+      hasDataChanges && input.apply && dryRun === undefined
         ? await restoreWorkspacePushArchive(
             {
               adminToken: provider?.adminToken ?? adminToken,
@@ -1630,18 +1664,19 @@ export async function pushFormlessInstanceWorkspace(
       throw new Error("Formless instance push apply stopped because dry-run restore failed.");
     }
 
-    const applyResult = input.apply
-      ? await restoreWorkspacePushArchive(
-          {
-            adminToken: provider?.adminToken ?? adminToken,
-            apply: true,
-            archiveDir: composedArchiveRoot,
-            packageResolver: activePackages.resolver,
-            target: selectedTarget.url,
-          },
-          dependencies,
-        )
-      : undefined;
+    const applyResult =
+      input.apply && hasDataChanges
+        ? await restoreWorkspacePushArchive(
+            {
+              adminToken: provider?.adminToken ?? adminToken,
+              apply: true,
+              archiveDir: composedArchiveRoot,
+              packageResolver: activePackages.resolver,
+              target: selectedTarget.url,
+            },
+            dependencies,
+          )
+        : undefined;
     const deploymentObservation =
       provider === undefined
         ? undefined
@@ -1678,7 +1713,8 @@ export async function pushFormlessInstanceWorkspace(
           }),
       ...(restoreDryRun === undefined ? {} : { dryRun: restoreDryRun }),
       mode: input.apply ? "apply" : "dry-run",
-      noop: false,
+      noop: !hasDataChanges && provider === undefined,
+      ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
       selectedTarget,
       source,
       syncPlan,
@@ -1767,9 +1803,13 @@ async function applyWorkspacePushProviderReconciliation(
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
       stateRoot: deploymentStateRoot,
+      workspaceRoot,
       ...(planned.workspaceAppPackages === undefined
         ? {}
         : { workspaceAppPackages: planned.workspaceAppPackages }),
+      ...(planned.workspaceRuntimeExtensions === undefined
+        ? {}
+        : { workspaceRuntimeExtensions: planned.workspaceRuntimeExtensions }),
     });
     const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deploymentResult.url);
 
@@ -1988,6 +2028,7 @@ export async function runFormlessInstanceWorkspaceDev(
           localDevSecrets,
           localSessionBootstrapToken,
           workspaceAppPackages: runtimeWorkspaceAppPackagesEnvValue(activePackages),
+          workspaceRuntimeExtensions: runtimeWorkspaceExtensionsEnvValue(manifest),
         },
       ),
       stdio: "pipe",
@@ -2189,9 +2230,13 @@ export async function deployLocalFormlessWorkspace(
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
       stateRoot: deploymentStateRoot,
+      workspaceRoot,
       ...(planned.workspaceAppPackages === undefined
         ? {}
         : { workspaceAppPackages: planned.workspaceAppPackages }),
+      ...(planned.workspaceRuntimeExtensions === undefined
+        ? {}
+        : { workspaceRuntimeExtensions: planned.workspaceRuntimeExtensions }),
     });
     const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
 
@@ -2576,6 +2621,7 @@ export async function planDeployLocalFormlessWorkspace(
     targetId: planned.selectedTarget.alias,
   });
   const workspaceAppPackages = runtimeWorkspaceAppPackagesEnvValue(activePackages);
+  const workspaceRuntimeExtensions = runtimeWorkspaceExtensionsEnvValue(manifest);
 
   return {
     ...planned,
@@ -2584,6 +2630,7 @@ export async function planDeployLocalFormlessWorkspace(
     manifestPath,
     ...(preflight === undefined ? {} : { preflight }),
     ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
+    ...(workspaceRuntimeExtensions === undefined ? {} : { workspaceRuntimeExtensions }),
     workspaceRoot,
   };
 }
@@ -2713,9 +2760,13 @@ export async function deployFormlessInstanceWorkspace(
       FORMLESS_ADMIN_TOKEN: adminToken,
     },
     stateRoot: deploymentStateRoot,
+    workspaceRoot,
     ...(planned.workspaceAppPackages === undefined
       ? {}
       : { workspaceAppPackages: planned.workspaceAppPackages }),
+    ...(planned.workspaceRuntimeExtensions === undefined
+      ? {}
+      : { workspaceRuntimeExtensions: planned.workspaceRuntimeExtensions }),
   });
   const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
 
@@ -2782,6 +2833,7 @@ export async function planDeployFormlessInstanceWorkspace(
     selectedTarget,
   });
   const workspaceAppPackages = runtimeWorkspaceAppPackagesEnvValue(activePackages);
+  const workspaceRuntimeExtensions = runtimeWorkspaceExtensionsEnvValue(manifest);
   const credential = deploymentSource.credential ?? defaultLocalWorkspaceDeploymentCredential();
 
   return {
@@ -2790,6 +2842,7 @@ export async function planDeployFormlessInstanceWorkspace(
     plan,
     selectedTarget,
     ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
+    ...(workspaceRuntimeExtensions === undefined ? {} : { workspaceRuntimeExtensions }),
     workspaceRoot,
   };
 }
@@ -3044,6 +3097,7 @@ export function formlessInstanceWorkspaceDevEnv(
     localDevSecrets?: FormlessInstanceWorkspaceLocalDevSecretState;
     localSessionBootstrapToken?: string;
     workspaceAppPackages?: string;
+    workspaceRuntimeExtensions?: string;
   } = {},
 ): NodeJS.ProcessEnv {
   const bootstrapToken = randomWorkspaceGatewayToken();
@@ -3065,6 +3119,7 @@ export function formlessInstanceWorkspaceDevEnv(
     [FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME]: localDevSecrets.ownerSessionSecret,
     [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]:
       options.localSessionBootstrapToken ?? randomWorkspaceGatewayToken(),
+    [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,
     FORMLESS_RUNTIME_PROFILE: "instance",
     FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
     FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
@@ -3089,6 +3144,12 @@ export function formlessInstanceWorkspaceDevEnv(
     nextEnv[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME] = options.workspaceAppPackages;
   } else {
     delete nextEnv[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME];
+  }
+
+  if (options.workspaceRuntimeExtensions) {
+    nextEnv[FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME] = options.workspaceRuntimeExtensions;
+  } else {
+    delete nextEnv[FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME];
   }
 
   delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;

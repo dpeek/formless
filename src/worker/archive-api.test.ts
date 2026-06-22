@@ -8,6 +8,7 @@ import {
   type InstanceArchive,
 } from "@dpeek/formless-archive";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
+import { renderPublishedSiteDocumentResponse } from "@dpeek/formless-site-app/worker";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -354,6 +355,12 @@ describe("instance archive restore API", () => {
   it("restores core Site media before public tree reads reference it", async () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
+    const document = await renderPublishedSiteDocumentResponse({
+      clientAssets: { body: "", head: "" },
+      requestUrl: new URL("https://personal.example/"),
+      treeResult: { kind: "found", tree: tree.body },
+    });
+    const html = await document.text();
     const served = await harness.fetch(coreMediaHref);
 
     expect(applied.response.status).toBe(200);
@@ -370,6 +377,10 @@ describe("instance archive restore API", () => {
     });
     expect(JSON.stringify(tree.body)).toContain(coreMediaHref);
     expect(tree.body.page.label).toBe("Home");
+    expect(document.status).toBe(200);
+    expect(html).toContain('<main class="min-h-dvh"><article');
+    expect(html).toContain('data-site-theme="light"');
+    expect(html).not.toContain("data-custom-public-site-renderer");
     expect(served.status).toBe(200);
     expect(served.headers.get("Content-Type")).toBe("image/png");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
