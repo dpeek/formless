@@ -18,18 +18,18 @@ import {
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { bundledAppPackageManifests } from "../shared/app-packages.ts";
 
-export type SiteCliAdminTokenSource = "env" | "explicit" | "missing" | "stored";
+export type FormlessCliAdminTokenSource = "env" | "explicit" | "missing" | "stored";
 
-export type SiteCliResolvedAdminToken = {
+export type FormlessCliResolvedAdminToken = {
   displayLabel: "[redacted]" | "missing";
-  source: SiteCliAdminTokenSource;
+  source: FormlessCliAdminTokenSource;
   token: string | null;
 };
 
-export type SiteCliTargetContext = {
+export type FormlessCliTargetContext = {
   adminToken: string | null;
   adminTokenDisplayLabel: "[redacted]" | "missing";
-  adminTokenSource: SiteCliAdminTokenSource;
+  adminTokenSource: FormlessCliAdminTokenSource;
   display: {
     adminToken: "[redacted]" | "missing";
     selectedTarget: string;
@@ -44,12 +44,12 @@ export type SiteCliTargetContext = {
   workspaceRoot: string;
 };
 
-export type RequiredSiteCliTargetContext = SiteCliTargetContext & {
+export type RequiredFormlessCliTargetContext = FormlessCliTargetContext & {
   selectedTarget: InstanceWorkspaceTarget;
   targetUrl: string;
 };
 
-export type ResolveSiteCliTargetContextInput = {
+export type ResolveFormlessCliTargetContextInput = {
   commandName: string;
   cwd: string;
   explicitAdminToken?: string | null;
@@ -58,17 +58,17 @@ export type ResolveSiteCliTargetContextInput = {
   workspacePath?: string | null;
 };
 
-export type ResolveSiteCliTargetContextDependencies = {
+export type ResolveFormlessCliTargetContextDependencies = {
   env?: NodeJS.ProcessEnv;
 };
 
-export async function resolveSiteCliTargetContext(
-  input: ResolveSiteCliTargetContextInput,
-  dependencies: ResolveSiteCliTargetContextDependencies,
-): Promise<SiteCliTargetContext> {
+export async function resolveFormlessCliTargetContext(
+  input: ResolveFormlessCliTargetContextInput,
+  dependencies: ResolveFormlessCliTargetContextDependencies,
+): Promise<FormlessCliTargetContext> {
   const workspaceRoot = path.resolve(input.cwd, input.workspacePath ?? ".");
-  const { manifest, manifestPath } = await readSiteCliWorkspaceManifest(workspaceRoot);
-  const selectedTarget = await resolveSiteCliWorkspaceTarget({
+  const { manifest, manifestPath } = await readFormlessCliWorkspaceManifest(workspaceRoot);
+  const selectedTarget = await resolveFormlessCliWorkspaceTarget({
     commandName: input.commandName,
     manifest,
     required: input.requireTarget === true,
@@ -76,7 +76,7 @@ export async function resolveSiteCliTargetContext(
     workspaceRoot,
   });
   const secretState = await readInstanceWorkspaceSecretState(workspaceRoot);
-  const adminToken = resolveSiteCliAdminToken({
+  const adminToken = resolveFormlessCliAdminToken({
     env: dependencies.env,
     explicitAdminToken: input.explicitAdminToken,
     secretState,
@@ -88,7 +88,7 @@ export async function resolveSiteCliTargetContext(
     adminTokenSource: adminToken.source,
     display: {
       adminToken: adminToken.displayLabel,
-      selectedTarget: formatSiteCliSelectedTargetDisplay(selectedTarget),
+      selectedTarget: formatFormlessCliSelectedTargetDisplay(selectedTarget),
       targetUrl: selectedTarget?.url ?? null,
       workspaceRoot,
     },
@@ -100,11 +100,11 @@ export async function resolveSiteCliTargetContext(
   };
 }
 
-export async function requireSiteCliTargetContext(
-  input: ResolveSiteCliTargetContextInput,
-  dependencies: ResolveSiteCliTargetContextDependencies,
-): Promise<RequiredSiteCliTargetContext> {
-  const context = await resolveSiteCliTargetContext(
+export async function requireFormlessCliTargetContext(
+  input: ResolveFormlessCliTargetContextInput,
+  dependencies: ResolveFormlessCliTargetContextDependencies,
+): Promise<RequiredFormlessCliTargetContext> {
+  const context = await resolveFormlessCliTargetContext(
     { ...input, requireTarget: true },
     dependencies,
   );
@@ -113,21 +113,21 @@ export async function requireSiteCliTargetContext(
     throw new Error(`Formless instance ${input.commandName} requires a workspace target.`);
   }
 
-  return context as RequiredSiteCliTargetContext;
+  return context as RequiredFormlessCliTargetContext;
 }
 
-export function resolveSiteCliAdminToken(input: {
+export function resolveFormlessCliAdminToken(input: {
   env?: NodeJS.ProcessEnv;
   explicitAdminToken?: string | null;
   secretState?: InstanceWorkspaceSecretState;
-}): SiteCliResolvedAdminToken {
-  const explicit = normalizedSiteCliAdminToken(input.explicitAdminToken);
+}): FormlessCliResolvedAdminToken {
+  const explicit = normalizedFormlessCliAdminToken(input.explicitAdminToken);
 
   if (explicit) {
     return redactedResolvedAdminToken(explicit, "explicit");
   }
 
-  const envToken = normalizedSiteCliAdminToken(
+  const envToken = normalizedFormlessCliAdminToken(
     input.env?.[INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME],
   );
 
@@ -135,7 +135,7 @@ export function resolveSiteCliAdminToken(input: {
     return redactedResolvedAdminToken(envToken, "env");
   }
 
-  const stored = normalizedSiteCliAdminToken(input.secretState?.adminToken);
+  const stored = normalizedFormlessCliAdminToken(input.secretState?.adminToken);
 
   if (stored) {
     return redactedResolvedAdminToken(stored, "stored");
@@ -148,22 +148,22 @@ export function resolveSiteCliAdminToken(input: {
   };
 }
 
-export function siteCliTargetAcceptHeaders(input: {
+export function formlessCliTargetAcceptHeaders(input: {
   adminToken?: string | null;
   headers?: Record<string, string>;
 }): Record<string, string> {
-  return siteCliTargetHeaders({
+  return formlessCliTargetHeaders({
     accept: "application/json",
     adminToken: input.adminToken,
     headers: input.headers,
   });
 }
 
-export function siteCliTargetJsonHeaders(input: {
+export function formlessCliTargetJsonHeaders(input: {
   adminToken?: string | null;
   headers?: Record<string, string>;
 }): Record<string, string> {
-  return siteCliTargetHeaders({
+  return formlessCliTargetHeaders({
     accept: "application/json",
     adminToken: input.adminToken,
     contentType: "application/json",
@@ -171,7 +171,7 @@ export function siteCliTargetJsonHeaders(input: {
   });
 }
 
-export function siteCliTargetFetchHeaders(input: {
+export function formlessCliTargetFetchHeaders(input: {
   accept: string;
   adminToken?: string | null;
   contentType?: string;
@@ -185,7 +185,7 @@ export function siteCliTargetFetchHeaders(input: {
     headers.set("content-type", input.contentType);
   }
 
-  const authorization = siteCliAdminAuthorizationHeader(input.adminToken);
+  const authorization = formlessCliAdminAuthorizationHeader(input.adminToken);
 
   if (authorization) {
     headers.set("authorization", authorization);
@@ -194,7 +194,7 @@ export function siteCliTargetFetchHeaders(input: {
   return headers;
 }
 
-export function siteCliTargetHeaders(input: {
+export function formlessCliTargetHeaders(input: {
   accept?: string;
   adminToken?: string | null;
   contentType?: string;
@@ -205,7 +205,7 @@ export function siteCliTargetHeaders(input: {
     ...(input.contentType === undefined ? {} : { "content-type": input.contentType }),
     ...input.headers,
   };
-  const authorization = siteCliAdminAuthorizationHeader(input.adminToken);
+  const authorization = formlessCliAdminAuthorizationHeader(input.adminToken);
 
   if (authorization) {
     headers.authorization = authorization;
@@ -214,14 +214,14 @@ export function siteCliTargetHeaders(input: {
   return headers;
 }
 
-export function siteCliAdminAuthorizationHeader(adminToken: string | null | undefined) {
-  const token = normalizedSiteCliAdminToken(adminToken);
+export function formlessCliAdminAuthorizationHeader(adminToken: string | null | undefined) {
+  const token = normalizedFormlessCliAdminToken(adminToken);
 
   return token ? `Bearer ${token}` : undefined;
 }
 
-export function siteCliWorkspaceStatusSecretStateLabel(
-  context: Pick<SiteCliTargetContext, "adminTokenSource" | "secretState">,
+export function formlessCliWorkspaceStatusSecretStateLabel(
+  context: Pick<FormlessCliTargetContext, "adminTokenSource" | "secretState">,
 ): "env" | "missing" | "stored" {
   if (context.adminTokenSource === "env" || context.adminTokenSource === "explicit") {
     return "env";
@@ -230,7 +230,7 @@ export function siteCliWorkspaceStatusSecretStateLabel(
   return context.secretState.adminToken ? "stored" : "missing";
 }
 
-async function readSiteCliWorkspaceManifest(workspaceRoot: string): Promise<{
+async function readFormlessCliWorkspaceManifest(workspaceRoot: string): Promise<{
   manifest: InstanceWorkspaceManifest;
   manifestPath: string;
 }> {
@@ -242,7 +242,7 @@ async function readSiteCliWorkspaceManifest(workspaceRoot: string): Promise<{
   };
 }
 
-async function resolveSiteCliWorkspaceTarget(input: {
+async function resolveFormlessCliWorkspaceTarget(input: {
   commandName: string;
   manifest: InstanceWorkspaceManifest;
   required: boolean;
@@ -258,7 +258,7 @@ async function resolveSiteCliWorkspaceTarget(input: {
     packageResolver: activePackages.resolver,
     workspaceRoot: input.workspaceRoot,
   });
-  const deploymentConfig = selectSiteCliDeploymentConfig(
+  const deploymentConfig = selectFormlessCliDeploymentConfig(
     controlPlane?.records.filter((record) => !record.deletedAt) ?? [],
     input.targetAlias,
     {
@@ -269,10 +269,10 @@ async function resolveSiteCliWorkspaceTarget(input: {
 
   return deploymentConfig === undefined
     ? undefined
-    : siteCliTargetFromDeploymentConfig(deploymentConfig, input.commandName);
+    : formlessCliTargetFromDeploymentConfig(deploymentConfig, input.commandName);
 }
 
-function selectSiteCliDeploymentConfig(
+function selectFormlessCliDeploymentConfig(
   records: readonly StoredRecord[],
   targetAlias: string | null | undefined,
   options: { commandName: string; required: boolean },
@@ -302,7 +302,7 @@ function selectSiteCliDeploymentConfig(
   }
 
   const primary = targets.find(
-    (record) => stringRecordValue(record, "targetId") === siteCliPrimaryTargetId(),
+    (record) => stringRecordValue(record, "targetId") === formlessCliPrimaryTargetId(),
   );
 
   if (primary) {
@@ -328,7 +328,7 @@ function selectSiteCliDeploymentConfig(
   );
 }
 
-function siteCliTargetFromDeploymentConfig(
+function formlessCliTargetFromDeploymentConfig(
   record: StoredRecord,
   commandName: string,
 ): InstanceWorkspaceTarget {
@@ -347,14 +347,16 @@ function siteCliTargetFromDeploymentConfig(
   };
 }
 
-function formatSiteCliSelectedTargetDisplay(target: InstanceWorkspaceTarget | undefined): string {
+function formatFormlessCliSelectedTargetDisplay(
+  target: InstanceWorkspaceTarget | undefined,
+): string {
   return target ? `${target.alias} (${target.url})` : "<none>";
 }
 
 function redactedResolvedAdminToken(
   token: string,
-  source: Exclude<SiteCliAdminTokenSource, "missing">,
-): SiteCliResolvedAdminToken {
+  source: Exclude<FormlessCliAdminTokenSource, "missing">,
+): FormlessCliResolvedAdminToken {
   return {
     displayLabel: "[redacted]",
     source,
@@ -362,13 +364,13 @@ function redactedResolvedAdminToken(
   };
 }
 
-function normalizedSiteCliAdminToken(value: string | null | undefined): string | null {
+function normalizedFormlessCliAdminToken(value: string | null | undefined): string | null {
   const token = value?.trim();
 
   return token ? token : null;
 }
 
-function siteCliPrimaryTargetId() {
+function formlessCliPrimaryTargetId() {
   return "instance.primary";
 }
 

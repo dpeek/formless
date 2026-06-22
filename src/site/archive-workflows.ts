@@ -49,7 +49,10 @@ import {
   readPortableArchiveInputStatus,
   type PortableArchiveInputStatus,
 } from "./archive-input-status.ts";
-import { resolveSiteCliAdminToken, siteCliTargetFetchHeaders } from "./instance-target-context.ts";
+import {
+  resolveFormlessCliAdminToken,
+  formlessCliTargetFetchHeaders,
+} from "./instance-target-context.ts";
 
 export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
@@ -602,7 +605,7 @@ type ArchiveExportAuth = {
 };
 
 function archiveExportRequestHeaders(auth: ArchiveExportAuth | undefined, accept: string): Headers {
-  return siteCliTargetFetchHeaders({
+  return formlessCliTargetFetchHeaders({
     accept,
     adminToken: archiveExportAdminToken(auth),
   });
@@ -610,7 +613,7 @@ function archiveExportRequestHeaders(auth: ArchiveExportAuth | undefined, accept
 
 function archiveExportAdminToken(auth: ArchiveExportAuth | undefined): string | undefined {
   return (
-    resolveSiteCliAdminToken({
+    resolveFormlessCliAdminToken({
       env: auth?.env,
       explicitAdminToken: auth?.adminToken,
     }).token ?? undefined
@@ -653,9 +656,9 @@ function archiveRestoreRequestHeaders(
   adminToken: string | null | undefined,
   env: NodeJS.ProcessEnv | undefined,
 ): Headers {
-  return siteCliTargetFetchHeaders({
+  return formlessCliTargetFetchHeaders({
     accept: "application/json",
-    adminToken: resolveSiteCliAdminToken({ env, explicitAdminToken: adminToken }).token,
+    adminToken: resolveFormlessCliAdminToken({ env, explicitAdminToken: adminToken }).token,
     contentType: "application/json",
   });
 }

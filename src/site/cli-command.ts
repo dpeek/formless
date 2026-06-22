@@ -52,24 +52,24 @@ export type FormlessCliCommand =
       workspacePath: string | null;
     };
 
-type SiteCliWorkspaceOperationOptionField = "dryRun" | "targetAlias" | "workspacePath";
+type FormlessCliWorkspaceOperationOptionField = "dryRun" | "targetAlias" | "workspacePath";
 
-type SiteCliWorkspaceOperationOptionBinding = {
-  fieldKey: SiteCliWorkspaceOperationOptionField;
+type FormlessCliWorkspaceOperationOptionBinding = {
+  fieldKey: FormlessCliWorkspaceOperationOptionField;
   optionName: string;
   syntax: string;
 };
 
-type SiteCliWorkspaceOperationBindingContract = {
+type FormlessCliWorkspaceOperationBindingContract = {
   command: string;
   dispatchKind: Extract<FormlessCliCommand["kind"], "workspacePull" | "workspacePush">;
   operationKind: Extract<WorkspaceOperationKind, "pull" | "push">;
-  options: readonly SiteCliWorkspaceOperationOptionBinding[];
+  options: readonly FormlessCliWorkspaceOperationOptionBinding[];
   terminalDescription: string;
   terminalLabel: string;
 };
 
-export const SITE_CLI_WORKSPACE_OPERATION_BINDINGS = [
+export const FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS = [
   {
     command: "formless pull",
     dispatchKind: "workspacePull",
@@ -94,24 +94,26 @@ export const SITE_CLI_WORKSPACE_OPERATION_BINDINGS = [
     terminalDescription: "Workspace source push",
     terminalLabel: "push",
   },
-] as const satisfies readonly SiteCliWorkspaceOperationBindingContract[];
+] as const satisfies readonly FormlessCliWorkspaceOperationBindingContract[];
 
-export type SiteCliWorkspaceOperationBinding =
-  (typeof SITE_CLI_WORKSPACE_OPERATION_BINDINGS)[number];
+export type FormlessCliWorkspaceOperationBinding =
+  (typeof FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS)[number];
 
-export type SiteCliWorkspaceOperationCommandName = SiteCliWorkspaceOperationBinding["command"];
+export type FormlessCliWorkspaceOperationCommandName =
+  FormlessCliWorkspaceOperationBinding["command"];
 
-export type SiteCliWorkspaceOperationKind = SiteCliWorkspaceOperationBinding["operationKind"];
+export type FormlessCliWorkspaceOperationKind =
+  FormlessCliWorkspaceOperationBinding["operationKind"];
 
-const siteCliWorkspaceOperationBindingsByKind = new Map<
-  SiteCliWorkspaceOperationKind,
-  SiteCliWorkspaceOperationBinding
->(SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => [binding.operationKind, binding]));
+const formlessCliWorkspaceOperationBindingsByKind = new Map<
+  FormlessCliWorkspaceOperationKind,
+  FormlessCliWorkspaceOperationBinding
+>(FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => [binding.operationKind, binding]));
 
-const siteCliWorkspaceOperationBindingsByCommand = new Map<
-  SiteCliWorkspaceOperationCommandName,
-  SiteCliWorkspaceOperationBinding
->(SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => [binding.command, binding]));
+const formlessCliWorkspaceOperationBindingsByCommand = new Map<
+  FormlessCliWorkspaceOperationCommandName,
+  FormlessCliWorkspaceOperationBinding
+>(FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => [binding.command, binding]));
 
 export function formlessCliUsage(): string {
   return [
@@ -136,7 +138,7 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
     return { kind: "help" };
   }
 
-  const workspaceOperationBinding = siteCliWorkspaceOperationBindingForTopLevelCommand(command);
+  const workspaceOperationBinding = formlessCliWorkspaceOperationBindingForTopLevelCommand(command);
   if (workspaceOperationBinding) {
     return parseWorkspaceCliOperationArgs(workspaceOperationBinding, rest);
   }
@@ -168,65 +170,67 @@ export function normalizeSourceUrl(value: string): string {
 }
 
 function workspaceCliOperationUsageLines(): string[] {
-  return SITE_CLI_WORKSPACE_OPERATION_BINDINGS.flatMap((binding) => [
+  return FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS.flatMap((binding) => [
     `  ${workspaceCliOperationUsage(binding)}`,
     `                                      ${binding.terminalDescription}`,
   ]);
 }
 
-export function siteCliWorkspaceOperationCommandNameForKind(
-  kind: SiteCliWorkspaceOperationKind,
-): SiteCliWorkspaceOperationCommandName {
-  return siteCliWorkspaceOperationBindingForKind(kind).command;
+export function formlessCliWorkspaceOperationCommandNameForKind(
+  kind: FormlessCliWorkspaceOperationKind,
+): FormlessCliWorkspaceOperationCommandName {
+  return formlessCliWorkspaceOperationBindingForKind(kind).command;
 }
 
-export function siteCliWorkspaceOperationBindingForKind(
-  kind: SiteCliWorkspaceOperationKind,
-): SiteCliWorkspaceOperationBinding {
-  const binding = siteCliWorkspaceOperationBindingsByKind.get(kind);
+export function formlessCliWorkspaceOperationBindingForKind(
+  kind: FormlessCliWorkspaceOperationKind,
+): FormlessCliWorkspaceOperationBinding {
+  const binding = formlessCliWorkspaceOperationBindingsByKind.get(kind);
 
   if (!binding) {
-    throw new Error(`Workspace operation "${kind}" is not bound to a Site CLI command.`);
+    throw new Error(`Workspace operation "${kind}" is not bound to a Formless CLI command.`);
   }
 
   return binding;
 }
 
-export function siteCliWorkspaceOperationBindingForCommand(
+export function formlessCliWorkspaceOperationBindingForCommand(
   command: string,
-): SiteCliWorkspaceOperationBinding {
-  const binding = siteCliWorkspaceOperationBindingsByCommand.get(
-    command as SiteCliWorkspaceOperationCommandName,
+): FormlessCliWorkspaceOperationBinding {
+  const binding = formlessCliWorkspaceOperationBindingsByCommand.get(
+    command as FormlessCliWorkspaceOperationCommandName,
   );
 
   if (!binding) {
-    throw new Error(`Site CLI command "${command}" is not bound to a workspace operation.`);
+    throw new Error(`Formless CLI command "${command}" is not bound to a workspace operation.`);
   }
 
   return binding;
 }
 
-function workspaceCliOperationUsage(binding: SiteCliWorkspaceOperationBinding): string {
+function workspaceCliOperationUsage(binding: FormlessCliWorkspaceOperationBinding): string {
   return [binding.terminalLabel, ...workspaceCliOperationOptionSyntax(binding)].join(" ");
 }
 
-function workspaceCliOperationOptionSyntax(binding: SiteCliWorkspaceOperationBinding): string[] {
+function workspaceCliOperationOptionSyntax(
+  binding: FormlessCliWorkspaceOperationBinding,
+): string[] {
   const definition = workspaceOperationDefinitionForKind(binding.operationKind);
   const allowed = workspaceCliOperationInputFieldSet(definition, binding);
 
   return binding.options.flatMap((option) => (allowed.has(option.fieldKey) ? [option.syntax] : []));
 }
 
-function siteCliWorkspaceOperationBindingForTopLevelCommand(
+function formlessCliWorkspaceOperationBindingForTopLevelCommand(
   command: string,
-): SiteCliWorkspaceOperationBinding | undefined {
-  return SITE_CLI_WORKSPACE_OPERATION_BINDINGS.find(
+): FormlessCliWorkspaceOperationBinding | undefined {
+  return FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS.find(
     (binding) => workspaceCliTopLevelCommand(binding.command) === command,
   );
 }
 
 function parseWorkspaceCliOperationArgs(
-  binding: SiteCliWorkspaceOperationBinding,
+  binding: FormlessCliWorkspaceOperationBinding,
   args: string[],
 ): FormlessCliCommand {
   const operationKind: string = binding.operationKind;
@@ -242,7 +246,7 @@ function parseWorkspaceCliOperationArgs(
 }
 
 function parseWorkspaceSourceSyncCliOperationArgs<TKind extends "workspacePull" | "workspacePush">(
-  binding: SiteCliWorkspaceOperationBinding,
+  binding: FormlessCliWorkspaceOperationBinding,
   args: string[],
   kind: TKind,
 ): Extract<FormlessCliCommand, { kind: TKind }> {
@@ -304,7 +308,7 @@ function workspaceCliOperationBooleanDefault(
 
 function workspaceCliOperationInputFieldSet(
   definition: WorkspaceOperationDefinition,
-  binding: SiteCliWorkspaceOperationBinding,
+  binding: FormlessCliWorkspaceOperationBinding,
 ): Set<string> {
   const allowed = new Set<string>();
   const boundFieldKeys = new Set<string>(binding.options.map((option) => option.fieldKey));
@@ -314,7 +318,7 @@ function workspaceCliOperationInputFieldSet(
 
     if (!boundFieldKeys.has(fieldKey)) {
       throw new Error(
-        `Site CLI command "${binding.command}" does not bind public input field "${fieldKey}".`,
+        `Formless CLI command "${binding.command}" does not bind public input field "${fieldKey}".`,
       );
     }
 
@@ -324,17 +328,17 @@ function workspaceCliOperationInputFieldSet(
   return allowed;
 }
 
-function workspaceCliTopLevelCommand(command: SiteCliWorkspaceOperationCommandName): string {
+function workspaceCliTopLevelCommand(command: FormlessCliWorkspaceOperationCommandName): string {
   const prefix = "formless ";
 
   if (!command.startsWith(prefix)) {
-    throw new Error(`Site CLI command "${command}" must start with "formless ".`);
+    throw new Error(`Formless CLI command "${command}" must start with "formless ".`);
   }
 
   const topLevelCommand = command.slice(prefix.length);
 
   if (!topLevelCommand || topLevelCommand.includes(" ")) {
-    throw new Error(`Site CLI command "${command}" must be a top-level command.`);
+    throw new Error(`Formless CLI command "${command}" must be a top-level command.`);
   }
 
   return topLevelCommand;

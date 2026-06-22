@@ -22,10 +22,10 @@ import {
 import {
   formlessCliUsage,
   parseFormlessCliArgs,
-  siteCliWorkspaceOperationBindingForCommand,
-  siteCliWorkspaceOperationCommandNameForKind,
-  type SiteCliWorkspaceOperationCommandName,
-  type SiteCliWorkspaceOperationKind,
+  formlessCliWorkspaceOperationBindingForCommand,
+  formlessCliWorkspaceOperationCommandNameForKind,
+  type FormlessCliWorkspaceOperationCommandName,
+  type FormlessCliWorkspaceOperationKind,
 } from "./cli-command.ts";
 import type {
   InstanceDomainProviderManualCleanupResponse,
@@ -123,7 +123,7 @@ import {
   readFormlessInstanceDomainProviderPlan,
   readFormlessInstanceOwnerSetupStatus,
 } from "./instance-target-client.ts";
-import { requireSiteCliTargetContext } from "./instance-target-context.ts";
+import { requireFormlessCliTargetContext } from "./instance-target-context.ts";
 import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
@@ -551,9 +551,9 @@ function workspaceDevServerCommandForEnv(
 }
 
 function workspaceCliCommandNameForOperation(
-  kind: SiteCliWorkspaceOperationKind,
-): SiteCliWorkspaceOperationCommandName {
-  return siteCliWorkspaceOperationCommandNameForKind(kind);
+  kind: FormlessCliWorkspaceOperationKind,
+): FormlessCliWorkspaceOperationCommandName {
+  return formlessCliWorkspaceOperationCommandNameForKind(kind);
 }
 
 async function runCliWorkspaceOperation(
@@ -823,11 +823,12 @@ function workspaceOperationInputForCliCommand(
   commandName: string,
   input: RunnableWorkspaceOperationInput,
 ): RunnableWorkspaceOperationInput {
-  const binding = siteCliWorkspaceOperationBindingForCommand(commandName);
+  const binding = formlessCliWorkspaceOperationBindingForCommand(commandName);
 
   if (binding.operationKind !== input.kind) {
     throw new Error(
-      `Site CLI command "${commandName}" is bound to operation "${binding.operationKind}", expected "${input.kind}".`,
+      `Formless CLI command "${commandName}" is bound to operation ` +
+        `"${binding.operationKind}", expected "${input.kind}".`,
     );
   }
 
@@ -1177,7 +1178,7 @@ export async function setupFormlessInstanceOwner(
     "cwd" | "env" | "fetch" | "openBrowser" | "randomToken" | "setupCapability"
   > = nodeFormlessCliDependencies(),
 ): Promise<SetupFormlessInstanceOwnerResult> {
-  const context = await requireSiteCliTargetContext(
+  const context = await requireFormlessCliTargetContext(
     {
       commandName: "owner setup",
       cwd: dependencies.cwd,
@@ -1245,7 +1246,7 @@ export async function planFormlessInstanceDomainProviderFromWorkspace(
     "cwd" | "env" | "fetch"
   > = nodeFormlessCliDependencies(),
 ): Promise<PlanFormlessInstanceDomainProviderResult> {
-  const context = await requireSiteCliTargetContext(
+  const context = await requireFormlessCliTargetContext(
     {
       commandName: "domains remote-plan",
       cwd: dependencies.cwd,

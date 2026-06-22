@@ -20,14 +20,14 @@ import {
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
-  resolveSiteCliTargetContext,
-  siteCliTargetAcceptHeaders,
+  resolveFormlessCliTargetContext,
+  formlessCliTargetAcceptHeaders,
 } from "./instance-target-context.ts";
 
 describe("Formless CLI target context", () => {
   it("prefers explicit admin tokens and redacts display labels", async () => {
     const workspaceRoot = await writeTargetWorkspace({ storedAdminToken: "stored-secret" });
-    const context = await resolveSiteCliTargetContext(
+    const context = await resolveFormlessCliTargetContext(
       {
         commandName: "status",
         cwd: workspaceRoot,
@@ -44,7 +44,7 @@ describe("Formless CLI target context", () => {
     expect(context.adminToken).toBe("explicit-secret");
     expect(context.adminTokenSource).toBe("explicit");
     expect(context.adminTokenDisplayLabel).toBe("[redacted]");
-    expect(siteCliTargetAcceptHeaders({ adminToken: context.adminToken }).authorization).toBe(
+    expect(formlessCliTargetAcceptHeaders({ adminToken: context.adminToken }).authorization).toBe(
       "Bearer explicit-secret",
     );
     expect(JSON.stringify(context.display)).not.toContain("explicit-secret");
@@ -54,7 +54,7 @@ describe("Formless CLI target context", () => {
 
   it("uses environment admin tokens before stored secret state", async () => {
     const workspaceRoot = await writeTargetWorkspace({ storedAdminToken: "stored-secret" });
-    const context = await resolveSiteCliTargetContext(
+    const context = await resolveFormlessCliTargetContext(
       {
         commandName: "status",
         cwd: workspaceRoot,
@@ -71,7 +71,7 @@ describe("Formless CLI target context", () => {
 
   it("uses stored admin tokens when explicit and environment tokens are missing", async () => {
     const workspaceRoot = await writeTargetWorkspace({ storedAdminToken: "stored-secret" });
-    const context = await resolveSiteCliTargetContext(
+    const context = await resolveFormlessCliTargetContext(
       {
         commandName: "status",
         cwd: workspaceRoot,
@@ -87,7 +87,7 @@ describe("Formless CLI target context", () => {
 
   it("reports missing admin tokens without adding authorization headers", async () => {
     const workspaceRoot = await writeTargetWorkspace();
-    const context = await resolveSiteCliTargetContext(
+    const context = await resolveFormlessCliTargetContext(
       {
         commandName: "status",
         cwd: workspaceRoot,
@@ -98,7 +98,7 @@ describe("Formless CLI target context", () => {
     expect(context.adminToken).toBeNull();
     expect(context.adminTokenSource).toBe("missing");
     expect(context.adminTokenDisplayLabel).toBe("missing");
-    expect(siteCliTargetAcceptHeaders({ adminToken: context.adminToken })).toEqual({
+    expect(formlessCliTargetAcceptHeaders({ adminToken: context.adminToken })).toEqual({
       accept: "application/json",
     });
   });

@@ -100,7 +100,10 @@ import {
 } from "../shared/upgrade-status.ts";
 import type { PortableArchiveInputStatus } from "./archive-input-status.ts";
 import { normalizeInstanceWorkspaceTargetUrl } from "@dpeek/formless-workspace";
-import { siteCliTargetAcceptHeaders, siteCliTargetJsonHeaders } from "./instance-target-context.ts";
+import {
+  formlessCliTargetAcceptHeaders,
+  formlessCliTargetJsonHeaders,
+} from "./instance-target-context.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
@@ -654,7 +657,7 @@ async function readFormlessInstanceAppRegistryResult(
   const registryUrl = apiUrl(targetUrl, APP_INSTALLS_API_PATH);
 
   const value = await fetchJson(dependencies.fetch, registryUrl, {
-    headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
+    headers: formlessCliTargetAcceptHeaders({ adminToken: input.adminToken }),
   });
   const appRegistry = parseAppRegistry(value, registryUrl, input.packageResolver);
 
@@ -686,7 +689,7 @@ export async function readFormlessInstanceDomainProviderPlan(
 
   return parseDomainProviderPlan(
     await fetchJson(dependencies.fetch, providerUrl.toString(), {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     providerUrl.toString(),
   );
@@ -705,7 +708,7 @@ export async function readFormlessInstanceDeploymentDesiredState(
 
   return parseDeployDesiredStateResponse(
     await fetchJson(dependencies.fetch, desiredStateUrl, {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     desiredStateUrl,
   );
@@ -720,7 +723,7 @@ export async function readFormlessInstanceDeploymentStatus(
 
   return parseDeployLatestStatusResponse(
     await fetchJson(dependencies.fetch, statusUrl, {
-      headers: siteCliTargetAcceptHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetAcceptHeaders({ adminToken: input.adminToken }),
     }),
     statusUrl,
   );
@@ -740,7 +743,7 @@ export async function readFormlessInstanceControlPlaneRecords(
 
   const bootstrap = parseControlPlaneBootstrapResponse(
     await fetchJson(dependencies.fetch, controlPlaneUrl, {
-      headers: siteCliTargetAcceptHeaders({
+      headers: formlessCliTargetAcceptHeaders({
         adminToken: input.adminToken,
         headers: deployControlPlaneActorHeaders(actorKind),
       }),
@@ -912,7 +915,7 @@ export async function patchFormlessInstanceDeploymentConfigObservation(
         input: values,
         recordId: input.targetId,
       }),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     operationUrl,
@@ -943,7 +946,7 @@ async function updateFormlessInstanceRouteRecord(
         recordId: input.recordId,
         source: { protocol: "cli" },
       }),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     operationUrl,
@@ -1093,7 +1096,7 @@ export async function requestFormlessInstanceDomainProviderDelete(
   return parseDomainProviderDeleteResponse(
     await postJson(dependencies.fetch, deleteUrl, {
       body: JSON.stringify(input.request ?? {}),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     deleteUrl,
@@ -1114,7 +1117,7 @@ export async function markFormlessInstanceDomainProviderResourceManuallyRemoved(
   return parseDomainProviderManualCleanupResponse(
     await postJson(dependencies.fetch, cleanupUrl, {
       body: JSON.stringify(input.request),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     cleanupUrl,
@@ -1139,7 +1142,7 @@ export async function completeFormlessInstanceDomainProviderDeleteJob(
   return parseDomainProviderDeleteJobResponse(
     await postJson(dependencies.fetch, resultUrl, {
       body: JSON.stringify(input.result),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     resultUrl,
@@ -1160,7 +1163,7 @@ export async function recordFormlessInstanceDomainMappingApplyEvidence(
   return parseApplyEvidenceResponse(
     await postJson(dependencies.fetch, evidenceUrl, {
       body: JSON.stringify(input.evidence),
-      headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+      headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
       method: "POST",
     }),
     evidenceUrl,
@@ -1666,7 +1669,7 @@ function parseOptionalString(value: unknown, fallback: string, context: string):
 }
 
 function adminJsonHeaders(adminToken: string | null | undefined): Record<string, string> {
-  return siteCliTargetJsonHeaders({ adminToken });
+  return formlessCliTargetJsonHeaders({ adminToken });
 }
 
 function parseRouteBase(value: unknown, fallback: "/apps"): "/apps" {
@@ -1965,7 +1968,7 @@ async function postDeploymentJson(
 
   return postJson(dependencies.fetch, url, {
     body: JSON.stringify(input.body),
-    headers: siteCliTargetJsonHeaders({ adminToken: input.adminToken }),
+    headers: formlessCliTargetJsonHeaders({ adminToken: input.adminToken }),
     method: "POST",
   });
 }

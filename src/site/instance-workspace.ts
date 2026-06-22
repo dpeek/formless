@@ -147,10 +147,10 @@ import {
 } from "./instance-target-client.ts";
 import type { FormlessInstanceDeploymentObservationPatch } from "./instance-target-client.ts";
 import {
-  requireSiteCliTargetContext,
-  resolveSiteCliTargetContext,
-  siteCliTargetFetchHeaders,
-  siteCliWorkspaceStatusSecretStateLabel,
+  requireFormlessCliTargetContext,
+  resolveFormlessCliTargetContext,
+  formlessCliTargetFetchHeaders,
+  formlessCliWorkspaceStatusSecretStateLabel,
 } from "./instance-target-context.ts";
 import {
   exportInstanceArchive,
@@ -1002,7 +1002,7 @@ export async function getFormlessInstanceWorkspaceStatus(
   input: FormlessInstanceWorkspaceStatusInput,
   dependencies: FormlessInstanceWorkspaceStatusDependencies,
 ): Promise<FormlessInstanceWorkspaceStatusResult> {
-  const context = await resolveSiteCliTargetContext(
+  const context = await resolveFormlessCliTargetContext(
     {
       commandName: "status",
       cwd: dependencies.cwd,
@@ -1032,7 +1032,7 @@ export async function getFormlessInstanceWorkspaceStatus(
     manifest: context.manifest,
     manifestPath: context.manifestPath,
     ...(remoteStatus === undefined ? {} : { remoteStatus }),
-    secretState: siteCliWorkspaceStatusSecretStateLabel(context),
+    secretState: formlessCliWorkspaceStatusSecretStateLabel(context),
     ...(context.selectedTarget === undefined ? {} : { selectedTarget: context.selectedTarget }),
     workspaceRoot: context.workspaceRoot,
   };
@@ -1042,7 +1042,7 @@ export async function pullFormlessInstanceWorkspace(
   input: PullFormlessInstanceWorkspaceInput,
   dependencies: PullFormlessInstanceWorkspaceDependencies,
 ): Promise<PullFormlessInstanceWorkspaceResult> {
-  const context = await requireSiteCliTargetContext(
+  const context = await requireFormlessCliTargetContext(
     {
       commandName: "pull",
       cwd: dependencies.cwd,
@@ -1207,7 +1207,7 @@ export async function checkFormlessInstanceWorkspace(
   input: CheckFormlessInstanceWorkspaceInput,
   dependencies: CheckFormlessInstanceWorkspaceDependencies,
 ): Promise<CheckFormlessInstanceWorkspaceResult> {
-  const context = await requireSiteCliTargetContext(
+  const context = await requireFormlessCliTargetContext(
     {
       commandName: "check",
       cwd: dependencies.cwd,
@@ -2954,7 +2954,7 @@ export async function planFormlessInstanceWorkspaceDomains(
   input: PlanFormlessInstanceWorkspaceDomainsInput,
   dependencies: PlanFormlessInstanceWorkspaceDomainsDependencies,
 ): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
-  const context = await requireSiteCliTargetContext(
+  const context = await requireFormlessCliTargetContext(
     {
       commandName: "domains plan",
       cwd: dependencies.cwd,
@@ -7040,7 +7040,7 @@ async function isInstanceDevServerReady(
 ): Promise<boolean> {
   try {
     const response = await fetcher(instanceAppInstallsUrl(origin), {
-      headers: siteCliTargetFetchHeaders({ accept: "application/json", adminToken }),
+      headers: formlessCliTargetFetchHeaders({ accept: "application/json", adminToken }),
     });
 
     return response.ok;
@@ -7098,7 +7098,7 @@ async function fetchWorkspaceJson<T>(
   options: { adminToken?: string | null } = {},
 ): Promise<T> {
   const response = await fetcher(url, {
-    headers: siteCliTargetFetchHeaders({
+    headers: formlessCliTargetFetchHeaders({
       accept: "application/json",
       adminToken: options.adminToken,
     }),

@@ -10,7 +10,7 @@ manage selected instance access.
 ### Requirement: Formless CLI Capability Naming
 
 The system SHALL describe the public CLI capability as the Formless CLI rather
-than as a Site-specific publish CLI.
+than as an app-specific publish CLI.
 
 #### Scenario: Capability path and title
 
@@ -19,7 +19,7 @@ than as a Site-specific publish CLI.
   validation output
 - THEN the capability name is `formless-cli`
 - AND the spec title is Formless CLI
-- AND legacy Site-specific publish capability names are not used for new change
+- AND legacy app-specific publish capability names are not used for new change
   metadata or shipped spec references
 
 #### Scenario: Source module names are not the CLI contract
@@ -52,10 +52,10 @@ workspace operations that are promoted to public CLI bindings.
   resources, control-plane records, app records, schema, and media
 - **AND** `formless destroy` remains the explicit Cloudflare teardown boundary
 - **AND** `formless pull` and `formless push` are the first public CLI bindings
-  selected by Site CLI for workspace operation definitions
+  selected by Formless CLI for workspace operation definitions
 - **AND** the workspace source save operation remains part of the workspace
   operation contract but has no public CLI command binding in this phase
-- **AND** Site CLI owns public command names, option syntax, terminal help
+- **AND** Formless CLI owns public command names, option syntax, terminal help
   labels, and dispatch behavior for public CLI bindings
 
 #### Scenario: Sync dry-runs
@@ -180,19 +180,19 @@ local execution binding handles it.
 - **AND** the first implementation does not require moving all operation bodies
   into one shared operation module
 
-#### Scenario: Site CLI binding from operation definition
+#### Scenario: Formless CLI binding from operation definition
 
 - **WHEN** the CLI exposes a workspace command for a defined operation
 - **THEN** command names, option spellings, option ordering, terminal help
-  labels, terminal descriptions, and dispatch behavior are declared in a Site
+  labels, terminal descriptions, and dispatch behavior are declared in a Formless
   CLI-owned binding table keyed by workspace operation kind or canonical key
 - **AND** command arguments and defaults are selected from the operation input
-  contract and the Site CLI binding table
+  contract and the Formless CLI binding table
 - **AND** each workspace operation promoted to the public CLI has one CLI
   binding name
 - **AND** the command invokes the same workspace operation contract with actor
   `cli`, either through direct local execution or through a gateway, API,
-  sidecar, or runtime endpoint selected by Site CLI from available execution
+  sidecar, or runtime endpoint selected by Formless CLI from available execution
   context
 - **AND** execution may continue to dispatch to existing local workspace
   functions while the operation definition remains the source of semantic input,
