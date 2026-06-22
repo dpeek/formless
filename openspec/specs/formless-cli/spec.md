@@ -52,9 +52,11 @@ workspace operations that are promoted to public CLI bindings.
   resources, control-plane records, app records, schema, and media
 - **AND** `formless destroy` remains the explicit Cloudflare teardown boundary
 - **AND** `formless pull` and `formless push` are the first public CLI bindings
-  derived from workspace operation definitions
+  selected by Site CLI for workspace operation definitions
 - **AND** the workspace source save operation remains part of the workspace
   operation contract but has no public CLI command binding in this phase
+- **AND** Site CLI owns public command names, option syntax, terminal help
+  labels, and dispatch behavior for public CLI bindings
 
 #### Scenario: Sync dry-runs
 
@@ -113,39 +115,89 @@ local execution binding handles it.
 - **WHEN** the workspace package declares a workspace operation
 - **THEN** the definition includes a target-prefixed canonical key, label, input
   fields, defaults, actor policy, read or write mode, bootstrap availability,
-  display-safe input summary, CLI binding, gateway binding, and required
-  execution capability
+  display-safe input summary, gateway binding, required execution capability,
+  and semantic execution requirements
 - **AND** the definition includes a stable execution handler key that may match
   the canonical operation key
 - **AND** operation kind allowlists, browser-visible operation sets, gateway
   mutating intent, bootstrap intent, and display input summaries are derived from
   the definitions
-- **AND** duplicated per-surface operation metadata is not maintained separately
-  in CLI, gateway, or instance shell code
+- **AND** duplicated semantic operation metadata is not maintained separately in
+  CLI, gateway, or instance shell code
+- **AND** the workspace package does not declare concrete public CLI command
+  spellings such as `formless pull`
+
+#### Scenario: Execution requirement vocabulary
+
+- **WHEN** a workspace operation declares execution context requirements
+- **THEN** each requirement is a string literal selected from
+  `workspace-source-read`, `workspace-source-write`, `local-filesystem`,
+  `local-authority`, `admin-token`, `remote-target`, and
+  `provider-credentials`
+- **AND** requirements describe execution context needed by the operation body,
+  not actor authorization, route syntax, command syntax, or transport policy
+- **AND** owner sessions, bootstrap tokens, CSRF proofs, admin bearer
+  authentication, sidecar URLs, HTTP request paths, CLI command names, option
+  names, and terminal help labels are not execution requirements
+- **AND** an operation may have base requirements from its definition and
+  effective requirements derived from validated input before execution
+
+#### Scenario: Base operation execution requirements
+
+- **WHEN** workspace operation definitions are read
+- **THEN** workspace init requires `local-filesystem` and
+  `workspace-source-write`
+- **AND** workspace status requires `local-filesystem` and
+  `workspace-source-read`, with `remote-target` and `admin-token` required only
+  when target-backed remote status is requested or selected
+- **AND** workspace source check requires `local-filesystem` and
+  `workspace-source-read`, with `remote-target` and `admin-token` required only
+  when a selected remote target is checked
+- **AND** workspace source save requires `local-filesystem`,
+  `workspace-source-read`, `workspace-source-write`, and `local-authority`
+- **AND** workspace source pull requires `local-filesystem`,
+  `workspace-source-read`, `workspace-source-write`, `remote-target`, and
+  `admin-token`
+- **AND** workspace source push requires `local-filesystem`,
+  `workspace-source-read`, and `remote-target`, with `admin-token`,
+  `provider-credentials`, and `workspace-source-write` added as effective
+  requirements for apply, provider reconciliation, or local writeback phases
+- **AND** credential setup requires `local-filesystem`,
+  `workspace-source-read`, `workspace-source-write`, and
+  `provider-credentials`
+- **AND** deployment refresh requires `local-filesystem`,
+  `workspace-source-read`, `remote-target`, and `admin-token`
 
 #### Scenario: Definition and handler boundary
 
 - **WHEN** a workspace operation is executed locally or through a gateway actor
-- **THEN** the operation definition remains the source of metadata, bindings,
-  input shape, actor policy, mode, and required execution capability
+- **THEN** the operation definition remains the source of semantic metadata,
+  input shape, actor policy, mode, required execution capability, execution
+  requirements, and gateway binding
 - **AND** operation handler implementations remain grouped by execution domain
   such as workspace status, workspace source sync, credential setup, and
   deployment
 - **AND** the first implementation does not require moving all operation bodies
   into one shared operation module
 
-#### Scenario: CLI binding from operation definition
+#### Scenario: Site CLI binding from operation definition
 
 - **WHEN** the CLI exposes a workspace command for a defined operation
-- **THEN** command arguments and defaults are selected from the operation input
-  contract and CLI binding
+- **THEN** command names, option spellings, option ordering, terminal help
+  labels, terminal descriptions, and dispatch behavior are declared in a Site
+  CLI-owned binding table keyed by workspace operation kind or canonical key
+- **AND** command arguments and defaults are selected from the operation input
+  contract and the Site CLI binding table
 - **AND** each workspace operation promoted to the public CLI has one CLI
   binding name
-- **AND** the command invokes the operation through the local workspace
-  operation runner with actor `cli`
+- **AND** the command invokes the same workspace operation contract with actor
+  `cli`, either through direct local execution or through a gateway, API,
+  sidecar, or runtime endpoint selected by Site CLI from available execution
+  context
 - **AND** execution may continue to dispatch to existing local workspace
-  functions while the operation definition remains the source of command shape,
-  actor policy, and display-safe input facts
+  functions while the operation definition remains the source of semantic input,
+  actor policy, mode, required capability, execution requirements, and
+  display-safe input facts
 - **AND** the first public CLI operation bindings are `formless pull` and
   `formless push`
 - **AND** public push and pull bindings expose only `--workspace`, `--target`,
@@ -161,7 +213,8 @@ local execution binding handles it.
 - **WHEN** a browser or automation caller starts a workspace operation through
   the same-origin gateway API
 - **THEN** the gateway parses allowed request fields, defaults, read/write mode,
-  bootstrap eligibility, and required actor policy from the operation definition
+  bootstrap eligibility, required actor policy, required capability, and
+  execution requirements from the operation definition
 - **AND** forbidden secret-looking, path-like, raw provider state, or shell
   command inputs remain rejected before execution
 - **AND** unsupported operations are rejected because no browser gateway binding

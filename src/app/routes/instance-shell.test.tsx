@@ -295,8 +295,17 @@ describe("instance shell route view", () => {
     ]);
     expect(
       selectWorkspaceGatewayOperationControls().map(
-        ({ bootstrapAllowed, inputFields, kind, label, mode, requiredCapability }) => ({
+        ({
           bootstrapAllowed,
+          executionRequirements,
+          inputFields,
+          kind,
+          label,
+          mode,
+          requiredCapability,
+        }) => ({
+          bootstrapAllowed,
+          executionRequirements,
           inputFields,
           kind,
           label,

@@ -325,9 +325,20 @@ describe("sidecar workspace gateway adapter", () => {
         readOperation: async () => operation("save"),
       }),
     );
+    const sidecarBootstrapWithoutIntent = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_status_00000001`, {
+        headers: sidecarProxyHeaders({ via: "bootstrap" }),
+      }),
+      gatewayEnv(),
+      operationHandlers(),
+    );
 
     expect(bootstrapWithoutIntent?.status).toBe(400);
     await expect(bootstrapWithoutIntent?.json()).resolves.toEqual({
+      error: "Workspace gateway operation intent is required for bootstrap reads.",
+    });
+    expect(sidecarBootstrapWithoutIntent?.status).toBe(400);
+    await expect(sidecarBootstrapWithoutIntent?.json()).resolves.toEqual({
       error: "Workspace gateway operation intent is required for bootstrap reads.",
     });
     expect(mismatchedSidecarIntent?.status).toBe(400);

@@ -8,7 +8,9 @@ import {
   parseWorkspaceOperationId,
   workspaceOperationExecutionDecision,
   workspaceOperationBootstrapAllowed,
+  workspaceOperationBaseExecutionRequirements,
   workspaceOperationDefinitionForGatewayRequestKind,
+  workspaceOperationEffectiveExecutionRequirements,
   workspaceOperationGatewayAllowedRequestFields,
   workspaceOperationGatewayInputFields,
   workspaceOperationInputFieldDefinition,
@@ -180,6 +182,10 @@ export function workspaceGatewayStartOperationIntent(
 
   return {
     bootstrapAllowed: workspaceOperationBootstrapAllowed(operation),
+    executionRequirements:
+      typeof input === "string"
+        ? workspaceOperationBaseExecutionRequirements(operation)
+        : workspaceOperationEffectiveExecutionRequirements(input),
     mutating: workspaceOperationMode(operation) === "write",
     operation,
     requiredCapability: workspaceOperationRequiredCapability(operation),
@@ -191,6 +197,7 @@ export function workspaceGatewayReadOperationIntent(
 ): WorkspaceGatewayOperationIntent {
   return {
     bootstrapAllowed: workspaceOperationBootstrapAllowed(operation),
+    executionRequirements: workspaceOperationBaseExecutionRequirements(operation),
     mutating: false,
     operation,
     requiredCapability: workspaceOperationRequiredCapability(operation),
@@ -209,12 +216,65 @@ export function workspaceGatewayOperationExecutionDecision(input: {
   actor: WorkspaceOperationActor;
   capabilities: readonly WorkspaceOperationRequiredCapability[];
   intent: WorkspaceGatewayOperationIntent;
+  mutating?: boolean;
+  operationInput?: WorkspaceGatewayStartInput;
 }): WorkspaceOperationExecutionDecision {
+  const intentDecision = workspaceGatewayOperationIntentDecision(input);
+
+  if (!intentDecision.ok) {
+    return intentDecision;
+  }
+
   return workspaceOperationExecutionDecision({
     actor: input.actor,
     capabilities: input.capabilities,
     kind: input.intent.operation,
   });
+}
+
+function workspaceGatewayOperationIntentDecision(input: {
+  intent: WorkspaceGatewayOperationIntent;
+  mutating?: boolean;
+  operationInput?: WorkspaceGatewayStartInput;
+}): WorkspaceOperationExecutionDecision {
+  const operation = input.intent.operation;
+
+  if (input.operationInput !== undefined && input.operationInput.kind !== operation) {
+    return { error: "Workspace gateway operation intent is invalid.", ok: false };
+  }
+
+  const expectedMutating =
+    input.operationInput === undefined
+      ? input.mutating
+      : workspaceOperationMode(input.operationInput.kind) === "write";
+
+  if (expectedMutating !== undefined && input.intent.mutating !== expectedMutating) {
+    return { error: "Workspace gateway operation intent is invalid.", ok: false };
+  }
+
+  if (input.intent.bootstrapAllowed !== workspaceOperationBootstrapAllowed(operation)) {
+    return { error: "Workspace gateway operation intent is invalid.", ok: false };
+  }
+
+  if (input.intent.requiredCapability !== workspaceOperationRequiredCapability(operation)) {
+    return { error: "Workspace gateway operation intent is invalid.", ok: false };
+  }
+
+  const expectedRequirements =
+    input.operationInput === undefined
+      ? workspaceOperationBaseExecutionRequirements(operation)
+      : workspaceOperationEffectiveExecutionRequirements(input.operationInput);
+
+  if (
+    !sameWorkspaceGatewayExecutionRequirements(
+      input.intent.executionRequirements,
+      expectedRequirements,
+    )
+  ) {
+    return { error: "Workspace gateway operation intent is invalid.", ok: false };
+  }
+
+  return { ok: true };
 }
 
 export function parseWorkspaceGatewayAutoSaveEnqueueInput(
@@ -483,6 +543,15 @@ function optionalBoolean(value: unknown): boolean | undefined {
   }
 
   return value;
+}
+
+function sameWorkspaceGatewayExecutionRequirements(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length && left.every((requirement, index) => right[index] === requirement)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

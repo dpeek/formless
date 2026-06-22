@@ -63,11 +63,13 @@ import {
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   WORKSPACE_RECORD_STATE_FILE_KIND,
+  WORKSPACE_OPERATION_KINDS,
   defaultWorkspacePackageLinks,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
   formatWorkspacePackageLinks,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
+  workspaceOperationDefinitionForKind,
 } from "@dpeek/formless-workspace";
 import {
   crmSeedRecords,
@@ -76,7 +78,13 @@ import {
   taskSeedRecords,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
-import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
+import {
+  SITE_CLI_WORKSPACE_OPERATION_BINDINGS,
+  formlessCliUsage,
+  normalizeSourceUrl,
+  parseFormlessCliArgs,
+  siteCliWorkspaceOperationCommandNameForKind,
+} from "./cli-command.ts";
 import {
   instanceWorkspaceInstanceStatePath,
   instanceWorkspaceMediaFilePath,
@@ -157,6 +165,74 @@ describe("Formless CLI", () => {
     await runFormlessCli(["help"], cliDeps(process.cwd(), { logs }));
 
     expect(logs).toEqual([usage]);
+  });
+
+  it("owns public workspace operation command bindings in Site CLI", () => {
+    expect(
+      SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => ({
+        command: binding.command,
+        dispatchKind: binding.dispatchKind,
+        operationKind: binding.operationKind,
+        optionFields: binding.options.map((option) => option.fieldKey),
+        optionSyntax: binding.options.map((option) => option.syntax),
+        terminalDescription: binding.terminalDescription,
+        terminalLabel: binding.terminalLabel,
+      })),
+    ).toEqual([
+      {
+        command: "formless pull",
+        dispatchKind: "workspacePull",
+        operationKind: "pull",
+        optionFields: ["workspacePath", "targetAlias", "dryRun"],
+        optionSyntax: ["[--workspace <path>]", "[--target <alias>]", "[--dry-run]"],
+        terminalDescription: "Workspace source pull",
+        terminalLabel: "pull",
+      },
+      {
+        command: "formless push",
+        dispatchKind: "workspacePush",
+        operationKind: "push",
+        optionFields: ["workspacePath", "targetAlias", "dryRun"],
+        optionSyntax: ["[--workspace <path>]", "[--target <alias>]", "[--dry-run]"],
+        terminalDescription: "Workspace source push",
+        terminalLabel: "push",
+      },
+    ]);
+    expect(siteCliWorkspaceOperationCommandNameForKind("pull")).toBe("formless pull");
+    expect(siteCliWorkspaceOperationCommandNameForKind("push")).toBe("formless push");
+    expect(SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => binding.operationKind)).toEqual([
+      "pull",
+      "push",
+    ]);
+    expect(
+      SITE_CLI_WORKSPACE_OPERATION_BINDINGS.every((binding) =>
+        WORKSPACE_OPERATION_KINDS.includes(binding.operationKind),
+      ),
+    ).toBe(true);
+
+    for (const binding of SITE_CLI_WORKSPACE_OPERATION_BINDINGS) {
+      const definition = workspaceOperationDefinitionForKind(binding.operationKind);
+      const definitionFieldKeys = new Set(definition.input.fields.map((field) => field.key));
+
+      expect(binding.options.map((option) => option.fieldKey)).toEqual([
+        "workspacePath",
+        "targetAlias",
+        "dryRun",
+      ]);
+      expect(binding.options.every((option) => definitionFieldKeys.has(option.fieldKey))).toBe(
+        true,
+      );
+    }
+
+    expect(SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => binding.command)).not.toContain(
+      "formless save",
+    );
+    expect(
+      SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => binding.operationKind),
+    ).not.toContain("save");
+    expect(
+      SITE_CLI_WORKSPACE_OPERATION_BINDINGS.map((binding) => binding.operationKind),
+    ).not.toContain("deploymentRefresh");
   });
 
   it("parses top-level workspace command shortcuts", () => {

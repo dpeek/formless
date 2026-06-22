@@ -87,6 +87,15 @@ export type WorkspaceOperationRequiredCapability =
   | "workspace-source-sync"
   | "workspace-source-write";
 
+export type WorkspaceOperationExecutionRequirement =
+  | "admin-token"
+  | "local-authority"
+  | "local-filesystem"
+  | "provider-credentials"
+  | "remote-target"
+  | "workspace-source-read"
+  | "workspace-source-write";
+
 export const WORKSPACE_OPERATION_CAPABILITIES = [
   "workspace-read",
   "workspace-source-write",
@@ -96,6 +105,16 @@ export const WORKSPACE_OPERATION_CAPABILITIES = [
   "deployment-apply",
   "deployment-observe",
 ] as const satisfies readonly WorkspaceOperationRequiredCapability[];
+
+export const WORKSPACE_OPERATION_EXECUTION_REQUIREMENTS = [
+  "workspace-source-read",
+  "workspace-source-write",
+  "local-filesystem",
+  "local-authority",
+  "admin-token",
+  "remote-target",
+  "provider-credentials",
+] as const satisfies readonly WorkspaceOperationExecutionRequirement[];
 
 export type WorkspaceOperationInputFieldValueType = "boolean" | "enum" | "string";
 
@@ -110,10 +129,6 @@ export type WorkspaceOperationInputFieldDefinition = {
   valueType: WorkspaceOperationInputFieldValueType;
 };
 
-export type WorkspaceOperationCliBindingDefinition = {
-  commands: readonly string[];
-};
-
 export type WorkspaceOperationGatewayBindingDefinition = {
   bootstrap: boolean;
   inputFields: readonly string[];
@@ -123,9 +138,9 @@ export type WorkspaceOperationGatewayBindingDefinition = {
 export type WorkspaceOperationDefinitionContract = {
   actorPolicy: WorkspaceOperationActorPolicy;
   bindings: {
-    cli?: WorkspaceOperationCliBindingDefinition;
     gateway?: WorkspaceOperationGatewayBindingDefinition;
   };
+  executionRequirements: readonly WorkspaceOperationExecutionRequirement[];
   handlerKey: string;
   input: {
     fields: readonly WorkspaceOperationInputFieldDefinition[];
@@ -172,6 +187,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
     bindings: {
       gateway: { bootstrap: false, inputFields: ["targetAlias"], requestKind: "check" },
     },
+    executionRequirements: ["local-filesystem", "workspace-source-read"],
     handlerKey: "workspace.source.check",
     input: { fields: [targetAliasInputField, workspacePathInputField] },
     key: "workspace.source.check",
@@ -204,6 +220,12 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
         workspacePathInputField,
       ],
     },
+    executionRequirements: [
+      "local-filesystem",
+      "workspace-source-read",
+      "workspace-source-write",
+      "provider-credentials",
+    ],
     key: "workspace.credentials.setup",
     kind: "credentialSetup",
     label: "Credential setup",
@@ -213,6 +235,12 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {},
+    executionRequirements: [
+      "local-filesystem",
+      "workspace-source-read",
+      "remote-target",
+      "admin-token",
+    ],
     handlerKey: "deployment.refresh",
     input: { fields: [targetAliasInputField, workspacePathInputField] },
     key: "deployment.refresh",
@@ -224,6 +252,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {},
+    executionRequirements: ["local-filesystem", "workspace-source-write"],
     handlerKey: "workspace.init",
     input: {
       fields: [
@@ -240,9 +269,15 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless pull"] },
       gateway: { bootstrap: false, inputFields: ["dryRun", "targetAlias"], requestKind: "pull" },
     },
+    executionRequirements: [
+      "local-filesystem",
+      "workspace-source-read",
+      "workspace-source-write",
+      "remote-target",
+      "admin-token",
+    ],
     handlerKey: "workspace.source.pull",
     input: { fields: [dryRunInputField, targetAliasInputField, workspacePathInputField] },
     key: "workspace.source.pull",
@@ -254,13 +289,13 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
     bindings: {
-      cli: { commands: ["formless push"] },
       gateway: {
         bootstrap: false,
         inputFields: ["dryRun", "targetAlias"],
         requestKind: "push",
       },
     },
+    executionRequirements: ["local-filesystem", "workspace-source-read", "remote-target"],
     handlerKey: "workspace.source.push",
     input: { fields: [dryRunInputField, targetAliasInputField, workspacePathInputField] },
     key: "workspace.source.push",
@@ -274,6 +309,12 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
     bindings: {
       gateway: { bootstrap: false, inputFields: ["check"], requestKind: "save" },
     },
+    executionRequirements: [
+      "local-filesystem",
+      "workspace-source-read",
+      "workspace-source-write",
+      "local-authority",
+    ],
     handlerKey: "workspace.source.save",
     input: {
       fields: [
@@ -310,6 +351,7 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
         workspacePathInputField,
       ],
     },
+    executionRequirements: ["local-filesystem", "workspace-source-read"],
     key: "workspace.status",
     kind: "status",
     label: "Workspace status",
@@ -326,16 +368,6 @@ export type WorkspaceOperationHandlerKey = WorkspaceOperationDefinition["handler
 
 export type WorkspaceOperationKind = WorkspaceOperationDefinition["kind"];
 
-export type WorkspaceCliOperationDefinition = Extract<
-  WorkspaceOperationDefinition,
-  { readonly bindings: { readonly cli: unknown } }
->;
-
-export type WorkspaceCliOperationKind = WorkspaceCliOperationDefinition["kind"];
-
-export type WorkspaceCliCommandName =
-  WorkspaceCliOperationDefinition["bindings"]["cli"]["commands"][number];
-
 export type WorkspaceGatewayOperationDefinition = Extract<
   WorkspaceOperationDefinition,
   { readonly bindings: { readonly gateway: unknown } }
@@ -349,6 +381,7 @@ export type WorkspaceBrowserOperationKind = WorkspaceGatewayOperationKind;
 
 export type WorkspaceBrowserOperationControlMetadata = {
   bootstrapAllowed: boolean;
+  executionRequirements: readonly WorkspaceOperationExecutionRequirement[];
   inputFields: readonly string[];
   kind: WorkspaceBrowserOperationKind;
   label: string;
@@ -363,19 +396,6 @@ export const WORKSPACE_OPERATION_KEYS = WORKSPACE_OPERATION_DEFINITIONS.map(
 export const WORKSPACE_OPERATION_KINDS = WORKSPACE_OPERATION_DEFINITIONS.map(
   (definition) => definition.kind,
 ) as WorkspaceOperationKind[];
-
-export const WORKSPACE_CLI_OPERATION_DEFINITIONS = WORKSPACE_OPERATION_DEFINITIONS.filter(
-  hasWorkspaceCliBinding,
-) as readonly WorkspaceCliOperationDefinition[];
-
-export const WORKSPACE_CLI_OPERATION_KINDS = WORKSPACE_CLI_OPERATION_DEFINITIONS.map(
-  (definition) => definition.kind,
-) as WorkspaceCliOperationKind[];
-
-export const WORKSPACE_CLI_OPERATION_COMMANDS = WORKSPACE_CLI_OPERATION_DEFINITIONS.flatMap(
-  (definition) =>
-    hasWorkspaceCliBinding(definition) ? Array.from(definition.bindings.cli.commands) : [],
-) as WorkspaceCliCommandName[];
 
 export const WORKSPACE_GATEWAY_OPERATION_DEFINITIONS = WORKSPACE_OPERATION_DEFINITIONS.filter(
   hasWorkspaceGatewayBinding,
@@ -392,12 +412,6 @@ export const WORKSPACE_BROWSER_OPERATION_KINDS = WORKSPACE_GATEWAY_OPERATION_KIN
 export const WORKSPACE_BOOTSTRAP_OPERATION_KINDS = WORKSPACE_GATEWAY_OPERATION_DEFINITIONS.filter(
   (definition) => hasWorkspaceGatewayBinding(definition) && definition.bindings.gateway.bootstrap,
 ).map((definition) => definition.kind) as WorkspaceGatewayOperationKind[];
-
-function hasWorkspaceCliBinding(
-  definition: WorkspaceOperationDefinition,
-): definition is WorkspaceCliOperationDefinition {
-  return "cli" in definition.bindings;
-}
 
 function hasWorkspaceGatewayBinding(
   definition: WorkspaceOperationDefinition,

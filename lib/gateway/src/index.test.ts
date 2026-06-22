@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  WORKSPACE_OPERATION_CAPABILITIES,
   workspaceOperationDefinitionForGatewayRequestKind,
   workspaceOperationDefinitionForKind,
   workspaceOperationGatewayAllowedRequestFields,
@@ -21,6 +22,7 @@ import {
   parseWorkspaceGatewayStartInput,
   workspaceGatewayOperationPath,
   workspaceGatewayReadOperationIntent,
+  workspaceGatewayOperationExecutionDecision,
   workspaceGatewayStartOperationIntent,
 } from "./index.ts";
 
@@ -243,33 +245,72 @@ describe("Gateway runtime-neutral contracts", () => {
 
     expect(workspaceGatewayStartOperationIntent({ kind: "status" })).toEqual({
       bootstrapAllowed: true,
+      executionRequirements: ["local-filesystem", "workspace-source-read"],
       mutating: false,
       operation: "status",
       requiredCapability: "workspace-read",
     });
     expect(workspaceGatewayStartOperationIntent({ check: true, kind: "save" })).toEqual({
       bootstrapAllowed: false,
+      executionRequirements: [
+        "local-filesystem",
+        "workspace-source-read",
+        "workspace-source-write",
+        "local-authority",
+      ],
       mutating: true,
       operation: "save",
       requiredCapability: "workspace-source-write",
     });
+    expect(workspaceGatewayStartOperationIntent({ dryRun: true, kind: "push" })).toMatchObject({
+      executionRequirements: ["local-filesystem", "workspace-source-read", "remote-target"],
+    });
+    expect(workspaceGatewayStartOperationIntent({ kind: "push" })).toMatchObject({
+      executionRequirements: [
+        "local-filesystem",
+        "workspace-source-read",
+        "remote-target",
+        "admin-token",
+        "provider-credentials",
+        "workspace-source-write",
+      ],
+    });
     expect(workspaceGatewayReadOperationIntent("status")).toEqual({
       bootstrapAllowed: true,
+      executionRequirements: ["local-filesystem", "workspace-source-read"],
       mutating: false,
       operation: "status",
       requiredCapability: "workspace-read",
     });
     expect(workspaceGatewayAutoSaveStatusIntent()).toEqual({
       bootstrapAllowed: true,
+      executionRequirements: ["local-filesystem", "workspace-source-read"],
       mutating: false,
       operation: "status",
       requiredCapability: "workspace-read",
     });
     expect(workspaceGatewayAutoSaveEnqueueIntent()).toEqual({
       bootstrapAllowed: false,
+      executionRequirements: [
+        "local-filesystem",
+        "workspace-source-read",
+        "workspace-source-write",
+        "local-authority",
+      ],
       mutating: true,
       operation: "save",
       requiredCapability: "workspace-source-write",
     });
+    expect(
+      workspaceGatewayOperationExecutionDecision({
+        actor: "browser",
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+        intent: {
+          ...workspaceGatewayStartOperationIntent({ kind: "push" }),
+          executionRequirements: ["local-filesystem", "workspace-source-read", "remote-target"],
+        },
+        operationInput: { kind: "push" },
+      }),
+    ).toEqual({ error: "Workspace gateway operation intent is invalid.", ok: false });
   });
 });

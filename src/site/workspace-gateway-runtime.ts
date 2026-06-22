@@ -18,6 +18,7 @@ import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   WORKSPACE_OPERATION_CAPABILITIES,
   assertWorkspaceOperationExecutionAllowed,
+  assertWorkspaceOperationExecutionRequirements,
   initialWorkspaceAutoSaveState,
   nextWorkspaceAutoSaveEnqueuedState,
   nextWorkspaceAutoSaveFailedState,
@@ -505,6 +506,7 @@ async function runCredentialSetupGatewayOperation(
     capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
     kind: input.kind,
   });
+  assertWorkspaceOperationExecutionRequirements(input);
 
   let operation = await createWorkspaceOperationState({
     actor,

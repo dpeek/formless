@@ -14,13 +14,11 @@ import {
   WORKSPACE_BROWSER_OPERATION_DEFINITIONS,
   WORKSPACE_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_BROWSER_OPERATION_KINDS,
-  WORKSPACE_CLI_OPERATION_DEFINITIONS,
-  WORKSPACE_CLI_OPERATION_COMMANDS,
-  WORKSPACE_CLI_OPERATION_KINDS,
   WORKSPACE_GATEWAY_OPERATION_DEFINITIONS,
   WORKSPACE_GATEWAY_OPERATION_KINDS,
   WORKSPACE_OPERATION_CAPABILITIES,
   WORKSPACE_OPERATION_DEFINITIONS,
+  WORKSPACE_OPERATION_EXECUTION_REQUIREMENTS,
   WORKSPACE_OPERATION_KINDS,
   WORKSPACE_OPERATION_KEYS,
   WORKSPACE_OPERATION_STATE_FILE_KIND,
@@ -37,6 +35,7 @@ import {
   formatWorkspaceRecordStateFile,
   formatWorkspaceOperationState,
   formatInstanceWorkspaceManifest,
+  assertWorkspaceOperationExecutionRequirements,
   initialWorkspaceAutoSaveState,
   initialWorkspaceOperationState,
   isWorkspaceAutoSaveSuppressionReason,
@@ -45,11 +44,11 @@ import {
   workspaceOperationActorPolicy,
   workspaceBrowserOperationControlMetadata,
   workspaceBrowserOperationDefinitions,
+  workspaceOperationBaseExecutionRequirements,
   workspaceOperationCapabilityAllowed,
-  workspaceOperationCliCommands,
-  workspaceCliOperationDefinitionForKind,
-  workspaceCliOperationDefinitions,
+  workspaceOperationEffectiveExecutionRequirements,
   workspaceOperationExecutionDecision,
+  workspaceOperationExecutionRequirementsMatch,
   workspaceOperationDefinitionForGatewayRequestKind,
   workspaceGatewayOperationDefinitionForKind,
   workspaceGatewayOperationDefinitions,
@@ -57,9 +56,8 @@ import {
   workspaceOperationGatewayInputFields,
   workspaceOperationGatewayRequestKind,
   isWorkspaceBrowserOperationKind,
-  isWorkspaceCliCommandName,
-  isWorkspaceCliOperationKind,
   isWorkspaceGatewayOperationKind,
+  isWorkspaceOperationExecutionRequirement,
   isWorkspaceOperationKind,
   nextWorkspaceOperationState,
   normalizeInstanceWorkspaceTargetUrl,
@@ -81,7 +79,6 @@ import {
   parseWorkspaceOperationId,
   parseWorkspaceOperationStateJson,
   workspaceOperationBootstrapAllowed,
-  workspaceOperationDefinitionForCliCommand,
   workspaceOperationDefinitionForKey,
   workspaceOperationDefinitionForKind,
   workspaceOperationInputDefaults,
@@ -678,6 +675,7 @@ describe("workspace operation contracts", () => {
     expect(workspaceBrowserOperationControlMetadata()).toEqual(
       WORKSPACE_BROWSER_OPERATION_DEFINITIONS.map((definition) => ({
         bootstrapAllowed: definition.bindings.gateway.bootstrap,
+        executionRequirements: definition.executionRequirements,
         inputFields: definition.bindings.gateway.inputFields,
         kind: definition.kind,
         label: definition.label,
@@ -692,6 +690,12 @@ describe("workspace operation contracts", () => {
     ).toMatchObject({
       save: {
         bootstrapAllowed: false,
+        executionRequirements: [
+          "local-filesystem",
+          "workspace-source-read",
+          "workspace-source-write",
+          "local-authority",
+        ],
         inputFields: ["check"],
         label: "Workspace source save",
         mode: "write",
@@ -699,22 +703,13 @@ describe("workspace operation contracts", () => {
       },
       status: {
         bootstrapAllowed: true,
+        executionRequirements: ["local-filesystem", "workspace-source-read"],
         inputFields: ["includeDeploymentStatus", "targetAlias"],
         label: "Workspace status",
         mode: "read",
         requiredCapability: "workspace-read",
       },
     });
-    expect(WORKSPACE_CLI_OPERATION_KINDS).toEqual(["pull", "push"]);
-    expect(WORKSPACE_CLI_OPERATION_COMMANDS).toEqual(["formless pull", "formless push"]);
-    expect(WORKSPACE_CLI_OPERATION_DEFINITIONS.map((definition) => definition.kind)).toEqual([
-      "pull",
-      "push",
-    ]);
-    expect(workspaceCliOperationDefinitions().map((definition) => definition.kind)).toEqual([
-      "pull",
-      "push",
-    ]);
     expect(WORKSPACE_BOOTSTRAP_OPERATION_KINDS).toEqual(["status"]);
     expect(isWorkspaceOperationKind("init")).toBe(true);
     expect(isWorkspaceBrowserOperationKind("init")).toBe(false);
@@ -722,13 +717,26 @@ describe("workspace operation contracts", () => {
     expect(isWorkspaceBrowserOperationKind("credentialSetup")).toBe(true);
     expect(isWorkspaceGatewayOperationKind("credentialSetup")).toBe(true);
     expect(isWorkspaceGatewayOperationKind("deploymentRefresh")).toBe(false);
-    expect(isWorkspaceCliOperationKind("push")).toBe(true);
-    expect(isWorkspaceCliOperationKind("save")).toBe(false);
-    expect(isWorkspaceCliCommandName("formless push")).toBe(true);
-    expect(isWorkspaceCliCommandName("formless save")).toBe(false);
-    expect(isWorkspaceCliCommandName("formless deploy")).toBe(false);
-    expect(isWorkspaceCliCommandName("formless instance push")).toBe(false);
-    expect(isWorkspaceCliCommandName("formless instance owner setup")).toBe(false);
+    expect(
+      WORKSPACE_OPERATION_DEFINITIONS.map((definition) => [
+        definition.kind,
+        Object.keys(definition.bindings),
+      ]),
+    ).toEqual([
+      ["check", ["gateway"]],
+      ["credentialSetup", ["gateway"]],
+      ["deploymentRefresh", []],
+      ["init", []],
+      ["pull", ["gateway"]],
+      ["push", ["gateway"]],
+      ["save", ["gateway"]],
+      ["status", ["gateway"]],
+    ]);
+    expect(
+      WORKSPACE_OPERATION_DEFINITIONS.every((definition) => !("cli" in definition.bindings)),
+    ).toBe(true);
+    expect(JSON.stringify(WORKSPACE_OPERATION_DEFINITIONS)).not.toContain("formless pull");
+    expect(JSON.stringify(WORKSPACE_OPERATION_DEFINITIONS)).not.toContain("formless push");
 
     expect(workspaceOperationDefinitionForKey("workspace.status")).toMatchObject({
       handlerKey: "workspace.status",
@@ -736,16 +744,6 @@ describe("workspace operation contracts", () => {
       mode: "read",
       requiredCapability: "workspace-read",
     });
-    expect(workspaceCliOperationDefinitionForKind("pull").bindings.cli.commands).toEqual([
-      "formless pull",
-    ]);
-    expect(workspaceOperationCliCommands("push")).toEqual(["formless push"]);
-    expect(() => workspaceOperationDefinitionForCliCommand("formless deploy")).toThrow(
-      'Workspace CLI command "formless deploy" is not bound to an operation definition.',
-    );
-    expect(() => workspaceOperationDefinitionForCliCommand("formless save")).toThrow(
-      'Workspace CLI command "formless save" is not bound to an operation definition.',
-    );
     expect("gateway" in workspaceOperationDefinitionForKind("init").bindings).toBe(false);
     expect("gateway" in workspaceOperationDefinitionForKind("deploymentRefresh").bindings).toBe(
       false,
@@ -807,6 +805,141 @@ describe("workspace operation contracts", () => {
         kind: "save",
       }),
     ).toEqual({ ok: true });
+  });
+
+  it("declares base and effective operation execution requirements", () => {
+    const baseExecutionRequirementsByKind = {
+      check: ["local-filesystem", "workspace-source-read"],
+      credentialSetup: [
+        "local-filesystem",
+        "workspace-source-read",
+        "workspace-source-write",
+        "provider-credentials",
+      ],
+      deploymentRefresh: [
+        "local-filesystem",
+        "workspace-source-read",
+        "remote-target",
+        "admin-token",
+      ],
+      init: ["local-filesystem", "workspace-source-write"],
+      pull: [
+        "local-filesystem",
+        "workspace-source-read",
+        "workspace-source-write",
+        "remote-target",
+        "admin-token",
+      ],
+      push: ["local-filesystem", "workspace-source-read", "remote-target"],
+      save: [
+        "local-filesystem",
+        "workspace-source-read",
+        "workspace-source-write",
+        "local-authority",
+      ],
+      status: ["local-filesystem", "workspace-source-read"],
+    } as const;
+
+    expect(WORKSPACE_OPERATION_EXECUTION_REQUIREMENTS).toEqual([
+      "workspace-source-read",
+      "workspace-source-write",
+      "local-filesystem",
+      "local-authority",
+      "admin-token",
+      "remote-target",
+      "provider-credentials",
+    ]);
+    expect(isWorkspaceOperationExecutionRequirement("provider-credentials")).toBe(true);
+    expect(isWorkspaceOperationExecutionRequirement("owner-session")).toBe(false);
+    expect(isWorkspaceOperationExecutionRequirement("csrf-proof")).toBe(false);
+    expect(isWorkspaceOperationExecutionRequirement("formless push")).toBe(false);
+    expect(WORKSPACE_OPERATION_CAPABILITIES).toContain("deployment-observe");
+    expect(WORKSPACE_OPERATION_EXECUTION_REQUIREMENTS).not.toContain("deployment-observe");
+    expect(WORKSPACE_OPERATION_EXECUTION_REQUIREMENTS).toContain("provider-credentials");
+    expect(WORKSPACE_OPERATION_CAPABILITIES).not.toContain("provider-credentials");
+
+    expect(
+      Object.fromEntries(
+        WORKSPACE_OPERATION_DEFINITIONS.map((definition) => [
+          definition.kind,
+          definition.executionRequirements,
+        ]),
+      ),
+    ).toEqual(baseExecutionRequirementsByKind);
+    expect(
+      Object.fromEntries(
+        WORKSPACE_OPERATION_KINDS.map((kind) => [
+          kind,
+          workspaceOperationBaseExecutionRequirements(kind),
+        ]),
+      ),
+    ).toEqual(baseExecutionRequirementsByKind);
+
+    for (const definition of WORKSPACE_OPERATION_DEFINITIONS) {
+      expect(new Set(definition.executionRequirements).size).toBe(
+        definition.executionRequirements.length,
+      );
+      expect(definition.executionRequirements.every(isWorkspaceOperationExecutionRequirement)).toBe(
+        true,
+      );
+    }
+
+    expect(workspaceOperationEffectiveExecutionRequirements({ kind: "check" })).toEqual(
+      baseExecutionRequirementsByKind.check,
+    );
+    expect(
+      workspaceOperationEffectiveExecutionRequirements({
+        kind: "check",
+        targetAlias: "remote",
+      }),
+    ).toEqual(["local-filesystem", "workspace-source-read", "remote-target", "admin-token"]);
+    expect(
+      workspaceOperationEffectiveExecutionRequirements({
+        includeDeploymentStatus: false,
+        kind: "status",
+        targetAlias: "  ",
+      }),
+    ).toEqual(baseExecutionRequirementsByKind.status);
+    expect(
+      workspaceOperationEffectiveExecutionRequirements({
+        includeDeploymentStatus: true,
+        kind: "status",
+      }),
+    ).toEqual(["local-filesystem", "workspace-source-read", "remote-target", "admin-token"]);
+    expect(
+      workspaceOperationEffectiveExecutionRequirements({ kind: "push", dryRun: true }),
+    ).toEqual(baseExecutionRequirementsByKind.push);
+    expect(workspaceOperationEffectiveExecutionRequirements({ kind: "push" })).toEqual([
+      "local-filesystem",
+      "workspace-source-read",
+      "remote-target",
+      "admin-token",
+      "provider-credentials",
+      "workspace-source-write",
+    ]);
+    expect(
+      workspaceOperationExecutionRequirementsMatch({ kind: "push", dryRun: true }, [
+        "local-filesystem",
+        "workspace-source-read",
+        "remote-target",
+      ]),
+    ).toBe(true);
+    expect(
+      workspaceOperationExecutionRequirementsMatch({ kind: "push", dryRun: true }, [
+        "local-filesystem",
+        "workspace-source-read",
+        "remote-target",
+        "provider-credentials",
+      ]),
+    ).toBe(false);
+    expect(() =>
+      assertWorkspaceOperationExecutionRequirements({ kind: "push", dryRun: true }, [
+        "local-filesystem",
+        "workspace-source-read",
+        "remote-target",
+        "provider-credentials",
+      ]),
+    ).toThrow('Workspace operation "push" execution requirements are invalid.');
   });
 
   it("matches operations against actor policy and required execution capability", () => {

@@ -35,6 +35,9 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
   pull, push, and credential setup
 - **AND** it cannot request arbitrary filesystem reads, arbitrary filesystem
   writes, shell commands, or path traversal
+- **AND** each request is classified against the workspace operation
+  definition's mode, bootstrap availability, required capability, and execution
+  requirements before it reaches a local execution handler
 - **AND** deployment and provider execution remains internal work behind the
   workspace source push operation unless a later workspace operation definition
   explicitly promotes a deployment-facing operation
@@ -110,6 +113,22 @@ reviewable workspace source when a local workspace gateway is available.
   authorization, operation intent validation, display-safe response forwarding,
   and HTTP proxying
 
+#### Scenario: Revalidate execution requirements after request hop
+
+- **WHEN** a workspace gateway operation crosses browser, local runtime proxy,
+  sidecar, or runtime operation handler boundaries
+- **THEN** each boundary that can authorize or execute the request revalidates
+  the operation kind, actor policy, required capability, operation intent, and
+  relevant execution requirements before forwarding or executing the request
+- **AND** the local runtime proxy refuses operations when the local workspace
+  gateway route or sidecar target required for local filesystem, local
+  Authority, secret-state, or provider-capable work is unavailable
+- **AND** the sidecar refuses proxied or direct requests that lack accepted
+  proxy or automation authorization before filesystem, local Authority,
+  secret-state, Cloudflare, Alchemy, or provider work begins
+- **AND** the Site runtime operation handler rechecks the same operation
+  contract before invoking workspace operation bodies
+
 ### Requirement: Gateway Package Boundary
 
 The system SHALL expose reusable local workspace gateway contracts and adapters
@@ -135,7 +154,8 @@ through the Gateway package slice.
 
 - **WHEN** Gateway browser, Worker, sidecar, Site runtime, or tests need
   semantic workspace operation input shapes, display-safe operation state,
-  operation result shapes, operation state redaction, or operation persistence
+  operation result shapes, execution requirement declarations, operation state
+  redaction, or operation persistence
 - **THEN** those contracts and local state adapters come from
   `@dpeek/formless-workspace` or `@dpeek/formless-workspace/node`
 - **AND** Gateway adapters treat those shapes as injected workspace operation
@@ -148,7 +168,8 @@ through the Gateway package slice.
 - **WHEN** a gateway adapter needs owner session validation, runtime topology
   eligibility, owner setup status, workspace save, workspace check, workspace
   pull, workspace push, credential setup, operation persistence, filesystem
-  access, or provider mutation behind a workspace operation
+  access, execution context resolution, or provider mutation behind a workspace
+  operation
 - **THEN** those behaviors are supplied through Formless runtime adapters or
   Workspace package local state adapters
 - **AND** the Gateway package does not own app records, Authority storage,
@@ -508,8 +529,9 @@ runtime code and bundles.
   `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and
   `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` are present
 - **THEN** the Worker authorizes the browser or automation request, classifies
-  the operation intent, and proxies the request to the configured sidecar over
-  HTTP
+  the operation intent, validates that the configured gateway route can satisfy
+  requirements that need sidecar execution, and proxies the request to the
+  configured sidecar over HTTP
 - **AND** the Worker does not read or write workspace source files, ignored
   gateway state, local secret state, or provider credentials
 

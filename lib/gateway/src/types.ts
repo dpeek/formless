@@ -20,6 +20,7 @@ import type {
   WorkspaceOperationDisplayValue,
   WorkspaceOperationError,
   WorkspaceOperationEvent,
+  WorkspaceOperationExecutionRequirement,
   WorkspaceOperationExternalAuthorizationEvent,
   WorkspaceOperationIdParseResult,
   WorkspaceOperationLog,
@@ -144,6 +145,7 @@ export type WorkspaceGatewayApiErrorBody = {
 
 export type WorkspaceGatewayOperationIntent = {
   bootstrapAllowed: boolean;
+  executionRequirements: readonly WorkspaceOperationExecutionRequirement[];
   mutating: boolean;
   operation: WorkspaceGatewayOperationKind;
   requiredCapability: WorkspaceOperationRequiredCapability;

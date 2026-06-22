@@ -19,7 +19,14 @@ import {
   cloudflareDomainClientFromEnv,
   type CloudflareDomainClient,
 } from "./cloudflare-domain-client.ts";
-import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
+import {
+  formlessCliUsage,
+  parseFormlessCliArgs,
+  siteCliWorkspaceOperationBindingForCommand,
+  siteCliWorkspaceOperationCommandNameForKind,
+  type SiteCliWorkspaceOperationCommandName,
+  type SiteCliWorkspaceOperationKind,
+} from "./cli-command.ts";
 import type {
   InstanceDomainProviderManualCleanupResponse,
   InstanceDomainProviderPlanResponse,
@@ -103,12 +110,8 @@ import { runFormlessWorkspaceOperation } from "./instance-workspace-operations.t
 import {
   WORKSPACE_OPERATION_CAPABILITIES,
   assertWorkspaceOperationExecutionAllowed,
-  workspaceOperationCliCommands,
-  workspaceOperationDefinitionForCliCommand,
   workspaceOperationInputDefaults,
   type RunnableWorkspaceOperationInput,
-  type WorkspaceCliCommandName,
-  type WorkspaceCliOperationKind,
   type WorkspaceOperationDisplayObject,
   type WorkspaceOperationDisplayValue,
   type WorkspaceOperationState,
@@ -548,18 +551,9 @@ function workspaceDevServerCommandForEnv(
 }
 
 function workspaceCliCommandNameForOperation(
-  kind: WorkspaceCliOperationKind,
-): WorkspaceCliCommandName {
-  const commands = workspaceOperationCliCommands(kind);
-  const [command] = commands;
-
-  if (commands.length !== 1 || !command) {
-    throw new Error(
-      `Workspace CLI operation "${kind}" must expose exactly one public command binding.`,
-    );
-  }
-
-  return command;
+  kind: SiteCliWorkspaceOperationKind,
+): SiteCliWorkspaceOperationCommandName {
+  return siteCliWorkspaceOperationCommandNameForKind(kind);
 }
 
 async function runCliWorkspaceOperation(
@@ -829,11 +823,11 @@ function workspaceOperationInputForCliCommand(
   commandName: string,
   input: RunnableWorkspaceOperationInput,
 ): RunnableWorkspaceOperationInput {
-  const definition = workspaceOperationDefinitionForCliCommand(commandName);
+  const binding = siteCliWorkspaceOperationBindingForCommand(commandName);
 
-  if (definition.kind !== input.kind) {
+  if (binding.operationKind !== input.kind) {
     throw new Error(
-      `Workspace CLI command "${commandName}" is bound to operation "${definition.kind}", expected "${input.kind}".`,
+      `Site CLI command "${commandName}" is bound to operation "${binding.operationKind}", expected "${input.kind}".`,
     );
   }
 

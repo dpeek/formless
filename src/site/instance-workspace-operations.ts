@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   WORKSPACE_OPERATION_CAPABILITIES,
   assertWorkspaceOperationExecutionAllowed,
+  assertWorkspaceOperationExecutionRequirements,
   workspaceOperationInputDisplay,
   type RunnableWorkspaceOperationInput,
   type StatusWorkspaceOperationInput,
@@ -58,6 +59,7 @@ export async function runFormlessWorkspaceOperation(
 ): Promise<WorkspaceOperationState> {
   const actor = options.actor ?? "system";
 
+  assertWorkspaceOperationExecutionRequirements(input);
   assertWorkspaceOperationExecutionAllowed({
     actor,
     capabilities: options.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,

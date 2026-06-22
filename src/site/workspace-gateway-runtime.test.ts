@@ -39,6 +39,7 @@ import {
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  WORKSPACE_BROWSER_OPERATION_KINDS,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
@@ -747,6 +748,7 @@ describe("local workspace gateway", () => {
     const cookie = await ownerCookie();
     let executed = false;
 
+    expect(WORKSPACE_BROWSER_OPERATION_KINDS).not.toContain("deploymentRefresh");
     for (const kind of ["deployPlan", "deployApply", "deploymentRefresh"]) {
       const rejected = await gatewayJson(
         operationRequest({ kind }, browserHeaders({ cookie, csrf: true })),

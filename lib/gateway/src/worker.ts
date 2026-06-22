@@ -28,6 +28,7 @@ import {
   type WorkspaceGatewayActor,
   type WorkspaceGatewayAuthorizationVia,
   type WorkspaceGatewayOperationIntent,
+  type WorkspaceGatewayStartInput,
   type WorkspaceGatewayStartInputParseResult,
 } from "./index.ts";
 import type { WorkspaceOperationRequiredCapability } from "@dpeek/formless-workspace";
@@ -80,6 +81,11 @@ type GatewayAuthorization =
   | { actor: WorkspaceGatewayActor; via: WorkspaceGatewayAuthorizationVia }
   | { error: string; status: number };
 
+type GatewayOperationExecutionContext = {
+  mutating?: boolean;
+  operationInput?: WorkspaceGatewayStartInput;
+};
+
 export async function handleWorkspaceGatewayProxyRequest(
   request: Request,
   env: WorkspaceGatewayWorkerProxyEnv,
@@ -107,7 +113,9 @@ export async function handleWorkspaceGatewayProxyRequest(
     }
 
     const intent = workspaceGatewayStatusIntent();
-    const authorization = await authorizeGatewayRequest(request, env, options, intent);
+    const authorization = await authorizeGatewayRequest(request, env, options, intent, {
+      mutating: false,
+    });
 
     if ("error" in authorization) {
       return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -121,7 +129,9 @@ export async function handleWorkspaceGatewayProxyRequest(
   if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
     if (request.method === "GET") {
       const intent = workspaceGatewayAutoSaveStatusIntent();
-      const authorization = await authorizeGatewayRequest(request, env, options, intent);
+      const authorization = await authorizeGatewayRequest(request, env, options, intent, {
+        mutating: false,
+      });
 
       if ("error" in authorization) {
         return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -140,7 +150,9 @@ export async function handleWorkspaceGatewayProxyRequest(
       }
 
       const intent = workspaceGatewayAutoSaveEnqueueIntent();
-      const authorization = await authorizeGatewayRequest(request, env, options, intent);
+      const authorization = await authorizeGatewayRequest(request, env, options, intent, {
+        mutating: true,
+      });
 
       if ("error" in authorization) {
         return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -166,7 +178,9 @@ export async function handleWorkspaceGatewayProxyRequest(
     }
 
     const intent = workspaceGatewayStartOperationIntent(parsed.input);
-    const authorization = await authorizeGatewayRequest(request, env, options, intent);
+    const authorization = await authorizeGatewayRequest(request, env, options, intent, {
+      operationInput: parsed.input,
+    });
 
     if ("error" in authorization) {
       return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -238,6 +252,7 @@ async function authorizeGatewayRequest(
   env: WorkspaceGatewayWorkerProxyEnv,
   dependencies: WorkspaceGatewayProxyDependencies,
   intent: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): Promise<GatewayAuthorization> {
   if (!isSameOriginOrNoOrigin(request)) {
     return { error: "Workspace gateway requests must be same-origin.", status: 403 };
@@ -259,6 +274,7 @@ async function authorizeGatewayRequest(
       { actor: "browser", via: "bootstrap" },
       dependencies,
       intent,
+      context,
     );
   }
 
@@ -267,6 +283,7 @@ async function authorizeGatewayRequest(
       { actor: "automation", via: "admin-bearer" },
       dependencies,
       intent,
+      context,
     );
   }
 
@@ -288,6 +305,7 @@ async function authorizeGatewayRequest(
       { actor: "browser", via: "owner-session" },
       dependencies,
       intent,
+      context,
     );
   }
 
@@ -330,6 +348,7 @@ async function authorizeGatewayReadOperationRequest(
       { actor: "browser", via: "bootstrap" },
       dependencies,
       intent,
+      { mutating: false },
     );
   }
 
@@ -340,6 +359,7 @@ async function authorizeGatewayReadOperationRequest(
           { actor: "automation", via: "admin-bearer" },
           dependencies,
           intent,
+          { mutating: false },
         );
   }
 
@@ -352,6 +372,7 @@ async function authorizeGatewayReadOperationRequest(
           { actor: "browser", via: "owner-session" },
           dependencies,
           intent,
+          { mutating: false },
         );
   }
 
@@ -365,11 +386,13 @@ function authorizeGatewayOperationExecution(
   authorization: Exclude<GatewayAuthorization, { error: string }>,
   dependencies: WorkspaceGatewayProxyDependencies,
   intent: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): GatewayAuthorization {
   const decision = workspaceGatewayOperationExecutionDecision({
     actor: authorization.actor,
     capabilities: dependencies.capabilities ?? [],
     intent,
+    ...context,
   });
 
   if (!decision.ok) {

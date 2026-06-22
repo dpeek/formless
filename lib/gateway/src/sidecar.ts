@@ -163,6 +163,11 @@ type GatewayAuthorization =
       status: number;
     };
 
+type GatewayOperationExecutionContext = {
+  mutating?: boolean;
+  operationInput?: WorkspaceGatewayStartInput;
+};
+
 export async function handleWorkspaceGatewayLocalProxyRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
@@ -186,7 +191,9 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
     }
 
     const intent = workspaceGatewayStatusIntent();
-    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
+      mutating: false,
+    });
 
     if ("error" in authorization) {
       return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -200,7 +207,9 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
   if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
     if (request.method === "GET") {
       const intent = workspaceGatewayAutoSaveStatusIntent();
-      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
+        mutating: false,
+      });
 
       if ("error" in authorization) {
         return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -219,7 +228,9 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
       }
 
       const intent = workspaceGatewayAutoSaveEnqueueIntent();
-      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
+        mutating: true,
+      });
 
       if ("error" in authorization) {
         return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -245,7 +256,9 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
     }
 
     const intent = workspaceGatewayStartOperationIntent(parsed.input);
-    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent);
+    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
+      operationInput: parsed.input,
+    });
 
     if ("error" in authorization) {
       return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -325,6 +338,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
       request,
       env,
       workspaceGatewayStatusIntent(),
+      { mutating: false },
     );
 
     if ("error" in authorization) {
@@ -342,6 +356,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
         request,
         env,
         workspaceGatewayAutoSaveStatusIntent(),
+        { mutating: false },
       );
 
       if ("error" in authorization) {
@@ -364,6 +379,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
         request,
         env,
         workspaceGatewayAutoSaveEnqueueIntent(),
+        { mutating: true },
       );
 
       if ("error" in authorization) {
@@ -398,6 +414,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
       request,
       env,
       workspaceGatewayStartOperationIntent(parsed.input),
+      { operationInput: parsed.input },
     );
 
     if ("error" in authorization) {
@@ -427,16 +444,20 @@ export async function handleWorkspaceGatewaySidecarRequest(
       return displaySafeJson({ error: parsedOperationId.error }, 400);
     }
 
-    const authorization = authorizeSidecarGatewayReadOperationRequest(request, env);
-
-    if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
-    }
-
     const proxiedOperation = parseProxiedOperationKind(request);
 
     if (!proxiedOperation.ok) {
       return displaySafeJson({ error: proxiedOperation.error }, 400);
+    }
+
+    const readIntent =
+      proxiedOperation.operation === undefined
+        ? undefined
+        : workspaceGatewayReadOperationIntent(proxiedOperation.operation);
+    const authorization = authorizeSidecarGatewayReadOperationRequest(request, env, readIntent);
+
+    if ("error" in authorization) {
+      return displaySafeJson({ error: authorization.error }, authorization.status);
     }
 
     const operation = await handlers.readOperation({
@@ -591,33 +612,36 @@ function authorizeSidecarGatewayRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
   intent: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): GatewayAuthorization {
-  const proxied = authorizeSidecarProxyRequest(request, env, intent);
+  const proxied = authorizeSidecarProxyRequest(request, env, intent, context);
 
   if (proxied) {
     return proxied;
   }
 
-  return authorizeDirectSidecarAutomationRequest(request, env, intent);
+  return authorizeDirectSidecarAutomationRequest(request, env, intent, context);
 }
 
 function authorizeSidecarGatewayReadOperationRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
+  intent?: WorkspaceGatewayOperationIntent,
 ): GatewayAuthorization {
-  const proxied = authorizeSidecarProxyRequest(request, env);
+  const proxied = authorizeSidecarProxyRequest(request, env, intent, { mutating: false });
 
   if (proxied) {
     return proxied;
   }
 
-  return authorizeDirectSidecarAutomationRequest(request, env);
+  return authorizeDirectSidecarAutomationRequest(request, env, intent, { mutating: false });
 }
 
 function authorizeSidecarProxyRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
   intent?: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): GatewayAuthorization | undefined {
   const proxyToken = request.headers.get(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER);
 
@@ -635,6 +659,13 @@ function authorizeSidecarProxyRequest(
     return { error: "Workspace gateway proxy actor facts are invalid.", status: 400 };
   }
 
+  if (actorFacts.via === "bootstrap" && intent === undefined) {
+    return {
+      error: "Workspace gateway operation intent is required for bootstrap reads.",
+      status: 400,
+    };
+  }
+
   if (actorFacts.via === "bootstrap" && intent && !intent.bootstrapAllowed) {
     return {
       error: "Workspace bootstrap authorization is limited to status operations.",
@@ -644,20 +675,31 @@ function authorizeSidecarProxyRequest(
 
   return intent === undefined
     ? actorFacts
-    : authorizeGatewayOperationExecution(actorFacts, WORKSPACE_OPERATION_CAPABILITIES, intent);
+    : authorizeGatewayOperationExecution(
+        actorFacts,
+        WORKSPACE_OPERATION_CAPABILITIES,
+        intent,
+        context,
+      );
 }
 
 function authorizeDirectSidecarAutomationRequest(
   request: Request,
   env: WorkspaceGatewaySidecarEnv,
   intent?: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): GatewayAuthorization {
   if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
     const authorization = { actor: "automation", via: "admin-bearer" } as const;
 
     return intent === undefined
       ? authorization
-      : authorizeGatewayOperationExecution(authorization, WORKSPACE_OPERATION_CAPABILITIES, intent);
+      : authorizeGatewayOperationExecution(
+          authorization,
+          WORKSPACE_OPERATION_CAPABILITIES,
+          intent,
+          context,
+        );
   }
 
   return { error: "Workspace gateway proxy authorization is required.", status: 401 };
@@ -713,6 +755,7 @@ async function authorizeGatewayRequest(
   env: WorkspaceGatewaySidecarEnv,
   dependencies: WorkspaceGatewayLocalProxyDependencies,
   intent: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): Promise<GatewayAuthorization> {
   if (!isSameOriginOrNoOrigin(request)) {
     return { error: "Workspace gateway requests must be same-origin.", status: 403 };
@@ -734,6 +777,7 @@ async function authorizeGatewayRequest(
       { actor: "browser", via: "bootstrap" },
       dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
       intent,
+      context,
     );
   }
 
@@ -742,6 +786,7 @@ async function authorizeGatewayRequest(
       { actor: "automation", via: "admin-bearer" },
       dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
       intent,
+      context,
     );
   }
 
@@ -763,6 +808,7 @@ async function authorizeGatewayRequest(
       { actor: "browser", via: "owner-session" },
       dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
       intent,
+      context,
     );
   }
 
@@ -805,6 +851,7 @@ async function authorizeGatewayReadOperationRequest(
       { actor: "browser", via: "bootstrap" },
       dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
       intent,
+      { mutating: false },
     );
   }
 
@@ -815,6 +862,7 @@ async function authorizeGatewayReadOperationRequest(
           { actor: "automation", via: "admin-bearer" },
           dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
           intent,
+          { mutating: false },
         );
   }
 
@@ -827,6 +875,7 @@ async function authorizeGatewayReadOperationRequest(
           { actor: "browser", via: "owner-session" },
           dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
           intent,
+          { mutating: false },
         );
   }
 
@@ -840,11 +889,13 @@ function authorizeGatewayOperationExecution(
   authorization: Exclude<GatewayAuthorization, { error: string }>,
   capabilities: readonly WorkspaceOperationRequiredCapability[],
   intent: WorkspaceGatewayOperationIntent,
+  context: GatewayOperationExecutionContext = {},
 ): GatewayAuthorization {
   const decision = workspaceGatewayOperationExecutionDecision({
     actor: authorization.actor,
     capabilities,
     intent,
+    ...context,
   });
 
   if (!decision.ok) {

@@ -50,6 +50,7 @@ import {
   workspaceOperationInputFieldDefinition,
   type WorkspaceBrowserOperationControlMetadata,
   type WorkspaceOperationActor,
+  type WorkspaceOperationExecutionRequirement,
   type WorkspaceOperationMode,
   type WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
@@ -101,6 +102,7 @@ export type WorkspaceGatewayRuntimeCapabilityFacts = {
 
 export type WorkspaceGatewayOperationControl = {
   bootstrapAllowed: boolean;
+  executionRequirements: readonly WorkspaceOperationExecutionRequirement[];
   group: Exclude<WorkspaceGatewayOperationControlGroup, "all">;
   input: WorkspaceGatewayStartInput;
   inputFields: readonly string[];
@@ -143,6 +145,7 @@ function workspaceGatewayOperationControlFromMetadata(
 ): WorkspaceGatewayOperationControl {
   return {
     bootstrapAllowed: metadata.bootstrapAllowed,
+    executionRequirements: metadata.executionRequirements,
     group: workspaceGatewayOperationControlGroup(),
     input: workspaceGatewayStartInputFromControlMetadata(metadata),
     inputFields: metadata.inputFields,
