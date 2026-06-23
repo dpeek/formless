@@ -2461,6 +2461,88 @@ describe("public site renderer", () => {
     expect(html).not.toContain("Ignored slot copy.");
   });
 
+  it("renders generic section, card grid, and metric grid blocks", () => {
+    const records: StoredRecord[] = [
+      ...testSiteSeedRecords,
+      siteBlockRecord("rec_site_block_section", {
+        type: "section",
+        label: "Capabilities",
+        body: "Reusable **page sections** with nested content.",
+      }),
+      siteBlockRecord("rec_site_block_card_grid", {
+        type: "cardGrid",
+        label: "What I do",
+        body: "A compact grid for related ideas.",
+      }),
+      siteBlockRecord("rec_site_block_card_product", {
+        type: "card",
+        label: "Product engineering",
+        body: "Shape and ship useful systems.",
+        icon: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>',
+        color: "#0f766e",
+      }),
+      siteBlockRecord("rec_site_block_metric_grid", {
+        type: "metricGrid",
+        label: "Proof points",
+        body: "A short strip of numbers.",
+      }),
+      siteBlockRecord("rec_site_block_metric_years", {
+        type: "metric",
+        label: "15+",
+        body: "Years building software.",
+        color: "#b45309",
+      }),
+      blockPlacementRecord(
+        "rec_site_place_home_section",
+        "rec_site_content_home",
+        "rec_site_block_section",
+        1600,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_section_card_grid",
+        "rec_site_block_section",
+        "rec_site_block_card_grid",
+        100,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_card_grid_product",
+        "rec_site_block_card_grid",
+        "rec_site_block_card_product",
+        100,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_section_metric_grid",
+        "rec_site_block_section",
+        "rec_site_block_metric_grid",
+        200,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_metric_grid_years",
+        "rec_site_block_metric_grid",
+        "rec_site_block_metric_years",
+        100,
+      ),
+    ];
+    const html = renderSitePage("home", records);
+
+    expect(html).toContain('data-block-type="section"');
+    expect(html).toContain("Capabilities");
+    expect(html).toContain("<strong");
+    expect(html).not.toContain("**page sections**");
+    expect(html).toContain('data-site-card-grid="true"');
+    expect(html).toContain('data-site-card="true"');
+    expect(html).toContain("Product engineering");
+    expect(html).toContain("Shape and ship useful systems.");
+    expect(html).toContain('data-site-card-icon="true"');
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain("--site-block-accent:#0f766e");
+    expect(html).toContain('data-site-metric-grid="true"');
+    expect(html).toContain('data-site-metric="true"');
+    expect(html).toContain("15+");
+    expect(html).toContain("Years building software.");
+    expect(html).toContain("--site-block-accent:#b45309");
+  });
+
   it("renders public markdown block bodies with the shared markdown renderer", () => {
     const records: StoredRecord[] = [
       ...testSiteSeedRecords,
@@ -3133,7 +3215,7 @@ describe("generated collection home", () => {
       'data-formless-tree-add-operation="block-placement.addTreeChild"',
     );
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList subscribeForm"',
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
@@ -3198,6 +3280,61 @@ describe("generated collection home", () => {
 
     resetClientStore();
     bootstrapSiteEditor([
+      siteBlockRecord("section-1", { type: "section", label: "Blank section" }),
+    ]);
+    const sectionRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "section-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(sectionRootHtml).toContain('data-formless-tree-add-parent="section-1"');
+    expect(sectionRootHtml).toContain(
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm"',
+    );
+
+    resetClientStore();
+    bootstrapSiteEditor([
+      siteBlockRecord("card-grid-1", { type: "cardGrid", label: "Blank card grid" }),
+    ]);
+    const cardGridRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "card-grid-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(cardGridRootHtml).toContain('data-formless-tree-add-parent="card-grid-1"');
+    expect(cardGridRootHtml).toContain('data-formless-tree-add-variants="card"');
+    expect(cardGridRootHtml).toContain('data-formless-tree-add-labels="Card"');
+
+    resetClientStore();
+    bootstrapSiteEditor([
+      siteBlockRecord("metric-grid-1", { type: "metricGrid", label: "Blank metric grid" }),
+    ]);
+    const metricGridRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "metric-grid-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(metricGridRootHtml).toContain('data-formless-tree-add-parent="metric-grid-1"');
+    expect(metricGridRootHtml).toContain('data-formless-tree-add-variants="metric"');
+    expect(metricGridRootHtml).toContain('data-formless-tree-add-labels="Metric"');
+
+    resetClientStore();
+    bootstrapSiteEditor([
       siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
       siteBlockRecord("group-1", { type: "group", label: "Empty group" }),
       siteBlockRecord("link-1", { type: "link", label: "Docs", href: "/docs" }),
@@ -3237,7 +3374,7 @@ describe("generated collection home", () => {
 
     expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
     expect(nestedHtml).toContain(
-      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList subscribeForm"',
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm"',
     );
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
     expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');

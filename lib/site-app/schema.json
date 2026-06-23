@@ -116,6 +116,21 @@
             "group": {
               "label": "Group"
             },
+            "section": {
+              "label": "Section"
+            },
+            "cardGrid": {
+              "label": "Card grid"
+            },
+            "card": {
+              "label": "Card"
+            },
+            "metricGrid": {
+              "label": "Metric grid"
+            },
+            "metric": {
+              "label": "Metric"
+            },
             "header": {
               "label": "Header"
             },
@@ -1140,6 +1155,26 @@
           "label": "Group",
           "fields": ["label"]
         },
+        "section": {
+          "label": "Section",
+          "fields": ["label", "body"]
+        },
+        "cardGrid": {
+          "label": "Card grid",
+          "fields": ["label", "body"]
+        },
+        "card": {
+          "label": "Card",
+          "fields": ["label", "body", "icon", "color"]
+        },
+        "metricGrid": {
+          "label": "Metric grid",
+          "fields": ["label", "body"]
+        },
+        "metric": {
+          "label": "Metric",
+          "fields": ["label", "body", "color"]
+        },
         "header": {
           "label": "Header",
           "fields": ["label"]
@@ -1572,6 +1607,63 @@
             }
           }
         },
+        "section": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "cardGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "card": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metricGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metric": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
+            }
+          }
+        },
         "subscribeForm": {
           "presentation": "fields",
           "fields": {
@@ -1715,6 +1807,63 @@
             "alignment": {
               "editor": "enum",
               "commit": "immediate"
+            }
+          }
+        },
+        "section": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "cardGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "card": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metricGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metric": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
             }
           }
         },
@@ -2202,8 +2351,11 @@
             "page": {
               "children": [
                 "group",
+                "section",
                 "hero",
                 "feature",
+                "cardGrid",
+                "metricGrid",
                 "markdown",
                 "image",
                 "link",
@@ -2216,8 +2368,11 @@
             "group": {
               "children": [
                 "group",
+                "section",
                 "hero",
                 "feature",
+                "cardGrid",
+                "metricGrid",
                 "markdown",
                 "image",
                 "link",
@@ -2227,6 +2382,31 @@
                 "subscribeForm"
               ]
             },
+            "section": {
+              "children": [
+                "group",
+                "section",
+                "hero",
+                "feature",
+                "cardGrid",
+                "metricGrid",
+                "markdown",
+                "image",
+                "link",
+                "project",
+                "postList",
+                "projectList",
+                "subscribeForm"
+              ]
+            },
+            "cardGrid": {
+              "children": ["card"]
+            },
+            "card": "leaf",
+            "metricGrid": {
+              "children": ["metric"]
+            },
+            "metric": "leaf",
             "post": {
               "children": [
                 "markdown",
@@ -2492,6 +2672,55 @@
             }
           }
         },
+        "section": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            }
+          }
+        },
+        "cardGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            }
+          }
+        },
+        "card": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "icon": {
+              "editor": "icon"
+            },
+            "color": {
+              "editor": "color"
+            }
+          }
+        },
+        "metricGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            }
+          }
+        },
+        "metric": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "color": {
+              "editor": "color"
+            }
+          }
+        },
         "subscribeForm": {
           "presentation": "fields",
           "fields": {
@@ -2708,6 +2937,63 @@
             "alignment": {
               "editor": "enum",
               "commit": "immediate"
+            }
+          }
+        },
+        "section": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "cardGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "card": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metricGrid": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "metric": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "color": {
+              "editor": "color",
+              "commit": "field-commit"
             }
           }
         },

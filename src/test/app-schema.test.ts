@@ -4928,6 +4928,11 @@ describe("personal site sample schema", () => {
         projectList: { label: "Project list" },
         subscribeForm: { label: "Subscribe form" },
         group: { label: "Group" },
+        section: { label: "Section" },
+        cardGrid: { label: "Card grid" },
+        card: { label: "Card" },
+        metricGrid: { label: "Metric grid" },
+        metric: { label: "Metric" },
         header: { label: "Header" },
         headerPrimary: { label: "Header primary" },
         headerSecondary: { label: "Header secondary" },
@@ -5653,6 +5658,11 @@ describe("personal site sample schema", () => {
     expect(Object.keys(branchVariants)).toEqual([
       "page",
       "group",
+      "section",
+      "cardGrid",
+      "card",
+      "metricGrid",
+      "metric",
       "post",
       "project",
       "feature",
@@ -5668,8 +5678,11 @@ describe("personal site sample schema", () => {
     ]);
     expect(pageChildren).toEqual([
       "group",
+      "section",
       "hero",
       "feature",
+      "cardGrid",
+      "metricGrid",
       "markdown",
       "image",
       "link",
@@ -5680,8 +5693,11 @@ describe("personal site sample schema", () => {
     ]);
     expect(groupChildren).toEqual([
       "group",
+      "section",
       "hero",
       "feature",
+      "cardGrid",
+      "metricGrid",
       "markdown",
       "image",
       "link",
@@ -5690,6 +5706,27 @@ describe("personal site sample schema", () => {
       "projectList",
       "subscribeForm",
     ]);
+    expect(branchVariants.section).toEqual({
+      children: [
+        "group",
+        "section",
+        "hero",
+        "feature",
+        "cardGrid",
+        "metricGrid",
+        "markdown",
+        "image",
+        "link",
+        "project",
+        "postList",
+        "projectList",
+        "subscribeForm",
+      ],
+    });
+    expect(branchVariants.cardGrid).toEqual({ children: ["card"] });
+    expect(branchVariants.card).toBe("leaf");
+    expect(branchVariants.metricGrid).toEqual({ children: ["metric"] });
+    expect(branchVariants.metric).toBe("leaf");
     expect(branchVariants.post).toEqual({
       children: [
         "markdown",
@@ -5752,6 +5789,11 @@ describe("personal site sample schema", () => {
       postList: { label: "Post list" },
       projectList: { label: "Project list" },
       subscribeForm: { label: "Subscribe form" },
+      section: { label: "Section" },
+      cardGrid: { label: "Card grid" },
+      card: { label: "Card" },
+      metricGrid: { label: "Metric grid" },
+      metric: { label: "Metric" },
     });
     expect(schema.unions?.blockByType?.variants).toMatchObject({
       postList: { label: "Post list", fields: ["label"] },
@@ -5760,6 +5802,11 @@ describe("personal site sample schema", () => {
         label: "Subscribe form",
         fields: ["label", "body", "operationName", "buttonLabel"],
       },
+      section: { label: "Section", fields: ["label", "body"] },
+      cardGrid: { label: "Card grid", fields: ["label", "body"] },
+      card: { label: "Card", fields: ["label", "body", "icon", "color"] },
+      metricGrid: { label: "Metric grid", fields: ["label", "body"] },
+      metric: { label: "Metric", fields: ["label", "body", "color"] },
     });
 
     const blockCreate = schema.views.blockCreate;
@@ -5849,6 +5896,39 @@ describe("personal site sample schema", () => {
             href: { editor: "href", commit: "field-commit" },
           },
         },
+        section: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+          },
+        },
+        cardGrid: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+          },
+        },
+        card: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
+            color: { editor: "color", commit: "field-commit" },
+          },
+        },
+        metricGrid: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+          },
+        },
+        metric: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            color: { editor: "color", commit: "field-commit" },
+          },
+        },
       },
       fallback: {
         presentation: "fields",
@@ -5882,6 +5962,39 @@ describe("personal site sample schema", () => {
       fields: {
         body: { editor: "markdown" },
         alignment: { editor: "enum" },
+      },
+    });
+    expect(blockCreate.variants?.section).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+      },
+    });
+    expect(blockCreate.variants?.cardGrid).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+      },
+    });
+    expect(blockCreate.variants?.card).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        icon: { editor: "icon" },
+        color: { editor: "color" },
+      },
+    });
+    expect(blockCreate.variants?.metricGrid).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+      },
+    });
+    expect(blockCreate.variants?.metric).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        color: { editor: "color" },
       },
     });
     expect(blockCreate.variants?.subscribeForm).toMatchObject({
@@ -5924,6 +6037,39 @@ describe("personal site sample schema", () => {
         alignment: { editor: "enum", commit: "immediate" },
       },
     });
+    expect(blockEdit.variants?.section).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+      },
+    });
+    expect(blockEdit.variants?.cardGrid).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+      },
+    });
+    expect(blockEdit.variants?.card).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        icon: { editor: "icon", commit: "field-commit" },
+        color: { editor: "color", commit: "field-commit" },
+      },
+    });
+    expect(blockEdit.variants?.metricGrid).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+      },
+    });
+    expect(blockEdit.variants?.metric).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        color: { editor: "color", commit: "field-commit" },
+      },
+    });
     expect(blockEdit.variants?.subscribeForm).toMatchObject({
       presentation: "fields",
       fields: {
@@ -5943,8 +6089,11 @@ describe("personal site sample schema", () => {
           page: {
             children: [
               "group",
+              "section",
               "hero",
               "feature",
+              "cardGrid",
+              "metricGrid",
               "markdown",
               "image",
               "link",
@@ -5957,8 +6106,11 @@ describe("personal site sample schema", () => {
           group: {
             children: [
               "group",
+              "section",
               "hero",
               "feature",
+              "cardGrid",
+              "metricGrid",
               "markdown",
               "image",
               "link",
@@ -5968,6 +6120,31 @@ describe("personal site sample schema", () => {
               "subscribeForm",
             ],
           },
+          section: {
+            children: [
+              "group",
+              "section",
+              "hero",
+              "feature",
+              "cardGrid",
+              "metricGrid",
+              "markdown",
+              "image",
+              "link",
+              "project",
+              "postList",
+              "projectList",
+              "subscribeForm",
+            ],
+          },
+          cardGrid: {
+            children: ["card"],
+          },
+          card: "leaf",
+          metricGrid: {
+            children: ["metric"],
+          },
+          metric: "leaf",
           post: {
             children: [
               "markdown",

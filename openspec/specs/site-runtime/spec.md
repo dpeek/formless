@@ -221,6 +221,37 @@ The system SHALL support a Site `subscribeForm` block that binds public page con
   keys and operation handler capability facts
 - AND generated Site authoring exposes the fields needed to configure the form
 
+### Requirement: Generic Site Content Blocks
+
+The system SHALL support generic Site content block variants for visually structured page sections, card grids, and metric grids without storing nested content.
+
+#### Scenario: Author generic content blocks
+
+- GIVEN the Site source schema declares block variants for `section`, `cardGrid`, `card`, `metricGrid`, and `metric`
+- WHEN generated Site authoring parses the schema
+- THEN each variant is a valid Site block type
+- AND authors can edit the label and markdown body fields for content-bearing variants
+- AND card blocks can edit icon and color fields
+- AND metric blocks can edit color fields
+
+#### Scenario: Compose generic content blocks
+
+- GIVEN an author edits a public page or group in the Site composition workspace
+- WHEN the author adds generic content blocks
+- THEN page, group, and section parents allow section, card grid, metric grid, and existing public content children
+- AND card grid parents allow card children
+- AND metric grid parents allow metric children
+- AND stored content remains flat block and block placement records
+
+#### Scenario: Render generic content blocks
+
+- GIVEN a public Site page contains section, card grid, card, metric grid, and metric blocks
+- WHEN the default public Site renderer renders the page
+- THEN sections render their heading, markdown intro, and ordered children as a visually separated page region
+- AND card grids render card children in a responsive grid
+- AND metric grids render metric children in a compact responsive proof-point layout
+- AND the renderer uses the public tree projection rather than nested stored data
+
 ### Requirement: Public Routes
 
 The system SHALL resolve public Site routes from live routable block hrefs and render public documents outside generated admin chrome.

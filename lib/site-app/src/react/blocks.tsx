@@ -1,5 +1,6 @@
-import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
+import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 
 import {
   SiteFooter,
@@ -76,6 +77,16 @@ function SiteBlockRenderer({
       return <HeroBlock block={block} />;
     case "feature":
       return <FeatureBlock block={block} />;
+    case "section":
+      return <SectionBlock block={block} />;
+    case "cardGrid":
+      return <CardGridBlock block={block} />;
+    case "card":
+      return <CardBlock block={block} />;
+    case "metricGrid":
+      return <MetricGridBlock block={block} />;
+    case "metric":
+      return <MetricBlock block={block} />;
     case "markdown":
       return <MarkdownBlock block={block} />;
     case "link":
@@ -214,6 +225,128 @@ function FeatureBlock({ block }: { block: SiteBlockNode }) {
         <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
     </section>
+  );
+}
+
+function SectionBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <section
+      className="space-y-6 rounded-md border border-zinc-200 bg-zinc-50/70 p-6 dark:border-zinc-800 dark:bg-zinc-900/35"
+      data-block-type={block.type}
+      data-site-section
+    >
+      <div className="max-w-3xl space-y-3">
+        <h2 className="text-3xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
+          {block.label}
+        </h2>
+        {block.body ? (
+          <MarkdownRenderer
+            className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+            content={block.body}
+            minHeadingLevel={3}
+          />
+        ) : null}
+      </div>
+      {renderUnclaimedPlacements(block)}
+    </section>
+  );
+}
+
+function CardGridBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <section className="space-y-4" data-block-type={block.type}>
+      <ContentBlockHeading block={block} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-site-card-grid>
+        {renderUnclaimedPlacements(block)}
+      </div>
+    </section>
+  );
+}
+
+function CardBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <article
+      className="h-full space-y-3 rounded-md border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      data-block-type={block.type}
+      data-site-card
+      style={blockAccentStyle(block)}
+    >
+      {block.icon ? (
+        <div
+          className="flex size-9 items-center justify-center rounded-md bg-zinc-100 text-[color:var(--site-block-accent,var(--site-link))] dark:bg-zinc-800"
+          data-site-card-icon
+        >
+          <SvgIcon className="size-5" source={block.icon} />
+        </div>
+      ) : null}
+      <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h3>
+      {block.body ? (
+        <MarkdownRenderer
+          className={`text-sm leading-6 text-zinc-600 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={4}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function MetricGridBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <section className="space-y-4" data-block-type={block.type}>
+      <ContentBlockHeading block={block} />
+      <div
+        className="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-4"
+        data-site-metric-grid
+      >
+        {renderUnclaimedPlacements(block)}
+      </div>
+    </section>
+  );
+}
+
+function MetricBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <div
+      className="rounded-md border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+      data-block-type={block.type}
+      data-site-metric
+      style={blockAccentStyle(block)}
+    >
+      <p className="text-3xl font-semibold tracking-normal text-[color:var(--site-block-accent,var(--site-link))]">
+        {block.label}
+      </p>
+      {block.body ? (
+        <MarkdownRenderer
+          className={`mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={4}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ContentBlockHeading({ block }: { block: SiteBlockNode }) {
+  const hasHeading = block.label || block.body;
+
+  if (!hasHeading) {
+    return null;
+  }
+
+  return (
+    <div className="max-w-3xl space-y-2">
+      {block.label ? (
+        <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+      ) : null}
+      {block.body ? (
+        <MarkdownRenderer
+          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={3}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -498,4 +631,12 @@ function stringFormValue(value: FormDataEntryValue | null): string | undefined {
 
 function featureMediaSide(block: SiteBlockNode): "left" | "right" {
   return block.alignment === "right" ? "right" : "left";
+}
+
+function blockAccentStyle(block: SiteBlockNode): CSSProperties | undefined {
+  return block.color
+    ? ({
+        "--site-block-accent": block.color,
+      } as CSSProperties)
+    : undefined;
 }

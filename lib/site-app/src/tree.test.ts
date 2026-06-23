@@ -296,6 +296,111 @@ describe("site page tree projection", () => {
     ]);
   });
 
+  it("projects generic section, card grid, and metric grid blocks from flat placements", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_section", {
+        type: "section",
+        label: "Capabilities",
+        body: "Useful reusable sections.",
+      }),
+      blockRecord("rec_site_block_card_grid", {
+        type: "cardGrid",
+        label: "What I do",
+        body: "A few reusable card summaries.",
+      }),
+      blockRecord("rec_site_block_card", {
+        type: "card",
+        label: "Product engineering",
+        body: "Shape and ship product systems.",
+        icon: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>',
+        color: "#0f766e",
+      }),
+      blockRecord("rec_site_block_metric_grid", {
+        type: "metricGrid",
+        label: "Proof points",
+        body: "A compact set of metrics.",
+      }),
+      blockRecord("rec_site_block_metric", {
+        type: "metric",
+        label: "15+",
+        body: "Years building software.",
+        color: "#b45309",
+      }),
+      placementRecord(
+        "rec_site_place_home_section",
+        "rec_site_content_home",
+        "rec_site_block_section",
+        { order: 900 },
+      ),
+      placementRecord(
+        "rec_site_place_section_card_grid",
+        "rec_site_block_section",
+        "rec_site_block_card_grid",
+        { order: 100 },
+      ),
+      placementRecord(
+        "rec_site_place_card_grid_card",
+        "rec_site_block_card_grid",
+        "rec_site_block_card",
+        { order: 100 },
+      ),
+      placementRecord(
+        "rec_site_place_section_metric_grid",
+        "rec_site_block_section",
+        "rec_site_block_metric_grid",
+        { order: 200 },
+      ),
+      placementRecord(
+        "rec_site_place_metric_grid_metric",
+        "rec_site_block_metric_grid",
+        "rec_site_block_metric",
+        { order: 100 },
+      ),
+    ];
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const section = childForPlacement(tree.page, "rec_site_place_home_section");
+    const cardGrid = childForPlacement(section, "rec_site_place_section_card_grid");
+    const card = childForPlacement(cardGrid, "rec_site_place_card_grid_card");
+    const metricGrid = childForPlacement(section, "rec_site_place_section_metric_grid");
+    const metric = childForPlacement(metricGrid, "rec_site_place_metric_grid_metric");
+
+    expect(section).toMatchObject({
+      id: "rec_site_block_section",
+      type: "section",
+      label: "Capabilities",
+      body: "Useful reusable sections.",
+    });
+    expect(section.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_section_card_grid",
+      "rec_site_place_section_metric_grid",
+    ]);
+    expect(cardGrid).toMatchObject({
+      type: "cardGrid",
+      label: "What I do",
+      body: "A few reusable card summaries.",
+    });
+    expect(card).toMatchObject({
+      type: "card",
+      label: "Product engineering",
+      body: "Shape and ship product systems.",
+      icon: expect.stringContaining("<svg"),
+      color: "#0f766e",
+    });
+    expect(metricGrid).toMatchObject({
+      type: "metricGrid",
+      label: "Proof points",
+      body: "A compact set of metrics.",
+    });
+    expect(metric).toMatchObject({
+      type: "metric",
+      label: "15+",
+      body: "Years building software.",
+      color: "#b45309",
+    });
+  });
+
   it("resolves explicit internal links through target block hrefs in the public tree", () => {
     const records = baseTreeRecords().map((record) => {
       if (record.id === "rec_site_content_blog") {
