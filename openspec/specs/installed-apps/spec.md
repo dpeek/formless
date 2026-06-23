@@ -122,8 +122,8 @@ contracts through the Installed Apps package slice.
 
 #### Scenario: Workspace resolver has explicit defaults
 
-- GIVEN a workspace package resolver is built from optional
-  `formless.packages.json` links
+- GIVEN a workspace package resolver is built from optional `formless.json`
+  `packages.links`
 - WHEN bundled package metadata should be part of that resolver
 - THEN the caller supplies bundled manifests explicitly
 - AND the Workspace package does not import root bundled package lists as an

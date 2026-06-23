@@ -6,26 +6,31 @@ import {
   INSTANCE_WORKSPACE_KIND,
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   INSTANCE_WORKSPACE_MANIFEST_VERSION,
-  WORKSPACE_PACKAGE_LINKS_FILE,
-  WORKSPACE_PACKAGE_LINKS_KIND,
-  WORKSPACE_PACKAGE_LINKS_VERSION,
 } from "./types.ts";
 import type {
   FormatInstanceWorkspaceManifestInput,
-  FormatWorkspacePackageLinksInput,
   InstanceWorkspaceLocalState,
   InstanceWorkspaceManifest,
   InstanceWorkspaceMedia,
+  InstanceWorkspacePackages,
   InstanceWorkspaceRuntime,
   InstanceWorkspaceRuntimeExtensions,
   InstanceWorkspaceSitePublicRendererExtension,
   InstanceWorkspaceState,
   WorkspacePackageLink,
-  WorkspacePackageLinks,
 } from "./types.ts";
 
-const rootKeys = new Set(["kind", "local", "media", "name", "runtime", "state", "version"]);
-const workspacePackageLinksRootKeys = new Set(["kind", "links", "version"]);
+const rootKeys = new Set([
+  "kind",
+  "local",
+  "media",
+  "name",
+  "packages",
+  "runtime",
+  "state",
+  "version",
+]);
+const packagesKeys = new Set(["links"]);
 const workspacePackageLinkKeys = new Set(["manifest"]);
 const stateKeys = new Set(["root"]);
 const mediaKeys = new Set(["root"]);
@@ -82,15 +87,14 @@ export function defaultInstanceWorkspaceManifest(input: {
       stateRoot: DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
       secretStateRoot: DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
     },
+    packages: defaultInstanceWorkspacePackages(),
     defaultAppPolicy: "none",
     apps: [],
   };
 }
 
-export function defaultWorkspacePackageLinks(): WorkspacePackageLinks {
+export function defaultInstanceWorkspacePackages(): InstanceWorkspacePackages {
   return {
-    version: WORKSPACE_PACKAGE_LINKS_VERSION,
-    kind: WORKSPACE_PACKAGE_LINKS_KIND,
     links: [],
   };
 }
@@ -111,18 +115,6 @@ export function parseInstanceWorkspaceManifestJson(contents: string): InstanceWo
   assertNoDuplicateRuntimeExtensionDeclarations(contents);
 
   return parseInstanceWorkspaceManifest(parsed);
-}
-
-export function parseWorkspacePackageLinksJson(contents: string): WorkspacePackageLinks {
-  try {
-    return parseWorkspacePackageLinks(JSON.parse(contents) as unknown);
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`${WORKSPACE_PACKAGE_LINKS_FILE} must be valid JSON.`);
-    }
-
-    throw error;
-  }
 }
 
 export function parseInstanceWorkspaceManifest(value: unknown): InstanceWorkspaceManifest {
@@ -153,36 +145,10 @@ export function parseInstanceWorkspaceManifest(value: unknown): InstanceWorkspac
     targets: [],
     media: parseMedia(value.media),
     local: parseLocalState(value.local),
+    packages: parsePackages(value.packages),
     defaultAppPolicy: "none",
     apps: [],
     ...(value.runtime === undefined ? {} : { runtime: parseRuntime(value.runtime) }),
-  };
-}
-
-export function parseWorkspacePackageLinks(value: unknown): WorkspacePackageLinks {
-  if (!isRecord(value)) {
-    throw new Error(`${WORKSPACE_PACKAGE_LINKS_FILE} must be an object.`);
-  }
-
-  assertNoForbiddenSecretKeys(value, WORKSPACE_PACKAGE_LINKS_FILE, WORKSPACE_PACKAGE_LINKS_FILE);
-  assertOnlyKeys(value, workspacePackageLinksRootKeys, WORKSPACE_PACKAGE_LINKS_FILE);
-
-  if (value.version !== WORKSPACE_PACKAGE_LINKS_VERSION) {
-    throw new Error(
-      `${WORKSPACE_PACKAGE_LINKS_FILE} version must be ${WORKSPACE_PACKAGE_LINKS_VERSION}.`,
-    );
-  }
-
-  if (value.kind !== WORKSPACE_PACKAGE_LINKS_KIND) {
-    throw new Error(
-      `${WORKSPACE_PACKAGE_LINKS_FILE} kind must be "${WORKSPACE_PACKAGE_LINKS_KIND}".`,
-    );
-  }
-
-  return {
-    version: WORKSPACE_PACKAGE_LINKS_VERSION,
-    kind: WORKSPACE_PACKAGE_LINKS_KIND,
-    links: parseWorkspacePackageLinkList(value.links),
   };
 }
 
@@ -204,6 +170,13 @@ export function formatInstanceWorkspaceManifest(
       stateRoot: manifest.local?.stateRoot ?? fallback.local.stateRoot,
       secretStateRoot: manifest.local?.secretStateRoot ?? fallback.local.secretStateRoot,
     },
+    ...(manifest.packages === undefined
+      ? {}
+      : {
+          packages: {
+            links: manifest.packages.links ?? fallback.packages.links,
+          },
+        }),
     ...(manifest.runtime === undefined ? {} : { runtime: manifest.runtime }),
   });
   const formatted: Record<string, unknown> = {
@@ -222,28 +195,13 @@ export function formatInstanceWorkspaceManifest(
     },
   };
 
+  if (parsed.packages.links.length > 0) {
+    formatted.packages = formatPackages(parsed.packages);
+  }
+
   if (parsed.runtime !== undefined) {
     formatted.runtime = formatRuntime(parsed.runtime);
   }
-
-  return `${JSON.stringify(formatted, null, 2)}\n`;
-}
-
-export function formatWorkspacePackageLinks(manifest: FormatWorkspacePackageLinksInput): string {
-  const parsed = parseWorkspacePackageLinks({
-    version: manifest.version,
-    kind: manifest.kind,
-    links: manifest.links.map((link) => ({
-      manifest: link.manifest,
-    })),
-  });
-  const formatted: Record<string, unknown> = {
-    version: parsed.version,
-    kind: parsed.kind,
-    links: parsed.links.map((link) => ({
-      manifest: link.manifest,
-    })),
-  };
 
   return `${JSON.stringify(formatted, null, 2)}\n`;
 }
@@ -369,6 +327,24 @@ function parseLocalState(value: unknown): InstanceWorkspaceLocalState {
   };
 }
 
+function parsePackages(value: unknown): InstanceWorkspacePackages {
+  if (value === undefined) {
+    return defaultInstanceWorkspacePackages();
+  }
+
+  const context = `${INSTANCE_WORKSPACE_MANIFEST_FILE} packages`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertOnlyKeys(value, packagesKeys, context);
+
+  return {
+    links: parseWorkspacePackageLinkList(value.links, `${context}.links`),
+  };
+}
+
 function parseRuntime(value: unknown): InstanceWorkspaceRuntime {
   if (!isRecord(value)) {
     throw new Error(`${INSTANCE_WORKSPACE_MANIFEST_FILE} runtime must be an object.`);
@@ -465,25 +441,29 @@ function formatRuntimeExtensions(
   return formatted;
 }
 
-function parseWorkspacePackageLinkList(value: unknown): WorkspacePackageLink[] {
+function formatPackages(packages: InstanceWorkspacePackages): Record<string, unknown> {
+  return {
+    links: packages.links.map((link) => ({
+      manifest: link.manifest,
+    })),
+  };
+}
+
+function parseWorkspacePackageLinkList(value: unknown, context: string): WorkspacePackageLink[] {
   if (value === undefined) {
     return [];
   }
 
   if (!Array.isArray(value)) {
-    throw new Error(`${WORKSPACE_PACKAGE_LINKS_FILE} links must be an array.`);
+    throw new Error(`${context} must be an array.`);
   }
 
-  const links = value.map((link, index) =>
-    parseWorkspacePackageLink(link, `${WORKSPACE_PACKAGE_LINKS_FILE} links[${index}]`),
-  );
+  const links = value.map((link, index) => parseWorkspacePackageLink(link, `${context}[${index}]`));
   const seen = new Set<string>();
 
   for (const link of links) {
     if (seen.has(link.manifest)) {
-      throw new Error(
-        `${WORKSPACE_PACKAGE_LINKS_FILE} links has duplicate manifest "${link.manifest}".`,
-      );
+      throw new Error(`${context} has duplicate manifest "${link.manifest}".`);
     }
 
     seen.add(link.manifest);

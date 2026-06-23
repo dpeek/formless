@@ -251,6 +251,7 @@ async function resolveFormlessCliWorkspaceTarget(input: {
 }): Promise<InstanceWorkspaceTarget | undefined> {
   const activePackages = await createWorkspaceAppPackageResolver({
     bundledManifests: bundledAppPackageManifests,
+    manifest: input.manifest,
     workspaceRoot: input.workspaceRoot,
   });
   const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({

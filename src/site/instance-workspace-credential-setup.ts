@@ -335,6 +335,7 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
   const manifest = await readCredentialSetupWorkspaceManifest(input.workspaceRoot);
   const activePackages = await createWorkspaceAppPackageResolver({
     bundledManifests: bundledAppPackageManifests,
+    manifest,
     workspaceRoot: input.workspaceRoot,
   });
   const current = await readInstanceWorkspaceControlPlaneStorageSnapshot({

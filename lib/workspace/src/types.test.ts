@@ -8,9 +8,6 @@ import {
   INSTANCE_WORKSPACE_MANIFEST_FILE,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   WORKSPACE_RECORD_STATE_FILE_VERSION,
-  WORKSPACE_PACKAGE_LINKS_FILE,
-  WORKSPACE_PACKAGE_LINKS_KIND,
-  WORKSPACE_PACKAGE_LINKS_VERSION,
   WORKSPACE_BROWSER_OPERATION_DEFINITIONS,
   WORKSPACE_BOOTSTRAP_OPERATION_KINDS,
   WORKSPACE_BROWSER_OPERATION_KINDS,
@@ -28,10 +25,9 @@ import {
   WORKSPACE_AUTO_SAVE_STATE_FILE_VERSION,
   WORKSPACE_AUTO_SAVE_SUPPRESSION_REASONS,
   WORKSPACE_AUTO_SAVE_WRITE_SOURCES,
+  defaultInstanceWorkspacePackages,
   defaultInstanceWorkspaceManifest,
-  defaultWorkspacePackageLinks,
   formatWorkspaceAutoSaveState,
-  formatWorkspacePackageLinks,
   formatWorkspaceRecordStateFile,
   formatWorkspaceOperationState,
   formatInstanceWorkspaceManifest,
@@ -71,8 +67,6 @@ import {
   parseInstanceWorkspaceRelativePath,
   parseInstanceWorkspaceResourceSlug,
   parseWorkspaceAutoSaveStateJson,
-  parseWorkspacePackageLinks,
-  parseWorkspacePackageLinksJson,
   parseWorkspacePackageManifestLinkPath,
   parseWorkspaceRecordStateFile,
   parseWorkspaceRecordStateFileJson,
@@ -116,6 +110,7 @@ describe("instance workspace manifest", () => {
         stateRoot: DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
         secretStateRoot: DEFAULT_INSTANCE_WORKSPACE_SECRET_STATE_ROOT,
       },
+      packages: defaultInstanceWorkspacePackages(),
       defaultAppPolicy: "none",
       apps: [],
     });
@@ -154,6 +149,7 @@ describe("instance workspace manifest", () => {
         stateRoot: ".formless/local",
         secretStateRoot: ".formless",
       },
+      packages: defaultInstanceWorkspacePackages(),
       defaultAppPolicy: "none",
       apps: [],
     });
@@ -573,91 +569,77 @@ describe("workspace record state contracts", () => {
   });
 });
 
-describe("workspace package links", () => {
+describe("workspace manifest package links", () => {
   it("parses omitted package links as empty reviewable dependency config", () => {
-    expect(WORKSPACE_PACKAGE_LINKS_FILE).toBe("formless.packages.json");
-    expect(defaultWorkspacePackageLinks()).toEqual({
-      version: WORKSPACE_PACKAGE_LINKS_VERSION,
-      kind: WORKSPACE_PACKAGE_LINKS_KIND,
-      links: [],
-    });
+    const manifest = parseInstanceWorkspaceManifest(layoutManifestSource());
+    const formatted = formatInstanceWorkspaceManifest(manifest);
 
-    const links = parseWorkspacePackageLinks({
-      version: 1,
-      kind: "formless.workspacePackages",
-    });
-    const formatted = formatWorkspacePackageLinks(links);
-
-    expect(links).toEqual(defaultWorkspacePackageLinks());
+    expect(manifest.packages).toEqual(defaultInstanceWorkspacePackages());
     expect(formatted).toBe(`${JSON.stringify(JSON.parse(formatted), null, 2)}\n`);
-    expect(JSON.parse(formatted)).toEqual({
-      version: 1,
-      kind: "formless.workspacePackages",
-      links: [],
-    });
-    expect(parseWorkspacePackageLinksJson(formatted)).toEqual(links);
+    expect(JSON.parse(formatted)).not.toHaveProperty("packages");
+    expect(parseInstanceWorkspaceManifestJson(formatted)).toEqual(manifest);
   });
 
   it("parses and formats sibling app package manifest links", () => {
-    const links = parseWorkspacePackageLinks({
-      version: 1,
-      kind: "formless.workspacePackages",
-      links: [
-        {
-          manifest: "../app/formless.app.json",
-        },
-        {
-          manifest: "packages/private-labs/formless.app.json",
-        },
-      ],
-    });
-    const formatted = formatWorkspacePackageLinks(links);
-
-    expect(parseWorkspacePackageManifestLinkPath("package link", "../app/formless.app.json")).toBe(
-      "../app/formless.app.json",
-    );
-    expect(links).toEqual({
-      version: 1,
-      kind: "formless.workspacePackages",
-      links: [
-        {
-          manifest: "../app/formless.app.json",
-        },
-        {
-          manifest: "packages/private-labs/formless.app.json",
-        },
-      ],
-    });
-    expect(JSON.parse(formatted)).toEqual({
-      version: 1,
-      kind: "formless.workspacePackages",
-      links: [
-        {
-          manifest: "../app/formless.app.json",
-        },
-        {
-          manifest: "packages/private-labs/formless.app.json",
-        },
-      ],
-    });
-    expect(parseWorkspacePackageLinksJson(formatted)).toEqual(links);
-  });
-
-  it("rejects duplicate package manifest links", () => {
-    expect(() =>
-      parseWorkspacePackageLinks({
-        version: 1,
-        kind: "formless.workspacePackages",
+    const manifest = parseInstanceWorkspaceManifest({
+      ...layoutManifestSource(),
+      packages: {
         links: [
           {
             manifest: "../app/formless.app.json",
           },
           {
-            manifest: " ../app/formless.app.json ",
+            manifest: "packages/private-labs/formless.app.json",
           },
         ],
+      },
+    });
+    const formatted = formatInstanceWorkspaceManifest(manifest);
+
+    expect(parseWorkspacePackageManifestLinkPath("package link", "../app/formless.app.json")).toBe(
+      "../app/formless.app.json",
+    );
+    expect(manifest.packages).toEqual({
+      links: [
+        {
+          manifest: "../app/formless.app.json",
+        },
+        {
+          manifest: "packages/private-labs/formless.app.json",
+        },
+      ],
+    });
+    expect(JSON.parse(formatted)).toMatchObject({
+      packages: {
+        links: [
+          {
+            manifest: "../app/formless.app.json",
+          },
+          {
+            manifest: "packages/private-labs/formless.app.json",
+          },
+        ],
+      },
+    });
+    expect(parseInstanceWorkspaceManifestJson(formatted)).toEqual(manifest);
+  });
+
+  it("rejects duplicate package manifest links", () => {
+    expect(() =>
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        packages: {
+          links: [
+            {
+              manifest: "../app/formless.app.json",
+            },
+            {
+              manifest: " ../app/formless.app.json ",
+            },
+          ],
+        },
       }),
-    ).toThrow('formless.packages.json links has duplicate manifest "../app/formless.app.json".');
+    ).toThrow('formless.json packages.links has duplicate manifest "../app/formless.app.json".');
   });
 
   it("rejects invalid package manifest link paths", () => {
@@ -675,54 +657,58 @@ describe("workspace package links", () => {
       "packages/app/manifest.json",
     ]) {
       expect(() =>
-        parseWorkspacePackageLinks({
-          version: 1,
-          kind: "formless.workspacePackages",
-          links: [
-            {
-              manifest,
-            },
-          ],
+        parseInstanceWorkspaceManifest({
+          ...layoutManifestSource(),
+          packages: {
+            links: [
+              {
+                manifest,
+              },
+            ],
+          },
         }),
-      ).toThrow(/formless\.packages\.json links\[0\]\.manifest/);
+      ).toThrow(/formless\.json packages\.links\[0\]\.manifest/);
     }
   });
 
   it("rejects unsupported fields and secret-looking package link fields", () => {
     expect(() =>
-      parseWorkspacePackageLinks({
-        version: 1,
-        kind: "formless.workspacePackages",
-        packages: [],
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        packages: {
+          paths: [],
+        },
       }),
-    ).toThrow('formless.packages.json has unsupported key "packages".');
+    ).toThrow('formless.json packages has unsupported key "paths".');
 
     expect(() =>
-      parseWorkspacePackageLinks({
-        version: 1,
-        kind: "formless.workspacePackages",
-        links: [
-          {
-            manifest: "../app/formless.app.json",
-            label: "Private app",
-          },
-        ],
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        packages: {
+          links: [
+            {
+              manifest: "../app/formless.app.json",
+              label: "Private app",
+            },
+          ],
+        },
       }),
-    ).toThrow('formless.packages.json links[0] has unsupported key "label".');
+    ).toThrow('formless.json packages.links[0] has unsupported key "label".');
 
     expect(() =>
-      parseWorkspacePackageLinks({
-        version: 1,
-        kind: "formless.workspacePackages",
-        links: [
-          {
-            manifest: "../app/formless.app.json",
-            adminToken: "secret",
-          },
-        ],
+      parseInstanceWorkspaceManifest({
+        ...layoutManifestSource(),
+        packages: {
+          links: [
+            {
+              manifest: "../app/formless.app.json",
+              adminToken: "secret",
+            },
+          ],
+        },
       }),
     ).toThrow(
-      'formless.packages.json must not store secret field "formless.packages.json.links[0].adminToken".',
+      'formless.json must not store secret field "formless.json.packages.links[0].adminToken".',
     );
   });
 });

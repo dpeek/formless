@@ -29,11 +29,9 @@ import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formles
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   WORKSPACE_AUTO_SAVE_STATE_FILE,
-  WORKSPACE_PACKAGE_LINKS_FILE,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   WORKSPACE_RECORD_STATE_FILE_VERSION,
   WORKSPACE_OPERATION_STATE_ROOT,
-  defaultWorkspacePackageLinks,
   formatWorkspaceAutoSaveState,
   formatWorkspaceRecordStateFile,
   formatWorkspaceOperationState,
@@ -42,7 +40,6 @@ import {
   parseWorkspaceAutoSaveStateJson,
   parseInstanceWorkspaceRelativePath,
   parseInstanceWorkspaceResourceSlug,
-  parseWorkspacePackageLinksJson,
   parseWorkspaceRecordStateFile,
   parseWorkspaceOperationStateJson,
   workspaceOperationStateFileName,
@@ -59,7 +56,6 @@ import type {
   InstanceWorkspaceManifest,
   UpdateWorkspaceOperationStateInput,
   WorkspacePackageLink,
-  WorkspacePackageLinks,
   WorkspaceAutoSaveState,
   WorkspaceOperationState,
   WorkspacePackageAppSchemaProvenance,
@@ -126,13 +122,13 @@ export type WorkspaceAppPackageSource = {
 
 export type CreateWorkspaceAppPackageResolverInput = {
   bundledManifests: readonly unknown[];
-  packageLinks?: WorkspacePackageLinks;
+  manifest: Pick<InstanceWorkspaceManifest, "packages">;
   workspaceRoot: string;
 };
 
 export type WorkspaceAppPackageResolverResult = {
   linkedPackages: WorkspaceAppPackageSource[];
-  packageLinks: WorkspacePackageLinks;
+  packageLinks: WorkspacePackageLink[];
   resolver: AppPackageResolver;
 };
 
@@ -173,10 +169,6 @@ export function workspaceOperationStatePath(workspaceRoot: string, operationId: 
     workspaceOperationStateRoot(workspaceRoot),
     `${workspaceOperationStateFileName(operationId)}.json`,
   );
-}
-
-export function workspacePackageLinksPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, WORKSPACE_PACKAGE_LINKS_FILE);
 }
 
 export function instanceWorkspaceStateRootPath(
@@ -237,22 +229,6 @@ export function instanceWorkspaceMediaFilePath(
     instanceWorkspaceMediaRootPath(workspaceRoot, manifest),
     parseWorkspaceMediaArchivePath(archivePath),
   );
-}
-
-export async function readWorkspacePackageLinks(
-  workspaceRoot: string,
-): Promise<WorkspacePackageLinks> {
-  const filePath = workspacePackageLinksPath(workspaceRoot);
-
-  try {
-    return parseWorkspacePackageLinksJson(await readFile(filePath, "utf8"));
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return defaultWorkspacePackageLinks();
-    }
-
-    throw error;
-  }
 }
 
 export async function readInstanceWorkspaceControlPlaneStorageSnapshot(input: {
@@ -451,10 +427,10 @@ export async function replaceInstanceWorkspaceMediaFiles(input: {
 export async function createWorkspaceAppPackageResolver(
   input: CreateWorkspaceAppPackageResolverInput,
 ): Promise<WorkspaceAppPackageResolverResult> {
-  const packageLinks = input.packageLinks ?? (await readWorkspacePackageLinks(input.workspaceRoot));
+  const packageLinks = input.manifest.packages.links;
   const linkedPackages: WorkspaceAppPackageSource[] = [];
 
-  for (const link of packageLinks.links) {
+  for (const link of packageLinks) {
     linkedPackages.push(
       await readLinkedWorkspaceAppPackage({
         context: `Workspace package link "${link.manifest}"`,

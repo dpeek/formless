@@ -21,10 +21,6 @@ export const INSTANCE_WORKSPACE_SITE_PUBLIC_RENDERER_EXTENSION = "site.publicRen
 export const WORKSPACE_RECORD_STATE_FILE_KIND = "formless.workspaceRecordState";
 export const WORKSPACE_RECORD_STATE_FILE_VERSION = 1;
 
-export const WORKSPACE_PACKAGE_LINKS_FILE = "formless.packages.json";
-export const WORKSPACE_PACKAGE_LINKS_VERSION = 1;
-export const WORKSPACE_PACKAGE_LINKS_KIND = "formless.workspacePackages";
-
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_WORKSPACE_CONTROL_PLANE_RECORD_SOURCE_FILE_KIND =
@@ -65,13 +61,9 @@ export type WorkspacePackageLink = {
   manifest: string;
 };
 
-export type WorkspacePackageLinks = {
-  version: typeof WORKSPACE_PACKAGE_LINKS_VERSION;
-  kind: typeof WORKSPACE_PACKAGE_LINKS_KIND;
+export type InstanceWorkspacePackages = {
   links: WorkspacePackageLink[];
 };
-
-export type FormatWorkspacePackageLinksInput = WorkspacePackageLinks;
 
 export type WorkspaceOperationActorPolicy = {
   allowedActors: readonly WorkspaceOperationActor[];
@@ -807,6 +799,7 @@ export type InstanceWorkspaceManifest = {
   targets: InstanceWorkspaceTarget[];
   media: InstanceWorkspaceMedia;
   local: InstanceWorkspaceLocalState;
+  packages: InstanceWorkspacePackages;
   defaultAppPolicy: InstanceWorkspaceDefaultAppPolicy;
   apps: InstanceWorkspaceApp[];
   domains?: InstanceWorkspaceDomainIntent[];
@@ -817,8 +810,11 @@ export type FormatInstanceWorkspaceManifestInput = Pick<
   InstanceWorkspaceManifest,
   "kind" | "name" | "version"
 > &
-  Partial<Omit<InstanceWorkspaceManifest, "kind" | "local" | "name" | "state" | "version">> & {
+  Partial<
+    Omit<InstanceWorkspaceManifest, "kind" | "local" | "name" | "packages" | "state" | "version">
+  > & {
     local?: Partial<InstanceWorkspaceLocalState>;
+    packages?: Partial<InstanceWorkspacePackages>;
     state?: Partial<InstanceWorkspaceState>;
   };
 

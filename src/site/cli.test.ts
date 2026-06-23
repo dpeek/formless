@@ -69,10 +69,8 @@ import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   WORKSPACE_OPERATION_KINDS,
-  defaultWorkspacePackageLinks,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
-  formatWorkspacePackageLinks,
   type InstanceWorkspaceManifest,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
   workspaceOperationDefinitionForKind,
@@ -954,7 +952,7 @@ describe("Formless CLI", () => {
     const context: FormlessInstanceWorkspaceProviderContext = {
       activePackages: {
         linkedPackages: [],
-        packageLinks: defaultWorkspacePackageLinks(),
+        packageLinks: [],
         resolver: bundledAppPackageResolver,
       },
       credential: {
@@ -974,6 +972,7 @@ describe("Formless CLI", () => {
         targets: [selectedTarget],
         media: { root: "media" },
         local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
+        packages: { links: [] },
         defaultAppPolicy: "declared-installs",
         apps: [workspaceApp("david", "David Peek")],
       },
@@ -4716,12 +4715,18 @@ async function writeWorkspaceManifest(
 }
 
 async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: string) {
-  await mkdir(workspaceRoot, { recursive: true });
+  const manifestPath = path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE);
+  const workspaceManifest = parseFormlessInstanceWorkspaceManifestJson(
+    await readFile(manifestPath, "utf8"),
+  );
+
   await writeFile(
-    path.join(workspaceRoot, "formless.packages.json"),
-    formatWorkspacePackageLinks({
-      ...defaultWorkspacePackageLinks(),
-      links: [{ manifest }],
+    manifestPath,
+    formatFormlessInstanceWorkspaceManifest({
+      ...workspaceManifest,
+      packages: {
+        links: [{ manifest }],
+      },
     }),
   );
 }
@@ -4777,6 +4782,7 @@ async function writeWorkspaceControlPlaneStorageSnapshot(
   );
   const activePackages = await createWorkspaceAppPackageResolver({
     bundledManifests: bundledAppPackageManifests,
+    manifest,
     workspaceRoot,
   });
 
@@ -4859,6 +4865,7 @@ function layoutWorkspaceManifest(name: string) {
       stateRoot: ".formless/local",
       secretStateRoot: ".formless",
     },
+    packages: { links: [] },
     defaultAppPolicy: "none",
     apps: [],
   };

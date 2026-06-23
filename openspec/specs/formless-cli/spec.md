@@ -246,7 +246,7 @@ optional first app install, credential setup, and push operations.
   source with storage snapshots and media payloads
 - **THEN** the product instance runtime starts with workspace-local persistence
 - **AND** the CLI builds the active package resolver from bundled packages plus
-  linked packages declared in `formless.packages.json` when present
+  linked packages declared in `formless.json` `packages.links` when present
 - **AND** installable package lists shown before the workspace has installed
   apps come from that active resolver
 - **AND** first-run local runtime state starts from workspace storage snapshots
@@ -308,7 +308,8 @@ optional first app install, credential setup, and push operations.
 
 #### Scenario: Install linked private app locally
 
-- **GIVEN** `formless.packages.json` links a private local app package manifest
+- **GIVEN** `formless.json` `packages.links` includes a private local app
+  package manifest
 - **WHEN** `formless dev` starts and an owner opens the app install flow
 - **THEN** the linked package appears in the installable package list for that
   workspace
@@ -319,8 +320,8 @@ optional first app install, credential setup, and push operations.
 
 #### Scenario: Reject missing linked package source
 
-- **GIVEN** `formless.packages.json` points at a missing or invalid package
-  manifest, source schema, or seed record file
+- **GIVEN** `formless.json` `packages.links` points at a missing or invalid
+  package manifest, source schema, or seed record file
 - **WHEN** `formless dev`, `formless push`, or a workspace
   operation builds the active package resolver
 - **THEN** the command fails before starting local runtime mutation, remote
@@ -455,8 +456,8 @@ without storing executable code configuration in app data.
   credential state, deployment observation state, or runtime secret state
 - **AND** `formless.json` stores runtime extension module paths only inside the
   manifest-owned `runtime.extensions` section
-- **AND** `formless.packages.json` remains dependency configuration for package
-  app source and does not duplicate runtime extension config
+- **AND** `formless.json` stores package app source links only inside the
+  manifest-owned `packages.links` section
 - **AND** app-install, route, deployment-config, app records, package manifests,
   and runtime package payloads do not store local renderer module paths
 

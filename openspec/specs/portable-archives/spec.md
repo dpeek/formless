@@ -189,10 +189,10 @@ package slice.
 
 ### Requirement: Workspace Source Of Truth
 
-The system SHALL treat the `formless.json` workspace manifest, optional
+The system SHALL treat the `formless.json` workspace manifest, manifest-owned
 workspace package links, workspace record state files, schema provenance, and
-media payloads as the reviewable local source of truth for local-first
-Formless workspaces.
+media payloads as the reviewable local source of truth for local-first Formless
+workspaces.
 
 #### Scenario: Fresh local workspace bootstrap
 
@@ -306,21 +306,21 @@ payloads, not portable archive directories or duplicated schema source bodies.
 ### Requirement: Workspace App Package Links
 
 The system SHALL allow a local Formless workspace to link private filesystem app
-package manifests through a reviewable package resolver source file without
-storing package links in instance control-plane records.
+package manifests through reviewable workspace manifest package configuration
+without storing package links in instance control-plane records.
 
 #### Scenario: Workspace package link source
 
-- **GIVEN** a workspace contains optional `formless.packages.json`
+- **GIVEN** a workspace contains optional `formless.json` `packages.links`
 - **WHEN** the package link source is read
-- **THEN** the file declares kind `formless.workspacePackages`, version `1`,
-  and an ordered list of app package manifest links
+- **THEN** the workspace manifest declares an ordered list of app package
+  manifest links in `packages.links`
 - **AND** each link points to a local relative `formless.app.json` path such as
   `../app/formless.app.json`
 - **AND** absolute paths, URL-like values, home-relative paths, empty paths,
   duplicate links, and secret-looking fields are rejected
-- **AND** omitting `formless.packages.json` means the active resolver contains
-  only bundled app packages
+- **AND** omitting `packages.links` means the active resolver contains only
+  bundled app packages
 
 #### Scenario: Resolve linked package source
 
@@ -342,13 +342,13 @@ storing package links in instance control-plane records.
 
 - **WHEN** workspace source is saved, checked, pushed, exported, or
   restored
-- **THEN** `formless.packages.json` is treated as reviewable dependency
-  configuration for resolving package app source
+- **THEN** `formless.json` `packages.links` is treated as reviewable
+  dependency configuration for resolving package app source
 - **AND** package links are not app install intent, route intent, app data,
   media payloads, provider config, deployment observation, or runtime secret
   state
-- **AND** `formless.json` remains the workspace manifest and does not duplicate
-  package links
+- **AND** `formless.json` stores package app source links only inside
+  manifest-owned package configuration
 
 ### Requirement: Workspace Runtime Extension Archive Boundary
 
@@ -394,11 +394,11 @@ semantic operation contracts through the Workspace package slice.
 
 - **WHEN** CLI, Site runtime, Gateway runtime adapters, archive workflows,
   tests, or local agent workflows need `formless.json` manifest parsing,
-  workspace path defaults, workspace target URL normalization, workspace
-  storage snapshot contracts, ignored local state contracts,
-  ignored secret state contracts, semantic workspace operation input shapes,
-  display-safe operation state, operation result shapes, operation redaction,
-  or deterministic local filesystem workspace IO
+  manifest package link parsing, workspace path defaults, workspace target URL
+  normalization, workspace storage snapshot contracts, ignored local state
+  contracts, ignored secret state contracts, semantic workspace operation input
+  shapes, display-safe operation state, operation result shapes, operation
+  redaction, or deterministic local filesystem workspace IO
 - **THEN** they import that behavior from `@dpeek/formless-workspace` or
   `@dpeek/formless-workspace/node`
 - **AND** they import package-owned workspace behavior only through exported

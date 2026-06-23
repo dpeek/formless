@@ -38,14 +38,11 @@ import {
   INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
   INSTANCE_WORKSPACE_SECRET_STATE_PATH,
   WORKSPACE_RECORD_STATE_FILE_KIND,
-  WORKSPACE_PACKAGE_LINKS_FILE,
   createWorkspaceAppPackageResolver,
   createWorkspaceOperationState,
   defaultInstanceWorkspaceManifest,
-  defaultWorkspacePackageLinks,
   ensureInstanceWorkspaceLocalDevSecretState,
   ensureInstanceWorkspaceSecretStateIgnored,
-  formatWorkspacePackageLinks,
   formatInstanceWorkspaceLocalDevSecretState,
   formatInstanceWorkspaceSecretState,
   initialWorkspaceAutoSaveState,
@@ -58,7 +55,6 @@ import {
   readInstanceWorkspaceAutoSaveState,
   readInstanceWorkspaceAppStorageSnapshot,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
-  readWorkspacePackageLinks,
   readWorkspaceOperationState,
   readInstanceWorkspaceLocalDevSecretState,
   readInstanceWorkspaceSecretState,
@@ -347,15 +343,14 @@ describe("Formless instance workspace secret state", () => {
 describe("workspace app package source resolver", () => {
   it("defaults to bundled packages when package links are omitted", async () => {
     const workspaceRoot = await makeTempDir();
+    const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
     const result = await createWorkspaceAppPackageResolver({
       bundledManifests: workspaceTestBundledManifests,
+      manifest,
       workspaceRoot,
     });
 
-    await expect(readWorkspacePackageLinks(workspaceRoot)).resolves.toEqual(
-      defaultWorkspacePackageLinks(),
-    );
-    expect(result.packageLinks).toEqual(defaultWorkspacePackageLinks());
+    expect(result.packageLinks).toEqual([]);
     expect(result.linkedPackages).toEqual([]);
     expect(result.resolver.findPackage("site")).toMatchObject({
       packageAppKey: "site",
@@ -368,12 +363,13 @@ describe("workspace app package source resolver", () => {
     const root = await makeTempDir();
     const workspaceRoot = path.join(root, "instance");
     const packageRoot = path.join(root, "app");
+    const manifest = workspaceManifestWithPackageLink("../app/formless.app.json");
 
-    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     const fixture = await writeWorkspaceAppPackageFixture(packageRoot);
 
     const result = await createWorkspaceAppPackageResolver({
       bundledManifests: workspaceTestBundledManifests,
+      manifest,
       workspaceRoot,
     });
     const linkedPackage = result.linkedPackages[0];
@@ -430,11 +426,11 @@ describe("workspace app package source resolver", () => {
       packageRevision: 3,
     });
     const manifestLink = path.relative(workspaceRoot, fixture.manifestPath);
-
-    await writeWorkspacePackageLinks(workspaceRoot, manifestLink);
+    const manifest = workspaceManifestWithPackageLink(manifestLink);
 
     const result = await createWorkspaceAppPackageResolver({
       bundledManifests: workspaceTestBundledManifests,
+      manifest,
       workspaceRoot,
     });
     const linkedPackage = result.linkedPackages[0];
@@ -481,13 +477,14 @@ describe("workspace app package source resolver", () => {
     const workspaceRoot = path.join(root, "instance");
     const packageRoot = path.join(root, "app");
     const invalidSchema = { version: 1 };
+    const manifest = workspaceManifestWithPackageLink("../app/formless.app.json");
 
-    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writeWorkspaceAppPackageFixture(packageRoot, { sourceSchema: invalidSchema });
 
     await expect(
       createWorkspaceAppPackageResolver({
         bundledManifests: workspaceTestBundledManifests,
+        manifest,
         workspaceRoot,
       }),
     ).rejects.toThrow('Schema must include "entities".');
@@ -497,8 +494,8 @@ describe("workspace app package source resolver", () => {
     const root = await makeTempDir();
     const workspaceRoot = path.join(root, "instance");
     const packageRoot = path.join(root, "app");
+    const manifest = workspaceManifestWithPackageLink("../app/formless.app.json");
 
-    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writeWorkspaceAppPackageFixture(packageRoot, {
       seedRecords: [
         {
@@ -513,6 +510,7 @@ describe("workspace app package source resolver", () => {
     await expect(
       createWorkspaceAppPackageResolver({
         bundledManifests: workspaceTestBundledManifests,
+        manifest,
         workspaceRoot,
       }),
     ).rejects.toThrow('values include unknown field "task.missing"');
@@ -522,8 +520,8 @@ describe("workspace app package source resolver", () => {
     const root = await makeTempDir();
     const workspaceRoot = path.join(root, "instance");
     const packageRoot = path.join(root, "app");
+    const manifest = workspaceManifestWithPackageLink("../app/formless.app.json");
 
-    await writeWorkspacePackageLinks(workspaceRoot, "../app/formless.app.json");
     await writeWorkspaceAppPackageFixture(packageRoot, {
       sourceSchemaHash: `sha256:${"2".repeat(64)}`,
     });
@@ -531,6 +529,7 @@ describe("workspace app package source resolver", () => {
     await expect(
       createWorkspaceAppPackageResolver({
         bundledManifests: workspaceTestBundledManifests,
+        manifest,
         workspaceRoot,
       }),
     ).rejects.toThrow(/does not match manifest sourceSchemaHash/);
@@ -861,15 +860,13 @@ async function makeTempDir(): Promise<string> {
   return tempDir;
 }
 
-async function writeWorkspacePackageLinks(workspaceRoot: string, manifest: string): Promise<void> {
-  await mkdir(workspaceRoot, { recursive: true });
-  await writeFile(
-    path.join(workspaceRoot, WORKSPACE_PACKAGE_LINKS_FILE),
-    formatWorkspacePackageLinks({
-      ...defaultWorkspacePackageLinks(),
+function workspaceManifestWithPackageLink(manifest: string) {
+  return {
+    ...defaultInstanceWorkspaceManifest({ name: "personal-sites" }),
+    packages: {
       links: [{ manifest }],
-    }),
-  );
+    },
+  };
 }
 
 type WorkspaceAppPackageFixture = {

@@ -913,7 +913,7 @@ export async function initFormlessInstanceWorkspace(
 
     remoteStatus = await readFormlessInstanceTargetStatus(
       {
-        packageResolver: (await createActiveWorkspaceAppPackages(workspaceRoot)).resolver,
+        packageResolver: (await createActiveWorkspaceAppPackages(workspaceRoot, manifest)).resolver,
         targetUrl,
       },
       dependencies,
@@ -3421,9 +3421,13 @@ type ActiveWorkspaceAppPackages = WorkspaceAppPackageResolverResult;
 
 async function createActiveWorkspaceAppPackages(
   workspaceRoot: string,
+  manifest?: FormlessInstanceWorkspaceManifest,
 ): Promise<ActiveWorkspaceAppPackages> {
+  const workspaceManifest = manifest ?? (await readWorkspaceManifest(workspaceRoot)).manifest;
+
   return createWorkspaceAppPackageResolver({
     bundledManifests: bundledAppPackageManifests,
+    manifest: workspaceManifest,
     workspaceRoot,
   });
 }
@@ -3799,7 +3803,7 @@ function assertWorkspaceControlPlanePackagesAvailable(input: {
     .join(", ");
 
   throw new Error(
-    `Formless instance ${input.operation} cannot continue because active app installs reference unavailable package apps: ${labels}. Add the packages to formless.packages.json or install bundled packages.`,
+    `Formless instance ${input.operation} cannot continue because active app installs reference unavailable package apps: ${labels}. Add the packages to formless.json packages.links or install bundled packages.`,
   );
 }
 

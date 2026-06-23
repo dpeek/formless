@@ -151,6 +151,7 @@ function targetWorkspaceManifest(): InstanceWorkspaceManifest {
     targets: [],
     media: { root: "media" },
     local: { stateRoot: ".formless/local", secretStateRoot: ".formless" },
+    packages: { links: [] },
     defaultAppPolicy: "none",
     apps: [],
   };
