@@ -296,7 +296,6 @@ describe("Deploy control-plane projection helpers", () => {
             domain: "secondary.example.com",
             enabled: true,
             providerFamily: "cloudflare",
-            verificationStatus: "verified",
           },
         },
       ],
@@ -311,7 +310,6 @@ describe("Deploy control-plane projection helpers", () => {
         enabled: true,
         id: "email-domain:mail.example.com",
         providerFamily: "cloudflare",
-        verificationStatus: "pending",
       },
     ]);
     expect(projectionInput.emailSenders).toEqual([
@@ -322,7 +320,6 @@ describe("Deploy control-plane projection helpers", () => {
         enabled: true,
         id: "email-sender:contact@mail.example.com",
         purpose: "contact-notification",
-        verificationStatus: "verified",
       },
       {
         address: "pending@mail.example.com",
@@ -330,7 +327,6 @@ describe("Deploy control-plane projection helpers", () => {
         enabled: true,
         id: "email-sender:pending@mail.example.com",
         purpose: "system",
-        verificationStatus: "pending",
       },
     ]);
     expect(JSON.stringify(projectionInput)).not.toContain("email-domain:secondary.example.com");
@@ -361,11 +357,15 @@ describe("Deploy control-plane projection helpers", () => {
         dependencies: [
           {
             logicalId: "demo-instance-email-sending-domain-mail-example-com",
-            reason: "verified senders",
+            reason: "configured senders",
           },
         ],
         inputs: {
-          allowedSenderAddresses: ["contact@mail.example.com", "system@mail.example.com"],
+          allowedSenderAddresses: [
+            "contact@mail.example.com",
+            "pending@mail.example.com",
+            "system@mail.example.com",
+          ],
           bindingName: "FORMLESS_EMAIL",
           domain: "mail.example.com",
           workerName: "demo-worker",
@@ -381,7 +381,8 @@ describe("Deploy control-plane projection helpers", () => {
       "cloudflare-worker-send-email-binding": 1,
     });
     expect(JSON.stringify(projection.resourceGraph)).not.toContain("cloudflare-email-dns-records");
-    expect(deployProjectionCanonicalJson(projection)).not.toContain("pending@mail.example.com");
+    expect(deployProjectionCanonicalJson(projection)).toContain("pending@mail.example.com");
+    expect(deployProjectionCanonicalJson(projection)).not.toContain("disabled@mail.example.com");
     expect(await computeDeployProjectionHash(projection)).toBe(
       await computeDeployProjectionHash(
         projectDeployControlPlaneDesiredState({
@@ -936,7 +937,6 @@ const emailDomains = [
     enabled: true,
     id: "email-domain:mail.example.com",
     providerFamily: "cloudflare",
-    verificationStatus: "pending",
   },
 ] satisfies ControlPlaneEmailDomainProjectionRecord[];
 
@@ -947,7 +947,6 @@ const emailSenders = [
     enabled: true,
     id: "email-sender:system@mail.example.com",
     purpose: "system",
-    verificationStatus: "verified",
   },
   {
     address: "contact@mail.example.com",
@@ -956,7 +955,6 @@ const emailSenders = [
     enabled: true,
     id: "email-sender:contact@mail.example.com",
     purpose: "contact-notification",
-    verificationStatus: "verified",
   },
   {
     address: "pending@mail.example.com",
@@ -964,7 +962,6 @@ const emailSenders = [
     enabled: true,
     id: "email-sender:pending@mail.example.com",
     purpose: "system",
-    verificationStatus: "pending",
   },
 ] satisfies ControlPlaneEmailSenderProjectionRecord[];
 
@@ -1058,7 +1055,6 @@ const emailSourceRecords = [
       domain: "Mail.Example.com.",
       enabled: true,
       providerFamily: "cloudflare",
-      verificationStatus: "pending",
     },
   },
   {
@@ -1071,7 +1067,6 @@ const emailSourceRecords = [
       emailDomain: "email-domain:mail.example.com",
       enabled: true,
       purpose: "contact-notification",
-      verificationStatus: "verified",
     },
   },
   {
@@ -1083,7 +1078,6 @@ const emailSourceRecords = [
       emailDomain: "email-domain:mail.example.com",
       enabled: true,
       purpose: "system",
-      verificationStatus: "pending",
     },
   },
   {
@@ -1095,7 +1089,6 @@ const emailSourceRecords = [
       emailDomain: "email-domain:mail.example.com",
       enabled: false,
       purpose: "system",
-      verificationStatus: "verified",
     },
   },
 ] satisfies ControlPlaneProjectionSourceRecord[];

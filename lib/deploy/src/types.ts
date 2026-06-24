@@ -226,15 +226,9 @@ export type ControlPlaneEmailDomainProjectionRecord = {
   enabled: boolean;
   id: string;
   providerFamily: DeployProviderFamily;
-  verificationStatus?: ControlPlaneEmailVerificationStatus;
 };
 
 export type ControlPlaneEmailSenderPurpose = "contact-notification" | "system";
-export type ControlPlaneEmailVerificationStatus =
-  | "failed"
-  | "pending"
-  | "unconfigured"
-  | "verified";
 
 export type ControlPlaneEmailSenderProjectionRecord = {
   address: string;
@@ -243,7 +237,6 @@ export type ControlPlaneEmailSenderProjectionRecord = {
   enabled: boolean;
   id: string;
   purpose: ControlPlaneEmailSenderPurpose;
-  verificationStatus?: ControlPlaneEmailVerificationStatus;
 };
 
 export type ControlPlaneDeploymentConfigObservedStatus =

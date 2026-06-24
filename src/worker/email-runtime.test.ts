@@ -107,20 +107,62 @@ describe("email runtime delivery scheduling", () => {
     expect(JSON.stringify(accepted.delivery)).not.toContain("secret-provider-token");
   });
 
-  it("rejects unverified senders before recording a delivery", async () => {
+  it("records missing email bindings as display-safe delivery failures", async () => {
     harness = await createEmailRuntimeHarness();
 
-    const response = await fetchEmailRuntime("/schedule", {
-      body: JSON.stringify(scheduleBody({ senderId: "email-sender:pending@mail.example.com" })),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
+    const failed = await postSchedule({
+      idempotencyKey: "missing-binding-message-1",
+      missingBinding: true,
     });
-    const body = (await response.json()) as { error: string };
+    const sends = await getJson<{ sends: CloudflareSendEmailMessage[] }>("/sends");
+
+    expect(failed).toMatchObject({
+      replayed: false,
+      sent: false,
+      delivery: {
+        attemptCount: 1,
+        latestError: "Email delivery binding is not configured.",
+        status: "failed",
+      },
+    });
+    expect(failed.delivery).not.toHaveProperty("providerMessageId");
+    expect(sends.sends).toEqual([]);
+  });
+
+  it("sends from enabled configured senders without sender verification state", async () => {
+    harness = await createEmailRuntimeHarness();
+
+    const result = await postSchedule({
+      idempotencyKey: "configured-sender-message-1",
+      senderId: "email-sender:updates@mail.example.com",
+    });
+    const sends = await getJson<{ sends: CloudflareSendEmailMessage[] }>("/sends");
     const deliveries = await getJson<{ deliveries: EmailDeliveryRecord[] }>("/deliveries");
 
-    expect(response.status).toBe(400);
-    expect(body).toEqual({ error: "Email sender must be enabled and verified." });
-    expect(deliveries.deliveries).toEqual([]);
+    expect(result).toMatchObject({
+      replayed: false,
+      sent: true,
+      delivery: {
+        providerMessageId: "message-1",
+        sender: {
+          address: "updates@mail.example.com",
+          displayName: "Example Updates",
+          id: "email-sender:updates@mail.example.com",
+        },
+        status: "accepted",
+      },
+    });
+    expect(sends.sends).toEqual([
+      {
+        from: { email: "updates@mail.example.com", name: "Example Updates" },
+        to: ["owner@example.com"],
+        subject: "New contact message",
+        replyTo: "visitor@example.net",
+        text: "Plain text body",
+        html: "<p>HTML body</p>",
+      },
+    ]);
+    expect(deliveries.deliveries).toHaveLength(1);
   });
 });
 
@@ -166,11 +208,15 @@ async function writeEmailRuntimeHarness() {
               const scheduleBody = { ...body };
               delete scheduleBody.now;
               delete scheduleBody.failProvider;
+              delete scheduleBody.missingBinding;
               const result = await scheduleEmailDelivery({
                 controlPlaneRecords,
                 now: body.now,
                 request: parseEmailDeliveryScheduleRequest(scheduleBody),
-                sendEmail: sendEmailBinding(this.ctx.storage, body.failProvider === true),
+                sendEmail:
+                  body.missingBinding === true
+                    ? undefined
+                    : sendEmailBinding(this.ctx.storage, body.failProvider === true),
                 storage: this.ctx.storage,
               });
 
@@ -243,7 +289,6 @@ async function writeEmailRuntimeHarness() {
           enabled: true,
           providerFamily: "cloudflare",
           domain: "mail.example.com",
-          verificationStatus: "verified",
         }),
         record("email-sender:contact@mail.example.com", "email-sender", {
           enabled: true,
@@ -251,14 +296,13 @@ async function writeEmailRuntimeHarness() {
           displayName: "Example Contact",
           purpose: "contact-notification",
           emailDomain: "email-domain:mail.example.com",
-          verificationStatus: "verified",
         }),
-        record("email-sender:pending@mail.example.com", "email-sender", {
+        record("email-sender:updates@mail.example.com", "email-sender", {
           enabled: true,
-          address: "pending@mail.example.com",
+          address: "updates@mail.example.com",
+          displayName: "Example Updates",
           purpose: "contact-notification",
           emailDomain: "email-domain:mail.example.com",
-          verificationStatus: "pending",
         }),
       ];
     `,
@@ -270,6 +314,7 @@ async function writeEmailRuntimeHarness() {
 type ScheduleBodyOverrides = {
   failProvider?: boolean;
   idempotencyKey?: string;
+  missingBinding?: boolean;
   senderId?: string;
 };
 
@@ -300,6 +345,7 @@ function scheduleBody(overrides: ScheduleBodyOverrides = {}) {
     },
     now: "2026-06-24T00:01:00.000Z",
     ...(overrides.failProvider === undefined ? {} : { failProvider: overrides.failProvider }),
+    ...(overrides.missingBinding === undefined ? {} : { missingBinding: overrides.missingBinding }),
   };
 }
 

@@ -179,7 +179,7 @@ storing provider truth or provider secrets in control-plane records.
 - WHEN desired deployment state is read for the selected deployment target
 - THEN the resource graph includes provider resources for the Email Sending
   domain or subdomain and Worker send-email binding
-- AND the send-email binding is constrained to the enabled verified sender
+- AND the send-email binding is constrained to the enabled configured sender
   addresses selected for that domain
 - AND the Email Sending domain resource relies on Cloudflare Email Service to
   create and own its required bounce, SPF, DKIM, and DMARC DNS records

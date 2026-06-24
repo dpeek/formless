@@ -6,7 +6,6 @@ import {
   type ControlPlaneDomainMappingProfile,
   type ControlPlaneEmailDomainProjectionRecord,
   type ControlPlaneEmailSenderProjectionRecord,
-  type ControlPlaneEmailVerificationStatus,
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneProjectionSourceRecord,
   type ControlPlaneRedirectStatusCode,
@@ -55,7 +54,6 @@ export type {
   ControlPlaneEmailDomainProjectionRecord,
   ControlPlaneEmailSenderProjectionRecord,
   ControlPlaneEmailSenderPurpose,
-  ControlPlaneEmailVerificationStatus,
   ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneProjectionSourceRecord,
   ControlPlaneRedirectStatusCode,
@@ -745,7 +743,6 @@ function emailDomainProjectionRecordFromControlPlaneRecord(
   }
 
   const deploymentConfig = stringRecordValue(record, "deploymentConfig");
-  const verificationStatus = emailVerificationStatusRecordValue(record, "verificationStatus");
 
   return {
     domain,
@@ -753,7 +750,6 @@ function emailDomainProjectionRecordFromControlPlaneRecord(
     id: record.id,
     providerFamily: "cloudflare",
     ...(deploymentConfig === undefined ? {} : { deploymentConfig }),
-    ...(verificationStatus === undefined ? {} : { verificationStatus }),
   };
 }
 
@@ -788,7 +784,6 @@ function emailSenderProjectionRecordFromControlPlaneRecord(
   }
 
   const displayName = stringRecordValue(record, "displayName");
-  const verificationStatus = emailVerificationStatusRecordValue(record, "verificationStatus");
 
   return {
     address,
@@ -797,22 +792,7 @@ function emailSenderProjectionRecordFromControlPlaneRecord(
     id: record.id,
     purpose,
     ...(displayName === undefined ? {} : { displayName }),
-    ...(verificationStatus === undefined ? {} : { verificationStatus }),
   };
-}
-
-function emailVerificationStatusRecordValue(
-  record: ControlPlaneProjectionSourceRecord,
-  fieldName: string,
-): ControlPlaneEmailVerificationStatus | undefined {
-  const value = stringRecordValue(record, fieldName);
-
-  return value === "failed" ||
-    value === "pending" ||
-    value === "unconfigured" ||
-    value === "verified"
-    ? value
-    : undefined;
 }
 
 function providerConfigProjectionRecordsFromControlPlaneRecords(
@@ -1102,7 +1082,7 @@ function projectEmailProviderResources(
   const sendersByDomainId = new Map<string, ControlPlaneEmailSenderProjectionRecord[]>();
 
   for (const sender of emailSenders) {
-    if (sender.enabled !== true || sender.verificationStatus !== "verified") {
+    if (sender.enabled !== true) {
       continue;
     }
 
@@ -1142,7 +1122,7 @@ function projectEmailProviderResources(
 
       if (senderAddresses.length > 0) {
         resources.push({
-          dependencies: [{ logicalId: logicalIds.domain, reason: "verified senders" }],
+          dependencies: [{ logicalId: logicalIds.domain, reason: "configured senders" }],
           inputs: {
             allowedSenderAddresses: senderAddresses,
             bindingName: "FORMLESS_EMAIL",
@@ -1525,7 +1505,6 @@ function normalizeEmailDomainInputs(
       domain: normalizeOptionalHost(emailDomain.domain) ?? null,
       id: emailDomain.id,
       providerFamily: emailDomain.providerFamily,
-      verificationStatus: emailDomain.verificationStatus ?? null,
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
@@ -1534,14 +1513,13 @@ function normalizeEmailSenderInputs(
   emailSenders: readonly ControlPlaneEmailSenderProjectionRecord[],
 ): DeployJsonValue[] {
   return emailSenders
-    .filter((sender) => sender.enabled && sender.verificationStatus === "verified")
+    .filter((sender) => sender.enabled)
     .map((sender) => ({
       address: normalizedEmailAddress(sender.address) ?? null,
       displayName: sender.displayName ?? null,
       emailDomain: sender.emailDomain,
       id: sender.id,
       purpose: sender.purpose,
-      verificationStatus: sender.verificationStatus ?? null,
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }

@@ -43,8 +43,7 @@ identity while allowing deployed preview instances to exist without email.
 - THEN email domains and senders are stored as email records that may reference
   the selected primary route
 - AND route records are not overloaded with email-only behavior such as sender
-  verification, SPF, DKIM, DMARC, bounce handling, or recipient verification
-  state
+  allowlists, SPF, DKIM, DMARC, bounce handling, or recipient verification state
 
 ### Requirement: Email Domain And Sender Records
 
@@ -55,8 +54,8 @@ The system SHALL model email configuration as flat instance-owned records.
 - GIVEN an owner enables outbound email for an instance
 - WHEN the email domain intent is stored
 - THEN an `email-domain` record stores enabled state, provider family, domain,
-  deployment config reference, optional primary route reference, verification
-  status, display-safe DNS status, and latest display-safe error
+  deployment config reference, optional primary route reference, display-safe
+  DNS or onboarding status, and latest display-safe error
 - AND it does not store provider credentials, raw provider responses, raw DNS
   provider truth, API tokens, OAuth tokens, Alchemy state, or runtime secrets
 
@@ -65,9 +64,8 @@ The system SHALL model email configuration as flat instance-owned records.
 - GIVEN an email domain is configured
 - WHEN sender intent is stored
 - THEN an `email-sender` record stores address, display name, purpose, enabled
-  state, email domain reference, and verification status
+  state, and email domain reference
 - AND the sender address host belongs to the referenced email domain
-- AND disabled or unverified senders are not used for runtime delivery
 
 #### Scenario: Instance settings select defaults
 
@@ -89,8 +87,8 @@ projected deployment pipeline used for other provider resources.
 - THEN it provisions or adopts the Cloudflare Email Sending domain or subdomain
 - AND it relies on Cloudflare Email Service onboarding to create and own the DNS
   records required for SPF, DKIM, bounce handling, and DMARC
-- AND it binds a Worker `send_email` binding constrained to the configured
-  sender addresses
+- AND it binds a Worker `send_email` binding constrained to the enabled
+  configured sender addresses for the onboarded domain
 - AND the Email Sending domain and Worker binding resources are declared in
   tracked Alchemy state or an equivalent provider reconciler with stable
   logical ids
@@ -142,7 +140,7 @@ app-specific provider calls.
 
 - GIVEN an app schedules outbound email
 - WHEN the runtime builds the provider request
-- THEN the `from` address must be a verified enabled email sender
+- THEN the `from` address is built from the configured email sender record
 - AND user-supplied addresses may be used as `replyTo` only after field-level
   validation
 - AND visitor or customer addresses are not spoofed as the sender address

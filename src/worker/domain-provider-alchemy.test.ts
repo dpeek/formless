@@ -442,7 +442,7 @@ describe("Alchemy domain provider adapter", () => {
           dependencies: [
             {
               logicalId: "primary-email-sending-domain-mail-example-com",
-              reason: "verified senders",
+              reason: "configured senders",
             },
           ],
           inputs: {

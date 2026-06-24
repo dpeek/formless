@@ -165,7 +165,7 @@ export async function scheduleEmailDelivery(
   input: ScheduleEmailDeliveryInput,
 ): Promise<ScheduleEmailDeliveryResult> {
   const now = input.now ?? nowIsoString();
-  const sender = resolveVerifiedCloudflareSender(
+  const sender = resolveConfiguredCloudflareSender(
     input.controlPlaneRecords,
     input.request.sender.id,
   );
@@ -221,7 +221,7 @@ export async function scheduleEmailDelivery(
   }
 }
 
-export function resolveVerifiedCloudflareSender(
+export function resolveConfiguredCloudflareSender(
   records: readonly StoredRecord[],
   senderId: string,
 ): EmailDeliverySender {
@@ -231,21 +231,16 @@ export function resolveVerifiedCloudflareSender(
     throw new DisplaySafeEmailRuntimeError(`Email sender "${senderId}" was not found.`);
   }
 
-  if (sender.values.enabled !== true || sender.values.verificationStatus !== "verified") {
-    throw new DisplaySafeEmailRuntimeError("Email sender must be enabled and verified.");
+  if (sender.values.enabled !== true) {
+    throw new DisplaySafeEmailRuntimeError("Email sender must be enabled.");
   }
 
   const domainId = stringRecordValue(sender.values.emailDomain);
   const domain = domainId ? activeControlPlaneRecord(records, "email-domain", domainId) : undefined;
 
-  if (
-    !domain ||
-    domain.values.enabled !== true ||
-    domain.values.providerFamily !== "cloudflare" ||
-    domain.values.verificationStatus !== "verified"
-  ) {
+  if (!domain || domain.values.enabled !== true || domain.values.providerFamily !== "cloudflare") {
     throw new DisplaySafeEmailRuntimeError(
-      "Email sender domain must be an enabled verified Cloudflare email domain.",
+      "Email sender domain must be an enabled Cloudflare email domain.",
     );
   }
 

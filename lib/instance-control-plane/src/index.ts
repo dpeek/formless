@@ -39,7 +39,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:11f83efcf61072f92ae877d7b659d6eb34079d9097067f4ab13ac2e464163ea8" satisfies SourceSchemaHash;
+  "sha256:0a41d87d9928e5d3d04af086f1e1983679edae8d0d420c68338a96e5a3e23864" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -175,11 +175,6 @@ export type InstanceControlPlaneDeploymentConfigValues = {
 };
 
 export type InstanceControlPlaneProductionIdentityStatus = "configured" | "unconfigured";
-export type InstanceControlPlaneVerificationStatus =
-  | "failed"
-  | "pending"
-  | "unconfigured"
-  | "verified";
 export type InstanceControlPlaneEmailDnsStatus = "failed" | "pending" | "unconfigured" | "verified";
 export type InstanceControlPlaneEmailSenderPurpose = "contact-notification" | "system";
 
@@ -203,7 +198,6 @@ export type InstanceControlPlaneEmailDomainValues = {
   domain: string;
   primaryRoute?: string;
   deploymentConfig?: string;
-  verificationStatus: InstanceControlPlaneVerificationStatus;
   dnsStatus?: InstanceControlPlaneEmailDnsStatus;
   latestError?: string;
 };
@@ -214,7 +208,6 @@ export type InstanceControlPlaneEmailSenderValues = {
   displayName?: string;
   purpose: InstanceControlPlaneEmailSenderPurpose;
   emailDomain: string;
-  verificationStatus: InstanceControlPlaneVerificationStatus;
 };
 
 export type InstanceControlPlaneProductionIdentity = {
@@ -502,16 +495,6 @@ export const instanceControlPlaneSourceSchema = {
         domain: textField("Domain"),
         primaryRoute: optionalReferenceField("Primary route", "route", "matchHost"),
         deploymentConfig: optionalReferenceField("Deployment config", "deployment-config", "label"),
-        verificationStatus: enumField(
-          "Verification status",
-          {
-            failed: "Failed",
-            pending: "Pending",
-            unconfigured: "Unconfigured",
-            verified: "Verified",
-          },
-          "unconfigured",
-        ),
         dnsStatus: optionalEnumField("DNS status", {
           failed: "Failed",
           pending: "Pending",
@@ -528,7 +511,6 @@ export const instanceControlPlaneSourceSchema = {
           "domain",
           "primaryRoute",
           "deploymentConfig",
-          "verificationStatus",
           "dnsStatus",
           "latestError",
         ],
@@ -538,7 +520,6 @@ export const instanceControlPlaneSourceSchema = {
             "domain",
             "primaryRoute",
             "deploymentConfig",
-            "verificationStatus",
             "dnsStatus",
             "latestError",
           ],
@@ -556,22 +537,12 @@ export const instanceControlPlaneSourceSchema = {
           system: "System",
         }),
         emailDomain: referenceField("Email domain", "email-domain", "domain"),
-        verificationStatus: enumField(
-          "Verification status",
-          {
-            failed: "Failed",
-            pending: "Pending",
-            unconfigured: "Unconfigured",
-            verified: "Verified",
-          },
-          "unconfigured",
-        ),
       },
       operations: writeOperations(
         "Email sender",
-        ["enabled", "address", "displayName", "purpose", "emailDomain", "verificationStatus"],
+        ["enabled", "address", "displayName", "purpose", "emailDomain"],
         {
-          updateFields: ["enabled", "address", "displayName", "purpose", "verificationStatus"],
+          updateFields: ["enabled", "address", "displayName", "purpose"],
         },
       ),
     },
@@ -695,18 +666,8 @@ export const instanceControlPlaneSourceSchema = {
       "canonicalOrigin",
       "productionIdentityStatus",
     ]),
-    emailDomainItem: itemView("email-domain", [
-      "domain",
-      "providerFamily",
-      "enabled",
-      "verificationStatus",
-    ]),
-    emailSenderItem: itemView("email-sender", [
-      "address",
-      "purpose",
-      "enabled",
-      "verificationStatus",
-    ]),
+    emailDomainItem: itemView("email-domain", ["domain", "providerFamily", "enabled", "dnsStatus"]),
+    emailSenderItem: itemView("email-sender", ["address", "purpose", "enabled", "emailDomain"]),
   },
   tableViews: {
     appInstallTable: tableView("app-install", [
@@ -811,7 +772,6 @@ export const instanceControlPlaneSourceSchema = {
         "providerFamily",
         "primaryRoute",
         "deploymentConfig",
-        "verificationStatus",
         "dnsStatus",
         "latestError",
       ],
@@ -829,14 +789,7 @@ export const instanceControlPlaneSourceSchema = {
     ),
     emailSenderTable: tableView(
       "email-sender",
-      [
-        { field: "enabled", display: "editor" },
-        "address",
-        "displayName",
-        "purpose",
-        "emailDomain",
-        "verificationStatus",
-      ],
+      [{ field: "enabled", display: "editor" }, "address", "displayName", "purpose", "emailDomain"],
       {
         operations: [
           {
@@ -987,7 +940,6 @@ export const instanceControlPlaneSourceSchema = {
       "domain",
       "primaryRoute",
       "deploymentConfig",
-      "verificationStatus",
       "dnsStatus",
       "latestError",
     ]),
@@ -996,7 +948,6 @@ export const instanceControlPlaneSourceSchema = {
       "domain",
       "primaryRoute",
       "deploymentConfig",
-      "verificationStatus",
       "dnsStatus",
       "latestError",
     ]),
@@ -1016,15 +967,8 @@ export const instanceControlPlaneSourceSchema = {
       "displayName",
       "purpose",
       "emailDomain",
-      "verificationStatus",
     ]),
-    emailSenderEdit: editView("email-sender", [
-      "enabled",
-      "address",
-      "displayName",
-      "purpose",
-      "verificationStatus",
-    ]),
+    emailSenderEdit: editView("email-sender", ["enabled", "address", "displayName", "purpose"]),
     emailSenderList: collectionView(
       "Email senders",
       "email-sender",
@@ -3606,7 +3550,6 @@ function editorForField(field: string): FieldEditor {
     field === "targetProfile" ||
     field === "providerFamily" ||
     field === "observedStatus" ||
-    field === "verificationStatus" ||
     field === "dnsStatus" ||
     field === "productionIdentityStatus" ||
     field === "purpose" ||

@@ -1890,7 +1890,6 @@ async function configureContactNotificationEmail(target: Harness) {
       providerFamily: "cloudflare",
       domain: "mail.example.com",
       primaryRoute: route.id,
-      verificationStatus: "verified",
       dnsStatus: "verified",
     },
     target,
@@ -1904,7 +1903,6 @@ async function configureContactNotificationEmail(target: Harness) {
       displayName: "Contact",
       purpose: "contact-notification",
       emailDomain: domain.id,
-      verificationStatus: "verified",
     },
     target,
   );

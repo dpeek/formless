@@ -1494,7 +1494,7 @@ describe("Alchemy Formless instance deployment", () => {
           dependencies: [
             {
               logicalId: "brother-instance-email-sending-domain-mail-example-com",
-              reason: "verified senders",
+              reason: "configured senders",
             },
           ],
           inputs: {

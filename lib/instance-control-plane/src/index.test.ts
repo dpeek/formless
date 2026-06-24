@@ -239,7 +239,6 @@ describe("instance control-plane schema contracts", () => {
       domain: { type: "text", required: true },
       primaryRoute: { type: "reference", required: false, to: "route" },
       deploymentConfig: { type: "reference", required: false, to: "deployment-config" },
-      verificationStatus: { type: "enum", required: true, default: "unconfigured" },
       dnsStatus: { type: "enum", required: false },
       latestError: { type: "text", required: false, format: "longText" },
     });
@@ -256,7 +255,6 @@ describe("instance control-plane schema contracts", () => {
         },
       },
       emailDomain: { type: "reference", required: true, to: "email-domain" },
-      verificationStatus: { type: "enum", required: true, default: "unconfigured" },
     });
     expect(schema.runtime?.controlPlane?.entities["instance-settings"]).toEqual({
       immutableFields: ["settingsId"],
@@ -1411,7 +1409,6 @@ function controlPlaneRecords(
               domain: "mail.example.com",
               primaryRoute: "route:host:public-site:www.example.com",
               deploymentConfig: "instance.primary",
-              verificationStatus: "verified",
               dnsStatus: "verified",
             },
             createdAt: now,
@@ -1426,7 +1423,6 @@ function controlPlaneRecords(
               displayName: "Contact",
               purpose: "contact-notification",
               emailDomain: "email-domain:mail.example.com",
-              verificationStatus: "verified",
             },
             createdAt: now,
             updatedAt: now,

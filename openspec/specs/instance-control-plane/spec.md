@@ -165,8 +165,9 @@ singleton instance settings record.
 - **GIVEN** primary route, email domain, or email sender records exist
 - **WHEN** the settings singleton selects defaults
 - **THEN** it stores stable record references to the selected records
-- **AND** DNS authentication, sender verification, provider status, and cleanup
-  lifecycle remain on the referenced records or provider observation boundary
+- **AND** DNS authentication, Email Sending onboarding state, provider status,
+  and cleanup lifecycle remain on the referenced records or provider observation
+  boundary
 
 ### Requirement: Email Domain And Sender Records
 
@@ -179,8 +180,8 @@ records separate from HTTP route behavior.
 - **WHEN** the `email-domain` entity is inspected
 - **THEN** each record stores camelCase fields for enabled state, provider
   family, domain, optional primary route reference, optional deployment config
-  reference, verification status, display-safe DNS status, and latest
-  display-safe error
+  reference, display-safe DNS or onboarding status, and latest display-safe
+  error
 - **AND** email domain records remain flat schema records
 - **AND** created and updated timestamps come from record system fields rather
   than email-domain value fields
@@ -192,10 +193,8 @@ records separate from HTTP route behavior.
 - **GIVEN** the instance control-plane schema is loaded
 - **WHEN** the `email-sender` entity is inspected
 - **THEN** each record stores camelCase fields for enabled state, address,
-  display name, purpose, email domain reference, and verification status
+  display name, purpose, and email domain reference
 - **AND** the sender address host must belong to the referenced email domain
-- **AND** disabled or unverified senders are excluded from runtime email
-  delivery defaults
 
 #### Scenario: Route remains HTTP intent
 
@@ -206,7 +205,7 @@ records separate from HTTP route behavior.
   derivation
 - **AND** the route record still represents only HTTP mount or redirect
   behavior
-- **AND** sender verification, SPF, DKIM, DMARC, and Email Sending state are not
+- **AND** sender allowlists, SPF, DKIM, DMARC, and Email Sending state are not
   stored as route fields
 
 ### Requirement: Deployment Projection Boundary
@@ -222,8 +221,8 @@ schema-owned control-plane intent records.
   records
 - **AND** enabled `route` records provide app mount, custom-domain, DNS, and
   Worker-handled redirect source-host resources
-- **AND** enabled `email-domain` and `email-sender` records provide email
-  sending, DNS authentication, and Worker email binding resources
+- **AND** enabled `email-domain` and `email-sender` records provide Email
+  Sending domain onboarding and Worker email binding resources
 - **AND** the singleton `instance-settings` record provides active primary
   route and email default selections when those defaults are configured
 - **AND** `deployment-config` records provide the target URL, provider account,
