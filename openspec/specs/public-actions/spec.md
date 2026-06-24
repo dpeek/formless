@@ -85,6 +85,26 @@ through an explicit actor policy and public binding.
 - AND retries use the public operation idempotency key and contact notification
   purpose to avoid duplicate sends
 
+#### Scenario: Public operation input notification side effect
+
+- GIVEN a public operation form submission commits successfully
+- WHEN the form binding or target configuration enables an operation input
+  notification and instance email defaults and a recipient are configured
+- THEN post-commit email notification scheduling may create or update platform
+  email delivery records outside the target app storage identity
+- AND the notification message is rendered from the submitted operation input,
+  public-safe field labels, canonical operation key, target storage identity,
+  request host and path, and Site block id when supplied
+- AND configured reply-to fields may use submitted scalar input values but
+  missing or invalid reply-to values do not block the committed operation
+- AND the public operation response remains the operation-native create or
+  command output
+- AND provider delivery status, sender verification facts, notification
+  recipient configuration, Turnstile proof values, and private notification
+  errors are not returned in the public response
+- AND retries use the public operation idempotency key and notification purpose
+  to avoid duplicate sends
+
 #### Scenario: Execute public record-plan command operation
 
 - GIVEN a non-Site app declares an anonymous public command operation with a

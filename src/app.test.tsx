@@ -3363,7 +3363,7 @@ describe("generated collection home", () => {
       'data-formless-tree-add-operation="block-placement.addTreeChild"',
     );
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm"',
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
@@ -3442,7 +3442,7 @@ describe("generated collection home", () => {
 
     expect(sectionRootHtml).toContain('data-formless-tree-add-parent="section-1"');
     expect(sectionRootHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm"',
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
     );
 
     resetClientStore();
@@ -3522,7 +3522,7 @@ describe("generated collection home", () => {
 
     expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
     expect(nestedHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm"',
+      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
     );
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
     expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');

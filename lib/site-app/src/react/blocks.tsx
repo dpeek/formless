@@ -25,13 +25,26 @@ import {
   TURNSTILE_RESPONSE_FIELD_NAME,
 } from "./subscribe-form.ts";
 import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contact-form.ts";
+import {
+  createPublicOperationFormIdempotencyKey,
+  publicOperationFormInputValuesFromFormData,
+  submitPublicOperationForm,
+} from "./public-operation-form.ts";
 import { TurnstileChallenge } from "./turnstile.tsx";
-import type { SiteBlockNode, SitePlacementNode } from "../types.ts";
+import type {
+  SiteBlockNode,
+  SitePlacementNode,
+  SitePublicOperationInputFieldNode,
+} from "../types.ts";
 
 const FEATURE_MEDIA_SLOT = "media";
 const FEATURE_ACTIONS_SLOT = "actions";
 const siteMarkdownLinkClassName =
   "[&_a]:text-[color:var(--site-link)] [&_a]:decoration-[color:var(--site-link-decoration)] [&_a]:underline-offset-4 [&_a:hover]:decoration-[color:var(--site-link)]";
+const siteFormInputClassName =
+  "min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900";
+const siteFormTextareaClassName =
+  "min-h-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900";
 
 export const sitePageRendererParts = {
   Footer: SiteRendererFooter,
@@ -99,6 +112,8 @@ function SiteBlockRenderer({
       return <SubscribeFormBlock block={block} />;
     case "contactForm":
       return <ContactFormBlock block={block} />;
+    case "publicOperationForm":
+      return <PublicOperationFormBlock block={block} />;
     case "postList":
     case "projectList":
       return <ContentListBlock block={block} />;
@@ -630,6 +645,249 @@ function ContactFormHeading({ block }: { block: SiteBlockNode }) {
       ) : null}
     </div>
   );
+}
+
+function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
+  const formInputIdPrefix = useId();
+  const idempotencyKey = useRef(createPublicOperationFormIdempotencyKey(block.id));
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [error, setError] = useState<string | undefined>();
+  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
+  const operation = block.publicOperation;
+  const siteKey =
+    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
+  const fields = operation?.fields;
+
+  if (!operation || !siteKey || !fields) {
+    return (
+      <section className="max-w-2xl space-y-3" data-block-type={block.type}>
+        <PublicOperationFormHeading block={block} />
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          Public operation form unavailable.
+        </p>
+      </section>
+    );
+  }
+
+  const publicOperation = operation;
+  const publicOperationFields = fields;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+    const inputResult = publicOperationFormInputValuesFromFormData(publicOperationFields, formData);
+
+    if (!inputResult.ok) {
+      setStatus("error");
+      setError(inputResult.error);
+      return;
+    }
+
+    if (!turnstileToken) {
+      setStatus("error");
+      setError("Complete the challenge.");
+      return;
+    }
+
+    setStatus("submitting");
+    setError(undefined);
+
+    try {
+      await submitPublicOperationForm({
+        idempotencyKey: idempotencyKey.current,
+        input: inputResult.input,
+        route: publicOperation.route,
+        siteBlockId: block.id,
+        turnstileToken,
+      });
+      setStatus("success");
+    } catch (submitError) {
+      setStatus("error");
+      setError(
+        submitError instanceof Error ? submitError.message : "Public operation request failed.",
+      );
+      setChallengeResetSignal((value) => value + 1);
+    }
+  }
+
+  const disabled = status === "submitting" || status === "success";
+
+  return (
+    <section className="max-w-2xl space-y-4" data-block-type={block.type}>
+      <PublicOperationFormHeading block={block} />
+      <form
+        action={publicOperation.route}
+        className="grid gap-4"
+        data-site-public-operation-form={block.id}
+        data-site-public-operation-key={publicOperation.canonicalKey}
+        data-site-public-operation-route={publicOperation.route}
+        method="post"
+        onSubmit={onSubmit}
+      >
+        {publicOperationFields.map((field) => (
+          <PublicOperationInputField
+            disabled={disabled}
+            field={field}
+            inputId={`${formInputIdPrefix}-${field.name}`}
+            key={field.name}
+          />
+        ))}
+        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
+        <button
+          className="inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
+          disabled={disabled}
+          type="submit"
+        >
+          {status === "submitting" ? "Sending..." : block.buttonLabel || "Submit"}
+        </button>
+        {status === "success" ? (
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            {block.successLabel || "Thanks. Your request was received."}
+          </p>
+        ) : null}
+        {status === "error" ? (
+          <p className="text-sm font-medium text-red-700 dark:text-red-300">
+            {error ?? "Public operation request failed."}
+          </p>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function PublicOperationFormHeading({ block }: { block: SiteBlockNode }) {
+  return (
+    <div className="space-y-2">
+      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+      {block.body ? (
+        <MarkdownRenderer
+          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={3}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function PublicOperationInputField({
+  disabled,
+  field,
+  inputId,
+}: {
+  disabled: boolean;
+  field: SitePublicOperationInputFieldNode;
+  inputId: string;
+}) {
+  if (field.control === "boolean") {
+    return (
+      <label
+        className="flex items-center gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-200"
+        data-site-public-operation-field={field.name}
+        htmlFor={inputId}
+      >
+        <input
+          className="size-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-300 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-700"
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          type="checkbox"
+          value="true"
+        />
+        <span>{field.label}</span>
+      </label>
+    );
+  }
+
+  return (
+    <label
+      className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200"
+      data-site-public-operation-field={field.name}
+      htmlFor={inputId}
+    >
+      <span>{field.label}</span>
+      {renderPublicOperationInputControl({ disabled, field, inputId })}
+    </label>
+  );
+}
+
+function renderPublicOperationInputControl({
+  disabled,
+  field,
+  inputId,
+}: {
+  disabled: boolean;
+  field: SitePublicOperationInputFieldNode;
+  inputId: string;
+}) {
+  switch (field.control) {
+    case "longText":
+      return (
+        <textarea
+          className={siteFormTextareaClassName}
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          required={field.required}
+        />
+      );
+    case "enum":
+      return (
+        <select
+          className={siteFormInputClassName}
+          defaultValue=""
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          required={field.required}
+        >
+          <option disabled={field.required} value="">
+            Select...
+          </option>
+          {(field.options ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    case "date":
+      return (
+        <input
+          className={siteFormInputClassName}
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          required={field.required}
+          type="date"
+        />
+      );
+    case "number":
+      return (
+        <input
+          className={siteFormInputClassName}
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          required={field.required}
+          type="number"
+        />
+      );
+    case "text":
+    default:
+      return (
+        <input
+          className={siteFormInputClassName}
+          disabled={disabled}
+          id={inputId}
+          name={field.name}
+          required={field.required}
+          type="text"
+        />
+      );
+  }
 }
 
 function ContentListBlock({ block }: { block: SiteBlockNode }) {

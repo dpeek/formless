@@ -10,19 +10,23 @@ import {
   type SchemaUpdateResponse,
   type SyncResponse,
 } from "../shared/protocol.ts";
-import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
+import type {
+  SitePageTreeResponse,
+  SitePublicOperationTargetResolver,
+} from "@dpeek/formless-site-app";
 import type {
   OperationInvocationEnvelope,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
-import type {
-  AppStorageIdentity,
-  InstanceControlPlaneStorageIdentity,
+import {
+  installedAppStorageIdentity,
+  type AppStorageIdentity,
+  type InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import type { SchemaOperationActorKind } from "@dpeek/formless-schema";
+import type { AppSchema, SchemaOperationActorKind } from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -180,11 +184,57 @@ type AuthorityOperationExecutionInput = {
   packageResolver?: AppPackageResolver;
   requestHeaders?: Headers;
   source: StorageSource;
+  sourceSchemas?: Partial<Record<string, AppSchema>>;
   storage: DurableObjectStorage;
   turnstileSiteKey?: string;
   validateConstraints?: RecordConstraintValidator;
   writes: AuthorityWriteNotifier;
 };
+
+function publicOperationTargetResolver(input: {
+  packageResolver?: AppPackageResolver;
+  sourceSchemas?: Partial<Record<string, AppSchema>>;
+}): SitePublicOperationTargetResolver {
+  return (request) => {
+    const sourceSchemas = input.sourceSchemas ?? {};
+
+    if (request.kind === "schemaKey") {
+      const schema = sourceSchemas[request.schemaKey];
+
+      return schema
+        ? {
+            schema,
+            route: {
+              kind: "schemaKey",
+              schemaKey: request.schemaKey,
+              apiRoutePrefix: `/api/${request.schemaKey}`,
+            },
+          }
+        : undefined;
+    }
+
+    const identity = installedAppStorageIdentity(
+      {
+        packageAppKey: request.packageAppKey,
+        installId: request.installId,
+      },
+      input.packageResolver,
+    );
+    const schema = identity ? sourceSchemas[identity.sourceSchemaKey] : undefined;
+
+    return identity && schema
+      ? {
+          schema,
+          route: {
+            kind: "appInstall",
+            packageAppKey: identity.packageAppKey,
+            installId: identity.installId,
+            apiRoutePrefix: identity.apiRoutePrefix,
+          },
+        }
+      : undefined;
+  };
+}
 
 export function selectAuthorityOperation(
   input: AuthorityOperationSelectionInput,
@@ -308,6 +358,10 @@ export function executeAuthorityOperation(
         records: getBootstrapRecords(input.storage),
         schema,
         slug,
+        publicOperationTargetResolver: publicOperationTargetResolver({
+          packageResolver: input.packageResolver,
+          sourceSchemas: input.sourceSchemas,
+        }),
         target: input.identity,
         turnstileSiteKey: input.turnstileSiteKey,
       });

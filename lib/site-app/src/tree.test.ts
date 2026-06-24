@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawSiteSourceSchema from "../schema.json";
-import { parseAppSchema } from "@dpeek/formless-schema";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "./types.ts";
 import { testSiteSeedRecords } from "./test-records.ts";
 import {
@@ -8,6 +8,7 @@ import {
   type SiteBlockNode,
   type SitePageTree,
   type SitePageTreeProjection,
+  type SitePublicOperationTargetResolver,
 } from "./tree.ts";
 
 const generatedAt = "2026-05-06T00:00:00.000Z";
@@ -1317,6 +1318,302 @@ describe("site page tree projection", () => {
     );
   });
 
+  it("projects public operation form schema-key facts and scalar input metadata", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_public_intake", {
+        type: "publicOperationForm",
+        label: "Request a test",
+        body: "Tell us what you need.",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "tasks",
+        operationKey: "request.submit",
+        buttonLabel: "Send request",
+        successLabel: "Request received.",
+        operationNotificationMode: "email",
+        operationNotificationReplyToField: "email",
+      }),
+      placementRecord(
+        "rec_site_place_home_public_intake",
+        "rec_site_content_home",
+        "rec_site_block_public_intake",
+        {
+          order: 4000,
+        },
+      ),
+      {
+        id: "target-private-request",
+        entity: "request",
+        values: {
+          name: "Private target record",
+          details: "Private target details.",
+        },
+        createdAt: "2026-05-06T00:00:01.000Z",
+      },
+      {
+        id: "instance-settings-private",
+        entity: "instance-settings",
+        values: {
+          operationInputNotificationRecipient: "owner@example.com",
+          providerSecret: "server-secret-value",
+        },
+        createdAt: "2026-05-06T00:00:02.000Z",
+      },
+    ];
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "home", {
+        generatedAt,
+        publicOperationTargetResolver: publicOperationTargetResolver({
+          tasks: publicIntakeSchema,
+        }),
+        turnstileSiteKey: "public-site-key",
+      }),
+    );
+    const form = childForPlacement(tree.page, "rec_site_place_home_public_intake");
+
+    expect(form).toMatchObject({
+      id: "rec_site_block_public_intake",
+      type: "publicOperationForm",
+      label: "Request a test",
+      body: "Tell us what you need.",
+      operationKey: "request.submit",
+      buttonLabel: "Send request",
+      successLabel: "Request received.",
+      publicOperation: {
+        entityName: "request",
+        operationName: "submit",
+        canonicalKey: "request.submit",
+        target: {
+          kind: "schemaKey",
+          schemaKey: "tasks",
+          apiRoutePrefix: "/api/tasks",
+        },
+        route: "/api/tasks/public/operations/request/submit",
+        challenge: {
+          kind: "turnstile",
+          siteKey: "public-site-key",
+        },
+        fields: [
+          {
+            name: "fullName",
+            label: "Your name",
+            required: true,
+            control: "text",
+          },
+          {
+            name: "details",
+            label: "Request details",
+            required: true,
+            control: "longText",
+          },
+          {
+            name: "tier",
+            label: "Tier",
+            required: true,
+            control: "enum",
+            options: [
+              { value: "standard", label: "Standard" },
+              { value: "priority", label: "Priority" },
+            ],
+          },
+          {
+            name: "acceptedTerms",
+            label: "Accepted terms",
+            required: false,
+            control: "boolean",
+          },
+          {
+            name: "neededBy",
+            label: "Needed by",
+            required: false,
+            control: "date",
+          },
+          {
+            name: "quantity",
+            label: "Quantity",
+            required: false,
+            control: "number",
+          },
+        ],
+      },
+    });
+    expect(form).not.toHaveProperty("operationTargetSchemaKey");
+    expect(form).not.toHaveProperty("operationNotificationMode");
+    expect(JSON.stringify(tree)).not.toContain("owner@example.com");
+    expect(JSON.stringify(tree)).not.toContain("server-secret-value");
+    expect(JSON.stringify(tree)).not.toContain("Private target details.");
+  });
+
+  it("projects public operation form installed app target routes", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_installed_intake", {
+        type: "publicOperationForm",
+        label: "Installed request",
+        operationTargetKind: "appInstall",
+        operationTargetPackageAppKey: "tasks",
+        operationTargetInstallId: "intake",
+        operationKey: "request.submit",
+      }),
+      placementRecord(
+        "rec_site_place_home_installed_intake",
+        "rec_site_content_home",
+        "rec_site_block_installed_intake",
+        {
+          order: 4000,
+        },
+      ),
+    ];
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "home", {
+        generatedAt,
+        publicOperationTargetResolver: publicOperationTargetResolver({
+          tasks: publicIntakeSchema,
+        }),
+        turnstileSiteKey: "public-site-key",
+      }),
+    );
+    const form = childForPlacement(tree.page, "rec_site_place_home_installed_intake");
+
+    expect(form.publicOperation).toMatchObject({
+      canonicalKey: "request.submit",
+      target: {
+        kind: "appInstall",
+        packageAppKey: "tasks",
+        installId: "intake",
+        apiRoutePrefix: "/api/app-installs/tasks/intake",
+      },
+      route: "/api/app-installs/tasks/intake/public/operations/request/submit",
+    });
+  });
+
+  it("warns and omits public operation form bindings for unavailable targets and required unsupported inputs", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_missing_target_intake", {
+        type: "publicOperationForm",
+        label: "Missing target",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "missing",
+        operationKey: "request.submit",
+      }),
+      blockRecord("rec_site_block_required_reference_intake", {
+        type: "publicOperationForm",
+        label: "Required reference",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "crm",
+        operationKey: "request.submit",
+      }),
+      blockRecord("rec_site_block_required_query_choice_intake", {
+        type: "publicOperationForm",
+        label: "Required query choice",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "catalog",
+        operationKey: "request.submit",
+      }),
+      blockRecord("rec_site_block_optional_reference_intake", {
+        type: "publicOperationForm",
+        label: "Optional reference",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "optional-crm",
+        operationKey: "request.submit",
+      }),
+      placementRecord(
+        "rec_site_place_home_missing_target_intake",
+        "rec_site_content_home",
+        "rec_site_block_missing_target_intake",
+        {
+          order: 4000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_required_reference_intake",
+        "rec_site_content_home",
+        "rec_site_block_required_reference_intake",
+        {
+          order: 5000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_required_query_choice_intake",
+        "rec_site_content_home",
+        "rec_site_block_required_query_choice_intake",
+        {
+          order: 6000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_optional_reference_intake",
+        "rec_site_content_home",
+        "rec_site_block_optional_reference_intake",
+        {
+          order: 7000,
+        },
+      ),
+    ];
+    const result = buildSitePageTree(siteSourceSchema, records, "home", {
+      generatedAt,
+      publicOperationTargetResolver: publicOperationTargetResolver({
+        catalog: requiredQueryChoiceIntakeSchema,
+        crm: requiredReferenceIntakeSchema,
+        "optional-crm": optionalReferenceIntakeSchema,
+      }),
+      turnstileSiteKey: "public-site-key",
+    });
+    const tree = requireTree(result);
+    const missingTarget = childForPlacement(tree.page, "rec_site_place_home_missing_target_intake");
+    const requiredReference = childForPlacement(
+      tree.page,
+      "rec_site_place_home_required_reference_intake",
+    );
+    const requiredQueryChoice = childForPlacement(
+      tree.page,
+      "rec_site_place_home_required_query_choice_intake",
+    );
+    const optionalReference = childForPlacement(
+      tree.page,
+      "rec_site_place_home_optional_reference_intake",
+    );
+
+    expect(missingTarget.publicOperation).toBeUndefined();
+    expect(requiredReference.publicOperation).toBeUndefined();
+    expect(requiredQueryChoice.publicOperation).toBeUndefined();
+    expect(optionalReference.publicOperation).toMatchObject({
+      canonicalKey: "request.submit",
+      fields: [
+        {
+          name: "fullName",
+          label: "Full name",
+          required: true,
+          control: "text",
+        },
+      ],
+    });
+    expect(result.meta.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "invalid-public-operation-target",
+          recordId: "rec_site_block_missing_target_intake",
+        }),
+        expect.objectContaining({
+          code: "unsupported-public-operation-input",
+          recordId: "rec_site_block_required_reference_intake",
+        }),
+        expect.objectContaining({
+          code: "unsupported-public-operation-input",
+          recordId: "rec_site_block_required_query_choice_intake",
+        }),
+      ]),
+    );
+    expect(result.meta.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          recordId: "rec_site_block_optional_reference_intake",
+        }),
+      ]),
+    );
+  });
+
   it("omits tombstoned and undated posts from postList projection", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_content_post_draft_notes"
@@ -1421,6 +1718,365 @@ describe("site page tree projection", () => {
 function baseTreeRecords(): StoredRecord[] {
   return testSiteSeedRecords;
 }
+
+function publicOperationTargetResolver(
+  schemas: Partial<Record<string, AppSchema>>,
+): SitePublicOperationTargetResolver {
+  return (request) => {
+    if (request.kind === "schemaKey") {
+      const schema = schemas[request.schemaKey];
+
+      return schema
+        ? {
+            schema,
+            route: {
+              kind: "schemaKey",
+              schemaKey: request.schemaKey,
+              apiRoutePrefix: `/api/${request.schemaKey}`,
+            },
+          }
+        : undefined;
+    }
+
+    const schema = schemas[request.packageAppKey];
+
+    return schema
+      ? {
+          schema,
+          route: {
+            kind: "appInstall",
+            packageAppKey: request.packageAppKey,
+            installId: request.installId,
+            apiRoutePrefix: `/api/app-installs/${request.packageAppKey}/${request.installId}`,
+          },
+        }
+      : undefined;
+  };
+}
+
+const anonymousTurnstilePolicy = {
+  actors: ["anonymous" as const],
+  access: {
+    actor: "anonymous" as const,
+    challenge: {
+      kind: "turnstile" as const,
+    },
+    origin: {
+      kind: "same-origin" as const,
+    },
+  },
+};
+
+const publicIntakeSchema = {
+  version: 1,
+  entities: {
+    owner: {
+      label: "Owner",
+      fields: {
+        label: {
+          type: "text",
+          required: true,
+          label: "Label",
+        },
+      },
+    },
+    request: {
+      label: "Request",
+      fields: {
+        name: {
+          type: "text",
+          required: true,
+          label: "Name",
+        },
+        details: {
+          type: "text",
+          required: true,
+          label: "Request details",
+          format: "longText",
+        },
+        tier: {
+          type: "enum",
+          required: true,
+          label: "Tier",
+          values: {
+            standard: { label: "Standard" },
+            priority: { label: "Priority" },
+          },
+        },
+        acceptedTerms: {
+          type: "boolean",
+          required: false,
+          label: "Accepted terms",
+        },
+        neededBy: {
+          type: "date",
+          required: false,
+          label: "Needed by",
+        },
+        quantity: {
+          type: "number",
+          required: false,
+          label: "Quantity",
+        },
+        owner: {
+          type: "reference",
+          required: false,
+          label: "Owner",
+          to: "owner",
+          displayField: "label",
+        },
+      },
+      operations: {
+        submit: {
+          label: "Submit request",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              fullName: {
+                field: "name",
+                required: true,
+                label: "Your name",
+              },
+              details: {
+                field: "details",
+                required: true,
+              },
+              tier: {
+                field: "tier",
+                required: true,
+              },
+              acceptedTerms: {
+                field: "acceptedTerms",
+              },
+              neededBy: {
+                field: "neededBy",
+              },
+              quantity: {
+                field: "quantity",
+              },
+              owner: {
+                field: "owner",
+              },
+            },
+          },
+          effect: {
+            type: "createRecord",
+          },
+          output: {
+            type: "create",
+          },
+          idempotency: {
+            required: true,
+          },
+          audit: {
+            input: "summary",
+          },
+          policy: anonymousTurnstilePolicy,
+        },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
+
+const requiredReferenceIntakeSchema = {
+  version: 1,
+  entities: {
+    owner: {
+      label: "Owner",
+      fields: {
+        label: {
+          type: "text",
+          required: true,
+          label: "Label",
+        },
+      },
+    },
+    request: {
+      label: "Request",
+      fields: {
+        owner: {
+          type: "reference",
+          required: true,
+          label: "Owner",
+          to: "owner",
+          displayField: "label",
+        },
+      },
+      operations: {
+        submit: {
+          label: "Submit request",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              owner: {
+                field: "owner",
+                required: true,
+              },
+            },
+          },
+          effect: {
+            type: "createRecord",
+          },
+          output: {
+            type: "create",
+          },
+          idempotency: {
+            required: true,
+          },
+          audit: {
+            input: "summary",
+          },
+          policy: anonymousTurnstilePolicy,
+        },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
+
+const requiredQueryChoiceIntakeSchema = {
+  version: 1,
+  entities: {
+    "catalog-item": {
+      label: "Catalog item",
+      fields: {
+        label: {
+          type: "text",
+          required: true,
+          label: "Label",
+        },
+      },
+    },
+    request: {
+      label: "Request",
+      fields: {
+        name: {
+          type: "text",
+          required: true,
+          label: "Name",
+        },
+      },
+      operations: {
+        submit: {
+          label: "Submit request",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              catalogItem: {
+                type: "queryChoice",
+                required: true,
+                label: "Catalog item",
+                query: "catalogItems",
+              } as never,
+            },
+          },
+          effect: {
+            type: "createRecord",
+          },
+          output: {
+            type: "create",
+          },
+          idempotency: {
+            required: true,
+          },
+          audit: {
+            input: "summary",
+          },
+          policy: anonymousTurnstilePolicy,
+        },
+      },
+    },
+  },
+  queries: {
+    catalogItems: {
+      label: "Catalog items",
+      entity: "catalog-item",
+      expression: { kind: "all" },
+    },
+  },
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
+
+const optionalReferenceIntakeSchema = {
+  version: 1,
+  entities: {
+    owner: {
+      label: "Owner",
+      fields: {
+        label: {
+          type: "text",
+          required: true,
+          label: "Label",
+        },
+      },
+    },
+    request: {
+      label: "Request",
+      fields: {
+        name: {
+          type: "text",
+          required: true,
+          label: "Name",
+        },
+        owner: {
+          type: "reference",
+          required: false,
+          label: "Owner",
+          to: "owner",
+          displayField: "label",
+        },
+      },
+      operations: {
+        submit: {
+          label: "Submit request",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              fullName: {
+                field: "name",
+                required: true,
+                label: "Full name",
+              },
+              owner: {
+                field: "owner",
+              },
+            },
+          },
+          effect: {
+            type: "createRecord",
+          },
+          output: {
+            type: "create",
+          },
+          idempotency: {
+            required: true,
+          },
+          audit: {
+            input: "summary",
+          },
+          policy: anonymousTurnstilePolicy,
+        },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
 
 function recordsWithBlogPostList(records: StoredRecord[] = baseTreeRecords()): StoredRecord[] {
   return [

@@ -292,6 +292,129 @@ describe("public Site renderer characterization", () => {
     expect(countOccurrences(html, 'name="cf-turnstile-response"')).toBe(2);
   });
 
+  it("renders public operation forms with projected scalar controls and Turnstile widget facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "operation-placement",
+          blockNode("operation-block", "publicOperationForm", "Request a test", {
+            body: "Send **sample details**.",
+            buttonLabel: "Submit request",
+            successLabel: "Request received.",
+            publicOperation: {
+              entityName: "intake-request",
+              operationName: "submit",
+              canonicalKey: "intake-request.submit",
+              route: "/api/intake/public/operations/intake-request/submit",
+              challenge: {
+                kind: "turnstile",
+                siteKey: "public-site-key",
+              },
+              fields: [
+                {
+                  name: "summary",
+                  label: "Summary",
+                  required: true,
+                  control: "text",
+                },
+                {
+                  name: "details",
+                  label: "Details",
+                  required: false,
+                  control: "longText",
+                },
+                {
+                  name: "category",
+                  label: "Category",
+                  required: true,
+                  control: "enum",
+                  options: [
+                    { value: "chemistry", label: "Chemistry" },
+                    { value: "materials", label: "Materials" },
+                  ],
+                },
+                {
+                  name: "rush",
+                  label: "Rush request",
+                  required: false,
+                  control: "boolean",
+                },
+                {
+                  name: "neededBy",
+                  label: "Needed by",
+                  required: true,
+                  control: "date",
+                },
+                {
+                  name: "sampleCount",
+                  label: "Sample count",
+                  required: true,
+                  control: "number",
+                },
+              ],
+            },
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain('data-block-type="publicOperationForm"');
+    expect(html).toContain('data-site-public-operation-form="operation-block"');
+    expect(html).toContain('data-site-public-operation-key="intake-request.submit"');
+    expect(html).toContain(
+      'data-site-public-operation-route="/api/intake/public/operations/intake-request/submit"',
+    );
+    expect(html).toContain('action="/api/intake/public/operations/intake-request/submit"');
+    expect(html).toContain('data-site-public-operation-field="summary"');
+    expect(html).toContain('name="summary"');
+    expect(html).toContain('type="text"');
+    expect(html).toContain('data-site-public-operation-field="details"');
+    expect(html).toContain("<textarea");
+    expect(html).toContain('name="details"');
+    expect(html).toContain('data-site-public-operation-field="category"');
+    expect(html).toContain("<select");
+    expect(html).toContain('name="category"');
+    expect(html).toContain('value="chemistry"');
+    expect(html).toContain("Chemistry");
+    expect(html).toContain('data-site-public-operation-field="rush"');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('name="rush"');
+    expect(html).toContain('data-site-public-operation-field="neededBy"');
+    expect(html).toContain('type="date"');
+    expect(html).toContain('name="neededBy"');
+    expect(html).toContain('data-site-public-operation-field="sampleCount"');
+    expect(html).toContain('type="number"');
+    expect(html).toContain('name="sampleCount"');
+    expect(html).toContain("Submit request");
+    expect(countOccurrences(html, 'class="cf-turnstile"')).toBe(0);
+    expect(html).toContain('data-site-turnstile="true"');
+    expect(html).toContain('data-sitekey="public-site-key"');
+    expect(html).toContain('name="cf-turnstile-response"');
+    expect(html).not.toContain("turnstile/v0/api.js");
+    expect(html).toContain('data-web-markdown-renderer="shared"');
+    expect(html).not.toContain("providerMessageId");
+    expect(html).not.toContain("owner@example.com");
+  });
+
+  it("does not render a working public operation form without projected public operation facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "operation-placement",
+          blockNode("operation-block", "publicOperationForm", "Request a test", {
+            operationKey: "missing.submit",
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain("Request a test");
+    expect(html).toContain("Public operation form unavailable.");
+    expect(html).not.toContain('data-site-public-operation-form="operation-block"');
+    expect(html).not.toContain('name="summary"');
+    expect(html).not.toContain("turnstile/v0/api.js");
+  });
+
   it("does not render a working contact form without projected public operation facts", () => {
     const html = renderSite(
       pageNode("home", [

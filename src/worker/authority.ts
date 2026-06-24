@@ -45,6 +45,7 @@ import {
   selectPublicOperationRoute,
 } from "./public-operations.ts";
 import { scheduleSiteContactNotificationAfterPublicOperation } from "./site-contact-notifications.ts";
+import { scheduleSiteOperationInputNotificationAfterPublicOperation } from "./site-operation-input-notifications.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 import {
   handleAppStorageUpgradeStatusDurableObjectRequest,
@@ -52,6 +53,7 @@ import {
 } from "./upgrade-status-api.ts";
 import {
   activeAppPackageResolver,
+  activeWorkerSourceSchemas,
   findActiveWorkerSchemaAppDefinition,
   listActiveAppPackages,
 } from "./runtime-app-packages.ts";
@@ -262,13 +264,24 @@ export class FormlessAuthority extends DurableObject<Env> {
         ensureStorageTables(this.ctx.storage);
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const result = await executePublicOperationRequest({
-          afterCommit: (response) =>
-            scheduleSiteContactNotificationAfterPublicOperation({
-              env: this.bindings,
-              identity: route.identity,
-              requestUrl: request.url,
-              response,
-            }),
+          afterCommit: async (response) => {
+            await Promise.allSettled([
+              scheduleSiteContactNotificationAfterPublicOperation({
+                env: this.bindings,
+                identity: route.identity,
+                requestUrl: request.url,
+                response,
+              }),
+              scheduleSiteOperationInputNotificationAfterPublicOperation({
+                env: this.bindings,
+                identity: route.identity,
+                requestUrl: request.url,
+                response,
+                schema,
+                storage: this.ctx.storage,
+              }),
+            ]);
+          },
           body,
           env: this.bindings,
           identity: route.identity,
@@ -303,6 +316,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           packageResolver: activeAppPackageResolver(this.bindings),
           requestHeaders: request.headers,
           source,
+          sourceSchemas: activeWorkerSourceSchemas(this.bindings),
           storage: this.ctx.storage,
           turnstileSiteKey: turnstileSiteKeyFromEnv(this.bindings),
           writes,

@@ -4928,6 +4928,7 @@ describe("personal site sample schema", () => {
         projectList: { label: "Project list" },
         subscribeForm: { label: "Subscribe form" },
         contactForm: { label: "Contact form" },
+        publicOperationForm: { label: "Public operation form" },
         group: { label: "Group" },
         section: { label: "Section" },
         cardGrid: { label: "Card grid" },
@@ -4996,11 +4997,18 @@ describe("personal site sample schema", () => {
       "label",
       "body",
       "operationName",
+      "operationKey",
+      "operationTargetKind",
+      "operationTargetSchemaKey",
+      "operationTargetPackageAppKey",
+      "operationTargetInstallId",
       "buttonLabel",
       "successLabel",
       "nameLabel",
       "emailLabel",
       "messageLabel",
+      "operationNotificationMode",
+      "operationNotificationReplyToField",
       "href",
       "mediaAssetId",
       "date",
@@ -5675,6 +5683,7 @@ describe("personal site sample schema", () => {
       "projectList",
       "subscribeForm",
       "contactForm",
+      "publicOperationForm",
       "header",
       "headerPrimary",
       "headerSecondary",
@@ -5697,6 +5706,7 @@ describe("personal site sample schema", () => {
       "projectList",
       "subscribeForm",
       "contactForm",
+      "publicOperationForm",
     ]);
     expect(groupChildren).toEqual([
       "group",
@@ -5713,6 +5723,7 @@ describe("personal site sample schema", () => {
       "projectList",
       "subscribeForm",
       "contactForm",
+      "publicOperationForm",
     ]);
     expect(branchVariants.section).toEqual({
       children: [
@@ -5730,6 +5741,7 @@ describe("personal site sample schema", () => {
         "projectList",
         "subscribeForm",
         "contactForm",
+        "publicOperationForm",
       ],
     });
     expect(branchVariants.cardGrid).toEqual({ children: ["card"] });
@@ -5773,6 +5785,7 @@ describe("personal site sample schema", () => {
     expect(branchVariants.projectList).toBe("leaf");
     expect(branchVariants.subscribeForm).toBe("leaf");
     expect(branchVariants.contactForm).toBe("leaf");
+    expect(branchVariants.publicOperationForm).toBe("leaf");
     expect(branchVariants.header).toEqual({
       action: "leaf",
       children: ["headerPrimary", "headerSecondary"],
@@ -5800,6 +5813,7 @@ describe("personal site sample schema", () => {
       projectList: { label: "Project list" },
       subscribeForm: { label: "Subscribe form" },
       contactForm: { label: "Contact form" },
+      publicOperationForm: { label: "Public operation form" },
       section: { label: "Section" },
       cardGrid: { label: "Card grid" },
       card: { label: "Card" },
@@ -5824,6 +5838,22 @@ describe("personal site sample schema", () => {
           "nameLabel",
           "emailLabel",
           "messageLabel",
+        ],
+      },
+      publicOperationForm: {
+        label: "Public operation form",
+        fields: [
+          "label",
+          "body",
+          "operationTargetKind",
+          "operationTargetSchemaKey",
+          "operationTargetPackageAppKey",
+          "operationTargetInstallId",
+          "operationKey",
+          "buttonLabel",
+          "successLabel",
+          "operationNotificationMode",
+          "operationNotificationReplyToField",
         ],
       },
       section: { label: "Section", fields: ["label", "body"] },
@@ -6041,6 +6071,33 @@ describe("personal site sample schema", () => {
         messageLabel: { editor: "text" },
       },
     });
+    expect(blockCreate.variants?.publicOperationForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        operationTargetKind: { editor: "enum" },
+        operationTargetSchemaKey: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["schemaKey"] },
+        },
+        operationTargetPackageAppKey: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationTargetInstallId: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationKey: { editor: "text" },
+        buttonLabel: { editor: "text" },
+        successLabel: { editor: "text" },
+        operationNotificationMode: { editor: "enum" },
+        operationNotificationReplyToField: {
+          editor: "text",
+          visibleWhen: { field: "operationNotificationMode", values: ["email"] },
+        },
+      },
+    });
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
@@ -6126,6 +6183,37 @@ describe("personal site sample schema", () => {
         messageLabel: { editor: "text", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.publicOperationForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        operationTargetKind: { editor: "enum", commit: "immediate" },
+        operationTargetSchemaKey: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["schemaKey"] },
+        },
+        operationTargetPackageAppKey: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationTargetInstallId: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationKey: { editor: "text", commit: "field-commit" },
+        buttonLabel: { editor: "text", commit: "field-commit" },
+        successLabel: { editor: "text", commit: "field-commit" },
+        operationNotificationMode: { editor: "enum", commit: "immediate" },
+        operationNotificationReplyToField: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationNotificationMode", values: ["email"] },
+        },
+      },
+    });
 
     expect(siteCompositionHome.result).toMatchObject({
       type: "tree",
@@ -6150,6 +6238,7 @@ describe("personal site sample schema", () => {
               "projectList",
               "subscribeForm",
               "contactForm",
+              "publicOperationForm",
             ],
           },
           group: {
@@ -6168,6 +6257,7 @@ describe("personal site sample schema", () => {
               "projectList",
               "subscribeForm",
               "contactForm",
+              "publicOperationForm",
             ],
           },
           section: {
@@ -6186,6 +6276,7 @@ describe("personal site sample schema", () => {
               "projectList",
               "subscribeForm",
               "contactForm",
+              "publicOperationForm",
             ],
           },
           cardGrid: {
@@ -6233,6 +6324,7 @@ describe("personal site sample schema", () => {
           projectList: "leaf",
           subscribeForm: "leaf",
           contactForm: "leaf",
+          publicOperationForm: "leaf",
           header: {
             action: "leaf",
             children: ["headerPrimary", "headerSecondary"],

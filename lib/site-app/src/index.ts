@@ -45,5 +45,10 @@ export {
 } from "./source-media.ts";
 export type { SiteSourceMediaAsset } from "./source-media.ts";
 export { buildSitePageTree } from "./tree.ts";
-export type { BuildSitePageTreeOptions } from "./tree.ts";
+export type {
+  BuildSitePageTreeOptions,
+  SitePublicOperationTargetResolver,
+  SitePublicOperationTargetRequest,
+  SitePublicOperationTargetResolution,
+} from "./tree.ts";
 export type * from "./types.ts";

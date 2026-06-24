@@ -20,6 +20,7 @@ import {
   type PublicSiteDocumentTreeResult,
   type PublicSiteIndexingResource,
   type SiteIconRoute,
+  type SitePublicOperationTargetResolver,
 } from "@dpeek/formless-site-app/worker";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/worker";
 import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-app";
@@ -46,6 +47,7 @@ export type PublicSiteWorkerTreeInput = {
   records: StoredRecord[];
   schema: AppSchema;
   slug: string;
+  publicOperationTargetResolver?: SitePublicOperationTargetResolver;
   target?: { apiRoutePrefix: `/${string}` };
   turnstileSiteKey?: string;
 };

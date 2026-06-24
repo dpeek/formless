@@ -51,12 +51,40 @@ export type SitePublicOperationChallengeNode = {
   siteKey?: string;
 };
 
+export type SitePublicOperationTargetNode =
+  | {
+      kind: "schemaKey";
+      schemaKey: string;
+      apiRoutePrefix: string;
+    }
+  | {
+      kind: "appInstall";
+      packageAppKey: string;
+      installId: string;
+      apiRoutePrefix: string;
+    };
+
+export type SitePublicOperationInputFieldOptionNode = {
+  value: string;
+  label: string;
+};
+
+export type SitePublicOperationInputFieldNode = {
+  name: string;
+  label: string;
+  required: boolean;
+  control: "text" | "longText" | "boolean" | "date" | "number" | "enum";
+  options?: SitePublicOperationInputFieldOptionNode[];
+};
+
 export type SitePublicOperationNode = {
   entityName: string;
   operationName: string;
   canonicalKey: string;
+  target?: SitePublicOperationTargetNode;
   route: string;
   challenge: SitePublicOperationChallengeNode;
+  fields?: SitePublicOperationInputFieldNode[];
 };
 
 export type SiteTreeRoute =
@@ -86,6 +114,7 @@ export type SiteBlockNode = {
   label: string;
   body?: string;
   operationName?: string;
+  operationKey?: string;
   buttonLabel?: string;
   successLabel?: string;
   nameLabel?: string;

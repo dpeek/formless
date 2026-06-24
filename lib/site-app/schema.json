@@ -116,6 +116,9 @@
             "contactForm": {
               "label": "Contact form"
             },
+            "publicOperationForm": {
+              "label": "Public operation form"
+            },
             "group": {
               "label": "Group"
             },
@@ -185,6 +188,39 @@
           "required": false,
           "label": "Operation"
         },
+        "operationKey": {
+          "type": "text",
+          "required": false,
+          "label": "Operation key"
+        },
+        "operationTargetKind": {
+          "type": "enum",
+          "required": false,
+          "label": "Target route",
+          "values": {
+            "schemaKey": {
+              "label": "Schema key"
+            },
+            "appInstall": {
+              "label": "Installed app"
+            }
+          }
+        },
+        "operationTargetSchemaKey": {
+          "type": "text",
+          "required": false,
+          "label": "Target schema key"
+        },
+        "operationTargetPackageAppKey": {
+          "type": "text",
+          "required": false,
+          "label": "Target package app key"
+        },
+        "operationTargetInstallId": {
+          "type": "text",
+          "required": false,
+          "label": "Target install id"
+        },
         "buttonLabel": {
           "type": "text",
           "required": false,
@@ -209,6 +245,24 @@
           "type": "text",
           "required": false,
           "label": "Message label"
+        },
+        "operationNotificationMode": {
+          "type": "enum",
+          "required": false,
+          "label": "Input notification",
+          "values": {
+            "none": {
+              "label": "None"
+            },
+            "email": {
+              "label": "Email"
+            }
+          }
+        },
+        "operationNotificationReplyToField": {
+          "type": "text",
+          "required": false,
+          "label": "Reply-to input field"
         },
         "href": {
           "type": "text",
@@ -305,6 +359,21 @@
               "operationName": {
                 "field": "operationName"
               },
+              "operationKey": {
+                "field": "operationKey"
+              },
+              "operationTargetKind": {
+                "field": "operationTargetKind"
+              },
+              "operationTargetSchemaKey": {
+                "field": "operationTargetSchemaKey"
+              },
+              "operationTargetPackageAppKey": {
+                "field": "operationTargetPackageAppKey"
+              },
+              "operationTargetInstallId": {
+                "field": "operationTargetInstallId"
+              },
               "buttonLabel": {
                 "field": "buttonLabel"
               },
@@ -319,6 +388,12 @@
               },
               "messageLabel": {
                 "field": "messageLabel"
+              },
+              "operationNotificationMode": {
+                "field": "operationNotificationMode"
+              },
+              "operationNotificationReplyToField": {
+                "field": "operationNotificationReplyToField"
               },
               "href": {
                 "field": "href"
@@ -383,6 +458,21 @@
               "operationName": {
                 "field": "operationName"
               },
+              "operationKey": {
+                "field": "operationKey"
+              },
+              "operationTargetKind": {
+                "field": "operationTargetKind"
+              },
+              "operationTargetSchemaKey": {
+                "field": "operationTargetSchemaKey"
+              },
+              "operationTargetPackageAppKey": {
+                "field": "operationTargetPackageAppKey"
+              },
+              "operationTargetInstallId": {
+                "field": "operationTargetInstallId"
+              },
               "buttonLabel": {
                 "field": "buttonLabel"
               },
@@ -397,6 +487,12 @@
               },
               "messageLabel": {
                 "field": "messageLabel"
+              },
+              "operationNotificationMode": {
+                "field": "operationNotificationMode"
+              },
+              "operationNotificationReplyToField": {
+                "field": "operationNotificationReplyToField"
               },
               "href": {
                 "field": "href"
@@ -1211,6 +1307,22 @@
             "messageLabel"
           ]
         },
+        "publicOperationForm": {
+          "label": "Public operation form",
+          "fields": [
+            "label",
+            "body",
+            "operationTargetKind",
+            "operationTargetSchemaKey",
+            "operationTargetPackageAppKey",
+            "operationTargetInstallId",
+            "operationKey",
+            "buttonLabel",
+            "successLabel",
+            "operationNotificationMode",
+            "operationNotificationReplyToField"
+          ]
+        },
         "group": {
           "label": "Group",
           "fields": ["label"]
@@ -1774,6 +1886,67 @@
             }
           }
         },
+        "publicOperationForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationKey": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "operationNotificationMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationNotificationReplyToField": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationNotificationMode",
+                "values": ["email"]
+              }
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -2007,6 +2180,67 @@
             "messageLabel": {
               "editor": "text",
               "commit": "field-commit"
+            }
+          }
+        },
+        "publicOperationForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationKey": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "operationNotificationMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationNotificationReplyToField": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationNotificationMode",
+                "values": ["email"]
+              }
             }
           }
         },
@@ -2489,7 +2723,8 @@
                 "postList",
                 "projectList",
                 "subscribeForm",
-                "contactForm"
+                "contactForm",
+                "publicOperationForm"
               ]
             },
             "group": {
@@ -2507,7 +2742,8 @@
                 "postList",
                 "projectList",
                 "subscribeForm",
-                "contactForm"
+                "contactForm",
+                "publicOperationForm"
               ]
             },
             "section": {
@@ -2525,7 +2761,8 @@
                 "postList",
                 "projectList",
                 "subscribeForm",
-                "contactForm"
+                "contactForm",
+                "publicOperationForm"
               ]
             },
             "cardGrid": {
@@ -2581,6 +2818,7 @@
             "projectList": "leaf",
             "subscribeForm": "leaf",
             "contactForm": "leaf",
+            "publicOperationForm": "leaf",
             "header": {
               "action": "leaf",
               "children": ["headerPrimary", "headerSecondary"]
@@ -2888,6 +3126,57 @@
             },
             "messageLabel": {
               "editor": "text"
+            }
+          }
+        },
+        "publicOperationForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "operationTargetKind": {
+              "editor": "enum"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationKey": {
+              "editor": "text"
+            },
+            "buttonLabel": {
+              "editor": "text"
+            },
+            "successLabel": {
+              "editor": "text"
+            },
+            "operationNotificationMode": {
+              "editor": "enum"
+            },
+            "operationNotificationReplyToField": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationNotificationMode",
+                "values": ["email"]
+              }
             }
           }
         },
@@ -3200,6 +3489,67 @@
             "messageLabel": {
               "editor": "text",
               "commit": "field-commit"
+            }
+          }
+        },
+        "publicOperationForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationKey": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "operationNotificationMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationNotificationReplyToField": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationNotificationMode",
+                "values": ["email"]
+              }
             }
           }
         },

@@ -389,6 +389,19 @@ entity operations and view operation bindings.
 - AND operation response shape drives success, failure, replay, local
   auto-save, and compact status presentation
 
+#### Scenario: Public operation form authoring controls
+
+- GIVEN generated Site authoring renders a `publicOperationForm` block editor
+- WHEN the author configures the block
+- THEN the editable controls cover the block label, body, target app route
+  identity, canonical operation key, button label, success label, and optional
+  operation input notification configuration
+- AND generated UI does not ask the author to manually define submitted form
+  fields that duplicate `operation.input.fields`
+- AND generated UI surfaces unavailable target operations, missing Turnstile
+  configuration, unsupported required input fields, and invalid target route
+  facts as configuration feedback instead of rendering a working public form
+
 #### Scenario: Table controls bind operations directly
 
 - GIVEN a generated table renders row edit, destructive, command, or ordering

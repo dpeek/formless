@@ -20,6 +20,13 @@ import type {
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import {
+  emailStylePublicIntakeFormBlockId,
+  emailStylePublicIntakeFormBlockValues,
+  emailStylePublicIntakeInput,
+  emailStylePublicIntakeOperationKey,
+  schemaWithEmailStylePublicIntake,
+} from "../test/public-intake-schema.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
 
@@ -455,18 +462,235 @@ describe("public operation runtime", () => {
     }
   });
 
+  it("keeps configured generic operation input notifications out of public command responses", async () => {
+    const emailHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: turnstileVerifyResponse,
+    });
+
+    try {
+      await resetSchemaApp("site", emailHarness);
+      await configureContactNotificationEmail(emailHarness);
+      const block = await postAdminRecordOperation(
+        {
+          idempotencyKey: "write-create-generic-operation-input-form",
+          entity: "block",
+          operationName: "create",
+          input: {
+            type: "publicOperationForm",
+            label: "Request updates",
+            operationKey: "subscription.subscribe",
+            operationNotificationMode: "email",
+            operationNotificationReplyToField: "email",
+          },
+        },
+        emailHarness,
+      );
+
+      const first = await postPublicOperation(
+        "/api/site/public/operations/subscription/subscribe",
+        publicSubscribeBody({
+          idempotencyKey: "generic-operation-input-notify",
+          input: { email: "visitor@example.com" },
+          sourceBlockId: block.record.id,
+        }),
+        emailHarness,
+      );
+      const replay = await postPublicOperation(
+        "/api/site/public/operations/subscription/subscribe",
+        publicSubscribeBody({
+          idempotencyKey: "generic-operation-input-notify",
+          input: { email: "visitor@example.com" },
+          sourceBlockId: block.record.id,
+          token: "token-replay",
+        }),
+        emailHarness,
+      );
+      const firstBody = (await first.json()) as PublicOperationResponse;
+      const replayBody = (await replay.json()) as PublicOperationResponse;
+
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
+      expect(firstBody.status).toBe("committed");
+      expect(replayBody).toEqual({ ...firstBody, status: "replayed" });
+      expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
+      expect(JSON.stringify(firstBody)).not.toContain("token-ok");
+      expectTurnstileRequests(turnstileRequests, [
+        {
+          secret: turnstileSecret,
+          response: "token-ok",
+        },
+      ]);
+    } finally {
+      await emailHarness.dispose();
+    }
+  });
+
+  it("executes email-style generic public operation form create submissions with replay-safe response filtering", async () => {
+    const emailHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: turnstileVerifyResponse,
+    });
+
+    try {
+      await resetSchemaApp("site", emailHarness);
+      await installEmailStylePublicIntakeSchema(emailHarness);
+      await configureContactNotificationEmail(emailHarness);
+      const block = await postAdminRecordOperation(
+        {
+          idempotencyKey: "write-create-email-style-public-intake-form",
+          entity: "block",
+          operationName: "create",
+          input: emailStylePublicIntakeFormBlockValues,
+        },
+        emailHarness,
+      );
+      const first = await postPublicOperation(
+        "/api/site/public/operations/intake-request/submit",
+        publicEmailStyleIntakeBody({
+          idempotencyKey: "generic-create-email-style-intake",
+          sourceBlockId: block.record.id,
+        }),
+        emailHarness,
+      );
+      const replay = await postPublicOperation(
+        "/api/site/public/operations/intake-request/submit",
+        publicEmailStyleIntakeBody({
+          idempotencyKey: "generic-create-email-style-intake",
+          sourceBlockId: block.record.id,
+          token: "token-replay",
+        }),
+        emailHarness,
+      );
+      const firstBody = (await first.json()) as PublicOperationResponse;
+      const replayBody = (await replay.json()) as PublicOperationResponse;
+      const after = await getJson<BootstrapResponse>("/api/site/bootstrap", emailHarness);
+      const requests = emailStyleIntakeRecords(after.records);
+
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
+      expect(firstBody).toMatchObject({
+        operation: {
+          entityName: "intake-request",
+          operationName: "submit",
+          canonicalKey: emailStylePublicIntakeOperationKey,
+          kind: "create",
+        },
+        status: "committed",
+      });
+      expect(replayBody).toEqual({ ...firstBody, status: "replayed" });
+      expect(requests).toHaveLength(1);
+      expect(firstBody.output.type).toBe("create");
+      if (firstBody.output.type !== "create") {
+        throw new Error("Expected create output.");
+      }
+      expect(firstBody.output.record.values).toEqual(emailStylePublicIntakeInput);
+      expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
+      expect(JSON.stringify(firstBody)).not.toContain("token-ok");
+      expect(JSON.stringify(replayBody)).not.toContain("token-replay");
+      expect(JSON.stringify(replayBody)).not.toContain(turnstileSecret);
+      expectTurnstileRequests(turnstileRequests, [
+        {
+          secret: turnstileSecret,
+          response: "token-ok",
+        },
+      ]);
+    } finally {
+      await emailHarness.dispose();
+    }
+  });
+
+  it("rejects generic public operation form create unknown and invalid input before challenge verification", async () => {
+    await installEmailStylePublicIntakeSchema();
+
+    const beforeUnknown = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const unknown = await postPublicOperation(
+      "/api/site/public/operations/intake-request/submit",
+      publicEmailStyleIntakeBody({
+        idempotencyKey: "generic-create-email-style-unknown",
+        input: {
+          ...emailStylePublicIntakeInput,
+          internalNotes: "not public",
+        },
+        token: "secret-generic-create-token",
+      }),
+    );
+    const afterUnknown = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const beforeInvalid = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const invalid = await postPublicOperation(
+      "/api/site/public/operations/intake-request/submit",
+      publicEmailStyleIntakeBody({
+        idempotencyKey: "generic-create-email-style-invalid",
+        input: {
+          ...emailStylePublicIntakeInput,
+          message: "",
+        },
+      }),
+    );
+    const afterInvalid = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const retry = await postPublicOperation(
+      "/api/site/public/operations/intake-request/submit",
+      publicEmailStyleIntakeBody({ idempotencyKey: "generic-create-email-style-unknown" }),
+    );
+    const afterRetry = await getJson<BootstrapResponse>("/api/site/bootstrap");
+
+    expect(unknown.status).toBe(400);
+    expect((await unknown.json()) as { error: string }).toEqual({
+      error: 'Public operation input includes undeclared field "internalNotes".',
+    });
+    expect(afterUnknown.records).toEqual(beforeUnknown.records);
+    expect(afterUnknown.cursor).toBe(beforeUnknown.cursor);
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()) as { error: string }).toEqual({
+      error: 'Field "message" cannot be empty.',
+    });
+    expect(afterInvalid.records).toEqual(beforeInvalid.records);
+    expect(afterInvalid.cursor).toBe(beforeInvalid.cursor);
+    expect(retry.status).toBe(200);
+    expect(emailStyleIntakeRecords(afterRetry.records)).toHaveLength(1);
+    expect(turnstileRequests).toHaveLength(1);
+    expect(JSON.stringify(await retry.json())).not.toContain("secret-generic-create-token");
+  });
+
   it("executes and rejects schema-key public record-plan command operations", async () => {
     await installPublicRecordPlanSchema("/api/tasks");
 
     const before = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
     const accepted = await postPublicOperation(
       "/api/tasks/public/operations/task/submitPublicPlan",
-      publicRecordPlanBody({ idempotencyKey: "record-plan-schema-key" }),
+      publicRecordPlanBody({
+        idempotencyKey: "record-plan-schema-key",
+        sourceBlockId: "rec_site_block_public_plan_form",
+      }),
+    );
+    const replay = await postPublicOperation(
+      "/api/tasks/public/operations/task/submitPublicPlan",
+      publicRecordPlanBody({
+        idempotencyKey: "record-plan-schema-key",
+        sourceBlockId: "rec_site_block_public_plan_form",
+        token: "token-replay",
+      }),
     );
     const body = (await accepted.json()) as PublicOperationResponse;
+    const replayBody = (await replay.json()) as PublicOperationResponse;
     const after = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
 
     expect(accepted.status).toBe(200);
+    expect(replay.status).toBe(200);
     expect(body).toMatchObject({
       invocationId: "operation:task.submitPublicPlan:record-plan-schema-key",
       operation: {
@@ -488,6 +712,7 @@ describe("public operation runtime", () => {
       },
       status: "committed",
     });
+    expect(replayBody).toEqual({ ...body, status: "replayed" });
     if (body.output.type !== "command") {
       throw new Error("Expected command output.");
     }
@@ -514,6 +739,7 @@ describe("public operation runtime", () => {
       sourcePath: "/api/tasks/public/operations/task/submitPublicPlan",
     });
     expect(JSON.stringify(body)).not.toContain("token-ok");
+    expect(JSON.stringify(replayBody)).not.toContain("token-replay");
     expect(JSON.stringify(body)).not.toContain(turnstileSecret);
     expect(JSON.stringify(body)).not.toContain("Public plan task");
     expect(JSON.stringify(body)).not.toContain("Created from public plan");
@@ -528,9 +754,23 @@ describe("public operation runtime", () => {
           note: "Rejected note",
           admin: true,
         },
+        sourceBlockId: "rec_site_block_public_plan_form",
       }),
     );
     const afterRejected = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+    const beforeInvalid = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+    const invalid = await postPublicOperation(
+      "/api/tasks/public/operations/task/submitPublicPlan",
+      publicRecordPlanBody({
+        idempotencyKey: "record-plan-schema-key-invalid",
+        input: {
+          title: "",
+          note: "Invalid declared field",
+        },
+        sourceBlockId: "rec_site_block_public_plan_form",
+      }),
+    );
+    const afterInvalid = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
 
     expect(rejected.status).toBe(400);
     expect((await rejected.json()) as { error: string }).toEqual({
@@ -538,6 +778,12 @@ describe("public operation runtime", () => {
     });
     expect(afterRejected.records).toEqual(beforeRejected.records);
     expect(afterRejected.cursor).toBe(beforeRejected.cursor);
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()) as { error: string }).toEqual({
+      error: 'Public operation input field "title" cannot be empty.',
+    });
+    expect(afterInvalid.records).toEqual(beforeInvalid.records);
+    expect(afterInvalid.cursor).toBe(beforeInvalid.cursor);
     expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
@@ -1635,15 +1881,23 @@ async function installSiteSchema(transform: (schema: AppSchema) => void) {
   await postAdminJson<SchemaUpdateResponse>("/api/site/schema", { schema });
 }
 
+async function installEmailStylePublicIntakeSchema(target: Harness = harness) {
+  const current = await getJson<SchemaResponse>("/api/site/schema", target);
+  const schema = schemaWithEmailStylePublicIntake(current.schema);
+
+  await postAdminJson<SchemaUpdateResponse>("/api/site/schema", { schema }, target);
+}
+
 function publicSubscribeBody(input: {
   idempotencyKey: string;
   input?: Record<string, unknown>;
+  sourceBlockId?: string;
   token?: string;
 }) {
   return {
     input: input.input ?? { email: "ada@example.com" },
     proof: { turnstileToken: input.token ?? "token-ok" },
-    source: { siteBlockId: "rec_site_subscribe_form" },
+    source: { siteBlockId: input.sourceBlockId ?? "rec_site_subscribe_form" },
     idempotencyKey: input.idempotencyKey,
   };
 }
@@ -1665,6 +1919,20 @@ function publicContactMessageBody(input: {
   };
 }
 
+function publicEmailStyleIntakeBody(input: {
+  idempotencyKey: string;
+  input?: Record<string, unknown>;
+  sourceBlockId?: string;
+  token?: string;
+}) {
+  return {
+    input: input.input ?? emailStylePublicIntakeInput,
+    proof: { turnstileToken: input.token ?? "token-ok" },
+    source: { siteBlockId: input.sourceBlockId ?? emailStylePublicIntakeFormBlockId },
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
 async function installPublicRecordPlanSchema(apiPrefix: string) {
   const current = await getJson<SchemaResponse>(`${apiPrefix}/schema`);
   const schema = schemaWithPublicRecordPlanOperation(current.schema);
@@ -1675,6 +1943,7 @@ async function installPublicRecordPlanSchema(apiPrefix: string) {
 function publicRecordPlanBody(input: {
   idempotencyKey: string;
   input?: Record<string, unknown>;
+  sourceBlockId?: string;
   token?: string;
 }) {
   return {
@@ -1683,6 +1952,7 @@ function publicRecordPlanBody(input: {
       note: "Created from public plan",
     },
     proof: { turnstileToken: input.token ?? "token-ok" },
+    ...(input.sourceBlockId === undefined ? {} : { source: { siteBlockId: input.sourceBlockId } }),
     idempotencyKey: input.idempotencyKey,
   };
 }
@@ -1806,6 +2076,10 @@ function contactSubscriptionRecords(records: StoredRecord[]) {
 
 function contactMessageRecords(records: StoredRecord[]) {
   return records.filter((record) => record.entity === "contact-message");
+}
+
+function emailStyleIntakeRecords(records: StoredRecord[]) {
+  return records.filter((record) => record.entity === "intake-request");
 }
 
 function taskRecordPlanRecords(records: StoredRecord[]) {

@@ -1387,6 +1387,7 @@ describe("home view model collections", () => {
         "projectList",
         "subscribeForm",
         "contactForm",
+        "publicOperationForm",
       ],
       group: [
         "group",
@@ -1403,6 +1404,7 @@ describe("home view model collections", () => {
         "projectList",
         "subscribeForm",
         "contactForm",
+        "publicOperationForm",
       ],
       section: [
         "group",
@@ -1419,6 +1421,7 @@ describe("home view model collections", () => {
         "projectList",
         "subscribeForm",
         "contactForm",
+        "publicOperationForm",
       ],
       cardGrid: ["card"],
       metricGrid: ["metric"],
@@ -1464,6 +1467,7 @@ describe("home view model collections", () => {
     expect(treeResult.branches?.variants.leafVariantValues).toContain("projectList");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("subscribeForm");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("contactForm");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("publicOperationForm");
     expect(treeResult.childRecordUnion?.variants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

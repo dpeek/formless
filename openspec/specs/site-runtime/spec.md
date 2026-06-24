@@ -199,6 +199,38 @@ exposing private challenge, email provider, or runtime secrets.
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
 
+### Requirement: Public Operation Form Public Tree Projection
+
+The system SHALL project generic public operation form blocks into public Site
+trees without exposing private challenge, app storage, email provider, or
+runtime secrets.
+
+#### Scenario: Project public operation form facts
+
+- GIVEN the public Site tree includes a `publicOperationForm` block
+- WHEN the block references one publicly executable anonymous operation on a
+  target app storage identity
+- THEN the projected block includes the canonical operation key, target public
+  operation route, challenge facts required for browser rendering, and
+  public-safe operation input field metadata
+- AND the target may be a schema-key app route or an installed app route
+- AND projected field metadata is derived from `operation.input.fields` and
+  includes only field names, labels, required flags, supported scalar control
+  types, and enum option labels
+- AND the projected block does not include Turnstile secrets, raw Authority
+  storage records, app install records, private app records, email provider
+  credentials, sender verification facts, or private notification recipients
+
+#### Scenario: Warn for unavailable public operation form
+
+- GIVEN a `publicOperationForm` block references an operation that is missing,
+  not publicly executable, targets an unavailable app storage identity, lacks
+  challenge configuration, or has required input outside the generic form field
+  subset
+- WHEN the public tree is projected
+- THEN the public tree includes a warning
+- AND public rendering does not expose a working form for that block
+
 ### Requirement: Site Authoring
 
 The system SHALL expose Site authoring through generated admin screens that edit Site settings and tree-structured block composition without exposing raw implementation-only fields as primary controls.
@@ -265,6 +297,32 @@ content to a schema-declared public contact message operation.
 - THEN `contactForm` is a valid block type and union variant
 - AND its stored operation reference resolves through source-declared operation
   keys and operation handler capability facts
+- AND generated Site authoring exposes the fields needed to configure the form
+
+### Requirement: Public Operation Form Block
+
+The system SHALL support a Site `publicOperationForm` block that binds public
+page content to a schema-declared anonymous public operation without
+special-casing the submitted input fields in Site records.
+
+#### Scenario: Author public operation form block
+
+- GIVEN a Site author creates a `publicOperationForm` block
+- WHEN the block is stored
+- THEN the block stores normal flat block fields for label, body, canonical
+  operation key, target app route identity, button label, success label, and
+  optional operation input notification configuration
+- AND the block does not store per-customer form field definitions that
+  duplicate the target operation input contract
+- AND the block can be placed under public page and group composition branches
+
+#### Scenario: Public operation form variant is parsed
+
+- GIVEN the Site source schema declares the `publicOperationForm` block type
+- WHEN the schema is parsed
+- THEN `publicOperationForm` is a valid block type and union variant
+- AND its stored operation reference resolves through source-declared operation
+  keys, target app route facts, operation policy, and operation input contracts
 - AND generated Site authoring exposes the fields needed to configure the form
 
 ### Requirement: Generic Site Content Blocks
@@ -364,6 +422,34 @@ installed, and mapped public Site routes.
 - THEN the page shows the configured success state
 - AND the visitor is not shown provider delivery state, notification recipient
   configuration, or admin-only contact message records
+
+### Requirement: Public Operation Form Rendering
+
+The system SHALL render public operation form blocks as schema-driven public
+forms on preview, installed, and mapped public Site routes.
+
+#### Scenario: Render Turnstile-protected public operation form
+
+- GIVEN a public Site page renders a valid `publicOperationForm` block whose
+  operation requires Turnstile
+- WHEN the public renderer renders the block
+- THEN the page renders one control for each projected public operation input
+  field, a submit control, and a Turnstile widget using the public site key
+- AND text, long text, enum, boolean, date, and number projected fields render
+  with matching browser controls
+- AND form submission posts to the target public operation route with the
+  declared operation input values, source block id, idempotency key, and
+  Turnstile token
+- AND browser coercion preserves booleans as booleans, numbers as finite
+  numbers, dates as `YYYY-MM-DD` strings, and enum values as declared strings
+
+#### Scenario: Render successful public operation form outcome
+
+- GIVEN a public operation form submission succeeds
+- WHEN the public page handles the outcome
+- THEN the page shows the configured success state
+- AND the visitor is not shown operation-created records, provider delivery
+  state, notification recipient configuration, or admin-only app records
 
 ### Requirement: Links And Frames
 

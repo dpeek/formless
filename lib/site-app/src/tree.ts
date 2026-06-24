@@ -4,7 +4,9 @@ import type {
   SiteMediaNode,
   SitePageFrame,
   SiteSettingsNode,
+  SitePublicOperationInputFieldNode,
   SitePublicOperationNode,
+  SitePublicOperationTargetNode,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
@@ -15,8 +17,11 @@ import {
   getOperationHandlerCapabilities,
   isOperationHandlerEffect,
   isOperationHandlerEffectForKind,
+  parseEntityOperationKey,
   type AppSchema,
   type EntityOperationSchema,
+  type EntityOperationInputFieldSchema,
+  type FieldSchema,
 } from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
@@ -39,9 +44,30 @@ export type {
 export type BuildSitePageTreeOptions = {
   generatedAt?: string;
   maxDepth?: number;
+  publicOperationTargetResolver?: SitePublicOperationTargetResolver;
   target?: { apiRoutePrefix: `/${string}` };
   turnstileSiteKey?: string;
 };
+
+export type SitePublicOperationTargetRequest =
+  | {
+      kind: "schemaKey";
+      schemaKey: string;
+    }
+  | {
+      kind: "appInstall";
+      packageAppKey: string;
+      installId: string;
+    };
+
+export type SitePublicOperationTargetResolution = {
+  route: SitePublicOperationTargetNode;
+  schema: AppSchema;
+};
+
+export type SitePublicOperationTargetResolver = (
+  request: SitePublicOperationTargetRequest,
+) => SitePublicOperationTargetResolution | undefined;
 
 type SiteTreeIndexes = {
   blocks: Map<string, StoredRecord>;
@@ -52,6 +78,7 @@ type SiteTreeIndexes = {
 type SiteTreeBuildContext = {
   schema: AppSchema;
   indexes: SiteTreeIndexes;
+  publicOperationTargetResolver?: SitePublicOperationTargetResolver;
   publicOperationApiRoutePrefix: `/${string}`;
   turnstileSiteKey?: string;
   warnings: SiteTreeWarning[];
@@ -95,6 +122,9 @@ export function buildSitePageTree(
   const context = {
     schema,
     indexes,
+    ...(options.publicOperationTargetResolver === undefined
+      ? {}
+      : { publicOperationTargetResolver: options.publicOperationTargetResolver }),
     publicOperationApiRoutePrefix:
       options.target?.apiRoutePrefix ?? DEFAULT_SITE_PUBLIC_API_ROUTE_PREFIX,
     ...(options.turnstileSiteKey === undefined
@@ -359,6 +389,8 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
   const mediaProjection = projectedMediaFields(record, type, context);
   const publicOperationProjection = projectedPublicOperationFields(record, type, context);
   const publicFormBlock = type === "subscribeForm" || type === "contactForm";
+  const publicOperationFormBlock = type === "publicOperationForm";
+  const operationFormBlock = publicFormBlock || publicOperationFormBlock;
 
   return {
     id: record.id,
@@ -366,8 +398,11 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
     ...(publicFormBlock ? optionalStringField("operationName", record.values.operationName) : {}),
-    ...(publicFormBlock ? optionalStringField("buttonLabel", record.values.buttonLabel) : {}),
-    ...(type === "contactForm"
+    ...(publicOperationFormBlock
+      ? optionalStringField("operationKey", record.values.operationKey)
+      : {}),
+    ...(operationFormBlock ? optionalStringField("buttonLabel", record.values.buttonLabel) : {}),
+    ...(type === "contactForm" || publicOperationFormBlock
       ? optionalStringField("successLabel", record.values.successLabel)
       : {}),
     ...(type === "contactForm" ? optionalStringField("nameLabel", record.values.nameLabel) : {}),
@@ -399,6 +434,10 @@ function projectedPublicOperationFields(
   type: string,
   context: SiteTreeBuildContext,
 ): SitePublicOperationNode | undefined {
+  if (type === "publicOperationForm") {
+    return projectedGenericPublicOperationFields(record, context);
+  }
+
   if (type !== "subscribeForm" && type !== "contactForm") {
     return undefined;
   }
@@ -452,6 +491,317 @@ function projectedPublicOperationFields(
   };
 }
 
+function projectedGenericPublicOperationFields(
+  record: StoredRecord,
+  context: SiteTreeBuildContext,
+): SitePublicOperationNode | undefined {
+  const operationKey = stringValue(record.values.operationKey);
+  const formLabel = "Public operation form";
+
+  if (!operationKey) {
+    context.warnings.push({
+      code: "missing-public-operation",
+      recordId: record.id,
+      message: `${formLabel} block "${record.id}" does not declare an operation key.`,
+    });
+    return undefined;
+  }
+
+  const target = selectPublicOperationFormTarget(record, context);
+
+  if (!target) {
+    return undefined;
+  }
+
+  const operation = selectGenericPublicOperation(target.schema, operationKey);
+
+  if (operation.kind !== "available") {
+    context.warnings.push({
+      code: operation.code,
+      recordId: record.id,
+      message: operation.message,
+    });
+    return undefined;
+  }
+
+  if (context.turnstileSiteKey === undefined) {
+    context.warnings.push({
+      code: "missing-public-operation-challenge-config",
+      recordId: record.id,
+      message: `${formLabel} operation "${operationKey}" requires Turnstile site key configuration.`,
+    });
+    return undefined;
+  }
+
+  const fields = projectPublicOperationInputFields({
+    entityName: operation.entityName,
+    operation: operation.operation,
+    recordId: record.id,
+    schema: target.schema,
+    warnings: context.warnings,
+  });
+
+  if (!fields) {
+    return undefined;
+  }
+
+  return {
+    entityName: operation.entityName,
+    operationName: operation.operationName,
+    canonicalKey: operation.canonicalKey,
+    target: target.route,
+    route: `${target.route.apiRoutePrefix}/public/operations/${encodeURIComponent(
+      operation.entityName,
+    )}/${encodeURIComponent(operation.operationName)}`,
+    challenge: {
+      kind: "turnstile",
+      siteKey: context.turnstileSiteKey,
+    },
+    fields,
+  };
+}
+
+function selectPublicOperationFormTarget(
+  record: StoredRecord,
+  context: SiteTreeBuildContext,
+): SitePublicOperationTargetResolution | undefined {
+  const targetKind = stringValue(record.values.operationTargetKind);
+
+  if (targetKind === "schemaKey") {
+    const schemaKey = stringValue(record.values.operationTargetSchemaKey);
+
+    if (!schemaKey) {
+      context.warnings.push({
+        code: "missing-public-operation-target",
+        recordId: record.id,
+        message: `Public operation form block "${record.id}" does not declare a target schema key.`,
+      });
+      return undefined;
+    }
+
+    return resolvePublicOperationFormTarget(record, context, {
+      kind: "schemaKey",
+      schemaKey,
+    });
+  }
+
+  if (targetKind === "appInstall") {
+    const packageAppKey = stringValue(record.values.operationTargetPackageAppKey);
+    const installId = stringValue(record.values.operationTargetInstallId);
+
+    if (!packageAppKey || !installId) {
+      context.warnings.push({
+        code: "missing-public-operation-target",
+        recordId: record.id,
+        message: `Public operation form block "${record.id}" does not declare an installed app target.`,
+      });
+      return undefined;
+    }
+
+    return resolvePublicOperationFormTarget(record, context, {
+      kind: "appInstall",
+      packageAppKey,
+      installId,
+    });
+  }
+
+  context.warnings.push({
+    code: "missing-public-operation-target",
+    recordId: record.id,
+    message: `Public operation form block "${record.id}" does not declare a supported target route kind.`,
+  });
+  return undefined;
+}
+
+function resolvePublicOperationFormTarget(
+  record: StoredRecord,
+  context: SiteTreeBuildContext,
+  request: SitePublicOperationTargetRequest,
+): SitePublicOperationTargetResolution | undefined {
+  const target = context.publicOperationTargetResolver?.(request);
+
+  if (!target) {
+    context.warnings.push({
+      code: "invalid-public-operation-target",
+      recordId: record.id,
+      message:
+        request.kind === "schemaKey"
+          ? `Public operation form target schema key "${request.schemaKey}" is unavailable.`
+          : `Public operation form target install "${request.packageAppKey}/${request.installId}" is unavailable.`,
+    });
+    return undefined;
+  }
+
+  return target;
+}
+
+function selectGenericPublicOperation(
+  schema: AppSchema,
+  operationKey: string,
+):
+  | {
+      kind: "available";
+      entityName: string;
+      operationName: string;
+      canonicalKey: string;
+      operation: EntityOperationSchema;
+    }
+  | { kind: "unavailable"; code: string; message: string } {
+  let parsed: ReturnType<typeof parseEntityOperationKey>;
+
+  try {
+    parsed = parseEntityOperationKey("Public operation form operation key", operationKey);
+  } catch (error) {
+    return {
+      kind: "unavailable",
+      code: "invalid-public-operation",
+      message: error instanceof Error ? error.message : "Public operation key is invalid.",
+    };
+  }
+
+  const entity = schema.entities[parsed.entityKey];
+  const operation = entity?.operations?.[parsed.operationKey];
+
+  if (!entity || !operation) {
+    return {
+      kind: "unavailable",
+      code: "missing-public-operation",
+      message: `Public operation form operation "${operationKey}" does not exist.`,
+    };
+  }
+
+  if (!publicOperationExecutable(operation) || !anonymousTurnstileSameOrigin(operation)) {
+    return {
+      kind: "unavailable",
+      code: "invalid-public-operation",
+      message: `Public operation form operation "${operationKey}" is not publicly executable.`,
+    };
+  }
+
+  if (!operation.input) {
+    return {
+      kind: "unavailable",
+      code: "invalid-public-operation",
+      message: `Public operation form operation "${operationKey}" does not declare input fields.`,
+    };
+  }
+
+  return {
+    kind: "available",
+    entityName: parsed.entityKey,
+    operationName: parsed.operationKey,
+    canonicalKey: formatEntityOperationKey({
+      entityKey: parsed.entityKey,
+      operationKey: parsed.operationKey,
+    }),
+    operation,
+  };
+}
+
+function projectPublicOperationInputFields(input: {
+  entityName: string;
+  operation: EntityOperationSchema;
+  recordId: string;
+  schema: AppSchema;
+  warnings: SiteTreeWarning[];
+}): SitePublicOperationInputFieldNode[] | undefined {
+  if (!input.operation.input) {
+    return [];
+  }
+
+  const entity = input.schema.entities[input.entityName];
+  const fields: SitePublicOperationInputFieldNode[] = [];
+
+  for (const [inputName, field] of Object.entries(input.operation.input.fields)) {
+    const projected = projectPublicOperationInputField(inputName, field, entity?.fields ?? {});
+
+    if (projected) {
+      fields.push(projected);
+      continue;
+    }
+
+    if (operationInputFieldRequired(field)) {
+      input.warnings.push({
+        code: "unsupported-public-operation-input",
+        recordId: input.recordId,
+        message: `Public operation form block "${input.recordId}" cannot render required input field "${inputName}".`,
+      });
+      return undefined;
+    }
+  }
+
+  return fields;
+}
+
+function projectPublicOperationInputField(
+  inputName: string,
+  field: EntityOperationInputFieldSchema,
+  entityFields: Record<string, FieldSchema>,
+): SitePublicOperationInputFieldNode | undefined {
+  if ("field" in field) {
+    const entityField = entityFields[field.field];
+
+    if (!entityField) {
+      return undefined;
+    }
+
+    return projectScalarPublicOperationInputField(
+      inputName,
+      field.label,
+      field.required ?? false,
+      entityField,
+    );
+  }
+
+  return projectScalarPublicOperationInputField(inputName, field.label, field.required, field);
+}
+
+function projectScalarPublicOperationInputField(
+  inputName: string,
+  label: string | undefined,
+  required: boolean,
+  field: FieldSchema,
+): SitePublicOperationInputFieldNode | undefined {
+  const fieldLabel = label ?? field.label ?? inputName;
+
+  if (field.type === "text") {
+    return {
+      name: inputName,
+      label: fieldLabel,
+      required,
+      control: field.format === "longText" || field.format === "markdown" ? "longText" : "text",
+    };
+  }
+
+  if (field.type === "boolean" || field.type === "date" || field.type === "number") {
+    return {
+      name: inputName,
+      label: fieldLabel,
+      required,
+      control: field.type,
+    };
+  }
+
+  if (field.type === "enum") {
+    return {
+      name: inputName,
+      label: fieldLabel,
+      required,
+      control: "enum",
+      options: Object.entries(field.values).map(([value, option]) => ({
+        value,
+        label: option.label,
+      })),
+    };
+  }
+
+  return undefined;
+}
+
+function operationInputFieldRequired(field: EntityOperationInputFieldSchema): boolean {
+  return "field" in field ? field.required === true : field.required;
+}
+
 function selectPublicContactOperation(
   schema: AppSchema,
   operationName: string,
@@ -473,18 +823,7 @@ function selectPublicContactOperation(
       return false;
     }
 
-    const publicCreate =
-      operation.kind === "create" &&
-      operation.scope === "collection" &&
-      operation.effect?.type === "createRecord" &&
-      operation.output.type === "create";
-    const publicCommand =
-      operation.kind === "command" &&
-      (operation.effect?.type === "recordPlan" ||
-        (isOperationHandlerEffect(operation.effect) &&
-          getOperationHandlerCapabilities(operation.effect.handler).publicExecution));
-
-    return publicCreate || publicCommand;
+    return publicOperationExecutable(operation);
   });
 
   if (publicContactOperations.length !== 1) {
@@ -585,6 +924,21 @@ function anonymousTurnstileSameOrigin(operation: EntityOperationSchema): boolean
     access.challenge.kind === "turnstile" &&
     access.origin.kind === "same-origin"
   );
+}
+
+function publicOperationExecutable(operation: EntityOperationSchema): boolean {
+  const publicCreate =
+    operation.kind === "create" &&
+    operation.scope === "collection" &&
+    operation.effect?.type === "createRecord" &&
+    operation.output.type === "create";
+  const publicCommand =
+    operation.kind === "command" &&
+    (operation.effect?.type === "recordPlan" ||
+      (isOperationHandlerEffect(operation.effect) &&
+        getOperationHandlerCapabilities(operation.effect.handler).publicExecution));
+
+  return publicCreate || publicCommand;
 }
 
 function projectedMediaFields(
