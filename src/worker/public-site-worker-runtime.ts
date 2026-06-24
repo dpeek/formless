@@ -91,7 +91,6 @@ export type PublicSiteWorkerAdapter = {
 };
 
 const siteSchemaKey = "site";
-const clientModulePath = "/src/main.tsx";
 const viteReactRefreshPreamble = `<script type="module">
 import RefreshRuntime from "/@react-refresh";
 RefreshRuntime.injectIntoGlobalHook(window);
@@ -101,7 +100,7 @@ window.__vite_plugin_react_preamble_installed__ = true;
 </script>`;
 const developmentClientAssets: PublicSiteDocumentClientAssets = {
   body: `${viteReactRefreshPreamble}
-    <script type="module" src="${clientModulePath}"></script>`,
+    <script type="module" src="${runtimeTopologyRoutes.publicSiteClientModulePath}"></script>`,
   head: "",
 };
 const emptyClientAssets: PublicSiteDocumentClientAssets = { body: "", head: "" };
@@ -272,12 +271,17 @@ export async function handlePublicSiteDocumentRequest(
   const getRequest = getEquivalentRequestForHead(request);
   const requestUrl = new URL(getRequest.url);
   const slug = normalizeSiteRoutePath(requestUrl.pathname);
+  const treeResult = await fetchSitePageTreeResult(getRequest, env, slug, requestTarget.target);
   const response = await adapter.renderDocument({
-    clientAssets: await loadClientDocumentAssets(getRequest, env),
+    clientAssets: await loadClientDocumentAssets(getRequest, env, {
+      includeScripts: publicSiteDocumentNeedsClientScripts(treeResult, {
+        rendererConfigured: workspaceSitePublicRenderer !== undefined,
+      }),
+    }),
     requestUrl,
     runtimeHints: publicSiteRuntimeHints(requestTarget.target),
     slug,
-    treeResult: await fetchSitePageTreeResult(getRequest, env, slug, requestTarget.target),
+    treeResult,
   });
 
   return responseWithoutBodyForHead(request, response);
@@ -532,50 +536,207 @@ function primarySiteSettingsRecord(records: StoredRecord[]): StoredRecord | unde
 async function loadClientDocumentAssets(
   request: Request,
   env: Env,
+  options: { includeScripts: boolean },
 ): Promise<PublicSiteDocumentClientAssets> {
   if (!env.ASSETS) {
-    return developmentClientAssets;
+    return options.includeScripts ? developmentClientAssets : emptyClientAssets;
   }
 
-  let shellHtml = "";
-
   try {
-    const shellUrl = new URL(runtimeTopologyRoutes.clientShellAssetPath, request.url);
-    const shellResponse = await env.ASSETS.fetch(
-      new Request(shellUrl, {
-        headers: { Accept: "text/html" },
-        method: "GET",
-      }),
-    );
+    const manifest = await fetchClientAssetManifest(request, env);
 
-    if (!shellResponse.ok) {
+    if (!manifest) {
       return emptyClientAssets;
     }
 
-    shellHtml = await shellResponse.text();
+    return publicSiteClientAssetsFromManifest(manifest, options);
   } catch {
     return emptyClientAssets;
   }
-
-  const assetTags = extractClientAssetTags(shellHtml);
-
-  if (assetTags.length > 0) {
-    return { body: "", head: assetTags.join("\n    ") };
-  }
-
-  if (shellHtml.includes(clientModulePath) || shellHtml.includes("/@react-refresh")) {
-    return developmentClientAssets;
-  }
-
-  return emptyClientAssets;
 }
 
-function extractClientAssetTags(html: string): string[] {
-  const headContent = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? "";
-  const assetTagPattern =
-    /<script\b[^>]*\bsrc="\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*\bhref="\/assets\/[^"]+"[^>]*>/g;
+type ClientAssetManifest = Record<string, ClientAssetManifestChunk>;
 
-  return [...headContent.matchAll(assetTagPattern)].map((match) => match[0].trim());
+type ClientAssetManifestChunk = {
+  css?: string[];
+  file: string;
+  imports?: string[];
+  isEntry?: boolean;
+  src?: string;
+};
+
+async function fetchClientAssetManifest(
+  request: Request,
+  env: Env,
+): Promise<ClientAssetManifest | undefined> {
+  if (!env.ASSETS) {
+    return undefined;
+  }
+
+  const manifestUrl = new URL(runtimeTopologyRoutes.publicSiteClientAssetManifestPath, request.url);
+  const response = await env.ASSETS.fetch(
+    new Request(manifestUrl, {
+      headers: { Accept: "application/json" },
+      method: "GET",
+    }),
+  );
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  return parseClientAssetManifest(await response.json());
+}
+
+function parseClientAssetManifest(value: unknown): ClientAssetManifest | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const manifest: ClientAssetManifest = {};
+
+  for (const [key, chunk] of Object.entries(value)) {
+    if (!isRecord(chunk) || typeof chunk.file !== "string") {
+      continue;
+    }
+
+    manifest[key] = {
+      file: chunk.file,
+      ...(arrayOfStrings(chunk.css) ? { css: chunk.css } : {}),
+      ...(arrayOfStrings(chunk.imports) ? { imports: chunk.imports } : {}),
+      ...(typeof chunk.isEntry === "boolean" ? { isEntry: chunk.isEntry } : {}),
+      ...(typeof chunk.src === "string" ? { src: chunk.src } : {}),
+    };
+  }
+
+  return manifest;
+}
+
+function publicSiteClientAssetsFromManifest(
+  manifest: ClientAssetManifest,
+  options: { includeScripts: boolean },
+): PublicSiteDocumentClientAssets {
+  const entry = publicSiteClientManifestEntry(manifest);
+
+  if (!entry) {
+    return emptyClientAssets;
+  }
+
+  const importedChunks = [...publicSiteClientImportedChunks(entry, manifest)];
+  const cssFiles = uniqueStrings([
+    ...importedChunks.flatMap((chunk) => chunk.css ?? []),
+    ...(entry.css ?? []),
+  ]);
+  const headTags = [
+    ...(options.includeScripts
+      ? importedChunks.map((chunk) => modulePreloadTag(assetPath(chunk.file)))
+      : []),
+    ...cssFiles.map((file) => stylesheetTag(assetPath(file))),
+    ...(options.includeScripts ? [moduleScriptTag(assetPath(entry.file))] : []),
+  ];
+
+  return headTags.length > 0 ? { body: "", head: headTags.join("\n    ") } : emptyClientAssets;
+}
+
+function publicSiteClientManifestEntry(
+  manifest: ClientAssetManifest,
+): ClientAssetManifestChunk | undefined {
+  return (
+    manifest[runtimeTopologyRoutes.publicSiteClientManifestEntryKey] ??
+    Object.values(manifest).find(
+      (chunk) =>
+        chunk.isEntry && chunk.src === runtimeTopologyRoutes.publicSiteClientManifestEntryKey,
+    )
+  );
+}
+
+function* publicSiteClientImportedChunks(
+  chunk: ClientAssetManifestChunk,
+  manifest: ClientAssetManifest,
+  seen: Set<string> = new Set(),
+): Generator<ClientAssetManifestChunk> {
+  for (const key of chunk.imports ?? []) {
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    const imported = manifest[key];
+
+    if (!imported) {
+      continue;
+    }
+
+    yield* publicSiteClientImportedChunks(imported, manifest, seen);
+    yield imported;
+  }
+}
+
+function publicSiteDocumentNeedsClientScripts(
+  treeResult: PublicSiteDocumentTreeResult,
+  options: { rendererConfigured: boolean },
+): boolean {
+  if (options.rendererConfigured || treeResult.kind !== "found") {
+    return options.rendererConfigured;
+  }
+
+  return (
+    siteBlockTreeNeedsClientScripts(treeResult.tree.page) ||
+    siteFrameNeedsClientScripts(treeResult.tree)
+  );
+}
+
+function siteFrameNeedsClientScripts(tree: SitePageTree): boolean {
+  return Boolean(tree.frame.header || tree.frame.footer);
+}
+
+function siteBlockTreeNeedsClientScripts(block: SitePageTree["page"]): boolean {
+  if (block.publicOperation) {
+    return true;
+  }
+
+  if (block.query?.items.some(siteBlockTreeNeedsClientScripts)) {
+    return true;
+  }
+
+  return block.placements.some((placement) => siteBlockTreeNeedsClientScripts(placement.block));
+}
+
+function modulePreloadTag(href: string): string {
+  return `<link rel="modulepreload" crossorigin href="${escapeHtmlAttribute(href)}">`;
+}
+
+function stylesheetTag(href: string): string {
+  return `<link rel="stylesheet" crossorigin href="${escapeHtmlAttribute(href)}">`;
+}
+
+function moduleScriptTag(src: string): string {
+  return `<script type="module" crossorigin src="${escapeHtmlAttribute(src)}"></script>`;
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function assetPath(file: string): string {
+  return `/${file.replace(/^\/+/, "")}`;
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function arrayOfStrings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function publicSiteRuntimeHints(target?: AppStorageIdentity): PublicSiteDocumentRuntimeHint[] {

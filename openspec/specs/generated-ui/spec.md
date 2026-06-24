@@ -58,6 +58,20 @@ The system SHALL select generated surfaces from the active runtime profile and r
 - **AND** React routing does not hard-code the bundled Site route component
   when the selected package has no registered public adapter
 
+#### Scenario: Published public Site avoids generated admin entrypoint
+
+- **GIVEN** the runtime renders a published Site page, mapped public Site host,
+  or installed public Site route for anonymous visitors
+- **WHEN** browser assets are selected for that public route
+- **THEN** the selected assets do not require the generated admin `HomeRoute`,
+  instance shell, app settings shell, owner setup or login routes, workspace
+  gateway controls, or generated field editor modules to load
+- **AND** generated app and instance management routes continue to mount through
+  their own generated UI entrypoint when an admin or owner visits those routes
+- **AND** public Site browser behavior is limited to the package public route
+  component, configured public renderer, read-only markdown display, and public
+  form behavior needed by the rendered tree
+
 ### Requirement: App Frame And Settings
 
 The system SHALL render app chrome according to profile and SHALL expose app-local controls through the app settings surface.

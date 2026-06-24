@@ -3,9 +3,11 @@ import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   App,
+  type AppRouteComponents,
   runtimeInstalledAppRouteRegistryFromResponse,
   selectRuntimeShellInstalledAppLinks,
 } from "./app.tsx";
+import { GeneratedAppFrame } from "./app/generated-app-frame.tsx";
 import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
   GeneratedCreateDialogForm,
@@ -47,6 +49,10 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
+import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
+import { LocalSessionRoute } from "./app/routes/local-session.tsx";
+import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
+import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import { buildSitePageTree, type SitePageTree } from "@dpeek/formless-site-app";
 import {
   createDevRuntimeProfile,
@@ -116,7 +122,7 @@ function renderRoute(
         installedAppRouteInstalls={installedAppRouteInstalls}
         installedAppRoutePackages={options.installedAppRoutePackages}
         localWorkspaceGatewayAvailable={options.localWorkspaceGatewayAvailable}
-        routeComponents={{ HomeRoute, SitePageRoute }}
+        routeComponents={appRouteComponents()}
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
       />
     </Router>,
@@ -227,6 +233,19 @@ function SitePageRouteProbe({
   );
 }
 
+function appRouteComponents(overrides: Partial<AppRouteComponents> = {}): AppRouteComponents {
+  return {
+    GeneratedAppFrame,
+    HomeRoute,
+    InstanceShellRoute,
+    LocalSessionRoute,
+    OwnerLoginRoute,
+    OwnerSetupRoute,
+    SitePageRoute,
+    ...overrides,
+  };
+}
+
 function renderSitePage(slug = "home", records = testSiteSeedRecords) {
   return renderToStaticMarkup(<SitePageRenderer tree={sitePageTree(slug, records)} />);
 }
@@ -301,6 +320,10 @@ function mainHtml(html: string): string {
   }
 
   return html.slice(start, end + "</main>".length);
+}
+
+function stripReactSuspenseMarkers(html: string): string {
+  return html.replace(/<!--\/?\$[^>]*-->/g, "");
 }
 
 function runtimeShellHtml(html: string): string {
@@ -878,10 +901,7 @@ describe("App smoke routes", () => {
       <Router ssrPath="/apps/personal/settings">
         <App
           installedAppRouteInstalls={appInstalls}
-          routeComponents={{
-            HomeRoute: SchemaKeyProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: SchemaKeyProbeHomeRoute })}
           runtimeProfile={instanceProfile}
         />
       </Router>,
@@ -967,10 +987,7 @@ describe("App smoke routes", () => {
       <Router ssrPath="/workspace/personal/settings">
         <App
           installedAppRouteInstalls={[personalInstall]}
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={createInstanceRuntimeProfile()}
         />
       </Router>,
@@ -1006,10 +1023,7 @@ describe("App smoke routes", () => {
     const appProfileHtml = renderToStaticMarkup(
       <Router ssrPath="/">
         <App
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={createAppRuntimeProfile("crm")}
         />
       </Router>,
@@ -1017,10 +1031,7 @@ describe("App smoke routes", () => {
     const installedProfileHtml = renderToStaticMarkup(
       <Router ssrPath="/">
         <App
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={installedProfile}
         />
       </Router>,
@@ -1028,10 +1039,10 @@ describe("App smoke routes", () => {
     const publishedSiteHtml = renderToStaticMarkup(
       <Router ssrPath="/">
         <App
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute: TargetProbeHomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createPublishedSiteRuntimeProfile()}
         />
       </Router>,
@@ -1080,10 +1091,7 @@ describe("App smoke routes", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/site">
         <App
-          routeComponents={{
-            HomeRoute: SchemaKeyProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: SchemaKeyProbeHomeRoute })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1100,10 +1108,7 @@ describe("App smoke routes", () => {
       <Router ssrPath="/apps/personal/settings">
         <App
           installedAppRouteInstalls={appInstalls}
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1147,10 +1152,7 @@ describe("App smoke routes", () => {
       <Router ssrPath="/apps/task-workspace">
         <App
           installedAppRouteInstalls={appInstalls}
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1189,10 +1191,7 @@ describe("App smoke routes", () => {
         <App
           installedAppRouteInstalls={appInstalls}
           installedAppRoutePackages={[privatePackage]}
-          routeComponents={{
-            HomeRoute: TargetProbeHomeRoute,
-            SitePageRoute,
-          }}
+          routeComponents={appRouteComponents({ HomeRoute: TargetProbeHomeRoute })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1535,10 +1534,10 @@ describe("App smoke routes", () => {
       <Router ssrPath="/sites/personal/blog/shipping-schema-backed-authoring">
         <App
           installedAppRouteInstalls={appInstalls}
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1565,10 +1564,10 @@ describe("App smoke routes", () => {
       <Router ssrPath="/sites/task-workspace">
         <App
           installedAppRouteInstalls={appInstalls}
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createDevRuntimeProfile()}
         />
       </Router>,
@@ -1662,10 +1661,10 @@ describe("App smoke routes", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/">
         <App
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createPublishedSiteRuntimeProfile({ packageAppKey: "private-site" })}
         />
       </Router>,
@@ -1680,10 +1679,10 @@ describe("App smoke routes", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/">
         <App
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createSiteAuthoringRuntimeProfile()}
         />
       </Router>,
@@ -1701,10 +1700,10 @@ describe("App smoke routes", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/blog/shipping-schema-backed-authoring">
         <App
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: SitePageRouteProbe,
-          }}
+          })}
           runtimeProfile={createSiteAuthoringRuntimeProfile()}
         />
       </Router>,
@@ -2320,16 +2319,16 @@ describe("public site renderer", () => {
     const hydratedAppHtml = renderToString(
       <Router ssrPath="/">
         <App
-          routeComponents={{
+          routeComponents={appRouteComponents({
             HomeRoute,
             SitePageRoute: ReadySitePageRoute,
-          }}
+          })}
           runtimeProfile={createPublishedSiteRuntimeProfile()}
         />
       </Router>,
     );
 
-    expect(hydratedAppHtml).toBe(ssrHtml);
+    expect(stripReactSuspenseMarkers(hydratedAppHtml)).toBe(ssrHtml);
   });
 
   it("renders seeded post and project summaries from groups", () => {

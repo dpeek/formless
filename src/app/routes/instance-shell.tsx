@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
   type Dispatch,
+  type ElementType,
   type ReactNode,
   type SetStateAction,
 } from "react";
@@ -26,8 +27,13 @@ import {
   createInstanceAppInstall,
   fetchInstanceAppInstalls,
 } from "../../client/app-installs.ts";
-import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
 import {
+  instanceControlPlaneClientTarget,
+  type ClientAppSchemaKey,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
+import {
+  type AppPackageResolver,
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
@@ -65,7 +71,14 @@ import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-cont
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { InstanceRail } from "../instance-rail.tsx";
-import { HomeRoute } from "./home.tsx";
+
+export type InstanceShellHomeRouteProps = {
+  activePackageResolver?: AppPackageResolver | undefined;
+  sectionOperationControls?: Record<string, ReactNode>;
+  target?: ClientAppTarget;
+  schemaKey: ClientAppSchemaKey;
+  screenPath: string;
+};
 
 export type PackageInstallDraft = {
   installId: string;
@@ -201,8 +214,12 @@ function workspaceGatewayControlDefaultValue(
 }
 
 export function InstanceShellRoute({
+  homeRouteComponent,
   localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
-}: { localWorkspaceGatewayAvailable?: boolean | undefined } = {}) {
+}: {
+  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
+  localWorkspaceGatewayAvailable?: boolean | undefined;
+}) {
   const [location, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
@@ -490,6 +507,7 @@ export function InstanceShellRoute({
       }
       onSubmitInstall={submitInstall}
       onStartWorkspaceOperation={startWorkspaceOperation}
+      homeRouteComponent={homeRouteComponent}
       state={state}
       workspaceGatewayState={workspaceGatewayState}
     />
@@ -679,6 +697,7 @@ export function operationPollsAutomatically(operation: WorkspaceGatewayOperation
 
 export function InstanceShellRouteView({
   currentPath = runtimeTopologyRoutes.instanceRootRoute,
+  homeRouteComponent,
   installDrafts = {},
   onPollWorkspaceOperation,
   onInstallDraftChange,
@@ -688,6 +707,7 @@ export function InstanceShellRouteView({
   workspaceGatewayState = { status: "unavailable" },
 }: {
   currentPath?: string;
+  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
   installDrafts?: PackageInstallDrafts;
   onPollWorkspaceOperation?: (
     operationId: string,
@@ -735,10 +755,11 @@ export function InstanceShellRouteView({
         state={workspaceGatewayState}
       />
       <GeneratedInstanceAppsSection
+        homeRouteComponent={homeRouteComponent}
         installDisabled={state.installing || state.packages.length === 0}
         onInstall={() => setInstallDialogOpen(true)}
       />
-      <GeneratedInstanceRoutesSection />
+      <GeneratedInstanceRoutesSection homeRouteComponent={homeRouteComponent} />
       <InstallAppDialog
         installDrafts={installDrafts}
         onDraftChange={onInstallDraftChange}
@@ -1292,9 +1313,11 @@ function workspaceManagementOperation(
 }
 
 function GeneratedInstanceAppsSection({
+  homeRouteComponent: HomeRouteComponent,
   installDisabled,
   onInstall,
 }: {
+  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
   installDisabled: boolean;
   onInstall: () => void;
 }) {
@@ -1303,7 +1326,7 @@ function GeneratedInstanceAppsSection({
   return (
     <section aria-label="Apps" className="space-y-3">
       <div data-formless-control-plane-screen="apps">
-        <HomeRoute
+        <HomeRouteComponent
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
           sectionOperationControls={{
             "app-installs": (
@@ -1327,13 +1350,17 @@ function GeneratedInstanceAppsSection({
   );
 }
 
-function GeneratedInstanceRoutesSection() {
+function GeneratedInstanceRoutesSection({
+  homeRouteComponent: HomeRouteComponent,
+}: {
+  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
+}) {
   const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
 
   return (
     <section aria-label="Routes" className="space-y-3">
       <div data-formless-control-plane-screen="routes">
-        <HomeRoute
+        <HomeRouteComponent
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
           screenPath="/routes"
           target={controlPlaneTarget}

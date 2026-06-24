@@ -9,12 +9,7 @@ import {
   useState,
 } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
-import { ActiveAppSurface } from "./app/app-surface.tsx";
-import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
-import { LocalSessionRoute } from "./app/routes/local-session.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
-import { OwnerLoginRoute, fetchOwnerSessionStatus } from "./app/routes/owner-login.tsx";
-import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import { normalizeSitePageSlug } from "@dpeek/formless-site-app/react";
 import {
   createPublicSiteReactAdapterRegistry,
@@ -22,6 +17,7 @@ import {
   type PublicSiteReactAdapterRegistry,
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
+import type { GeneratedAppFrameProps } from "./app/generated-app-frame.tsx";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   findRuntimeWorldMountByRoute,
@@ -31,13 +27,11 @@ import {
   installedSitePublicSurfaceFromRoute,
   normalizeRuntimeBrowserPath,
   resolveRuntimeProfile,
-  runtimeAppManagementHref,
   runtimeBrowserRoutePatterns,
   runtimeInstalledSitePublicHomeSlug,
   runtimeInstalledSitePublicPath,
   runtimeProfileNeedsInstalledAppRouteInstalls,
   runtimeProfileWithActivePackageResolver,
-  runtimeScreenPathFromRoute,
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
   type RuntimeProfile,
   type RuntimeInstalledAppRouteContext,
@@ -48,15 +42,7 @@ import {
   activeAppPackageResolverFromPackages,
   fetchInstanceAppInstalls,
 } from "./client/app-installs.ts";
-import { useActiveClientStorageName, useActiveSchemaKey, useSchema } from "./client/store.ts";
-import { workspaceGatewayBrowserConfig } from "@dpeek/formless-gateway/client";
-import {
-  appStorageIdentityForClientTarget,
-  clientTargetForSchemaKey,
-  clientTargetSourceSchemaKey,
-  type ClientAppSchemaKey,
-  type ClientAppTarget,
-} from "./client/app-target.ts";
+import type { ClientAppSchemaKey, ClientAppTarget } from "./client/app-target.ts";
 import type {
   AppInstall,
   AppPackageResolver,
@@ -68,14 +54,19 @@ import {
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
 import type { RuntimeRouteAccess } from "./shared/runtime-topology.ts";
-import { selectPrimaryScreenModels } from "./client/views.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
+  sectionOperationControls?: Record<string, ReactNode>;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
+};
+
+type InstanceShellRouteProps = {
+  homeRouteComponent: ElementType<HomeRouteProps>;
+  localWorkspaceGatewayAvailable?: boolean | undefined;
 };
 
 export type RuntimeInstalledAppRouteRegistry = {
@@ -85,7 +76,12 @@ export type RuntimeInstalledAppRouteRegistry = {
 };
 
 export type AppRouteComponents = {
+  GeneratedAppFrame: ElementType<GeneratedAppFrameProps>;
   HomeRoute: ElementType<HomeRouteProps>;
+  InstanceShellRoute: ElementType<InstanceShellRouteProps>;
+  LocalSessionRoute: ElementType;
+  OwnerLoginRoute: ElementType;
+  OwnerSetupRoute: ElementType;
   SitePageRoute: ElementType<PublicSiteRouteProps>;
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
@@ -96,8 +92,33 @@ const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
 );
 
 const defaultRouteComponents: AppRouteComponents = {
+  GeneratedAppFrame: lazy(() =>
+    import("./app/generated-app-frame.tsx").then((module) => ({
+      default: module.GeneratedAppFrame,
+    })),
+  ),
   HomeRoute: lazy(() =>
     import("./app/routes/home.tsx").then((module) => ({ default: module.HomeRoute })),
+  ),
+  InstanceShellRoute: lazy(() =>
+    import("./app/routes/instance-shell.tsx").then((module) => ({
+      default: module.InstanceShellRoute,
+    })),
+  ),
+  LocalSessionRoute: lazy(() =>
+    import("./app/routes/local-session.tsx").then((module) => ({
+      default: module.LocalSessionRoute,
+    })),
+  ),
+  OwnerLoginRoute: lazy(() =>
+    import("./app/routes/owner-login.tsx").then((module) => ({
+      default: module.OwnerLoginRoute,
+    })),
+  ),
+  OwnerSetupRoute: lazy(() =>
+    import("./app/routes/owner-setup.tsx").then((module) => ({
+      default: module.OwnerSetupRoute,
+    })),
   ),
   SitePageRoute: defaultPublicSiteReactAdapters.get("site")!.Route,
   publicSiteReactAdapters: defaultPublicSiteReactAdapters,
@@ -107,16 +128,17 @@ export function App({
   installedAppRouteInstalls: installedAppRouteInstallsProp,
   installedAppRoutePackages: installedAppRoutePackagesProp,
   localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
-  routeComponents = defaultRouteComponents,
+  routeComponents: routeComponentOverrides,
   runtimeProfile: runtimeProfileProp,
 }: {
   installedAppRouteInstalls?: readonly AppInstall[];
   installedAppRoutePackages?: readonly InstallableAppPackage[];
   localWorkspaceGatewayAvailable?: boolean;
-  routeComponents?: AppRouteComponents;
+  routeComponents?: Partial<AppRouteComponents>;
   runtimeProfile?: RuntimeProfile;
 } = {}) {
   const [location] = useLocation();
+  const routeComponents = resolveAppRouteComponents(routeComponentOverrides);
   const runtimeProfile = useMemo(
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
     [runtimeProfileProp],
@@ -143,50 +165,21 @@ export function App({
     }),
     [installedAppRouteInstalls, installedAppRouteRegistry?.activePackageResolver],
   );
-  const localWorkspaceGatewayAvailable =
-    localWorkspaceGatewayAvailableProp ?? workspaceGatewayBrowserConfig() !== undefined;
-  const routeContext = useMemo(
-    () => ({ ...installedAppRouteContext, localWorkspaceGatewayAvailable }),
-    [installedAppRouteContext, localWorkspaceGatewayAvailable],
-  );
-  const routeWorld = findRuntimeWorldMountByRoute(activeRuntimeProfile, location, routeContext);
   const browserRoutes = useMemo(
     () => runtimeBrowserRoutePatterns(activeRuntimeProfile),
     [activeRuntimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
-  const routeApp = routeWorld?.app;
-  const activeClientStorageName = useActiveClientStorageName();
-  const activeSchemaKey = useActiveSchemaKey();
-  const activeSchema = useSchema();
-  const routeAppTarget = routeWorld ? runtimeWorldClientTarget(routeWorld) : undefined;
-  const routeAppTargetIdentity = routeAppTarget
-    ? appStorageIdentityForClientTarget(routeAppTarget)
-    : undefined;
-  const routeAppSchemaKey = routeAppTarget
-    ? clientTargetSourceSchemaKey(routeAppTarget)
-    : undefined;
-  const routeStoreMatchesTarget =
-    activeClientStorageName === null ||
-    (routeAppTargetIdentity !== undefined &&
-      activeClientStorageName === routeAppTargetIdentity.browserDatabaseName);
-  const routeAppSchema =
-    routeApp &&
-    routeStoreMatchesTarget &&
-    (activeSchemaKey === null || activeSchemaKey === routeAppSchemaKey)
-      ? activeSchema
-      : null;
-  const routeAppScreenModels = useMemo(
-    () => (routeAppSchema ? selectPrimaryScreenModels(routeAppSchema) : []),
-    [routeAppSchema],
+  const localWorkspaceGatewayAvailable = useLocalWorkspaceGatewayAvailable(
+    localWorkspaceGatewayAvailableProp,
+    routeMayNeedLocalWorkspaceGateway(browserRoutes, normalizedLocation),
   );
-  const activeScreenPath = routeWorld
-    ? runtimeScreenPathFromRoute(routeWorld, location)
-    : undefined;
+  const routeContext = useMemo(
+    () => ({ ...installedAppRouteContext, localWorkspaceGatewayAvailable }),
+    [installedAppRouteContext, localWorkspaceGatewayAvailable],
+  );
+  const routeWorld = findRuntimeWorldMountByRoute(activeRuntimeProfile, location, routeContext);
   const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
-  const instanceRailInstalls = runtimeProfileSupportsInstanceRail(activeRuntimeProfile)
-    ? (installedAppRouteInstalls ?? [])
-    : undefined;
   const routeRegistryLoading =
     runtimeProfile.appProfileTarget !== undefined &&
     runtimeProfile.worlds.length === 0 &&
@@ -220,23 +213,24 @@ export function App({
     );
   }
 
+  const GeneratedAppFrame = routeComponents.GeneratedAppFrame;
   const generatedAppFrame = (
-    <ActiveAppSurface
-      activePackageResolver={installedAppRouteContext.activePackageResolver}
-      activeScreenPath={activeScreenPath}
-      currentPath={location}
-      instanceRailInstalls={instanceRailInstalls}
-      managementHref={runtimeAppManagementHref(activeRuntimeProfile, routeWorld)}
-      screenModels={routeAppScreenModels}
-      world={routeWorld}
-    >
-      <AppRoutes
-        installedAppRouteContext={installedAppRouteContext}
-        localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-        routeComponents={routeComponents}
+    <Suspense fallback={<RouteLoading />}>
+      <GeneratedAppFrame
+        activePackageResolver={installedAppRouteContext.activePackageResolver}
+        currentPath={location}
+        installedAppRouteInstalls={installedAppRouteInstalls}
+        routeWorld={routeWorld}
         runtimeProfile={activeRuntimeProfile}
-      />
-    </ActiveAppSurface>
+      >
+        <AppRoutes
+          installedAppRouteContext={installedAppRouteContext}
+          localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
+          routeComponents={routeComponents}
+          runtimeProfile={activeRuntimeProfile}
+        />
+      </GeneratedAppFrame>
+    </Suspense>
   );
 
   return activeRuntimeProfile.shell === "dev" ? (
@@ -284,6 +278,25 @@ export function runtimeInstalledAppRouteRegistryFromResponse(
   };
 }
 
+function resolveAppRouteComponents(
+  overrides: Partial<AppRouteComponents> | undefined,
+): AppRouteComponents {
+  const merged = {
+    ...defaultRouteComponents,
+    ...overrides,
+  };
+
+  return {
+    ...merged,
+    publicSiteReactAdapters:
+      overrides && "publicSiteReactAdapters" in overrides
+        ? overrides.publicSiteReactAdapters
+        : overrides?.SitePageRoute
+          ? undefined
+          : defaultRouteComponents.publicSiteReactAdapters,
+  };
+}
+
 function runtimeInstalledAppRouteRegistryFromInstalls(
   installs: readonly AppInstall[],
   packages: readonly InstallableAppPackage[] = [],
@@ -301,10 +314,6 @@ function emptyRuntimeInstalledAppRouteRegistry(): RuntimeInstalledAppRouteRegist
     installs: [],
     packages: [],
   };
-}
-
-function runtimeProfileSupportsInstanceRail(runtimeProfile: RuntimeProfile): boolean {
-  return runtimeProfile.shell === "instance" || runtimeProfile.shell === "dev";
 }
 
 function useRuntimeInstalledAppRouteRegistry(
@@ -361,6 +370,54 @@ function useRuntimeInstalledAppRouteRegistry(
   }, [initialInstalls, initialPackages, refreshKey, shouldLoad]);
 
   return registry;
+}
+
+function useLocalWorkspaceGatewayAvailable(
+  explicitAvailable: boolean | undefined,
+  shouldResolve: boolean,
+): boolean {
+  const [available, setAvailable] = useState(() => explicitAvailable ?? false);
+
+  useEffect(() => {
+    if (explicitAvailable !== undefined) {
+      setAvailable(explicitAvailable);
+      return;
+    }
+
+    if (!shouldResolve) {
+      setAvailable(false);
+      return;
+    }
+
+    let stopped = false;
+
+    async function resolveGatewayAvailability() {
+      const { workspaceGatewayBrowserConfig } = await import("@dpeek/formless-gateway/client");
+
+      if (!stopped) {
+        setAvailable(workspaceGatewayBrowserConfig() !== undefined);
+      }
+    }
+
+    void resolveGatewayAvailability().catch(() => {
+      if (!stopped) {
+        setAvailable(false);
+      }
+    });
+
+    return () => {
+      stopped = true;
+    };
+  }, [explicitAvailable, shouldResolve]);
+
+  return available;
+}
+
+function routeMayNeedLocalWorkspaceGateway(
+  routes: ReturnType<typeof runtimeBrowserRoutePatterns>,
+  path: string,
+): boolean {
+  return path === routes.localSessionRoute || path === routes.instanceShellRoute;
 }
 
 function WorkbenchFrame({
@@ -544,7 +601,8 @@ function AppRoutes({
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
-  const { HomeRoute } = routeComponents;
+  const { HomeRoute, InstanceShellRoute, LocalSessionRoute, OwnerLoginRoute, OwnerSetupRoute } =
+    routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
@@ -552,8 +610,6 @@ function AppRoutes({
   const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
   const publishedSite = runtimeProfile.publishedSite;
   const publicSitePreview = runtimeProfile.publicSitePreview;
-  const hasLazyGeneratedRoutes =
-    generatedWorlds.length > 0 || browserRoutes.installedAppHomeRoutePattern !== undefined;
   const routes = (
     <Switch>
       {runtimeProfile.defaultRedirect ? (
@@ -579,7 +635,10 @@ function AppRoutes({
       {browserRoutes.instanceShellRoute ? (
         <Route path={browserRoutes.instanceShellRoute}>
           <OwnerRouteGuard access="owner">
-            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
+            <InstanceShellRoute
+              homeRouteComponent={HomeRoute}
+              localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
+            />
           </OwnerRouteGuard>
         </Route>
       ) : null}
@@ -725,11 +784,7 @@ function AppRoutes({
     </Switch>
   );
 
-  return hasLazyGeneratedRoutes ? (
-    <Suspense fallback={<RouteLoading />}>{routes}</Suspense>
-  ) : (
-    routes
-  );
+  return <Suspense fallback={<RouteLoading />}>{routes}</Suspense>;
 }
 
 function InstalledAppHomeRoute({
@@ -885,6 +940,7 @@ function OwnerRouteGuard({
 
     async function checkOwnerSession() {
       try {
+        const { fetchOwnerSessionStatus } = await import("./app/routes/owner-login.tsx");
         const status = await fetchOwnerSessionStatus({ signal: controller.signal });
 
         if (!stopped) {
@@ -934,10 +990,6 @@ function ownerRouteTargetFromLocation(location: string): OwnerLoginRedirectTarge
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {
   return world.route === "/" ? "/*" : `${world.route}/*`;
-}
-
-function runtimeWorldClientTarget(world: RuntimeWorldMount): ClientAppTarget {
-  return world.target ?? clientTargetForSchemaKey(world.app.key);
 }
 
 function runtimeWildcardScreenPath(params: unknown): string {

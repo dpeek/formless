@@ -451,6 +451,38 @@ forms on preview, installed, and mapped public Site routes.
 - AND the visitor is not shown operation-created records, provider delivery
   state, notification recipient configuration, or admin-only app records
 
+### Requirement: Public Site Client Runtime
+
+The system SHALL keep published, mapped, and installed public Site browser
+assets scoped to public Site interactivity rather than the generated admin app
+shell.
+
+#### Scenario: Published documents inject public Site assets
+
+- GIVEN a published Site document needs browser code for a workspace public
+  renderer, read-only markdown rendering, public form submission, Turnstile, or
+  public tree hydration
+- WHEN Worker SSR injects browser assets into the document shell
+- THEN the injected assets come from a public Site browser entrypoint or manifest
+- AND the injected assets do not require the generated admin app shell entrypoint
+  to boot on the public page
+- AND public Site documents that do not need browser interactivity may omit
+  public Site script assets
+
+#### Scenario: Public Site assets exclude admin-only code
+
+- GIVEN a visitor opens a published Site page, mapped public Site host, or
+  installed public Site route
+- WHEN the public Site browser assets load
+- THEN generated admin screens, instance management shell, owner setup and login
+  routes, workspace gateway controls, app replica sync for generated admin, and
+  generated field editors are not part of the required public Site entrypoint
+- AND public forms continue to post through public operation routes with
+  projected operation facts, source block id, idempotency key, and Turnstile
+  token
+- AND read-only markdown rendering remains available without loading rich
+  markdown editor modules
+
 ### Requirement: Links And Frames
 
 The system SHALL render header, footer, and links from Site records, resolving internal targets from block references and external targets from absolute URLs.

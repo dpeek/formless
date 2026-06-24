@@ -113,7 +113,7 @@ describe("published Site Worker SSR", () => {
     expect(payload.tree.meta.slug).toBe("home");
     expect(html).toContain('import RefreshRuntime from "/@react-refresh";');
     expect(html).toContain("window.__vite_plugin_react_preamble_installed__ = true;");
-    expect(html).toContain('<script type="module" src="/src/main.tsx"></script>');
+    expect(html).toContain('<script type="module" src="/src/public-site-main.tsx"></script>');
     expect(html).not.toContain("Loading site page...");
   });
 
@@ -151,12 +151,15 @@ describe("published Site Worker SSR", () => {
     expect(await headResponse.text()).toBe("");
   });
 
-  it("injects production client assets from the built client shell", async () => {
+  it("injects production client assets from the public Site manifest", async () => {
+    const assetRequests: string[] = [];
     const response = await handlePublicSiteDocumentRequest(
       new Request("https://example.com/projects", {
         headers: { Accept: "text/html" },
       }),
-      envWithTreeResponse(Response.json(testSitePageTree("projects")), builtClientShellHtml()),
+      envWithTreeResponse(Response.json(testSitePageTree("projects")), builtClientManifestJson(), {
+        assetRequests,
+      }),
     );
 
     if (!response) {
@@ -172,21 +175,67 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('<link rel="icon" sizes="any" href="/favicon.ico" />');
     expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     expect(html).toContain(
-      '<link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">',
+      '<link rel="modulepreload" crossorigin href="/assets/public-site-vendor-test.js">',
     );
-    expect(html).toContain('<link rel="stylesheet" crossorigin href="/assets/index-test.css">');
     expect(html).toContain(
-      '<script type="module" crossorigin src="/assets/index-test.js"></script>',
+      '<link rel="stylesheet" crossorigin href="/assets/public-site-vendor-test.css">',
+    );
+    expect(html).toContain(
+      '<link rel="stylesheet" crossorigin href="/assets/public-site-test.css">',
+    );
+    expect(html).toContain(
+      '<script type="module" crossorigin src="/assets/public-site-test.js"></script>',
     );
     expect(html.indexOf('<script id="formless-public-site-theme">')).toBeLessThan(
-      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/index-test.css">'),
+      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/public-site-test.css">'),
     );
     expect(html.indexOf('<style id="formless-public-site-theme-style">')).toBeGreaterThan(
-      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/index-test.css">'),
+      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/public-site-test.css">'),
     );
+    expect(assetRequests).toEqual(["/assets/formless-client-manifest.json"]);
     expect(html).not.toContain("/@react-refresh");
     expect(html).not.toContain("/src/main.tsx");
+    expect(html).not.toContain("/assets/index-test.js");
+    expect(html).not.toContain("/assets/index-test.css");
+    expect(html).not.toContain("/assets/generated-admin-test.js");
+    expect(html).not.toContain("/assets/generated-admin-test.css");
     expect(html).not.toContain("/favicon-32x32.png");
+  });
+
+  it("omits production public Site scripts when the document has no hydratable behavior", async () => {
+    const response = await handlePublicSiteDocumentRequest(
+      new Request("https://example.com/static", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(
+        Response.json(
+          testSitePageTree("static", {
+            frame: {},
+            label: "Static page",
+          }),
+        ),
+        builtClientManifestJson(),
+      ),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("Static page");
+    expect(html).toContain(
+      '<link rel="stylesheet" crossorigin href="/assets/public-site-test.css">',
+    );
+    expect(html).not.toContain(
+      '<script type="module" crossorigin src="/assets/public-site-test.js"></script>',
+    );
+    expect(html).not.toContain(
+      '<link rel="modulepreload" crossorigin href="/assets/public-site-vendor-test.js">',
+    );
+    expect(html).not.toContain("/src/public-site-main.tsx");
   });
 
   it("emits runtime target hints for mapped installed public Site documents", async () => {
@@ -569,24 +618,38 @@ function initialTreeScriptText(html: string): string {
 
 function envWithTreeResponse(
   response: Response,
-  clientShellHtml?: string,
-  runtimeProfile = "publishedSite",
+  clientAssetManifest?: string,
+  runtimeProfileOrOptions:
+    | string
+    | {
+        assetRequests?: string[];
+        runtimeProfile?: string;
+      } = "publishedSite",
   options: {
     authorityRequests?: string[];
     installId?: string;
     packageAppKey?: string;
   } = {},
 ): Env {
+  const runtimeProfile =
+    typeof runtimeProfileOrOptions === "string"
+      ? runtimeProfileOrOptions
+      : (runtimeProfileOrOptions.runtimeProfile ?? "publishedSite");
+  const assetRequests =
+    typeof runtimeProfileOrOptions === "string" ? undefined : runtimeProfileOrOptions.assetRequests;
   const installId = options.installId ?? publishedInstallId;
   const packageAppKey = options.packageAppKey ?? publishedPackageAppKey;
 
   return {
-    ASSETS: clientShellHtml
+    ASSETS: clientAssetManifest
       ? {
-          fetch: async () =>
-            new Response(clientShellHtml, {
-              headers: { "Content-Type": "text/html; charset=utf-8" },
-            }),
+          fetch: async (assetRequest: Request) => {
+            assetRequests?.push(new URL(assetRequest.url).pathname);
+
+            return new Response(clientAssetManifest, {
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+            });
+          },
         }
       : undefined,
     FORMLESS_AUTHORITY: {
@@ -609,26 +672,38 @@ function envWithTreeResponse(
   } as unknown as Env;
 }
 
-function builtClientShellHtml(): string {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>formless</title>
-    <script type="module" crossorigin src="/assets/index-test.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-test.css">
-  </head>
-  <body>
-    <div id="app"></div>
-  </body>
-</html>`;
+function builtClientManifestJson(): string {
+  return JSON.stringify({
+    "assets/public-site-vendor-test.js": {
+      css: ["assets/public-site-vendor-test.css"],
+      file: "assets/public-site-vendor-test.js",
+    },
+    "assets/generated-admin-test.js": {
+      css: ["assets/generated-admin-test.css"],
+      file: "assets/generated-admin-test.js",
+    },
+    "src/main.tsx": {
+      css: ["assets/index-test.css"],
+      file: "assets/index-test.js",
+      imports: ["assets/generated-admin-test.js"],
+      isEntry: true,
+      src: "src/main.tsx",
+    },
+    "src/public-site-main.tsx": {
+      css: ["assets/public-site-test.css"],
+      file: "assets/public-site-test.js",
+      imports: ["assets/public-site-vendor-test.js"],
+      isEntry: true,
+      src: "src/public-site-main.tsx",
+    },
+  });
 }
 
 function testSitePageTree(
   slug: string,
   options: {
     body?: string;
+    frame?: SitePageTreeResponse["frame"];
     label?: string;
     routeKind?: "page" | "post";
     siteName?: string;
@@ -646,7 +721,7 @@ function testSitePageTree(
       ...(options.body ? { body: options.body } : {}),
       placements: [],
     },
-    frame: siteFrame(options.siteName ?? "Example Site"),
+    frame: options.frame ?? siteFrame(options.siteName ?? "Example Site"),
     meta: {
       slug,
       generatedAt: "2026-05-13T00:00:00.000Z",

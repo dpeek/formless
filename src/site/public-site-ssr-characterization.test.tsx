@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { describe, expect, it } from "vite-plus/test";
 
-import { App } from "../app.tsx";
+import { App, type AppRouteComponents } from "../app.tsx";
+import { GeneratedAppFrame } from "../app/generated-app-frame.tsx";
 import { createPublishedSiteRuntimeProfile } from "../app/runtime-profile.ts";
 import {
   SitePageRoute,
@@ -12,6 +13,10 @@ import {
   type SitePageRouteState,
 } from "@dpeek/formless-site-app/react";
 import { HomeRoute } from "../app/routes/home.tsx";
+import { InstanceShellRoute } from "../app/routes/instance-shell.tsx";
+import { LocalSessionRoute } from "../app/routes/local-session.tsx";
+import { OwnerLoginRoute } from "../app/routes/owner-login.tsx";
+import { OwnerSetupRoute } from "../app/routes/owner-setup.tsx";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 
 describe("public Site SSR characterization", () => {
@@ -141,11 +146,23 @@ function renderPublishedRoute(path: string): string {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
       <App
-        routeComponents={{ HomeRoute, SitePageRoute }}
+        routeComponents={appRouteComponents()}
         runtimeProfile={createPublishedSiteRuntimeProfile()}
       />
     </Router>,
   );
+}
+
+function appRouteComponents(): AppRouteComponents {
+  return {
+    GeneratedAppFrame,
+    HomeRoute,
+    InstanceShellRoute,
+    LocalSessionRoute,
+    OwnerLoginRoute,
+    OwnerSetupRoute,
+    SitePageRoute,
+  };
 }
 
 function readRepoFile(relativePath: string): string {

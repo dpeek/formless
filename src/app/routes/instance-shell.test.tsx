@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
@@ -18,7 +18,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
 import {
   InstallAppDialogForm,
-  InstanceShellRouteView,
+  InstanceShellRouteView as BaseInstanceShellRouteView,
   WorkspaceOperationProgress,
   displaySafeEntries,
   instanceShellUninitializedWorkspaceInstallState,
@@ -35,6 +35,7 @@ import {
   workspaceBrowserOperationControlMetadata,
   workspaceOperationDefinitionForKind,
 } from "@dpeek/formless-workspace";
+import { HomeRoute } from "./home.tsx";
 
 beforeEach(() => {
   resetClientStore();
@@ -42,6 +43,12 @@ beforeEach(() => {
 
 function renderWithRouter(children: ReactNode, ssrPath = "/") {
   return renderToStaticMarkup(<Router ssrPath={ssrPath}>{children}</Router>);
+}
+
+function InstanceShellRouteView(
+  props: Omit<ComponentProps<typeof BaseInstanceShellRouteView>, "homeRouteComponent">,
+) {
+  return <BaseInstanceShellRouteView homeRouteComponent={HomeRoute} {...props} />;
 }
 
 describe("instance shell route view", () => {
