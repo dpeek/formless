@@ -17,6 +17,16 @@ export type AppInstallRoute = {
   routeKind: AppInstallRouteKind;
 };
 
+export type AppInstallLaunchLink = {
+  access: AppInstallRouteAccess;
+  href: `/${string}`;
+  installId: AppInstallId;
+  label: string;
+  packageAppKey: PackageAppKey;
+  routeId?: string;
+  routeKind: AppInstallRouteKind;
+};
+
 export type AppInstall = {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
@@ -30,6 +40,7 @@ export type AppInstall = {
   publicRoute?: `/${string}`;
   publicRoutePrefix?: `/${string}/`;
   routes?: AppInstallRoute[];
+  launchLinks?: AppInstallLaunchLink[];
 };
 
 export const appPackageManifestKind = "formless.appPackage";

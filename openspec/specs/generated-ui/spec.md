@@ -85,6 +85,28 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
+#### Scenario: Minimal instance rail navigation
+
+- **GIVEN** an owner is using the product instance shell on the instance or dev
+  workbench profile
+- **WHEN** installed app navigation links are available
+- **THEN** the shell renders a persistent narrow rail before the generated app
+  sidebar
+- **AND** the rail contains one rounded-square instance settings tile
+- **AND** each installed app admin link is a rounded-square tile displaying the
+  first display letter from the app install label
+- **AND** each installed public Site link is a rounded-square tile displaying a
+  public Site icon rather than a repeated app initial
+- **AND** every tile has an accessible name that includes the destination label
+  and surface such as admin or public Site
+- **AND** the current tile is selected from the active browser path without
+  changing generated app screen selection
+- **AND** app install and route configuration tables remain available through
+  instance settings rather than being the primary launch surface
+- **AND** mapped app hosts, mapped public Site hosts, published Site profiles,
+  anonymous owner-login routes, and anonymous owner-setup routes do not render
+  the instance rail
+
 #### Scenario: Local workspace save status
 
 - **GIVEN** the product instance shell renders in a local workspace profile with

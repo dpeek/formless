@@ -4,7 +4,9 @@ import {
   INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   formatInstanceControlPlaneBoundaryEntityName,
+  instanceControlPlaneAppLaunchLinksFromRecords,
   instanceControlPlaneAppInstallRecord,
+  instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneDefaultRoutesForInstall,
   instanceControlPlaneDeploymentConfigObservedFields,
   instanceControlPlaneEffectiveRouteAccess,
@@ -705,6 +707,327 @@ describe("instance control-plane schema contracts", () => {
     );
   });
 
+  it("projects launch link hrefs, route ids, and access from enabled route records", () => {
+    const records: StoredRecord[] = [
+      storedAppInstallRecord({
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+      }),
+      storedRouteRecord({
+        id: "route:personal:admin",
+        values: {
+          enabled: true,
+          matchPath: "/launch/personal-admin",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "personal",
+          surface: "admin",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:personal:public-site",
+        values: {
+          enabled: true,
+          matchPath: "/launch/personal",
+          matchPrefix: "/launch/personal/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "personal",
+          surface: "public-site",
+          access: "owner",
+        },
+      }),
+    ];
+
+    expect(
+      instanceControlPlaneAppLaunchLinksFromRecords(records, controlPlanePackageResolver),
+    ).toEqual([
+      {
+        access: "owner",
+        href: "/launch/personal-admin",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:admin",
+        routeKind: "admin",
+      },
+      {
+        access: "owner",
+        href: "/launch/personal",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:public-site",
+        routeKind: "publicSite",
+      },
+    ]);
+  });
+
+  it("projects launch links from enabled hostless route records", () => {
+    const records: StoredRecord[] = [
+      storedAppInstallRecord({
+        createdAt: "2026-05-28T00:00:00.000Z",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+      }),
+      storedAppInstallRecord({
+        createdAt: "2026-05-28T00:01:00.000Z",
+        installId: "verifi",
+        label: "Verifi Labs",
+        packageAppKey: "verifi",
+      }),
+      storedAppInstallRecord({
+        createdAt: "2026-05-28T00:02:00.000Z",
+        deletedAt: "2026-05-28T00:03:00.000Z",
+        installId: "archived",
+        label: "Archived Site",
+        packageAppKey: "site",
+      }),
+      storedRouteRecord({
+        id: "route:personal:admin-default",
+        values: {
+          enabled: false,
+          matchPath: "/apps/personal",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "personal",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:personal:admin-custom",
+        values: {
+          enabled: true,
+          matchPath: "/apps/personal-admin",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "personal",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:personal:public-custom",
+        values: {
+          enabled: true,
+          matchPath: "/public/personal",
+          matchPrefix: "/public/personal/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "personal",
+          surface: "public-site",
+          access: "anonymous",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:personal:host-public",
+        values: {
+          enabled: true,
+          matchHost: "personal.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "personal",
+          surface: "public-site",
+          access: "anonymous",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:personal:wrong-profile",
+        values: {
+          enabled: true,
+          matchPath: "/instance/personal",
+          kind: "mount",
+          targetProfile: "instance",
+          appInstall: "personal",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:verifi:admin",
+        values: {
+          enabled: true,
+          matchPath: "/apps/verifi-labs",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "verifi",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:verifi:public-invalid",
+        values: {
+          enabled: true,
+          matchPath: "/sites/verifi",
+          matchPrefix: "/sites/verifi/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "verifi",
+          surface: "public-site",
+          access: "anonymous",
+        },
+      }),
+      storedRouteRecord({
+        id: "route:archived:admin",
+        values: {
+          enabled: true,
+          matchPath: "/apps/archived",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "archived",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+    ];
+    const links = instanceControlPlaneAppLaunchLinksFromRecords(
+      records,
+      controlPlanePackageResolver,
+    );
+    const installs = instanceControlPlaneAppInstallsFromRecords(
+      records,
+      controlPlanePackageResolver,
+    );
+
+    expect(links).toEqual([
+      {
+        access: "owner",
+        href: "/apps/personal-admin",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:admin-custom",
+        routeKind: "admin",
+      },
+      {
+        access: "anonymous",
+        href: "/public/personal",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:public-custom",
+        routeKind: "publicSite",
+      },
+      {
+        access: "owner",
+        href: "/apps/verifi-labs",
+        installId: "verifi",
+        label: "Verifi Labs",
+        packageAppKey: "verifi",
+        routeId: "route:verifi:admin",
+        routeKind: "admin",
+      },
+    ]);
+    expect(installs.map((install) => install.installId)).toEqual(["personal", "verifi"]);
+    expect(installs[0]).toMatchObject({
+      adminRoute: "/apps/personal-admin",
+      publicRoute: "/public/personal",
+      publicRoutePrefix: "/public/personal/",
+      launchLinks: links.slice(0, 2),
+    });
+    expect(installs[1]).toMatchObject({
+      adminRoute: "/apps/verifi-labs",
+      launchLinks: [links[2]],
+    });
+    expect(installs[1]).not.toHaveProperty("publicRoute");
+  });
+
+  it("projects fallback launch links only when no route records exist for an install", () => {
+    const records: StoredRecord[] = [
+      storedAppInstallRecord({
+        createdAt: "2026-05-28T00:00:00.000Z",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+      }),
+      storedAppInstallRecord({
+        createdAt: "2026-05-28T00:01:00.000Z",
+        installId: "verifi",
+        label: "Verifi Labs",
+        packageAppKey: "verifi",
+      }),
+    ];
+    const links = instanceControlPlaneAppLaunchLinksFromRecords(
+      records,
+      controlPlanePackageResolver,
+    );
+    const installs = instanceControlPlaneAppInstallsFromRecords(
+      records,
+      controlPlanePackageResolver,
+    );
+
+    expect(links).toEqual([
+      {
+        access: "owner",
+        href: "/apps/personal",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeKind: "admin",
+      },
+      {
+        access: "anonymous",
+        href: "/sites/personal",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeKind: "publicSite",
+      },
+      {
+        access: "owner",
+        href: "/apps/verifi",
+        installId: "verifi",
+        label: "Verifi Labs",
+        packageAppKey: "verifi",
+        routeKind: "admin",
+      },
+    ]);
+    expect(links.every((link) => link.routeId === undefined)).toBe(true);
+    expect(installs[0]).toMatchObject({
+      adminRoute: "/apps/personal",
+      publicRoute: "/sites/personal",
+      publicRoutePrefix: "/sites/personal/",
+      launchLinks: links.slice(0, 2),
+    });
+    expect(installs[0]).not.toHaveProperty("routes");
+    expect(installs[1]).toMatchObject({
+      adminRoute: "/apps/verifi",
+      launchLinks: [links[2]],
+    });
+  });
+
+  it("omits launch links for app installs whose package is unsupported", () => {
+    const records: StoredRecord[] = [
+      storedAppInstallRecord({
+        installId: "missing",
+        label: "Missing Package",
+        packageAppKey: "missing",
+      }),
+      storedRouteRecord({
+        id: "route:missing:admin",
+        values: {
+          enabled: true,
+          matchPath: "/apps/missing",
+          kind: "mount",
+          targetProfile: "app",
+          appInstall: "missing",
+          surface: "admin",
+          access: "owner",
+        },
+      }),
+    ];
+
+    expect(
+      instanceControlPlaneAppLaunchLinksFromRecords(records, controlPlanePackageResolver),
+    ).toEqual([]);
+  });
+
   it("keeps route paths static, app-relative, lowercase, and away from reserved roots", () => {
     expect(isInstanceControlPlaneRouteSafePath("/apps/personal")).toBe(true);
     expect(isInstanceControlPlaneRouteSafePath("/sites/personal")).toBe(true);
@@ -825,6 +1148,46 @@ function packageManifest(input: {
           ]
         : []),
     ],
+  };
+}
+
+function storedAppInstallRecord(input: {
+  createdAt?: string;
+  deletedAt?: string;
+  installId: string;
+  label: string;
+  packageAppKey: string;
+}): StoredRecord {
+  const now = input.createdAt ?? "2026-05-28T00:00:00.000Z";
+
+  return {
+    id: input.installId,
+    entity: "app-install",
+    values: {
+      installId: input.installId,
+      packageAppKey: input.packageAppKey,
+      label: input.label,
+      status: "installed",
+      storageIdentity: `app:${input.installId}`,
+    },
+    createdAt: now,
+    updatedAt: now,
+    ...(input.deletedAt === undefined ? {} : { deletedAt: input.deletedAt }),
+  };
+}
+
+function storedRouteRecord(input: {
+  id: string;
+  values: Record<string, boolean | string>;
+}): StoredRecord {
+  const now = "2026-05-28T00:00:00.000Z";
+
+  return {
+    id: input.id,
+    entity: "route",
+    values: input.values,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 

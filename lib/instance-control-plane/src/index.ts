@@ -4,6 +4,7 @@ import {
   listAppInstalls,
   type AppInstall,
   type AppInstallId,
+  type AppInstallLaunchLink,
   type AppInstallRouteAccess,
   type AppInstallRoute,
   type AppInstallRouteKind,
@@ -701,20 +702,30 @@ export function instanceControlPlaneAppInstallsFromRecords(
       .map((record) =>
         appInstallFromControlPlaneRecord(
           record,
-          routeRecords
-            .filter(
-              (routeRecord) =>
-                routeRecord.values.appInstall === record.id &&
-                routeRecord.values.matchHost === undefined,
-            )
-            .map((routeRecord) => ({
-              id: routeRecord.id,
-              values: routeRecord.values as InstanceControlPlaneRouteValues,
-            })),
+          hostlessRouteRecordsForInstall(routeRecords, record.id),
           packageResolver,
         ),
       ),
   );
+}
+
+export function instanceControlPlaneAppLaunchLinksFromRecords(
+  records: readonly InstanceControlPlaneProjectionRecord[],
+  packageResolver?: AppPackageResolver,
+): AppInstallLaunchLink[] {
+  const activeRecords = records.filter((record) => record.deletedAt === undefined);
+  const routeRecords = activeRecords.filter((record) => record.entity === "route");
+
+  return activeRecords
+    .filter((record) => record.entity === "app-install" && record.values.status === "installed")
+    .sort(compareControlPlaneAppInstallRecords)
+    .flatMap((record) =>
+      appInstallLaunchLinksFromControlPlaneRecord(
+        record,
+        hostlessRouteRecordsForInstall(routeRecords, record.id),
+        packageResolver,
+      ),
+    );
 }
 
 function appInstallFromControlPlaneRecord(
@@ -734,11 +745,18 @@ function appInstallFromControlPlaneRecord(
   }
 
   const installId = stringControlPlaneValue(values.installId) ?? "";
-  const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords);
-  const hasRouteRecords = routes.length > 0;
+  const label = stringControlPlaneValue(values.label) ?? "";
+  const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords, packageApp);
+  const hasRouteRecords = routeRecords.length > 0;
   const adminRoute =
     enabledRoutePath(routes, "admin") ?? `${packageApp.adminRouteBase}/${installId}`;
   const publicRoute = enabledAppInstallRoute(routes, "publicSite");
+  const launchLinks = appInstallLaunchLinks({
+    installId,
+    label,
+    packageApp,
+    routeRecords,
+  });
 
   return {
     installId,
@@ -751,7 +769,7 @@ function appInstallFromControlPlaneRecord(
       values.sourceSchemaHash,
       packageApp.sourceSchemaHash,
     ),
-    label: stringControlPlaneValue(values.label) ?? "",
+    label,
     status: "installed",
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -769,15 +787,58 @@ function appInstallFromControlPlaneRecord(
             publicRoutePrefix: `${packageApp.publicRouteBase}/${installId}/`,
           }),
     ...(hasRouteRecords ? { routes } : {}),
+    ...(launchLinks.length > 0 ? { launchLinks } : {}),
   };
+}
+
+function appInstallLaunchLinksFromControlPlaneRecord(
+  record: InstanceControlPlaneProjectionRecord,
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
+  packageResolver?: AppPackageResolver,
+): AppInstallLaunchLink[] {
+  const values = record.values;
+  const packageAppKey = stringControlPlaneValue(values.packageAppKey);
+  const packageApp =
+    packageAppKey && packageResolver
+      ? findResolvedAppPackage(packageAppKey, packageResolver)
+      : undefined;
+  const installId = stringControlPlaneValue(values.installId);
+
+  if (!installId || !packageApp) {
+    return [];
+  }
+
+  return appInstallLaunchLinks({
+    installId,
+    label: stringControlPlaneValue(values.label) ?? "",
+    packageApp,
+    routeRecords,
+  });
+}
+
+function hostlessRouteRecordsForInstall(
+  routeRecords: readonly InstanceControlPlaneProjectionRecord[],
+  installRecordId: string,
+): { id: string; values: InstanceControlPlaneRouteValues }[] {
+  return routeRecords
+    .filter(
+      (routeRecord) =>
+        routeRecord.values.appInstall === installRecordId &&
+        routeRecord.values.matchHost === undefined,
+    )
+    .map((routeRecord) => ({
+      id: routeRecord.id,
+      values: routeRecord.values as InstanceControlPlaneRouteValues,
+    }));
 }
 
 function appInstallRoutesFromControlPlaneRoutes(
   routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[],
+  packageApp: { publicRouteBase?: "/sites" },
 ): AppInstallRoute[] {
   return routeRecords
     .flatMap((record) => {
-      const route = appInstallRouteFromControlPlaneRoute(record.id, record.values);
+      const route = appInstallRouteFromControlPlaneRoute(record.id, record.values, packageApp);
 
       return route ? [route] : [];
     })
@@ -787,12 +848,13 @@ function appInstallRoutesFromControlPlaneRoutes(
 function appInstallRouteFromControlPlaneRoute(
   id: string,
   values: InstanceControlPlaneRouteValues,
+  packageApp: { publicRouteBase?: "/sites" },
 ): AppInstallRoute | undefined {
-  if (values.kind !== "mount" || values.surface === undefined) {
+  if (values.kind !== "mount") {
     return undefined;
   }
 
-  const routeKind = appInstallRouteKindFromRouteSurface(values.surface);
+  const routeKind = appInstallRouteKindFromRouteValues(values, packageApp);
 
   if (routeKind === undefined) {
     return undefined;
@@ -824,17 +886,125 @@ function appInstallRouteKindOrder(kind: AppInstallRouteKind) {
   }
 }
 
-function appInstallRouteKindFromRouteSurface(
-  surface: InstanceControlPlaneRouteValues["surface"],
+function appInstallRouteKindFromRouteValues(
+  values: Pick<InstanceControlPlaneRouteValues, "surface" | "targetProfile">,
+  packageApp: { publicRouteBase?: "/sites" },
 ): AppInstallRouteKind | undefined {
-  switch (surface) {
-    case "admin":
-      return "admin";
-    case "public-site":
-      return "publicSite";
-    default:
-      return undefined;
+  if (values.surface === "admin" && values.targetProfile === "app") {
+    return "admin";
   }
+
+  if (
+    values.surface === "public-site" &&
+    values.targetProfile === "public-site" &&
+    packageApp.publicRouteBase !== undefined
+  ) {
+    return "publicSite";
+  }
+
+  return undefined;
+}
+
+function appInstallLaunchLinks(input: {
+  installId: AppInstallId;
+  label: string;
+  packageApp: {
+    adminRouteBase: "/apps";
+    packageAppKey: PackageAppKey;
+    publicRouteBase?: "/sites";
+  };
+  routeRecords: { id: string; values: InstanceControlPlaneRouteValues }[];
+}): AppInstallLaunchLink[] {
+  if (input.routeRecords.length === 0) {
+    return defaultAppInstallLaunchLinks(input);
+  }
+
+  return input.routeRecords
+    .flatMap((record) => {
+      const link = appInstallLaunchLinkFromControlPlaneRoute(record.id, record.values, input);
+
+      return link ? [link] : [];
+    })
+    .sort(compareAppInstallLaunchLinks);
+}
+
+function appInstallLaunchLinkFromControlPlaneRoute(
+  id: string,
+  values: InstanceControlPlaneRouteValues,
+  input: {
+    installId: AppInstallId;
+    label: string;
+    packageApp: { packageAppKey: PackageAppKey; publicRouteBase?: "/sites" };
+  },
+): AppInstallLaunchLink | undefined {
+  if (values.kind !== "mount" || values.enabled !== true) {
+    return undefined;
+  }
+
+  const routeKind = appInstallRouteKindFromRouteValues(values, input.packageApp);
+
+  if (routeKind === undefined) {
+    return undefined;
+  }
+
+  return {
+    access: instanceControlPlaneEffectiveRouteAccess(values),
+    href: values.matchPath,
+    installId: input.installId,
+    label: input.label,
+    packageAppKey: input.packageApp.packageAppKey,
+    routeId: id,
+    routeKind,
+  };
+}
+
+function defaultAppInstallLaunchLinks(input: {
+  installId: AppInstallId;
+  label: string;
+  packageApp: {
+    adminRouteBase: "/apps";
+    packageAppKey: PackageAppKey;
+    publicRouteBase?: "/sites";
+  };
+}): AppInstallLaunchLink[] {
+  return [
+    {
+      access: "owner",
+      href: `${input.packageApp.adminRouteBase}/${input.installId}` as `/${string}`,
+      installId: input.installId,
+      label: input.label,
+      packageAppKey: input.packageApp.packageAppKey,
+      routeKind: "admin",
+    },
+    ...(input.packageApp.publicRouteBase === undefined
+      ? []
+      : [
+          {
+            access: "anonymous" as const,
+            href: `${input.packageApp.publicRouteBase}/${input.installId}` as `/${string}`,
+            installId: input.installId,
+            label: input.label,
+            packageAppKey: input.packageApp.packageAppKey,
+            routeKind: "publicSite" as const,
+          },
+        ]),
+  ];
+}
+
+function compareControlPlaneAppInstallRecords(
+  left: InstanceControlPlaneProjectionRecord,
+  right: InstanceControlPlaneProjectionRecord,
+) {
+  const createdAtOrder = left.createdAt.localeCompare(right.createdAt);
+
+  return createdAtOrder === 0 ? left.id.localeCompare(right.id) : createdAtOrder;
+}
+
+function compareAppInstallLaunchLinks(left: AppInstallLaunchLink, right: AppInstallLaunchLink) {
+  const kindOrder =
+    appInstallRouteKindOrder(left.routeKind) - appInstallRouteKindOrder(right.routeKind);
+
+  return kindOrder === 0 ? left.href.localeCompare(right.href) : kindOrder;
 }
 
 function enabledRoutePath(

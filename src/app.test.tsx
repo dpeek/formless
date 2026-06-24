@@ -315,6 +315,18 @@ function runtimeShellHtml(html: string): string {
   return html.slice(shellStart, shellEnd + "</header>".length);
 }
 
+function instanceRailHtml(html: string): string {
+  const railIndex = html.indexOf('data-formless-instance-rail="true"');
+  const railStart = html.lastIndexOf("<nav", railIndex);
+  const railEnd = html.indexOf("</nav>", railIndex);
+
+  if (railIndex === -1 || railStart === -1 || railEnd === -1) {
+    throw new Error("Missing instance rail.");
+  }
+
+  return html.slice(railStart, railEnd + "</nav>".length);
+}
+
 function generatedAppFrameHtml(html: string): string {
   const frameIndex = html.indexOf('data-frame="generated-app"');
 
@@ -680,7 +692,8 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
     expect(html).toContain("Instance Settings");
-    expect(html).not.toContain('aria-label="Instance navigation"');
+    expect(html).toContain('aria-label="Instance navigation"');
+    expect(html).toContain('aria-label="Open Instance Settings"');
     expect(html).not.toContain("Overview");
     expect(html).not.toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
@@ -890,17 +903,152 @@ describe("App smoke routes", () => {
     expect(adminHtml).toContain('data-frame="generated-app"');
     expect(adminHtml).toContain('data-target-kind="appInstall"');
     expect(adminHtml).toContain('data-install-id="personal"');
-    expect(adminHtml).toContain('aria-label="Site management"');
+    expect(adminHtml).toContain('aria-label="Instance navigation"');
+    expect(adminHtml).toContain('aria-label="Open Instance Settings"');
+    expect(adminHtml).toContain('aria-label="Open Personal Site admin"');
+    expect(adminHtml).toContain('aria-label="Open Personal Site public Site"');
     expect(adminHtml).toContain('href="/"');
-    expect(adminHtml).toContain("App management");
+    expect(adminHtml).not.toContain('aria-label="Site management"');
+    expect(adminHtml).not.toContain("App management");
     expect(adminHtml).toContain(
       'aria-label="Reset source seed data for Site app install personal"',
     );
     expectSyncStatusControl(adminHtml, "app:personal");
     expect(adminHtml).not.toContain('href="/apps/personal/schema"');
-    expect(adminHtml).not.toContain('aria-label="Instance navigation"');
     expect(adminHtml).not.toContain('href="/deployments"');
     expect(adminHtml).not.toContain('data-frame="workbench"');
+  });
+
+  it("renders instance rail initials, public Site icons, and active route state", () => {
+    const personalInstall: AppInstall = {
+      ...appInstallFixture({ installId: "personal", label: "Personal Site" }),
+      adminRoute: "/workspace/personal",
+      publicRoute: "/public/personal",
+      publicRoutePrefix: "/public/personal/",
+      launchLinks: [
+        {
+          access: "owner",
+          href: "/workspace/personal",
+          installId: "personal",
+          label: "Personal Site",
+          packageAppKey: "site",
+          routeId: "route:personal:admin",
+          routeKind: "admin",
+        },
+        {
+          access: "anonymous",
+          href: "/public/personal",
+          installId: "personal",
+          label: "Personal Site",
+          packageAppKey: "site",
+          routeId: "route:personal:public-site",
+          routeKind: "publicSite",
+        },
+      ],
+      routes: [
+        {
+          access: "owner",
+          enabled: true,
+          id: "route:personal:admin",
+          path: "/workspace/personal",
+          routeKind: "admin",
+        },
+        {
+          access: "anonymous",
+          enabled: true,
+          id: "route:personal:public-site",
+          path: "/public/personal",
+          prefix: "/public/personal/",
+          routeKind: "publicSite",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/workspace/personal/settings">
+        <App
+          installedAppRouteInstalls={[personalInstall]}
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createInstanceRuntimeProfile()}
+        />
+      </Router>,
+    );
+    const railHtml = instanceRailHtml(html);
+    const settingsTile = linkHtml(railHtml, "/");
+    const adminTile = linkHtml(railHtml, "/workspace/personal");
+    const publicTile = linkHtml(railHtml, "/public/personal");
+
+    expect(html).toContain('data-frame="generated-app"');
+    expect(railHtml).toContain('aria-label="Instance navigation"');
+    expect(settingsTile).toContain('aria-label="Open Instance Settings"');
+    expect(settingsTile).not.toContain('aria-current="page"');
+    expect(adminTile).toContain('aria-label="Open Personal Site admin"');
+    expect(adminTile).toContain('<span aria-hidden="true">P</span>');
+    expect(adminTile).toContain('aria-current="page"');
+    expect(publicTile).toContain('aria-label="Open Personal Site public Site"');
+    expect(publicTile).toContain("<svg");
+    expect(publicTile).not.toContain("<span");
+    expect(publicTile).not.toContain('aria-current="page"');
+  });
+
+  it("omits the instance rail outside owner instance and dev app shells", () => {
+    const installedProfile = createInstalledAppRuntimeProfile({
+      installId: "task-workspace",
+      packageAppKey: "tasks",
+    });
+
+    if (!installedProfile) {
+      throw new Error("Missing installed app profile.");
+    }
+
+    const appProfileHtml = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createAppRuntimeProfile("crm")}
+        />
+      </Router>,
+    );
+    const installedProfileHtml = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={installedProfile}
+        />
+      </Router>,
+    );
+    const publishedSiteHtml = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createPublishedSiteRuntimeProfile()}
+        />
+      </Router>,
+    );
+    const loginHtml = renderRoute("/login");
+    const setupHtml = renderRoute("/setup");
+
+    for (const html of [
+      appProfileHtml,
+      installedProfileHtml,
+      publishedSiteHtml,
+      loginHtml,
+      setupHtml,
+    ]) {
+      expect(html).not.toContain('data-formless-instance-rail="true"');
+      expect(html).not.toContain('aria-label="Instance navigation"');
+    }
   });
 
   it("renders sync details in app settings instead of generated page content", () => {

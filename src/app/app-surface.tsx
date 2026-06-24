@@ -23,6 +23,7 @@ import {
 } from "./routes/home-selection.tsx";
 import { SyncStatusControl } from "./routes/status-line.tsx";
 import { runtimeScreenRoute, type RuntimeWorldMount } from "./runtime-profile.ts";
+import { InstanceRail } from "./instance-rail.tsx";
 import {
   useEntityRecordCountReferencingField,
   useEntityRecordOptionsMatchingQuery,
@@ -37,12 +38,14 @@ import {
 } from "../client/generated-authoring.ts";
 import { todayDateString } from "../shared/date.ts";
 import type { HomeScreenModel } from "../client/views.ts";
-import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
+import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 
 export function ActiveAppSurface({
   activePackageResolver,
   activeScreenPath,
   children,
+  currentPath,
+  instanceRailInstalls,
   managementHref,
   screenModels,
   world,
@@ -50,6 +53,8 @@ export function ActiveAppSurface({
   activePackageResolver?: AppPackageResolver | undefined;
   activeScreenPath: string | undefined;
   children: ReactNode;
+  currentPath: string;
+  instanceRailInstalls?: readonly AppInstall[] | undefined;
   managementHref: "/" | undefined;
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount | undefined;
@@ -62,8 +67,18 @@ export function ActiveAppSurface({
 
   const frame = (
     <HomeRouteSelectionProvider>
-      <SidebarProvider data-frame="generated-app">
-        <Sidebar closeButton={false} collapsible="hidden">
+      <SidebarProvider
+        className={instanceRailInstalls ? "[--instance-rail-width:3.5rem]" : undefined}
+        data-frame="generated-app"
+      >
+        {instanceRailInstalls ? (
+          <InstanceRail currentPath={currentPath} installs={instanceRailInstalls} />
+        ) : null}
+        <Sidebar
+          className={instanceRailInstalls ? "md:left-[var(--instance-rail-width)]" : undefined}
+          closeButton={false}
+          collapsible="hidden"
+        >
           <SidebarHeader>
             <div className="px-2 py-1 text-sm font-semibold">{world?.app.label ?? "Formless"}</div>
           </SidebarHeader>
@@ -72,7 +87,7 @@ export function ActiveAppSurface({
               <ActiveAppNavigation
                 activeScreenPath={activeScreenPath}
                 activePackageResolver={activePackageResolver}
-                managementHref={managementHref}
+                managementHref={instanceRailInstalls ? undefined : managementHref}
                 screenModels={screenModels}
                 world={world}
               />

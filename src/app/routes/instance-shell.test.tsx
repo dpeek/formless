@@ -65,10 +65,13 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain("Instance Settings");
+    expect(html).toContain('aria-label="Instance navigation"');
+    expect(html).toContain('aria-label="Open Instance Settings"');
+    expect(html).toContain('aria-label="Open Personal Site admin"');
+    expect(html).toContain('aria-label="Open Personal Site public Site"');
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain("Loading Instance control plane");
-    expect(html).not.toContain('aria-label="Instance navigation"');
     expect(html).not.toContain("Overview");
     expect(html).not.toContain("Deployments");
     expect(html).not.toContain('href="/deployments"');

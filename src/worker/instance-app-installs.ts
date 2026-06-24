@@ -6,6 +6,7 @@ import {
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppLaunchLinksFromRecords,
   instanceControlPlaneAppInstallsFromRecords,
 } from "@dpeek/formless-instance-control-plane";
 import {
@@ -327,9 +328,13 @@ async function appInstallsResponse(
   request: Request,
   env: InstanceAppInstallsApiEnv,
 ): Promise<AppInstallsResponse> {
+  const records = await readControlPlaneRecords({ env, requestUrl: request.url });
+  const packageResolver = activeAppPackageResolver(env);
+
   return {
     packages: listActiveAppPackages(env),
-    installs: await readControlPlaneAppInstallsForRequest(env, request.url),
+    installs: instanceControlPlaneAppInstallsFromRecords(records ?? [], packageResolver),
+    launchLinks: instanceControlPlaneAppLaunchLinksFromRecords(records ?? [], packageResolver),
   };
 }
 

@@ -346,6 +346,27 @@ describe("instance app install API routes", () => {
         ["publicSite", "anonymous"],
       ],
     );
+    expect(after.body.installs[0]?.launchLinks).toEqual([
+      {
+        access: "owner",
+        href: "/apps/personal-admin",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:admin",
+        routeKind: "admin",
+      },
+      {
+        access: "anonymous",
+        href: "/sites/personal",
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        routeId: "route:personal:public-site",
+        routeKind: "publicSite",
+      },
+    ]);
+    expect(after.body.launchLinks).toEqual(after.body.installs[0]?.launchLinks);
   });
 
   it("rejects app installs whose generated route records conflict before recording the install", async () => {

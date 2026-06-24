@@ -184,6 +184,9 @@ export function App({
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
   const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
+  const instanceRailInstalls = runtimeProfileSupportsInstanceRail(activeRuntimeProfile)
+    ? (installedAppRouteInstalls ?? [])
+    : undefined;
   const routeRegistryLoading =
     runtimeProfile.appProfileTarget !== undefined &&
     runtimeProfile.worlds.length === 0 &&
@@ -221,6 +224,8 @@ export function App({
     <ActiveAppSurface
       activePackageResolver={installedAppRouteContext.activePackageResolver}
       activeScreenPath={activeScreenPath}
+      currentPath={location}
+      instanceRailInstalls={instanceRailInstalls}
       managementHref={runtimeAppManagementHref(activeRuntimeProfile, routeWorld)}
       screenModels={routeAppScreenModels}
       world={routeWorld}
@@ -296,6 +301,10 @@ function emptyRuntimeInstalledAppRouteRegistry(): RuntimeInstalledAppRouteRegist
     installs: [],
     packages: [],
   };
+}
+
+function runtimeProfileSupportsInstanceRail(runtimeProfile: RuntimeProfile): boolean {
+  return runtimeProfile.shell === "instance" || runtimeProfile.shell === "dev";
 }
 
 function useRuntimeInstalledAppRouteRegistry(

@@ -3,6 +3,7 @@ import { isStoredRecord, type RecordValues, type StoredRecord } from "@dpeek/for
 import type {
   AppInstall,
   AppInstallInitializationPlan,
+  AppInstallLaunchLink,
   InstallableAppPackage,
   PackageAppKey,
 } from "@dpeek/formless-installed-apps";
@@ -194,6 +195,7 @@ export type OwnerSetupCompleteResponse = {
 export type AppInstallsResponse = {
   packages: InstallableAppPackage[];
   installs: AppInstall[];
+  launchLinks?: AppInstallLaunchLink[];
 };
 
 export type CreateAppInstallRequest = {

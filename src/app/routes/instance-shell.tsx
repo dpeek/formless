@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
@@ -57,6 +64,7 @@ import {
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
+import { InstanceRail } from "../instance-rail.tsx";
 import { HomeRoute } from "./home.tsx";
 
 export type PackageInstallDraft = {
@@ -692,28 +700,33 @@ export function InstanceShellRouteView({
   workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const frame = (children: ReactNode, installs: readonly AppInstall[] = []) => (
+    <InstanceShellFrame currentPath={currentPath} installs={installs}>
+      {children}
+    </InstanceShellFrame>
+  );
 
   if (state.status === "loading") {
-    return (
+    return frame(
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
         <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-muted-fg">Loading installed apps...</p>
-      </section>
+      </section>,
     );
   }
 
   if (state.status === "failed") {
-    return (
+    return frame(
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
         <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-red-700" role="alert">
           {state.message}
         </p>
-      </section>
+      </section>,
     );
   }
 
-  return (
+  return frame(
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader currentPath={currentPath} />
       <WorkspaceGatewayManagementSection
@@ -734,7 +747,25 @@ export function InstanceShellRouteView({
         open={installDialogOpen}
         state={state}
       />
-    </section>
+    </section>,
+    state.installs,
+  );
+}
+
+function InstanceShellFrame({
+  children,
+  currentPath,
+  installs,
+}: {
+  children: ReactNode;
+  currentPath: string;
+  installs: readonly AppInstall[];
+}) {
+  return (
+    <div className="flex min-h-dvh bg-bg text-fg" data-frame="instance-owner-shell">
+      <InstanceRail currentPath={currentPath} installs={installs} />
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
 

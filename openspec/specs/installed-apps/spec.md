@@ -168,6 +168,27 @@ instance `route` records.
   `/apps/<installId>`
 - **AND** no public Site route record is created for that install
 
+#### Scenario: Route-derived launch navigation
+
+- **GIVEN** instance shell navigation needs launch links for installed apps and
+  public Site surfaces
+- **WHEN** app install registry metadata is projected from schema-owned
+  `app-install` and `route` records
+- **THEN** admin launch links are derived from enabled `route` records whose
+  surface is `admin` and target profile is `app`
+- **AND** public Site launch links are derived from enabled `route` records
+  whose surface is `public-site` and target profile is `public-site`
+- **AND** disabled route records, deleted installs, unsupported package keys,
+  and missing public Site capability are omitted from launch navigation
+- **AND** the link label, install id, package app key, route id, route kind,
+  access policy, and href are available to the browser without exposing
+  installed app records, provider secrets, deployment evidence, or raw route
+  provider state
+- **AND** default `/apps/<installId>` and `/sites/<installId>` paths are used
+  only when no schema-owned route records exist for an older install snapshot
+- **AND** custom enabled route paths are preserved rather than recomputed from
+  install id
+
 ### Requirement: Installed Package Revision
 
 The system SHALL track package app revision and source schema hash for each
